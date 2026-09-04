@@ -130,6 +130,9 @@ public sealed class DotNetPublishInstaller
     /// <summary>Installer identifier used in paths and step keys.</summary>
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>Installer package format. Defaults to MSI for compatibility.</summary>
+    public DotNetPublishInstallerKind Kind { get; set; } = DotNetPublishInstallerKind.Msi;
+
     /// <summary>Source publish target name this installer prepares payloads from.</summary>
     public string PrepareFromTarget { get; set; } = string.Empty;
 
@@ -255,6 +258,69 @@ public sealed class DotNetPublishInstaller
     /// Optional client-license injection passed to MSI build as an MSBuild property.
     /// </summary>
     public DotNetPublishMsiClientLicenseOptions? ClientLicense { get; set; }
+
+    /// <summary>Debian package metadata used when <see cref="Kind"/> is <see cref="DotNetPublishInstallerKind.Debian"/>.</summary>
+    public DotNetPublishDebianOptions? Debian { get; set; }
+}
+
+/// <summary>
+/// Declarative Debian desktop-package metadata.
+/// </summary>
+public sealed class DotNetPublishDebianOptions
+{
+    /// <summary>Lower-case Debian package name.</summary>
+    public string PackageName { get; set; } = string.Empty;
+
+    /// <summary>Debian package version.</summary>
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>Package maintainer identity.</summary>
+    public string Maintainer { get; set; } = string.Empty;
+
+    /// <summary>Short package description.</summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>Executable path relative to the published payload root.</summary>
+    public string Executable { get; set; } = string.Empty;
+
+    /// <summary>Command installed under /usr/bin.</summary>
+    public string CommandName { get; set; } = string.Empty;
+
+    /// <summary>Directory name installed under /opt.</summary>
+    public string InstallDirectoryName { get; set; } = string.Empty;
+
+    /// <summary>Optional Debian dependency expression.</summary>
+    public string? Depends { get; set; }
+
+    /// <summary>Debian section. Defaults to utils.</summary>
+    public string Section { get; set; } = "utils";
+
+    /// <summary>Debian priority. Defaults to optional.</summary>
+    public string Priority { get; set; } = "optional";
+
+    /// <summary>Optional architecture override; otherwise inferred from the Linux runtime identifier.</summary>
+    public string? Architecture { get; set; }
+
+    /// <summary>Optional desktop application name. When set, a desktop entry is installed.</summary>
+    public string? DesktopName { get; set; }
+
+    /// <summary>Optional desktop comment.</summary>
+    public string? DesktopComment { get; set; }
+
+    /// <summary>Optional semicolon-terminated desktop categories.</summary>
+    public string? DesktopCategories { get; set; }
+
+    /// <summary>Optional semicolon-terminated MIME types.</summary>
+    public string? MimeTypes { get; set; }
+
+    /// <summary>Optional startup WM class.</summary>
+    public string? StartupWmClass { get; set; }
+
+    /// <summary>Optional PNG icon source path, resolved from the project root.</summary>
+    public string? IconPath { get; set; }
+
+    /// <summary>Icon size used in the hicolor theme path. Defaults to 256.</summary>
+    public int IconSize { get; set; } = 256;
 }
 
 /// <summary>

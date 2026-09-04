@@ -28,6 +28,8 @@ public enum DotNetPublishTargetKind
     Unknown,
     /// <summary>Command-line application.</summary>
     Cli,
+    /// <summary>Desktop graphical application.</summary>
+    Desktop,
     /// <summary>Long-running service application.</summary>
     Service,
     /// <summary>Library / shared component.</summary>
@@ -77,6 +79,17 @@ public enum DotNetPublishMsiHarvestMode
     None,
     /// <summary>Generate a WiX fragment for all files in prepared payload.</summary>
     Auto
+}
+
+/// <summary>
+/// Installer package format produced from a dotnet publish target.
+/// </summary>
+public enum DotNetPublishInstallerKind
+{
+    /// <summary>Windows Installer package authored through WiX.</summary>
+    Msi,
+    /// <summary>Debian package for Debian-family Linux distributions.</summary>
+    Debian
 }
 
 /// <summary>
@@ -219,6 +232,8 @@ public enum DotNetPublishStepKind
     MsiBuild,
     /// <summary>Sign MSI build outputs using configured signing policy.</summary>
     MsiSign,
+    /// <summary>Build a Debian package from a published Linux target.</summary>
+    DebianPackage,
     /// <summary>Build Microsoft Store / MSIX packaging outputs.</summary>
     StorePackage,
     /// <summary>Extract benchmark metrics from JSON/log inputs.</summary>

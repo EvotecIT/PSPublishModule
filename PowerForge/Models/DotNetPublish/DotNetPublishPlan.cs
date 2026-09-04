@@ -152,6 +152,9 @@ public sealed class DotNetPublishInstallerPlan
     /// <summary>Installer identifier.</summary>
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>Resolved installer package format.</summary>
+    public DotNetPublishInstallerKind Kind { get; set; } = DotNetPublishInstallerKind.Msi;
+
     /// <summary>Source target used for payload preparation.</summary>
     public string PrepareFromTarget { get; set; } = string.Empty;
 
@@ -214,6 +217,9 @@ public sealed class DotNetPublishInstallerPlan
 
     /// <summary>Optional client-license injection options used by MSI build steps.</summary>
     public DotNetPublishMsiClientLicenseOptions? ClientLicense { get; set; }
+
+    /// <summary>Resolved Debian package metadata.</summary>
+    public DotNetPublishDebianOptions? Debian { get; set; }
 }
 
 /// <summary>
@@ -604,6 +610,9 @@ public sealed class DotNetPublishStep
 
     /// <summary>Optional resolved Store package output path for Store build steps.</summary>
     public string? StorePackageOutputPath { get; set; }
+
+    /// <summary>Optional resolved installer output file path for direct package steps.</summary>
+    public string? InstallerOutputPath { get; set; }
 
     /// <summary>Optional command hook identifier.</summary>
     public string? HookId { get; set; }

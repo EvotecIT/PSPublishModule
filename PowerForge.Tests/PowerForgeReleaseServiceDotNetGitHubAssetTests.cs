@@ -171,6 +171,66 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void TryBuildDotNetGitHubRunnableAssets_IncludesNativeInstallerArtefact()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string publish = Path.Combine(root, "Sample.zip");
+            string package = Path.Combine(root, "sample_1.0.0_amd64.deb");
+            File.WriteAllText(publish, "publish");
+            File.WriteAllText(package, "package");
+            var target = new DotNetPublishTargetPlan
+            {
+                Name = "Sample",
+                Publish = new DotNetPublishPublishOptions { Zip = true }
+            };
+            var plan = new DotNetPublishPlan { Targets = new[] { target } };
+            var result = new DotNetPublishResult
+            {
+                ChecksumsPath = Path.Combine(root, "SHA256SUMS.txt"),
+                Artefacts = new[]
+                {
+                    new DotNetPublishArtefactResult
+                    {
+                        Category = DotNetPublishArtefactCategory.Publish,
+                        Target = "Sample",
+                        Runtime = "linux-x64",
+                        Framework = "net10.0",
+                        Style = DotNetPublishStyle.PortableCompat,
+                        ZipPath = publish
+                    },
+                    new DotNetPublishArtefactResult
+                    {
+                        Category = DotNetPublishArtefactCategory.Installer,
+                        Target = "Sample",
+                        Runtime = "linux-x64",
+                        Framework = "net10.0",
+                        Style = DotNetPublishStyle.PortableCompat,
+                        OutputFiles = new[] { package }
+                    }
+                }
+            };
+
+            bool success = PowerForgeReleaseService.TryBuildDotNetGitHubRunnableAssets(
+                plan,
+                target,
+                result,
+                out List<string> assets,
+                out _,
+                out _,
+                out string? error);
+
+            Assert.True(success, error);
+            Assert.Equal(new[] { publish, package }, assets, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(false, true, true)]
     [InlineData(true, false, false)]

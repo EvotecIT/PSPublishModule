@@ -586,6 +586,9 @@ public sealed class DotNetPublishRunReportArtefacts
     /// <summary>Published artifact count.</summary>
     public int PublishCount { get; set; }
 
+    /// <summary>Installer artifact count, including MSI and native package artifacts.</summary>
+    public int InstallerCount { get; set; }
+
     /// <summary>MSI prepare count.</summary>
     public int MsiPrepareCount { get; set; }
 

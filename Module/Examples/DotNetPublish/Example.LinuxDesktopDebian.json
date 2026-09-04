@@ -1,0 +1,78 @@
+{
+  "$schema": "../../../Schemas/powerforge.dotnetpublish.schema.json",
+  "SchemaVersion": 1,
+  "DotNet": {
+    "ProjectRoot": ".",
+    "Configuration": "Release",
+    "Restore": true,
+    "Build": true,
+    "NoRestoreInPublish": true,
+    "NoBuildInPublish": true,
+    "Runtimes": [
+      "linux-x64"
+    ]
+  },
+  "Targets": [
+    {
+      "Name": "Sample.Studio",
+      "ProjectPath": "src/Sample.Studio/Sample.Studio.csproj",
+      "Kind": "Desktop",
+      "Publish": {
+        "Framework": "net10.0",
+        "Runtimes": [
+          "linux-x64"
+        ],
+        "Style": "PortableCompat",
+        "UseStaging": true,
+        "ClearOutput": true,
+        "Slim": true,
+        "KeepSymbols": false,
+        "KeepDocs": false,
+        "PruneReferences": true,
+        "Zip": true
+      }
+    }
+  ],
+  "Installers": [
+    {
+      "Id": "sample.studio.debian",
+      "Kind": "Debian",
+      "PrepareFromTarget": "Sample.Studio",
+      "Runtimes": [
+        "linux-x64"
+      ],
+      "Frameworks": [
+        "net10.0"
+      ],
+      "Styles": [
+        "PortableCompat"
+      ],
+      "OutputPath": "Artifacts/DotNetPublish/Debian/{installer}/{rid}",
+      "OutputName": "sample-studio_{version}_{architecture}.deb",
+      "Debian": {
+        "PackageName": "sample-studio",
+        "Version": "1.0.0",
+        "Maintainer": "Example <support@example.com>",
+        "Description": "Sample cross-platform document studio.",
+        "Executable": "Sample.Studio",
+        "CommandName": "sample-studio",
+        "InstallDirectoryName": "sample-studio",
+        "Section": "utils",
+        "Priority": "optional",
+        "DesktopName": "Sample Studio",
+        "DesktopComment": "Open and work with documents locally.",
+        "DesktopCategories": "Office;Utility;",
+        "MimeTypes": "application/pdf;",
+        "StartupWmClass": "Sample.Studio",
+        "IconPath": "src/Sample.Studio/Assets/Sample.Studio.png",
+        "IconSize": 256
+      }
+    }
+  ],
+  "Outputs": {
+    "ManifestJsonPath": "Artifacts/DotNetPublish/manifest.json",
+    "ManifestTextPath": "Artifacts/DotNetPublish/manifest.txt",
+    "ChecksumsPath": "Artifacts/DotNetPublish/SHA256SUMS.txt",
+    "RunReportPath": "Artifacts/DotNetPublish/run-report.json"
+  }
+}

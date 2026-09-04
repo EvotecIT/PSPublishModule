@@ -25,7 +25,9 @@ internal sealed partial class PowerForgeReleaseService
         error = null;
         var targetRunnableAssets = new List<(DotNetPublishArtefactResult Artefact, string Path, bool Direct)>();
         DotNetPublishArtefactResult[] targetArtefacts = (result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
-            .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
+            .Where(entry =>
+                string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase) &&
+                entry.Category != DotNetPublishArtefactCategory.Installer)
             .ToArray();
         foreach (DotNetPublishArtefactResult artefact in targetArtefacts)
         {
@@ -45,6 +47,14 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         runnableAssets.AddRange(targetRunnableAssets.Select(entry => entry.Path));
+        runnableAssets.AddRange(
+            (result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
+            .Where(entry =>
+                string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase) &&
+                entry.Category == DotNetPublishArtefactCategory.Installer)
+            .SelectMany(entry => entry.OutputFiles ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(Path.GetFullPath));
         runnableAssets.AddRange(
             (result.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
             .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))

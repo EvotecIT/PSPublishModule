@@ -56,7 +56,7 @@
     },
     "DotNetPublishTargetKind": {
       "type": "string",
-      "enum": ["Unknown", "Cli", "Service", "Library"]
+      "enum": ["Unknown", "Cli", "Desktop", "Service", "Library"]
     },
     "DotNetPublishPolicyMode": {
       "type": "string",
@@ -69,6 +69,10 @@
     "DotNetPublishMsiHarvestMode": {
       "type": "string",
       "enum": ["None", "Auto"]
+    },
+    "DotNetPublishInstallerKind": {
+      "type": "string",
+      "enum": ["Msi", "Debian"]
     },
     "DotNetPublishStoreBuildMode": {
       "type": "string",
@@ -850,6 +854,7 @@
       "additionalProperties": false,
       "properties": {
         "Id": { "type": "string", "minLength": 1 },
+        "Kind": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishInstallerKind" }, { "type": "null" }] },
         "PrepareFromTarget": { "type": "string", "minLength": 1 },
         "PrepareFromBundleId": { "type": ["string", "null"] },
         "Runtimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
@@ -879,9 +884,35 @@
         "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
         "SignProfile": { "type": ["string", "null"] },
         "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] },
-        "ClientLicense": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiClientLicenseOptions" }, { "type": "null" }] }
+        "ClientLicense": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiClientLicenseOptions" }, { "type": "null" }] },
+        "Debian": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishDebianOptions" }, { "type": "null" }] }
       },
       "required": ["Id", "PrepareFromTarget"]
+    },
+    "DotNetPublishDebianOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "PackageName": { "type": "string", "minLength": 1 },
+        "Version": { "type": "string", "minLength": 1 },
+        "Maintainer": { "type": "string", "minLength": 1 },
+        "Description": { "type": "string", "minLength": 1 },
+        "Executable": { "type": "string", "minLength": 1 },
+        "CommandName": { "type": "string", "minLength": 1 },
+        "InstallDirectoryName": { "type": "string", "minLength": 1 },
+        "Depends": { "type": ["string", "null"] },
+        "Section": { "type": "string", "minLength": 1 },
+        "Priority": { "type": "string", "minLength": 1 },
+        "Architecture": { "type": ["string", "null"] },
+        "DesktopName": { "type": ["string", "null"] },
+        "DesktopComment": { "type": ["string", "null"] },
+        "DesktopCategories": { "type": ["string", "null"] },
+        "MimeTypes": { "type": ["string", "null"] },
+        "StartupWmClass": { "type": ["string", "null"] },
+        "IconPath": { "type": ["string", "null"] },
+        "IconSize": { "type": "integer", "minimum": 1, "maximum": 4096 }
+      },
+      "required": ["PackageName", "Version", "Maintainer", "Description", "Executable", "CommandName", "InstallDirectoryName"]
     },
     "DotNetPublishStorePackage": {
       "type": "object",
