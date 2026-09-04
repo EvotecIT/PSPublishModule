@@ -632,16 +632,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
             referencedProject = requestsByEvaluation[referencedProjectKey];
-            if (outputRootsByEvaluation.TryGetValue(referencedProjectKey, out string[]? outputRoots) &&
-                expectedOutputPathsByEvaluation.TryGetValue(
-                    referencedProjectKey,
-                    out string[]? expectedOutputPaths) &&
+            bool hasTrustedGeneratedOutputPath =
+                outputRootsByEvaluation.TryGetValue(referencedProjectKey, out string[]? outputRoots) &&
+                expectedOutputPathsByEvaluation.TryGetValue(referencedProjectKey, out string[]? expectedOutputPaths) &&
                 IsTrustedGeneratedOutputPath(
                     output.OutputPath,
                     outputRoots,
                     expectedOutputPaths,
                     Path.GetDirectoryName(referencedProject.ProjectPath)!,
-                    directories) &&
+                    directories);
+            string? controlledOutputFailureReason = null;
+            if (hasTrustedGeneratedOutputPath &&
                 TryProveControlledGeneratedOutputs(
                     referencedProject,
                     new[] { output.OutputPath },
@@ -670,7 +671,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         out VerifiedPackageInputCatalog? verifiedPackages)
                         ? verifiedPackages
                         : null,
-                    controlledGeneratedOutputProofs))
+                    controlledGeneratedOutputProofs,
+                    out controlledOutputFailureReason))
             {
                 if (buildPlan?.NoBuildInPublish != true)
                 {
@@ -683,6 +685,15 @@ public sealed partial class DotNetPublishPipelineRunner
                         unixFileMode: ReadControlledUnixFileMode(output.OutputPath)));
                 }
                 continue;
+            }
+
+            if (hasTrustedGeneratedOutputPath &&
+                !string.IsNullOrWhiteSpace(controlledOutputFailureReason))
+            {
+                projectDirectories = directories.ToArray();
+                failureReason = $"controlled generated-output proof failed for '{output.OutputPath}': " +
+                    controlledOutputFailureReason;
+                return false;
             }
 
             buildInputs.Add(output.OutputPath);

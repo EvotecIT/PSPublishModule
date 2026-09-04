@@ -684,6 +684,16 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         if (!controlledPropertyNames.Contains(property.Key))
                             continue;
+                        // These are intrinsic to the independently selected dotnet/MSBuild
+                        // toolchain. Replaying the original checkout's absolute SDK paths as
+                        // project context would either escape the controlled checkout or let a
+                        // source project redirect trusted tool execution. The controlled process
+                        // resolves them from its verified dotnet host instead.
+                        if (property.Key.Equals("MSBuildToolsPath", StringComparison.OrdinalIgnoreCase) ||
+                            property.Key.Equals("MSBuildSDKsPath", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
                         if (!TryRemapControlledBuildValue(
                                 property.Value,
                                 gitRoot!,

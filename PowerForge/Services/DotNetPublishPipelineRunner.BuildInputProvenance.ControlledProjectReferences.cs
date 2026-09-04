@@ -138,9 +138,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     request.ReadEffectiveGlobalProperties(),
                     projectContexts,
                     out originalGitRoot,
-                    out string? controlledProjectPath))
+                    out string? controlledProjectPath,
+                    out string? checkoutFailureReason))
             {
-                failureReason = "controlled source checkout could not be created";
+                failureReason = "controlled source checkout could not be created: " +
+                    (checkoutFailureReason ?? "unknown reason");
                 return false;
             }
             if (!TryCreateControlledBuildEnvironment(
