@@ -242,12 +242,27 @@ public sealed class PowerShellTypedCompilationTranspiler
             methodSources.RemoveAt(index);
         }
 
-        var promotedRegions = boundResult.PromotedRegions
-            .Where(region => methods.All(method => !method.GeneratedName.Equals(region.GeneratedName, StringComparison.Ordinal)))
-            .ToArray();
-        methodSources.AddRange(promotedRegions.Select(static region => region.GeneratedSource));
+        var selectedRegions = PowerShellTypedRegionSelectionReconciler.Resolve(
+            boundResult.PromotedRegions,
+            boundResult.RegionCandidates,
+            methods,
+            diagnostics);
+        methodSources.AddRange(selectedRegions.Promoted.Select(static region => region.GeneratedSource));
 
-        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework, semanticProfileId, boundResult.Optimization, boundResult.IrSnapshots, promotedRegions);
+        return CreateResult(
+            fullPaths,
+            namespaceName,
+            typeName,
+            methods.ToArray(),
+            methodSources.ToArray(),
+            diagnostics,
+            parsedFiles,
+            targetFramework,
+            semanticProfileId,
+            boundResult.Optimization,
+            boundResult.IrSnapshots,
+            selectedRegions.Promoted,
+            selectedRegions.Candidates);
     }
 
     private static void EmitFunctionGraph(
@@ -354,7 +369,15 @@ public sealed class PowerShellTypedCompilationTranspiler
             emissions[GetSemanticMethodKey(path, function.Symbol.Name, function.Symbol.Declaration.StartLine)] = result.Emitted.Methods[index];
         }
         var promotedRegions = result.PromotedRegions.Select(static region => CreateCompiledRegion(region)).ToArray();
-        return new BoundEmissionIndex(emissions, result.Optimization.ToPublicModel(), PowerShellCompilationIrSnapshotBuilder.Create(result), promotedRegions);
+        var regionCandidates = result.RegionCandidateDecisions
+            .Select(static decision => PowerShellTypedRegionSelectionReconciler.CreateEvidence(decision))
+            .ToArray();
+        return new BoundEmissionIndex(
+            emissions,
+            result.Optimization.ToPublicModel(),
+            PowerShellCompilationIrSnapshotBuilder.Create(result),
+            promotedRegions,
+            regionCandidates);
     }
 
     private static string GetSemanticMethodKey(string path, string name, int definitionStartLine)
@@ -464,7 +487,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         string semanticProfileId,
         PowerShellCompilationOptimizationEvidence? optimization = null,
         PowerShellCompilationIrSnapshotBundle? irSnapshots = null,
-        PowerShellCompiledRegion[]? promotedRegions = null)
+        PowerShellCompiledRegion[]? promotedRegions = null,
+        PowerShellCompilationRegionCandidate[]? regionCandidates = null)
     {
         var template = ReadTemplate();
         var source = template
@@ -488,6 +512,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             optimization,
             irSnapshots);
         result.PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
+        result.RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
         return result;
     }
 
@@ -497,18 +522,21 @@ public sealed class PowerShellTypedCompilationTranspiler
             IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> emissions,
             PowerShellCompilationOptimizationEvidence optimization,
             PowerShellCompilationIrSnapshotBundle irSnapshots,
-            PowerShellCompiledRegion[] promotedRegions)
+            PowerShellCompiledRegion[] promotedRegions,
+            PowerShellCompilationRegionCandidate[] regionCandidates)
         {
             Emissions = emissions;
             Optimization = optimization;
             IrSnapshots = irSnapshots;
             PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
+            RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
         }
 
         internal IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> Emissions { get; }
         internal PowerShellCompilationOptimizationEvidence Optimization { get; }
         internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
         internal PowerShellCompiledRegion[] PromotedRegions { get; }
+        internal PowerShellCompilationRegionCandidate[] RegionCandidates { get; }
     }
 
     private static string ReadTemplate()

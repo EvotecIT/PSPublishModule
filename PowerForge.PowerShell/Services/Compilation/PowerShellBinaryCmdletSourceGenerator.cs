@@ -128,6 +128,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             optimization: filtered.Optimization,
             irSnapshots: filtered.IrSnapshots);
         result.PromotedRegions = filtered.PromotedRegions;
+        result.RegionCandidates = filtered.RegionCandidates;
         return result;
     }
 

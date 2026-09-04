@@ -464,6 +464,12 @@ public sealed class PowerShellTypedCompilationResult
     /// </summary>
     public PowerShellCompiledRegion[] PromotedRegions { get; internal set; } = Array.Empty<PowerShellCompiledRegion>();
 
+    /// <summary>
+    /// Every terminal region considered by the canonical Hybrid promotion policy, including
+    /// promoted and fail-closed decisions. This is diagnostic evidence, not emitted-unit credit.
+    /// </summary>
+    public PowerShellCompilationRegionCandidate[] RegionCandidates { get; internal set; } = Array.Empty<PowerShellCompilationRegionCandidate>();
+
     /// <summary>Whether at least one method was translated and no blockers remain.</summary>
     public bool Success => Methods.Length > 0 && Diagnostics.Length == 0;
 }

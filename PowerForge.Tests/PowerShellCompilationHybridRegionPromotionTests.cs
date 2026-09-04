@@ -1,4 +1,5 @@
 using PowerForge;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -53,16 +54,26 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(new[] { "Parameter:USEZERO", "Parameter:VALUE" }, Assert.Single(region.RegionGraph.Regions).Inputs);
         Assert.Equal(new[] { "Success" }, Assert.Single(region.RegionGraph.Regions).Streams);
         Assert.Empty(Assert.Single(region.RegionGraph.Regions).Errors);
+        var accepted = Assert.Single(hybrid.RegionCandidates);
+        Assert.True(accepted.Promoted);
+        Assert.Equal("region.promoted", accepted.DecisionCode);
+        Assert.Equal(region.RegionId, accepted.RegionId);
+        Assert.Equal(region.GeneratedName, accepted.GeneratedName);
+        Assert.NotNull(accepted.RegionGraph);
         Assert.Equal(3, hybrid.IrSnapshots!.SchemaVersion);
         Assert.Contains(hybrid.IrSnapshots.Bound, static unit => unit.Disposition == "PromotedTypedRegion");
         Assert.Contains(hybrid.IrSnapshots.Lowered, static unit => unit.Disposition == "PromotedTypedRegion");
         Assert.Empty(strict.PromotedRegions);
+        Assert.Empty(strict.RegionCandidates);
         Assert.Empty(stateWithoutRegionAuthority.PromotedRegions);
+        Assert.Empty(stateWithoutRegionAuthority.RegionCandidates);
 
         var census = new PowerShellCompilationCensusRunner().Run(new[] { fixture.ScriptPath }, "net10.0");
         var product = Assert.Single(census.Products);
         Assert.Equal(0, product.Coverage.EmittedFunctions);
         Assert.Equal(1, product.PromotedTypedRegions);
+        Assert.Equal(0, product.RejectedTypedRegions);
+        Assert.True(Assert.Single(product.RegionCandidates).Promoted);
         Assert.Equal(1, census.PromotedTypedRegions);
         Assert.Equal(1, Assert.Single(product.FunctionDispositions).PromotedTypedRegions);
     }
@@ -71,7 +82,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Transpile_HybridRejectsTerminalRegionWithModeledClrFailureRoute()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-RegionalValue { param([int] $Value); trap { continue }; return $Value + 1 }",
+            """
+            function Get-RegionalValue {
+                [CmdletBinding()]
+                param([string] $Value, [bool] $UseZero)
+                & { "hosted:$Value" }
+                trap { continue }
+                if ($UseZero) { return 0.0 }
+                return [double] $Value
+            }
+            """,
             ".psm1");
 
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
@@ -83,7 +103,123 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.Empty(typed.Methods);
         Assert.Empty(typed.PromotedRegions);
+        var decision = Assert.Single(typed.RegionCandidates);
+        Assert.False(decision.Promoted);
+        Assert.Equal("region.error-route", decision.DecisionCode);
+        Assert.Contains("ClrException", decision.Reason, StringComparison.Ordinal);
+        Assert.Contains("PowerShellLanguageRuntimeError", decision.Reason, StringComparison.Ordinal);
+        Assert.NotNull(decision.RegionGraph);
         Assert.DoesNotContain("__PowerForgeRegion_", typed.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Transpile_HybridExplainsHostedCommandInsideTerminalCandidate()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-RegionalValue { [CmdletBinding()] param([object] $Status, [bool] $Warn); Write-Verbose \"Status: $Status\"; if ($Warn) { Write-Verbose 'suffix' }; return $true }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(typed.PromotedRegions);
+        var decision = Assert.Single(typed.RegionCandidates);
+        Assert.False(decision.Promoted);
+        Assert.Equal("region.command-boundary", decision.DecisionCode);
+        Assert.Contains("hosted command boundary", decision.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(decision.RegionGraph);
+        Assert.Empty(decision.GeneratedName);
+    }
+
+    [Fact]
+    public void Transpile_HybridReportsGeneratedNameCollisionAsRetained()
+    {
+        using var fixture = ArtifactFixture.Create(HybridRegionSource, ".psm1");
+        var transpiler = new PowerShellTypedCompilationTranspiler();
+        var initial = transpiler.TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+        var helperName = Assert.Single(initial.PromotedRegions).GeneratedName;
+        File.AppendAllText(fixture.ScriptPath, $"{Environment.NewLine}function {helperName} {{ return 7 }}");
+
+        var typed = transpiler.TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(typed.PromotedRegions);
+        Assert.Contains(typed.Methods, method => method.GeneratedName == helperName);
+        var candidate = Assert.Single(typed.RegionCandidates);
+        Assert.False(candidate.Promoted);
+        Assert.Equal("region.generated-name-collision", candidate.DecisionCode);
+        Assert.Empty(candidate.GeneratedName);
+        Assert.Contains(typed.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("collides with generated CLR method name", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Census_RegionCandidateEvidenceRoundTripsThroughPublicJsonContract()
+    {
+        using var fixture = ArtifactFixture.Create(HybridRegionSource, ".psm1");
+        var original = new PowerShellCompilationCensusRunner().Run(new[] { fixture.ScriptPath }, "net10.0");
+
+        var json = JsonSerializer.Serialize(original);
+        var roundTripped = JsonSerializer.Deserialize<PowerShellCompilationCensusResult>(json);
+
+        var candidate = Assert.Single(Assert.Single(roundTripped!.Products).RegionCandidates);
+        Assert.True(candidate.Promoted);
+        Assert.Equal("region.promoted", candidate.DecisionCode);
+        Assert.NotNull(candidate.RegionGraph);
+    }
+
+    [Fact]
+    public void Transpile_HybridExplainsWhyLiveLocalTransferFailsClosed()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-RegionalValue {
+                param([int] $Value)
+                if ($Value -gt 0) {
+                    $Saved = 'positive'
+                    Write-Verbose 'hosted'
+                } else {
+                    $Saved = 'other'
+                    Write-Verbose 'hosted'
+                }
+                return "$Saved"
+            }
+            """,
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(typed.Methods);
+        Assert.Empty(typed.PromotedRegions);
+        var decision = Assert.Single(typed.RegionCandidates);
+        Assert.False(decision.Promoted);
+        Assert.Equal("PSD1001", decision.DecisionCode);
+        Assert.Contains("definitely assigned", decision.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(decision.RegionGraph);
+        Assert.DoesNotContain("__PowerForgeRegion_", typed.SourceCode, StringComparison.Ordinal);
+
+        var census = new PowerShellCompilationCensusRunner().Run(new[] { fixture.ScriptPath }, "net10.0");
+        var product = Assert.Single(census.Products);
+        Assert.Equal(1, product.RejectedTypedRegions);
+        Assert.Equal("PSD1001", Assert.Single(product.RegionCandidates).DecisionCode);
     }
 
     [Fact]

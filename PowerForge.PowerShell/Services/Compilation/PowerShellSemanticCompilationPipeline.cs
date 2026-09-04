@@ -56,16 +56,23 @@ internal sealed class PowerShellSemanticCompilationPipeline
         var analyzed = _analyzer.Analyze(optimized.Program);
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
-        var promotedRegions = CompileRegions(binding.RegionCandidates, bound.Documents, capabilities);
-        return new PowerShellSemanticCompilationResult(bound, optimized.Evidence, analyzed, lowered, emitted, promotedRegions);
+        var regions = CompileRegions(binding.RegionCandidates, bound.Documents, capabilities);
+        return new PowerShellSemanticCompilationResult(
+            bound,
+            optimized.Evidence,
+            analyzed,
+            lowered,
+            emitted,
+            regions.Promoted,
+            regions.Decisions);
     }
 
-    private PowerShellPromotedRegionEmission[] CompileRegions(
+    private PowerShellRegionCompilationResult CompileRegions(
         IReadOnlyList<PowerShellBoundRegionCandidate> candidates,
         IReadOnlyList<PowerShellBoundSourceDocument> documents,
         PowerShellCompilationCapability capabilities)
     {
-        if (candidates.Count == 0) return Array.Empty<PowerShellPromotedRegionEmission>();
+        if (candidates.Count == 0) return PowerShellRegionCompilationResult.Empty;
         var candidateProgram = new PowerShellBoundProgram(
             documents.ToArray(),
             candidates.Select(static candidate => candidate.RegionFunction).ToArray(),
@@ -76,17 +83,39 @@ internal sealed class PowerShellSemanticCompilationPipeline
         var emitted = _backend.Emit(lowered);
         var byKey = candidates.ToDictionary(static candidate => candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal);
         var analyzedByKey = analyzed.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
-        var result = new List<PowerShellPromotedRegionEmission>();
+        var decisions = new Dictionary<string, PowerShellRegionCandidateDecision>(StringComparer.Ordinal);
+        var promoted = new List<PowerShellPromotedRegionEmission>();
         for (var index = 0; index < lowered.Functions.Length && index < emitted.Methods.Length; index++)
         {
             var loweredFunction = lowered.Functions[index];
             if (!byKey.TryGetValue(loweredFunction.Symbol.StableKey, out var candidate)) continue;
             if (!analyzedByKey.TryGetValue(loweredFunction.Symbol.StableKey, out var analyzedFunction)) continue;
             var method = emitted.Methods[index];
-            if (PowerShellTypedRegionPromotionPolicy.IsSafe(candidate, loweredFunction, method))
-                result.Add(new PowerShellPromotedRegionEmission(candidate, analyzedFunction, loweredFunction, method));
+            var policy = PowerShellTypedRegionPromotionPolicy.Evaluate(candidate, loweredFunction, method);
+            decisions[candidate.RegionId] = new PowerShellRegionCandidateDecision(candidate, policy, method);
+            if (policy.IsSafe)
+                promoted.Add(new PowerShellPromotedRegionEmission(candidate, analyzedFunction, loweredFunction, method));
         }
-        return result.OrderBy(static region => region.Candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal).ToArray();
+        foreach (var candidate in candidates.Where(candidate => !decisions.ContainsKey(candidate.RegionId)))
+        {
+            var analyzedFunction = analyzedByKey.TryGetValue(candidate.RegionFunction.Symbol.StableKey, out var value)
+                ? value
+                : null;
+            var code = analyzedFunction?.Disposition.ReasonCode;
+            var reason = analyzedFunction?.Disposition.Explanation;
+            decisions[candidate.RegionId] = new PowerShellRegionCandidateDecision(
+                candidate,
+                new PowerShellTypedRegionPromotionDecision(
+                    isSafe: false,
+                    string.IsNullOrWhiteSpace(code) ? "region.not-emitted" : code!,
+                    string.IsNullOrWhiteSpace(reason)
+                        ? "The candidate did not survive canonical semantic analysis and lowering."
+                        : reason!),
+                emission: null);
+        }
+        return new PowerShellRegionCompilationResult(
+            promoted.OrderBy(static region => region.Candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
+            decisions.Values.OrderBy(static decision => decision.Candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal).ToArray());
     }
 }
 
@@ -98,7 +127,8 @@ internal sealed class PowerShellSemanticCompilationResult
         PowerShellBoundProgram analyzed,
         PowerShellLoweredProgram lowered,
         PowerShellBoundCSharpResult emitted,
-        PowerShellPromotedRegionEmission[] promotedRegions)
+        PowerShellPromotedRegionEmission[] promotedRegions,
+        PowerShellRegionCandidateDecision[] regionCandidateDecisions)
     {
         Bound = bound;
         Optimization = optimization;
@@ -106,6 +136,7 @@ internal sealed class PowerShellSemanticCompilationResult
         Lowered = lowered;
         Emitted = emitted;
         PromotedRegions = promotedRegions ?? Array.Empty<PowerShellPromotedRegionEmission>();
+        RegionCandidateDecisions = regionCandidateDecisions ?? Array.Empty<PowerShellRegionCandidateDecision>();
     }
 
     internal PowerShellBoundProgram Bound { get; }
@@ -114,4 +145,40 @@ internal sealed class PowerShellSemanticCompilationResult
     internal PowerShellLoweredProgram Lowered { get; }
     internal PowerShellBoundCSharpResult Emitted { get; }
     internal PowerShellImmutableArray<PowerShellPromotedRegionEmission> PromotedRegions { get; }
+    internal PowerShellImmutableArray<PowerShellRegionCandidateDecision> RegionCandidateDecisions { get; }
+}
+
+internal sealed class PowerShellRegionCompilationResult
+{
+    internal static PowerShellRegionCompilationResult Empty { get; } = new(
+        Array.Empty<PowerShellPromotedRegionEmission>(),
+        Array.Empty<PowerShellRegionCandidateDecision>());
+
+    internal PowerShellRegionCompilationResult(
+        PowerShellPromotedRegionEmission[] promoted,
+        PowerShellRegionCandidateDecision[] decisions)
+    {
+        Promoted = promoted ?? Array.Empty<PowerShellPromotedRegionEmission>();
+        Decisions = decisions ?? Array.Empty<PowerShellRegionCandidateDecision>();
+    }
+
+    internal PowerShellPromotedRegionEmission[] Promoted { get; }
+    internal PowerShellRegionCandidateDecision[] Decisions { get; }
+}
+
+internal sealed class PowerShellRegionCandidateDecision
+{
+    internal PowerShellRegionCandidateDecision(
+        PowerShellBoundRegionCandidate candidate,
+        PowerShellTypedRegionPromotionDecision policy,
+        PowerShellCSharpMethodEmission? emission)
+    {
+        Candidate = candidate ?? throw new ArgumentNullException(nameof(candidate));
+        Policy = policy ?? throw new ArgumentNullException(nameof(policy));
+        Emission = emission;
+    }
+
+    internal PowerShellBoundRegionCandidate Candidate { get; }
+    internal PowerShellTypedRegionPromotionDecision Policy { get; }
+    internal PowerShellCSharpMethodEmission? Emission { get; }
 }

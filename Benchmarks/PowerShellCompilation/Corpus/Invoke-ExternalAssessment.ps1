@@ -258,6 +258,7 @@ $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
 $packetSha256 = (Get-FileHash -LiteralPath $PacketPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $results = [Collections.Generic.List[object]]::new()
 $frontierRows = [Collections.Generic.List[object]]::new()
+$regionDecisionRows = [Collections.Generic.List[object]]::new()
 
 try {
     $selected = @($packet.workloads)
@@ -275,8 +276,22 @@ try {
             $product = $census.Product
             $functionPercentage = if ($product.coverage.totalFunctions) { [Math]::Round(100 * $product.coverage.emittedFunctions / $product.coverage.totalFunctions, 2) } else { $null }
             $unitPercentage = if ($product.totalUnits) { [Math]::Round(100 * $product.compilableUnits / $product.totalUnits, 2) } else { 0.0 }
+            $regionCandidates = @($product.regionCandidates | Where-Object { $null -ne $_ })
+            $regionDecisionSummary = @($regionCandidates |
+                Group-Object -Property decisionCode |
+                Sort-Object -Property @{ Expression = 'Count'; Descending = $true }, Name |
+                ForEach-Object {
+                    [ordered]@{
+                        decisionCode = $_.Name
+                        candidates = $_.Count
+                        exampleReason = [string] $_.Group[0].reason
+                    }
+                })
             foreach ($impact in @($product.functionImpacts)) {
                 $frontierRows.Add([pscustomobject]@{ WorkloadId = $entry.id; Impact = $impact })
+            }
+            foreach ($candidate in @($regionCandidates | Where-Object { -not $_.promoted })) {
+                $regionDecisionRows.Add([pscustomobject]@{ WorkloadId = $entry.id; Candidate = $candidate })
             }
             $results.Add([ordered]@{
                 id = $entry.id
@@ -296,6 +311,9 @@ try {
                 analyzerEligibleFunctions = $product.coverage.analyzerEligibleFunctions
                 emittedFunctions = $product.coverage.emittedFunctions
                 promotedTypedRegions = [int] $product.promotedTypedRegions
+                regionCandidates = $regionCandidates.Count
+                rejectedTypedRegions = [int] $product.rejectedTypedRegions
+                regionDecisionSummary = $regionDecisionSummary
                 droppedEligibleFunctions = $product.coverage.droppedEligibleFunctions
                 fallbackFunctions = $product.coverage.fallbackFunctions
                 functionDispositions = @($product.functionDispositions | ForEach-Object {
@@ -341,6 +359,8 @@ try {
     $totalFunctions = [int] (($successful | ForEach-Object { [int] $_.totalFunctions } | Measure-Object -Sum).Sum)
     $emittedFunctions = [int] (($successful | ForEach-Object { [int] $_.emittedFunctions } | Measure-Object -Sum).Sum)
     $promotedTypedRegions = [int] (($successful | ForEach-Object { [int] $_.promotedTypedRegions } | Measure-Object -Sum).Sum)
+    $regionCandidates = [int] (($successful | ForEach-Object { [int] $_.regionCandidates } | Measure-Object -Sum).Sum)
+    $rejectedTypedRegions = [int] (($successful | ForEach-Object { [int] $_.rejectedTypedRegions } | Measure-Object -Sum).Sum)
     $parseErrorFiles = [int] (($successful | ForEach-Object { [int] $_.parseErrorFiles } | Measure-Object -Sum).Sum)
     $crossWorkloadFrontier = @($frontierRows |
         Group-Object { $_.Impact.featureId } |
@@ -358,6 +378,18 @@ try {
         } |
         Sort-Object -Property @{ Expression = 'affectedWorkloads'; Descending = $true }, @{ Expression = 'visibleSoleBlockerUnits'; Descending = $true }, @{ Expression = 'affectedUnits'; Descending = $true }, featureId |
         Select-Object -First 20)
+    $crossWorkloadRetainedRegionFrontier = @($regionDecisionRows |
+        Group-Object { $_.Candidate.decisionCode } |
+        ForEach-Object {
+            $group = @($_.Group)
+            [pscustomobject][ordered]@{
+                decisionCode = $_.Name
+                affectedWorkloads = @($group.WorkloadId | Sort-Object -Unique).Count
+                candidates = $group.Count
+                exampleReason = [string] $group[0].Candidate.reason
+            }
+        } |
+        Sort-Object -Property @{ Expression = 'affectedWorkloads'; Descending = $true }, @{ Expression = 'candidates'; Descending = $true }, decisionCode)
     $evidence = [ordered]@{
         schemaVersion = 1
         packetId = $packet.packetId
@@ -373,6 +405,7 @@ try {
         }
         workloads = @($results)
         crossWorkloadFunctionFrontier = $crossWorkloadFrontier
+        crossWorkloadRetainedRegionFrontier = $crossWorkloadRetainedRegionFrontier
         regressions = @($regressions)
         summary = [ordered]@{
             workloadsAssessed = $successful.Count
@@ -384,6 +417,8 @@ try {
             totalFunctions = $totalFunctions
             emittedFunctions = $emittedFunctions
             promotedTypedRegions = $promotedTypedRegions
+            regionCandidates = $regionCandidates
+            rejectedTypedRegions = $rejectedTypedRegions
             emittedFunctionPercentage = if ($totalFunctions) { [Math]::Round(100 * $emittedFunctions / $totalFunctions, 2) } else { $null }
             parseErrorFiles = $parseErrorFiles
             acquisitionOrAnalysisFailures = @($results | Where-Object { -not $_.succeeded }).Count
@@ -395,7 +430,7 @@ try {
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Information "Evidence: $EvidencePath" -InformationAction Continue
-    Write-Information "Assessed: $($successful.Count)/$($results.Count); emitted functions: $emittedFunctions/$totalFunctions; emitted units: $emittedUnits/$totalUnits; promoted typed regions: $promotedTypedRegions; regressions: $($regressions.Count)" -InformationAction Continue
+    Write-Information "Assessed: $($successful.Count)/$($results.Count); emitted functions: $emittedFunctions/$totalFunctions; emitted units: $emittedUnits/$totalUnits; promoted typed regions: $promotedTypedRegions; retained candidates: $rejectedTypedRegions/$regionCandidates; regressions: $($regressions.Count)" -InformationAction Continue
     if ($evidence.summary.acquisitionOrAnalysisFailures -gt 0 -or $regressions.Count -gt 0) { exit 1 }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {

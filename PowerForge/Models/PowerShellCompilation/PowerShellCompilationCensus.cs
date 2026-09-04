@@ -76,7 +76,6 @@ public sealed class PowerShellCompilationCensusProduct
     }
 
     /// <summary>Creates a product census result with stable per-function dispositions.</summary>
-    [System.Text.Json.Serialization.JsonConstructor]
     public PowerShellCompilationCensusProduct(
         string name,
         string path,
@@ -94,6 +93,47 @@ public sealed class PowerShellCompilationCensusProduct
         string? sourceFingerprint,
         PowerShellCompilationFeatureImpact[]? functionImpacts,
         PowerShellCompilationFunctionDisposition[]? functionDispositions)
+        : this(
+            name,
+            path,
+            sourceFiles,
+            totalUnits,
+            compilableUnits,
+            runtimeFallbackUnits,
+            parseErrorFiles,
+            analysisMilliseconds,
+            blockers,
+            featureImpacts,
+            dependencySummary,
+            resourceSummary,
+            coverage,
+            sourceFingerprint,
+            functionImpacts,
+            functionDispositions,
+            Array.Empty<PowerShellCompilationRegionCandidate>())
+    {
+    }
+
+    /// <summary>Creates a product census result with function and typed-region dispositions.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
+    public PowerShellCompilationCensusProduct(
+        string name,
+        string path,
+        int sourceFiles,
+        int totalUnits,
+        int compilableUnits,
+        int runtimeFallbackUnits,
+        int parseErrorFiles,
+        double analysisMilliseconds,
+        PowerShellCompilationCensusBlocker[] blockers,
+        PowerShellCompilationFeatureImpact[]? featureImpacts,
+        PowerShellCompilationDependencySummary[]? dependencySummary,
+        PowerShellCompilationResourceSummary? resourceSummary,
+        PowerShellCompilationCoverageBreakdown? coverage,
+        string? sourceFingerprint,
+        PowerShellCompilationFeatureImpact[]? functionImpacts,
+        PowerShellCompilationFunctionDisposition[]? functionDispositions,
+        PowerShellCompilationRegionCandidate[]? regionCandidates)
     {
         Name = name ?? string.Empty;
         Path = path ?? string.Empty;
@@ -111,6 +151,7 @@ public sealed class PowerShellCompilationCensusProduct
         SourceFingerprint = sourceFingerprint ?? string.Empty;
         FunctionImpacts = functionImpacts ?? Array.Empty<PowerShellCompilationFeatureImpact>();
         FunctionDispositions = functionDispositions ?? Array.Empty<PowerShellCompilationFunctionDisposition>();
+        RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
     }
 
     /// <summary>Stable product name derived from the source root.</summary>
@@ -166,6 +207,12 @@ public sealed class PowerShellCompilationCensusProduct
 
     /// <summary>Typed CLR regions promoted inside functions that remain runtime-routed.</summary>
     public int PromotedTypedRegions => FunctionDispositions.Sum(static disposition => disposition.PromotedTypedRegions);
+
+    /// <summary>Canonical promotion decisions for terminal regions inside retained functions.</summary>
+    public PowerShellCompilationRegionCandidate[] RegionCandidates { get; internal set; }
+
+    /// <summary>Terminal region candidates retained after the promotion policy failed closed.</summary>
+    public int RejectedTypedRegions => RegionCandidates.Count(static candidate => !candidate.Promoted);
 }
 
 /// <summary>Stable post-shaping census disposition for one authored function.</summary>
