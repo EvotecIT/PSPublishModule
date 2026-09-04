@@ -62,9 +62,9 @@ Export-ModuleMember -Function Get-CdxmlManagementCaption
     <Version>1.0</Version>
     <DefaultNoun>GenericOperatingSystem</DefaultNoun>
     <InstanceCmdlets>
+      <GetCmdletParameters />
       <GetCmdlet>
         <CmdletMetadata Verb="Get" />
-        <GetCmdletParameters />
       </GetCmdlet>
     </InstanceCmdlets>
   </Class>
