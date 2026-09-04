@@ -744,7 +744,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
-    public void BuildRestoreMsBuildProperties_SelfContainedPreservesMultiFileShape()
+    public void BuildRestoreMsBuildProperties_SelfContainedUsesSingleFileSupersetLockGraph()
     {
         var plan = new DotNetPublishPlan
         {
@@ -774,7 +774,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             "net10.0");
 
         Assert.Equal("true", properties["SelfContained"]);
-        Assert.Equal("false", properties["PublishSingleFile"]);
+        Assert.Equal("true", properties["PublishSingleFile"]);
         Assert.False(properties.ContainsKey("IncludeNativeLibrariesForSelfExtract"));
         Assert.False(properties.ContainsKey("PublishAot"));
     }

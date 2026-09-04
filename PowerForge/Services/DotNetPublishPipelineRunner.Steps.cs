@@ -104,8 +104,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     if (!merged.ContainsKey("SelfContained"))
                         merged["SelfContained"] = "true";
+                    // Keep restore on the single-file superset so one committed lock can serve
+                    // both portable single-file and multi-file self-contained release lanes.
+                    // Build and publish still force PublishSingleFile=false for this style.
                     if (!merged.ContainsKey("PublishSingleFile"))
-                        merged["PublishSingleFile"] = "false";
+                        merged["PublishSingleFile"] = "true";
                     if (target.Publish.ReadyToRun.HasValue && !merged.ContainsKey("PublishReadyToRun"))
                         merged["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
                 }
