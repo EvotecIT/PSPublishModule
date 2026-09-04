@@ -1224,6 +1224,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out hasDynamicProjectReferenceTaskOutputs,
                         out dynamicProjectReferences))
                 {
+                    failureReason = "preprocessed project imports could not be evaluated";
                     return false;
                 }
                 importPaths.UnionWith(preprocessedImports);
@@ -1234,6 +1235,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (verifiedPackages is not null &&
                     !verifiedPackages.TrySetControlledBuildInputs(evaluatedImportPaths))
                 {
+                    failureReason = "controlled package build inputs could not be verified";
                     return false;
                 }
                 evaluatedProjectReferenceConditionProperties =
@@ -1250,6 +1252,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             evaluatedProjectReferenceConditionProperties,
                             out taskWideProjectReferencePropertyRemovals))
                     {
+                        failureReason = "project-reference property removals could not be resolved";
                         return false;
                     }
                 }
@@ -1264,6 +1267,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             taskWideProjectReferencePropertyRemovals,
                             out EvaluatedProjectReference[] itemReferences))
                     {
+                        failureReason = "dynamic project references could not be resolved";
                         return false;
                     }
                     foreach (EvaluatedProjectReference rawReference in itemReferences)
@@ -1297,6 +1301,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             continue;
                         if (IsAmbientReferenceResolutionItem(itemName) && values.GetArrayLength() > 0)
                         {
+                            failureReason = $"ambient '{itemName}' items are not allowed";
                             return false;
                         }
                         foreach (JsonElement item in values.EnumerateArray())
@@ -1343,9 +1348,10 @@ public sealed partial class DotNetPublishPipelineRunner
                                             hasDynamicProjectReferenceTaskOutputs,
                                         allowAmbiguousEvaluatedAssignments:
                                             hasDynamicProjectReferenceTaskOutputs,
-                                        out EvaluatedProjectReference[] itemReferences) ||
+                                    out EvaluatedProjectReference[] itemReferences) ||
                                     itemReferences.Length == 0)
                                 {
+                                    failureReason = "an evaluated project reference could not be resolved";
                                     return false;
                                 }
                                 foreach (EvaluatedProjectReference rawReference in itemReferences)
@@ -1445,6 +1451,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out EvaluatedProjectReference[] resolvedReferences,
                         out string resolvedItemsJson))
                 {
+                    failureReason = "controlled project references could not be resolved";
                     return false;
                 }
                 foreach (EvaluatedProjectReference reference in MergeResolvedProjectReferenceContexts(
@@ -1474,6 +1481,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         trustedBuildInfrastructureRoots,
                         generatedProjectReferenceOutputs))
                 {
+                    failureReason = "controlled project-reference items could not be processed";
                     return false;
                 }
             }
