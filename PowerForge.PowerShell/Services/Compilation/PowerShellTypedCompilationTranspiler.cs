@@ -262,7 +262,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             boundResult.Optimization,
             boundResult.IrSnapshots,
             selectedRegions.Promoted,
-            selectedRegions.Candidates);
+            selectedRegions.Candidates,
+            boundResult.RegionOpportunities);
     }
 
     private static void EmitFunctionGraph(
@@ -377,7 +378,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             result.Optimization.ToPublicModel(),
             PowerShellCompilationIrSnapshotBuilder.Create(result),
             promotedRegions,
-            regionCandidates);
+            regionCandidates,
+            result.RegionOpportunities.ToArray());
     }
 
     private static string GetSemanticMethodKey(string path, string name, int definitionStartLine)
@@ -488,7 +490,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         PowerShellCompilationOptimizationEvidence? optimization = null,
         PowerShellCompilationIrSnapshotBundle? irSnapshots = null,
         PowerShellCompiledRegion[]? promotedRegions = null,
-        PowerShellCompilationRegionCandidate[]? regionCandidates = null)
+        PowerShellCompilationRegionCandidate[]? regionCandidates = null,
+        PowerShellCompilationRegionOpportunity[]? regionOpportunities = null)
     {
         var template = ReadTemplate();
         var source = template
@@ -513,6 +516,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             irSnapshots);
         result.PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
         result.RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
+        result.RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
         return result;
     }
 
@@ -523,13 +527,15 @@ public sealed class PowerShellTypedCompilationTranspiler
             PowerShellCompilationOptimizationEvidence optimization,
             PowerShellCompilationIrSnapshotBundle irSnapshots,
             PowerShellCompiledRegion[] promotedRegions,
-            PowerShellCompilationRegionCandidate[] regionCandidates)
+            PowerShellCompilationRegionCandidate[] regionCandidates,
+            PowerShellCompilationRegionOpportunity[] regionOpportunities)
         {
             Emissions = emissions;
             Optimization = optimization;
             IrSnapshots = irSnapshots;
             PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
             RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
+            RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
         }
 
         internal IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> Emissions { get; }
@@ -537,6 +543,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
         internal PowerShellCompiledRegion[] PromotedRegions { get; }
         internal PowerShellCompilationRegionCandidate[] RegionCandidates { get; }
+        internal PowerShellCompilationRegionOpportunity[] RegionOpportunities { get; }
     }
 
     private static string ReadTemplate()

@@ -395,6 +395,9 @@ try {
                 $regionCandidates = @($censusProduct.regionCandidates | Where-Object { $null -ne $_ } | ForEach-Object {
                     ConvertTo-PortableRegionCandidate -Candidate $_ -SourceRoot $sourceRoot
                 })
+                $regionOpportunities = @($censusProduct.regionOpportunities | Where-Object { $null -ne $_ } | ForEach-Object {
+                    ConvertTo-PortableRegionOpportunity -Opportunity $_ -SourceRoot $sourceRoot
+                })
                 $analysis = Invoke-PowerForgeJson -Arguments @('powershell', 'analyze', $entryPoint, '--kind', 'dll', '--mode', $packet.mode, '--framework', $packet.targetFramework, '--resource-mode', $packet.resourceMode) -WorkingDirectory $runRoot
                 $lockPath = Join-Path $runRoot ('locks/' + $entry.id + '.lock.json')
                 Write-Utf8Json -Path $lockPath -Value $analysis.Json.result.dependencyGraph
@@ -423,6 +426,9 @@ try {
                     rejectedTypedRegions = @($regionCandidates | Where-Object { -not $_.promoted }).Count
                     regionDecisionSummary = @(Get-RegionCandidateDecisionSummary -Candidates $regionCandidates)
                     regionCandidateDecisions = $regionCandidates
+                    regionOpportunities = $regionOpportunities.Count
+                    nonTerminalRegionOpportunities = @($regionOpportunities | Where-Object { -not $_.insideTerminalCandidate }).Count
+                    regionOpportunityEvidence = $regionOpportunities
                     durationMilliseconds = [ordered]@{ census = $census.DurationMilliseconds; analyze = $analysis.DurationMilliseconds; build = $build.DurationMilliseconds; probe = $probe.DurationMilliseconds }
                     succeeded = $true
                 })
@@ -595,6 +601,13 @@ try {
         }
     })
     $crossWorkloadRetainedRegionFrontier = @(Get-CrossWorkloadRetainedRegionFrontier -Rows $regionDecisionRows)
+    $regionOpportunityRows = @($moduleResults | Where-Object succeeded | ForEach-Object {
+        $module = $_
+        @($module.regionOpportunityEvidence) | ForEach-Object {
+            [pscustomobject]@{ WorkloadId = $module.id; ScenarioFamily = $module.scenarioFamily; Opportunity = $_ }
+        }
+    })
+    $crossWorkloadRegionOpportunityFrontier = @(Get-CrossWorkloadRegionOpportunityFrontier -Rows $regionOpportunityRows)
     $evidence = [ordered]@{
         schemaVersion = 1
         packetId = $packet.packetId
@@ -611,6 +624,7 @@ try {
         modules = @($moduleResults)
         strictPrograms = @($strictResults)
         crossWorkloadRetainedRegionFrontier = $crossWorkloadRetainedRegionFrontier
+        crossWorkloadRegionOpportunityFrontier = $crossWorkloadRegionOpportunityFrontier
         regressions = $regressions
         baselineScope = [ordered]@{ hybrid = if ($compareModules) { 'Full' } else { 'IdentityOnly' }; strict = if ($compareStrict) { 'Full' } else { 'IdentityOnly' } }
         summary = [ordered]@{
@@ -623,11 +637,13 @@ try {
             promotedTypedRegions = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.counts.promotedTypedRegions })
             regionCandidates = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.regionCandidates })
             rejectedTypedRegions = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.rejectedTypedRegions })
+            regionOpportunities = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.regionOpportunities })
+            nonTerminalRegionOpportunities = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.nonTerminalRegionOpportunities })
         }
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Host "Evidence: $EvidencePath"
-    Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); promoted typed regions: $($evidence.summary.promotedTypedRegions); retained candidates: $($evidence.summary.rejectedTypedRegions)/$($evidence.summary.regionCandidates); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
+    Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); promoted typed regions: $($evidence.summary.promotedTypedRegions); retained candidates: $($evidence.summary.rejectedTypedRegions)/$($evidence.summary.regionCandidates); analysis-only opportunities outside terminal candidates: $($evidence.summary.nonTerminalRegionOpportunities)/$($evidence.summary.regionOpportunities); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
     if ($evidence.summary.failures -gt 0 -or $evidence.summary.regressions -gt 0) { exit 1 }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {

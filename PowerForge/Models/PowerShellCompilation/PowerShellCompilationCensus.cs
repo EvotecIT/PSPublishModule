@@ -115,7 +115,6 @@ public sealed class PowerShellCompilationCensusProduct
     }
 
     /// <summary>Creates a product census result with function and typed-region dispositions.</summary>
-    [System.Text.Json.Serialization.JsonConstructor]
     public PowerShellCompilationCensusProduct(
         string name,
         string path,
@@ -134,6 +133,49 @@ public sealed class PowerShellCompilationCensusProduct
         PowerShellCompilationFeatureImpact[]? functionImpacts,
         PowerShellCompilationFunctionDisposition[]? functionDispositions,
         PowerShellCompilationRegionCandidate[]? regionCandidates)
+        : this(
+            name,
+            path,
+            sourceFiles,
+            totalUnits,
+            compilableUnits,
+            runtimeFallbackUnits,
+            parseErrorFiles,
+            analysisMilliseconds,
+            blockers,
+            featureImpacts,
+            dependencySummary,
+            resourceSummary,
+            coverage,
+            sourceFingerprint,
+            functionImpacts,
+            functionDispositions,
+            regionCandidates,
+            Array.Empty<PowerShellCompilationRegionOpportunity>())
+    {
+    }
+
+    /// <summary>Creates a product census result with terminal candidates and analysis-only opportunities.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
+    public PowerShellCompilationCensusProduct(
+        string name,
+        string path,
+        int sourceFiles,
+        int totalUnits,
+        int compilableUnits,
+        int runtimeFallbackUnits,
+        int parseErrorFiles,
+        double analysisMilliseconds,
+        PowerShellCompilationCensusBlocker[] blockers,
+        PowerShellCompilationFeatureImpact[]? featureImpacts,
+        PowerShellCompilationDependencySummary[]? dependencySummary,
+        PowerShellCompilationResourceSummary? resourceSummary,
+        PowerShellCompilationCoverageBreakdown? coverage,
+        string? sourceFingerprint,
+        PowerShellCompilationFeatureImpact[]? functionImpacts,
+        PowerShellCompilationFunctionDisposition[]? functionDispositions,
+        PowerShellCompilationRegionCandidate[]? regionCandidates,
+        PowerShellCompilationRegionOpportunity[]? regionOpportunities)
     {
         Name = name ?? string.Empty;
         Path = path ?? string.Empty;
@@ -152,6 +194,7 @@ public sealed class PowerShellCompilationCensusProduct
         FunctionImpacts = functionImpacts ?? Array.Empty<PowerShellCompilationFeatureImpact>();
         FunctionDispositions = functionDispositions ?? Array.Empty<PowerShellCompilationFunctionDisposition>();
         RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
+        RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
     }
 
     /// <summary>Stable product name derived from the source root.</summary>
@@ -210,6 +253,9 @@ public sealed class PowerShellCompilationCensusProduct
 
     /// <summary>Canonical promotion decisions for terminal regions inside retained functions.</summary>
     public PowerShellCompilationRegionCandidate[] RegionCandidates { get; internal set; }
+
+    /// <summary>Analysis-only typed regions found inside otherwise rejected functions.</summary>
+    public PowerShellCompilationRegionOpportunity[] RegionOpportunities { get; internal set; }
 
     /// <summary>Terminal region candidates retained after the promotion policy failed closed.</summary>
     public int RejectedTypedRegions => RegionCandidates.Count(static candidate => !candidate.Promoted);

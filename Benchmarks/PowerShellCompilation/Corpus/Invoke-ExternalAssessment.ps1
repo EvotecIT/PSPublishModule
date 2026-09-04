@@ -278,6 +278,9 @@ try {
             $regionCandidates = @($product.regionCandidates | Where-Object { $null -ne $_ } | ForEach-Object {
                 ConvertTo-PortableRegionCandidate -Candidate $_ -SourceRoot $sourceRoot
             })
+            $regionOpportunities = @($product.regionOpportunities | Where-Object { $null -ne $_ } | ForEach-Object {
+                ConvertTo-PortableRegionOpportunity -Opportunity $_ -SourceRoot $sourceRoot
+            })
             $regionDecisionSummary = @(Get-RegionCandidateDecisionSummary -Candidates $regionCandidates)
             foreach ($impact in @($product.functionImpacts)) {
                 $frontierRows.Add([pscustomobject]@{ WorkloadId = $entry.id; Impact = $impact })
@@ -304,6 +307,9 @@ try {
                 rejectedTypedRegions = [int] $product.rejectedTypedRegions
                 regionDecisionSummary = $regionDecisionSummary
                 regionCandidateDecisions = $regionCandidates
+                regionOpportunities = $regionOpportunities.Count
+                nonTerminalRegionOpportunities = @($regionOpportunities | Where-Object { -not $_.insideTerminalCandidate }).Count
+                regionOpportunityEvidence = $regionOpportunities
                 droppedEligibleFunctions = $product.coverage.droppedEligibleFunctions
                 fallbackFunctions = $product.coverage.fallbackFunctions
                 functionDispositions = @($product.functionDispositions | ForEach-Object {
@@ -350,6 +356,8 @@ try {
     $emittedFunctions = [int] (($successful | ForEach-Object { [int] $_.emittedFunctions } | Measure-Object -Sum).Sum)
     $promotedTypedRegions = [int] (($successful | ForEach-Object { [int] $_.promotedTypedRegions } | Measure-Object -Sum).Sum)
     $regionCandidates = [int] (($successful | ForEach-Object { [int] $_.regionCandidates } | Measure-Object -Sum).Sum)
+    $regionOpportunities = [int] (($successful | ForEach-Object { [int] $_.regionOpportunities } | Measure-Object -Sum).Sum)
+    $nonTerminalRegionOpportunities = [int] (($successful | ForEach-Object { [int] $_.nonTerminalRegionOpportunities } | Measure-Object -Sum).Sum)
     $rejectedTypedRegions = [int] (($successful | ForEach-Object { [int] $_.rejectedTypedRegions } | Measure-Object -Sum).Sum)
     $parseErrorFiles = [int] (($successful | ForEach-Object { [int] $_.parseErrorFiles } | Measure-Object -Sum).Sum)
     $regionDecisionRows = @($successful | ForEach-Object {
@@ -375,6 +383,13 @@ try {
         Sort-Object -Property @{ Expression = 'affectedWorkloads'; Descending = $true }, @{ Expression = 'visibleSoleBlockerUnits'; Descending = $true }, @{ Expression = 'affectedUnits'; Descending = $true }, featureId |
         Select-Object -First 20)
     $crossWorkloadRetainedRegionFrontier = @(Get-CrossWorkloadRetainedRegionFrontier -Rows $regionDecisionRows)
+    $regionOpportunityRows = @($successful | ForEach-Object {
+        $workload = $_
+        @($workload.regionOpportunityEvidence) | ForEach-Object {
+            [pscustomobject]@{ WorkloadId = $workload.id; ScenarioFamily = $workload.scenarioFamily; Opportunity = $_ }
+        }
+    })
+    $crossWorkloadRegionOpportunityFrontier = @(Get-CrossWorkloadRegionOpportunityFrontier -Rows $regionOpportunityRows)
     $evidence = [ordered]@{
         schemaVersion = 1
         packetId = $packet.packetId
@@ -391,6 +406,7 @@ try {
         workloads = @($results)
         crossWorkloadFunctionFrontier = $crossWorkloadFrontier
         crossWorkloadRetainedRegionFrontier = $crossWorkloadRetainedRegionFrontier
+        crossWorkloadRegionOpportunityFrontier = $crossWorkloadRegionOpportunityFrontier
         regressions = @($regressions)
         summary = [ordered]@{
             workloadsAssessed = $successful.Count
@@ -404,6 +420,8 @@ try {
             promotedTypedRegions = $promotedTypedRegions
             regionCandidates = $regionCandidates
             rejectedTypedRegions = $rejectedTypedRegions
+            regionOpportunities = $regionOpportunities
+            nonTerminalRegionOpportunities = $nonTerminalRegionOpportunities
             emittedFunctionPercentage = if ($totalFunctions) { [Math]::Round(100 * $emittedFunctions / $totalFunctions, 2) } else { $null }
             parseErrorFiles = $parseErrorFiles
             acquisitionOrAnalysisFailures = @($results | Where-Object { -not $_.succeeded }).Count
@@ -415,7 +433,7 @@ try {
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Information "Evidence: $EvidencePath" -InformationAction Continue
-    Write-Information "Assessed: $($successful.Count)/$($results.Count); emitted functions: $emittedFunctions/$totalFunctions; emitted units: $emittedUnits/$totalUnits; promoted typed regions: $promotedTypedRegions; retained candidates: $rejectedTypedRegions/$regionCandidates; regressions: $($regressions.Count)" -InformationAction Continue
+    Write-Information "Assessed: $($successful.Count)/$($results.Count); emitted functions: $emittedFunctions/$totalFunctions; emitted units: $emittedUnits/$totalUnits; promoted typed regions: $promotedTypedRegions; retained candidates: $rejectedTypedRegions/$regionCandidates; analysis-only opportunities outside terminal candidates: $nonTerminalRegionOpportunities/$regionOpportunities; regressions: $($regressions.Count)" -InformationAction Continue
     if ($evidence.summary.acquisitionOrAnalysisFailures -gt 0 -or $regressions.Count -gt 0) { exit 1 }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {

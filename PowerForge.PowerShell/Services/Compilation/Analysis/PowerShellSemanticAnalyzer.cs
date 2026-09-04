@@ -28,6 +28,18 @@ internal sealed partial class PowerShellSemanticAnalyzer
         return current;
     }
 
+    /// <summary>
+    /// Computes canonical type, data-flow, call, output, effect, and capability facts for
+    /// analysis-only regions without applying the whole-function fallback policy.
+    /// </summary>
+    internal PowerShellBoundProgram AnalyzeRegionOpportunities(PowerShellBoundProgram program)
+    {
+        var current = program ?? throw new ArgumentNullException(nameof(program));
+        foreach (var pass in _passes.Where(static pass => pass is not FallbackPass))
+            current = pass.Run(current);
+        return current;
+    }
+
     private static IEnumerable<IPowerShellSemanticPass> CreateDefaultPasses()
     {
         yield return new PowerShellDefiniteAssignmentPass();

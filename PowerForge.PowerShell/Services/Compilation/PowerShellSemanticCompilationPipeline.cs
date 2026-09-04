@@ -57,6 +57,11 @@ internal sealed class PowerShellSemanticCompilationPipeline
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
         var regions = CompileRegions(binding.RegionCandidates, bound.Documents, capabilities);
+        var regionOpportunities = new PowerShellBoundRegionOpportunityAnalyzer(_optimizer, _analyzer, _lowerer).Analyze(
+            binding.RegionOpportunities,
+            bound,
+            binding.RegionCandidates,
+            capabilities);
         return new PowerShellSemanticCompilationResult(
             bound,
             optimized.Evidence,
@@ -64,7 +69,8 @@ internal sealed class PowerShellSemanticCompilationPipeline
             lowered,
             emitted,
             regions.Promoted,
-            regions.Decisions);
+            regions.Decisions,
+            regionOpportunities);
     }
 
     private PowerShellRegionCompilationResult CompileRegions(
@@ -128,7 +134,8 @@ internal sealed class PowerShellSemanticCompilationResult
         PowerShellLoweredProgram lowered,
         PowerShellBoundCSharpResult emitted,
         PowerShellPromotedRegionEmission[] promotedRegions,
-        PowerShellRegionCandidateDecision[] regionCandidateDecisions)
+        PowerShellRegionCandidateDecision[] regionCandidateDecisions,
+        PowerShellCompilationRegionOpportunity[] regionOpportunities)
     {
         Bound = bound;
         Optimization = optimization;
@@ -137,6 +144,7 @@ internal sealed class PowerShellSemanticCompilationResult
         Emitted = emitted;
         PromotedRegions = promotedRegions ?? Array.Empty<PowerShellPromotedRegionEmission>();
         RegionCandidateDecisions = regionCandidateDecisions ?? Array.Empty<PowerShellRegionCandidateDecision>();
+        RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
     }
 
     internal PowerShellBoundProgram Bound { get; }
@@ -146,6 +154,7 @@ internal sealed class PowerShellSemanticCompilationResult
     internal PowerShellBoundCSharpResult Emitted { get; }
     internal PowerShellImmutableArray<PowerShellPromotedRegionEmission> PromotedRegions { get; }
     internal PowerShellImmutableArray<PowerShellRegionCandidateDecision> RegionCandidateDecisions { get; }
+    internal PowerShellImmutableArray<PowerShellCompilationRegionOpportunity> RegionOpportunities { get; }
 }
 
 internal sealed class PowerShellRegionCompilationResult

@@ -166,6 +166,104 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Equal(2, root.GetProperty("frontier")[0].GetProperty("affectedWorkloads").GetInt32());
     }
 
+    [Fact]
+    public void CorpusRegionOpportunityProjectionIsPortableAnalysisOnlyEvidence()
+    {
+        var repositoryRoot = FindCorpusRepositoryRoot();
+        var commonScript = Path.Combine(
+            repositoryRoot,
+            "Benchmarks",
+            "PowerShellCompilation",
+            "Corpus",
+            "Corpus.Runner.Common.ps1");
+        var sourceRoot = Path.Combine(Path.GetTempPath(), "PowerForge Opportunity Projection", Guid.NewGuid().ToString("N"));
+        var sourcePath = Path.Combine(sourceRoot, "Nested", "Module.psm1");
+        var opportunityJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            opportunityId = "opportunity:test",
+            sourceSha256 = new string('a', 64),
+            sourceDocumentSha256 = new string('b', 64),
+            sourceName = "Get-Proof",
+            sourceLine = 4,
+            sourcePath,
+            startOffset = 10,
+            endOffset = 40,
+            startLine = 8,
+            startColumn = 2,
+            endLine = 10,
+            endColumn = 8,
+            startStatementIndex = 1,
+            endStatementIndex = 3,
+            statementCount = 3,
+            continuation = "UnboundFallThrough",
+            continuationAnalysisComplete = false,
+            liveInputSourceAnalysisComplete = true,
+            liveOutputConsumerAnalysisComplete = false,
+            insideTerminalCandidate = false,
+            liveInputs = new[] { new { identity = "Parameter:VALUE", typeName = "System.Int32", typeProvenance = "Explicit", stableScalar = true } },
+            liveOutputs = new[] { new { identity = "Local:RESULT", typeName = "System.Int32", typeProvenance = "Explicit", stableScalar = true } },
+            localCalls = Array.Empty<string>(),
+            regionGraph = new
+            {
+                schemaVersion = 1,
+                hostedCommandBoundarySites = 0,
+                moduleStateReadBoundarySites = 0,
+                moduleStateWriteBoundarySites = 0,
+                staticBoundaryCrossings = 0,
+                staticBoundaryCostUnits = 0,
+                regions = new[]
+                {
+                    new
+                    {
+                        regionId = "region:test:0", ordinal = 0, execution = "Typed",
+                        startOffset = 10, endOffset = 40, startLine = 8, startColumn = 2, endLine = 10, endColumn = 8,
+                        inputs = new[] { "Parameter:VALUE" }, outputs = new[] { "Local:RESULT" }, mutations = new[] { "Local:RESULT" },
+                        streams = Array.Empty<string>(), errors = Array.Empty<string>(), ordering = "AuthoredSequentialSingleEvaluation",
+                        hostedCommandBoundarySites = 0, moduleStateReadBoundarySites = 0, moduleStateWriteBoundarySites = 0,
+                        staticBoundaryCrossings = 0, staticBoundaryValueTransfers = 0, staticBoundaryCostUnits = 0
+                    }
+                }
+            },
+            analysisOnly = true
+        });
+        var command = $$"""
+            Set-StrictMode -Version 3.0
+            . '{{commonScript.Replace("'", "''", StringComparison.Ordinal)}}'
+            $opportunity = @'
+            {{opportunityJson}}
+            '@ | ConvertFrom-Json
+            $portable = ConvertTo-PortableRegionOpportunity -Opportunity $opportunity -SourceRoot '{{sourceRoot.Replace("'", "''", StringComparison.Ordinal)}}'
+            $frontier = @(Get-CrossWorkloadRegionOpportunityFrontier -Rows @(
+                [pscustomobject]@{ WorkloadId = 'one'; ScenarioFamily = 'family-one'; Opportunity = $portable },
+                [pscustomobject]@{ WorkloadId = 'two'; ScenarioFamily = 'family-two'; Opportunity = $portable }
+            ))
+            $invalid = $opportunity | Select-Object *
+            $invalid.analysisOnly = $false
+            $invalidRejected = $false
+            try { ConvertTo-PortableRegionOpportunity -Opportunity $invalid -SourceRoot '{{sourceRoot.Replace("'", "''", StringComparison.Ordinal)}}' | Out-Null }
+            catch {
+                if (-not $_.Exception.Message.Contains('not marked analysis-only', [StringComparison]::Ordinal)) { throw }
+                $invalidRejected = $true
+            }
+            [pscustomobject]@{ opportunity = $portable; frontier = $frontier; invalidRejected = $invalidRejected } |
+                ConvertTo-Json -Compress -Depth 20
+            """;
+
+        var result = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", command);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(result.StandardError), result.StandardError);
+        using var document = System.Text.Json.JsonDocument.Parse(result.StandardOutput);
+        var root = document.RootElement;
+        Assert.Equal("Nested/Module.psm1", root.GetProperty("opportunity").GetProperty("relativePath").GetString());
+        Assert.Equal(3, root.GetProperty("opportunity").GetProperty("statementCount").GetInt32());
+        Assert.True(root.GetProperty("opportunity").GetProperty("analysisOnly").GetBoolean());
+        Assert.Equal("Local:RESULT", root.GetProperty("opportunity").GetProperty("liveOutputs")[0].GetProperty("identity").GetString());
+        Assert.Equal(2, root.GetProperty("frontier")[0].GetProperty("affectedScenarioFamilies").GetInt32());
+        Assert.True(root.GetProperty("invalidRejected").GetBoolean());
+    }
+
     private static string FindCorpusRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

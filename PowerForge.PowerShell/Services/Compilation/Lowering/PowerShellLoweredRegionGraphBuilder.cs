@@ -303,7 +303,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
     private static string Symbol(PowerShellSymbolId symbol) => symbol.Kind + ":" + symbol.Name.ToUpperInvariant();
     private static string ModuleState(string name) => "ModuleState:" + name.ToUpperInvariant();
     private static string TypeName(Type type) => type.FullName ?? type.Name;
-    private static string CreateRegionId(SourceSpan span, PowerShellCompilationRegionExecution execution)
+    internal static string CreateRegionId(SourceSpan span, PowerShellCompilationRegionExecution execution)
         => "region:" + span.DocumentId + ":" + span.StartOffset + ":" + span.EndOffset + ":" + execution;
 
     private static void RecordFirst(IDictionary<string, int> values, string name, int offset)

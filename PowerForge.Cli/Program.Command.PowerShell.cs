@@ -340,13 +340,13 @@ internal static partial class Program
             }
 
             if (result.PostEmissionEvaluated)
-                logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.EmittedFunctions}/{result.TotalFunctions} functions emitted ({result.EmittedFunctionCoveragePercentage:0.0}%), {result.PromotedTypedRegions} typed region(s) promoted and {result.Products.Sum(static product => product.RejectedTypedRegions)} candidate region(s) retained, {result.DroppedEligibleFunctions} analyzer-eligible function(s) dropped after shaping, {result.ParseErrorFiles} parse-error files.");
+                logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.EmittedFunctions}/{result.TotalFunctions} functions emitted ({result.EmittedFunctionCoveragePercentage:0.0}%), {result.PromotedTypedRegions} typed region(s) promoted, {result.Products.Sum(static product => product.RejectedTypedRegions)} candidate region(s) retained, and {result.Products.Sum(static product => product.RegionOpportunities.Length)} analysis-only typed opportunity region(s), {result.DroppedEligibleFunctions} analyzer-eligible function(s) dropped after shaping, {result.ParseErrorFiles} parse-error files.");
             else
                 logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.CompilableUnits}/{result.TotalUnits} units structurally eligible; post-emission shaping was not evaluated, {result.ParseErrorFiles} parse-error files.");
             foreach (var product in result.Products)
             {
                 if (product.Coverage.PostEmissionEvaluated)
-                    logger.Info($"{product.Name}: {product.SourceFiles} files, {product.Coverage.EmittedFunctions}/{product.Coverage.TotalFunctions} functions emitted ({product.Coverage.EmittedFunctionCoveragePercentage:0.0}%), {product.PromotedTypedRegions} typed region(s) promoted and {product.RejectedTypedRegions} candidate region(s) retained, {product.Coverage.TotalScriptUnits} script/init unit(s), {product.AnalysisMilliseconds:0.0} ms.");
+                    logger.Info($"{product.Name}: {product.SourceFiles} files, {product.Coverage.EmittedFunctions}/{product.Coverage.TotalFunctions} functions emitted ({product.Coverage.EmittedFunctionCoveragePercentage:0.0}%), {product.PromotedTypedRegions} typed region(s) promoted, {product.RejectedTypedRegions} candidate region(s) retained, and {product.RegionOpportunities.Length} analysis-only typed opportunity region(s), {product.Coverage.TotalScriptUnits} script/init unit(s), {product.AnalysisMilliseconds:0.0} ms.");
                 else
                     logger.Info($"{product.Name}: {product.SourceFiles} files, {product.CompilableUnits}/{product.TotalUnits} units structurally eligible; post-emission shaping was not evaluated, {product.AnalysisMilliseconds:0.0} ms.");
                 foreach (var feature in product.FunctionImpacts.Take(5))

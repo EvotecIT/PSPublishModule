@@ -42,9 +42,15 @@ internal sealed partial class PowerShellSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
-        IDictionary<string, PowerShellBoundRegionCandidate>? regionCandidates = null)
+        IDictionary<string, PowerShellBoundRegionCandidate>? regionCandidates = null,
+        IDictionary<string, PowerShellBoundRegionOpportunity>? regionOpportunities = null)
     {
         var functionDiagnosticStart = diagnostics.Count;
+        ClearFunctionRegionEvidence(
+            regionCandidates,
+            regionOpportunities,
+            document.Path,
+            functionSymbol.Name);
         if (!PowerShellOutputTypeSemanticPolicy.TryResolve(
                 function.Body,
                 targetFramework,
@@ -118,7 +124,7 @@ internal sealed partial class PowerShellSemanticBinder
                 else
                 {
                     statements.Add(objectMutation);
-                    statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, objectMutation));
+                    statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, objectMutation));
                 }
                 if (objectMutation is null) lastFailedStatementIndex = authoredStatementIndex;
                 continue;
@@ -144,7 +150,7 @@ internal sealed partial class PowerShellSemanticBinder
                     out var hosted))
             {
                 statements.Add(hosted!);
-                statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, hosted!));
+                statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, index, hosted!));
                 continue;
             }
             var diagnosticCount = diagnostics.Count;
@@ -163,7 +169,7 @@ internal sealed partial class PowerShellSemanticBinder
                 continue;
             }
             statements.Add(bound);
-            statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, bound));
+            statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, bound));
         }
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
@@ -179,6 +185,17 @@ internal sealed partial class PowerShellSemanticBinder
                     lastFailedStatementIndex,
                     out var candidate))
                 regionCandidates[candidate.RegionId] = candidate;
+            if (regionOpportunities is not null)
+                AddRegionOpportunities(
+                    regionOpportunities,
+                    document,
+                    function,
+                    functionSymbol,
+                    parameters,
+                    symbols,
+                    locals,
+                    authoredStatements,
+                    statementBindings);
             return null;
         }
 

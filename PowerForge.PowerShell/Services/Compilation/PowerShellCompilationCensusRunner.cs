@@ -86,6 +86,7 @@ public sealed partial class PowerShellCompilationCensusRunner
         var coverage = new PowerShellCompilationCoverageBreakdown();
         PowerShellCompilationUnitDispositionLedger? dispositionLedger = null;
         PowerShellCompilationRegionCandidate[] regionCandidates = Array.Empty<PowerShellCompilationRegionCandidate>();
+        PowerShellCompilationRegionOpportunity[] regionOpportunities = Array.Empty<PowerShellCompilationRegionOpportunity>();
         if (recurse)
         {
             var resolved = new PowerShellCompilationInputResolver().Resolve(
@@ -141,6 +142,7 @@ public sealed partial class PowerShellCompilationCensusRunner
             sourceFingerprint = ComputeSourceFingerprint(resolved.SourceFiles, path);
             coverage = BuildCoverageBreakdown(dispositionLedger);
             regionCandidates = emitted.RegionCandidates;
+            regionOpportunities = emitted.RegionOpportunities;
         }
         else
         {
@@ -228,6 +230,7 @@ public sealed partial class PowerShellCompilationCensusRunner
                 PowerShellCompilationUnitKind.Function),
             BuildFunctionDispositions(dispositionLedger));
         product.RegionCandidates = regionCandidates;
+        product.RegionOpportunities = regionOpportunities;
         return new AnalyzedProduct(product, featureEvidence);
     }
 

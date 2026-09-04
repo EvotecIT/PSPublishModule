@@ -1,5 +1,6 @@
 using PowerForge;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -223,6 +224,84 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Transpile_HybridDiscoversNonTerminalTypedOpportunitiesWithoutEmittingThem()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-RegionalValue {
+                param([int] $Value)
+                [int] $Seed = 1
+                $Seed += $Value
+                [int] $Scaled = 2
+                $Scaled += $Seed
+                & { "hosted:$Scaled" }
+                [int] $Final = 3
+                $Final += $Scaled
+                return $Final
+            }
+            """,
+            ".psm1");
+        var transpiler = new PowerShellTypedCompilationTranspiler();
+
+        var hybrid = transpiler.TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+        var strict = transpiler.TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(hybrid.Methods);
+        Assert.Empty(hybrid.PromotedRegions);
+        Assert.DoesNotContain("__PowerForgeOpportunity_", hybrid.SourceCode, StringComparison.Ordinal);
+        var opportunities = hybrid.RegionOpportunities.OrderBy(static item => item.StartOffset).ToArray();
+        Assert.Equal(2, opportunities.Length);
+        var prefix = opportunities[0];
+        Assert.Equal(4, prefix.StatementCount);
+        Assert.Equal(PowerShellCompilationRegionContinuation.UnboundFallThrough, prefix.Continuation);
+        Assert.False(prefix.ContinuationAnalysisComplete);
+        Assert.True(prefix.LiveInputSourceAnalysisComplete);
+        Assert.False(prefix.LiveOutputConsumerAnalysisComplete);
+        Assert.False(prefix.InsideTerminalCandidate);
+        Assert.Contains(prefix.LiveInputs, static input => input.Identity == "Parameter:VALUE" && input.StableScalar);
+        Assert.Equal(2, prefix.LiveOutputs.Count);
+        Assert.Contains(prefix.LiveOutputs, static output => output.Identity == "Local:SEED" && output.StableScalar);
+        Assert.Contains(prefix.LiveOutputs, static output => output.Identity == "Local:SCALED" && output.StableScalar);
+        Assert.Empty(prefix.LocalCalls);
+        Assert.Equal(PowerShellCompilationRegionExecution.Typed, Assert.Single(prefix.RegionGraph.Regions).Execution);
+        Assert.Equal(0, prefix.RegionGraph.StaticBoundaryCostUnits);
+        var sourceText = File.ReadAllText(fixture.ScriptPath);
+        var prefixText = sourceText.Substring(prefix.StartOffset, prefix.EndOffset - prefix.StartOffset);
+        Assert.Equal(
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(prefixText))).ToLowerInvariant(),
+            prefix.SourceSha256);
+        var suffix = opportunities[1];
+        Assert.Equal(3, suffix.StatementCount);
+        Assert.Equal(PowerShellCompilationRegionContinuation.Terminating, suffix.Continuation);
+        Assert.True(suffix.ContinuationAnalysisComplete);
+        Assert.False(suffix.LiveInputSourceAnalysisComplete);
+        Assert.True(suffix.LiveOutputConsumerAnalysisComplete);
+        Assert.True(suffix.InsideTerminalCandidate);
+        Assert.Contains(suffix.LiveInputs, static input => input.Identity == "Local:SCALED" && input.StableScalar);
+        Assert.Empty(suffix.LiveOutputs);
+        Assert.Empty(strict.RegionOpportunities);
+
+        var census = new PowerShellCompilationCensusRunner().Run(new[] { fixture.ScriptPath }, "net10.0");
+        var json = JsonSerializer.Serialize(census);
+        var roundTripped = JsonSerializer.Deserialize<PowerShellCompilationCensusResult>(json);
+        Assert.Equal(2, Assert.Single(roundTripped!.Products).RegionOpportunities.Length);
+        var legacyJson = JsonNode.Parse(json)!.AsObject();
+        Assert.True(legacyJson["Products"]!.AsArray()[0]!.AsObject().Remove("RegionOpportunities"));
+        var legacyRoundTrip = JsonSerializer.Deserialize<PowerShellCompilationCensusResult>(legacyJson.ToJsonString());
+        Assert.Empty(Assert.Single(legacyRoundTrip!.Products).RegionOpportunities);
+    }
+
+    [Fact]
     public void Transpile_HybridRejectsIsolatedRegionWhoseLocalCallClosureIsNotPromoted()
     {
         using var fixture = ArtifactFixture.Create(
@@ -239,6 +318,115 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Single(typed.Methods, static method => method.SourceName == "Get-Helper");
         Assert.Empty(typed.PromotedRegions);
         Assert.DoesNotContain("__PowerForgeRegion_", typed.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Transpile_HybridReportsResolvedLocalCallOpportunityWithoutEmittingIt()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Helper { return 1 }; function Get-RegionalValue { data HostedData { 'hosted' }; return Get-Helper }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Single(typed.Methods, static method => method.SourceName == "Get-Helper");
+        Assert.Empty(typed.PromotedRegions);
+        var opportunity = Assert.Single(typed.RegionOpportunities);
+        Assert.Contains(opportunity.LocalCalls, static call => call.EndsWith("GET-HELPER", StringComparison.Ordinal));
+        Assert.True(opportunity.AnalysisOnly);
+        Assert.DoesNotContain("__PowerForgeOpportunity_", typed.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Transpile_HybridRebindingReplacesSupersededRegionOpportunities()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Read-State { return $script:State }; " +
+            "function Get-StateAccess { [object]$Value = Read-State; return $Value.Count; data HostedData { 'hosted' } }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(typed.RegionOpportunities);
+        Assert.Empty(typed.RegionCandidates);
+        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Get-StateAccess");
+    }
+
+    [Fact]
+    public void Transpile_HybridOpportunityRetainsAuthoredStatementIdentityAfterOptimization()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-OptimizedOpportunity { param([int]$Value) if ($true) { $Value = 1 }; $Value++; data HostedData { 'hosted' } }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        var opportunity = Assert.Single(typed.RegionOpportunities);
+        Assert.Equal(0, opportunity.StartStatementIndex);
+        Assert.Equal(1, opportunity.EndStatementIndex);
+        Assert.Equal(2, opportunity.StatementCount);
+        var region = Assert.Single(opportunity.RegionGraph.Regions);
+        Assert.Equal(opportunity.StartOffset, region.StartOffset);
+        Assert.Equal(opportunity.EndOffset, region.EndOffset);
+        var source = File.ReadAllText(fixture.ScriptPath);
+        var exactSource = source.Substring(opportunity.StartOffset, opportunity.EndOffset - opportunity.StartOffset);
+        Assert.StartsWith("if ($true)", exactSource, StringComparison.Ordinal);
+        Assert.Contains("$Value++", exactSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Transpile_HybridOpportunityOmitsAuthoredStatementContainingMixedOptimizedRegions()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-MixedOptimizedOpportunity { param([int]$Value) " +
+            "if ($true) { $Value = 1; $script:State = $Value; $Value++ }; data HostedData { 'hosted' } }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(typed.RegionOpportunities);
+        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Get-MixedOptimizedOpportunity");
+    }
+
+    [Fact]
+    public void Transpile_HybridOpportunityStopsContinuationAtFirstTerminatingStatement()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TerminatingOpportunity { return 1; [int]$Never = 2; data HostedData { 'hosted' } }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RegionalMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        var opportunity = Assert.Single(typed.RegionOpportunities);
+        Assert.Equal(2, opportunity.StatementCount);
+        Assert.Equal(PowerShellCompilationRegionContinuation.Terminating, opportunity.Continuation);
+        Assert.True(opportunity.ContinuationAnalysisComplete);
+        Assert.True(opportunity.LiveOutputConsumerAnalysisComplete);
     }
 
     [Fact]

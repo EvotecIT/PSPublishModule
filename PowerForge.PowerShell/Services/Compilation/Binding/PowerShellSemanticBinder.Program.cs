@@ -19,6 +19,7 @@ internal sealed partial class PowerShellSemanticBinder
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
         var diagnostics = new List<PowerShellSemanticDiagnostic>();
         var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
+        var regionOpportunities = new Dictionary<string, PowerShellBoundRegionOpportunity>(StringComparer.Ordinal);
         var declarations = DeclareFunctions(orderedDocuments, diagnostics);
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
@@ -72,6 +73,9 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities,
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
                         ? regionCandidates
+                        : null,
+                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
+                        ? regionOpportunities
                         : null);
                 if (bound is not null)
                 {
@@ -121,6 +125,9 @@ internal sealed partial class PowerShellSemanticBinder
             program,
             regionCandidates.Values
                 .OrderBy(static candidate => candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal)
+                .ToArray(),
+            regionOpportunities.Values
+                .OrderBy(static opportunity => opportunity.RegionFunction.Symbol.StableKey, StringComparer.Ordinal)
                 .ToArray());
     }
 
@@ -139,12 +146,15 @@ internal sealed class PowerShellSemanticBindingResult
 {
     internal PowerShellSemanticBindingResult(
         PowerShellBoundProgram program,
-        PowerShellBoundRegionCandidate[] regionCandidates)
+        PowerShellBoundRegionCandidate[] regionCandidates,
+        PowerShellBoundRegionOpportunity[] regionOpportunities)
     {
         Program = program;
         RegionCandidates = regionCandidates ?? Array.Empty<PowerShellBoundRegionCandidate>();
+        RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellBoundRegionOpportunity>();
     }
 
     internal PowerShellBoundProgram Program { get; }
     internal PowerShellImmutableArray<PowerShellBoundRegionCandidate> RegionCandidates { get; }
+    internal PowerShellImmutableArray<PowerShellBoundRegionOpportunity> RegionOpportunities { get; }
 }

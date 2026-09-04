@@ -28,7 +28,7 @@ internal static class PowerShellBoundRegionCandidateSelector
             .ToArray();
         if (suffix.Length == 0 ||
             suffix[0].AuthoredStatementIndex != lastFailedStatementIndex + 1 ||
-            suffix[suffix.Length - 1].AuthoredStatementIndex != authoredStatements.Count - 1 ||
+            suffix[suffix.Length - 1].AuthoredStatementEndIndex != authoredStatements.Count - 1 ||
             !AlwaysReturns(suffix[suffix.Length - 1].Statement))
             return false;
 
@@ -181,13 +181,18 @@ internal static class PowerShellBoundRegionCandidateSelector
 
 internal sealed class PowerShellBoundStatementBinding
 {
-    internal PowerShellBoundStatementBinding(int authoredStatementIndex, PowerShellBoundStatement statement)
+    internal PowerShellBoundStatementBinding(
+        int authoredStatementIndex,
+        int authoredStatementEndIndex,
+        PowerShellBoundStatement statement)
     {
         AuthoredStatementIndex = authoredStatementIndex;
+        AuthoredStatementEndIndex = Math.Max(authoredStatementIndex, authoredStatementEndIndex);
         Statement = statement;
     }
 
     internal int AuthoredStatementIndex { get; }
+    internal int AuthoredStatementEndIndex { get; }
     internal PowerShellBoundStatement Statement { get; }
 }
 

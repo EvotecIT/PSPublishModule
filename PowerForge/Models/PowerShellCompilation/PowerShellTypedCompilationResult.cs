@@ -470,6 +470,12 @@ public sealed class PowerShellTypedCompilationResult
     /// </summary>
     public PowerShellCompilationRegionCandidate[] RegionCandidates { get; internal set; } = Array.Empty<PowerShellCompilationRegionCandidate>();
 
+    /// <summary>
+    /// Analysis-only statement-aligned typed regions found inside otherwise rejected functions.
+    /// These records do not authorize backend emission or source rewriting.
+    /// </summary>
+    public PowerShellCompilationRegionOpportunity[] RegionOpportunities { get; internal set; } = Array.Empty<PowerShellCompilationRegionOpportunity>();
+
     /// <summary>Whether at least one method was translated and no blockers remain.</summary>
     public bool Success => Methods.Length > 0 && Diagnostics.Length == 0;
 }

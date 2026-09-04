@@ -45,6 +45,7 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
             typed.IrSnapshots);
         result.PromotedRegions = typed.PromotedRegions;
         result.RegionCandidates = typed.RegionCandidates;
+        result.RegionOpportunities = typed.RegionOpportunities;
         return result;
     }
 

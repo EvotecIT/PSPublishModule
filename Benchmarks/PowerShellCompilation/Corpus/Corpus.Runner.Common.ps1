@@ -35,6 +35,51 @@ function Write-Utf8Json {
     [IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth $Depth) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
 }
 
+function ConvertTo-PortableRegionGraph {
+    param([object] $Graph)
+
+    if ($null -eq $Graph) { return $null }
+    $regions = @($Graph.regions | Where-Object { $null -ne $_ })
+    return [pscustomobject]@{
+        schemaVersion = [int] $Graph.schemaVersion
+        regionCount = $regions.Count
+        typedRegions = @($regions | Where-Object execution -eq 'Typed').Count
+        hostedRegions = @($regions | Where-Object execution -eq 'Hosted').Count
+        mixedRegions = @($regions | Where-Object execution -eq 'Mixed').Count
+        hostedCommandBoundarySites = [int] $Graph.hostedCommandBoundarySites
+        moduleStateReadBoundarySites = [int] $Graph.moduleStateReadBoundarySites
+        moduleStateWriteBoundarySites = [int] $Graph.moduleStateWriteBoundarySites
+        staticBoundaryCrossings = [int] $Graph.staticBoundaryCrossings
+        staticBoundaryValueTransfers = [int] (($regions | ForEach-Object { [int] $_.staticBoundaryValueTransfers } | Measure-Object -Sum).Sum)
+        staticBoundaryCostUnits = [int] $Graph.staticBoundaryCostUnits
+        regions = @($regions | ForEach-Object {
+            [pscustomobject]@{
+                regionId = [string] $_.regionId
+                ordinal = [int] $_.ordinal
+                execution = [string] $_.execution
+                startOffset = [int] $_.startOffset
+                endOffset = [int] $_.endOffset
+                startLine = [int] $_.startLine
+                startColumn = [int] $_.startColumn
+                endLine = [int] $_.endLine
+                endColumn = [int] $_.endColumn
+                inputs = @($_.inputs)
+                outputs = @($_.outputs)
+                mutations = @($_.mutations)
+                streams = @($_.streams)
+                errors = @($_.errors)
+                ordering = [string] $_.ordering
+                hostedCommandBoundarySites = [int] $_.hostedCommandBoundarySites
+                moduleStateReadBoundarySites = [int] $_.moduleStateReadBoundarySites
+                moduleStateWriteBoundarySites = [int] $_.moduleStateWriteBoundarySites
+                staticBoundaryCrossings = [int] $_.staticBoundaryCrossings
+                staticBoundaryValueTransfers = [int] $_.staticBoundaryValueTransfers
+                staticBoundaryCostUnits = [int] $_.staticBoundaryCostUnits
+            }
+        })
+    }
+}
+
 function ConvertTo-PortableRegionCandidate {
     param([object] $Candidate, [string] $SourceRoot)
 
@@ -43,7 +88,6 @@ function ConvertTo-PortableRegionCandidate {
     $relativePath = $sourcePath.Substring($rootFull.Length).TrimStart([char[]] @('\', '/')).Replace('\', '/')
     $graphProperty = $Candidate.PSObject.Properties['regionGraph']
     $graph = if ($null -eq $graphProperty) { $null } else { $graphProperty.Value }
-    $regions = if ($null -eq $graph) { @() } else { @($graph.regions | Where-Object { $null -ne $_ }) }
     $sourceLineSpan = if ([int] $Candidate.startLine -gt 0 -and [int] $Candidate.endLine -ge [int] $Candidate.startLine) {
         1 + [int] $Candidate.endLine - [int] $Candidate.startLine
     } else { 0 }
@@ -66,47 +110,109 @@ function ConvertTo-PortableRegionCandidate {
         decisionCode = [string] $Candidate.decisionCode
         reason = [string] $Candidate.reason
         generatedName = [string] $Candidate.generatedName
-        graph = if ($null -eq $graph) { $null } else {
-            [pscustomobject]@{
-                schemaVersion = [int] $graph.schemaVersion
-                regionCount = $regions.Count
-                typedRegions = @($regions | Where-Object execution -eq 'Typed').Count
-                hostedRegions = @($regions | Where-Object execution -eq 'Hosted').Count
-                mixedRegions = @($regions | Where-Object execution -eq 'Mixed').Count
-                hostedCommandBoundarySites = [int] $graph.hostedCommandBoundarySites
-                moduleStateReadBoundarySites = [int] $graph.moduleStateReadBoundarySites
-                moduleStateWriteBoundarySites = [int] $graph.moduleStateWriteBoundarySites
-                staticBoundaryCrossings = [int] $graph.staticBoundaryCrossings
-                staticBoundaryValueTransfers = [int] (($regions | ForEach-Object { [int] $_.staticBoundaryValueTransfers } | Measure-Object -Sum).Sum)
-                staticBoundaryCostUnits = [int] $graph.staticBoundaryCostUnits
-                regions = @($regions | ForEach-Object {
-                    [pscustomobject]@{
-                        regionId = [string] $_.regionId
-                        ordinal = [int] $_.ordinal
-                        execution = [string] $_.execution
-                        startOffset = [int] $_.startOffset
-                        endOffset = [int] $_.endOffset
-                        startLine = [int] $_.startLine
-                        startColumn = [int] $_.startColumn
-                        endLine = [int] $_.endLine
-                        endColumn = [int] $_.endColumn
-                        inputs = @($_.inputs)
-                        outputs = @($_.outputs)
-                        mutations = @($_.mutations)
-                        streams = @($_.streams)
-                        errors = @($_.errors)
-                        ordering = [string] $_.ordering
-                        hostedCommandBoundarySites = [int] $_.hostedCommandBoundarySites
-                        moduleStateReadBoundarySites = [int] $_.moduleStateReadBoundarySites
-                        moduleStateWriteBoundarySites = [int] $_.moduleStateWriteBoundarySites
-                        staticBoundaryCrossings = [int] $_.staticBoundaryCrossings
-                        staticBoundaryValueTransfers = [int] $_.staticBoundaryValueTransfers
-                        staticBoundaryCostUnits = [int] $_.staticBoundaryCostUnits
-                    }
-                })
-            }
+        graph = ConvertTo-PortableRegionGraph -Graph $graph
+    }
+}
+
+function ConvertTo-PortableRegionOpportunity {
+    param([object] $Opportunity, [string] $SourceRoot)
+
+    if (-not [bool] $Opportunity.analysisOnly) {
+        throw "Region opportunity '$($Opportunity.opportunityId)' is not marked analysis-only."
+    }
+    $rootFull = [IO.Path]::GetFullPath($SourceRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $sourcePath = Assert-ContainedPath -Root $rootFull -Path ([string] $Opportunity.sourcePath) -Label 'Region opportunity source'
+    $relativePath = $sourcePath.Substring($rootFull.Length).TrimStart([char[]] @('\', '/')).Replace('\', '/')
+    $sourceLineSpan = if ([int] $Opportunity.startLine -gt 0 -and [int] $Opportunity.endLine -ge [int] $Opportunity.startLine) {
+        1 + [int] $Opportunity.endLine - [int] $Opportunity.startLine
+    } else { 0 }
+    $graph = ConvertTo-PortableRegionGraph -Graph $Opportunity.regionGraph
+    if ($null -eq $graph -or $graph.regionCount -lt 1 -or $graph.typedRegions -ne $graph.regionCount) {
+        throw "Region opportunity '$($Opportunity.opportunityId)' does not contain an exclusively typed lowered graph."
+    }
+    $convertTransfer = {
+        [pscustomobject]@{
+            identity = [string] $_.identity
+            typeName = [string] $_.typeName
+            typeProvenance = [string] $_.typeProvenance
+            stableScalar = [bool] $_.stableScalar
         }
     }
+
+    return [pscustomobject]@{
+        schemaVersion = [int] $Opportunity.schemaVersion
+        opportunityId = [string] $Opportunity.opportunityId
+        sourceSha256 = [string] $Opportunity.sourceSha256
+        sourceDocumentSha256 = [string] $Opportunity.sourceDocumentSha256
+        relativePath = $relativePath
+        sourceName = [string] $Opportunity.sourceName
+        sourceLine = [int] $Opportunity.sourceLine
+        startOffset = [int] $Opportunity.startOffset
+        endOffset = [int] $Opportunity.endOffset
+        startLine = [int] $Opportunity.startLine
+        startColumn = [int] $Opportunity.startColumn
+        endLine = [int] $Opportunity.endLine
+        endColumn = [int] $Opportunity.endColumn
+        sourceLineSpan = $sourceLineSpan
+        startStatementIndex = [int] $Opportunity.startStatementIndex
+        endStatementIndex = [int] $Opportunity.endStatementIndex
+        statementCount = [int] $Opportunity.statementCount
+        continuation = [string] $Opportunity.continuation
+        continuationAnalysisComplete = [bool] $Opportunity.continuationAnalysisComplete
+        liveInputSourceAnalysisComplete = [bool] $Opportunity.liveInputSourceAnalysisComplete
+        liveOutputConsumerAnalysisComplete = [bool] $Opportunity.liveOutputConsumerAnalysisComplete
+        insideTerminalCandidate = [bool] $Opportunity.insideTerminalCandidate
+        liveInputs = @($Opportunity.liveInputs | ForEach-Object $convertTransfer)
+        liveOutputs = @($Opportunity.liveOutputs | ForEach-Object $convertTransfer)
+        localCalls = @($Opportunity.localCalls | ForEach-Object { [string] $_ })
+        graph = $graph
+        analysisOnly = [bool] $Opportunity.analysisOnly
+    }
+}
+
+function Get-RegionOpportunityShapeKey {
+    param([object] $Opportunity)
+
+    $statementBand = if ([int] $Opportunity.statementCount -ge 10) { '10+' }
+        elseif ([int] $Opportunity.statementCount -ge 5) { '05-09' }
+        elseif ([int] $Opportunity.statementCount -ge 2) { '02-04' }
+        else { '01' }
+    $inputShape = @($Opportunity.liveInputs | ForEach-Object { "$($_.typeName):$($_.stableScalar)" } | Sort-Object) -join ','
+    $outputShape = @($Opportunity.liveOutputs | ForEach-Object { "$($_.typeName):$($_.stableScalar)" } | Sort-Object) -join ','
+    $region = @($Opportunity.graph.regions)[0]
+    $streams = @($region.streams | Sort-Object) -join ','
+    $errors = @($region.errors | Sort-Object) -join ','
+    return "$statementBand|$($Opportunity.continuation)|in=$inputShape|out=$outputShape|streams=$streams|errors=$errors|calls=$(@($Opportunity.localCalls).Count -gt 0)|state=$($Opportunity.graph.moduleStateReadBoundarySites)/$($Opportunity.graph.moduleStateWriteBoundarySites)|complete=$($Opportunity.liveInputSourceAnalysisComplete)/$($Opportunity.liveOutputConsumerAnalysisComplete)"
+}
+
+function Get-CrossWorkloadRegionOpportunityFrontier {
+    param([object[]] $Rows)
+
+    return @($Rows |
+        Where-Object { -not $_.Opportunity.insideTerminalCandidate } |
+        Group-Object { Get-RegionOpportunityShapeKey -Opportunity $_.Opportunity } |
+        ForEach-Object {
+            $group = @($_.Group)
+            $example = $group | Sort-Object { [int] $_.Opportunity.statementCount } -Descending | Select-Object -First 1
+            [pscustomobject]@{
+                analysisShape = $_.Name
+                affectedScenarioFamilies = @($group.ScenarioFamily | Sort-Object -Unique).Count
+                affectedWorkloads = @($group.WorkloadId | Sort-Object -Unique).Count
+                opportunities = $group.Count
+                maximumStatementCount = [int] (($group | ForEach-Object { [int] $_.Opportunity.statementCount } | Measure-Object -Maximum).Maximum)
+                maximumSourceLineSpan = [int] (($group | ForEach-Object { [int] $_.Opportunity.sourceLineSpan } | Measure-Object -Maximum).Maximum)
+                completeLiveInputSources = @($group | Where-Object { $_.Opportunity.liveInputSourceAnalysisComplete }).Count
+                completeLiveOutputConsumers = @($group | Where-Object { $_.Opportunity.liveOutputConsumerAnalysisComplete }).Count
+                example = [pscustomobject]@{
+                    workloadId = $example.WorkloadId
+                    relativePath = $example.Opportunity.relativePath
+                    sourceName = $example.Opportunity.sourceName
+                    startLine = $example.Opportunity.startLine
+                    endLine = $example.Opportunity.endLine
+                }
+            }
+        } |
+        Sort-Object -Property @{ Expression = 'affectedScenarioFamilies'; Descending = $true }, @{ Expression = 'maximumStatementCount'; Descending = $true }, @{ Expression = 'opportunities'; Descending = $true }, analysisShape)
 }
 
 function Get-RegionCandidateDecisionSummary {

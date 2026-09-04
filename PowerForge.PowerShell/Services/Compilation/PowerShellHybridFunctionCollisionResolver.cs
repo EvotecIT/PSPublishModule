@@ -89,6 +89,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
             irSnapshots: filtered.IrSnapshots);
         result.PromotedRegions = filtered.PromotedRegions;
         result.RegionCandidates = filtered.RegionCandidates;
+        result.RegionOpportunities = filtered.RegionOpportunities;
         return result;
     }
 
