@@ -189,7 +189,8 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 failureReason = process.TimedOut
                     ? "controlled publish evaluation timed out"
-                    : $"controlled publish evaluation exited with code {process.ExitCode}";
+                    : $"controlled publish evaluation exited with code {process.ExitCode}" +
+                      ReadControlledProcessFailureDetail(process);
                 return false;
             }
 
