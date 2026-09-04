@@ -9,25 +9,33 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void PublishProvenanceLease_ConsolidatesLargeWatcherSets()
+    public void PublishProvenanceLease_UsesOneLinuxWatcherForManyDirectories()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
+
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
-            string[] directories = Enumerable.Range(0, 100)
-                .Select(index => Path.Combine(root, "packages", "package-" + index, "1.0.0"))
+            string[] guardedPaths = Enumerable.Range(0, 140)
+                .Select(index =>
+                {
+                    string directory = Directory.CreateDirectory(
+                        Path.Combine(root, "inputs", "input-" + index)).FullName;
+                    string path = Path.Combine(directory, "input.props");
+                    File.WriteAllText(path, "<Project />");
+                    return path;
+                })
                 .ToArray();
-            MethodInfo method = typeof(DotNetPublishPipelineRunner.PublishProvenanceLease)
-                .GetMethod(
-                    "BuildConsolidatedWatcherRoots",
-                    BindingFlags.Static | BindingFlags.NonPublic)!;
+            using DotNetPublishPipelineRunner.PublishProvenanceLease lease =
+                DotNetPublishPipelineRunner.PublishProvenanceLease.Create(guardedPaths);
+            FieldInfo linuxWatcherField = typeof(DotNetPublishPipelineRunner.PublishProvenanceLease)
+                .GetField("_linuxWatcher", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            FieldInfo watchersField = typeof(DotNetPublishPipelineRunner.PublishProvenanceLease)
+                .GetField("_watchers", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-            var watcherRoots = Assert.IsAssignableFrom<IReadOnlyDictionary<string, bool>>(
-                method.Invoke(null, [directories, StringComparer.Ordinal]));
-
-            Assert.NotEmpty(watcherRoots);
-            Assert.True(watcherRoots.Count < directories.Length);
-            Assert.All(watcherRoots.Values, Assert.True);
+            Assert.NotNull(linuxWatcherField.GetValue(lease));
+            Assert.Empty(Assert.IsType<List<FileSystemWatcher>>(watchersField.GetValue(lease)));
         }
         finally
         {

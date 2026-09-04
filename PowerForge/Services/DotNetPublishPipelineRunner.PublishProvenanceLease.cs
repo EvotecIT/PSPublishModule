@@ -4,14 +4,14 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    internal sealed class PublishProvenanceLease : IDisposable
+    internal sealed partial class PublishProvenanceLease : IDisposable
     {
-        private const int MaximumWatcherInstances = 64;
         private readonly HashSet<string> _guardedPaths;
         private readonly HashSet<string> _absentDirectoryAncestors;
         private readonly Dictionary<string, string?> _expectedHashes;
         private readonly List<FileStream> _leases = new();
         private readonly List<FileSystemWatcher> _watchers = new();
+        private LinuxDirectoryMutationWatcher? _linuxWatcher;
         private int _changed;
         private string? _changeDescription;
         private bool _disposed;
@@ -131,6 +131,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (_disposed)
                 return;
             _disposed = true;
+            _linuxWatcher?.Dispose();
             foreach (FileSystemWatcher watcher in _watchers)
             {
                 watcher.EnableRaisingEvents = false;
@@ -149,14 +150,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(FindNearestExistingDirectory)
                 .Distinct(comparer)
                 .ToArray();
-            IReadOnlyDictionary<string, bool> watcherRoots = !IsWindows() && directories.Length > MaximumWatcherInstances
-                ? BuildConsolidatedWatcherRoots(directories, comparer)
-                : directories.ToDictionary(directory => directory, _ => false, comparer);
-            foreach (KeyValuePair<string, bool> root in watcherRoots)
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Linux))
             {
-                var watcher = new FileSystemWatcher(root.Key)
+                _linuxWatcher = LinuxDirectoryMutationWatcher.Create(
+                    directories,
+                    HandleLinuxMutation);
+                return;
+            }
+
+            foreach (string directory in directories)
+            {
+                var watcher = new FileSystemWatcher(directory)
                 {
-                    IncludeSubdirectories = root.Value,
+                    IncludeSubdirectories = false,
                     InternalBufferSize = 64 * 1024,
                     NotifyFilter = NotifyFilters.FileName |
                                    NotifyFilters.LastWrite |
@@ -172,74 +179,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 _watchers.Add(watcher);
             }
         }
-
-        private static IReadOnlyDictionary<string, bool> BuildConsolidatedWatcherRoots(
-            IEnumerable<string> directories,
-            StringComparer comparer)
-        {
-            var roots = new HashSet<string>(
-                directories.Select(Path.GetFullPath),
-                comparer);
-            while (roots.Count > MaximumWatcherInstances)
-            {
-                var candidates = roots
-                    .SelectMany(directory => EnumerateNonRootAncestors(directory)
-                        .Select(ancestor => new { Ancestor = ancestor, Directory = directory }))
-                    .GroupBy(entry => entry.Ancestor, comparer)
-                    .Select(group => new
-                    {
-                        Path = group.Key,
-                        Covered = group.Select(entry => entry.Directory).Distinct(comparer).ToArray()
-                    })
-                    .Where(candidate => candidate.Covered.Length > 1)
-                    .ToArray();
-                if (candidates.Length == 0)
-                    throw new InvalidOperationException("Publish provenance watcher roots could not be consolidated.");
-
-                int coverageNeeded = roots.Count - (MaximumWatcherInstances - 1);
-                var sufficientCandidates = candidates
-                    .Where(candidate => candidate.Covered.Length >= coverageNeeded)
-                    .ToArray();
-                var selected = sufficientCandidates.Length > 0
-                    ? sufficientCandidates
-                        .OrderByDescending(candidate => GetPathDepth(candidate.Path))
-                        .ThenByDescending(candidate => candidate.Covered.Length)
-                        .ThenBy(candidate => candidate.Path, comparer)
-                        .First()
-                    : candidates
-                        .OrderByDescending(candidate => candidate.Covered.Length)
-                        .ThenByDescending(candidate => GetPathDepth(candidate.Path))
-                        .ThenBy(candidate => candidate.Path, comparer)
-                        .First();
-                roots.ExceptWith(selected.Covered);
-                roots.Add(selected.Path);
-            }
-
-            return roots.ToDictionary(directory => directory, _ => true, comparer);
-        }
-
-        private static IEnumerable<string> EnumerateNonRootAncestors(string directory)
-        {
-            string? current = Path.GetFullPath(directory);
-            string root = Path.GetPathRoot(current)!;
-            while (!string.IsNullOrWhiteSpace(current) &&
-                   !string.Equals(
-                       current,
-                       root,
-                       IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-            {
-                yield return current;
-                current = Path.GetDirectoryName(current);
-            }
-        }
-
-        private static int GetPathDepth(string path)
-            => Path.GetFullPath(path)
-                .Substring(Path.GetPathRoot(Path.GetFullPath(path))!.Length)
-                .Split(
-                    new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
-                    StringSplitOptions.RemoveEmptyEntries)
-                .Length;
 
         internal static string[] BuildGuardedPaths(
             IEnumerable<string> publishInputFiles,
@@ -273,6 +212,17 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             Interlocked.CompareExchange(ref _changeDescription, description, null);
             Interlocked.Exchange(ref _changed, 1);
+        }
+
+        private void HandleLinuxMutation(string? path, bool overflowed)
+        {
+            if (overflowed)
+            {
+                RecordChange("the Linux inotify queue overflowed");
+                return;
+            }
+            if (!string.IsNullOrWhiteSpace(path) && AffectsGuardedPath(path!))
+                RecordChange($"filesystem mutation '{path}'");
         }
 
         private bool AffectsGuardedPath(string changedPath)
