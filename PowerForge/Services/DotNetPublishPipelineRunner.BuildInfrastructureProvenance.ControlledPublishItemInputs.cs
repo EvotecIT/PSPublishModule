@@ -75,8 +75,9 @@ public sealed partial class DotNetPublishPipelineRunner
                              DecodeMsBuildEscapes(expanded).Split(';')))
                 {
                     string candidate = value.Trim().Trim('\'', '"');
-                    if (candidate.Length == 0 ||
-                        candidate.IndexOf('*') >= 0 ||
+                    if (candidate.Length == 0)
+                        continue;
+                    if (candidate.IndexOf('*') >= 0 ||
                         candidate.IndexOf('?') >= 0 ||
                         ContainsUnresolvedBuildExpression(candidate) ||
                         !TryResolveControlledTaskInputPath(

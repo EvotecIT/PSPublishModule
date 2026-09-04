@@ -135,8 +135,22 @@ public sealed partial class DotNetPublishPipelineRunner
                     .ToArray();
                 if (itemValues.Length == 0)
                 {
-                    expandedValues = Array.Empty<string>();
-                    return false;
+                    IReadOnlyDictionary<string, string> evaluatedProperties =
+                        evaluatedGlobalProperties ?? new Dictionary<string, string>();
+                    if (!EvaluatedSourceItemNames.Contains(itemName) ||
+                        HasTaskOutputAssignment(
+                            relatedDocuments.Select(related => related.Document).ToArray(),
+                            "ItemName",
+                            itemName,
+                            evaluatedProperties))
+                    {
+                        expandedValues = Array.Empty<string>();
+                        return false;
+                    }
+
+                    pending.Enqueue(value.Replace(match.Value, string.Empty));
+                    expanded = true;
+                    continue;
                 }
                 pending.Enqueue(value.Replace(match.Value, string.Join(";", itemValues)));
                 expanded = true;
@@ -149,6 +163,25 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 string itemName = match.Groups[1].Value;
                 string metadataName = match.Groups[2].Value;
+                if (itemName.Length > 0 &&
+                    metadataName.Equals("Identity", StringComparison.OrdinalIgnoreCase))
+                {
+                    ControlledStaticItem[] items = EnumerateControlledStaticItems(
+                            itemName,
+                            relatedDocuments)
+                        .ToArray();
+                    if (items.Length == 0)
+                    {
+                        expandedValues = Array.Empty<string>();
+                        return false;
+                    }
+
+                    foreach (ControlledStaticItem item in items)
+                        pending.Enqueue(value.Replace(match.Value, item.Identity));
+                    expanded = true;
+                    continue;
+                }
+
                 foreach ((XDocument relatedDocument, string relatedPath) in relatedDocuments)
                 {
                     foreach (XElement metadata in relatedDocument.Descendants().Where(element =>

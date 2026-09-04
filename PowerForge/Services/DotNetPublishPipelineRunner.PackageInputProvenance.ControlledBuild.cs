@@ -114,6 +114,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string controlledSourceRoot,
             string controlledProjectPath,
             out string[] packageSources,
+            IReadOnlyDictionary<string, string> evaluatedProperties,
             bool allowSdkManagedToolchainPackages = false)
             => _archives.TrySeedControlledPackageSource(
                 destination,
@@ -123,6 +124,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledSourceRoot,
                 controlledProjectPath,
                 out packageSources,
+                evaluatedProperties,
                 allowSdkManagedToolchainPackages);
     }
 
@@ -171,6 +173,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string controlledSourceRoot,
             string controlledProjectPath,
             out string[] packageSources,
+            IReadOnlyDictionary<string, string> evaluatedProperties,
             bool allowSdkManagedToolchainPackages)
         {
             packageSources = Array.Empty<string>();
@@ -197,7 +200,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         !cached.Archive.HasOnlyControlledBuildInputs(
                             controlledBuildInputs,
                             controlledSourceRoot,
-                            controlledProjectPath))
+                            controlledProjectPath,
+                            evaluatedProperties))
                     {
                         return false;
                     }
@@ -225,7 +229,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool HasOnlyControlledBuildInputs(
             IReadOnlyCollection<string> executableBuildInputs,
             string controlledSourceRoot,
-            string controlledProjectPath)
+            string controlledProjectPath,
+            IReadOnlyDictionary<string, string> evaluatedProperties)
         {
             try
             {
@@ -339,7 +344,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             "package-root",
                             controlledSourceRoot,
                             controlledDocumentSources,
-                            evaluatedGlobalProperties: null,
+                            evaluatedGlobalProperties: evaluatedProperties,
                             controlledProjectPath: controlledProjectPath,
                             isControlledInput: path => IsControlledPackageOrProjectInput(
                                 path,
@@ -352,7 +357,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     }
                 }
                 return !controlledDocuments.Any(document =>
-                    ContainsUncontrolledControlledBuildTask(document, controlledDocuments));
+                        ContainsUncontrolledControlledBuildTask(
+                            document,
+                            controlledDocuments,
+                            evaluatedProperties));
             }
             catch
             {

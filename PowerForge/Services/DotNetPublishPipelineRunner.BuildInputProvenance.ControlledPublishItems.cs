@@ -81,6 +81,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         controlledSourceRoot,
                         controlledProjectPath!,
                         out string[] catalogSources,
+                        evaluatedProperties,
                         allowSdkManagedToolchainPackages: true))
                 {
                     failureReason = "the verified offline package source could not be seeded.";
@@ -175,12 +176,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 offlinePackageSourceList,
                 Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath!)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
             {
                 failureReason = process.TimedOut
@@ -486,12 +487,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 offlinePackageSourceList,
                 Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
             {
                 string? detail = TailLines(
