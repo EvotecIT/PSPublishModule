@@ -163,13 +163,15 @@ public sealed class PowerShellCompilationCensusProduct
 
     /// <summary>Stable post-shaping identity and disposition for every authored function.</summary>
     public PowerShellCompilationFunctionDisposition[] FunctionDispositions { get; }
+
+    /// <summary>Typed CLR regions promoted inside functions that remain runtime-routed.</summary>
+    public int PromotedTypedRegions => FunctionDispositions.Sum(static disposition => disposition.PromotedTypedRegions);
 }
 
 /// <summary>Stable post-shaping census disposition for one authored function.</summary>
 public sealed class PowerShellCompilationFunctionDisposition
 {
     /// <summary>Creates one function disposition.</summary>
-    [System.Text.Json.Serialization.JsonConstructor]
     public PowerShellCompilationFunctionDisposition(
         string unitId,
         string relativePath,
@@ -179,6 +181,31 @@ public sealed class PowerShellCompilationFunctionDisposition
         bool emitted,
         bool runtimeRouted,
         bool shapingFallback)
+        : this(
+            unitId,
+            relativePath,
+            name,
+            startLine,
+            semanticEligible,
+            emitted,
+            runtimeRouted,
+            shapingFallback,
+            promotedTypedRegions: 0)
+    {
+    }
+
+    /// <summary>Creates one function disposition including promoted typed-region evidence.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
+    public PowerShellCompilationFunctionDisposition(
+        string unitId,
+        string relativePath,
+        string name,
+        int startLine,
+        bool semanticEligible,
+        bool emitted,
+        bool runtimeRouted,
+        bool shapingFallback,
+        int promotedTypedRegions)
     {
         UnitId = unitId ?? string.Empty;
         RelativePath = relativePath ?? string.Empty;
@@ -188,6 +215,7 @@ public sealed class PowerShellCompilationFunctionDisposition
         Emitted = emitted;
         RuntimeRouted = runtimeRouted;
         ShapingFallback = shapingFallback;
+        PromotedTypedRegions = Math.Max(0, promotedTypedRegions);
     }
 
     /// <summary>Relocation-stable authored-unit identity.</summary>
@@ -206,6 +234,8 @@ public sealed class PowerShellCompilationFunctionDisposition
     public bool RuntimeRouted { get; }
     /// <summary>Whether artifact shaping retained a runtime path for an analyzer-eligible function.</summary>
     public bool ShapingFallback { get; }
+    /// <summary>Typed CLR regions promoted while this function remains runtime-routed.</summary>
+    public int PromotedTypedRegions { get; }
 }
 
 /// <summary>One aggregated blocker category in a compilation census.</summary>
@@ -320,6 +350,9 @@ public sealed class PowerShellCompilationCensusResult
 
     /// <summary>Total functions emitted as typed CLR methods after artifact shaping.</summary>
     public int EmittedFunctions => Sum(static product => product.Coverage.EmittedFunctions);
+
+    /// <summary>Total typed CLR regions promoted inside functions that remain runtime-routed.</summary>
+    public int PromotedTypedRegions => Sum(static product => product.PromotedTypedRegions);
 
     /// <summary>Total analyzer-eligible functions lost during graph or artifact shaping.</summary>
     public int DroppedEligibleFunctions => Sum(static product => product.Coverage.DroppedEligibleFunctions);

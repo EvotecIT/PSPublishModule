@@ -133,6 +133,7 @@ public sealed partial class ModulePipelineRunner
                     powerShellCompilationResult.UsesPowerShellRuntimeFallback
                         ? $"{powerShellCompilationResult.RuntimeFallbackUnits} unit(s) retain explicit PowerShell runtime fallback."
                         : "No authored unit uses PowerShell runtime fallback.",
+                    $"{powerShellCompilationResult.PromotedTypedRegions} typed region(s) execute in generated CLR helpers without counting their retained functions as emitted units.",
                     $"Assembly: {powerShellCompilationResult.AssemblyPath}"
                 }));
         }

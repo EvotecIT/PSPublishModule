@@ -27,6 +27,20 @@ internal static class PowerShellCompilationIrSnapshotBuilder
                     Disposition = function.Disposition.Kind.ToString(),
                     Nodes = function.Body.Statements.Select(static statement => statement.GetType().Name).ToArray()
                 })
+                .Concat(result.PromotedRegions.Select(static region => new PowerShellCompilationIrUnitSnapshot
+                {
+                    UnitId = region.Candidate.RegionId,
+                    DocumentId = region.Analyzed.Symbol.DocumentId,
+                    Name = region.Candidate.SourceName,
+                    ReturnType = TypeName(region.Analyzed.ReturnType.ClrType),
+                    OutputCardinality = region.Analyzed.OutputCardinality.ToString(),
+                    ValueStates = Array.Empty<string>(),
+                    Capabilities = SplitFlags(region.Analyzed.Capabilities.ToString()),
+                    Effects = SplitFlags(region.Analyzed.Effects.ToString()),
+                    Disposition = "PromotedTypedRegion",
+                    Nodes = region.Analyzed.Body.Statements.Select(static statement => statement.GetType().Name).ToArray()
+                }))
+                .OrderBy(static unit => unit.UnitId, StringComparer.Ordinal)
                 .ToArray(),
             Lowered = result.Lowered.Functions
                 .OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal)
@@ -43,6 +57,20 @@ internal static class PowerShellCompilationIrSnapshotBuilder
                     Disposition = "LoweredClr",
                     Nodes = function.Statements.Select(static statement => statement.GetType().Name).ToArray()
                 })
+                .Concat(result.PromotedRegions.Select(static region => new PowerShellCompilationIrUnitSnapshot
+                {
+                    UnitId = region.Candidate.RegionId,
+                    DocumentId = region.Lowered.Symbol.DocumentId,
+                    Name = region.Candidate.SourceName,
+                    ReturnType = TypeName(region.Lowered.ReturnType),
+                    OutputCardinality = region.Lowered.OutputCardinality.ToString(),
+                    ValueStates = region.Lowered.OutputValueStates.Select(static state => state.ToString()).OrderBy(static state => state, StringComparer.Ordinal).ToArray(),
+                    Capabilities = SplitFlags(GetLoweredCapabilities(region.Lowered).ToString()),
+                    Effects = Array.Empty<string>(),
+                    Disposition = "PromotedTypedRegion",
+                    Nodes = region.Lowered.Statements.Select(static statement => statement.GetType().Name).ToArray()
+                }))
+                .OrderBy(static unit => unit.UnitId, StringComparer.Ordinal)
                 .ToArray()
         };
         bundle.Sha256 = ComputeSha256(bundle);

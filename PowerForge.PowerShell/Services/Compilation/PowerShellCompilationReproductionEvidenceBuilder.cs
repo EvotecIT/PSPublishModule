@@ -108,6 +108,11 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
         var failureMapSha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.ComputeFailureMapSha256(failureMap);
         var diagnosticAuditSha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.ComputeAuditTrailSha256(diagnosticAudit);
         var diagnosticsPolicySha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.Hash(diagnosticsPolicy);
+        if (manifest.PromotedTypedRegions != unitDispositionLedger.PromotedTypedRegions ||
+            decisionTrace.PromotedTypedRegions != unitDispositionLedger.PromotedTypedRegions)
+        {
+            throw new InvalidOperationException("Canonical compilation region totals do not match the final unit-disposition ledger.");
+        }
         if (evidence.SchemaVersion != 4 ||
             evidence.Mode != manifest.Mode ||
             evidence.Kind != manifest.Kind ||

@@ -38,7 +38,7 @@ internal static partial class Program
                 return exitCode;
             }
 
-            logger.Info($"PowerShell compilation decisions ({explanation.Mode}): {explanation.TypedUnits} typed, {explanation.RuntimeFallbackUnits} runtime fallback, {explanation.RejectedUnits} rejected.");
+            logger.Info($"PowerShell compilation decisions ({explanation.Mode}): {explanation.TypedUnits} typed units, {explanation.PromotedTypedRegions} typed regions inside retained functions, {explanation.RuntimeFallbackUnits} runtime fallback, {explanation.RejectedUnits} rejected.");
             foreach (var file in explanation.Files)
             {
             foreach (var cause in file.Causes)

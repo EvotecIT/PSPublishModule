@@ -100,6 +100,7 @@ function ConvertTo-Baseline {
                 totalFunctions = $_.totalFunctions
                 analyzerEligibleFunctions = $_.analyzerEligibleFunctions
                 emittedFunctions = $_.emittedFunctions
+                promotedTypedRegions = $_.promotedTypedRegions
                 droppedEligibleFunctions = $_.droppedEligibleFunctions
                 fallbackFunctions = $_.fallbackFunctions
                 functionDispositions = @($_.functionDispositions)
@@ -110,6 +111,14 @@ function ConvertTo-Baseline {
             note = 'This is a pinned workload regression baseline. Emitted-unit and emitted-function ratios are not estimates of PowerShell-language coverage or proof of complete workload execution.'
         }
     }
+}
+
+function Get-OptionalIntegerProperty {
+    param([object] $Value, [string] $Name)
+
+    $property = $Value.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) { return 0 }
+    return [int] $property.Value
 }
 
 function Compare-Baseline {
@@ -158,6 +167,10 @@ function Compare-Baseline {
                 $regressions.Add([ordered]@{ id = $expected.id; metric = $metric; expectedMinimum = $expected.$metric; actual = $current.$metric })
             }
         }
+        $expectedPromotedRegions = Get-OptionalIntegerProperty -Value $expected -Name 'promotedTypedRegions'
+        if ([int] $current.promotedTypedRegions -lt $expectedPromotedRegions) {
+            $regressions.Add([ordered]@{ id = $expected.id; metric = 'promotedTypedRegions'; expectedMinimum = $expectedPromotedRegions; actual = $current.promotedTypedRegions })
+        }
         foreach ($metric in @('runtimeFallbackUnits', 'parseErrorFiles', 'fallbackFunctions')) {
             if ([int] $current.$metric -gt [int] $expected.$metric) {
                 $regressions.Add([ordered]@{ id = $expected.id; metric = $metric; expectedMaximum = $expected.$metric; actual = $current.$metric })
@@ -200,6 +213,10 @@ function Compare-Baseline {
                 if ($expectedDisposition.$gainMetric -ne $true -and $currentDisposition.$gainMetric -eq $true) {
                     $regressions.Add([ordered]@{ id = $expected.id; metric = "$gainMetric`:$unitId"; expected = $false; actual = $true })
                 }
+            }
+            $expectedPromotedRegions = Get-OptionalIntegerProperty -Value $expectedDisposition -Name 'promotedTypedRegions'
+            if ([int] $currentDisposition.promotedTypedRegions -lt $expectedPromotedRegions) {
+                $regressions.Add([ordered]@{ id = $expected.id; metric = "promotedTypedRegions`:$unitId"; expectedMinimum = $expectedPromotedRegions; actual = $currentDisposition.promotedTypedRegions })
             }
             if ($expectedDisposition.semanticEligible -eq $true -and $expectedDisposition.shapingFallback -ne $true -and $currentDisposition.shapingFallback -eq $true) {
                 $regressions.Add([ordered]@{ id = $expected.id; metric = "shapingFallback:$unitId"; expected = $false; actual = $true })
@@ -278,6 +295,7 @@ try {
                 totalFunctions = $product.coverage.totalFunctions
                 analyzerEligibleFunctions = $product.coverage.analyzerEligibleFunctions
                 emittedFunctions = $product.coverage.emittedFunctions
+                promotedTypedRegions = [int] $product.promotedTypedRegions
                 droppedEligibleFunctions = $product.coverage.droppedEligibleFunctions
                 fallbackFunctions = $product.coverage.fallbackFunctions
                 functionDispositions = @($product.functionDispositions | ForEach-Object {
@@ -290,6 +308,7 @@ try {
                         emitted = $_.emitted
                         runtimeRouted = $_.runtimeRouted
                         shapingFallback = $_.shapingFallback
+                        promotedTypedRegions = [int] $_.promotedTypedRegions
                     }
                 })
                 emittedUnitPercentage = $unitPercentage
@@ -321,6 +340,7 @@ try {
     $emittedUnits = [int] (($successful | ForEach-Object { [int] $_.emittedUnits } | Measure-Object -Sum).Sum)
     $totalFunctions = [int] (($successful | ForEach-Object { [int] $_.totalFunctions } | Measure-Object -Sum).Sum)
     $emittedFunctions = [int] (($successful | ForEach-Object { [int] $_.emittedFunctions } | Measure-Object -Sum).Sum)
+    $promotedTypedRegions = [int] (($successful | ForEach-Object { [int] $_.promotedTypedRegions } | Measure-Object -Sum).Sum)
     $parseErrorFiles = [int] (($successful | ForEach-Object { [int] $_.parseErrorFiles } | Measure-Object -Sum).Sum)
     $crossWorkloadFrontier = @($frontierRows |
         Group-Object { $_.Impact.featureId } |
@@ -363,6 +383,7 @@ try {
             emittedUnitPercentage = if ($totalUnits) { [Math]::Round(100 * $emittedUnits / $totalUnits, 2) } else { 0.0 }
             totalFunctions = $totalFunctions
             emittedFunctions = $emittedFunctions
+            promotedTypedRegions = $promotedTypedRegions
             emittedFunctionPercentage = if ($totalFunctions) { [Math]::Round(100 * $emittedFunctions / $totalFunctions, 2) } else { $null }
             parseErrorFiles = $parseErrorFiles
             acquisitionOrAnalysisFailures = @($results | Where-Object { -not $_.succeeded }).Count
@@ -374,7 +395,7 @@ try {
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Information "Evidence: $EvidencePath" -InformationAction Continue
-    Write-Information "Assessed: $($successful.Count)/$($results.Count); emitted functions: $emittedFunctions/$totalFunctions; emitted units: $emittedUnits/$totalUnits; regressions: $($regressions.Count)" -InformationAction Continue
+    Write-Information "Assessed: $($successful.Count)/$($results.Count); emitted functions: $emittedFunctions/$totalFunctions; emitted units: $emittedUnits/$totalUnits; promoted typed regions: $promotedTypedRegions; regressions: $($regressions.Count)" -InformationAction Continue
     if ($evidence.summary.acquisitionOrAnalysisFailures -gt 0 -or $regressions.Count -gt 0) { exit 1 }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {

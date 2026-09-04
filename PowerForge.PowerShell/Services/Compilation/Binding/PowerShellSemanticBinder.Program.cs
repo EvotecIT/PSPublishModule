@@ -8,10 +8,17 @@ internal sealed partial class PowerShellSemanticBinder
         IEnumerable<ParsedSourceDocument> documents,
         string? targetFramework = null,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        => BindWithRegionCandidates(documents, targetFramework, capabilities).Program;
+
+    internal PowerShellSemanticBindingResult BindWithRegionCandidates(
+        IEnumerable<ParsedSourceDocument> documents,
+        string? targetFramework = null,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         if (documents is null) throw new ArgumentNullException(nameof(documents));
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
         var diagnostics = new List<PowerShellSemanticDiagnostic>();
+        var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
         var declarations = DeclareFunctions(orderedDocuments, diagnostics);
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
@@ -62,7 +69,10 @@ internal sealed partial class PowerShellSemanticBinder
                     functionsByName,
                     functionDiagnostics,
                     targetFramework,
-                    capabilities);
+                    capabilities,
+                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
+                        ? regionCandidates
+                        : null);
                 if (bound is not null)
                 {
                     functions.Add(bound);
@@ -103,10 +113,15 @@ internal sealed partial class PowerShellSemanticBinder
                 .OrderBy(static symbol => symbol.StableKey, StringComparer.Ordinal)
                 .ToArray())).ToArray();
 
-        return new PowerShellBoundProgram(
+        var program = new PowerShellBoundProgram(
             boundDocuments,
             functions.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
             OrderDiagnostics(diagnostics));
+        return new PowerShellSemanticBindingResult(
+            program,
+            regionCandidates.Values
+                .OrderBy(static candidate => candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal)
+                .ToArray());
     }
 
     private static bool HasTypedFunctionShape(ScriptBlockAst body, PowerShellCompilationCapability capabilities)
@@ -118,4 +133,18 @@ internal sealed partial class PowerShellSemanticBinder
 
     private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
         => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;
+}
+
+internal sealed class PowerShellSemanticBindingResult
+{
+    internal PowerShellSemanticBindingResult(
+        PowerShellBoundProgram program,
+        PowerShellBoundRegionCandidate[] regionCandidates)
+    {
+        Program = program;
+        RegionCandidates = regionCandidates ?? Array.Empty<PowerShellBoundRegionCandidate>();
+    }
+
+    internal PowerShellBoundProgram Program { get; }
+    internal PowerShellImmutableArray<PowerShellBoundRegionCandidate> RegionCandidates { get; }
 }

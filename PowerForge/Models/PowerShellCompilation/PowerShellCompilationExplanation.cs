@@ -76,6 +76,10 @@ public sealed class PowerShellCompilationUnitExplanation
     public int BoundaryCrossings { get; set; }
     /// <summary>Canonical coarse lowered-region evidence for an emitted CLR method.</summary>
     public PowerShellCompilationRegionGraph? RegionGraph { get; set; }
+    /// <summary>Number of generated CLR regions inside this retained function.</summary>
+    public int PromotedTypedRegions { get; set; }
+    /// <summary>Generated CLR helper members backing the promoted regions.</summary>
+    public string[] GeneratedRegionMemberNames { get; set; } = Array.Empty<string>();
     /// <summary>Whether artifact shaping retained a runtime path for an eligible unit.</summary>
     public bool ShapingFallback { get; set; }
     /// <summary>Whether the artifact intentionally omits this unit.</summary>
@@ -195,9 +199,9 @@ public sealed class PowerShellCompilationReproductionEvidence
 public sealed class PowerShellCompilationExplanation
 {
     /// <summary>Explanation schema version.</summary>
-    public int SchemaVersion { get; set; } = 4;
+    public int SchemaVersion { get; set; } = 5;
     /// <summary>Compatibility contract used by semantic fingerprints across supported hosts.</summary>
-    public int SemanticCompatibilityVersion { get; set; } = 3;
+    public int SemanticCompatibilityVersion { get; set; } = 4;
     /// <summary>SHA-256 over semantic decisions with authored coordinates and traversal order removed.</summary>
     public string SemanticFingerprintSha256 { get; set; } = string.Empty;
     /// <summary>Selected compilation mode.</summary>
@@ -212,6 +216,8 @@ public sealed class PowerShellCompilationExplanation
     public int RuntimeFallbackUnits { get; set; }
     /// <summary>Rejected unit count.</summary>
     public int RejectedUnits { get; set; }
+    /// <summary>Typed regions promoted inside retained authored functions.</summary>
+    public int PromotedTypedRegions { get; set; }
     /// <summary>Missing dependency causes that block the plan independently of unit eligibility.</summary>
     public PowerShellCompilationDependencyExplanation[] DependencyCauses { get; set; } = Array.Empty<PowerShellCompilationDependencyExplanation>();
     /// <summary>All dependency decisions that shaped the selected artifact.</summary>

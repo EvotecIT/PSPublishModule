@@ -29,7 +29,8 @@ public static class PowerShellCompilationCapabilities
     /// <summary>Capabilities supplied by a Hybrid binary module with one retained script-module state owner.</summary>
     public const PowerShellCompilationCapability HybridModule =
         BinaryModule |
-        PowerShellCompilationCapability.PowerShellModuleState;
+        PowerShellCompilationCapability.PowerShellModuleState |
+        PowerShellCompilationCapability.HybridTypedRegions;
 
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =

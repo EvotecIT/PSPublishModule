@@ -131,7 +131,6 @@ public sealed class PowerShellCompilationUnitDisposition
     }
 
     /// <summary>Creates one final unit disposition with directional state and canonical region evidence.</summary>
-    [JsonConstructor]
     public PowerShellCompilationUnitDisposition(
         string unitId,
         string relativePath,
@@ -154,6 +153,59 @@ public sealed class PowerShellCompilationUnitDisposition
         int moduleStateReadBoundaryCrossings,
         int moduleStateWriteBoundaryCrossings,
         PowerShellCompilationRegionGraph? regionGraph)
+        : this(
+            unitId,
+            relativePath,
+            name,
+            kind,
+            startLine,
+            semanticEligible,
+            emittedClrMethod,
+            emittedBinaryCmdlet,
+            retainedHostedSource,
+            runtimeCommandRegions,
+            boundaryCrossings,
+            shapingFallback,
+            omitted,
+            rejected,
+            generatedMemberName,
+            dependencyCauses,
+            boundaryCauses,
+            diagnosticChain,
+            moduleStateReadBoundaryCrossings,
+            moduleStateWriteBoundaryCrossings,
+            regionGraph,
+            promotedTypedRegions: 0,
+            generatedRegionMemberNames: null)
+    {
+    }
+
+    /// <summary>Creates one final unit disposition including partial typed-region evidence.</summary>
+    [JsonConstructor]
+    public PowerShellCompilationUnitDisposition(
+        string unitId,
+        string relativePath,
+        string name,
+        PowerShellCompilationUnitKind kind,
+        int startLine,
+        bool semanticEligible,
+        bool emittedClrMethod,
+        bool emittedBinaryCmdlet,
+        bool retainedHostedSource,
+        int runtimeCommandRegions,
+        int boundaryCrossings,
+        bool shapingFallback,
+        bool omitted,
+        bool rejected,
+        string generatedMemberName,
+        IReadOnlyList<string>? dependencyCauses,
+        IReadOnlyList<string>? boundaryCauses,
+        IReadOnlyList<PowerShellCompilationDispositionCause>? diagnosticChain,
+        int moduleStateReadBoundaryCrossings,
+        int moduleStateWriteBoundaryCrossings,
+        PowerShellCompilationRegionGraph? regionGraph,
+        int promotedTypedRegions,
+        IReadOnlyList<string>? generatedRegionMemberNames)
     {
         UnitId = unitId ?? string.Empty;
         RelativePath = relativePath ?? string.Empty;
@@ -166,6 +218,7 @@ public sealed class PowerShellCompilationUnitDisposition
         RetainedHostedSource = retainedHostedSource;
         RuntimeCommandRegions = Math.Max(0, runtimeCommandRegions);
         BoundaryCrossings = Math.Max(0, boundaryCrossings);
+        PromotedTypedRegions = Math.Max(0, promotedTypedRegions);
         ModuleStateReadBoundaryCrossings = Math.Max(0, moduleStateReadBoundaryCrossings);
         ModuleStateWriteBoundaryCrossings = Math.Max(0, moduleStateWriteBoundaryCrossings);
         if (ModuleStateReadBoundaryCrossings == 0 && ModuleStateWriteBoundaryCrossings == 0)
@@ -173,6 +226,7 @@ public sealed class PowerShellCompilationUnitDisposition
             ModuleStateReadBoundaryCrossings = Math.Max(
                 0,
                 BoundaryCrossings - RuntimeCommandRegions -
+                PromotedTypedRegions -
                 (RetainedHostedSource && (EmittedClrMethod || EmittedBinaryCmdlet) ? 1 : 0));
         }
         ShapingFallback = shapingFallback;
@@ -183,6 +237,7 @@ public sealed class PowerShellCompilationUnitDisposition
         BoundaryCauses = Array.AsReadOnly((boundaryCauses ?? Array.Empty<string>()).ToArray());
         DiagnosticChain = Array.AsReadOnly((diagnosticChain ?? Array.Empty<PowerShellCompilationDispositionCause>()).ToArray());
         RegionGraph = regionGraph;
+        GeneratedRegionMemberNames = Array.AsReadOnly((generatedRegionMemberNames ?? Array.Empty<string>()).ToArray());
     }
 
     /// <summary>Stable relocation-safe authored-unit identity.</summary>
@@ -235,6 +290,12 @@ public sealed class PowerShellCompilationUnitDisposition
     /// <summary>Canonical lowered region evidence when this unit has an emitted CLR method.</summary>
     public PowerShellCompilationRegionGraph? RegionGraph { get; }
 
+    /// <summary>Number of CLR regions promoted inside this retained authored function.</summary>
+    public int PromotedTypedRegions { get; }
+
+    /// <summary>Generated CLR helper members backing promoted regions.</summary>
+    public IReadOnlyList<string> GeneratedRegionMemberNames { get; }
+
     /// <summary>Total parent Hybrid script-module state crossings in either direction.</summary>
     [JsonIgnore]
     public int ModuleStateBoundaryCrossings => ModuleStateReadBoundaryCrossings + ModuleStateWriteBoundaryCrossings;
@@ -248,6 +309,7 @@ public sealed class PowerShellCompilationUnitDisposition
     public string ArtifactDisposition => string.Join("+", new[]
     {
         Emitted ? "TypedArtifact" : string.Empty,
+        PromotedTypedRegions > 0 ? "TypedRegions" : string.Empty,
         RetainedHostedSource ? "HostedSource" : string.Empty,
         RuntimeCommandRegions > 0 ? "HostedCommandRegions" : string.Empty,
         ModuleStateBoundaryCrossings > 0 ? "HostedModuleState" : string.Empty,
@@ -273,7 +335,7 @@ public sealed class PowerShellCompilationUnitDispositionLedger
     }
 
     /// <summary>Ledger schema version.</summary>
-    public int SchemaVersion => 3;
+    public int SchemaVersion => 4;
     /// <summary>Deterministically ordered authored-unit dispositions.</summary>
     public IReadOnlyList<PowerShellCompilationUnitDisposition> Entries { get; }
     /// <summary>Runtime delivery causes outside an authored compilation unit, such as manifest hooks.</summary>
@@ -302,6 +364,8 @@ public sealed class PowerShellCompilationUnitDispositionLedger
     public int ModuleStateBoundaryCrossings => ModuleStateReadBoundaryCrossings + ModuleStateWriteBoundaryCrossings;
     /// <summary>Total statically identified typed/hosted crossings.</summary>
     public int BoundaryCrossings => Entries.Sum(static entry => entry.BoundaryCrossings);
+    /// <summary>Total typed regions promoted inside retained authored functions.</summary>
+    public int PromotedTypedRegions => Entries.Sum(static entry => entry.PromotedTypedRegions);
     /// <summary>Whether the delivered artifact retains any PowerShell runtime execution path.</summary>
     public bool UsesPowerShellRuntimeFallback =>
         Entries.Any(static entry => entry.RuntimeRouted) || DeliveryRuntimeCauses.Count > 0;

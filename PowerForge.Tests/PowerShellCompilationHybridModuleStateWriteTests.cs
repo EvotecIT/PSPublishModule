@@ -364,7 +364,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
 
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
-        Assert.Equal(3, ledger.SchemaVersion);
+        Assert.Equal(4, ledger.SchemaVersion);
         var hosted = Assert.Single(ledger.Entries, static entry => entry.Name == "Set-StateFromHostedCommand");
         Assert.Equal(1, hosted.RuntimeCommandRegions);
         Assert.Equal(0, hosted.ModuleStateReadBoundaryCrossings);
@@ -386,7 +386,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             File.ReadAllText(snapshotPath),
             new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         Assert.NotNull(snapshots);
-        Assert.Equal(2, snapshots.SchemaVersion);
+        Assert.Equal(3, snapshots.SchemaVersion);
         var loweredHosted = Assert.Single(snapshots.Lowered, static unit => unit.Name == "Set-StateFromHostedCommand");
         Assert.Contains("PowerShellModuleStateWrite", loweredHosted.Capabilities);
         Assert.DoesNotContain("PowerShellModuleStateRead", loweredHosted.Capabilities);

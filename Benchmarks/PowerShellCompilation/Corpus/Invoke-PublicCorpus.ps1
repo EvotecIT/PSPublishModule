@@ -111,6 +111,7 @@ function Get-LedgerSummary {
         analyzedUnits = $entries.Count
         boundUnits = @($entries | Where-Object semanticEligible).Count
         emittedClrUnits = @($entries | Where-Object emittedClrMethod).Count
+        promotedTypedRegions = [int] (($entries | Measure-Object promotedTypedRegions -Sum).Sum)
         exportedCmdletUnits = @($entries | Where-Object emittedBinaryCmdlet).Count
         hostedRegions = ($entries | Measure-Object runtimeCommandRegions -Sum).Sum
         retainedSourceUnits = @($entries | Where-Object retainedHostedSource).Count
@@ -149,6 +150,14 @@ function New-TargetContract {
 function Get-Sum {
     param([object[]] $Values)
     return [int] (($Values | Measure-Object -Sum).Sum)
+}
+
+function Get-OptionalIntegerProperty {
+    param([object] $Value, [string] $Name)
+
+    $property = $Value.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) { return 0 }
+    return [int] $property.Value
 }
 
 function Get-PercentileMilliseconds {
@@ -198,6 +207,17 @@ function Compare-PublicBaseline {
     if ($regressions.Count -gt 0) { return @($regressions) }
 
     if ($CompareModules) {
+        $derivedEmittedPercentage = if ([int] $Baseline.hybrid.analyzedUnits -gt 0) {
+            [Math]::Round(100.0 * [int] $Baseline.hybrid.emittedClrUnits / [int] $Baseline.hybrid.analyzedUnits, 2)
+        } else { 0.0 }
+        if ([Math]::Abs([double] $Baseline.hybrid.emittedClrUnitPercentage - $derivedEmittedPercentage) -gt 0.005) {
+            $regressions.Add([ordered]@{
+                scope = 'hybrid'
+                metric = 'emittedClrUnitPercentage'
+                expected = $derivedEmittedPercentage
+                actual = $Baseline.hybrid.emittedClrUnitPercentage
+            })
+        }
         if ($Rid -ne $Baseline.hybrid.runtimeIdentifier) {
             $regressions.Add([ordered]@{ scope = 'hybrid'; metric = 'runtimeIdentifier'; expected = $Baseline.hybrid.runtimeIdentifier; actual = $Rid })
         }
@@ -210,6 +230,7 @@ function Compare-PublicBaseline {
             analyzedUnits = Get-Sum @($successful | ForEach-Object { $_.counts.analyzedUnits })
             boundUnits = Get-Sum @($successful | ForEach-Object { $_.counts.boundUnits })
             emittedClrUnits = Get-Sum @($successful | ForEach-Object { $_.counts.emittedClrUnits })
+            promotedTypedRegions = Get-Sum @($successful | ForEach-Object { $_.counts.promotedTypedRegions })
             exportedCmdletUnits = Get-Sum @($successful | ForEach-Object { $_.counts.exportedCmdletUnits })
             hostedRegions = Get-Sum @($successful | ForEach-Object { $_.counts.hostedRegions })
             retainedSourceUnits = Get-Sum @($successful | ForEach-Object { $_.counts.retainedSourceUnits })
@@ -228,6 +249,10 @@ function Compare-PublicBaseline {
             if ([int] $metrics[$metric] -lt [int] $Baseline.hybrid.$metric) {
                 $regressions.Add([ordered]@{ scope = 'hybrid'; metric = $metric; expectedMinimum = $Baseline.hybrid.$metric; actual = $metrics[$metric] })
             }
+        }
+        $expectedPromotedRegions = Get-OptionalIntegerProperty -Value $Baseline.hybrid -Name 'promotedTypedRegions'
+        if ([int] $metrics.promotedTypedRegions -lt $expectedPromotedRegions) {
+            $regressions.Add([ordered]@{ scope = 'hybrid'; metric = 'promotedTypedRegions'; expectedMinimum = $expectedPromotedRegions; actual = $metrics.promotedTypedRegions })
         }
         foreach ($metric in @('hostedRegions', 'retainedSourceUnits', 'semanticFallbackUnits', 'shapingFallbackUnits', 'runtimeRoutedUnits', 'omittedUnits', 'rejectedUnits')) {
             if ([int] $metrics[$metric] -gt [int] $Baseline.hybrid.$metric) {
@@ -574,11 +599,12 @@ try {
             strictProgramsTotal = $strictResults.Count
             failures = $failedModules + $failedStrict
             regressions = $regressions.Count
+            promotedTypedRegions = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.counts.promotedTypedRegions })
         }
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Host "Evidence: $EvidencePath"
-    Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
+    Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); promoted typed regions: $($evidence.summary.promotedTypedRegions); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
     if ($evidence.summary.failures -gt 0 -or $evidence.summary.regressions -gt 0) { exit 1 }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {

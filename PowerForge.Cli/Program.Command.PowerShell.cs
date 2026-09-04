@@ -219,7 +219,7 @@ internal static partial class Program
             if (!string.IsNullOrWhiteSpace(result.GeneratedSourcePath))
                 logger.Info($"Generated source: {result.GeneratedSourcePath}");
             logger.Info(result.Manifest!.UsesPowerShellRuntimeFallback
-                ? $"Runtime-packaged artifact: {result.Manifest.RuntimeFallbackUnits} unit(s) execute through PowerShell."
+                ? $"Runtime-packaged artifact: {result.Manifest.RuntimeFallbackUnits} unit(s) execute through PowerShell; {result.Manifest.PromotedTypedRegions} typed region(s) run in generated CLR helpers."
                 : result.Manifest.RequiresPowerShellRuntime
                     ? $"Typed PowerShell binary module: {result.Manifest.CompiledMethods} cmdlet(s), no dynamic script fallback."
                     : $"Typed CLR artifact: {result.Manifest.CompiledMethods} method(s), {result.Manifest.OmittedUnits} unsupported unit(s) omitted, no PowerShell runtime dependency.");
@@ -340,13 +340,13 @@ internal static partial class Program
             }
 
             if (result.PostEmissionEvaluated)
-                logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.EmittedFunctions}/{result.TotalFunctions} functions emitted ({result.EmittedFunctionCoveragePercentage:0.0}%), {result.DroppedEligibleFunctions} analyzer-eligible function(s) dropped after shaping, {result.ParseErrorFiles} parse-error files.");
+                logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.EmittedFunctions}/{result.TotalFunctions} functions emitted ({result.EmittedFunctionCoveragePercentage:0.0}%), {result.PromotedTypedRegions} typed region(s) promoted inside retained functions, {result.DroppedEligibleFunctions} analyzer-eligible function(s) dropped after shaping, {result.ParseErrorFiles} parse-error files.");
             else
                 logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.CompilableUnits}/{result.TotalUnits} units structurally eligible; post-emission shaping was not evaluated, {result.ParseErrorFiles} parse-error files.");
             foreach (var product in result.Products)
             {
                 if (product.Coverage.PostEmissionEvaluated)
-                    logger.Info($"{product.Name}: {product.SourceFiles} files, {product.Coverage.EmittedFunctions}/{product.Coverage.TotalFunctions} functions emitted ({product.Coverage.EmittedFunctionCoveragePercentage:0.0}%), {product.Coverage.TotalScriptUnits} script/init unit(s), {product.AnalysisMilliseconds:0.0} ms.");
+                    logger.Info($"{product.Name}: {product.SourceFiles} files, {product.Coverage.EmittedFunctions}/{product.Coverage.TotalFunctions} functions emitted ({product.Coverage.EmittedFunctionCoveragePercentage:0.0}%), {product.PromotedTypedRegions} typed region(s) promoted, {product.Coverage.TotalScriptUnits} script/init unit(s), {product.AnalysisMilliseconds:0.0} ms.");
                 else
                     logger.Info($"{product.Name}: {product.SourceFiles} files, {product.CompilableUnits}/{product.TotalUnits} units structurally eligible; post-emission shaping was not evaluated, {product.AnalysisMilliseconds:0.0} ms.");
                 foreach (var feature in product.FunctionImpacts.Take(5))

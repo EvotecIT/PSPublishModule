@@ -50,6 +50,9 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var method = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle is null);
                 var lifecycleMethod = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle is not null);
                 var dispositionMethod = method ?? lifecycleMethod;
+                var promotedRegions = shapedCompilation?.PromotedRegions
+                    .Where(candidate => RegionMatches(candidate, file.FullPath, unit))
+                    .ToArray() ?? Array.Empty<PowerShellCompiledRegion>();
                 var unitKey = PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine);
                 var emitted = method is not null ||
                               plan.Mode == PowerShellCompilationMode.Strict &&
@@ -115,19 +118,22 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     runtimeCommandRegions,
                     boundaryCrossings: runtimeCommandRegions +
                                         moduleStateBoundaryCrossings +
-                                        (retainedHostedSource && (emitted || emittedBinaryCmdlet) ? 1 : 0),
+                                        (retainedHostedSource && (emitted || emittedBinaryCmdlet) ? 1 : 0) +
+                                        promotedRegions.Length,
                     shapingFallback: retainedHostedSource && (unit.IsCompilable || lifecycleMethod is not null),
                     omitted,
                     rejected,
-                    dispositionMethod?.GeneratedName ?? string.Empty,
+                    emitted || emittedBinaryCmdlet ? dispositionMethod?.GeneratedName ?? string.Empty : string.Empty,
                     dependencyCauses: runtimeRouted
                         ? GetUnitDependencyCauses(plan.Dependencies, file.FullPath, relativePath)
                         : Array.Empty<string>(),
-                    boundaryCauses: GetBoundaryCauses(dispositionMethod, retainedHostedSource),
+                    boundaryCauses: GetBoundaryCauses(dispositionMethod, retainedHostedSource, promotedRegions),
                     diagnosticChain,
                     moduleStateReadBoundaryCrossings,
                     moduleStateWriteBoundaryCrossings,
-                    dispositionMethod?.RegionGraph));
+                    dispositionMethod?.RegionGraph ?? promotedRegions.FirstOrDefault()?.RegionGraph,
+                    promotedRegions.Length,
+                    promotedRegions.Select(static region => region.GeneratedName).ToArray()));
             }
         }
 
@@ -248,7 +254,19 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                method.SourceLine == unit.StartLine;
     }
 
-    private static string[] GetBoundaryCauses(PowerShellCompiledMethod? method, bool retainedHostedSource)
+    private static bool RegionMatches(
+        PowerShellCompiledRegion region,
+        string fullPath,
+        PowerShellCompilationUnitPlan unit)
+        => unit.Kind == PowerShellCompilationUnitKind.Function &&
+           PowerShellCompilationPathSafety.PathEquals(region.SourcePath, fullPath) &&
+           region.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) &&
+           region.SourceLine == unit.StartLine;
+
+    private static string[] GetBoundaryCauses(
+        PowerShellCompiledMethod? method,
+        bool retainedHostedSource,
+        IReadOnlyList<PowerShellCompiledRegion> promotedRegions)
     {
         var causes = new List<string>();
         if (retainedHostedSource) causes.Add("Authored source remains on the hosted PowerShell path after artifact shaping.");
@@ -265,6 +283,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             method.WrittenPowerShellModuleVariables.Length == 0)
             causes.Add("The emitted CLR method depends on live parent Hybrid script-module state through a compiled local call.");
         if (method?.Lifecycle is not null) causes.Add("The emitted cmdlet uses a hosted advanced-function lifecycle.");
+        if (promotedRegions.Count > 0)
+            causes.Add($"The retained function delegates {promotedRegions.Count} terminal typed region(s) to generated CLR helpers while keeping its PowerShell command surface.");
         return causes.ToArray();
     }
 

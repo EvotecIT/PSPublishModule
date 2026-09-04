@@ -113,7 +113,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             targetFramework,
             invalid,
             capabilities);
-        return new PowerShellTypedCompilationResult(
+        var result = new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,
             filtered.TypeName,
@@ -127,6 +127,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             lifecycleSources: null,
             optimization: filtered.Optimization,
             irSnapshots: filtered.IrSnapshots);
+        result.PromotedRegions = filtered.PromotedRegions;
+        return result;
     }
 
     internal static string Generate(

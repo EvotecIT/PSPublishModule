@@ -470,7 +470,8 @@ public sealed partial class PowerShellCompilationCensusRunner
                    entry.SemanticEligible,
                    entry.Emitted,
                    entry.RuntimeRouted,
-                   entry.ShapingFallback))
+                   entry.ShapingFallback,
+                   entry.PromotedTypedRegions))
                .ToArray()
            ?? Array.Empty<PowerShellCompilationFunctionDisposition>();
 

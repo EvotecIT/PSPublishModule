@@ -22,7 +22,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
     internal static PowerShellCompilationFailureMap CreateFailureMap(
         PowerShellCompilationPlan plan,
         IEnumerable<PowerShellCompiledMethod> methods,
-        PowerShellCompilationUnitDispositionLedger ledger)
+        PowerShellCompilationUnitDispositionLedger ledger,
+        IEnumerable<PowerShellCompiledRegion>? promotedRegions = null)
     {
         var entries = new List<PowerShellCompilationFailureMapEntry>();
         foreach (var method in methods.Where(static item => item.Lifecycle is null)
@@ -58,12 +59,44 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 BoundaryContract = boundary
             }));
         }
+        foreach (var region in (promotedRegions ?? Array.Empty<PowerShellCompiledRegion>())
+                     .OrderBy(static item => item.DocumentId, StringComparer.Ordinal)
+                     .ThenBy(static item => item.StartLine)
+                     .ThenBy(static item => item.SourceName, StringComparer.Ordinal))
+        {
+            var file = plan.Files.FirstOrDefault(item => PowerShellCompilationPathSafety.PathEquals(item.FullPath, region.SourcePath));
+            if (file is null) continue;
+            var unit = file.Units.FirstOrDefault(item => item.Kind == PowerShellCompilationUnitKind.Function &&
+                item.Name.Equals(region.SourceName, StringComparison.OrdinalIgnoreCase) && item.StartLine == region.SourceLine);
+            if (unit is null) continue;
+            var unitId = PowerShellCompilationExplanationService.ComputeUnitId(file.RelativePath, unit);
+            var disposition = ledger.Entries.FirstOrDefault(item => item.UnitId.Equals(unitId, StringComparison.Ordinal));
+            var maps = region.SourceMap.Count == 0
+                ? new[] { new PowerShellCompilationSourceMapEntry(region.StartLine, region.StartColumn, region.EndLine, region.EndColumn, 1, 1, 1, 1) }
+                : region.SourceMap;
+            entries.AddRange(maps.Select(map => new PowerShellCompilationFailureMapEntry
+            {
+                DocumentId = region.DocumentId,
+                RelativePath = NormalizeRelative(file.RelativePath, Path.GetFileName(file.FullPath)),
+                UnitId = unitId,
+                UnitName = unit.Name,
+                GeneratedMemberName = region.GeneratedName,
+                SourceStartLine = map.SourceStartLine,
+                SourceStartColumn = map.SourceStartColumn,
+                SourceEndLine = map.SourceEndLine,
+                SourceEndColumn = map.SourceEndColumn,
+                GeneratedStartLine = map.GeneratedStartLine,
+                GeneratedEndLine = map.GeneratedEndLine,
+                BoundaryContract = DescribeBoundary(disposition)
+            }));
+        }
         var mappedUnitIds = entries.Select(static item => item.UnitId).ToHashSet(StringComparer.Ordinal);
         var identityRoot = plan.Files.Length == 0
             ? Directory.GetCurrentDirectory()
             : Path.GetDirectoryName(Path.GetFullPath(plan.Files[0].FullPath)) ?? Directory.GetCurrentDirectory();
         foreach (var disposition in ledger.Entries
-                     .Where(entry => !mappedUnitIds.Contains(entry.UnitId))
+                     .Where(entry => !mappedUnitIds.Contains(entry.UnitId) ||
+                                     (entry.RetainedHostedSource && entry.PromotedTypedRegions > 0))
                      .OrderBy(static entry => entry.RelativePath, StringComparer.Ordinal)
                      .ThenBy(static entry => entry.StartLine)
                      .ThenBy(static entry => entry.Name, StringComparer.Ordinal))
@@ -81,7 +114,9 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 RelativePath = NormalizeRelative(file.RelativePath, Path.GetFileName(file.FullPath)),
                 UnitId = disposition.UnitId,
                 UnitName = disposition.Name,
-                GeneratedMemberName = disposition.GeneratedMemberName,
+                GeneratedMemberName = disposition.PromotedTypedRegions > 0
+                    ? string.Empty
+                    : disposition.GeneratedMemberName,
                 SourceStartLine = extent.StartLine,
                 SourceStartColumn = extent.StartColumn,
                 SourceEndLine = extent.EndLine,
@@ -250,17 +285,21 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
     private static PowerShellCompilationFailureMapEntry? MatchEntry(PowerShellCompilationFailureMap map, string file, int line)
     {
         var normalized = file.Replace('\\', '/');
-        return map.Entries.FirstOrDefault(item =>
-                   item.DocumentId.Equals(normalized, StringComparison.Ordinal) &&
-                   line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine))
-               ?? map.Entries.FirstOrDefault(item =>
-                   item.RelativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase) &&
-                   line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine))
-               ?? map.Entries.FirstOrDefault(item =>
-                   normalized.EndsWith("/" + item.RelativePath, StringComparison.OrdinalIgnoreCase) &&
-                   line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine))
+        return MostSpecific(map.Entries.Where(item => item.DocumentId.Equals(normalized, StringComparison.Ordinal)), line)
+               ?? MostSpecific(map.Entries.Where(item => item.RelativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase)), line)
+               ?? MostSpecific(map.Entries.Where(item => normalized.EndsWith("/" + item.RelativePath, StringComparison.OrdinalIgnoreCase)), line)
                ?? map.Entries.FirstOrDefault(item => item.GeneratedMemberName.Equals(normalized, StringComparison.Ordinal));
     }
+
+    private static PowerShellCompilationFailureMapEntry? MostSpecific(
+        IEnumerable<PowerShellCompilationFailureMapEntry> entries,
+        int line)
+        => entries
+            .Where(item => line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine))
+            .OrderBy(item => Math.Max(item.SourceStartLine, item.SourceEndLine) - item.SourceStartLine)
+            .ThenByDescending(static item => item.GeneratedStartLine > 0)
+            .ThenBy(static item => item.SourceStartColumn)
+            .FirstOrDefault();
 
     private static PowerShellCompilationFailureLocation Location(PowerShellCompilationFailureMapEntry entry, string code, string message)
         => new()

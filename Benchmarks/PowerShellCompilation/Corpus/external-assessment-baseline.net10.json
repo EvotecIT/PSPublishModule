@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "packetId": "powerforge-external-powershell-assessment-net10-v1",
   "packetSha256": "ab354b9f511bdd16e817d64697cdee4081594349f4c49d9594924cf17367f529",
-  "recordedOn": "2026-09-03",
+  "recordedOn": "2026-09-04",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
   "workloads": [
@@ -21,6 +21,7 @@
       "totalFunctions": 44,
       "analyzerEligibleFunctions": 4,
       "emittedFunctions": 2,
+      "promotedTypedRegions": 0,
       "droppedEligibleFunctions": 2,
       "fallbackFunctions": 43,
       "functionDispositions": [
@@ -32,7 +33,8 @@
           "semanticEligible": true,
           "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "ccc8375d1a86eff9089240dd",
@@ -42,7 +44,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "7bab6c84b52611d07593a3b0",
@@ -52,7 +55,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "7f03461fa8a9f1506c66df09",
@@ -62,7 +66,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "6cf85291ff0500cb4f6a6956",
@@ -72,7 +77,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8e12149d1ddd4e58088eb005",
@@ -82,7 +88,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "ccc66721434c55cffe3d2ca7",
@@ -92,7 +99,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "b1251ca7c56e8c28a54309d1",
@@ -102,7 +110,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "0b736a5d81cc1d688a80bb41",
@@ -112,7 +121,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "0d96e2c8db3b82a64cbbb2cf",
@@ -122,7 +132,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d347b76254462c326470cc7b",
@@ -132,7 +143,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "20d8b14f8ea0402f0aa6985f",
@@ -142,7 +154,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "b70fe41be61de09d2f247c6f",
@@ -152,7 +165,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "63e8e95ce1320c3097ce8532",
@@ -162,7 +176,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "ddc6f8539f7f34712130d5d9",
@@ -172,7 +187,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "79e04ed7c3fd3e2835a17fdf",
@@ -182,7 +198,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "3fc6a795eb21c0e730772835",
@@ -192,7 +209,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "df98829eaeca8a41458df62a",
@@ -202,7 +220,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "6432f5fa58162a55a0c2b87f",
@@ -212,7 +231,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "02b3efc96d1de803c5572e9f",
@@ -222,7 +242,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "7925c13fd378e46ef550612b",
@@ -232,7 +253,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "92b857f23cb76d15845ccda6",
@@ -242,7 +264,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "6af1f817973c7faeda405256",
@@ -252,7 +275,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "a08de43e1ac2a49f13d88bef",
@@ -262,7 +286,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "acac771bd2da0085fe7043c5",
@@ -272,7 +297,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d1f501d7255e6582e861a4b6",
@@ -282,7 +308,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "80bf7e1854578e232f746a75",
@@ -292,7 +319,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "332fcc38d1379801be1343c8",
@@ -302,7 +330,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "2cf8561779c2dd8c5306e117",
@@ -312,7 +341,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "56a4aeaaa0f6740088bb3aeb",
@@ -322,7 +352,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "69e04db58d4ce8028571bb2f",
@@ -332,7 +363,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e9dadd0e171f3376d2251d1b",
@@ -342,7 +374,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "cb143792eba9023701b45ef2",
@@ -352,7 +385,8 @@
           "semanticEligible": true,
           "emitted": true,
           "runtimeRouted": false,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d2ee5a01f5d7b8638807b6ca",
@@ -362,7 +396,8 @@
           "semanticEligible": true,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": true
+          "shapingFallback": true,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "763ab2b0c3a316079dcb1aa6",
@@ -372,7 +407,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "136c061aaca36f297e962037",
@@ -382,7 +418,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "897a4afdbe94fc04ca8e58da",
@@ -392,7 +429,8 @@
           "semanticEligible": true,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": true
+          "shapingFallback": true,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d1f8f3b0ca50742834acf790",
@@ -402,7 +440,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "ac0b25086ba0274aef51f8a0",
@@ -412,7 +451,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "edc72e8add171ce4e70dbc91",
@@ -422,7 +462,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "642ef80de98b3c4fd7fa1421",
@@ -432,7 +473,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "0a74e631366c138a15127821",
@@ -442,7 +484,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "321d8e0585b7251bf9836d65",
@@ -452,7 +495,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d6394c142d02d0ba6170e5b9",
@@ -462,7 +506,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         }
       ]
     },
@@ -481,6 +526,7 @@
       "totalFunctions": 100,
       "analyzerEligibleFunctions": 2,
       "emittedFunctions": 2,
+      "promotedTypedRegions": 2,
       "droppedEligibleFunctions": 0,
       "fallbackFunctions": 99,
       "functionDispositions": [
@@ -492,7 +538,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "22b4297ced677a664906b4c7",
@@ -502,7 +549,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "1a7e18a7facd3635a1302202",
@@ -512,7 +560,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8f672b6714aa802d5ea9b10b",
@@ -522,7 +571,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "5b1c31a78bc8f871191995c9",
@@ -532,7 +582,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8270917130682e574266a549",
@@ -542,7 +593,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "f1c8cbd07ecf522345a51786",
@@ -552,7 +604,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e6307470d477dbb4fde2523d",
@@ -562,7 +615,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "09bcc54e0e40d3abb27da076",
@@ -572,7 +626,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "192db9eaa35bccb6460339c6",
@@ -582,7 +637,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "3a926f9b9b1ac7a77646f457",
@@ -592,7 +648,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "33cd472a0d85c5be6d6f17ea",
@@ -602,7 +659,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "947668a8c556e2b3d2eeebec",
@@ -612,7 +670,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "35103c3060ef616dc4c5a079",
@@ -622,7 +681,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "078f078c7f315cab8cb089ee",
@@ -632,7 +692,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "b84b8952e0a7063985907d81",
@@ -642,7 +703,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "24f976e24aa4a017948dbc1a",
@@ -652,7 +714,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8b86c204ab37443636454f7f",
@@ -662,7 +725,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "9969683b816438659b7bf63d",
@@ -672,7 +736,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "556f883993e631fbecc2edb8",
@@ -682,7 +747,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "f75ee360150881d4354fffde",
@@ -692,7 +758,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d6a518ec37d0c0d9a49bdef3",
@@ -702,7 +769,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "c81f9c8f9541d54f2c1a3974",
@@ -712,7 +780,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e777fee16c27e2854ae85978",
@@ -722,7 +791,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "7f91da5c0005f854a9a1b3c5",
@@ -732,7 +802,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "a59d7833ca341123cb1c36c2",
@@ -742,7 +813,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "6fefeec05e251f14e921771e",
@@ -752,7 +824,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "797a951a8bdd16ff9804cf9b",
@@ -762,7 +835,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "3b0575770329b836ceb1ad83",
@@ -772,7 +846,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "0f89240a7c2d3efa795f5b10",
@@ -782,7 +857,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "2f03bba6372ba6817e8340d9",
@@ -792,7 +868,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "bf5cab62bc5b41ef6ff3c175",
@@ -802,7 +879,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "cf856f2b297549291122762f",
@@ -812,7 +890,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "c42bb04b4b2f8f7f220ed1a4",
@@ -822,7 +901,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "61d37763f569ef9da18ded9b",
@@ -832,7 +912,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "750951d3ad039bada6f090c6",
@@ -842,7 +923,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "5901f4235fc0a3a1864ce448",
@@ -852,7 +934,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "02d89f32f90b7bad9beeede5",
@@ -862,7 +945,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8d19e1c858fc2513ceec8cda",
@@ -872,7 +956,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "3d93e04a9a9d3d490a7a8fc5",
@@ -882,7 +967,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "0176297bbc20fde08141b3b4",
@@ -892,7 +978,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "255a133eab1ebdcc6b48c75a",
@@ -902,7 +989,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "c979f49a8e0a273b7eb45fe0",
@@ -912,7 +1000,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "dc7b18a46be819a119ea322d",
@@ -922,7 +1011,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "5a25f15078bbfe0da85b9e0a",
@@ -932,7 +1022,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "3a4cfc154f941295c02b258a",
@@ -942,7 +1033,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "f8f7c4d2411f6babd396dd85",
@@ -952,7 +1044,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "00efb9d4cc81247f34e15abc",
@@ -962,7 +1055,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "af87f5ba0eaec4781b1f214e",
@@ -972,7 +1066,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "a4bdb8bbcef1f6895126d14c",
@@ -982,7 +1077,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "7154d9cf9392f5d0e11b17b2",
@@ -992,7 +1088,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "6136390ff4c078db40b7fdf1",
@@ -1002,7 +1099,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "a3aefeeeaf0300ed2bfa591e",
@@ -1012,7 +1110,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "cd3590f872bc5fcc170dc10b",
@@ -1022,7 +1121,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "7334c25492c5b29439a22f5a",
@@ -1032,7 +1132,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "ce4060a337dda5f5eab1234a",
@@ -1042,7 +1143,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "fcf3bd0f1d2d6d1e0ca298ce",
@@ -1052,7 +1154,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "ad72cbb9d4cf9da229af98e1",
@@ -1062,7 +1165,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "9cde8b7d75187f263ef9cfd2",
@@ -1072,7 +1176,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d5afa2271076a9675329cac5",
@@ -1082,7 +1187,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e2fc9ce3721989f8ef752915",
@@ -1092,7 +1198,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "b2acb2e3190332bc2b0f9255",
@@ -1102,7 +1209,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "61dfffb189e1ddca24c5dd7c",
@@ -1112,7 +1220,8 @@
           "semanticEligible": true,
           "emitted": true,
           "runtimeRouted": false,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d2e96b7834ebeb6f1f6d87e9",
@@ -1122,7 +1231,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "9ad6f43f899d39ef248a7b4d",
@@ -1132,7 +1242,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "7654d61a993355b950068639",
@@ -1142,7 +1253,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "cad45cb07cc4752b92b457e1",
@@ -1152,7 +1264,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "b68ce48e567ccd83c264c54f",
@@ -1162,7 +1275,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "9f5f90cca30515cb5fadbb5c",
@@ -1172,7 +1286,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "416b62bb190feec4fb9e035d",
@@ -1182,7 +1297,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 1
         },
         {
           "unitId": "29c6cce58bc3446e728f412b",
@@ -1192,7 +1308,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "91651f1497d70e86032ac191",
@@ -1202,7 +1319,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8d046581c22744161134226e",
@@ -1212,7 +1330,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 1
         },
         {
           "unitId": "15d26af3305ef2fdbb72d652",
@@ -1222,7 +1341,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "6eb500055181840cf45575c7",
@@ -1232,7 +1352,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "ce3250fa4270c937f4863fa8",
@@ -1242,7 +1363,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "f53af9df7b06f61ffa5ee662",
@@ -1252,7 +1374,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "55d1277b63f21a173c9ecd60",
@@ -1262,7 +1385,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "5bb4cb82571f07a3be179cc7",
@@ -1272,7 +1396,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "a12b59911c5d42761aa081c5",
@@ -1282,7 +1407,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d2ffd28a81e14ee3869f66ae",
@@ -1292,7 +1418,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "fd75c33f166b0214c6dfa534",
@@ -1302,7 +1429,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "2c55b0304cc817c13c2b351f",
@@ -1312,7 +1440,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8f9f403109c66bb3256569d7",
@@ -1322,7 +1451,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "556b5c67369dc41b90f59b4c",
@@ -1332,7 +1462,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e72206f87cc689a0282a317b",
@@ -1342,7 +1473,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "1b23b333be73dcf1ddf86b49",
@@ -1352,7 +1484,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "a08ade00f954c5f8130cd001",
@@ -1362,7 +1495,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "69f405c8b589a937b3bcfdb4",
@@ -1372,7 +1506,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "95a32e7b3b795e61e59baa07",
@@ -1382,7 +1517,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "67b9f0262fcb403b59f3182d",
@@ -1392,7 +1528,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "03b121d488b86e09c58ba5bf",
@@ -1402,7 +1539,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8f1339ab1246d5263ab28d45",
@@ -1412,7 +1550,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "3d4ab76cd85ed9f897e47add",
@@ -1422,7 +1561,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e22c702d3483193bf695df47",
@@ -1432,7 +1572,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "9ebfd8bbaab1683d71818ae5",
@@ -1442,7 +1583,8 @@
           "semanticEligible": true,
           "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d531dee9f795af7943386163",
@@ -1452,7 +1594,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e1d68c27eb940db7a21cc7c8",
@@ -1462,7 +1605,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "94b31d3f038b8aeed36ef30c",
@@ -1472,7 +1616,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "04a8e86b5334fcecbc4bc5ca",
@@ -1482,7 +1627,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         }
       ]
     },
@@ -1501,6 +1647,7 @@
       "totalFunctions": 0,
       "analyzerEligibleFunctions": 0,
       "emittedFunctions": 0,
+      "promotedTypedRegions": 0,
       "droppedEligibleFunctions": 0,
       "fallbackFunctions": 0,
       "functionDispositions": []
@@ -1520,6 +1667,7 @@
       "totalFunctions": 1,
       "analyzerEligibleFunctions": 0,
       "emittedFunctions": 0,
+      "promotedTypedRegions": 0,
       "droppedEligibleFunctions": 0,
       "fallbackFunctions": 1,
       "functionDispositions": [
@@ -1531,7 +1679,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         }
       ]
     },
@@ -1550,6 +1699,7 @@
       "totalFunctions": 4,
       "analyzerEligibleFunctions": 0,
       "emittedFunctions": 0,
+      "promotedTypedRegions": 0,
       "droppedEligibleFunctions": 0,
       "fallbackFunctions": 4,
       "functionDispositions": [
@@ -1561,7 +1711,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "aea96e318722298369d22954",
@@ -1571,7 +1722,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "0ed8a3f2774f7635d4632572",
@@ -1581,7 +1733,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "9d95e92f417a061309d22065",
@@ -1591,7 +1744,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         }
       ]
     },
@@ -1610,6 +1764,7 @@
       "totalFunctions": 24,
       "analyzerEligibleFunctions": 5,
       "emittedFunctions": 1,
+      "promotedTypedRegions": 0,
       "droppedEligibleFunctions": 4,
       "fallbackFunctions": 23,
       "functionDispositions": [
@@ -1621,7 +1776,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "f322cbf67d77a69ae1115c94",
@@ -1631,7 +1787,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "6f7821ecb3801e31656ae20d",
@@ -1641,7 +1798,8 @@
           "semanticEligible": true,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": true
+          "shapingFallback": true,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "20c3f9de94f5dc21f68b2f27",
@@ -1651,7 +1809,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e4c498f0050120fcb07ceb74",
@@ -1661,7 +1820,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "87e03847d964b95b9856a37f",
@@ -1671,7 +1831,8 @@
           "semanticEligible": true,
           "emitted": true,
           "runtimeRouted": false,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "6f99b673bae7c57565ac11e4",
@@ -1681,7 +1842,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "508b34c88d7b36881bf54efd",
@@ -1691,7 +1853,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "dabe09822f1b06b60b3b4f61",
@@ -1701,7 +1864,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "92642ab426b5fa623c99979e",
@@ -1711,7 +1875,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "3c6e86e28d6d1236a82c5030",
@@ -1721,7 +1886,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "a02fc5f19112221383934374",
@@ -1731,7 +1897,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e5c77ebd20a758101f3bed75",
@@ -1741,7 +1908,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "c7135b324d1d47f9702bb5d3",
@@ -1751,7 +1919,8 @@
           "semanticEligible": true,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": true
+          "shapingFallback": true,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "74c20ca8b094df2088c40100",
@@ -1761,7 +1930,8 @@
           "semanticEligible": true,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": true
+          "shapingFallback": true,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "d253d26f0ba2abe2962a9698",
@@ -1771,7 +1941,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "cdee5276c2ef3e23c47e3ff2",
@@ -1781,7 +1952,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "950ace25e62fdbdd6d33790a",
@@ -1791,7 +1963,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "91a0f7b0e30ee30680bcf1d0",
@@ -1801,7 +1974,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "a69beffe23457752acb219ee",
@@ -1811,7 +1985,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "9dc7ea626af8aeba4ce4bd29",
@@ -1821,7 +1996,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "4fe31fc133c3cb3e345d5e52",
@@ -1831,7 +2007,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e22b811cd7e7acf33101e7a7",
@@ -1841,7 +2018,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "98ac11ee7958e87bb025936b",
@@ -1851,7 +2029,8 @@
           "semanticEligible": true,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": true
+          "shapingFallback": true,
+          "promotedTypedRegions": 0
         }
       ]
     },
@@ -1870,6 +2049,7 @@
       "totalFunctions": 10,
       "analyzerEligibleFunctions": 1,
       "emittedFunctions": 1,
+      "promotedTypedRegions": 0,
       "droppedEligibleFunctions": 0,
       "fallbackFunctions": 10,
       "functionDispositions": [
@@ -1881,7 +2061,8 @@
           "semanticEligible": true,
           "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "f47a8d51ab9ebc908dd991ff",
@@ -1891,7 +2072,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "9a2b473188ace90ad213c6ce",
@@ -1901,7 +2083,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "5c38fa65eb13cd40323f7c50",
@@ -1911,7 +2094,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "b9fbae1e75487a453c106dfc",
@@ -1921,7 +2105,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "4ad8fc60bf8ab92d65a3b7fc",
@@ -1931,7 +2116,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "2bf0d12a58d18fba07f28159",
@@ -1941,7 +2127,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "891ce06d70d36541388c6e4b",
@@ -1951,7 +2138,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "8b694f67b13e3cf0a66d5216",
@@ -1961,7 +2149,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "1bb07a3b52956c3a8ab9489a",
@@ -1971,7 +2160,8 @@
           "semanticEligible": false,
           "emitted": false,
           "runtimeRouted": true,
-          "shapingFallback": false
+          "shapingFallback": false,
+          "promotedTypedRegions": 0
         }
       ]
     }

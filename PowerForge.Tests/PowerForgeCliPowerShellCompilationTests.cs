@@ -102,8 +102,8 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             using var document = JsonDocument.Parse(result.StdOut);
             Assert.Equal("powershell.explain", document.RootElement.GetProperty("command").GetString());
             var explanation = document.RootElement.GetProperty("result");
-            Assert.Equal(4, explanation.GetProperty("schemaVersion").GetInt32());
-            Assert.Equal(3, explanation.GetProperty("semanticCompatibilityVersion").GetInt32());
+            Assert.Equal(5, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(4, explanation.GetProperty("semanticCompatibilityVersion").GetInt32());
             var file = Assert.Single(explanation.GetProperty("files").EnumerateArray());
             Assert.Equal("Input.ps1", file.GetProperty("relativePath").GetString());
             var unit = Assert.Single(file.GetProperty("units").EnumerateArray());
@@ -137,7 +137,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
             using var document = JsonDocument.Parse(result.StdOut);
             var explanation = document.RootElement.GetProperty("result");
-            Assert.Equal(4, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(5, explanation.GetProperty("schemaVersion").GetInt32());
             var unit = Assert.Single(Assert.Single(explanation.GetProperty("files").EnumerateArray())
                 .GetProperty("units").EnumerateArray());
             Assert.Equal("Typed", unit.GetProperty("decision").GetString());

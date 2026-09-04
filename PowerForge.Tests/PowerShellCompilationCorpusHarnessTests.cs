@@ -7,6 +7,25 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Fact]
+    public void PublicCorpusBaselineDerivedHybridPercentageIsConsistent()
+    {
+        var baselinePath = Path.Combine(
+            FindCorpusRepositoryRoot(),
+            "Benchmarks",
+            "PowerShellCompilation",
+            "Corpus",
+            "public-corpus-baseline.net8.json");
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(baselinePath));
+        var hybrid = document.RootElement.GetProperty("hybrid");
+        var analyzed = hybrid.GetProperty("analyzedUnits").GetInt32();
+        var emitted = hybrid.GetProperty("emittedClrUnits").GetInt32();
+        var recorded = hybrid.GetProperty("emittedClrUnitPercentage").GetDouble();
+        var derived = analyzed == 0 ? 0.0 : Math.Round(100.0 * emitted / analyzed, 2);
+
+        Assert.Equal(derived, recorded, precision: 2);
+    }
+
+    [Fact]
     public void PublicCorpusBaselineReportsZeroSuccessWithoutPropertyEnumerationFailure()
     {
         var scriptPath = Path.Combine(

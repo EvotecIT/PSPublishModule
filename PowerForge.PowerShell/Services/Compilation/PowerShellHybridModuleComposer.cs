@@ -66,20 +66,31 @@ internal static class PowerShellHybridModuleComposer
         var source = new StringBuilder(ast.Extent.Text);
         var exportContract = PowerShellModuleExportContract.TryRead(ast);
         var wrapped = GetWrappedCompiledMethodKeys(sourcePath, typed);
-        var removals = new List<(int Start, int Length)>();
+        var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in functions)
         {
             if (!wrapped.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
                 continue;
             if (function.Extent.StartOffset < prologueEndOffset)
                 throw new InvalidOperationException($"Compiled function '{function.Name}' overlaps the module prologue and cannot be composed safely.");
-            removals.Add((function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset));
+            edits.Add(new PowerShellHybridSourceEdit(
+                function.Extent.StartOffset,
+                function.Extent.EndOffset - function.Extent.StartOffset,
+                string.Empty,
+                "function:" + function.Name));
         }
         if (exportContract is not null)
-            removals.AddRange(exportContract.Commands.Select(static command =>
-                (command.Extent.StartOffset, command.Extent.EndOffset - command.Extent.StartOffset)));
-        foreach (var removal in removals.OrderByDescending(static removal => removal.Start))
-            source.Remove(removal.Start, removal.Length);
+            edits.AddRange(exportContract.Commands.Select(static command => new PowerShellHybridSourceEdit(
+                command.Extent.StartOffset,
+                command.Extent.EndOffset - command.Extent.StartOffset,
+                string.Empty,
+                "export:" + command.Extent.StartOffset)));
+        edits.AddRange(PowerShellHybridRegionRewriter.CreateEdits(sourcePath, ast, typed, wrapped));
+        foreach (var edit in edits.OrderByDescending(static edit => edit.Start))
+        {
+            source.Remove(edit.Start, edit.Length);
+            source.Insert(edit.Start, edit.Replacement);
+        }
 
         var fallbackFunctions = ReadModuleScopeFunctions(typed.SourcePaths)
             .Where(function => !wrapped.Contains(GetCompiledMethodKey(function.Path, function.Name, function.Line)))
@@ -265,7 +276,9 @@ internal static class PowerShellHybridModuleComposer
             .Select(method => GetCompiledMethodKey(sourcePath, method.SourceName, method.SourceLine))
             .Where(wrappedCompiledMethods.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (compiled.Count == 0)
+        var hasPromotedRegions = typed.PromotedRegions.Any(region =>
+            PowerShellCompilationPathSafety.PathEquals(region.SourcePath, sourcePath));
+        if (compiled.Count == 0 && !hasPromotedRegions)
             return null;
 
         Token[] tokens;
@@ -274,12 +287,23 @@ internal static class PowerShellHybridModuleComposer
         if (errors.Length > 0)
             throw new InvalidOperationException($"Hybrid module dependency '{sourcePath}' could not be parsed while composing fallback code.");
         var source = new StringBuilder(ast.Extent.Text);
+        var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                      .Cast<FunctionDefinitionAst>()
                      .Where(function => compiled.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
                      .OrderByDescending(static function => function.Extent.StartOffset))
         {
-            source.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
+            edits.Add(new PowerShellHybridSourceEdit(
+                function.Extent.StartOffset,
+                function.Extent.EndOffset - function.Extent.StartOffset,
+                string.Empty,
+                "function:" + function.Name));
+        }
+        edits.AddRange(PowerShellHybridRegionRewriter.CreateEdits(sourcePath, ast, typed, wrappedCompiledMethods));
+        foreach (var edit in edits.OrderByDescending(static edit => edit.Start))
+        {
+            source.Remove(edit.Start, edit.Length);
+            source.Insert(edit.Start, edit.Replacement);
         }
         return source.ToString();
     }

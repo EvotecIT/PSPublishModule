@@ -62,7 +62,10 @@ public enum PowerShellCompilationCapability
     AdvisoryOutputTypeMetadata = 4096,
 
     /// <summary>Hybrid binary modules may read live values from their retained parent script-module scope.</summary>
-    PowerShellModuleState = 8192
+    PowerShellModuleState = 8192,
+
+    /// <summary>Hybrid binary modules may delegate independently proven bound regions from retained functions to CLR helpers.</summary>
+    HybridTypedRegions = 16384
 }
 
 /// <summary>
@@ -420,7 +423,8 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.RuntimeFreeProviderOperations |
                               PowerShellCompilationCapability.UntypedObjectParameters |
                               PowerShellCompilationCapability.AdvisoryOutputTypeMetadata |
-                              PowerShellCompilationCapability.PowerShellModuleState)) != 0)
+                              PowerShellCompilationCapability.PowerShellModuleState |
+                              PowerShellCompilationCapability.HybridTypedRegions)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

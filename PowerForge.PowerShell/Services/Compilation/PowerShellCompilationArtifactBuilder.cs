@@ -317,7 +317,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 runtimeManifestHooks.Select(static hook => "Manifest runtime script hook: " + hook),
                 compiledMethodDetails);
             usesPowerShellRuntimeFallback = unitDispositionLedger.UsesPowerShellRuntimeFallback;
-            failureMap = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, compiledMethodDetails, unitDispositionLedger);
+            failureMap = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(
+                plan,
+                compiledMethodDetails,
+                unitDispositionLedger,
+                typed?.PromotedRegions);
 
             if (spec.Mode == PowerShellCompilationMode.Strict && compiledMethodDetails.Count > 0)
             {
@@ -562,6 +566,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     CompiledMethods = compiledMethods,
                     AnalyzedUnits = unitDispositionLedger.AnalyzedUnits,
                     EmittedUnits = unitDispositionLedger.EmittedUnits,
+                    PromotedTypedRegions = unitDispositionLedger.PromotedTypedRegions,
                     RuntimeRoutedUnits = unitDispositionLedger.RuntimeRoutedUnits,
                     FallbackUnits = unitDispositionLedger.FallbackUnits,
                     ShapedFallbackUnits = unitDispositionLedger.ShapedFallbackUnits,

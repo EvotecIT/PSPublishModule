@@ -40,7 +40,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(diagnosed.Succeeded, diagnosed.Error + Environment.NewLine + diagnosed.BuildOutput);
         var manifest = Assert.IsType<PowerShellCompilationArtifactManifest>(diagnosed.Manifest);
-        Assert.Equal(12, manifest.SchemaVersion);
+        Assert.Equal(13, manifest.SchemaVersion);
         var snapshots = Assert.IsType<PowerShellCompilationIrSnapshotEvidence>(manifest.IrSnapshots);
         Assert.True(snapshots.Emitted);
         Assert.Equal(64, snapshots.Sha256.Length);

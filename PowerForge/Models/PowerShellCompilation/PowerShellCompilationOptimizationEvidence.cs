@@ -62,7 +62,7 @@ public sealed class PowerShellCompilationOptimizationEvidence
 public sealed class PowerShellCompilationBoundaryEvidence
 {
     /// <summary>Evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>Generated typed callable entry points.</summary>
     public int TypedEntryPoints { get; set; }
@@ -70,11 +70,14 @@ public sealed class PowerShellCompilationBoundaryEvidence
     /// <summary>Statically emitted calls into hosted PowerShell command regions.</summary>
     public int HostedRegionSites { get; set; }
 
+    /// <summary>Typed CLR regions invoked from retained PowerShell function surfaces.</summary>
+    public int PromotedTypedRegions { get; set; }
+
     /// <summary>Compilation units retained on a PowerShell runtime path.</summary>
     public int RuntimeFallbackUnits { get; set; }
 
     /// <summary>Minimum statically visible typed/hosted transitions; runtime invocation counts require profiling.</summary>
-    public int StaticBoundarySites => TypedEntryPoints + HostedRegionSites;
+    public int StaticBoundarySites => TypedEntryPoints + HostedRegionSites + PromotedTypedRegions;
 
     /// <summary>Deterministic build-time advisory when static fallback dominates the typed plan.</summary>
     public string Advisory { get; set; } = string.Empty;

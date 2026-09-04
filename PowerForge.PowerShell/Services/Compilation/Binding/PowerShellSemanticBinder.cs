@@ -41,7 +41,8 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        IDictionary<string, PowerShellBoundRegionCandidate>? regionCandidates = null)
     {
         var functionDiagnosticStart = diagnostics.Count;
         if (!PowerShellOutputTypeSemanticPolicy.TryResolve(
@@ -95,9 +96,12 @@ internal sealed partial class PowerShellSemanticBinder
         var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
         var statements = new List<PowerShellBoundStatement>();
+        var statementBindings = new List<PowerShellBoundStatementBinding>();
         var bodyIsValid = true;
+        var lastFailedStatementIndex = -1;
         for (var index = 0; index < authoredStatements.Length; index++)
         {
+            var authoredStatementIndex = index;
             var statement = authoredStatements[index];
             if (PowerShellObjectSemanticBinder.TryBindAddMember(
                     document,
@@ -111,7 +115,12 @@ internal sealed partial class PowerShellSemanticBinder
                     out var objectMutation))
             {
                 if (objectMutation is null) bodyIsValid = false;
-                else statements.Add(objectMutation);
+                else
+                {
+                    statements.Add(objectMutation);
+                    statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, objectMutation));
+                }
+                if (objectMutation is null) lastFailedStatementIndex = authoredStatementIndex;
                 continue;
             }
             var isModuleStateAssignment = statement is AssignmentStatementAst moduleStateAssignment &&
@@ -135,6 +144,7 @@ internal sealed partial class PowerShellSemanticBinder
                     out var hosted))
             {
                 statements.Add(hosted!);
+                statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, hosted!));
                 continue;
             }
             var diagnosticCount = diagnostics.Count;
@@ -149,11 +159,28 @@ internal sealed partial class PowerShellSemanticBinder
                         PowerShellSourceParser.GetSpan(document, statement.Extent)));
                 }
                 bodyIsValid = false;
+                lastFailedStatementIndex = authoredStatementIndex;
                 continue;
             }
             statements.Add(bound);
+            statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, bound));
         }
-        if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart) return null;
+        if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
+        {
+            if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&
+                PowerShellBoundRegionCandidateSelector.TryCreate(
+                    document,
+                    function,
+                    functionSymbol,
+                    parameters,
+                    locals,
+                    authoredStatements,
+                    statementBindings,
+                    lastFailedStatementIndex,
+                    out var candidate))
+                regionCandidates[candidate.RegionId] = candidate;
+            return null;
+        }
 
         var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
         locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();

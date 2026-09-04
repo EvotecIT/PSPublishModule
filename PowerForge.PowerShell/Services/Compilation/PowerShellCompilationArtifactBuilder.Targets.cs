@@ -12,13 +12,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     {
         var typedEntries = ledger.EmittedUnits;
         var hostedRegions = ledger.RuntimeCommandRegions;
-        var staticAdvisory = ledger.RuntimeRoutedUnits > typedEntries
+        var promotedRegions = ledger.PromotedTypedRegions;
+        var staticAdvisory = ledger.RuntimeRoutedUnits > typedEntries + promotedRegions
             ? "Runtime fallback units exceed typed entry points; profile this Hybrid artifact before assuming compilation improves the workload."
             : string.Empty;
         return new PowerShellCompilationBoundaryEvidence
         {
             TypedEntryPoints = typedEntries,
             HostedRegionSites = hostedRegions,
+            PromotedTypedRegions = promotedRegions,
             RuntimeFallbackUnits = ledger.RuntimeRoutedUnits,
             RuntimeProfile = runtimeProfile,
             Advisory = !string.IsNullOrWhiteSpace(runtimeProfile?.Advisory)

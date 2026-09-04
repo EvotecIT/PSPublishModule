@@ -242,7 +242,12 @@ public sealed class PowerShellTypedCompilationTranspiler
             methodSources.RemoveAt(index);
         }
 
-        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework, semanticProfileId, boundResult.Optimization, boundResult.IrSnapshots);
+        var promotedRegions = boundResult.PromotedRegions
+            .Where(region => methods.All(method => !method.GeneratedName.Equals(region.GeneratedName, StringComparison.Ordinal)))
+            .ToArray();
+        methodSources.AddRange(promotedRegions.Select(static region => region.GeneratedSource));
+
+        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework, semanticProfileId, boundResult.Optimization, boundResult.IrSnapshots, promotedRegions);
     }
 
     private static void EmitFunctionGraph(
@@ -348,7 +353,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             if (!paths.TryGetValue(function.Symbol.DocumentId, out var path)) continue;
             emissions[GetSemanticMethodKey(path, function.Symbol.Name, function.Symbol.Declaration.StartLine)] = result.Emitted.Methods[index];
         }
-        return new BoundEmissionIndex(emissions, result.Optimization.ToPublicModel(), PowerShellCompilationIrSnapshotBuilder.Create(result));
+        var promotedRegions = result.PromotedRegions.Select(static region => CreateCompiledRegion(region)).ToArray();
+        return new BoundEmissionIndex(emissions, result.Optimization.ToPublicModel(), PowerShellCompilationIrSnapshotBuilder.Create(result), promotedRegions);
     }
 
     private static string GetSemanticMethodKey(string path, string name, int definitionStartLine)
@@ -411,6 +417,33 @@ public sealed class PowerShellTypedCompilationTranspiler
         return method;
     }
 
+    private static PowerShellCompiledRegion CreateCompiledRegion(PowerShellPromotedRegionEmission region)
+    {
+        var candidate = region.Candidate;
+        var emitted = region.Emission;
+        var compiled = new PowerShellCompiledRegion(
+            candidate.RegionId,
+            candidate.SourceSha256,
+            candidate.SourceDocumentSha256,
+            candidate.SourceName,
+            candidate.SourceLine,
+            candidate.SourcePath,
+            emitted.GeneratedName,
+            emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
+            candidate.InputParameters.ToArray(),
+            emitted.SourceSpan.StartOffset,
+            emitted.SourceSpan.EndOffset,
+            emitted.SourceSpan.StartLine,
+            emitted.SourceSpan.StartColumn,
+            emitted.SourceSpan.EndLine,
+            emitted.SourceSpan.EndColumn,
+            emitted.SourceMap,
+            emitted.RegionGraph,
+            emitted.SourceSpan.DocumentId);
+        compiled.GeneratedSource = emitted.Source;
+        return compiled;
+    }
+
     private static PowerShellCompilationDiagnostic CreateDiagnostic(FunctionSource source, Ast node, string message)
         => new(
             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
@@ -430,14 +463,15 @@ public sealed class PowerShellTypedCompilationTranspiler
         string? targetFramework,
         string semanticProfileId,
         PowerShellCompilationOptimizationEvidence? optimization = null,
-        PowerShellCompilationIrSnapshotBundle? irSnapshots = null)
+        PowerShellCompilationIrSnapshotBundle? irSnapshots = null,
+        PowerShellCompiledRegion[]? promotedRegions = null)
     {
         var template = ReadTemplate();
         var source = template
             .Replace("{{NAMESPACE}}", SanitizeQualifiedName(namespaceName))
             .Replace("{{TYPE_NAME}}", PowerShellCSharpSymbolRenderer.Identifier(typeName))
             .Replace("{{METHODS}}", string.Join(Environment.NewLine + Environment.NewLine, methodSources));
-        return new PowerShellTypedCompilationResult(
+        var result = new PowerShellTypedCompilationResult(
             sourcePaths[0],
             SanitizeQualifiedName(namespaceName),
             PowerShellCSharpSymbolRenderer.Identifier(typeName),
@@ -453,6 +487,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework, semanticProfileId)).ToArray(),
             optimization,
             irSnapshots);
+        result.PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
+        return result;
     }
 
     private sealed class BoundEmissionIndex
@@ -460,16 +496,19 @@ public sealed class PowerShellTypedCompilationTranspiler
         internal BoundEmissionIndex(
             IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> emissions,
             PowerShellCompilationOptimizationEvidence optimization,
-            PowerShellCompilationIrSnapshotBundle irSnapshots)
+            PowerShellCompilationIrSnapshotBundle irSnapshots,
+            PowerShellCompiledRegion[] promotedRegions)
         {
             Emissions = emissions;
             Optimization = optimization;
             IrSnapshots = irSnapshots;
+            PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
         }
 
         internal IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> Emissions { get; }
         internal PowerShellCompilationOptimizationEvidence Optimization { get; }
         internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
+        internal PowerShellCompiledRegion[] PromotedRegions { get; }
     }
 
     private static string ReadTemplate()

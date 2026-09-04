@@ -278,7 +278,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 12;
+    public int SchemaVersion { get; set; } = 13;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -396,6 +396,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Number of analyzed units emitted into the final typed artifact surface.</summary>
     public int EmittedUnits { get; set; }
+
+    /// <summary>Number of typed CLR regions promoted inside units that remain runtime-routed.</summary>
+    public int PromotedTypedRegions { get; set; }
 
     /// <summary>Number of units routed through the PowerShell runtime in the delivered artifact.</summary>
     public int RuntimeRoutedUnits { get; set; }

@@ -52,6 +52,8 @@ public static class PowerShellCompilationExplanationService
             unit.ModuleStateWriteBoundaryCrossings = entry.ModuleStateWriteBoundaryCrossings;
             unit.BoundaryCrossings = entry.BoundaryCrossings;
             unit.RegionGraph = entry.RegionGraph;
+            unit.PromotedTypedRegions = entry.PromotedTypedRegions;
+            unit.GeneratedRegionMemberNames = entry.GeneratedRegionMemberNames.ToArray();
             unit.ShapingFallback = entry.ShapingFallback;
             unit.Omitted = entry.Omitted;
             unit.Rejected = entry.Rejected;
@@ -64,6 +66,8 @@ public static class PowerShellCompilationExplanationService
                 ? "BoundClr+PowerShellRuntime"
                 : entry.Emitted
                     ? "BoundClr"
+                    : entry.PromotedTypedRegions > 0
+                        ? "BoundClrRegions+PowerShellRuntime"
                     : entry.RuntimeRouted
                         ? "PowerShellRuntime"
                         : "Rejected";
@@ -81,6 +85,7 @@ public static class PowerShellCompilationExplanationService
         explanation.TypedUnits = ledger.EmittedUnits;
         explanation.RuntimeFallbackUnits = ledger.RuntimeRoutedUnits;
         explanation.RejectedUnits = ledger.RejectedUnits;
+        explanation.PromotedTypedRegions = ledger.PromotedTypedRegions;
         explanation.SemanticFingerprintSha256 = ComputeSemanticFingerprint(explanation);
         return explanation;
     }
@@ -369,6 +374,11 @@ public static class PowerShellCompilationExplanationService
                             AppendSequence("Errors", region.Errors);
                         }
                     }
+                }
+                if (explanation.SemanticCompatibilityVersion >= 4)
+                {
+                    Append(unit.PromotedTypedRegions.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    AppendSequence("GeneratedRegionMembers", unit.GeneratedRegionMemberNames);
                 }
                 foreach (var parameter in unit.Parameters)
                 {

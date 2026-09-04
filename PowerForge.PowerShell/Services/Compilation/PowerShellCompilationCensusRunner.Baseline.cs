@@ -29,6 +29,12 @@ public sealed partial class PowerShellCompilationCensusRunner
             AddBooleanLoss(regressions, product, "SemanticEligibleFunction:" + expected.UnitId, expected.SemanticEligible, actual.SemanticEligible);
             AddBooleanLoss(regressions, product, "EmittedFunction:" + expected.UnitId, expected.Emitted, actual.Emitted);
             AddBooleanGain(regressions, product, "RuntimeRoutedFunction:" + expected.UnitId, expected.RuntimeRouted, actual.RuntimeRouted);
+            AddLowerIsRegression(
+                regressions,
+                product,
+                "PromotedTypedRegionsFunction:" + expected.UnitId,
+                expected.PromotedTypedRegions,
+                actual.PromotedTypedRegions);
             if (expected.SemanticEligible)
                 AddBooleanGain(regressions, product, "ShapingFallbackFunction:" + expected.UnitId, expected.ShapingFallback, actual.ShapingFallback);
         }

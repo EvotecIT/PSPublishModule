@@ -29,7 +29,7 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
             .Select(CreateMethod)
             .ToArray();
         if (lifecycleMethods.Length == 0) return typed;
-        return new PowerShellTypedCompilationResult(
+        var result = new PowerShellTypedCompilationResult(
             typed.SourcePath,
             typed.NamespaceName,
             typed.TypeName,
@@ -43,6 +43,8 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
             typed.LifecycleSources,
             typed.Optimization,
             typed.IrSnapshots);
+        result.PromotedRegions = typed.PromotedRegions;
+        return result;
     }
 
     private static PowerShellCompiledMethod CreateMethod(PowerShellCompilationLifecycleSource source)

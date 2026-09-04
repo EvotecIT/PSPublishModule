@@ -73,7 +73,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 definition.Function.Extent.StartLineNumber,
                 definition.Function.Extent.StartColumnNumber);
         });
-        return new PowerShellTypedCompilationResult(
+        var result = new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,
             filtered.TypeName,
@@ -87,6 +87,8 @@ internal static class PowerShellHybridFunctionCollisionResolver
             lifecycleSources: null,
             optimization: filtered.Optimization,
             irSnapshots: filtered.IrSnapshots);
+        result.PromotedRegions = filtered.PromotedRegions;
+        return result;
     }
 
     private static bool IsCommandReferenceCandidate(Ast node, HashSet<string> invokeCommandAliases)

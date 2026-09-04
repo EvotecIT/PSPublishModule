@@ -337,6 +337,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
         result.TargetFramework = manifest.TargetFramework;
         result.AnalyzedUnits = manifest.AnalyzedUnits;
         result.EmittedUnits = manifest.EmittedUnits;
+        result.PromotedTypedRegions = manifest.PromotedTypedRegions;
         result.RuntimeRoutedUnits = manifest.RuntimeRoutedUnits;
         result.FallbackUnits = manifest.FallbackUnits;
         result.ShapedFallbackUnits = manifest.ShapedFallbackUnits;

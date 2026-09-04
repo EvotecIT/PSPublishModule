@@ -176,8 +176,8 @@ public sealed class PowerShellCompilationExplanationTests
         Assert.Equal(PowerShellCompilationDecisionKind.Typed, tracedUnit.Decision);
         Assert.Equal("BoundClr", tracedUnit.LoweringRoute);
         Assert.Equal("TypedArtifact", tracedUnit.ArtifactDisposition);
-        Assert.Equal(4, explanation.SchemaVersion);
-        Assert.Equal(3, explanation.SemanticCompatibilityVersion);
+        Assert.Equal(5, explanation.SchemaVersion);
+        Assert.Equal(4, explanation.SemanticCompatibilityVersion);
         Assert.Single(Assert.IsType<PowerShellCompilationRegionGraph>(tracedUnit.RegionGraph).Regions);
         Assert.Equal(PowerShellCompilationDependencyDisposition.Embedded, Assert.Single(explanation.Dependencies).Disposition);
 
@@ -299,7 +299,7 @@ public sealed class PowerShellCompilationExplanationTests
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(
             JsonSerializer.Deserialize<PowerShellCompilationUnitDispositionLedger>(json));
 
-        Assert.Equal(3, ledger.SchemaVersion);
+        Assert.Equal(4, ledger.SchemaVersion);
         Assert.Null(Assert.Single(ledger.Entries).RegionGraph);
     }
 

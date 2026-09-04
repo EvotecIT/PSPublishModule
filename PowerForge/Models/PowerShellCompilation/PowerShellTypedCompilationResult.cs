@@ -458,6 +458,12 @@ public sealed class PowerShellTypedCompilationResult
     /// <summary>Optional semantic-only bound/lowered IR snapshots produced by the canonical pipeline.</summary>
     public PowerShellCompilationIrSnapshotBundle? IrSnapshots { get; }
 
+    /// <summary>
+    /// Typed terminal regions promoted inside otherwise-retained Hybrid functions. These do not
+    /// represent fully emitted functions or binary cmdlets.
+    /// </summary>
+    public PowerShellCompiledRegion[] PromotedRegions { get; internal set; } = Array.Empty<PowerShellCompiledRegion>();
+
     /// <summary>Whether at least one method was translated and no blockers remain.</summary>
     public bool Success => Methods.Length > 0 && Diagnostics.Length == 0;
 }
