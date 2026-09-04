@@ -174,7 +174,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 watcher.Created += MarkChanged;
                 watcher.Deleted += MarkChanged;
                 watcher.Renamed += MarkChanged;
-                watcher.Error += (_, _) => RecordChange("the filesystem watcher buffer overflowed");
+                watcher.Error += (_, args) => RecordChange(
+                    $"the filesystem watcher for '{directory}' failed: " +
+                    (args.GetException()?.Message ?? "its buffer overflowed"));
                 watcher.EnableRaisingEvents = true;
                 _watchers.Add(watcher);
             }
