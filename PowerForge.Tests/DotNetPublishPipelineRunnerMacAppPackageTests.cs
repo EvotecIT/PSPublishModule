@@ -111,6 +111,17 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
         Assert.Contains("<string>AppIcon.icns</string>", plist, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("-", false)]
+    [InlineData("Developer ID Application: Example Corp (ABCDE12345)", true)]
+    public void HardenedRuntime_IsLimitedToAppleIdentitySigning(string identity, bool expected)
+    {
+        DotNetPublishMacAppOptions options = CreateMacOptions();
+        options.CodesignIdentity = identity;
+
+        Assert.Equal(expected, DotNetPublishPipelineRunner.ShouldEnableMacHardenedRuntime(options));
+    }
+
     [Fact]
     public void BuildMacAppPackage_OnMac_CreatesSignedInspectableBundleAndZip()
     {

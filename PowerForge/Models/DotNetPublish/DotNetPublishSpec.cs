@@ -307,7 +307,10 @@ public sealed class DotNetPublishMacAppOptions
     /// </summary>
     public string CodesignIdentity { get; set; } = string.Empty;
 
-    /// <summary>Enable hardened runtime when signing. Defaults to true.</summary>
+    /// <summary>
+    /// Enable hardened runtime when signing with an Apple identity. Defaults to true. PowerForge omits
+    /// hardened runtime for local ad-hoc signing because nested libraries cannot share an Apple Team ID.
+    /// </summary>
     public bool HardenedRuntime { get; set; } = true;
 
     /// <summary>Request a trusted timestamp for non-ad-hoc signatures. Defaults to true.</summary>

@@ -83,10 +83,16 @@ public sealed partial class DotNetPublishPipelineRunner
             File.WriteAllText(plistPath, BuildMacInfoPlist(options, Path.GetFileName(options.Executable), iconFileName), new UTF8Encoding(false));
 
             var signArguments = new List<string> { "--force", "--deep", "--sign", options.CodesignIdentity };
-            if (options.HardenedRuntime)
+            if (ShouldEnableMacHardenedRuntime(options))
             {
                 signArguments.Add("--options");
                 signArguments.Add("runtime");
+            }
+            else if (options.HardenedRuntime)
+            {
+                _logger.Warn(
+                    $"MacApp installer '{installerId}' uses ad-hoc signing; hardened runtime is omitted because " +
+                    "ad-hoc nested libraries do not share an Apple Team ID. Supply an Apple signing identity for hardened distribution builds.");
             }
             if (options.Timestamp && !string.Equals(options.CodesignIdentity, "-", StringComparison.Ordinal))
                 signArguments.Add("--timestamp");
@@ -245,6 +251,10 @@ public sealed partial class DotNetPublishPipelineRunner
         string result = string.Concat(value.Trim().Select(character => character is '/' or '\\' or ':' ? '-' : character));
         return string.IsNullOrWhiteSpace(result) ? "Application" : result;
     }
+
+    internal static bool ShouldEnableMacHardenedRuntime(DotNetPublishMacAppOptions options)
+        => options.HardenedRuntime &&
+           !string.Equals(options.CodesignIdentity, "-", StringComparison.Ordinal);
 
     private static void RunRequiredMacTool(string tool, string workingDirectory, IReadOnlyList<string> arguments)
     {
