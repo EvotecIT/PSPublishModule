@@ -28,6 +28,8 @@ internal sealed class PowerForgeReleaseSpec
 
     public PowerForgeWorkspaceValidationOptions? WorkspaceValidation { get; set; }
 
+    public PowerForgeReleaseValidationOptions? Validation { get; set; }
+
     public PowerForgeReleaseOutputsOptions Outputs { get; set; } = new();
 
     public PowerForgeReleaseGitHubOptions? GitHub { get; set; }
@@ -318,6 +320,9 @@ internal sealed class PowerForgeReleaseResult
     public PowerForgeModulePackageReleaseCheckpoint[] ModulePackagePlans { get; set; } =
         Array.Empty<PowerForgeModulePackageReleaseCheckpoint>();
 
+    public PowerForgeModulePackagePublicationResult[] ModulePackagePublications { get; set; } =
+        Array.Empty<PowerForgeModulePackagePublicationResult>();
+
     public ProjectBuildHostExecutionResult? Packages { get; set; }
 
     public PowerForgeToolReleasePlan? ToolPlan { get; set; }
@@ -337,6 +342,9 @@ internal sealed class PowerForgeReleaseResult
     public WorkspaceValidationPlan? WorkspaceValidationPlan { get; set; }
 
     public WorkspaceValidationResult? WorkspaceValidation { get; set; }
+
+    public PowerForgeReleaseValidationResult[] ReleaseValidations { get; set; } =
+        Array.Empty<PowerForgeReleaseValidationResult>();
 
     public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleases { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
 
@@ -1156,6 +1164,8 @@ internal sealed class PowerForgeReleaseAssetEntry
 
     public string? StagedPath { get; set; }
 
+    internal string? StagedSha256 { get; set; }
+
     public bool IsFinalPackageOutput { get; set; }
 }
 
@@ -1168,6 +1178,93 @@ internal sealed class PowerForgeWorkspaceValidationOptions
     public string[] EnableFeatures { get; set; } = Array.Empty<string>();
 
     public string[] DisableFeatures { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>
+/// Validation actions that inspect the complete staged release before publication continues.
+/// </summary>
+internal sealed class PowerForgeReleaseValidationOptions
+{
+    /// <summary>PowerShell scripts executed after release assets and manifests are staged.</summary>
+    public PowerForgeReleaseValidationAction[] AfterStaging { get; set; } =
+        Array.Empty<PowerForgeReleaseValidationAction>();
+}
+
+/// <summary>One staged-release validation action.</summary>
+internal sealed class PowerForgeReleaseValidationAction
+{
+    /// <summary>Enables or disables the action.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Friendly name used in progress and result output.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>PowerShell script path. Relative paths resolve from the release configuration directory.</summary>
+    public string FilePath { get; set; } = string.Empty;
+
+    /// <summary>Optional working directory. Relative paths resolve from the release configuration directory.</summary>
+    public string? WorkingDirectory { get; set; }
+
+    /// <summary>Environment variable overrides passed to the validation process.</summary>
+    public Dictionary<string, string?> Environment { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Timeout in seconds. Defaults to thirty minutes.</summary>
+    public int TimeoutSeconds { get; set; } = 1800;
+
+    /// <summary>Prefer Windows PowerShell over PowerShell 7 on Windows.</summary>
+    public bool PreferWindowsPowerShell { get; set; }
+}
+
+/// <summary>Stable JSON context supplied to staged-release validation scripts.</summary>
+internal sealed class PowerForgeReleaseValidationContext
+{
+    public int SchemaVersion { get; set; } = 1;
+
+    public string Stage { get; set; } = "AfterStaging";
+
+    public string ActionName { get; set; } = string.Empty;
+
+    public string ConfigPath { get; set; } = string.Empty;
+
+    public string ProjectRoot { get; set; } = string.Empty;
+
+    public string ResolvedVersion { get; set; } = string.Empty;
+
+    public string? ReleaseManifestPath { get; set; }
+
+    public string? ReleaseChecksumsPath { get; set; }
+
+    public string? StagingRoot { get; set; }
+
+    public string? ModuleStagingPath { get; set; }
+
+    public string[] ReleaseAssets { get; set; } = Array.Empty<string>();
+
+    public string[] StagedAssets { get; set; } = Array.Empty<string>();
+
+    public string ContextPath { get; set; } = string.Empty;
+}
+
+/// <summary>Result of one staged-release validation action.</summary>
+internal sealed class PowerForgeReleaseValidationResult
+{
+    public string Name { get; set; } = string.Empty;
+
+    public bool Succeeded { get; set; }
+
+    public int ExitCode { get; set; }
+
+    public string Executable { get; set; } = string.Empty;
+
+    public string FilePath { get; set; } = string.Empty;
+
+    public string WorkingDirectory { get; set; } = string.Empty;
+
+    public string StdOut { get; set; } = string.Empty;
+
+    public string StdErr { get; set; } = string.Empty;
+
+    public bool TimedOut { get; set; }
 }
 
 /// <summary>

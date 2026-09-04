@@ -5,6 +5,53 @@ namespace PowerForge.Tests;
 public sealed class NuGetPackagePublishServiceTests
 {
     [Fact]
+    public void ExecutePackages_StopsBeforeNextPackageWhenCancellationIsRequested()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "pf-nuget-publish-cancellation-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packages = new[]
+            {
+                Path.Combine(root.FullName, "Sample.One.1.0.0.nupkg"),
+                Path.Combine(root.FullName, "Sample.Two.1.0.0.nupkg")
+            };
+            foreach (var package in packages)
+            {
+                File.WriteAllText(package, "package");
+            }
+
+            using var cancellation = new CancellationTokenSource();
+            var pushed = new List<string>();
+            var service = new NuGetPackagePublishService(
+                new NullLogger(),
+                request =>
+                {
+                    pushed.Add(request.PackagePath);
+                    cancellation.Cancel();
+                    return new DotNetRepositoryReleaseService.PackagePushResult
+                    {
+                        Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Published
+                    };
+                });
+
+            Assert.Throws<OperationCanceledException>(() => service.ExecutePackages(
+                packages,
+                "key",
+                "https://api.nuget.org/v3/index.json",
+                skipDuplicate: true,
+                cancellationToken: cancellation.Token));
+
+            Assert.Equal(packages[0], Assert.Single(pushed));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void ExecutePackages_ReportsEveryPublishedPackageAsDurableWork()
     {
         var root = Directory.CreateDirectory(Path.Combine(

@@ -28,6 +28,9 @@ public sealed class WebPipelineRunnerLinksTests
             Assert.True(properties.TryGetProperty("shortlinkOverlays", out _));
             Assert.True(properties.TryGetProperty("shortlink-overlays", out _));
         }
+        var exportProperties = pipelineSchema.RootElement.GetProperty("$defs").GetProperty("LinksExportApacheStep").GetProperty("properties");
+        Assert.True(exportProperties.TryGetProperty("shortlinkMapOut", out _));
+        Assert.True(exportProperties.TryGetProperty("shortlinkMapRuntimePath", out _));
     }
 
     [Fact]
@@ -103,6 +106,8 @@ public sealed class WebPipelineRunnerLinksTests
                       "task": "links-export-apache",
                       "config": "./site.json",
                       "includeErrorDocument404": true,
+                      "shortlinkMapOut": "./Build/shortlinks.txt",
+                      "shortlinkMapRuntimePath": "/var/lib/powerforge/maps/release/shortlinks.map",
                       "summaryPath": "./Build/links-summary.json"
                     }
                   ]
@@ -120,8 +125,12 @@ public sealed class WebPipelineRunnerLinksTests
             Assert.True(File.Exists(outputPath));
             var apache = File.ReadAllText(outputPath);
             Assert.Contains("RewriteRule ^/?old/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^/?discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^/?release/?$ https://evotec.xyz/releases/ [R=302,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteMap powerforge_shortlinks \"dbm:/var/lib/powerforge/maps/release/shortlinks.map\"", apache, StringComparison.Ordinal);
+            Assert.DoesNotContain("RewriteRule ^/?discord/?$", apache, StringComparison.Ordinal);
+            Assert.DoesNotContain("RewriteRule ^/?release/?$", apache, StringComparison.Ordinal);
+            var map = File.ReadAllLines(Path.Combine(root, "Build", "shortlinks.txt"));
+            Assert.Contains("302:evo.yt:discord https://discord.gg/example", map);
+            Assert.Contains("302:evo.yt:release https://evotec.xyz/releases/", map);
 
             using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "links-summary.json")));
             Assert.Equal(1, summary.RootElement.GetProperty("redirects").GetInt32());
@@ -136,7 +145,9 @@ public sealed class WebPipelineRunnerLinksTests
                   "steps": [
                     {
                       "task": "links-export-apache",
-                      "config": "./site.json"
+                      "config": "./site.json",
+                      "shortlinkMapOut": "./Build/cached-shortlinks.txt",
+                      "shortlinkMapRuntimePath": "/var/lib/powerforge/maps/cache-test/shortlinks.map"
                     }
                   ]
                 }
@@ -147,6 +158,15 @@ public sealed class WebPipelineRunnerLinksTests
             Assert.True(cacheFirst.Success);
             Assert.True(cacheSecond.Success);
             Assert.True(cacheSecond.Steps[0].Cached);
+
+            var cachedMapPath = Path.Combine(root, "Build", "cached-shortlinks.txt");
+            Assert.True(File.Exists(cachedMapPath));
+            File.Delete(cachedMapPath);
+
+            var cacheAfterMapCleanup = WebPipelineRunner.RunPipeline(cachePipelinePath, logger: null);
+            Assert.True(cacheAfterMapCleanup.Success);
+            Assert.False(cacheAfterMapCleanup.Steps[0].Cached);
+            Assert.True(File.Exists(cachedMapPath));
 
             File.WriteAllText(Path.Combine(root, "data", "links", "managed-shortlinks.json"),
                 """
@@ -165,7 +185,7 @@ public sealed class WebPipelineRunnerLinksTests
             var cacheAfterOverlayChange = WebPipelineRunner.RunPipeline(cachePipelinePath, logger: null);
             Assert.True(cacheAfterOverlayChange.Success);
             Assert.False(cacheAfterOverlayChange.Steps[0].Cached);
-            Assert.Contains("https://evotec.xyz/releases/updated/", File.ReadAllText(outputPath), StringComparison.Ordinal);
+            Assert.Contains("https://evotec.xyz/releases/updated/", File.ReadAllText(cachedMapPath), StringComparison.Ordinal);
         }
         finally
         {

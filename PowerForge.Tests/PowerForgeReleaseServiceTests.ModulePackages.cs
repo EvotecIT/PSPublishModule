@@ -3,6 +3,260 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void ModulePackageCheckpoint_UsesValidatedStagedPackageForPublication()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var sourcePath = Path.Combine(root, "artifacts", "Sample.1.2.3.nupkg");
+            var stagedPath = Path.Combine(root, "staged", "nuget", "Sample.1.2.3.nupkg");
+            Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
+            File.WriteAllText(sourcePath, "source");
+            File.WriteAllText(stagedPath, "validated staged bytes");
+            var stagedSha256 = ComputeTestSha256(stagedPath);
+            var source = new DotNetRepositoryReleaseResult
+            {
+                Success = true,
+                ResolvedVersion = "1.2.3",
+                Projects =
+                [
+                    new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Sample",
+                        PackageId = "Sample",
+                        IsPackable = true,
+                        NewVersion = "1.2.3",
+                        Packages = [sourcePath]
+                    }
+                ]
+            };
+            source.ResolvedVersionsByProject["Sample"] = "1.2.3";
+
+            var publication = ModulePackageReleaseCheckpointService.CreatePublicationRelease(
+                source,
+                [
+                    new PowerForgeReleaseAssetEntry
+                    {
+                        Path = sourcePath,
+                        StagedPath = stagedPath,
+                        Category = PowerForgeReleaseAssetCategory.Package,
+                        IsFinalPackageOutput = true,
+                        StagedSha256 = stagedSha256
+                    }
+                ],
+                requireStagedAssets: true);
+
+            Assert.Equal(stagedPath, Assert.Single(Assert.Single(publication.Projects).Packages));
+            Assert.Equal("1.2.3", publication.ResolvedVersionsByProject["Sample"]);
+            Assert.Equal("source", File.ReadAllText(sourcePath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ModulePackageCheckpoint_RejectsStagedPackageChangedAfterValidation()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var sourcePath = Path.Combine(root, "artifacts", "Sample.1.2.3.nupkg");
+            var stagedPath = Path.Combine(root, "staged", "nuget", "Sample.1.2.3.nupkg");
+            Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
+            File.WriteAllText(sourcePath, "source");
+            File.WriteAllText(stagedPath, "validated staged bytes");
+            var stagedSha256 = ComputeTestSha256(stagedPath);
+            File.WriteAllText(stagedPath, "changed after validation");
+            var source = new DotNetRepositoryReleaseResult
+            {
+                Success = true,
+                Projects =
+                [
+                    new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Sample",
+                        PackageId = "Sample",
+                        IsPackable = true,
+                        Packages = [sourcePath]
+                    }
+                ]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                ModulePackageReleaseCheckpointService.CreatePublicationRelease(
+                    source,
+                    [
+                        new PowerForgeReleaseAssetEntry
+                        {
+                            Path = sourcePath,
+                            StagedPath = stagedPath,
+                            Category = PowerForgeReleaseAssetCategory.Package,
+                            IsFinalPackageOutput = true,
+                            StagedSha256 = stagedSha256
+                        }
+                    ],
+                    requireStagedAssets: true));
+
+            Assert.Contains("changed after release staging", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ModulePackagePublicationSnapshot_UsesPrivateImmutableBytesAndMapsResultsBack()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var stagedPath = Path.Combine(root, "staged", "Sample.1.2.3.nupkg");
+            Directory.CreateDirectory(Path.GetDirectoryName(stagedPath)!);
+            File.WriteAllText(stagedPath, "validated staged bytes");
+            var release = new DotNetRepositoryReleaseResult
+            {
+                Success = true,
+                Projects =
+                [
+                    new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Sample",
+                        PackageId = "Sample",
+                        IsPackable = true,
+                        Packages = [stagedPath]
+                    }
+                ]
+            };
+
+            using var snapshot = ModulePackagePublicationSnapshot.Create(release);
+            var snapshotPath = Assert.Single(Assert.Single(snapshot.Release.Projects).Packages);
+
+            Assert.NotEqual(Path.GetFullPath(stagedPath), snapshotPath);
+            Assert.True(File.Exists(snapshotPath));
+            Assert.True(File.GetAttributes(snapshotPath).HasFlag(FileAttributes.ReadOnly));
+            Assert.Equal(stagedPath, Assert.Single(snapshot.ResolveOriginalPaths([snapshotPath])));
+            snapshot.ValidateUnchanged();
+
+            File.SetAttributes(snapshotPath, FileAttributes.Normal);
+            File.WriteAllText(snapshotPath, "tampered publication bytes");
+            var exception = Assert.Throws<InvalidOperationException>(snapshot.ValidateUnchanged);
+            Assert.Contains("publication snapshot changed", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static string ComputeTestSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return string.Concat(sha256.ComputeHash(stream).Select(static value => value.ToString("x2")));
+    }
+
+    [Fact]
+    public void Execute_ModuleOwnedPackages_CapturesCurrentRunProvenanceWithoutVirusTotal()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            var packagePath = Path.Combine(root, "Sample.1.2.3.nupkg");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                _ =>
+                {
+                    using var archive = System.IO.Compression.ZipFile.Open(
+                        packagePath,
+                        System.IO.Compression.ZipArchiveMode.Create);
+                    var nuspec = archive.CreateEntry("Sample.nuspec");
+                    using var writer = new StreamWriter(nuspec.Open());
+                    writer.Write("<package><metadata><id>Sample</id><version>1.2.3</version></metadata></package>");
+                });
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = root,
+                    ScriptPath = scriptPath,
+                    ModuleVersion = "1.2.3",
+                    IncludesPackages = true,
+                    ArtifactPaths = [packagePath]
+                }
+            };
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleOnly = true,
+                    ModuleRunMode = ConfigurationGateMode.Build
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains(packagePath, result.ModuleProducedAssets, StringComparer.OrdinalIgnoreCase);
+            var package = Assert.Single(result.ReleaseAssetEntries);
+            Assert.Equal(PowerForgeReleaseAssetCategory.Package, package.Category);
+            Assert.True(package.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ModulePackageCheckpoint_RejectsPackageMissingFromValidatedStage()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var sourcePath = Path.Combine(root, "artifacts", "Sample.1.2.3.nupkg");
+            Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+            File.WriteAllText(sourcePath, "source");
+            var source = new DotNetRepositoryReleaseResult
+            {
+                Success = true,
+                Projects =
+                [
+                    new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Sample",
+                        PackageId = "Sample",
+                        IsPackable = true,
+                        Packages = [sourcePath]
+                    }
+                ]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                ModulePackageReleaseCheckpointService.CreatePublicationRelease(
+                    source,
+                    Array.Empty<PowerForgeReleaseAssetEntry>(),
+                    requireStagedAssets: true));
+
+            Assert.Contains("validated staged release", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ModulePlan_InfersModuleNameFromJsonBuildContract()
     {
         var root = CreateSandbox();

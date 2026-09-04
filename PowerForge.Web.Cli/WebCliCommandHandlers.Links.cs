@@ -121,10 +121,17 @@ internal static partial class WebCliCommandHandlers
         var include404 = HasOption(args, "--include-404") ||
                          HasOption(args, "--include-error-document-404") ||
                          HasOption(args, "--includeErrorDocument404");
+        var shortlinkMapOutputPath = ResolveOptionalPath(baseDir,
+            TryGetOptionValue(args, "--shortlink-map-out") ??
+            TryGetOptionValue(args, "--shortlinkMapOut"));
+        var shortlinkMapRuntimePath = TryGetOptionValue(args, "--shortlink-map-runtime-path") ??
+                                      TryGetOptionValue(args, "--shortlinkMapRuntimePath");
 
         var export = WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
         {
             OutputPath = outputPath,
+            ShortlinkMapOutputPath = shortlinkMapOutputPath,
+            ShortlinkMapRuntimePath = shortlinkMapRuntimePath,
             IncludeHeader = includeHeader,
             IncludeErrorDocument404 = include404,
             Hosts = linkOptions.Hosts,

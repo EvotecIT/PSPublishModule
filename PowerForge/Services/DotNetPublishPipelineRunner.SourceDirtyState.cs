@@ -13,7 +13,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? sourceRootPaths,
         IEnumerable<string>? buildProjectPaths,
         string? buildConfiguration,
-        DotNetPublishPlan? buildPlan)
+        DotNetPublishPlan? buildPlan,
+        DotNetPublishStep? buildStep)
     {
         var scope = new SourceDirtyScope();
         foreach (string path in explicitInputPaths ?? Array.Empty<string>())
@@ -25,10 +26,13 @@ public sealed partial class DotNetPublishPipelineRunner
             buildProjectPaths,
             buildConfiguration,
             buildPlan,
+            buildStep,
             out string[] projectDirectories,
             out HashSet<string> buildInputs,
             out HashSet<string> sourceInputs,
-            out NoBuildPublishInput[] noBuildPublishInputs);
+            out NoBuildPublishInput[] noBuildPublishInputs,
+            out string? buildInputFailureReason);
+        scope.BuildInputFailureReason = buildInputFailureReason;
         scope.ProjectDirectories = projectDirectories;
         scope.BuildInputs = buildInputs;
         scope.SourceInputs = sourceInputs;
@@ -156,6 +160,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         internal bool BuildInputsResolved { get; set; }
+
+        internal string? BuildInputFailureReason { get; set; }
 
         internal string[] ProjectDirectories { get; set; } = Array.Empty<string>();
 

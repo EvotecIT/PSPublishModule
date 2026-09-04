@@ -8,6 +8,54 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
+    public void IsFinalPublishInputRetained_KeepsNestedFilesThatCleanupDoesNotRemove()
+    {
+        Assert.False(DotNetPublishPipelineRunner.IsFinalPublishInputRetained(
+            "App.pdb",
+            "App.pdb",
+            keepSymbols: false,
+            keepDocs: false));
+        Assert.True(DotNetPublishPipelineRunner.IsFinalPublishInputRetained(
+            "plugin/App.pdb",
+            "plugin/App.pdb",
+            keepSymbols: false,
+            keepDocs: false));
+        Assert.True(DotNetPublishPipelineRunner.IsFinalPublishInputRetained(
+            "docs/App.xml",
+            "docs\\App.xml",
+            keepSymbols: false,
+            keepDocs: false));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ValidatePublishProvenanceEntries_RevalidatesEveryDistinctArtifactScope()
+    {
+        int firstValidations = 0;
+        int secondValidations = 0;
+        var first = new DotNetPublishPipelineRunner.SourceProvenance(
+            "revision",
+            dirty: false,
+            validateCurrentSource: () => firstValidations++);
+        var second = new DotNetPublishPipelineRunner.SourceProvenance(
+            "revision",
+            dirty: false,
+            validateCurrentSource: () => secondValidations++);
+        var provenances = new Dictionary<string, DotNetPublishPipelineRunner.SourceProvenance>
+        {
+            ["first"] = first,
+            ["duplicate"] = first,
+            ["second"] = second
+        };
+
+        DotNetPublishPipelineRunner.ValidatePublishProvenanceEntries(provenances);
+
+        Assert.Equal(1, firstValidations);
+        Assert.Equal(1, secondValidations);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void ResolvePlannedPublishGeneratedPaths_ExcludesEveryPublishDirectoryAndZipFromCachedSourceChecks()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
@@ -137,6 +185,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             null,
             null,
             null,
+            true,
             true
         ]);
         object projectReference = referenceConstructor.Invoke(

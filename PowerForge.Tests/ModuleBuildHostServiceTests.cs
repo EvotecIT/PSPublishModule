@@ -281,7 +281,9 @@ public sealed class ModuleBuildHostServiceTests
             ScriptPath = @"C:\repo\Build\Build-Module.ps1",
             ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
             NoDotnetBuild = true,
-            SignModule = true
+            SignModule = true,
+            ReuseStaging = true,
+            SkipInstall = true
         });
 
         Assert.NotNull(captured);
@@ -289,8 +291,37 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$buildScriptArguments['NoDotnetBuild'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('SignModule')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['SignModule'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('ReuseStaging')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['ReuseStaging'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('SkipInstall')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['SkipInstall'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptArguments += '-SignModule'", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ForwardsExplicitSignModuleFalseToLegacyScript()
+    {
+        PowerShellRunRequest? captured = null;
+        var service = new ModuleBuildHostService(new StubPowerShellRunner(request =>
+        {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        }));
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            SignModule = false,
+            SignModuleWasSpecified = true
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(captured);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('SignModule')", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['SignModule'] = $false", captured.CommandText!, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -495,19 +526,78 @@ public sealed class ModuleBuildHostServiceTests
         });
 
         Assert.NotNull(captured);
-        Assert.Contains(
-            "$buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')",
-            captured!.CommandText!,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "$buildScriptCommand.Parameters.ContainsKey('StagingPath')",
-            captured.CommandText!,
-            StringComparison.Ordinal);
+        foreach (var parameterName in new[]
+        {
+            "NoDotnetBuild",
+            "StagingPath",
+            "ReuseStaging",
+            "IncludeProjectPackages",
+            "IncludeModulePublishing",
+            "SkipInstall"
+        })
+        {
+            Assert.Contains($"'{parameterName}'", captured!.CommandText!, StringComparison.Ordinal);
+        }
+        Assert.Contains("$missingCheckpointParameters", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("Parameters.ContainsKey('RunMode')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("Parameters.ContainsKey('ConfigurationGateMode')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains(
             "Deferred module publication requires the legacy build script",
             captured.CommandText!,
             StringComparison.Ordinal);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_DeferredLegacyPublishRejectsWrapperWithoutGateParameter()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "pf-module-host-checkpoint-gate-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleName = "CheckpointHost";
+            var modulePath = Path.Combine(root.FullName, moduleName + ".psd1");
+            var scriptPath = Path.Combine(root.FullName, "Build-Module.ps1");
+            var markerPath = Path.Combine(root.FullName, "invoked.txt");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), string.Empty);
+            File.WriteAllText(
+                modulePath,
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0' }}");
+            File.WriteAllText(
+                scriptPath,
+                $$"""
+                [CmdletBinding()]
+                param(
+                    [bool] $NoDotnetBuild = $false,
+                    [string] $StagingPath,
+                    [bool] $ReuseStaging = $false,
+                    [bool] $IncludeProjectPackages = $true,
+                    [bool] $IncludeModulePublishing = $true,
+                    [bool] $SkipInstall = $false
+                )
+                [IO.File]::WriteAllText('{{markerPath.Replace("'", "''")}}', 'invoked')
+                """);
+
+            var result = await new ModuleBuildHostService().ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+            {
+                RepositoryRoot = root.FullName,
+                ScriptPath = scriptPath,
+                ModulePath = modulePath,
+                RunMode = ConfigurationGateMode.Build,
+                StagingPath = Path.Combine(root.FullName, "staging"),
+                RequireReusableOutput = true,
+                Timeout = TimeSpan.FromMinutes(1)
+            });
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("RunMode or ConfigurationGateMode", result.StandardError, StringComparison.Ordinal);
+            Assert.False(File.Exists(markerPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
     }
 
     [Fact]

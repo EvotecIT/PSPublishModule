@@ -1,0 +1,243 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace PowerForge.Web;
+
+/// <summary>Indexed Apache map export operations for exact shortlinks.</summary>
+public static partial class WebLinkService
+{
+    private const string ApacheShortlinkMapName = "powerforge_shortlinks";
+
+    private static ApacheShortlinkMapEntry[] BuildApacheShortlinkMapEntries(
+        IReadOnlyList<LinkRedirectRule> rules,
+        WebLinkApacheExportOptions options)
+    {
+        ValidateApacheShortlinkMapOptions(options);
+        if (string.IsNullOrWhiteSpace(options.ShortlinkMapOutputPath))
+            return Array.Empty<ApacheShortlinkMapEntry>();
+
+        var entries = new List<ApacheShortlinkMapEntry>();
+        var precedingOrdinaryRules = new ApacheRuleOverlapIndex();
+        foreach (var rule in rules)
+        {
+            if (!IsApacheShortlinkMapRule(rule, options) ||
+                precedingOrdinaryRules.MayOverlap(rule))
+            {
+                precedingOrdinaryRules.Add(rule);
+                continue;
+            }
+
+            entries.Add(CreateApacheShortlinkMapEntry(rule, options));
+        }
+
+        return entries
+            .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static ApacheShortlinkMapEntry CreateApacheShortlinkMapEntry(
+        LinkRedirectRule rule,
+        WebLinkApacheExportOptions options)
+    {
+        var destination = NormalizeApacheDestination(rule.TargetUrl, rule.SourceHost, options.LanguageRootHosts);
+        if (!IsSafeApacheRewriteSubstitution(destination))
+            throw new InvalidOperationException($"Apache redirect target contains characters that must be URL-encoded before export: {rule.Id ?? rule.SourcePath}");
+        return new ApacheShortlinkMapEntry(
+            BuildApacheShortlinkMapKey(rule),
+            destination,
+            rule.SourceHost!.Trim(),
+            ResolveStatus(rule.Status, defaultStatus: 302),
+            rule);
+    }
+
+    private static bool IsApacheShortlinkMapRule(LinkRedirectRule rule, WebLinkApacheExportOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.ShortlinkMapOutputPath) ||
+            string.IsNullOrWhiteSpace(options.ShortlinkMapRuntimePath))
+            return false;
+
+        var host = rule.SourceHost?.Trim() ?? string.Empty;
+        var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+        var mapSafe = host.Length > 0 && path.Length > 0 &&
+                      !host.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':') &&
+                      !path.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':');
+
+        return mapSafe &&
+               string.Equals(rule.Source, "shortlink", StringComparison.Ordinal) &&
+               rule.MatchType == LinkRedirectMatchType.Exact &&
+               !string.Equals(host, "*", StringComparison.Ordinal) &&
+               string.IsNullOrWhiteSpace(rule.SourceQuery) &&
+               string.IsNullOrWhiteSpace(rule.SourceQueryParameter) &&
+               !rule.PreserveQuery &&
+               rule.Status is 301 or 302 or 307 or 308;
+    }
+
+    private static void ValidateApacheShortlinkMapOptions(WebLinkApacheExportOptions options)
+    {
+        var hasOutput = !string.IsNullOrWhiteSpace(options.ShortlinkMapOutputPath);
+        var hasRuntime = !string.IsNullOrWhiteSpace(options.ShortlinkMapRuntimePath);
+        if (hasOutput != hasRuntime)
+            throw new InvalidOperationException("Apache shortlink-map export requires both output and runtime paths.");
+        if (!hasRuntime)
+            return;
+
+        var configurationOutputPath = Path.GetFullPath(options.OutputPath);
+        var mapOutputPath = Path.GetFullPath(options.ShortlinkMapOutputPath!);
+        // A build directory can live on a case-insensitive volume regardless of
+        // the host OS. Conservatively reject case-only differences everywhere.
+        if (string.Equals(configurationOutputPath, mapOutputPath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Apache configuration and shortlink-map outputs must use different paths.");
+
+        var runtimePath = options.ShortlinkMapRuntimePath!.Trim();
+        if (!Path.IsPathRooted(runtimePath) || runtimePath.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value is '"' or '\'' or '$' or '{' or '}'))
+            throw new InvalidOperationException("Apache shortlink-map runtime path must be an absolute path without shell or configuration metacharacters.");
+    }
+
+    private static string BuildApacheShortlinkMapKey(LinkRedirectRule rule)
+    {
+        var host = rule.SourceHost!.Trim().ToLowerInvariant();
+        var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+        if (host.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':') ||
+            path.Length == 0 || path.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':'))
+            throw new InvalidOperationException($"Apache indexed shortlink path is not map-safe: {rule.Id ?? rule.SourcePath}");
+        return $"{ResolveStatus(rule.Status, defaultStatus: 302)}:{host}:{path}";
+    }
+
+    private static string NormalizeApacheOverlapHost(string? host)
+    {
+        var value = host?.Trim() ?? string.Empty;
+        if (value.Length == 0 || value == "*")
+            return string.Empty;
+        return value.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+            ? value.Substring(4)
+            : value;
+    }
+
+    private static string? WriteApacheShortlinkMap(
+        IReadOnlyList<ApacheShortlinkMapEntry> entries,
+        WebLinkApacheExportOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.ShortlinkMapOutputPath))
+            return null;
+
+        var outputPath = Path.GetFullPath(options.ShortlinkMapOutputPath!);
+        var directory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        using var writer = new StreamWriter(outputPath, append: false, Utf8NoBom);
+        foreach (var entry in entries)
+            writer.WriteLine($"{entry.Key} {entry.Destination}");
+        return outputPath;
+    }
+
+    private static void AppendApacheShortlinkMapRules(
+        List<string> lines,
+        IReadOnlyList<ApacheShortlinkMapEntry> entries,
+        WebLinkApacheExportOptions options)
+    {
+        var runtimePath = options.ShortlinkMapRuntimePath!.Trim();
+        lines.Add($"RewriteMap {ApacheShortlinkMapName} \"dbm:{runtimePath}\"");
+        lines.Add(string.Empty);
+
+        foreach (var group in entries
+                     .GroupBy(static entry => new { entry.Host, entry.Status })
+                     .OrderBy(static group => group.Key.Host, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static group => group.Key.Status))
+        {
+            AppendHostCondition(lines, group.Key.Host);
+            WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
+            lines.Add($"RewriteCond ${{{ApacheShortlinkMapName}:{group.Key.Status}:{group.Key.Host.ToLowerInvariant()}:$1|NOT_FOUND}} !^NOT_FOUND$");
+            lines.Add($"RewriteRule ^/?(.+?)/?$ ${{{ApacheShortlinkMapName}:{group.Key.Status}:{group.Key.Host.ToLowerInvariant()}:$1}} [R={group.Key.Status},L,NE,QSD]");
+            lines.Add(string.Empty);
+        }
+    }
+
+    private sealed record ApacheShortlinkMapEntry(
+        string Key,
+        string Destination,
+        string Host,
+        int Status,
+        LinkRedirectRule Rule);
+
+    private sealed class ApacheRuleOverlapIndex
+    {
+        private readonly ApachePathOverlapIndex _allHosts = new();
+        private readonly Dictionary<string, ApachePathOverlapIndex> _hosts = new(StringComparer.OrdinalIgnoreCase);
+
+        public void Add(LinkRedirectRule rule)
+        {
+            var host = NormalizeApacheOverlapHost(rule.SourceHost);
+            var paths = host.Length == 0 ? _allHosts : GetOrCreateHost(host);
+            paths.Add(rule);
+        }
+
+        public bool MayOverlap(LinkRedirectRule shortlink)
+        {
+            var path = NormalizeSourcePath(shortlink.SourcePath).Trim('/');
+            if (_allHosts.MayOverlap(path))
+                return true;
+
+            var host = NormalizeApacheOverlapHost(shortlink.SourceHost);
+            return host.Length > 0 &&
+                   _hosts.TryGetValue(host, out var paths) &&
+                   paths.MayOverlap(path);
+        }
+
+        private ApachePathOverlapIndex GetOrCreateHost(string host)
+        {
+            if (_hosts.TryGetValue(host, out var paths))
+                return paths;
+            paths = new ApachePathOverlapIndex();
+            _hosts.Add(host, paths);
+            return paths;
+        }
+    }
+
+    private sealed class ApachePathOverlapIndex
+    {
+        private readonly HashSet<string> _exactPaths = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _prefixPaths = new(StringComparer.OrdinalIgnoreCase);
+        private bool _matchesEveryPath;
+
+        public void Add(LinkRedirectRule rule)
+        {
+            if (rule.MatchType == LinkRedirectMatchType.Regex)
+            {
+                _matchesEveryPath = true;
+                return;
+            }
+
+            var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+            if (rule.MatchType != LinkRedirectMatchType.Prefix)
+            {
+                _exactPaths.Add(path);
+                return;
+            }
+
+            var starIndex = path.IndexOf('*');
+            if (starIndex >= 0)
+                path = path.Substring(0, starIndex).TrimEnd('/');
+            if (path.Length == 0)
+                _matchesEveryPath = true;
+            else
+                _prefixPaths.Add(path);
+        }
+
+        public bool MayOverlap(string path)
+        {
+            if (_matchesEveryPath || _exactPaths.Contains(path) || _prefixPaths.Contains(path))
+                return true;
+
+            for (var separator = path.IndexOf('/'); separator >= 0; separator = path.IndexOf('/', separator + 1))
+            {
+                if (_prefixPaths.Contains(path.Substring(0, separator)))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+}
