@@ -65,6 +65,8 @@ public sealed class BenchmarkMarkdownRenderer
             .OrderBy(engine => !includeBaseline && string.Equals(engine, primaryBaseline, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(engine => engine, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var hasExternalBaseline = baselines.Any(baseline => !engines.Contains(baseline, StringComparer.OrdinalIgnoreCase));
+        var isComparison = engines.Length > 1 || hasExternalBaseline;
 
         markdown.Append("| Scenario |");
         if (includeVariables) markdown.Append(" Variables |");
@@ -76,7 +78,7 @@ public sealed class BenchmarkMarkdownRenderer
         if (includeBaseline) markdown.Append(" Baseline |");
         foreach (var engine in engines)
             markdown.Append(' ').Append(Cell(engine)).Append(" |");
-        markdown.AppendLine(" Result |");
+        markdown.AppendLine(isComparison ? " Result |" : string.Empty);
 
         markdown.Append("| --- |");
         if (includeVariables) markdown.Append(" --- |");
@@ -88,7 +90,7 @@ public sealed class BenchmarkMarkdownRenderer
         if (includeBaseline) markdown.Append(" --- |");
         foreach (var _ in engines)
             markdown.Append(" ---: |");
-        markdown.AppendLine(" --- |");
+        markdown.AppendLine(isComparison ? " --- |" : string.Empty);
 
         foreach (var group in rows
                      .GroupBy(r => string.Join("\u001f", r.Scenario, FormatVariables(r.Variables), r.Operation, r.Host, r.Os, r.RunMode, r.Metric, r.BaselineEngine, r.TieTolerance.ToString("G17", CultureInfo.InvariantCulture)), StringComparer.Ordinal)
@@ -121,10 +123,17 @@ public sealed class BenchmarkMarkdownRenderer
             foreach (var engine in engines)
             {
                 byEngine.TryGetValue(engine, out var row);
-                markdown.Append(' ').Append(Cell(FormatComparisonValue(row))).Append(" |");
+                markdown.Append(' ').Append(Cell(FormatComparisonValue(row, isComparison))).Append(" |");
             }
-            markdown.AppendLine(
-                $" {Cell(FormatComparisonResult(baseline, first.Metric, group))} |");
+            if (isComparison)
+            {
+                markdown.AppendLine(
+                    $" {Cell(FormatComparisonResult(baseline, first.Metric, group, engines))} |");
+            }
+            else
+            {
+                markdown.AppendLine();
+            }
         }
 
         return markdown.ToString().TrimEnd() + Environment.NewLine;
@@ -133,7 +142,7 @@ public sealed class BenchmarkMarkdownRenderer
     private static string DisplayScenario(BenchmarkComparisonRow row)
         => row.Scenario;
 
-    private static string FormatComparisonValue(BenchmarkComparisonRow? row)
+    private static string FormatComparisonValue(BenchmarkComparisonRow? row, bool includeRatio)
     {
         if (row is null)
             return "n/a";
@@ -148,27 +157,61 @@ public sealed class BenchmarkMarkdownRenderer
         var value = BenchmarkComparisonSemantics.IsDurationMetric(row.Metric)
             ? FormatDuration(row.Actual.Value)
             : Number(row.Actual.Value);
-        return $"{ratio} ({value})";
+        return includeRatio ? $"{ratio} ({value})" : value;
     }
 
-    private static string FormatComparisonResult(string baseline, string? metric, IEnumerable<BenchmarkComparisonRow> rows)
+    private static string FormatComparisonResult(
+        string baseline,
+        string? metric,
+        IEnumerable<BenchmarkComparisonRow> rows,
+        IReadOnlyCollection<string> engines)
     {
         if (!BenchmarkComparisonSemantics.IsDurationMetric(metric))
-            return $"{baseline} baseline";
+            return $"Reference: {baseline}";
 
-        var successful = rows
+        var materializedRows = rows.ToArray();
+        var successful = materializedRows
             .Where(static row => row.Actual.HasValue)
             .OrderBy(static row => row.Actual!.Value)
             .ToArray();
         if (successful.Length == 0)
-            return "No successful rows";
+        {
+            return materializedRows.All(static row => string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase))
+                ? "No lanes measured"
+                : "No lanes succeeded";
+        }
+
+        if (successful.Length == 1)
+        {
+            var successfulEngine = successful[0].Engine;
+            if (engines.Count == 1
+                && !string.Equals(successfulEngine, baseline, StringComparison.OrdinalIgnoreCase)
+                && successful[0].Baseline.HasValue)
+            {
+                return $"Reference: {baseline}";
+            }
+            var unsuccessful = materializedRows.Where(static row => !row.Actual.HasValue).ToArray();
+            if (materializedRows.Length < engines.Count)
+            {
+                return $"Only {successfulEngine} measured";
+            }
+            if (unsuccessful.All(static row => string.Equals(row.Status, "Skipped", StringComparison.OrdinalIgnoreCase)))
+            {
+                return $"Only {successfulEngine} measured; others skipped";
+            }
+            return $"Only {successfulEngine} succeeded";
+        }
 
         var fastest = successful[0];
-        var baselineSucceeded = successful.Any(row => string.Equals(row.Engine, baseline, StringComparison.OrdinalIgnoreCase));
-        if (!baselineSucceeded)
-            return $"{baseline} failed";
-        if (successful.Length == 1)
-            return $"{baseline} only successful";
+        var baselineRow = materializedRows.FirstOrDefault(row => string.Equals(row.Engine, baseline, StringComparison.OrdinalIgnoreCase));
+        if (baselineRow?.Actual is null)
+        {
+            return baselineRow is null
+                ? $"Reference {baseline} not measured; fastest: {fastest.Engine}"
+                : string.Equals(baselineRow.Status, "Skipped", StringComparison.OrdinalIgnoreCase)
+                    ? $"Reference {baseline} skipped; fastest: {fastest.Engine}"
+                    : $"Reference {baseline} failed; fastest: {fastest.Engine}";
+        }
 
         var tieTolerance = Math.Max(0, successful[0].TieTolerance);
         if (tieTolerance > 0)
@@ -177,17 +220,13 @@ public sealed class BenchmarkMarkdownRenderer
                 .Where(row => row.Actual!.Value <= fastest.Actual!.Value * (1 + tieTolerance))
                 .Select(row => row.Engine)
                 .ToArray();
-            if (tiedEngines.Any(engine => string.Equals(engine, baseline, StringComparison.OrdinalIgnoreCase)) && tiedEngines.Length > 1)
+            if (tiedEngines.Length > 1)
             {
-                var peers = tiedEngines.Where(engine => !string.Equals(engine, baseline, StringComparison.OrdinalIgnoreCase));
-                return $"{baseline} tied with {string.Join(", ", peers)}";
+                return $"Fastest: {string.Join(", ", tiedEngines)} (tie)";
             }
         }
 
-        if (string.Equals(fastest.Engine, baseline, StringComparison.OrdinalIgnoreCase))
-            return $"{baseline} fastest";
-
-        return $"{baseline} slower than {fastest.Engine}";
+        return $"Fastest: {fastest.Engine}";
     }
 
     private static bool IsDefaultDurationMetric(string? metric)
