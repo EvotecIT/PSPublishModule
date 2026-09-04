@@ -168,6 +168,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     request.TrustedBuildPackages,
                     out offlinePackageSources,
                     out string packageSourceFailureReason,
+                    evaluatedConditionProperties,
                     allowSdkManagedToolchainPackages: true))
             {
                 failureReason = "verified package source could not be seeded: " +
@@ -305,12 +306,12 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments.Add("-p:CustomAfterMicrosoftCommonTargets=" +
                 EscapeMsBuildPropertyValue(controlledReferenceTargets));
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath!)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
             {
                 failureReason = process.TimedOut

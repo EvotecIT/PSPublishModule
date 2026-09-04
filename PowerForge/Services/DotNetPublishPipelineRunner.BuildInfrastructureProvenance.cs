@@ -211,6 +211,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     request.TrustedBuildPackages,
                     out offlinePackageSources,
                     out _,
+                    controlledEvaluationProperties,
                     allowSdkManagedToolchainPackages: true))
                 return CacheAll(false);
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
