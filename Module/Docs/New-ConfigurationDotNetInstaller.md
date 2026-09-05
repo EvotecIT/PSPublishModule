@@ -6,16 +6,16 @@ schema: 2.0.0
 ---
 # New-ConfigurationDotNetInstaller
 ## SYNOPSIS
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+Creates MSI, Debian, or macOS app-bundle installer configuration for the DotNet publish DSL.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetInstaller -Id <string> -PrepareFromTarget <string> [-InstallerProjectId <string>] [-InstallerProjectPath <string>] [-Authoring <PowerForgeInstallerDefinition>] [-StagingPath <string>] [-ManifestPath <string>] [-Harvest <DotNetPublishMsiHarvestMode>] [-HarvestPath <string>] [-HarvestDirectoryRefId <string>] [-HarvestComponentGroupId <string>] [-Sign <DotNetPublishSignOptions>] [-Versioning <DotNetPublishMsiVersionOptions>] [-MsBuildProperties <hashtable>] [-ClientLicense <DotNetPublishMsiClientLicenseOptions>] [<CommonParameters>]
+New-ConfigurationDotNetInstaller -Id <string> -PrepareFromTarget <string> [-Kind <DotNetPublishInstallerKind>] [-PrepareFromBundleId <string>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-InstallerProjectId <string>] [-InstallerProjectPath <string>] [-Authoring <PowerForgeInstallerDefinition>] [-StagingPath <string>] [-ManifestPath <string>] [-OutputPath <string>] [-OutputName <string>] [-Harvest <DotNetPublishMsiHarvestMode>] [-HarvestPath <string>] [-HarvestDirectoryRefId <string>] [-HarvestComponentGroupId <string>] [-HarvestExcludePatterns <string[]>] [-Sign <DotNetPublishSignOptions>] [-SignProfile <string>] [-SignOverrides <DotNetPublishSignPatch>] [-Versioning <DotNetPublishMsiVersionOptions>] [-MsBuildProperties <hashtable>] [-ClientLicense <DotNetPublishMsiClientLicenseOptions>] [-Debian <DotNetPublishDebianOptions>] [-MacApp <DotNetPublishMacAppOptions>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+Creates MSI, Debian, or macOS app-bundle installer configuration for the DotNet publish DSL.
 
 ## EXAMPLES
 
@@ -48,6 +48,38 @@ Optional client-license injection policy.
 
 ```yaml
 Type: DotNetPublishMsiClientLicenseOptions
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Debian
+Debian package metadata used when Kind is Debian.
+
+```yaml
+Type: DotNetPublishDebianOptions
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Frameworks
+Optional target-framework filter for installer generation.
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -96,6 +128,22 @@ Optional WiX directory reference id for generated harvest fragment.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -HarvestExcludePatterns
+Optional wildcard patterns excluded from MSI harvesting.
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -171,6 +219,38 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -Kind
+Installer format. Defaults to MSI.
+
+```yaml
+Type: DotNetPublishInstallerKind
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Msi, Debian, MacApp
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -MacApp
+macOS app-bundle metadata used when Kind is MacApp.
+
+```yaml
+Type: DotNetPublishMacAppOptions
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -ManifestPath
 Optional manifest path template for MSI prepare output.
 
@@ -203,6 +283,54 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -OutputName
+Optional installer output file-name template.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OutputPath
+Optional installer output directory template.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PrepareFromBundleId
+Optional bundle identifier used as the installer payload source.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -PrepareFromTarget
 Source publish target name used for prepare/build.
 
@@ -213,6 +341,22 @@ Aliases: None
 Possible values:
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Runtimes
+Optional runtime filter for installer generation.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -235,6 +379,38 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -SignOverrides
+Optional signing-profile overrides.
+
+```yaml
+Type: DotNetPublishSignPatch
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SignProfile
+Optional named signing profile.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -StagingPath
 Optional staging path template for MSI payload.
 
@@ -243,6 +419,22 @@ Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Styles
+Optional publish-style filter for installer generation.
+
+```yaml
+Type: DotNetPublishStyle[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Portable, PortableCompat, PortableSize, SelfContained, FrameworkDependent, AotSpeed, AotSize
 
 Required: False
 Position: named

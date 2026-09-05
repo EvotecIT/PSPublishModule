@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.133
+Help Version: 3.0.135
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -309,8 +309,11 @@ Creates a benchmark metric extraction rule for DotNet publish gates.
 ### [New-ConfigurationDotNetConfigBootstrapRule](New-ConfigurationDotNetConfigBootstrapRule.md)
 Creates config bootstrap copy rules for DotNet publish service packages.
 
+### [New-ConfigurationDotNetDebian](New-ConfigurationDotNetDebian.md)
+Creates Debian desktop-package metadata for the DotNet publish DSL.
+
 ### [New-ConfigurationDotNetInstaller](New-ConfigurationDotNetInstaller.md)
-Creates installer configuration (MSI prepare/build) for DotNet publish DSL.
+Creates MSI, Debian, or macOS app-bundle installer configuration for the DotNet publish DSL.
 
 ### [New-ConfigurationDotNetMatrix](New-ConfigurationDotNetMatrix.md)
 Creates matrix defaults and include/exclude filters for DotNet publish DSL.

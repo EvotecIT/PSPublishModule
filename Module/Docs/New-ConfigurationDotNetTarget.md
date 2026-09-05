@@ -130,7 +130,7 @@ Target kind metadata.
 Type: DotNetPublishTargetKind
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: Unknown, Cli, Service, Library
+Possible values: Unknown, Cli, Desktop, Service, Library
 
 Required: False
 Position: named
@@ -338,7 +338,7 @@ Primary publish style.
 Type: DotNetPublishStyle
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
+Possible values: Portable, PortableCompat, PortableSize, SelfContained, FrameworkDependent, AotSpeed, AotSize
 
 Required: False
 Position: named
@@ -354,7 +354,7 @@ Optional style matrix values.
 Type: DotNetPublishStyle[]
 Parameter Sets: __AllParameterSets
 Aliases: None
-Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
+Possible values: Portable, PortableCompat, PortableSize, SelfContained, FrameworkDependent, AotSpeed, AotSize
 
 Required: False
 Position: named
