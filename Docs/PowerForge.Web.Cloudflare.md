@@ -162,6 +162,13 @@ secrets:
   cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
 
+The managed Pages job uses incremental manifest comparison only when the
+effective site profile selects `PurgeMode: "incremental"`. For another purge
+mode it applies the policy and then executes that configured purge scope. This
+matters for application entry points whose arbitrary query strings create
+separate cache keys: use `hostname` when the variants cannot be enumerated
+safely instead of leaving stale fingerprinted HTML at an old query URL.
+
 Linux deployment has two distinct credential boundaries. The narrow purge-only
 token is staged ephemerally for promotion and rollback. The broader policy token
 stays on the protected Actions runner, is used only after promotion succeeds, and

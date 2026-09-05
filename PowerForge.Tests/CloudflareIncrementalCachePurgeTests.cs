@@ -638,6 +638,11 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
         Assert.Contains("inputs.dry-run != 'true'", action, StringComparison.Ordinal);
         Assert.Contains("retention-days: 1", runWorkflow, StringComparison.Ordinal);
         Assert.Contains("Purge changed Cloudflare URLs", action, StringComparison.Ordinal);
+        Assert.Contains("Purge configured Cloudflare scope after policy application", action, StringComparison.Ordinal);
+        Assert.Contains("inputs.manage-incremental-purge == 'true' && steps.incremental.outputs.enabled != 'true'", action, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgeCloudflareConfiguredPurge.ps1", action, StringComparison.Ordinal);
+        Assert.Contains("$env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -eq 'true'", action, StringComparison.Ordinal);
+        Assert.Contains("Managed purge does not support hostname or base-path overrides", action, StringComparison.Ordinal);
         Assert.True(
             runWorkflow.IndexOf("Archive site artifact", StringComparison.Ordinal) <
             runWorkflow.IndexOf("Create exact deployment manifest", StringComparison.Ordinal));
