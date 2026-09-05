@@ -15,6 +15,54 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Theory]
+    [InlineData("'$([MSBuild]::IsOSPlatform(`Windows`))'")]
+    [InlineData("'$([MSBuild]::IsOSPlatform('Linux'))'")]
+    [InlineData("'$([MSBuild]::IsOSUnixLike())'")]
+    public void ControlledBuildInputs_AllowLiteralPlatformPredicatesInConditions(string condition)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(projectPath, $"""
+                <Project>
+                  <PropertyGroup Condition="{condition.Replace("'", "&apos;", StringComparison.Ordinal)}">
+                    <TargetFrameworks>net8.0;net472</TargetFrameworks>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            Assert.True(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(root));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ControlledBuildInputs_RejectPlatformPredicatesOutsideConditions()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "App.proj"), """
+                <Project>
+                  <PropertyGroup>
+                    <Trademark>$([MSBuild]::IsOSPlatform(`Windows`))</Trademark>
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            Assert.False(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(root));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Theory]
     [InlineData("MSBUILDADDITIONALSDKRESOLVERSFOLDER")]
     [InlineData("MSBUILD_EXE_PATH")]
     [InlineData("MSBUILDSDKSPATH")]
@@ -196,6 +244,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             Environment.SetEnvironmentVariable("POWERFORGE_GIT_PATH", previous);
             DeleteTestRepository(root);
         }
+    }
+
+    [Fact]
+    public void TrustedBuildTool_AcceptsAppleSealedSystemGitWithSharedInode()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("git", out string resolvedPath));
+        Assert.Equal("/usr/bin/git", resolvedPath, StringComparer.Ordinal);
     }
 
     [Fact]

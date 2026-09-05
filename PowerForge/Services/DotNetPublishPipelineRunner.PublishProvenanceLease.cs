@@ -4,14 +4,16 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    internal sealed class PublishProvenanceLease : IDisposable
+    internal sealed partial class PublishProvenanceLease : IDisposable
     {
         private readonly HashSet<string> _guardedPaths;
         private readonly HashSet<string> _absentDirectoryAncestors;
         private readonly Dictionary<string, string?> _expectedHashes;
         private readonly List<FileStream> _leases = new();
         private readonly List<FileSystemWatcher> _watchers = new();
+        private LinuxDirectoryMutationWatcher? _linuxWatcher;
         private int _changed;
+        private string? _changeDescription;
         private bool _disposed;
 
         private PublishProvenanceLease(IEnumerable<string> paths)
@@ -87,7 +89,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
-                    "A proven project or import input changed while publish was running.");
+                    "A proven project or import input changed while publish was running: " +
+                    (_changeDescription ?? "the filesystem watcher lost mutation evidence") + ".");
             }
             if (_absentDirectoryAncestors.Any(Directory.Exists))
             {
@@ -118,7 +121,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
-                    "A proven project or import input changed while publish was running.");
+                    "A proven project or import input changed while publish was running: " +
+                    (_changeDescription ?? "the filesystem watcher lost mutation evidence") + ".");
             }
         }
 
@@ -127,6 +131,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (_disposed)
                 return;
             _disposed = true;
+            _linuxWatcher?.Dispose();
             foreach (FileSystemWatcher watcher in _watchers)
             {
                 watcher.EnableRaisingEvents = false;
@@ -138,9 +143,23 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private void StartWatchers()
         {
-            foreach (string directory in _guardedPaths
-                         .Select(FindNearestExistingDirectory)
-                         .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+            StringComparer comparer = IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            string[] directories = _guardedPaths
+                .Select(FindNearestExistingDirectory)
+                .Distinct(comparer)
+                .ToArray();
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Linux))
+            {
+                _linuxWatcher = LinuxDirectoryMutationWatcher.Create(
+                    directories,
+                    HandleLinuxMutation);
+                return;
+            }
+
+            foreach (string directory in directories)
             {
                 var watcher = new FileSystemWatcher(directory)
                 {
@@ -155,7 +174,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 watcher.Created += MarkChanged;
                 watcher.Deleted += MarkChanged;
                 watcher.Renamed += MarkChanged;
-                watcher.Error += (_, _) => Interlocked.Exchange(ref _changed, 1);
+                watcher.Error += (_, args) => RecordChange(
+                    $"the filesystem watcher for '{directory}' failed: " +
+                    (args.GetException()?.Message ?? "its buffer overflowed"));
                 watcher.EnableRaisingEvents = true;
                 _watchers.Add(watcher);
             }
@@ -178,15 +199,32 @@ public sealed partial class DotNetPublishPipelineRunner
         private void MarkChanged(object sender, FileSystemEventArgs args)
         {
             if (AffectsGuardedPath(args.FullPath))
-                Interlocked.Exchange(ref _changed, 1);
+                RecordChange($"{args.ChangeType} '{args.FullPath}'");
         }
 
         private void MarkChanged(object sender, RenamedEventArgs args)
         {
             if (AffectsGuardedPath(args.FullPath) || AffectsGuardedPath(args.OldFullPath))
             {
-                Interlocked.Exchange(ref _changed, 1);
+                RecordChange($"renamed '{args.OldFullPath}' to '{args.FullPath}'");
             }
+        }
+
+        private void RecordChange(string description)
+        {
+            Interlocked.CompareExchange(ref _changeDescription, description, null);
+            Interlocked.Exchange(ref _changed, 1);
+        }
+
+        private void HandleLinuxMutation(string? path, bool overflowed)
+        {
+            if (overflowed)
+            {
+                RecordChange("the Linux inotify queue overflowed");
+                return;
+            }
+            if (!string.IsNullOrWhiteSpace(path) && AffectsGuardedPath(path!))
+                RecordChange($"filesystem mutation '{path}'");
         }
 
         private bool AffectsGuardedPath(string changedPath)

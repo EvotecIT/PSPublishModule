@@ -133,8 +133,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         DotNetPublishPipelineRunner.AppendControlledProofSafeguards(
             arguments,
             "isolated.config",
-            "isolated-source",
-            "isolated.lock.json");
+            "isolated-source");
 
         Assert.Contains("-noAutoResponse", arguments);
         Assert.Contains("-maxCpuCount:1", arguments);

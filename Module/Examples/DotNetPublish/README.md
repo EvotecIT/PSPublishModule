@@ -8,6 +8,10 @@ Files:
   - service packaging + MSI prepare/build pattern.
 - `Example.GeneratedServiceMsi.json`
   - service packaging + generated WiX SDK MSI authoring pattern.
+- `Example.LinuxDesktopDebian.json`
+  - Linux desktop publish + native Debian package, command, desktop entry, MIME types, and icon.
+- `Example.MacDesktopApp.json`
+  - macOS desktop publish + `.app` bundle layout, ICNS generation, channel-appropriate code signing, document associations, and transport ZIP.
 - `Example.RebuildState.json`
   - rebuild/state preservation pattern with service lifecycle.
 - `Example.PortableBundleMsi.json`
@@ -37,6 +41,18 @@ For desktop/portable delivery:
 Copy-Item '.\Module\Examples\DotNetPublish\Example.PortableBundleMsi.json' '.\powerforge.dotnetpublish.json'
 ```
 
+For a Linux desktop Debian package, copy the template and run PowerForge on Linux with `dpkg-deb` available:
+
+```powershell
+Copy-Item '.\Module\Examples\DotNetPublish\Example.LinuxDesktopDebian.json' '.\powerforge.dotnetpublish.json'
+```
+
+For a macOS application bundle, copy the template and run PowerForge on macOS with the system `codesign`, `sips`, `iconutil`, and `ditto` tools:
+
+```powershell
+Copy-Item '.\Module\Examples\DotNetPublish\Example.MacDesktopApp.json' '.\powerforge.dotnetpublish.json'
+```
+
 2. Adjust `Projects`, `Targets`, `Installers`, `StorePackages`, or Store submission paths as needed.
 
 3. Validate and plan:
@@ -56,6 +72,8 @@ Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
 
 - `Example.ServiceMsi.json` expects a WiX installer project (`*.wixproj`).
 - `Example.GeneratedServiceMsi.json` uses `Installers[].Authoring` to generate `Product.wxs` and a WiX SDK project during `msi.build`; use `Type` on each authoring component (`File`, `Folder`, `RemoveFolder`, `Service`, `RegistryValue`, `Shortcut`). It also shows typed finish-page launch and RTF license agreement authoring through `ExitLaunch` and `LicenseAgreement`.
+- `Example.LinuxDesktopDebian.json` uses `Installers[].Kind = Debian` and keeps Linux package layout, `/usr/bin` command wiring, freedesktop metadata, and `dpkg-deb` execution in PowerForge. The product repository supplies only declarative identity and paths.
+- `Example.MacDesktopApp.json` uses `Installers[].Kind = MacApp` and keeps `.app` layout, `Info.plist`, ICNS generation, signing, verification, and `ditto` packaging in PowerForge. Its `CodesignIdentity = "-"` is deliberately local-only proof, so PowerForge omits hardened runtime to keep multi-file apps launchable without an Apple Team ID. Direct distribution enables hardened runtime by supplying a `Developer ID Application` identity, a trusted timestamp, and PowerForge's Apple notarization/stapling flow.
 - `Example.RebuildState.json` is aimed at preserve/restore deployments and service-aware rebuild flows.
 - `Example.PortableBundleMsi.json` shows how to use `Bundles`, include sidecar targets, and build an MSI from the composed bundle instead of the raw publish output.
 - `Example.PackageBundleMsi.json` is the starter for TierBridge-style packages: composed service/CLI payload, shipped PowerShell module, generated scripts, ZIP, and MSI from the bundle.

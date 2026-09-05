@@ -1042,11 +1042,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 : (-1, timedStdout, timedStderr, true);
         }
 
-        var stdout = p.StandardOutput.ReadToEnd();
-        var stderr = p.StandardError.ReadToEnd();
+        Task<string> stdoutReadTask = p.StandardOutput.ReadToEndAsync();
+        Task<string> stderrReadTask = p.StandardError.ReadToEndAsync();
         p.WaitForExit();
+        Task.WaitAll(stdoutReadTask, stderrReadTask);
         cancellationToken.ThrowIfCancellationRequested();
-        return (p.ExitCode, stdout, stderr, false);
+        return (p.ExitCode, stdoutReadTask.Result, stderrReadTask.Result, false);
     }
 
     private static string AppendProcessTimeoutMessage(string stderr, TimeSpan timeout)

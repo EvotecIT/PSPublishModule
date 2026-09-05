@@ -54,13 +54,36 @@ public sealed partial class DotNetPublishPipelineRunner
         string? taskInputBaseDirectory = null,
         string? controlledProjectPath = null,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts = null)
+        => HasOnlyControlledBuildFileInputs(
+            checkoutRoot,
+            controlledInputs,
+            executableMsBuildInputs,
+            evaluatedGlobalProperties,
+            taskInputBaseDirectory,
+            controlledProjectPath,
+            evaluatedProjectContexts,
+            out _);
+
+    private static bool HasOnlyControlledBuildFileInputs(
+        string checkoutRoot,
+        IReadOnlyCollection<string> controlledInputs,
+        IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
+        string? taskInputBaseDirectory,
+        string? controlledProjectPath,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts,
+        out string? failureReason)
     {
+        failureReason = null;
         try
         {
             string normalizedTaskInputBaseDirectory = Path.GetFullPath(
                 taskInputBaseDirectory ?? checkoutRoot);
             if (!IsSameOrBelowBuildInputPath(normalizedTaskInputBaseDirectory, checkoutRoot))
+            {
+                failureReason = "task input base directory escaped the checkout";
                 return false;
+            }
             var executableInputs = new HashSet<string>(
                 executableMsBuildInputs.Select(Path.GetFullPath),
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -70,6 +93,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!IsSameOrBelowBuildInputPath(controlledProjectPath, checkoutRoot) ||
                     !executableInputs.Contains(controlledProjectPath))
                 {
+                    failureReason = "controlled project is outside the executable MSBuild inputs";
                     return false;
                 }
             }
@@ -91,6 +115,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     !IsSameOrBelowBuildInputPath(path, checkoutRoot) ||
                     HasReparsePointBelowRoot(path, checkoutRoot))
                 {
+                    failureReason = $"controlled input is missing, linked, or outside checkout: '{Path.GetFileName(path)}'";
                     return false;
                 }
 
@@ -110,6 +135,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             ContainsUncontrolledFileSystemPropertyFunction(value) ||
                             ContainsUnresolvedBuildExpression(value)))
                     {
+                        failureReason = $"automatic response file contains an uncontrolled value: '{Path.GetFileName(path)}'";
                         return false;
                     }
                     continue;
@@ -134,7 +160,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
                 {
                     if (!HasOnlyControlledResourceFileInputs(document, path, checkoutRoot))
+                    {
+                        failureReason = $"resource file contains an uncontrolled input: '{Path.GetFileName(path)}'";
                         return false;
+                    }
                     continue;
                 }
                 if (!knownProjectExtension &&
@@ -181,7 +210,8 @@ public sealed partial class DotNetPublishPipelineRunner
                               entry.BaseDirectory,
                               checkoutRoot) ||
                           ContainsUncontrolledEnvironmentReference(entry.Value) ||
-                          ContainsUncontrolledAmbientPropertyFunction(entry.Value) ||
+                          (ContainsUncontrolledAmbientPropertyFunction(entry.Value) &&
+                           !IsControlledLiteralPlatformCondition(entry.Node, entry.Value)) ||
                           ContainsUncontrolledFileSystemPropertyFunction(entry.Value)) ||
                         IsDefinitelyInactiveControlledBuildValue(
                             entry.Node,
@@ -191,6 +221,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         continue;
                     }
+                    failureReason = $"MSBuild document contains an uncontrolled value: '{Path.GetFileName(path)}'";
                     return false;
                 }
             }
@@ -198,7 +229,10 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach ((XDocument document, string path) in executableDocuments)
             {
                 if (ContainsControlledBuildPropertyEscape(document))
+                {
+                    failureReason = $"MSBuild document contains a property escape: '{Path.GetFileName(path)}'";
                     return false;
+                }
                 IReadOnlyDictionary<string, string>[] propertyContexts =
                     evaluatedProjectContexts is not null &&
                     evaluatedProjectContexts.TryGetValue(
@@ -221,19 +255,50 @@ public sealed partial class DotNetPublishPipelineRunner
                             properties,
                             outputProjectPath,
                             readLines: ReadControlledCheckoutTextInput)))
+                {
+                    failureReason = $"MSBuild document contains an uncontrolled task file input: '{Path.GetFileName(path)}'";
                     return false;
+                }
             }
 
-            return !controlledDocuments.Any(document =>
+            bool controlled = !controlledDocuments.Any(document =>
                 ContainsUncontrolledControlledBuildTask(
                     document,
                     controlledDocuments,
                     evaluatedGlobalProperties));
+            if (!controlled)
+                failureReason = "MSBuild graph contains an uncontrolled build task";
+            return controlled;
         }
-        catch
+        catch (Exception exception)
+        {
+            failureReason = $"{exception.GetType().Name} while validating controlled build inputs";
+            return false;
+        }
+    }
+
+    private static bool IsControlledLiteralPlatformCondition(XObject node, string value)
+    {
+        if (node is not XAttribute attribute ||
+            !attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
+
+        string remaining = System.Text.RegularExpressions.Regex.Replace(
+            DecodeMsBuildEscapes(value),
+            @"\$\(\[MSBuild\]::IsOSPlatform\(\s*([`'""])(Windows|Linux|OSX|FreeBSD)\1\s*\)\)",
+            string.Empty,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        remaining = System.Text.RegularExpressions.Regex.Replace(
+            remaining,
+            @"\$\(\[MSBuild\]::IsOSUnixLike\(\s*\)\)",
+            string.Empty,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+        return !ContainsUncontrolledAmbientPropertyFunction(remaining);
     }
 
     private static bool IsDefinitelyInactiveControlledBuildValue(

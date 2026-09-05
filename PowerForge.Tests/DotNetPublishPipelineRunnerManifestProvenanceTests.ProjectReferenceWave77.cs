@@ -44,7 +44,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved source\"");
-            RunDotNet(root, $"build \"{appProject}\" -c Release --no-restore --nologo");
+            RunDotNet(
+                root,
+                $"build \"{appProject}\" -c Release --no-restore --nologo " +
+                "-p:ContinuousIntegrationBuild=true -p:DebugType=None -p:DebugSymbols=false");
 
             var plan = new DotNetPublishPlan
             {

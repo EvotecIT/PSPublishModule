@@ -46,8 +46,10 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
         IReadOnlyDictionary<string, string?>? environmentVariables,
         IReadOnlyDictionary<string, string> committedArchivePaths,
-        VerifiedPackageArchiveCache archives)
+        VerifiedPackageArchiveCache archives,
+        out string? failureReason)
     {
+        failureReason = null;
         if (!TryReadTrustedSdkRestoreGraph(
                 projectPath,
                 properties,
@@ -57,7 +59,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 archives,
                 out JsonDocument? document,
                 out string? evidenceRoot,
-                out string? isolatedPackageRoot) ||
+                out string? isolatedPackageRoot,
+                out failureReason) ||
             document is null)
         {
             return null;
@@ -107,11 +110,13 @@ public sealed partial class DotNetPublishPipelineRunner
         VerifiedPackageArchiveCache archives,
         out JsonDocument? document,
         out string? evidenceRoot,
-        out string? isolatedPackageRoot)
+        out string? isolatedPackageRoot,
+        out string? failureReason)
     {
         document = null;
         evidenceRoot = null;
         isolatedPackageRoot = null;
+        failureReason = null;
         string temporaryRoot = Path.Combine(
             Path.GetTempPath(),
             "pf-rg-" + Guid.NewGuid().ToString("N"));
@@ -124,7 +129,10 @@ public sealed partial class DotNetPublishPipelineRunner
             string verifiedPackageSource = Directory.CreateDirectory(
                 Path.Combine(temporaryRoot, "verified-lock")).FullName;
             if (!archives.TrySeedVerifiedRestoreSource(verifiedPackageSource, committedArchivePaths))
+            {
+                failureReason = "verified-lock source seeding failed";
                 return false;
+            }
             string graphPath = Path.Combine(temporaryRoot, "restore-graph.json");
             string lockPath = Path.Combine(temporaryRoot, "restore.lock.json");
             string configPath = Path.Combine(temporaryRoot, "NuGet.Config");
@@ -133,6 +141,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     verifiedPackageSource,
                     usePublicSource: false))
             {
+                failureReason = "offline NuGet configuration could not be written";
                 return false;
             }
             var graphArguments = new List<string>
@@ -162,6 +171,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(2));
             if (graphProcess.ExitCode != 0 || graphProcess.TimedOut || !File.Exists(graphPath))
             {
+                failureReason = graphProcess.TimedOut
+                    ? "restore graph generation timed out"
+                    : $"restore graph generation failed with exit code {graphProcess.ExitCode}" +
+                      ReadControlledProcessFailureDetail(graphProcess);
                 return false;
             }
 
@@ -171,6 +184,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     projectPath,
                     out HashSet<string> sdkPackageKeys))
             {
+                failureReason = "SDK package keys could not be read from the restore graph";
                 return false;
             }
             if (!TryPrimeSdkEvidencePackages(
@@ -183,6 +197,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(projectPath)!,
                     environmentVariables))
             {
+                failureReason = "locked packages could not be primed into the isolated package root";
                 return false;
             }
             if (!TryWriteSdkEvidenceNuGetConfig(
@@ -190,6 +205,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     verifiedPackageSource,
                     usePublicSource: true))
             {
+                failureReason = "online SDK-evidence NuGet configuration could not be written";
                 return false;
             }
             if (!TryPrimeSdkEvidencePackages(
@@ -202,6 +218,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(projectPath)!,
                     environmentVariables))
             {
+                failureReason = "SDK-owned packages could not be primed from the trusted source";
                 return false;
             }
             if (!TryReadSdkPackageHashes(
@@ -213,6 +230,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     trustedSdkPackageHashes,
                     archives))
             {
+                failureReason = "SDK package hashes or archive snapshots could not be verified";
                 return false;
             }
             if (!TryWriteSdkEvidenceNuGetConfig(
@@ -220,6 +238,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     verifiedPackageSource,
                     usePublicSource: false))
             {
+                failureReason = "final offline NuGet configuration could not be written";
                 return false;
             }
 
@@ -253,6 +272,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(5));
             if (restoreProcess.ExitCode != 0 || restoreProcess.TimedOut)
             {
+                failureReason = restoreProcess.TimedOut
+                    ? "isolated SDK-evidence restore timed out"
+                    : $"isolated SDK-evidence restore failed with exit code {restoreProcess.ExitCode}" +
+                      ReadControlledProcessFailureDetail(restoreProcess);
                 return false;
             }
             if (!TryReadSdkPackageHashes(
@@ -264,16 +287,18 @@ public sealed partial class DotNetPublishPipelineRunner
                     isolatedPackageRoot,
                     trustedSdkPackageHashes))
             {
+                failureReason = "post-restore SDK package verification failed";
                 return false;
             }
 
             evidenceRoot = temporaryRoot;
             return true;
         }
-        catch
+        catch (Exception exception)
         {
             document?.Dispose();
             document = null;
+            failureReason = $"{exception.GetType().Name} while collecting SDK package evidence";
             return false;
         }
         finally
@@ -287,7 +312,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static void AppendSdkEvidenceProperties(
+    internal static void AppendSdkEvidenceProperties(
         ICollection<string> arguments,
         JsonElement properties,
         IReadOnlyDictionary<string, string>? effectiveGlobalProperties)
@@ -335,6 +360,17 @@ public sealed partial class DotNetPublishPipelineRunner
                      entry => entry.Key,
                      StringComparer.OrdinalIgnoreCase))
         {
+            if (property.Key.Equals("RuntimeIdentifiers", StringComparison.OrdinalIgnoreCase))
+            {
+                arguments.Add("-p:RuntimeIdentifiers=" + BuildMsBuildListPropertyValue(
+                    property.Value.Split(
+                        new[] { ';' },
+                        StringSplitOptions.RemoveEmptyEntries)
+                    .Select(value => value.Trim())
+                    .Where(value => value.Length > 0)));
+                continue;
+            }
+
             arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
     }
@@ -353,6 +389,7 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:RestoreAdditionalProjectFallbackFolders=");
         arguments.Add("-p:RestoreAdditionalProjectSources=");
         arguments.Add("-p:RestoreRecursive=false");
+        arguments.Add("-p:WarningsNotAsErrors=NU1510");
     }
 
     private static bool IsSafeSdkEvidencePropertyName(string name)
@@ -552,6 +589,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static void AppendSyntheticSdkEvidenceProjectIsolationProperties(
         ICollection<string> arguments)
     {
+        arguments.Add("-p:DisableImplicitLibraryPacksFolder=true");
         arguments.Add("-p:DisableImplicitFrameworkReferences=true");
         arguments.Add("-p:ImportDirectoryBuildProps=false");
         arguments.Add("-p:ImportDirectoryBuildTargets=false");

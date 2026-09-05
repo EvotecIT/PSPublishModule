@@ -257,6 +257,12 @@ public sealed partial class DotNetPublishPipelineRunner
                         case DotNetPublishStepKind.MsiSign:
                             SignMsiPackage(plan, msiBuilds, step);
                             break;
+                        case DotNetPublishStepKind.DebianPackage:
+                            artefacts.Add(BuildDebianPackage(plan, artefacts, step));
+                            break;
+                        case DotNetPublishStepKind.MacAppPackage:
+                            artefacts.Add(BuildMacAppPackage(plan, artefacts, step));
+                            break;
                         case DotNetPublishStepKind.StorePackage:
                             storePackages.Add(BuildStorePackage(plan, step));
                             break;
