@@ -1298,7 +1298,7 @@ Optional publish style filter.
 Type: DotNetPublishStyle[]
 Parameter Sets: Config, Project
 Aliases: Style
-Possible values: Portable, PortableCompat, PortableSize, FrameworkDependent, AotSpeed, AotSize
+Possible values: Portable, PortableCompat, PortableSize, SelfContained, FrameworkDependent, AotSpeed, AotSize
 
 Required: False
 Position: named
