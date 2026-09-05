@@ -9,7 +9,7 @@ public partial class WebAgentReadinessTests
     public async Task Scan_AcceptsCanonicalRuntimeWithPlatformLineEndings()
     {
         var handler = new RuntimeIdentityWebMcpRouteScanHandler(
-            WebSiteBuilder.GetWebMcpSiteSearchAssetContent().Replace("\n", "\r\n", StringComparison.Ordinal));
+            WebSiteBuilder.GetWebMcpSiteSearchAssetContent().ReplaceLineEndings("\r\n"));
         var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
         {
             BaseUrl = "https://example.test",

@@ -245,6 +245,31 @@ pages use route-relative index/runtime URLs so sites hosted below an origin path
 remain functional; theme-owned pages should do the same or include the deployed
 base path explicitly.
 
+If a theme cannot reliably synchronize its visible results from the runtime's
+synthetic `input` event, it can predeclare a `renderVisibleResults(response,
+context)` function before the PowerForge runtime loads. The runtime calls it only
+after enforcing the result-count, URL, and 1,500-character response limits, and
+passes a defensive copy plus `context.signal`. The hook should render the supplied
+results rather than loading or ranking the search index again:
+
+```html
+<script>
+  window.PowerForgeWebMcpSearch = {
+    renderVisibleResults: function (response) {
+      searchInput.value = response.query;
+      renderSearchResults(response.results, response.query);
+    }
+  };
+</script>
+<script src="/assets/powerforge/webmcp-site-search.v1.js"
+        data-powerforge-webmcp defer></script>
+```
+
+The predeclared renderer replaces synthetic input dispatch. A bound search adapter
+continues to own its visible interaction unless the page also predeclares this
+renderer explicitly. Both adapters and renderers should honor the supplied abort
+signal and avoid visible changes after cancellation.
+
 The `page-tool` kind is a verification contract for a product-owned adapter;
 PowerForge does not generate its behavior. Use it only when an existing visible
 page already owns the operation. The rendered route must contain exactly one
