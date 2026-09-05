@@ -48,6 +48,7 @@
     "deploy": { "$ref": "#/$defs/Deploy" },
     "verify": { "$ref": "#/$defs/Verify" },
     "backupTarget": { "$ref": "#/$defs/BackupTarget" },
+    "durableBackup": { "$ref": "#/$defs/DurableBackup" },
     "notes": {
       "type": "array",
       "items": { "type": "string" }
@@ -534,6 +535,58 @@
         "via": { "type": "string" }
       },
       "required": ["url"]
+    },
+    "DurableBackup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exportRoot": {
+          "allOf": [
+            { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+            { "not": { "enum": ["/etc", "/home", "/root", "/srv", "/var", "/var/lib"] } }
+          ]
+        },
+        "exportGroup": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,31}$" },
+        "recipient": { "type": "string", "pattern": "^age1[a-z0-9]+$" },
+        "stagingRetentionHours": { "type": "integer", "minimum": 24, "maximum": 720 },
+        "databases": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/DurableBackupDatabase" }
+        },
+        "encryptedFiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/EncryptedCaptureFile" }
+        },
+        "artifactStores": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/DurableBackupArtifactStore" }
+        }
+      },
+      "required": ["exportRoot", "exportGroup", "recipient", "stagingRetentionHours", "databases", "encryptedFiles", "artifactStores"]
+    },
+    "DurableBackupDatabase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" },
+        "provider": { "type": "string", "enum": ["postgresql"] },
+        "database": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$" },
+        "required": { "type": "boolean" }
+      },
+      "required": ["id", "provider", "database"]
+    },
+    "DurableBackupArtifactStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" },
+        "path": { "$ref": "#/$defs/AbsoluteUnixExactPath" },
+        "required": { "type": "boolean" }
+      },
+      "required": ["id", "path"]
     },
     "BackupTarget": {
       "type": "object",

@@ -4,78 +4,8 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
-
-function Assert-LastExitCode {
-    param([Parameter(Mandatory)][string] $Operation)
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Operation failed with exit code $LASTEXITCODE."
-    }
-}
-
-function Invoke-GitWithRetry {
-    param(
-        [Parameter(Mandatory)][string] $Operation,
-        [Parameter(Mandatory)][string[]] $Arguments,
-        [string] $ResetPath,
-        [ValidateRange(1, 5)][int] $MaxAttempts = 3,
-        [ValidateRange(0, 60)][int] $RetryDelaySeconds = 5
-    )
-
-    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        if (-not [string]::IsNullOrWhiteSpace($ResetPath) -and (Test-Path -LiteralPath $ResetPath)) {
-            Remove-Item -LiteralPath $ResetPath -Recurse -Force
-        }
-
-        & git @Arguments
-        $exitCode = $LASTEXITCODE
-        if ($exitCode -eq 0) {
-            return
-        }
-        if ($attempt -lt $MaxAttempts) {
-            Write-Warning "$Operation failed with exit code $exitCode; retrying ($attempt/$MaxAttempts)."
-            Start-Sleep -Seconds ($attempt * $RetryDelaySeconds)
-        }
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($ResetPath) -and (Test-Path -LiteralPath $ResetPath)) {
-        Remove-Item -LiteralPath $ResetPath -Recurse -Force
-    }
-    throw "$Operation failed after $MaxAttempts attempts with exit code $exitCode."
-}
-
-function Write-ActionOutput {
-    param(
-        [Parameter(Mandatory)][string] $Name,
-        [Parameter(Mandatory)][AllowEmptyString()][string] $Value
-    )
-
-    "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-}
-
-function Write-CaptureFailureDiagnostic {
-    param([Parameter(Mandatory)][string] $CaptureRoot)
-
-    foreach ($name in @('plain-files.stderr.txt', 'encrypted-secrets.stderr.txt')) {
-        $path = Join-Path $CaptureRoot $name
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
-            continue
-        }
-
-        # Only tar/encryption stderr is surfaced. Command captures may contain sensitive service output.
-        $diagnostic = ((Get-Content -LiteralPath $path -TotalCount 40) -join [Environment]::NewLine)
-        $diagnostic = $diagnostic -replace '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '?'
-        if ($diagnostic.Length -gt 4096) {
-            $diagnostic = $diagnostic.Substring(0, 4096) + [Environment]::NewLine + '[truncated]'
-        }
-        $stopToken = [Guid]::NewGuid().ToString('N')
-        Write-Host "::group::PowerForge capture diagnostic: $name"
-        Write-Host "::stop-commands::$stopToken"
-        Write-Host $diagnostic
-        Write-Host "::$stopToken::"
-        Write-Host '::endgroup::'
-    }
-}
+. (Join-Path $PSScriptRoot 'PowerForgeBackupSupport.ps1')
+. (Join-Path $PSScriptRoot 'PowerForgeBackupCatalog.ps1')
 
 if ($env:RUNNER_OS -ne 'Linux') {
     throw 'PowerForge server backup requires a Linux runner.'
@@ -334,6 +264,8 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         Remove-Item -LiteralPath $stale.FullName -Recurse -Force
     }
 
+    Update-BackupCatalog -TargetRoot $targetRoot -TargetRelative $backupPath -KeepLatestInTree $keepLatestInTree
+
     git -C $checkout config user.name 'PowerForge Server Backup'
     Assert-LastExitCode 'Configuring the backup Git author'
     git -C $checkout config user.email 'powerforge-backup@users.noreply.github.com'
@@ -353,11 +285,11 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
             'origin',
             "+refs/heads/${backupBranch}:refs/remotes/origin/${backupBranch}"
         )
-        git -C $checkout rebase "origin/$backupBranch"
-        if ($LASTEXITCODE -ne 0) {
-            git -C $checkout rebase --abort 2>$null
-            throw 'Rebasing the backup publication failed.'
-        }
+        $generatedCatalogPaths = @(
+            "$($backupPath.TrimEnd('/'))/LATEST.txt",
+            "$($backupPath.TrimEnd('/'))/index.json"
+        )
+        Invoke-BackupPublicationRebase -Checkout $checkout -Upstream "origin/$backupBranch" -GeneratedCatalogPaths $generatedCatalogPaths
 
         $captures = @(Get-ChildItem -LiteralPath $targetRoot -Directory |
             Where-Object Name -Match '^\d{8}T\d{6}Z-\d+-\d+$' |
@@ -365,6 +297,7 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         foreach ($stale in @($captures | Select-Object -Skip $keepLatestInTree)) {
             Remove-Item -LiteralPath $stale.FullName -Recurse -Force
         }
+        Update-BackupCatalog -TargetRoot $targetRoot -TargetRelative $backupPath -KeepLatestInTree $keepLatestInTree
         git -C $checkout add -- $backupPath
         Assert-LastExitCode 'Restaging retained backup captures'
 

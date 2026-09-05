@@ -4,23 +4,8 @@ param()
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-$actionScript = Join-Path $repositoryRoot '.github/actions/powerforge-server-backup/Invoke-PowerForgeServerBackup.ps1'
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile($actionScript, [ref]$tokens, [ref]$parseErrors)
-if ($parseErrors.Count -gt 0) {
-    throw "Unable to parse the server backup action: $($parseErrors[0].Message)"
-}
-
-$functionAst = $ast.Find({
-        param($node)
-        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-        $node.Name -eq 'Invoke-GitWithRetry'
-    }, $true)
-if ($null -eq $functionAst) {
-    throw 'Invoke-GitWithRetry was not found in the server backup action.'
-}
-. ([scriptblock]::Create($functionAst.Extent.Text))
+$supportScript = Join-Path $repositoryRoot '.github/actions/powerforge-server-backup/PowerForgeBackupSupport.ps1'
+. $supportScript
 
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "powerforge-git-retry-$([Guid]::NewGuid().ToString('N'))"
 $resetPath = Join-Path $testRoot 'partial-clone'
@@ -149,6 +134,56 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "Published history does not retain $requiredPath."
         }
+    }
+
+    $catalogRemote = Join-Path $testRoot 'catalog-remote.git'
+    $catalogSeed = Join-Path $testRoot 'catalog-seed'
+    $catalogWorkerA = Join-Path $testRoot 'catalog-worker-a'
+    $catalogWorkerB = Join-Path $testRoot 'catalog-worker-b'
+    Invoke-TestGit init --bare $catalogRemote
+    Invoke-TestGit init $catalogSeed
+    Invoke-TestGit -C $catalogSeed checkout -b main
+    Invoke-TestGit -C $catalogSeed config user.name PowerForgeTest
+    Invoke-TestGit -C $catalogSeed config user.email powerforge-test@example.invalid
+    New-Item -ItemType Directory -Path (Join-Path $catalogSeed 'server') | Out-Null
+    Set-Content -LiteralPath (Join-Path $catalogSeed 'server/LATEST.txt') -Value seed -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $catalogSeed 'server/index.json') -Value '{"latest":"seed"}' -Encoding utf8NoBOM
+    Invoke-TestGit -C $catalogSeed add server
+    Invoke-TestGit -C $catalogSeed commit -m seed
+    Invoke-TestGit -C $catalogSeed remote add origin $catalogRemote
+    Invoke-TestGit -C $catalogSeed push -u origin main
+
+    $catalogRemoteUri = ([Uri]$catalogRemote).AbsoluteUri
+    foreach ($catalogWorker in @($catalogWorkerA, $catalogWorkerB)) {
+        Invoke-TestGit clone --no-tags --single-branch --branch main $catalogRemoteUri $catalogWorker
+        Invoke-TestGit -C $catalogWorker config user.name PowerForgeTest
+        Invoke-TestGit -C $catalogWorker config user.email powerforge-test@example.invalid
+    }
+    New-Item -ItemType Directory -Path (Join-Path $catalogWorkerA 'server/capture-a') | Out-Null
+    Set-Content -LiteralPath (Join-Path $catalogWorkerA 'server/capture-a/data.txt') -Value capture-a -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $catalogWorkerA 'server/LATEST.txt') -Value capture-a -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $catalogWorkerA 'server/index.json') -Value '{"latest":"capture-a"}' -Encoding utf8NoBOM
+    Invoke-TestGit -C $catalogWorkerA add server
+    Invoke-TestGit -C $catalogWorkerA commit -m capture-a
+
+    New-Item -ItemType Directory -Path (Join-Path $catalogWorkerB 'server/capture-b') | Out-Null
+    Set-Content -LiteralPath (Join-Path $catalogWorkerB 'server/capture-b/data.txt') -Value capture-b -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $catalogWorkerB 'server/LATEST.txt') -Value capture-b -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $catalogWorkerB 'server/index.json') -Value '{"latest":"capture-b"}' -Encoding utf8NoBOM
+    Invoke-TestGit -C $catalogWorkerB add server
+    Invoke-TestGit -C $catalogWorkerB commit -m capture-b
+    Invoke-TestGit -C $catalogWorkerB push origin HEAD:main
+
+    Invoke-TestGit -C $catalogWorkerA fetch origin '+refs/heads/main:refs/remotes/origin/main'
+    Invoke-BackupPublicationRebase -Checkout $catalogWorkerA -Upstream origin/main -GeneratedCatalogPaths @('server/LATEST.txt', 'server/index.json')
+    foreach ($requiredPath in @('server/capture-a/data.txt', 'server/capture-b/data.txt')) {
+        & git -C $catalogWorkerA cat-file -e "HEAD:$requiredPath"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Catalog-only conflict resolution lost $requiredPath."
+        }
+    }
+    if ((Get-Content -LiteralPath (Join-Path $catalogWorkerA 'server/LATEST.txt') -Raw).Trim() -ne 'capture-b') {
+        throw 'Catalog-only conflict resolution did not preserve the refreshed upstream catalog.'
     }
 }
 finally {
