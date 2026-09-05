@@ -106,22 +106,78 @@ public sealed class PowerShellCompiledMethod
         bool isAdvancedFunction,
         PowerShellCompilationCommandBinding? commandBinding,
         bool requiresPowerShellRuntimeState,
-        string? declaredOutputType)
+        string? declaredOutputType,
+        int sourceColumn = 1,
+        int sourceEndLine = 0,
+        int sourceEndColumn = 0,
+        PowerShellCompilationSourceMapEntry[]? sourceMap = null,
+        PowerShellCompilationCommandProviderContract[]? commandProviders = null,
+        string? outputCardinality = null,
+        string[]? outputValueStates = null,
+        string? collectionElementType = null,
+        string? outputScalarization = null)
+        : this(sourceName, generatedName, returnType, parameters, sourceLine, sourcePath,
+            requiresPowerShellStreams, requiresPowerShellCommandRegions, aliases, requiresPowerShellBoundParameters,
+            isAdvancedFunction, commandBinding, requiresPowerShellRuntimeState, declaredOutputType, sourceColumn,
+            sourceEndLine, sourceEndColumn, sourceMap, commandProviders, outputCardinality, outputValueStates,
+            collectionElementType, outputScalarization, 0)
+    {
+    }
+
+    /// <summary>Creates a complete compiled-method description with exact hosted boundary-site evidence.</summary>
+    public PowerShellCompiledMethod(
+        string sourceName,
+        string generatedName,
+        string returnType,
+        PowerShellCompilationParameter[] parameters,
+        int sourceLine,
+        string? sourcePath,
+        bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions,
+        string[]? aliases,
+        bool requiresPowerShellBoundParameters,
+        bool isAdvancedFunction,
+        PowerShellCompilationCommandBinding? commandBinding,
+        bool requiresPowerShellRuntimeState,
+        string? declaredOutputType,
+        int sourceColumn,
+        int sourceEndLine,
+        int sourceEndColumn,
+        PowerShellCompilationSourceMapEntry[]? sourceMap,
+        PowerShellCompilationCommandProviderContract[]? commandProviders,
+        string? outputCardinality,
+        string[]? outputValueStates,
+        string? collectionElementType,
+        string? outputScalarization,
+        int hostedRegionSiteCount,
+        bool requiresProviderCancellation = false)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
         ReturnType = returnType ?? string.Empty;
         Parameters = parameters ?? Array.Empty<PowerShellCompilationParameter>();
         SourceLine = sourceLine;
+        SourceColumn = sourceColumn;
+        SourceEndLine = sourceEndLine > 0 ? sourceEndLine : sourceLine;
+        SourceEndColumn = sourceEndColumn > 0 ? sourceEndColumn : sourceColumn;
+        SourceMap = sourceMap ?? Array.Empty<PowerShellCompilationSourceMapEntry>();
+        CommandProviders = commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>();
+        OutputCardinality = outputCardinality ?? string.Empty;
+        OutputValueStates = outputValueStates ?? Array.Empty<string>();
+        CollectionElementType = collectionElementType ?? string.Empty;
+        OutputScalarization = outputScalarization ?? string.Empty;
         SourcePath = sourcePath ?? string.Empty;
         RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresProviderCancellation = requiresProviderCancellation;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
+        HostedRegionSiteCount = hostedRegionSiteCount;
         Aliases = aliases ?? Array.Empty<string>();
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         IsAdvancedFunction = isAdvancedFunction;
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         DeclaredOutputType = declaredOutputType ?? string.Empty;
+        DeclaredOutputTypeIsSemanticContract = !string.IsNullOrWhiteSpace(declaredOutputType);
     }
 
     /// <summary>Original PowerShell function name.</summary>
@@ -136,23 +192,92 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Authored OutputType metadata, or an empty string when none is declared.</summary>
     public string DeclaredOutputType { get; }
 
+    /// <summary>Whether the authored output type is also a target-compatible CLR semantic contract.</summary>
+    internal bool DeclaredOutputTypeIsSemanticContract { get; set; }
+
     /// <summary>Typed method parameters.</summary>
     public PowerShellCompilationParameter[] Parameters { get; }
 
     /// <summary>One-based source line of the PowerShell function body.</summary>
     public int SourceLine { get; }
 
+    /// <summary>One-based source column where the PowerShell function begins.</summary>
+    public int SourceColumn { get; }
+
+    /// <summary>One-based source line where the PowerShell function ends.</summary>
+    public int SourceEndLine { get; }
+
+    /// <summary>One-based source column where the PowerShell function ends.</summary>
+    public int SourceEndColumn { get; }
+
+    /// <summary>Statement-level source spans and method-relative generated C# ranges.</summary>
+    public PowerShellCompilationSourceMapEntry[] SourceMap { get; }
+
+    /// <summary>Versioned command semantic providers used by the generated method.</summary>
+    public PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
+
+    /// <summary>Bound success-output cardinality, independent of CLR type-name spelling.</summary>
+    public string OutputCardinality { get; }
+
+    /// <summary>Bound value states reachable on the success-output path.</summary>
+    public string[] OutputValueStates { get; }
+
+    /// <summary>Bound collection element CLR type, or an empty string for non-collection output.</summary>
+    public string CollectionElementType { get; }
+
+    /// <summary>PowerShell success-output scalarization applied by the generated host surface.</summary>
+    public string OutputScalarization { get; }
+
+    /// <summary>Advanced-function lifecycle contract when this generated cmdlet uses a hosted steppable pipeline.</summary>
+    public PowerShellCompilationLifecycleContract? Lifecycle { get; internal set; }
+
+    /// <summary>Authored function source used only by the generated hosted lifecycle implementation.</summary>
+    internal string HostedLifecycleSource { get; set; } = string.Empty;
+
     /// <summary>Full path of the authored PowerShell file containing the function.</summary>
     public string SourcePath { get; }
+
+    /// <summary>Stable parser-independent source document identity.</summary>
+    public string DocumentId { get; internal set; } = string.Empty;
 
     /// <summary>Whether the generated method expects PSCmdlet stream delegates.</summary>
     public bool RequiresPowerShellStreams { get; }
 
+    /// <summary>Whether the generated method expects a cooperative provider cancellation token.</summary>
+    public bool RequiresProviderCancellation { get; }
+
     /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
     public bool RequiresPowerShellCommandRegions { get; }
 
+    /// <summary>Number of statically emitted calls into a hosted PowerShell command region.</summary>
+    public int HostedRegionSiteCount { get; }
+
     /// <summary>Whether the generated method expects bounded PowerShell runtime-state delegates and values.</summary>
     public bool RequiresPowerShellRuntimeState { get; }
+
+    /// <summary>Whether the generated method expects access to live parent Hybrid script-module state.</summary>
+    public bool RequiresPowerShellModuleState { get; internal set; }
+
+    /// <summary>Whether the generated method expects read access to live parent Hybrid script-module state.</summary>
+    public bool RequiresPowerShellModuleStateRead { get; internal set; }
+
+    /// <summary>Whether the generated method expects write access to live parent Hybrid script-module state.</summary>
+    public bool RequiresPowerShellModuleStateWrite { get; internal set; }
+
+    /// <summary>Live parent script-module variables read by this method's canonical lowered body.</summary>
+    public string[] RequiredPowerShellModuleVariables { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>Number of statically emitted reads across the live parent Hybrid script-module boundary.</summary>
+    public int PowerShellModuleStateReadSiteCount { get; internal set; }
+
+    /// <summary>Live parent script-module variables written by this method's canonical lowered body.</summary>
+    public string[] WrittenPowerShellModuleVariables { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>Number of statically emitted writes across the live parent Hybrid script-module boundary.</summary>
+    public int PowerShellModuleStateWriteSiteCount { get; internal set; }
+
+    /// <summary>Canonical coarse-region and boundary-transfer graph derived from this method's lowered IR.</summary>
+    public PowerShellCompilationRegionGraph? RegionGraph { get; internal set; }
 
     /// <summary>Whether the generated method expects the names of explicitly bound PowerShell parameters.</summary>
     public bool RequiresPowerShellBoundParameters { get; }
@@ -165,6 +290,58 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Advanced-function and positional binding behavior preserved for the generated command.</summary>
     public PowerShellCompilationCommandBinding CommandBinding { get; }
+
+    /// <summary>Authored comment-based help retained for the compiled command.</summary>
+    public PowerShellCompilationHelp? Help { get; internal set; }
+}
+
+/// <summary>Maps one lowered PowerShell statement to a generated C# range.</summary>
+public sealed class PowerShellCompilationSourceMapEntry
+{
+    /// <summary>Creates one statement-level source-map entry.</summary>
+    public PowerShellCompilationSourceMapEntry(
+        int sourceStartLine,
+        int sourceStartColumn,
+        int sourceEndLine,
+        int sourceEndColumn,
+        int generatedStartLine,
+        int generatedStartColumn,
+        int generatedEndLine,
+        int generatedEndColumn)
+    {
+        SourceStartLine = sourceStartLine;
+        SourceStartColumn = sourceStartColumn;
+        SourceEndLine = sourceEndLine;
+        SourceEndColumn = sourceEndColumn;
+        GeneratedStartLine = generatedStartLine;
+        GeneratedStartColumn = generatedStartColumn;
+        GeneratedEndLine = generatedEndLine;
+        GeneratedEndColumn = generatedEndColumn;
+    }
+
+    /// <summary>One-based authored start line.</summary>
+    public int SourceStartLine { get; }
+
+    /// <summary>One-based authored start column.</summary>
+    public int SourceStartColumn { get; }
+
+    /// <summary>One-based authored end line.</summary>
+    public int SourceEndLine { get; }
+
+    /// <summary>One-based authored end column.</summary>
+    public int SourceEndColumn { get; }
+
+    /// <summary>One-based generated start line relative to the generated method.</summary>
+    public int GeneratedStartLine { get; }
+
+    /// <summary>One-based generated start column.</summary>
+    public int GeneratedStartColumn { get; }
+
+    /// <summary>One-based generated end line relative to the generated method.</summary>
+    public int GeneratedEndLine { get; }
+
+    /// <summary>One-based generated end column.</summary>
+    public int GeneratedEndColumn { get; }
 }
 
 /// <summary>
@@ -193,6 +370,51 @@ public sealed class PowerShellTypedCompilationResult
         PowerShellCompiledMethod[] methods,
         PowerShellCompilationDiagnostic[] diagnostics,
         string[]? sourcePaths)
+        : this(sourcePath, namespaceName, typeName, sourceCode, methods, diagnostics, sourcePaths, lifecycleSources: null)
+    {
+    }
+
+    /// <summary>Creates a typed-compilation result with every authored source file and hosted lifecycle source.</summary>
+    public PowerShellTypedCompilationResult(
+        string sourcePath,
+        string namespaceName,
+        string typeName,
+        string sourceCode,
+        PowerShellCompiledMethod[] methods,
+        PowerShellCompilationDiagnostic[] diagnostics,
+        string[]? sourcePaths,
+        PowerShellCompilationLifecycleSource[]? lifecycleSources)
+        : this(sourcePath, namespaceName, typeName, sourceCode, methods, diagnostics, sourcePaths, lifecycleSources, null)
+    {
+    }
+
+    /// <summary>Creates a typed-compilation result with authored sources, hosted lifecycle sources, and optimization evidence.</summary>
+    public PowerShellTypedCompilationResult(
+        string sourcePath,
+        string namespaceName,
+        string typeName,
+        string sourceCode,
+        PowerShellCompiledMethod[] methods,
+        PowerShellCompilationDiagnostic[] diagnostics,
+        string[]? sourcePaths,
+        PowerShellCompilationLifecycleSource[]? lifecycleSources,
+        PowerShellCompilationOptimizationEvidence? optimization)
+        : this(sourcePath, namespaceName, typeName, sourceCode, methods, diagnostics, sourcePaths, lifecycleSources, optimization, null)
+    {
+    }
+
+    /// <summary>Creates a typed-compilation result with authored sources, lifecycle sources, optimization evidence, and optional semantic IR snapshots.</summary>
+    public PowerShellTypedCompilationResult(
+        string sourcePath,
+        string namespaceName,
+        string typeName,
+        string sourceCode,
+        PowerShellCompiledMethod[] methods,
+        PowerShellCompilationDiagnostic[] diagnostics,
+        string[]? sourcePaths,
+        PowerShellCompilationLifecycleSource[]? lifecycleSources,
+        PowerShellCompilationOptimizationEvidence? optimization,
+        PowerShellCompilationIrSnapshotBundle? irSnapshots)
     {
         SourcePath = sourcePath ?? string.Empty;
         NamespaceName = namespaceName ?? string.Empty;
@@ -201,6 +423,9 @@ public sealed class PowerShellTypedCompilationResult
         Methods = methods ?? Array.Empty<PowerShellCompiledMethod>();
         Diagnostics = diagnostics ?? Array.Empty<PowerShellCompilationDiagnostic>();
         SourcePaths = sourcePaths ?? (string.IsNullOrWhiteSpace(SourcePath) ? Array.Empty<string>() : new[] { SourcePath });
+        LifecycleSources = lifecycleSources ?? Array.Empty<PowerShellCompilationLifecycleSource>();
+        Optimization = optimization ?? new PowerShellCompilationOptimizationEvidence();
+        IrSnapshots = irSnapshots;
     }
 
     /// <summary>Full PowerShell source path.</summary>
@@ -223,6 +448,33 @@ public sealed class PowerShellTypedCompilationResult
 
     /// <summary>All authored PowerShell files contributing to this generated CLR source.</summary>
     public string[] SourcePaths { get; }
+
+    /// <summary>Neutral hosted lifecycle candidates bound by the canonical front end.</summary>
+    public PowerShellCompilationLifecycleSource[] LifecycleSources { get; }
+
+    /// <summary>Bound-IR optimization evidence produced while compiling these methods.</summary>
+    public PowerShellCompilationOptimizationEvidence Optimization { get; }
+
+    /// <summary>Optional semantic-only bound/lowered IR snapshots produced by the canonical pipeline.</summary>
+    public PowerShellCompilationIrSnapshotBundle? IrSnapshots { get; }
+
+    /// <summary>
+    /// Typed terminal regions promoted inside otherwise-retained Hybrid functions. These do not
+    /// represent fully emitted functions or binary cmdlets.
+    /// </summary>
+    public PowerShellCompiledRegion[] PromotedRegions { get; internal set; } = Array.Empty<PowerShellCompiledRegion>();
+
+    /// <summary>
+    /// Every terminal region considered by the canonical Hybrid promotion policy, including
+    /// promoted and fail-closed decisions. This is diagnostic evidence, not emitted-unit credit.
+    /// </summary>
+    public PowerShellCompilationRegionCandidate[] RegionCandidates { get; internal set; } = Array.Empty<PowerShellCompilationRegionCandidate>();
+
+    /// <summary>
+    /// Analysis-only statement-aligned typed regions found inside otherwise rejected functions.
+    /// These records do not authorize backend emission or source rewriting.
+    /// </summary>
+    public PowerShellCompilationRegionOpportunity[] RegionOpportunities { get; internal set; } = Array.Empty<PowerShellCompilationRegionOpportunity>();
 
     /// <summary>Whether at least one method was translated and no blockers remain.</summary>
     public bool Success => Methods.Length > 0 && Diagnostics.Length == 0;

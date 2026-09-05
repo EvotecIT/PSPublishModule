@@ -1,0 +1,485 @@
+namespace PowerForge;
+
+internal enum PowerShellCommandResolutionStatus
+{
+    Resolved,
+    Missing,
+    Ambiguous
+}
+
+internal sealed class PowerShellCommandSemanticResolution
+{
+    internal PowerShellCommandSemanticResolution(
+        PowerShellCommandResolutionStatus status,
+        string requestedName,
+        PowerShellCompilationCommandProviderContract? contract,
+        IReadOnlyList<PowerShellCompilationCommandProviderContract>? candidates = null)
+    {
+        Status = status;
+        RequestedName = requestedName;
+        Contract = contract;
+        Candidates = candidates ?? Array.Empty<PowerShellCompilationCommandProviderContract>();
+    }
+
+    internal PowerShellCommandResolutionStatus Status { get; }
+    internal string RequestedName { get; }
+    internal PowerShellCompilationCommandProviderContract? Contract { get; }
+    internal IReadOnlyList<PowerShellCompilationCommandProviderContract> Candidates { get; }
+}
+
+/// <summary>Canonical, deterministic registry for compile-time-only command semantics.</summary>
+internal sealed class PowerShellCommandSemanticRegistry
+{
+    private readonly IReadOnlyDictionary<string, PowerShellCompilationCommandProviderContract> _qualified;
+    private readonly IReadOnlyDictionary<string, PowerShellCompilationCommandProviderContract[]> _unqualified;
+
+    internal PowerShellCommandSemanticRegistry(IEnumerable<PowerShellCompilationCommandProviderContract> contracts)
+    {
+        if (contracts is null) throw new ArgumentNullException(nameof(contracts));
+        Contracts = contracts.Select(Snapshot)
+            .OrderBy(static contract => contract.ProviderId, StringComparer.Ordinal)
+            .ToArray();
+        ValidateContracts(Contracts);
+
+        var qualified = new Dictionary<string, PowerShellCompilationCommandProviderContract>(StringComparer.OrdinalIgnoreCase);
+        var unqualified = new Dictionary<string, List<PowerShellCompilationCommandProviderContract>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var contract in Contracts)
+        {
+            var names = new[] { contract.CommandName }.Concat(contract.Aliases)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            foreach (var name in names)
+            {
+                AddUnqualified(unqualified, name, contract);
+                foreach (var module in contract.ModuleNames)
+                    AddQualified(qualified, module + "\\" + name, contract);
+            }
+        }
+        _qualified = qualified;
+        _unqualified = unqualified.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value.GroupBy(static contract => contract.ProviderId, StringComparer.Ordinal)
+                .Select(static group => group.First())
+                .OrderBy(static contract => contract.ProviderId, StringComparer.Ordinal).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    internal static PowerShellCommandSemanticRegistry Default { get; } = new(CreateBuiltIns());
+
+    internal static PowerShellCommandSemanticRegistry Create(IEnumerable<PowerShellCompilationCommandProviderContract>? extensions)
+    {
+        var extensionArray = (extensions ?? Array.Empty<PowerShellCompilationCommandProviderContract>()).ToArray();
+        var compilerOwned = extensionArray.FirstOrDefault(static contract =>
+            contract.Family is PowerShellCompilationCommandFamily.ClrConstruction or PowerShellCompilationCommandFamily.RuntimeState);
+        if (compilerOwned is not null)
+            throw new InvalidOperationException(
+                $"Command provider '{compilerOwned.ProviderId}' cannot extend compiler-owned command family '{compilerOwned.Family}'.");
+        return new PowerShellCommandSemanticRegistry(CreateBuiltIns().Concat(extensionArray));
+    }
+
+    internal IReadOnlyList<PowerShellCompilationCommandProviderContract> Contracts { get; }
+
+    internal PowerShellCommandSemanticResolution Resolve(string? commandName)
+    {
+        var requested = commandName?.Trim() ?? string.Empty;
+        if (requested.Length == 0)
+            return new PowerShellCommandSemanticResolution(PowerShellCommandResolutionStatus.Missing, requested, null);
+        var separator = requested.LastIndexOf('\\');
+        if (separator >= 0)
+        {
+            var module = requested.Substring(0, separator);
+            var leaf = requested.Substring(separator + 1);
+            if (module.Length == 0 || leaf.Length == 0)
+                return new PowerShellCommandSemanticResolution(PowerShellCommandResolutionStatus.Missing, requested, null);
+            return _qualified.TryGetValue(module + "\\" + leaf, out var qualified)
+                ? new PowerShellCommandSemanticResolution(PowerShellCommandResolutionStatus.Resolved, requested, qualified)
+                : new PowerShellCommandSemanticResolution(PowerShellCommandResolutionStatus.Missing, requested, null);
+        }
+
+        if (!_unqualified.TryGetValue(requested, out var candidates))
+            return new PowerShellCommandSemanticResolution(PowerShellCommandResolutionStatus.Missing, requested, null);
+        return candidates.Length == 1
+            ? new PowerShellCommandSemanticResolution(PowerShellCommandResolutionStatus.Resolved, requested, candidates[0])
+            : new PowerShellCommandSemanticResolution(PowerShellCommandResolutionStatus.Ambiguous, requested, null, candidates);
+    }
+
+    internal static PowerShellCompilationCommandProviderContract HostedRegionContract(string commandName)
+        => Contract(
+            "powerforge.command.hosted-region",
+            PowerShellCompilationCommandFamily.HostedRegion,
+            commandName,
+            Array.Empty<string>(),
+            PowerShellCompilationCommandOutput.Unknown,
+            PowerShellCompilationCommandCardinality.Unknown,
+            "Success+PowerShell",
+            PowerShellCompilationCommandErrors.PowerShellHost,
+            runtimeFree: false,
+            moduleNames: Array.Empty<string>());
+
+    private static IEnumerable<PowerShellCompilationCommandProviderContract> CreateBuiltIns()
+    {
+        yield return Stream("output", "Write-Output", "InputObject", "Success", PowerShellCompilationCommandOutput.Enumerated, PowerShellCompilationCommandCardinality.Collection, PowerShellCompilationCommandErrors.None);
+        yield return Stream("verbose", "Write-Verbose", "Message", "Verbose");
+        yield return Stream("debug", "Write-Debug", "Message", "Debug");
+        yield return Stream("warning", "Write-Warning", "Message", "Warning");
+        yield return Stream("information", "Write-Information", "MessageData", "Information");
+        yield return Stream("host", "Write-Host", "Object", "Host");
+        yield return Stream("error", "Write-Error", "Message", "Error", PowerShellCompilationCommandOutput.None, PowerShellCompilationCommandCardinality.None, PowerShellCompilationCommandErrors.NonTerminating);
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.object-mutation.add-member",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Add-Member"),
+            Family = PowerShellCompilationCommandFamily.ObjectMutation,
+            CommandName = "Add-Member",
+            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = "NotePropertyName", Position = -1 },
+                new PowerShellCompilationCommandParameterContract { Name = "NotePropertyValue", Position = -1 }
+            },
+            Output = PowerShellCompilationCommandOutput.None,
+            Cardinality = PowerShellCompilationCommandCardinality.None,
+            Stream = "None",
+            Errors = PowerShellCompilationCommandErrors.PowerShellHost,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                SemanticProfile = "PowerShell.Hosted/1.0",
+                Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
+        yield return Contract(
+            "powerforge.command.projection.select-object",
+            PowerShellCompilationCommandFamily.Projection,
+            "Select-Object",
+            new[] { "select" },
+            PowerShellCompilationCommandOutput.Projected,
+            PowerShellCompilationCommandCardinality.Collection,
+            "Success",
+            PowerShellCompilationCommandErrors.PowerShellHost,
+            runtimeFree: false);
+        yield return Contract(
+            "powerforge.command.filtering.where-object",
+            PowerShellCompilationCommandFamily.Filtering,
+            "Where-Object",
+            new[] { "where", "?" },
+            PowerShellCompilationCommandOutput.Filtered,
+            PowerShellCompilationCommandCardinality.Collection,
+            "Success",
+            PowerShellCompilationCommandErrors.PowerShellHost,
+            runtimeFree: false,
+            moduleNames: new[] { "Microsoft.PowerShell.Core" });
+        yield return Contract(
+            "powerforge.command.mapping.foreach-object",
+            PowerShellCompilationCommandFamily.Mapping,
+            "ForEach-Object",
+            new[] { "foreach", "%" },
+            PowerShellCompilationCommandOutput.Enumerated,
+            PowerShellCompilationCommandCardinality.Collection,
+            "Success",
+            PowerShellCompilationCommandErrors.PowerShellHost,
+            runtimeFree: false,
+            moduleNames: new[] { "Microsoft.PowerShell.Core" });
+        yield return Contract(
+            "powerforge.command.sorting.sort-object",
+            PowerShellCompilationCommandFamily.Sorting,
+            "Sort-Object",
+            new[] { "sort" },
+            PowerShellCompilationCommandOutput.Sorted,
+            PowerShellCompilationCommandCardinality.Collection,
+            "Success",
+            PowerShellCompilationCommandErrors.PowerShellHost,
+            runtimeFree: false);
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.discovery.get-command",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Get-Command"),
+            Family = PowerShellCompilationCommandFamily.CommandDiscovery,
+            CommandName = "Get-Command",
+            ModuleNames = new[] { "Microsoft.PowerShell.Core" },
+            Aliases = new[] { "gcm" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = "Name", Position = 0 },
+                new PowerShellCompilationCommandParameterContract { Name = "ErrorAction", Aliases = new[] { "EA" }, Position = -1 }
+            },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.PowerShellHost,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "InvokePowerShellCapture",
+                SemanticProfile = "PowerShell.Hosted/1.0",
+                RuntimeFree = false,
+                AotCompatible = false,
+                Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.hosted-boolean.test-path",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Test-Path"),
+            Family = PowerShellCompilationCommandFamily.HostedBooleanQuery,
+            CommandName = "Test-Path",
+            ModuleNames = new[] { "Microsoft.PowerShell.Management" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = "LiteralPath", Aliases = new[] { "PSPath" }, Position = -1 },
+                new PowerShellCompilationCommandParameterContract { Name = "PathType", Position = -1 },
+                new PowerShellCompilationCommandParameterContract { Name = "IsValid", Position = -1 },
+                new PowerShellCompilationCommandParameterContract { Name = "ErrorAction", Aliases = new[] { "EA" }, Position = -1 }
+            },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.None,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "InvokePowerShellBoolean",
+                SemanticProfile = "PowerShell.Hosted/1.0",
+                RuntimeFree = false,
+                AotCompatible = false,
+                Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.runtime-state.get-date",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Get-Date"),
+            Family = PowerShellCompilationCommandFamily.RuntimeState,
+            CommandName = "Get-Date",
+            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.None,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "ReadCurrentLocalDateTime",
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
+            }
+        };
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.construction.new-object",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("New-Object"),
+            Family = PowerShellCompilationCommandFamily.ClrConstruction,
+            CommandName = "New-Object",
+            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = "TypeName", Position = 0 },
+                new PowerShellCompilationCommandParameterContract { Name = "ArgumentList", Aliases = new[] { "Args" }, Position = 1 }
+            },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.Terminating,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "ConstructClrObject",
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
+            }
+        };
+    }
+
+    private static PowerShellCompilationCommandProviderContract Stream(
+        string id,
+        string commandName,
+        string valueParameter,
+        string stream,
+        PowerShellCompilationCommandOutput output = PowerShellCompilationCommandOutput.None,
+        PowerShellCompilationCommandCardinality cardinality = PowerShellCompilationCommandCardinality.None,
+        PowerShellCompilationCommandErrors errors = PowerShellCompilationCommandErrors.Terminating)
+        => new()
+        {
+            ProviderId = "powerforge.command.stream." + id,
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand(commandName),
+            Family = PowerShellCompilationCommandFamily.Stream,
+            CommandName = commandName,
+            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = valueParameter, Position = 0 }
+            },
+            Output = output,
+            Cardinality = cardinality,
+            Stream = stream,
+            Errors = errors,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = stream.Equals("Success", StringComparison.Ordinal) ? "WriteOutput" : "Write" + stream,
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
+            }
+        };
+
+    private static PowerShellCompilationCommandProviderContract Contract(
+        string providerId,
+        PowerShellCompilationCommandFamily family,
+        string commandName,
+        string[] aliases,
+        PowerShellCompilationCommandOutput output,
+        PowerShellCompilationCommandCardinality cardinality,
+        string stream,
+        PowerShellCompilationCommandErrors errors,
+        bool runtimeFree,
+        string[]? moduleNames = null)
+        => new()
+        {
+            ProviderId = providerId,
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand(commandName),
+            Family = family,
+            CommandName = commandName,
+            ModuleNames = moduleNames ?? new[] { "Microsoft.PowerShell.Utility" },
+            Aliases = aliases,
+            Output = output,
+            Cardinality = cardinality,
+            Stream = stream,
+            Errors = errors,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                SemanticProfile = runtimeFree
+                    ? PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion
+                    : "PowerShell.Hosted/1.0",
+                RuntimeFree = runtimeFree,
+                AotCompatible = runtimeFree,
+                Dependencies = runtimeFree ? Array.Empty<string>() : new[] { "System.Management.Automation" }
+            }
+        };
+
+    private static void ValidateContracts(IReadOnlyList<PowerShellCompilationCommandProviderContract> contracts)
+    {
+        var duplicateProvider = contracts.GroupBy(static contract => contract.ProviderId, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicateProvider is not null)
+            throw new InvalidOperationException($"Command semantic provider '{duplicateProvider.Key}' is registered more than once.");
+        foreach (var contract in contracts)
+        {
+            if (contract.SchemaVersion != 1 || string.IsNullOrWhiteSpace(contract.ProviderId) ||
+                string.IsNullOrWhiteSpace(contract.ProviderVersion) || string.IsNullOrWhiteSpace(contract.CommandName))
+                throw new InvalidOperationException("Command semantic providers require schema 1 plus non-empty provider, version, and command identities.");
+            if (!contract.CompileTimeOnly || contract.MayImportSourceModules || contract.MayExecuteSource)
+                throw new InvalidOperationException($"Command semantic provider '{contract.ProviderId}' violates the compile-time-only execution boundary.");
+            var parameterNames = contract.Parameters
+                .SelectMany(static parameter => new[] { parameter.Name }.Concat(parameter.Aliases ?? Array.Empty<string>()))
+                .ToArray();
+            if (contract.Parameters.Any(static parameter => string.IsNullOrWhiteSpace(parameter.Name) || parameter.Position < -1) ||
+                parameterNames.GroupBy(static value => value, StringComparer.OrdinalIgnoreCase).Any(static group => group.Count() > 1))
+                throw new InvalidOperationException($"Command semantic provider '{contract.ProviderId}' declares an invalid or duplicate parameter shape.");
+            if (contract.Adapter.RuntimeFree)
+            {
+                PowerShellCompilationProviderContractValidator.ValidateExecutableContractShape(
+                    contract,
+                    requireExecutableEntryPoint: false);
+                if (contract.Adapter.Dependencies.Length > 0 && contract.Adapter.EntryPoint is null)
+                    throw new InvalidOperationException($"Runtime-free built-in provider '{contract.ProviderId}' cannot declare external adapter dependencies.");
+            }
+            else if (contract.Family == PowerShellCompilationCommandFamily.ExternalOperation)
+            {
+                PowerShellCompilationProviderContractValidator.ValidateExecutableContractShape(
+                    contract,
+                    requireExecutableEntryPoint: false);
+            }
+            else if (contract.Family == PowerShellCompilationCommandFamily.HostedBooleanQuery &&
+                     (!contract.Adapter.Operation.Equals("InvokePowerShellBoolean", StringComparison.Ordinal) ||
+                      contract.Output != PowerShellCompilationCommandOutput.Projected ||
+                      contract.Cardinality != PowerShellCompilationCommandCardinality.Scalar ||
+                      !contract.Stream.Equals("Success", StringComparison.Ordinal) ||
+                      contract.Adapter.RuntimeFree))
+            {
+                throw new InvalidOperationException($"Hosted Boolean provider '{contract.ProviderId}' must declare the InvokePowerShellBoolean scalar success contract.");
+            }
+            else if (contract.Adapter.Dependencies.Any(static dependency =>
+                         !dependency.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"Hosted provider '{contract.ProviderId}' declares an adapter dependency outside the current PowerShell host contract.");
+            }
+            var duplicateName = new[] { contract.CommandName }.Concat(contract.Aliases)
+                .GroupBy(static value => value, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(static group => group.Count() > 1);
+            if (duplicateName is not null)
+                throw new InvalidOperationException($"Command semantic provider '{contract.ProviderId}' registers duplicate command or alias '{duplicateName.Key}'.");
+        }
+    }
+
+    private static void AddQualified(
+        IDictionary<string, PowerShellCompilationCommandProviderContract> lookup,
+        string key,
+        PowerShellCompilationCommandProviderContract contract)
+    {
+        if (lookup.TryGetValue(key, out var existing) && !existing.ProviderId.Equals(contract.ProviderId, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Qualified command semantic registration '{key}' is owned by both '{existing.ProviderId}' and '{contract.ProviderId}'.");
+        lookup[key] = contract;
+    }
+
+    private static void AddUnqualified(
+        IDictionary<string, List<PowerShellCompilationCommandProviderContract>> lookup,
+        string key,
+        PowerShellCompilationCommandProviderContract contract)
+    {
+        if (!lookup.TryGetValue(key, out var providers)) lookup[key] = providers = new List<PowerShellCompilationCommandProviderContract>();
+        providers.Add(contract);
+    }
+
+    private static PowerShellCompilationCommandProviderContract Snapshot(PowerShellCompilationCommandProviderContract source)
+        => new()
+        {
+            SchemaVersion = source.SchemaVersion,
+            ProviderId = source.ProviderId ?? string.Empty,
+            ProviderVersion = source.ProviderVersion ?? string.Empty,
+            FeatureId = source.FeatureId ?? string.Empty,
+            Family = source.Family,
+            CommandName = source.CommandName ?? string.Empty,
+            ModuleNames = (source.ModuleNames ?? Array.Empty<string>()).ToArray(),
+            Aliases = (source.Aliases ?? Array.Empty<string>()).ToArray(),
+            Parameters = (source.Parameters ?? Array.Empty<PowerShellCompilationCommandParameterContract>())
+                .Select(static parameter => new PowerShellCompilationCommandParameterContract
+                {
+                    Name = parameter.Name ?? string.Empty,
+                    Aliases = parameter.Aliases?.ToArray() ?? Array.Empty<string>(),
+                    Position = parameter.Position
+                })
+                .ToArray(),
+            Output = source.Output,
+            Cardinality = source.Cardinality,
+            Stream = source.Stream ?? string.Empty,
+            Errors = source.Errors,
+            CompileTimeOnly = source.CompileTimeOnly,
+            MayImportSourceModules = source.MayImportSourceModules,
+            MayExecuteSource = source.MayExecuteSource,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = source.Adapter?.Operation ?? string.Empty,
+                SemanticProfile = source.Adapter?.SemanticProfile ?? string.Empty,
+                RuntimeFree = source.Adapter?.RuntimeFree == true,
+                AotCompatible = source.Adapter?.AotCompatible == true,
+                Cancellation = source.Adapter?.Cancellation ?? PowerShellCompilationProviderCancellation.NotApplicable,
+                ProcessIsolationTimeoutSeconds = source.Adapter?.ProcessIsolationTimeoutSeconds ?? 0,
+                Cleanup = source.Adapter?.Cleanup ?? PowerShellCompilationProviderCleanup.NotApplicable,
+                Dependencies = source.Adapter?.Dependencies?.ToArray() ?? Array.Empty<string>(),
+                EntryPoint = source.Adapter?.EntryPoint is null
+                    ? null
+                    : new PowerShellCompilationProviderAdapterEntryPoint
+                    {
+                        AssemblyPath = source.Adapter.EntryPoint.AssemblyPath,
+                        TypeName = source.Adapter.EntryPoint.TypeName,
+                        MethodName = source.Adapter.EntryPoint.MethodName,
+                        ResultType = source.Adapter.EntryPoint.ResultType
+                    }
+            }
+        };
+}

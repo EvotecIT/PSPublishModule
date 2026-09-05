@@ -30,7 +30,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.LiteralVariableLookup",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -55,7 +55,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.NullableValueObservation",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -83,7 +83,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.NullArrayRoute",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -109,7 +109,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.NullArrayIndependent",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("runtime-error identity", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -201,7 +201,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.DynamicPackagedDotSource",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = new[] { fixture.ScriptPath, helper },
             SingleFile = false
@@ -224,7 +224,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ResourcePathIdentity",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             IncludeResource = new[] { "data.json" },
             SingleFile = false

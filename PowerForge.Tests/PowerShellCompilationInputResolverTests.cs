@@ -4,6 +4,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationInputResolverTests
 {
     [Fact]
@@ -17,6 +18,21 @@ public sealed class PowerShellCompilationInputResolverTests
         {
             typeof(string), typeof(string), typeof(string), typeof(string), typeof(PowerShellCompiledMethod[]), typeof(PowerShellCompilationDiagnostic[])
         }));
+        Assert.NotNull(typeof(PowerShellTypedCompilationResult).GetConstructor(new[]
+        {
+            typeof(string), typeof(string), typeof(string), typeof(string),
+            typeof(PowerShellCompiledMethod[]), typeof(PowerShellCompilationDiagnostic[]),
+            typeof(string[]), typeof(PowerShellCompilationLifecycleSource[])
+        }));
+        _ = new PowerShellTypedCompilationResult(
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            Array.Empty<PowerShellCompiledMethod>(),
+            Array.Empty<PowerShellCompilationDiagnostic>(),
+            Array.Empty<string>(),
+            null);
     }
 
     [Fact]
@@ -206,6 +222,23 @@ public sealed class PowerShellCompilationInputResolverTests
         Assert.Equal(new[] { conditional, direct, local, root }.OrderBy(static path => path), resolved.SourceFiles.OrderBy(static path => path));
     }
 
+    [Theory]
+    [InlineData("do { $Files = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1) } while ($false)")]
+    [InlineData("do { $Files = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1) } until ($true)")]
+    public void Resolve_DoesNotTreatPostTestLoopProducerAsTopLevelDiscovery(string producer)
+    {
+        using var fixture = ResolverFixture.Create("PostTestDiscoveryModule");
+        fixture.Write("PostTestDiscoveryModule.psd1", "@{ RootModule = 'PostTestDiscoveryModule.psm1' }");
+        fixture.Write(
+            "PostTestDiscoveryModule.psm1",
+            producer + "; foreach ($File in $Files) { . $File.FullName }");
+        fixture.Write("Public/Get-Proof.ps1", "function Get-Proof { return 42 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Resolve_ConventionalModuleLoaderDiscoversAuthoredPowerShellGlobsWithoutExecutingModuleCode()
     {
@@ -350,6 +383,26 @@ public sealed class PowerShellCompilationInputResolverTests
             new PowerShellCompilationInputResolver().Resolve(fixture.Root));
 
         Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_CompleteHybridModuleMayRetainDynamicLoaderAsPackagedRuntimeSource()
+    {
+        using var fixture = ResolverFixture.Create("DynamicCompleteModule");
+        fixture.Write("DynamicCompleteModule.psd1", "@{ RootModule = 'DynamicCompleteModule.psm1' }");
+        var root = fixture.Write(
+            "DynamicCompleteModule.psm1",
+            "if ($false) { $Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1) }; foreach ($File in $Files) { . $File.FullName }");
+        fixture.Write("Public/Get-RuntimeProof.ps1", "function Get-RuntimeProof { return 1 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(
+            fixture.Root,
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowDynamicModuleRuntimeSources: true);
+
+        Assert.Equal(new[] { root }, resolved.CompilationSourceFiles);
+        Assert.Equal(new[] { root }, resolved.SourceFiles);
     }
 
     [Fact]

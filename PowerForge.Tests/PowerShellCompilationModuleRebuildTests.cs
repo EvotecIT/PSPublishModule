@@ -10,7 +10,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridModuleWithNoTypedFunctionsPreservesCompletePowerShellFallback()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FallbackOnly { return (Get-Date).Year }",
+            "function Get-FallbackOnly { return [int](Get-Date -Format yyyy) }",
             ".psm1");
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -18,7 +18,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.FallbackOnly",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -34,7 +34,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             """
             function HelperProof
             {
-                return (Get-Date).Year
+                return [int](Get-Date -Format yyyy)
             }
             """,
             ".psm1");
@@ -44,7 +44,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.MultilineFallback",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -67,7 +67,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.MultilineTyped",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -112,7 +112,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Public"));
         Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Private"));
         File.WriteAllText(Path.Combine(fixture.RootPath, "Public", "Get-TypedValue.ps1"), "function Get-TypedValue { return 42 }");
-        File.WriteAllText(Path.Combine(fixture.RootPath, "Private", "Get-FallbackValue.ps1"), "function Get-FallbackValue { return (Get-Date).Year }");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Private", "Get-FallbackValue.ps1"), "function Get-FallbackValue { return [int](Get-Date -Format yyyy) }");
         File.WriteAllText(
             Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
             "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @() }");
@@ -224,7 +224,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.InvalidDualOwner",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = manifest,
             CompilationSourcePaths = new[] { fixture.ScriptPath, shared }
@@ -252,7 +252,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.ExplicitManifestNested",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = manifest,
             CompilationSourcePaths = new[] { fixture.ScriptPath }
@@ -270,7 +270,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             outputPath,
             artifactName,
             resolved.Kind,
-            resolved.Mode)
+            resolved.Mode, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = resolved.ModuleManifestPath,
             CompilationSourcePaths = resolved.CompilationSourceFiles
@@ -278,10 +278,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     private static string RunModuleProof(string modulePath, string command)
+        => RunModuleProof(modulePath, command, "pwsh");
+
+    private static string RunModuleProof(string modulePath, string command, string host)
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "pwsh",
+            FileName = host,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

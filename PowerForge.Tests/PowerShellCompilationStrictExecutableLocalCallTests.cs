@@ -28,7 +28,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedLocalCallProof",
             resolved.Kind,
-            resolved.Mode)
+            resolved.Mode, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = resolved.CompilationSourceFiles,
             EmitSource = true
@@ -69,7 +69,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedInjection",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = new[] { fixture.ScriptPath, injectedPath }
         });
@@ -94,7 +94,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedNestedClosure",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = closure
         });
@@ -117,7 +117,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedLocalCycle",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("cycle", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -135,7 +135,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedLocalValidation",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -161,7 +161,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedLocalNaNValidation",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -186,7 +186,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.AdvancedLocalAbbreviation",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("ambiguous", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -203,7 +203,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedTryCatch",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var valid = RunProcess(result.ArtifactPath!, "--Text=42");
@@ -222,7 +222,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedOrderedDictionary",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });

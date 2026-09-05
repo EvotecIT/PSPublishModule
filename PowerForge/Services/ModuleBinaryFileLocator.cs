@@ -37,6 +37,30 @@ internal static class ModuleBinaryFileLocator
             .Any(path => expected.Contains(Path.GetFileName(path)));
     }
 
+    internal static bool ContainsAnySelectablePayloadFileName(
+        string directory,
+        IReadOnlyList<string>? fileNames)
+    {
+        var expected = new HashSet<string>(
+            (fileNames ?? Array.Empty<string>())
+                .Where(static fileName => !string.IsNullOrWhiteSpace(fileName))
+                .Select(Path.GetFileName)
+                .Where(static fileName => !string.IsNullOrWhiteSpace(fileName))!,
+            StringComparer.OrdinalIgnoreCase);
+        if (expected.Count == 0 || !Directory.Exists(directory))
+            return false;
+
+        return Enumerate(directory, SearchOption.AllDirectories).Any(path =>
+        {
+            if (!expected.Contains(Path.GetFileName(path)))
+                return false;
+            var relative = FrameworkCompatibility.GetRelativePath(directory, path)
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            var separator = relative.IndexOf(Path.DirectorySeparatorChar);
+            return separator < 0 || ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName(relative.Substring(0, separator));
+        });
+    }
+
     internal static string[] ResolveAssemblyFileNames(
         string moduleName,
         IReadOnlyList<string>? exportAssemblies)

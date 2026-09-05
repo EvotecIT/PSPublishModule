@@ -40,7 +40,13 @@
     "AssemblyTypeAcceleratorMode": { "type": ["string", "null"], "enum": ["None", "AllowList", "Assembly", "Enums", null] },
     "AssemblyTypeAccelerators": { "type": "array", "items": { "type": "string" } },
     "AssemblyTypeAcceleratorAssemblies": { "type": "array", "items": { "type": "string" } },
-    "KeepStaging": { "type": "boolean" }
+    "KeepStaging": { "type": "boolean" },
+    "PowerShellCompilation": {
+      "anyOf": [
+        { "$ref": "powerforge.common.schema.json#/$defs/PowerShellModuleCompilationConfiguration" },
+        { "type": "null" }
+      ]
+    }
   },
   "required": ["Name", "SourcePath"]
 }

@@ -3,6 +3,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationDependencyPlannerTests
 {
     [Fact]
@@ -37,7 +38,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             dependency.Discovery == PowerShellCompilationDependencyDiscovery.FileList &&
             dependency.Selection == PowerShellCompilationDependencySelection.Required);
         Assert.Contains(dependencies, dependency =>
-            dependency.Name == "PSSharedGoods" &&
+            dependency.Name == "Random.External.Dependency" &&
             !dependency.Exists &&
             dependency.Disposition == PowerShellCompilationDependencyDisposition.ExternalRequirement);
     }
@@ -62,6 +63,33 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             Assert.Equal(PowerShellCompilationDependencyDisposition.Missing, dependency.Disposition);
             Assert.Equal(PowerShellCompilationDependencySelection.Required, dependency.Selection);
             Assert.Contains("required", dependency.Note, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public void Analyze_ExpandsFileListDirectoriesIntoRequiredContainedFiles()
+    {
+        using var fixture = new DependencyFixture();
+        fixture.Write("Demo.psm1", "function Get-Value { return 1 }");
+        fixture.Write("Demo.psd1", "@{ RootModule = 'Demo.psm1'; ModuleVersion = '1.0.0'; FileList = @('Assets') }");
+        fixture.Write(Path.Combine("Assets", "first.txt"), "one");
+        fixture.Write(Path.Combine("Assets", "Nested", "second.txt"), "two");
+
+        var input = new PowerShellCompilationInputResolver().Resolve(
+            fixture.RootPath,
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid);
+
+        var fileList = input.Dependencies
+            .Where(static dependency => dependency.Discovery == PowerShellCompilationDependencyDiscovery.FileList)
+            .OrderBy(static dependency => dependency.RelativePath, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(new[] { "Assets/Nested/second.txt", "Assets/first.txt" }, fileList.Select(static dependency => dependency.RelativePath));
+        Assert.All(fileList, dependency =>
+        {
+            Assert.True(dependency.Exists);
+            Assert.Equal(PowerShellCompilationDependencyDisposition.CopiedAdjacent, dependency.Disposition);
+            Assert.Equal(PowerShellCompilationDependencySelection.Required, dependency.Selection);
         });
     }
 
@@ -119,7 +147,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             output,
             "Demo.Compiled",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = Path.Combine(fixture.RootPath, "Demo.psd1"),
             CompilationSourcePaths = new[] { Path.Combine(fixture.RootPath, "Demo.psm1") },
@@ -159,7 +187,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
                 Path.Combine(fixture.RootPath, "out"),
                 "Escaping.Runtime.Source",
                 PowerShellCompilationArtifactKind.Executable,
-                PowerShellCompilationMode.Package)
+                PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
             {
                 CompilationSourcePaths = new[] { script },
                 RuntimeSourcePaths = new[] { script, outside }
@@ -191,7 +219,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
                 "function Get-TypedValue { return 1 }; function Get-FallbackValue { & { return 2 } }");
             Write(
                 "Demo.psd1",
-                "@{ RootModule = 'Demo.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @(); AliasesToExport = @(); VariablesToExport = @(); RequiredModules = @('PSSharedGoods'); FileList = @('Assets/data.txt') }");
+                "@{ RootModule = 'Demo.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @(); AliasesToExport = @(); VariablesToExport = @(); RequiredModules = @('Random.External.Dependency'); FileList = @('Assets/data.txt') }");
             Write(Path.Combine("Resources", "site.css"), "body{}");
             Write(Path.Combine("Resources", "app.js"), "console.log('demo');");
             Write(Path.Combine("Assets", "data.txt"), "payload");

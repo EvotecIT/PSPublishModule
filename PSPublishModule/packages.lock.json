@@ -319,7 +319,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.5.ReferenceAssemblies": "[1.1.0, )",
-          "PowerForge": "[3.0.131, )",
+          "PowerForge": "[3.0.135, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )",
           "System.Text.Json": "[10.0.11, )"
         }
@@ -1128,7 +1128,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.5, )",
-          "PowerForge": "[3.0.131, )",
+          "PowerForge": "[3.0.135, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
         }
       }
@@ -1896,7 +1896,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.18, )",
-          "PowerForge": "[3.0.131, )",
+          "PowerForge": "[3.0.135, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
         }
       }

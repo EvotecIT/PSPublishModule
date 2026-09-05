@@ -20,7 +20,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "Demo",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = manifest
         });
@@ -50,7 +50,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.WildcardDiscovery",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
@@ -108,7 +108,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ValidationSubtype",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
@@ -190,7 +190,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.QualifiedOwners",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -216,7 +216,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.AliasDiscovery",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
@@ -243,7 +243,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "Versioned",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = manifest
         });
@@ -268,7 +268,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
                 fixture.OutputPath,
                 "PowerForge.StaleSibling",
                 PowerShellCompilationArtifactKind.BinaryModule,
-                PowerShellCompilationMode.Hybrid)));
+                PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)));
 
         Assert.Contains("does not own selected compilation source", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(Directory.Exists(fixture.OutputPath));
@@ -289,7 +289,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.SiblingManifest",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = Assert.Single(result.Manifest!.Files, file => file.Role == "TypedAssembly");

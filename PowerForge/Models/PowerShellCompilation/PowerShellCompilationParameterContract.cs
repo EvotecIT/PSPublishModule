@@ -7,11 +7,14 @@ public static class PowerShellCompilationCapabilities
 {
     /// <summary>Target-backed runtime facts available without a PowerShell host.</summary>
     public const PowerShellCompilationCapability StaticRuntimeFacts =
+        PowerShellCompilationCapability.PowerShellStreams |
+        PowerShellCompilationCapability.RuntimeFreeProviderOperations |
         PowerShellCompilationCapability.RuntimeStateIntrinsics;
 
     /// <summary>Capabilities supplied by generated binary cmdlets.</summary>
     public const PowerShellCompilationCapability BinaryModule =
         PowerShellCompilationCapability.PowerShellStreams |
+        PowerShellCompilationCapability.RuntimeFreeProviderOperations |
         PowerShellCompilationCapability.LocalFunctionCalls |
         PowerShellCompilationCapability.BoundParameters |
         PowerShellCompilationCapability.PowerShellObjects |
@@ -19,10 +22,19 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.PowerShellHostTypes |
         PowerShellCompilationCapability.PowerShellLanguageConversions |
         PowerShellCompilationCapability.PowerShellLanguageOperators |
-        PowerShellCompilationCapability.RuntimeStateIntrinsics;
+        PowerShellCompilationCapability.RuntimeStateIntrinsics |
+        PowerShellCompilationCapability.UntypedObjectParameters |
+        PowerShellCompilationCapability.AdvisoryOutputTypeMetadata;
+
+    /// <summary>Capabilities supplied by a Hybrid binary module with one retained script-module state owner.</summary>
+    public const PowerShellCompilationCapability HybridModule =
+        BinaryModule |
+        PowerShellCompilationCapability.PowerShellModuleState |
+        PowerShellCompilationCapability.HybridTypedRegions;
 
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =
+        PowerShellCompilationCapability.RuntimeFreeProviderOperations |
         PowerShellCompilationCapability.LocalFunctionCalls |
         PowerShellCompilationCapability.BoundParameters |
         PowerShellCompilationCapability.ExecutableParameterBinding |

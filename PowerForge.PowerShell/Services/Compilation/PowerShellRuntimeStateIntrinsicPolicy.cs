@@ -11,9 +11,21 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     IsLinux,
     IsMacOS,
     PSVersion,
+    PSVersionMajor,
+    ProcessId,
+    HomeDirectory,
+    CurrentCulture,
+    CurrentUICulture,
+    LanguageMode,
     WhatIfPreference,
+    ActionPreference,
+    ConfirmPreference,
+    ErrorCollection,
+    EnvironmentVariable,
+    ModuleVariable,
     ShouldProcessTarget,
-    ShouldProcessAction
+    ShouldProcessAction,
+    CurrentLocalDateTime
 }
 
 internal static class PowerShellRuntimeStateIntrinsicPolicy
@@ -24,6 +36,21 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         out PowerShellRuntimeStateIntrinsicKind kind)
+        => TryClassify(
+            ast,
+            body,
+            targetFramework,
+            PowerShellCompilationSemanticOracleCatalog.Get(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId),
+            capabilities,
+            out kind);
+
+    internal static bool TryClassify(
+        Ast ast,
+        ScriptBlockAst body,
+        string? targetFramework,
+        PowerShellCompilationSemanticOracleProfile semanticProfile,
+        PowerShellCompilationCapability capabilities,
+        out PowerShellRuntimeStateIntrinsicKind kind)
     {
         kind = PowerShellRuntimeStateIntrinsicKind.None;
         if (!capabilities.HasFlag(PowerShellCompilationCapability.RuntimeStateIntrinsics))
@@ -32,15 +59,33 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         if (ast is VariableExpressionAst variable)
         {
             var name = variable.VariablePath.UserPath;
-            if (name.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
+            if (name.StartsWith("env:", StringComparison.OrdinalIgnoreCase) && name.Length > 4)
+                kind = PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable;
+            else if (TryGetModuleVariableName(variable, capabilities, out _))
+                kind = PowerShellRuntimeStateIntrinsicKind.ModuleVariable;
+            else if (IsActionPreference(name) && !HasLocalDefinition(body, name) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
+                kind = PowerShellRuntimeStateIntrinsicKind.ActionPreference;
+            else if (name.Equals("ConfirmPreference", StringComparison.OrdinalIgnoreCase) && !HasLocalDefinition(body, name) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
+                kind = PowerShellRuntimeStateIntrinsicKind.ConfirmPreference;
+            else if (name.Equals("Error", StringComparison.OrdinalIgnoreCase) && !HasLocalDefinition(body, name) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+                kind = PowerShellRuntimeStateIntrinsicKind.ErrorCollection;
+            else if (name.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
                 kind = PowerShellRuntimeStateIntrinsicKind.PSEdition;
-            else if (IsCoreTarget(targetFramework) && name.Equals("IsCoreCLR", StringComparison.OrdinalIgnoreCase))
+            else if (name.Equals("PID", StringComparison.OrdinalIgnoreCase))
+                kind = PowerShellRuntimeStateIntrinsicKind.ProcessId;
+            else if (name.Equals("HOME", StringComparison.OrdinalIgnoreCase))
+                kind = PowerShellRuntimeStateIntrinsicKind.HomeDirectory;
+            else if (name.Equals("PSCulture", StringComparison.OrdinalIgnoreCase))
+                kind = PowerShellRuntimeStateIntrinsicKind.CurrentCulture;
+            else if (name.Equals("PSUICulture", StringComparison.OrdinalIgnoreCase))
+                kind = PowerShellRuntimeStateIntrinsicKind.CurrentUICulture;
+            else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsCoreCLR", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsCoreClr;
-            else if (IsCoreTarget(targetFramework) && name.Equals("IsWindows", StringComparison.OrdinalIgnoreCase))
+            else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsWindows", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsWindows;
-            else if (IsCoreTarget(targetFramework) && name.Equals("IsLinux", StringComparison.OrdinalIgnoreCase))
+            else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsLinux", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsLinux;
-            else if (IsCoreTarget(targetFramework) && name.Equals("IsMacOS", StringComparison.OrdinalIgnoreCase))
+            else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsMacOS", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsMacOS;
             else if (name.Equals("WhatIfPreference", StringComparison.OrdinalIgnoreCase) &&
                      !HasLocalDefinition(body, name) &&
@@ -49,14 +94,29 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             return kind != PowerShellRuntimeStateIntrinsicKind.None;
         }
 
+        if (TryGetVersionTableVersionMember(ast, out var versionMember))
+        {
+            if (versionMember.Equals("Major", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
+                kind = PowerShellRuntimeStateIntrinsicKind.PSVersionMajor;
+            return kind != PowerShellRuntimeStateIntrinsicKind.None;
+        }
+
         if (TryGetVersionTableMember(ast, out var member))
         {
             if (member.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
                 kind = PowerShellRuntimeStateIntrinsicKind.PSEdition;
             else if (member.Equals("PSVersion", StringComparison.OrdinalIgnoreCase) &&
+                     !IsConsumedByStaticVersionMember(ast, targetFramework) &&
                      capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
                 kind = PowerShellRuntimeStateIntrinsicKind.PSVersion;
             return kind != PowerShellRuntimeStateIntrinsicKind.None;
+        }
+
+        if (IsExecutionContextLanguageMode(ast, body) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+        {
+            kind = PowerShellRuntimeStateIntrinsicKind.LanguageMode;
+            return true;
         }
 
         if (ast is InvokeMemberExpressionAst invocation &&
@@ -83,8 +143,11 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         PowerShellCompilationCapability capabilities)
     {
         if (TryClassify(variable, body, targetFramework, capabilities, out _)) return true;
-        return (variable.Parent is MemberExpressionAst or IndexExpressionAst or InvokeMemberExpressionAst) &&
-               TryClassify(variable.Parent, body, targetFramework, capabilities, out _);
+        if (variable.Parent is MemberExpressionAst or IndexExpressionAst or InvokeMemberExpressionAst &&
+            TryClassify(variable.Parent, body, targetFramework, capabilities, out _))
+            return true;
+        return variable.Parent?.Parent is MemberExpressionAst or IndexExpressionAst or InvokeMemberExpressionAst &&
+               TryClassify(variable.Parent.Parent, body, targetFramework, capabilities, out _);
     }
 
     internal static bool RequiresHostBinding(
@@ -97,7 +160,12 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
                 searchNestedScriptBlocks: false))
             .Any(node => TryClassify(node, body, targetFramework, capabilities, out var kind) &&
                          kind is PowerShellRuntimeStateIntrinsicKind.PSVersion or
+                             PowerShellRuntimeStateIntrinsicKind.LanguageMode or
                              PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or
+                             PowerShellRuntimeStateIntrinsicKind.ActionPreference or
+                             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
+                             PowerShellRuntimeStateIntrinsicKind.ErrorCollection or
+                             PowerShellRuntimeStateIntrinsicKind.ModuleVariable or
                              PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
                              PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction);
 
@@ -117,6 +185,18 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         {
             PowerShellRuntimeStateIntrinsicKind.PSEdition => typeof(string),
             PowerShellRuntimeStateIntrinsicKind.PSVersion => typeof(object),
+            PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => typeof(int),
+            PowerShellRuntimeStateIntrinsicKind.ProcessId => typeof(int),
+            PowerShellRuntimeStateIntrinsicKind.CurrentLocalDateTime => typeof(DateTime),
+            PowerShellRuntimeStateIntrinsicKind.HomeDirectory or
+            PowerShellRuntimeStateIntrinsicKind.CurrentCulture or
+            PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => typeof(string),
+            PowerShellRuntimeStateIntrinsicKind.LanguageMode => typeof(System.Management.Automation.PSLanguageMode),
+            PowerShellRuntimeStateIntrinsicKind.ActionPreference => typeof(System.Management.Automation.ActionPreference),
+            PowerShellRuntimeStateIntrinsicKind.ConfirmPreference => typeof(System.Management.Automation.ConfirmImpact),
+            PowerShellRuntimeStateIntrinsicKind.ErrorCollection => typeof(System.Collections.ArrayList),
+            PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable => typeof(string),
+            PowerShellRuntimeStateIntrinsicKind.ModuleVariable => typeof(object),
             PowerShellRuntimeStateIntrinsicKind.IsCoreClr or
             PowerShellRuntimeStateIntrinsicKind.IsWindows or
             PowerShellRuntimeStateIntrinsicKind.IsLinux or
@@ -128,17 +208,111 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         };
 
     internal static string EmitStatic(PowerShellRuntimeStateIntrinsicKind kind, string targetFramework)
+        => EmitStatic(kind, targetFramework, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
+
+    internal static string EmitStatic(PowerShellRuntimeStateIntrinsicKind kind, string targetFramework, string semanticProfileId)
         => kind switch
         {
-            PowerShellRuntimeStateIntrinsicKind.PSEdition => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase) ? "\"Desktop\"" : "\"Core\"",
+            PowerShellRuntimeStateIntrinsicKind.PSEdition => PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).PowerShellEdition.Equals("Desktop", StringComparison.Ordinal) ? "\"Desktop\"" : "\"Core\"",
             PowerShellRuntimeStateIntrinsicKind.IsCoreClr => "true",
             PowerShellRuntimeStateIntrinsicKind.IsWindows => "global::System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(global::System.Runtime.InteropServices.OSPlatform.Windows)",
             PowerShellRuntimeStateIntrinsicKind.IsLinux => "global::System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(global::System.Runtime.InteropServices.OSPlatform.Linux)",
             PowerShellRuntimeStateIntrinsicKind.IsMacOS => "global::System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(global::System.Runtime.InteropServices.OSPlatform.OSX)",
             PowerShellRuntimeStateIntrinsicKind.PSVersion => "__psVersion",
+            PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => EmitPowerShellMajorVersion(semanticProfileId),
+            PowerShellRuntimeStateIntrinsicKind.ProcessId => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
+                ? "global::System.Diagnostics.Process.GetCurrentProcess().Id"
+                : "global::System.Environment.ProcessId",
+            PowerShellRuntimeStateIntrinsicKind.HomeDirectory => "global::System.Environment.GetFolderPath(global::System.Environment.SpecialFolder.UserProfile)",
+            PowerShellRuntimeStateIntrinsicKind.CurrentCulture => "global::System.Globalization.CultureInfo.CurrentCulture.Name",
+            PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => "global::System.Globalization.CultureInfo.CurrentUICulture.Name",
             PowerShellRuntimeStateIntrinsicKind.WhatIfPreference => "__whatIfPreference",
+            PowerShellRuntimeStateIntrinsicKind.CurrentLocalDateTime => "global::System.DateTime.Now",
             _ => throw new InvalidOperationException($"Runtime-state intrinsic '{kind}' requires expression-specific emission.")
         };
+
+    internal static bool TryGetModuleVariableName(
+        VariableExpressionAst variable,
+        PowerShellCompilationCapability capabilities,
+        out string name)
+    {
+        name = string.Empty;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) ||
+            PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable) ||
+            IsComplexModuleVariableReceiver(variable))
+            return false;
+        var userPath = variable.VariablePath.UserPath;
+        if (!userPath.StartsWith("script:", StringComparison.OrdinalIgnoreCase) || userPath.Length <= 7)
+            return false;
+        var candidate = userPath.Substring(7);
+        if (!IsSafeGeneratedModuleVariableName(candidate))
+            return false;
+        name = candidate;
+        return true;
+    }
+
+    internal static bool TryGetModuleVariableAssignmentName(
+        AssignmentStatementAst assignment,
+        PowerShellCompilationCapability capabilities,
+        out string name)
+    {
+        name = string.Empty;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) ||
+            assignment.Operator != TokenKind.Equals ||
+            assignment.Left is not VariableExpressionAst variable)
+            return false;
+        var userPath = variable.VariablePath.UserPath;
+        if (!userPath.StartsWith("script:", StringComparison.OrdinalIgnoreCase) || userPath.Length <= 7)
+            return false;
+        var candidate = userPath.Substring(7);
+        if (!IsSafeGeneratedModuleVariableName(candidate))
+            return false;
+        name = candidate;
+        return true;
+    }
+
+    private static bool IsComplexModuleVariableReceiver(VariableExpressionAst variable)
+    {
+        Ast receiver = variable;
+        while (receiver.Parent is Ast parent && IsTransparentExpressionWrapper(parent, receiver))
+            receiver = parent;
+        return receiver.Parent is MemberExpressionAst member && ReferenceEquals(member.Expression, receiver) ||
+               receiver.Parent is IndexExpressionAst index && ReferenceEquals(index.Target, receiver);
+    }
+
+    private static bool IsTransparentExpressionWrapper(Ast parent, Ast child)
+        => parent switch
+        {
+            CommandExpressionAst command => ReferenceEquals(command.Expression, child),
+            PipelineAst pipeline when pipeline.PipelineElements.Count == 1 =>
+                ReferenceEquals(pipeline.PipelineElements[0], child),
+            ParenExpressionAst parenthesized => ReferenceEquals(parenthesized.Pipeline, child),
+            _ => false
+        };
+
+    private static bool IsSafeGeneratedModuleVariableName(string name)
+    {
+        if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_')) return false;
+        return name.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
+    }
+
+    private static bool IsExecutionContextLanguageMode(Ast ast, ScriptBlockAst body)
+        => !IsAssignmentTarget(ast) &&
+           ast is MemberExpressionAst
+           {
+               Static: false,
+               Expression: MemberExpressionAst
+               {
+                   Static: false,
+                   Expression: VariableExpressionAst executionContext,
+                   Member: StringConstantExpressionAst { Value: var sessionState }
+               },
+               Member: StringConstantExpressionAst { Value: var languageMode }
+           } &&
+           executionContext.VariablePath.UserPath.Equals("ExecutionContext", StringComparison.OrdinalIgnoreCase) &&
+           sessionState.Equals("SessionState", StringComparison.OrdinalIgnoreCase) &&
+           languageMode.Equals("LanguageMode", StringComparison.OrdinalIgnoreCase) &&
+           !HasLocalDefinition(body, "ExecutionContext");
 
     private static bool TryGetVersionTableMember(Ast ast, out string member)
     {
@@ -147,6 +321,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             return false;
         if (ast is MemberExpressionAst
             {
+                Static: false,
                 Expression: VariableExpressionAst variable,
                 Member: StringConstantExpressionAst { Value: var property }
             } && variable.VariablePath.UserPath.Equals("PSVersionTable", StringComparison.OrdinalIgnoreCase))
@@ -164,6 +339,36 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             return true;
         }
         return false;
+    }
+
+    private static string EmitPowerShellMajorVersion(string semanticProfileId)
+    {
+        var major = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).PowerShellMajorVersion;
+        if (major <= 0)
+            throw new InvalidOperationException($"Semantic profile '{semanticProfileId}' does not fix one PowerShell major version.");
+        return major.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static bool IsConsumedByStaticVersionMember(Ast ast, string? targetFramework)
+        => ast.Parent is { } parent &&
+           TryGetVersionTableVersionMember(parent, out var member) &&
+           member.Equals("Major", StringComparison.OrdinalIgnoreCase) &&
+           IsKnownTarget(targetFramework);
+
+    private static bool TryGetVersionTableVersionMember(Ast ast, out string member)
+    {
+        member = string.Empty;
+        if (IsAssignmentTarget(ast) || ast is not MemberExpressionAst
+            {
+                Static: false,
+                Expression: var versionExpression,
+                Member: StringConstantExpressionAst { Value: var property }
+            } ||
+            !TryGetVersionTableMember(versionExpression, out var versionTableMember) ||
+            !versionTableMember.Equals("PSVersion", StringComparison.OrdinalIgnoreCase))
+            return false;
+        member = property;
+        return true;
     }
 
     private static bool HasLocalDefinition(ScriptBlockAst body, string name)
@@ -191,4 +396,15 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
     private static bool IsCoreTarget(string? targetFramework)
         => targetFramework?.Equals("net8.0", StringComparison.OrdinalIgnoreCase) == true ||
            targetFramework?.Equals("net10.0", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool IsCoreProfile(PowerShellCompilationSemanticOracleProfile semanticProfile)
+        => semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7;
+
+    private static bool IsActionPreference(string name)
+        => name.Equals("VerbosePreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("DebugPreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("WarningPreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("InformationPreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("ErrorActionPreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("ProgressPreference", StringComparison.OrdinalIgnoreCase);
 }

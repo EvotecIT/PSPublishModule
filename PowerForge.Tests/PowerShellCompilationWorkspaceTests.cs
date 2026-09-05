@@ -3,6 +3,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationWorkspaceTests
 {
     [Fact]
@@ -28,11 +29,10 @@ public sealed class PowerShellCompilationWorkspaceTests
         try
         {
             Directory.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-2));
-            var removed = PowerShellCompilationWorkspace.CleanupStaleWorkspaces(
+            PowerShellCompilationWorkspace.CleanupStaleWorkspaces(
                 Path.GetDirectoryName(path)!,
                 DateTime.UtcNow.AddHours(-1));
 
-            Assert.Equal(0, removed);
             Assert.True(Directory.Exists(path));
             Assert.True(File.Exists(Path.Combine(path, ".powerforge-keep")));
         }

@@ -34,7 +34,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedMetadataProof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var accepted = RunProcess(result.ArtifactPath!, "-n", "Alpha", "-Force");
@@ -56,7 +56,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedColonSwitch",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var disabled = RunProcess(result.ArtifactPath!, "-Force:$false");
@@ -79,7 +79,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.BinaryMetadataProof",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         };
@@ -96,5 +96,78 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("[ValidatePattern(\"^[A-Z]\")]", source, StringComparison.Ordinal);
         Assert.Contains("public SwitchParameter Force", source, StringComparison.Ordinal);
         Assert.Contains("Force.IsPresent", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Diagnostics.CodeAnalysis.SuppressMessageAttribute")]
+    [InlineData("System.Diagnostics.CodeAnalysis.SuppressMessageAttribute")]
+    public void Analyze_AcceptsExactCompileTimeSuppressMessageMetadata(string attributeType)
+    {
+        using var fixture = ArtifactFixture.Create(
+            $"function Get-Proof {{ [{attributeType}('Category', 'CheckId', Justification = 'compiler proof', Scope = 'function')] param([int] $Value) return $Value }}");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.DoesNotContain(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterMetadata);
+    }
+
+    [Theory]
+    [InlineData("[System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('Category')]")]
+    [InlineData("[System.Diagnostics.CodeAnalysis.SuppressMessageAttribute(123, 'CheckId')]")]
+    [InlineData("[System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('Category', 'CheckId', Unknown = 'value')]")]
+    [InlineData("[System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('Category', 'CheckId', Scope = 1)]")]
+    public void Analyze_RejectsUnprovenSuppressMessageMetadata(string attribute)
+    {
+        using var fixture = ArtifactFixture.Create(
+            $"function Get-Proof {{ {attribute} param([int] $Value) return $Value }}");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.Contains(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterMetadata);
+    }
+
+    [Fact]
+    public void Analyze_RejectsSuppressMessageAppliedToAParameter()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Proof { param([System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('Category', 'CheckId')] [int] $Value) return $Value }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.Contains(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterMetadata);
+    }
+
+    [Fact]
+    public void Build_StrictExecutableDropsCompileTimeSuppressMessageMetadataAndRuns()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "[System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('Category', 'CheckId', Justification = 'compiler proof')] param([int] $Value = 41) return $Value");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.CompileTimeMetadataProof",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.DoesNotContain(
+            "SuppressMessage",
+            File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellScript.cs")),
+            StringComparison.Ordinal);
+        var omitted = RunProcess(result.ArtifactPath!);
+        var bound = RunProcess(result.ArtifactPath!, "--Value=9");
+        Assert.Equal((0, "41", string.Empty), (omitted.ExitCode, omitted.StandardOutput.Trim(), omitted.StandardError.Trim()));
+        Assert.Equal((0, "9", string.Empty), (bound.ExitCode, bound.StandardOutput.Trim(), bound.StandardError.Trim()));
     }
 }

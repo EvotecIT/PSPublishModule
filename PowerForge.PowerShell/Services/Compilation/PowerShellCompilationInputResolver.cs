@@ -28,7 +28,16 @@ public sealed class PowerShellCompilationResolvedInput
         SourceFiles = sourceFiles;
         CompilationSourceFiles = compilationSourceFiles;
         RecursiveSourceDirectories = recursiveSourceDirectories ?? Array.Empty<string>();
-        Dependencies = new PowerShellCompilationDependencyPlanner().Analyze(this);
+        var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
+        Dependencies = dependencyPlanner.Analyze(this);
+        DependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
+            SourcePath,
+            ModuleManifestPath,
+            ModuleRoot,
+            Kind,
+            Mode,
+            CompilationSourceFiles,
+            Dependencies);
     }
 
     /// <summary>Original absolute input path.</summary>
@@ -61,6 +70,9 @@ public sealed class PowerShellCompilationResolvedInput
     /// <summary>Deterministic source, module, assembly, and content dependency decisions for the inferred artifact shape.</summary>
     public PowerShellCompilationDependency[] Dependencies { get; }
 
+    /// <summary>Locked dependency graph sharing stable identities across analysis and deployment views.</summary>
+    public PowerShellCompilationDependencyGraph DependencyGraph { get; }
+
     internal string[] RecursiveSourceDirectories { get; }
 }
 
@@ -69,12 +81,30 @@ public sealed class PowerShellCompilationResolvedInput
 /// </summary>
 public sealed class PowerShellCompilationInputResolver
 {
+    internal static PowerShellCompilationArtifactKind InferDefaultArtifactKind(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("A PowerShell script, module, manifest, or directory path is required.", nameof(path));
+        var requestedPath = Path.GetFullPath(path.Trim().Trim('"'));
+        if (Directory.Exists(requestedPath)) return PowerShellCompilationArtifactKind.BinaryModule;
+        if (!File.Exists(requestedPath))
+            throw new FileNotFoundException("PowerShell compilation input was not found.", requestedPath);
+        var extension = Path.GetExtension(requestedPath);
+        if (extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase))
+            return PowerShellCompilationArtifactKind.Executable;
+        if (extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase))
+            return PowerShellCompilationArtifactKind.BinaryModule;
+        throw new ArgumentException("PowerShell compilation input must be a .ps1, .psm1, .psd1, or directory path.", nameof(path));
+    }
+
     /// <summary>Resolves a loose set of PowerShell script files into one typed library or strict binary module.</summary>
     public PowerShellCompilationResolvedInput Resolve(
         IEnumerable<string> paths,
         PowerShellCompilationArtifactKind? kind = null,
         PowerShellCompilationMode? mode = null,
-        string? entryPointPath = null)
+        string? entryPointPath = null,
+        bool allowDynamicModuleRuntimeSources = false)
     {
         if (paths is null) throw new ArgumentNullException(nameof(paths));
         var requestedPaths = paths
@@ -85,7 +115,7 @@ public sealed class PowerShellCompilationInputResolver
         if (requestedPaths.Length == 0)
             throw new ArgumentException("At least one PowerShell script path is required.", nameof(paths));
         if (requestedPaths.Length == 1 && string.IsNullOrWhiteSpace(entryPointPath))
-            return Resolve(requestedPaths[0], kind, mode);
+            return Resolve(requestedPaths[0], kind, mode, allowDynamicModuleRuntimeSources);
         if (kind.HasValue && !Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind.Value))
             throw new ArgumentOutOfRangeException(nameof(kind));
         if (mode.HasValue && (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode.Value) || mode.Value == PowerShellCompilationMode.Analyze))
@@ -183,7 +213,8 @@ public sealed class PowerShellCompilationInputResolver
     public PowerShellCompilationResolvedInput Resolve(
         string path,
         PowerShellCompilationArtifactKind? kind = null,
-        PowerShellCompilationMode? mode = null)
+        PowerShellCompilationMode? mode = null,
+        bool allowDynamicModuleRuntimeSources = false)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("A PowerShell script, module, manifest, or directory path is required.", nameof(path));
@@ -222,9 +253,7 @@ public sealed class PowerShellCompilationInputResolver
                 $"PowerShell module manifest '{manifestPath}' traverses a symbolic link or junction.");
         }
 
-        var resolvedKind = kind ?? (Path.GetExtension(sourcePath).Equals(".ps1", StringComparison.OrdinalIgnoreCase)
-            ? PowerShellCompilationArtifactKind.Executable
-            : PowerShellCompilationArtifactKind.BinaryModule);
+        var resolvedKind = kind ?? InferDefaultArtifactKind(sourcePath);
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable &&
             Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase))
         {
@@ -257,10 +286,17 @@ public sealed class PowerShellCompilationInputResolver
                 .Where(file => !runtimeHookSet.Contains(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            sourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(
-                    sourcePath,
-                    runtimeHooks.Concat(conventionalSources),
-                    conventionalLoaders: conventionalDiscovery.Loaders)
+            sourceFiles = (allowDynamicModuleRuntimeSources && resolvedMode != PowerShellCompilationMode.Strict
+                    ? new[] { sourcePath }
+                        .Concat(runtimeHooks)
+                        .Concat(conventionalSources)
+                        .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                        .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies)
+                        .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                    : PowerShellHybridDependencyResolver.DiscoverDependencies(
+                        sourcePath,
+                        runtimeHooks.Concat(conventionalSources),
+                        conventionalLoaders: conventionalDiscovery.Loaders))
                 .Where(file => IsPowerShellSource(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();

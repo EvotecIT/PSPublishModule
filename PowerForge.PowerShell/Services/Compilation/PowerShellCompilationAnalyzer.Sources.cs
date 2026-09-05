@@ -31,34 +31,94 @@ public sealed partial class PowerShellCompilationAnalyzer
         IEnumerable<string>? includeResource = null,
         IEnumerable<string>? excludeResource = null,
         string? outputDirectory = null)
+        => Analyze(input, mode, targetFramework, resourceMode, includeResource, excludeResource, outputDirectory, null, null, null);
+
+    /// <summary>Analyzes the exact compilation graph and dependency lock for an explicit target contract.</summary>
+    public PowerShellCompilationPlan Analyze(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationMode mode,
+        string? targetFramework,
+        PowerShellCompilationResourceMode resourceMode,
+        IEnumerable<string>? includeResource,
+        IEnumerable<string>? excludeResource,
+        string? outputDirectory,
+        PowerShellCompilationTargetContract? targetContract)
+        => Analyze(input, mode, targetFramework, resourceMode, includeResource, excludeResource, outputDirectory, targetContract, null, null);
+
+    internal PowerShellCompilationPlan Analyze(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationMode mode,
+        string? targetFramework,
+        PowerShellCompilationResourceMode resourceMode,
+        IEnumerable<string>? includeResource,
+        IEnumerable<string>? excludeResource,
+        string? outputDirectory,
+        PowerShellCompilationTargetContract? targetContract,
+        IEnumerable<string>? generatedOutputDirectories,
+        string? nuGetPackageRoot)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
 
+        var target = targetContract is null ? null : PowerShellCompilationTargetContractService.Normalize(targetContract);
+        if (target is not null && target.ArtifactKind != input.Kind)
+            throw new ArgumentException("The explicit PowerShell compilation target kind conflicts with the resolved input.", nameof(targetContract));
+        var capabilityMode = target?.Mode ?? (mode == PowerShellCompilationMode.Analyze ? input.Mode : mode);
+        if (target is not null && mode != PowerShellCompilationMode.Analyze && mode != target.Mode)
+            throw new ArgumentException("The explicit PowerShell compilation target mode conflicts with the requested analysis mode.", nameof(targetContract));
         var normalizedTargetFramework = new PowerShellCompilationSpec(
             input.SourcePath,
-            mode,
-            targetFramework: targetFramework ?? "net8.0").TargetFramework;
-        var capabilityMode = mode == PowerShellCompilationMode.Analyze ? input.Mode : mode;
+            target?.Mode ?? mode,
+            targetFramework: target?.TargetFramework ?? targetFramework ?? "net8.0").TargetFramework;
         var plan = AnalyzeFiles(
-            mode,
+            target?.Mode ?? mode,
             input.CompilationSourceFiles,
             input.ModuleRoot,
             normalizedTargetFramework,
             PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
+        var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
+        var dependencies = dependencyPlanner.Analyze(
+            input,
+            capabilityMode,
+            resourceMode,
+            includeResource,
+            excludeResource,
+            outputDirectory,
+            generatedOutputDirectories);
+        var dependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
+            input.SourcePath,
+            input.ModuleManifestPath,
+            input.ModuleRoot,
+            input.Kind,
+            capabilityMode,
+            input.CompilationSourceFiles,
+            dependencies,
+            normalizedTargetFramework);
+        if (target is not null)
+        {
+            dependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
+                input.SourcePath,
+                input.ModuleManifestPath,
+                input.ModuleRoot,
+                input.Kind,
+                capabilityMode,
+                input.CompilationSourceFiles,
+                dependencies,
+                normalizedTargetFramework,
+                target.RuntimeIdentifier,
+                includeRuntimePack: target.ArtifactKind == PowerShellCompilationArtifactKind.Executable &&
+                                    target.Deployment != PowerShellCompilationDeploymentModel.FrameworkDependent,
+                nuGetPackageRoot);
+        }
         var combined = new PowerShellCompilationPlan(
             plan.Mode,
             plan.Files,
             plan.TargetFramework,
-            new PowerShellCompilationDependencyPlanner().Analyze(
-                input,
-                capabilityMode,
-                resourceMode,
-                includeResource,
-                excludeResource,
-                outputDirectory));
+            dependencies,
+            dependencyGraph,
+            target);
         return capabilityMode == PowerShellCompilationMode.Package
             ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? "net8.0")
             : combined;
@@ -104,7 +164,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     file.Units,
                     file.Diagnostics.Concat(new[] { diagnostic }).ToArray());
             }).ToArray();
-            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies);
+            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies, plan.DependencyGraph, plan.TargetContract);
         }
     }
 
@@ -125,10 +185,11 @@ public sealed partial class PowerShellCompilationAnalyzer
         var localFunctionNames = capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls)
             ? PowerShellLocalFunctionDiscovery.DiscoverNames(files)
             : null;
-        return new PowerShellCompilationPlan(
-            mode,
-            files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames)).ToArray(),
-            targetFramework);
+        var structural = files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames)).ToArray();
+        var analyzed = mode == PowerShellCompilationMode.Package
+            ? structural
+            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId);
+        return new PowerShellCompilationPlan(mode, analyzed, targetFramework);
     }
 
     private static string[] DiscoverFiles(PowerShellCompilationSpec spec)
@@ -181,26 +242,4 @@ public sealed partial class PowerShellCompilationAnalyzer
             ((exclusion.Equals("bin", StringComparison.OrdinalIgnoreCase) || exclusion.Equals("obj", StringComparison.OrdinalIgnoreCase)) &&
              directory.StartsWith(exclusion + "-", StringComparison.OrdinalIgnoreCase)));
 
-    private static bool RequiresArtifactGraphEmission(
-        IEnumerable<StatementAst> statements,
-        PowerShellCompilationCapability capabilities,
-        ISet<string>? localFunctionNames)
-    {
-        if (!capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) || localFunctionNames is null)
-            return false;
-
-        var materialized = statements as StatementAst[] ?? statements.ToArray();
-        if (materialized.Any(static statement =>
-                statement is PipelineAst { PipelineElements.Count: > 0 } pipeline &&
-                pipeline.PipelineElements[0] is CommandAst { InvocationOperator: TokenKind.Dot }))
-            return true;
-
-        return materialized
-            .SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
-            .OfType<CommandAst>()
-            .Any(command =>
-                command.InvocationOperator == TokenKind.Unknown &&
-                command.GetCommandName() is { } name &&
-                localFunctionNames.Contains(name));
-    }
 }

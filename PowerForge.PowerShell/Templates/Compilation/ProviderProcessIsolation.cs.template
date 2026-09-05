@@ -1,0 +1,325 @@
+internal static class PowerForgeProviderProcessIsolation
+{
+    private const string WorkerArgument = "--powerforge-internal-provider-worker-v2";
+    private const byte WorkerReady = 0x52;
+    private const byte WorkerSucceeded = 0x00;
+    private const byte WorkerFailed = 0x01;
+    private const int MaxProviderIdBytes = 4096;
+    private const int MaxRequestCharacters = 16 * 1024 * 1024;
+    private const int MaxRequestBytes = MaxRequestCharacters * 4;
+    private const int MaxResultCharacters = 64 * 1024 * 1024;
+    private const int MaxResultBytes = MaxResultCharacters * 4;
+    private const int MaxDiagnosticCharacters = 64 * 1024;
+    private const int MaxDiagnosticBytes = MaxDiagnosticCharacters * 4;
+    private const int MaxWorkerOutputCharacters = 1024 * 1024;
+    private static readonly global::System.Text.UTF8Encoding StrictUtf8 = new(false, true);
+
+    internal static int? TryRunWorker(string[] args)
+    {
+        if (args.Length != 3 || !args[0].Equals(WorkerArgument, global::System.StringComparison.Ordinal))
+            return null;
+        return RunWorkerAsync(args[1], args[2]).GetAwaiter().GetResult();
+    }
+
+    internal static string Invoke(
+        string providerId,
+        string request,
+        int timeoutSeconds,
+        global::System.Threading.CancellationToken cancellationToken)
+        => InvokeAsync(providerId, request, timeoutSeconds, cancellationToken).GetAwaiter().GetResult();
+
+    private static async global::System.Threading.Tasks.Task<int> RunWorkerAsync(
+        string requestHandle,
+        string responseHandle)
+    {
+        using var requestPipe = new global::System.IO.Pipes.AnonymousPipeClientStream(
+            global::System.IO.Pipes.PipeDirection.In,
+            requestHandle);
+        using var responsePipe = new global::System.IO.Pipes.AnonymousPipeClientStream(
+            global::System.IO.Pipes.PipeDirection.Out,
+            responseHandle);
+        try
+        {
+            await responsePipe.WriteAsync(new byte[] { WorkerReady }).ConfigureAwait(false);
+            await responsePipe.FlushAsync().ConfigureAwait(false);
+            var providerId = await ReadStringAsync(
+                requestPipe,
+                MaxProviderIdBytes,
+                global::System.Threading.CancellationToken.None).ConfigureAwait(false);
+            var request = await ReadStringAsync(
+                requestPipe,
+                MaxRequestBytes,
+                global::System.Threading.CancellationToken.None).ConfigureAwait(false);
+            if (request.Length > MaxRequestCharacters)
+                throw new global::System.InvalidOperationException("The provider worker request exceeded the bounded process-isolation contract.");
+            var result = providerId switch
+            {
+{{PROVIDER_WORKER_CASES}}
+                _ => throw new global::System.InvalidOperationException("The requested provider worker identity is not present in this compiled artifact.")
+            } ?? throw new global::System.InvalidOperationException("The provider worker returned a null result outside its contract.");
+            if (result.Length > MaxResultCharacters)
+                throw new global::System.InvalidOperationException("The provider worker result exceeded the bounded process-isolation contract.");
+            await WriteResponseAsync(responsePipe, WorkerSucceeded, result, MaxResultBytes).ConfigureAwait(false);
+        }
+        catch (global::System.Exception exception)
+        {
+            var diagnostic = NormalizeDiagnostic(exception.Message);
+            if (diagnostic.Length > MaxDiagnosticCharacters)
+                diagnostic = diagnostic.Substring(0, MaxDiagnosticCharacters);
+            await WriteResponseAsync(responsePipe, WorkerFailed, diagnostic, MaxDiagnosticBytes).ConfigureAwait(false);
+        }
+
+        // The parent deliberately keeps the direct worker alive until it has consumed the framed
+        // response, then terminates this process and its complete descendant tree as one unit.
+        var acknowledgement = new byte[1];
+        await ReadExactAsync(
+            requestPipe,
+            acknowledgement,
+            global::System.Threading.CancellationToken.None).ConfigureAwait(false);
+        return 0;
+    }
+
+    private static async global::System.Threading.Tasks.Task<string> InvokeAsync(
+        string providerId,
+        string request,
+        int timeoutSeconds,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(providerId))
+            throw new global::System.ArgumentException("A provider worker identity is required.", nameof(providerId));
+        if (request is null)
+            throw new global::System.ArgumentNullException(nameof(request));
+        if (request.Length > MaxRequestCharacters)
+            throw new global::System.InvalidOperationException("The provider worker request exceeded the bounded process-isolation contract.");
+        if (timeoutSeconds is < 1 or > 3600)
+            throw new global::System.ArgumentOutOfRangeException(nameof(timeoutSeconds));
+
+        var executablePath = global::System.Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executablePath))
+            throw new global::System.InvalidOperationException("The compiled executable path is unavailable for provider process isolation.");
+        using var requestPipe = new global::System.IO.Pipes.AnonymousPipeServerStream(
+            global::System.IO.Pipes.PipeDirection.Out,
+            global::System.IO.HandleInheritability.Inheritable);
+        using var responsePipe = new global::System.IO.Pipes.AnonymousPipeServerStream(
+            global::System.IO.Pipes.PipeDirection.In,
+            global::System.IO.HandleInheritability.Inheritable);
+        var startInfo = new global::System.Diagnostics.ProcessStartInfo(executablePath)
+        {
+            WorkingDirectory = global::System.AppContext.BaseDirectory,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        if (global::System.IO.Path.GetFileNameWithoutExtension(executablePath).Equals(
+                "dotnet",
+                global::System.StringComparison.OrdinalIgnoreCase))
+        {
+            var entryAssemblyPath = global::System.Reflection.Assembly.GetEntryAssembly()?.Location;
+            if (string.IsNullOrWhiteSpace(entryAssemblyPath))
+                throw new global::System.InvalidOperationException("The compiled entry assembly path is unavailable for provider process isolation.");
+            startInfo.ArgumentList.Add(entryAssemblyPath);
+        }
+        startInfo.ArgumentList.Add(WorkerArgument);
+        startInfo.ArgumentList.Add(requestPipe.GetClientHandleAsString());
+        startInfo.ArgumentList.Add(responsePipe.GetClientHandleAsString());
+
+        using var process = new global::System.Diagnostics.Process { StartInfo = startInfo };
+        using var deadline = new global::System.Threading.CancellationTokenSource(
+            global::System.TimeSpan.FromSeconds(timeoutSeconds));
+        using var linked = global::System.Threading.CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            deadline.Token);
+        global::System.Threading.Tasks.Task<WorkerOutput>? standardOutputTask = null;
+        global::System.Threading.Tasks.Task<WorkerOutput>? standardErrorTask = null;
+        try
+        {
+            if (!process.Start())
+                throw new global::System.InvalidOperationException("The provider worker process did not start.");
+            requestPipe.DisposeLocalCopyOfClientHandle();
+            responsePipe.DisposeLocalCopyOfClientHandle();
+            standardOutputTask = ReadBoundedAsync(process.StandardOutput, MaxWorkerOutputCharacters);
+            standardErrorTask = ReadBoundedAsync(process.StandardError, MaxDiagnosticCharacters);
+
+            var ready = new byte[1];
+            await ReadExactAsync(responsePipe, ready, linked.Token).ConfigureAwait(false);
+            if (ready[0] != WorkerReady)
+                throw new global::System.InvalidOperationException("The provider worker did not complete its authenticated pipe handshake.");
+            await WriteStringAsync(requestPipe, providerId, MaxProviderIdBytes, linked.Token).ConfigureAwait(false);
+            await WriteStringAsync(requestPipe, request, MaxRequestBytes, linked.Token).ConfigureAwait(false);
+            await requestPipe.FlushAsync(linked.Token).ConfigureAwait(false);
+
+            var status = new byte[1];
+            await ReadExactAsync(responsePipe, status, linked.Token).ConfigureAwait(false);
+            var maximumResponseBytes = status[0] == WorkerSucceeded ? MaxResultBytes : MaxDiagnosticBytes;
+            var response = await ReadStringAsync(responsePipe, maximumResponseBytes, linked.Token).ConfigureAwait(false);
+
+            // The worker waits for an acknowledgement that is never sent. Keeping the direct child
+            // alive makes Kill(entireProcessTree) authoritative even when descendants inherited IO.
+            await TerminateAsync(process).ConfigureAwait(false);
+            var output = await DrainOutputAsync(standardOutputTask, standardErrorTask).ConfigureAwait(false);
+            if (output.StandardOutput.LimitExceeded || output.StandardError.LimitExceeded)
+                throw new global::System.InvalidOperationException("The provider worker exceeded its bounded diagnostic-output contract.");
+            if (status[0] == WorkerFailed)
+                throw new global::System.InvalidOperationException(
+                    "Provider worker '" + providerId + "' failed: " + NormalizeDiagnostic(response));
+            if (status[0] != WorkerSucceeded)
+                throw new global::System.InvalidOperationException("The provider worker returned an unknown response status.");
+            return response;
+        }
+        catch (global::System.OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await TerminateAndObserveAsync(process, standardOutputTask, standardErrorTask).ConfigureAwait(false);
+            throw new global::System.OperationCanceledException(cancellationToken);
+        }
+        catch (global::System.OperationCanceledException) when (deadline.IsCancellationRequested)
+        {
+            await TerminateAndObserveAsync(process, standardOutputTask, standardErrorTask).ConfigureAwait(false);
+            throw new global::System.TimeoutException(
+                "Provider worker '" + providerId + "' exceeded its " + timeoutSeconds.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + " second isolation deadline.");
+        }
+        catch
+        {
+            await TerminateAndObserveAsync(process, standardOutputTask, standardErrorTask).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private static async global::System.Threading.Tasks.Task WriteResponseAsync(
+        global::System.IO.Stream stream,
+        byte status,
+        string value,
+        int maximumBytes)
+    {
+        await stream.WriteAsync(new byte[] { status }).ConfigureAwait(false);
+        await WriteStringAsync(
+            stream,
+            value,
+            maximumBytes,
+            global::System.Threading.CancellationToken.None).ConfigureAwait(false);
+        await stream.FlushAsync().ConfigureAwait(false);
+    }
+
+    private static async global::System.Threading.Tasks.Task WriteStringAsync(
+        global::System.IO.Stream stream,
+        string value,
+        int maximumBytes,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        var bytes = StrictUtf8.GetBytes(value);
+        if (bytes.Length > maximumBytes)
+            throw new global::System.InvalidOperationException("The provider worker frame exceeded its bounded transport contract.");
+        var length = new byte[sizeof(int)];
+        global::System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(length, bytes.Length);
+        await stream.WriteAsync(length, cancellationToken).ConfigureAwait(false);
+        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async global::System.Threading.Tasks.Task<string> ReadStringAsync(
+        global::System.IO.Stream stream,
+        int maximumBytes,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        var length = new byte[sizeof(int)];
+        await ReadExactAsync(stream, length, cancellationToken).ConfigureAwait(false);
+        var byteCount = global::System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(length);
+        if (byteCount < 0 || byteCount > maximumBytes)
+            throw new global::System.InvalidOperationException("The provider worker returned an invalid bounded frame length.");
+        var bytes = new byte[byteCount];
+        await ReadExactAsync(stream, bytes, cancellationToken).ConfigureAwait(false);
+        return StrictUtf8.GetString(bytes);
+    }
+
+    private static async global::System.Threading.Tasks.Task ReadExactAsync(
+        global::System.IO.Stream stream,
+        byte[] buffer,
+        global::System.Threading.CancellationToken cancellationToken)
+    {
+        var offset = 0;
+        while (offset < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(offset), cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+                throw new global::System.IO.EndOfStreamException("The provider worker pipe closed before a complete frame was received.");
+            offset += read;
+        }
+    }
+
+    private static async global::System.Threading.Tasks.Task<WorkerOutput> ReadBoundedAsync(
+        global::System.IO.StreamReader reader,
+        int maximumCharacters)
+    {
+        var builder = new global::System.Text.StringBuilder(global::System.Math.Min(maximumCharacters, 4096));
+        var buffer = new char[4096];
+        var exceeded = false;
+        int read;
+        while ((read = await reader.ReadAsync(buffer.AsMemory()).ConfigureAwait(false)) > 0)
+        {
+            var remaining = maximumCharacters - builder.Length;
+            if (remaining > 0)
+                builder.Append(buffer, 0, global::System.Math.Min(read, remaining));
+            if (read > remaining)
+                exceeded = true;
+        }
+        return new WorkerOutput(builder.ToString(), exceeded);
+    }
+
+    private static async global::System.Threading.Tasks.Task<(WorkerOutput StandardOutput, WorkerOutput StandardError)> DrainOutputAsync(
+        global::System.Threading.Tasks.Task<WorkerOutput> standardOutputTask,
+        global::System.Threading.Tasks.Task<WorkerOutput> standardErrorTask)
+    {
+        await global::System.Threading.Tasks.Task.WhenAll(standardOutputTask, standardErrorTask)
+            .WaitAsync(global::System.TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        return (await standardOutputTask.ConfigureAwait(false), await standardErrorTask.ConfigureAwait(false));
+    }
+
+    private static string NormalizeDiagnostic(string value)
+    {
+        var normalized = (value ?? string.Empty).Trim();
+        return normalized.Length == 0 ? "No diagnostic was returned." : normalized;
+    }
+
+    private static async global::System.Threading.Tasks.Task TerminateAndObserveAsync(
+        global::System.Diagnostics.Process process,
+        global::System.Threading.Tasks.Task<WorkerOutput>? standardOutputTask,
+        global::System.Threading.Tasks.Task<WorkerOutput>? standardErrorTask)
+    {
+        await TerminateAsync(process).ConfigureAwait(false);
+        if (standardOutputTask is null || standardErrorTask is null) return;
+        try { await DrainOutputAsync(standardOutputTask, standardErrorTask).ConfigureAwait(false); }
+        catch (global::System.Exception) { }
+    }
+
+    private static async global::System.Threading.Tasks.Task TerminateAsync(global::System.Diagnostics.Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (global::System.PlatformNotSupportedException) { process.Kill(); }
+                catch (global::System.NotSupportedException) { process.Kill(); }
+            }
+        }
+        catch (global::System.InvalidOperationException) { }
+        try
+        {
+            if (!process.HasExited)
+                await process.WaitForExitAsync().WaitAsync(global::System.TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        }
+        catch (global::System.InvalidOperationException) { }
+        catch (global::System.TimeoutException) { }
+    }
+
+    private sealed class WorkerOutput
+    {
+        internal WorkerOutput(string text, bool limitExceeded)
+        {
+            Text = text;
+            LimitExceeded = limitExceeded;
+        }
+
+        internal string Text { get; }
+        internal bool LimitExceeded { get; }
+    }
+}

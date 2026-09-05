@@ -6,6 +6,47 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    [Trait("Category", "PowerShellCompilation")]
+    public void Deserialize_reads_build_module_powershell_compilation()
+    {
+        const string json = """
+            {
+              "Build": {
+                "Name": "Generic.Module",
+                "SourcePath": ".",
+                "Version": "1.0.0"
+              },
+              "Segments": [
+                {
+                  "Type": "Build",
+                  "BuildModule": {
+                    "PowerShellCompilation": {
+                      "Enabled": true,
+                      "Mode": "Hybrid",
+                      "TargetFramework": "net8.0",
+                      "AllowUnreviewedDependencies": true
+                    }
+                  }
+                }
+              ]
+            }
+            """;
+
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+
+        var segment = Assert.IsType<ConfigurationBuildSegment>(Assert.Single(spec!.Segments));
+        var compilation = Assert.IsType<PowerShellModuleCompilationConfiguration>(segment.BuildModule.PowerShellCompilation);
+        Assert.True(compilation.Enabled);
+        Assert.Equal(PowerShellCompilationMode.Hybrid, compilation.Mode);
+        Assert.Equal("net8.0", compilation.TargetFramework);
+        Assert.True(compilation.AllowUnreviewedDependencies);
+    }
+
+    [Fact]
     public void SegmentsSchema_IncludesGateSegment()
     {
         using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));

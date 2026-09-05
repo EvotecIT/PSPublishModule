@@ -31,7 +31,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.DependencyBundleProof",
             resolved.Kind,
-            resolved.Mode)
+            resolved.Mode, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = resolved.CompilationSourceFiles,
             EmitSource = true

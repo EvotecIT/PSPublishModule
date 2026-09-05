@@ -26,6 +26,7 @@ internal static class Program
             PowerForgePackagedEntryPoint.Path = ExtractEmbeddedSources(source);
             ConfigureBundledModules();
             var initialState = InitialSessionState.CreateDefault2();
+            RegisterCompiledCmdlets(initialState);
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
                 initialState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
             using var runspace = RunspaceFactory.CreateRunspace(initialState);
@@ -86,6 +87,20 @@ internal static class Program
         {
             Console.Error.WriteLine(exception.ToString());
             return 1;
+        }
+    }
+
+    private static void RegisterCompiledCmdlets(InitialSessionState initialState)
+    {
+        foreach (var type in Assembly.GetExecutingAssembly().GetTypes().OrderBy(static type => type.FullName, StringComparer.Ordinal))
+        {
+            var attribute = type.GetCustomAttribute<CmdletAttribute>();
+            if (attribute is null || !typeof(Cmdlet).IsAssignableFrom(type))
+                continue;
+            initialState.Commands.Add(new SessionStateCmdletEntry(
+                attribute.VerbName + "-" + attribute.NounName,
+                type,
+                helpFileName: null));
         }
     }
 

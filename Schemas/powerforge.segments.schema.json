@@ -72,7 +72,13 @@
         "KillLockersBeforeInstall": { "type": ["boolean", "null"] },
         "KillLockersForce": { "type": ["boolean", "null"] },
         "AutoSwitchExactOnPublish": { "type": ["boolean", "null"] },
-        "ResolveBinaryConflicts": { "anyOf": [{ "$ref": "#/$defs/ResolveBinaryConflictsConfiguration" }, { "type": "null" }] }
+        "ResolveBinaryConflicts": { "anyOf": [{ "$ref": "#/$defs/ResolveBinaryConflictsConfiguration" }, { "type": "null" }] },
+        "PowerShellCompilation": {
+          "anyOf": [
+            { "$ref": "powerforge.common.schema.json#/$defs/PowerShellModuleCompilationConfiguration" },
+            { "type": "null" }
+          ]
+        }
       }
     },
 

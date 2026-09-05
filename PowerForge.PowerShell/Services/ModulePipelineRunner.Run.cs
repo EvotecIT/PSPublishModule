@@ -56,8 +56,22 @@ public sealed partial class ModulePipelineRunner
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
+                ApplyPowerShellModuleCompilation(
+                    plan,
+                    state,
+                    manifestRequiredModules,
+                    manifestExternalModuleDependencies);
                 ExecuteDocumentationPhase(plan, session, session.Reporter, state);
-                state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult, syncGeneratedBootstrapper: false);
+                state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(
+                    plan,
+                    state.BuildResult,
+                    syncGeneratedBootstrapper: false,
+                    syncStagedExports: state.PowerShellCompilationResult is null);
+                PersistPowerShellModuleCompilationCheckpoint(
+                    plan,
+                    state,
+                    manifestRequiredModules,
+                    manifestExternalModuleDependencies);
                 return BuildPipelineResult(spec, plan, state);
             }
 
@@ -65,7 +79,16 @@ public sealed partial class ModulePipelineRunner
             ExecuteTypeAcceleratorSurfaceReportPhase(plan, state);
             ExecuteDocumentationPhase(plan, session, session.Reporter, state);
             // Refresh the project-root manifest before validation or tests can abort the run so callers always see current metadata.
-            state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(plan, state.BuildResult);
+            state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(
+                plan,
+                state.BuildResult,
+                syncGeneratedBootstrapper: state.PowerShellCompilationResult is null,
+                syncStagedExports: state.PowerShellCompilationResult is null);
+            PersistPowerShellModuleCompilationCheckpoint(
+                plan,
+                state,
+                manifestRequiredModules,
+                manifestExternalModuleDependencies);
             CaptureAuthorizedProjectManifest(plan, state);
             ExecuteValidationPhases(plan, session, state);
             ExecuteTestPhases(plan, session, state);

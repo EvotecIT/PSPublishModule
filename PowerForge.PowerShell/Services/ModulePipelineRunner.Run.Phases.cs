@@ -54,8 +54,11 @@ public sealed partial class ModulePipelineRunner
             staged = pipeline.StageToStaging(plan.BuildSpec);
             state.Staged = staged;
             state.StagingPathForCleanup = staged.StagingPath;
-            ExecuteExternalAssets(plan, session, state);
-            SyncExternalAssetsToStaging(plan, state);
+            if (!IsReusingCompiledPowerShellModule(plan))
+            {
+                ExecuteExternalAssets(plan, session, state);
+                SyncExternalAssetsToStaging(plan, state);
+            }
             session.Done(session.StageStep);
         }
         catch (Exception ex)
@@ -82,19 +85,23 @@ public sealed partial class ModulePipelineRunner
         }
         ExecuteActions(ModulePipelineActionStage.AfterBuild, plan, session, state);
 
-        state.MergeExecution = plan.BuildSpec.RefreshManifestOnly ? MergeExecutionResult.None : ApplyMerge(plan, buildResult);
-        if (!plan.BuildSpec.RefreshManifestOnly)
+        state.MergeExecution = plan.BuildSpec.RefreshManifestOnly || IsReusingCompiledPowerShellModule(plan)
+            ? MergeExecutionResult.None
+            : ApplyMerge(plan, buildResult);
+        if (!plan.BuildSpec.RefreshManifestOnly && !IsReusingCompiledPowerShellModule(plan))
             ApplyPlaceholders(plan, buildResult);
 
-        EmbedModuleDependencies(plan, buildResult);
+        if (!IsReusingCompiledPowerShellModule(plan))
+            EmbedModuleDependencies(plan, buildResult);
 
         ExecuteActions(ModulePipelineActionStage.BeforeManifest, plan, session, state);
         session.Start(session.ManifestStep);
         try
         {
-            RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+            if (!IsReusingCompiledPowerShellModule(plan))
+                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
 
-            if (plan.Delivery is not null && plan.Delivery.Enable)
+            if (!IsReusingCompiledPowerShellModule(plan) && plan.Delivery is not null && plan.Delivery.Enable)
             {
                 ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
 
@@ -102,11 +109,13 @@ public sealed partial class ModulePipelineRunner
                     UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.PackageWithoutScriptFolders);
             }
 
-            if (state.MergeExecution.MergedModule) {
+            if (!IsReusingCompiledPowerShellModule(plan) && state.MergeExecution.MergedModule) {
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }
 
-            if (!state.PackageWithoutScriptFolders && !plan.BuildSpec.RefreshManifestOnly)
+            if (!state.PackageWithoutScriptFolders &&
+                !plan.BuildSpec.RefreshManifestOnly &&
+                !IsReusingCompiledPowerShellModule(plan))
                 TryRegenerateBootstrapperFromManifest(
                     buildResult,
                     plan.ModuleName,
@@ -114,7 +123,7 @@ public sealed partial class ModulePipelineRunner
                     plan.BuildSpec.HandleRuntimes,
                     plan);
 
-            if (!plan.BuildSpec.RefreshManifestOnly)
+            if (!plan.BuildSpec.RefreshManifestOnly && !IsReusingCompiledPowerShellModule(plan))
                 TryRegenerateSourceDevelopmentBootstrapperFromManifest(buildResult, plan);
 
             session.Done(session.ManifestStep);
@@ -216,7 +225,7 @@ public sealed partial class ModulePipelineRunner
         var buildResult = state.RequireBuildResult();
 
         ExecuteActions(ModulePipelineActionStage.BeforeFormatting, plan, session, state);
-        if (plan.Formatting is not null)
+        if (plan.Formatting is not null && !IsReusingCompiledPowerShellModule(plan))
         {
             var formattingPipeline = new FormattingPipeline(_logger);
 
@@ -280,7 +289,8 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+            if (!IsReusingCompiledPowerShellModule(plan))
+                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
             if (state.MergeExecution.MergedModule) {
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }
@@ -291,19 +301,27 @@ public sealed partial class ModulePipelineRunner
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
 
+        ApplyPowerShellModuleCompilation(
+            plan,
+            state,
+            manifestRequiredModules,
+            manifestExternalModuleDependencies);
+        buildResult = state.RequireBuildResult();
+
         ExecuteActions(ModulePipelineActionStage.BeforeSigning, plan, session, state);
         if (plan.SignModule)
         {
             session.Start(session.SignStep);
             try
             {
-                state.SigningResult = SignBuiltModuleOutput(
+                state.SigningResult = SignFinalizedModuleOutput(
                     moduleName: plan.ModuleName,
                     rootPath: buildResult.StagingPath,
                     signing: plan.Signing,
                     information: plan.Information,
                     delivery: plan.Delivery,
-                    includeScriptFolders: !state.PackageWithoutScriptFolders);
+                    includeScriptFolders: !state.PackageWithoutScriptFolders,
+                    finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
                 session.Done(session.SignStep);
             }
             catch (Exception ex)
@@ -314,6 +332,9 @@ public sealed partial class ModulePipelineRunner
         }
         ExecuteActions(ModulePipelineActionStage.AfterSigning, plan, session, state);
     }
+
+    private static bool IsReusingCompiledPowerShellModule(ModulePipelinePlan plan)
+        => plan.BuildSpec.ReuseStaging && plan.BuildSpec.PowerShellCompilation?.Enabled == true;
 
     private void ExecuteValidationPhases(
         ModulePipelinePlan plan,
@@ -696,122 +717,6 @@ public sealed partial class ModulePipelineRunner
             }
         }
         ExecuteActions(ModulePipelineActionStage.AfterTests, plan, session, state);
-    }
-
-    private void ExecutePackagingPublishAndInstallPhases(
-        ModulePipelineSpec spec,
-        ModulePipelinePlan plan,
-        ModulePipelineExecutionSession session,
-        RequiredModuleReference[] packagingRequiredModules,
-        ModuleBuildPipeline pipeline,
-        ModulePipelineRunState state)
-    {
-        var buildResult = state.RequireBuildResult();
-
-        ValidateReleaseArtefactOutputPathConflicts(plan, state);
-
-        ExecuteActions(ModulePipelineActionStage.BeforeArtefacts, plan, session, state);
-        if (plan.Artefacts is { Length: > 0 })
-        {
-            var builder = new ArtefactBuilder(_logger);
-            foreach (var artefact in plan.Artefacts)
-            {
-                var step = session.GetArtefactStep(artefact);
-                session.Start(step);
-                try
-                {
-                    ArtefactBuildResult result = builder.BuildWithFinalizer(
-                        segment: artefact,
-                        projectRoot: plan.ProjectRoot,
-                        stagingPath: buildResult.StagingPath,
-                        moduleName: plan.ModuleName,
-                        moduleVersion: plan.ResolvedVersion,
-                        preRelease: plan.PreRelease,
-                        requiredModules: packagingRequiredModules,
-                        information: plan.Information,
-                        delivery: plan.Delivery,
-                        includeScriptFolders: !state.PackageWithoutScriptFolders,
-                        finalizePackedArtefact: context => plan.SignModule
-                            ? FinalizeSignedPackedArtefact(plan, state, context)
-                            : FinalizeUnsignedPackedArtefact(plan, state, context));
-                    state.ArtefactResults.Add(result);
-                    CaptureFinalizedPackedArtefactIntegrity(plan, state, result);
-                    session.Done(step);
-                }
-                catch (Exception ex)
-                {
-                    session.Fail(step, ex);
-                    throw;
-                }
-            }
-        }
-        ExecuteActions(ModulePipelineActionStage.AfterArtefacts, plan, session, state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
-
-        ExecutePackageBuildsAfterModule(plan, session, state);
-        ValidateRequestedReleaseVersion(plan, state);
-
-        var publishingEnabled = plan.GateMode is null or ConfigurationGateMode.Publish;
-        if (publishingEnabled)
-        {
-            ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
-            ValidateFinalizedPackedArtefactIntegrity(state);
-            ExecutePublishOperations(plan, session, buildResult, state);
-            ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
-        }
-        else
-        {
-            ExecutePublishOperations(plan, session, buildResult, state);
-        }
-
-        state.ReleaseCoordinationResult ??= PrepareUnifiedReleaseAssets(plan, state, publishId: null);
-
-        ExecuteActions(ModulePipelineActionStage.BeforeInstall, plan, session, state);
-        if (plan.InstallEnabled)
-        {
-            session.Start(session.InstallStep);
-            string? installPackagePath = null;
-            try
-            {
-                installPackagePath = Path.Combine(Path.GetTempPath(), "PowerForge", "install", $"{plan.ModuleName}_{Guid.NewGuid():N}");
-                Directory.CreateDirectory(installPackagePath);
-                ArtefactBuilder.CopyModulePackageForInstall(
-                    buildResult.StagingPath,
-                    installPackagePath,
-                    plan.Information,
-                    plan.Delivery,
-                    includeScriptFolders: !state.PackageWithoutScriptFolders);
-
-                var installSpec = new ModuleInstallSpec
-                {
-                    Name = plan.ModuleName,
-                    Version = plan.ResolvedVersion,
-                    StagingPath = installPackagePath,
-                    Strategy = plan.InstallStrategy,
-                    KeepVersions = plan.InstallKeepVersions,
-                    Roots = plan.InstallRoots,
-                    UpdateManifestToResolvedVersion = spec.Install?.UpdateManifestToResolvedVersion ?? true,
-                    LegacyFlatHandling = plan.InstallLegacyFlatHandling,
-                    PreserveVersions = plan.InstallPreserveVersions
-                };
-                state.InstallResult = pipeline.InstallFromStaging(installSpec);
-                session.Done(session.InstallStep);
-            }
-            catch (Exception ex)
-            {
-                session.Fail(session.InstallStep, ex);
-                throw;
-            }
-            finally
-            {
-                if (!string.IsNullOrWhiteSpace(installPackagePath))
-                {
-                    try { DeleteDirectoryWithRetries(installPackagePath); }
-                    catch (Exception ex) { _logger.Warn($"Failed to delete install package folder: {ex.Message}"); }
-                }
-            }
-        }
-        ExecuteActions(ModulePipelineActionStage.AfterInstall, plan, session, state);
     }
 
     internal void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)

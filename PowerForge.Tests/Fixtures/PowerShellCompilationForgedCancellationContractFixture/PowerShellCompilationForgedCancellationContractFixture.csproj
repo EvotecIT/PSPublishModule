@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Generic.Semantic.ForgedCancellationContract</AssemblyName>
+    <RootNamespace>Generic.Semantic.ForgedCancellationContract</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
+  </PropertyGroup>
+</Project>

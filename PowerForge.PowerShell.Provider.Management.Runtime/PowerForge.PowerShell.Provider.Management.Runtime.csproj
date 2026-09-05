@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <VersionPrefix>3.0.126</VersionPrefix>
+    <PackageId>PowerForge.PowerShell.Provider.Management.Runtime</PackageId>
+    <Description>Executable win-x64 CIM and MI provider package for runtime-free PowerForge artifacts.</Description>
+    <PackageTags>powershell;compiler;provider;cim;mi;powerforge</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/EvotecIT/PSPublishModule</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForge.PowerShell.Provider.Management\PowerForge.PowerShell.Provider.Management.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell.ProviderSdk\PowerForge.PowerShell.ProviderSdk.csproj" />
+  </ItemGroup>
+
+  <Target Name="ReplaceNuGetWithExecutableProviderPackage" AfterTargets="GenerateNuspec">
+    <PropertyGroup>
+      <ProviderPackageOutputPath>$([System.IO.Path]::Combine('$(PackageOutputPath)', '$(PackageId).$(PackageVersion).nupkg'))</ProviderPackageOutputPath>
+    </PropertyGroup>
+    <Exec Command="dotnet run --project &quot;$(MSBuildProjectFullPath)&quot; --configuration $(Configuration) --no-build -- &quot;$(ProviderPackageOutputPath)&quot; &quot;$(PackageVersion)&quot;" />
+  </Target>
+
+</Project>

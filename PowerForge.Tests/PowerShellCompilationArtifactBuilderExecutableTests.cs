@@ -9,6 +9,30 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
+    public void Build_StrictExecutableExecutesOptimizedAuthoredConstants()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-OptimizedValue { return 1.5 + 2.5 }; Get-OptimizedValue");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.OptimizedExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.IrOptimization!.ConstantExpressionsFolded > 0);
+        var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
+        Assert.All(
+            ledger.Entries.Where(static entry => entry.EmittedClrMethod),
+            static entry => Assert.NotEmpty(Assert.IsType<PowerShellCompilationRegionGraph>(entry.RegionGraph).Regions));
+        var processResult = RunProcess(result.ArtifactPath!);
+        Assert.Equal((0, "4", string.Empty),
+            (processResult.ExitCode, processResult.StandardOutput.Trim(), processResult.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Build_StrictTypedExecutableUsesClrDefaultForOmittedOptionalParameter()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Count); return $Count");
@@ -17,7 +41,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedExecutableOptionalParameter",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var processResult = RunProcess(result.ArtifactPath!);
@@ -36,7 +60,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedExecutableMandatoryString",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var processResult = RunProcess(result.ArtifactPath!, "--Name=");
@@ -66,7 +90,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedExecutableProof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.NotNull(result.ArtifactPath);
@@ -74,7 +98,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.NotNull(result.Manifest);
         Assert.False(result.Manifest.RequiresPowerShellRuntime);
         Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);
-        Assert.Equal(1, result.Manifest.CompiledMethods);
+        Assert.NotNull(result.Manifest.SemanticProfile);
+        Assert.NotNull(result.Manifest.PublicAbi);
+        Assert.Equal("CompiledPowerShellScript", result.Manifest.PublicAbi.TypeName);
+        Assert.False(result.Manifest.ContainsEmbeddedPowerShellSource);
+        Assert.False(result.Manifest.AllowsPowerShellRuntimeEvaluation);
+        Assert.True(result.Manifest.DependencyClosureVerified);
+        Assert.NotNull(result.Manifest.DependencyClosure);
+        Assert.StartsWith("DotNetSingleFile/", result.Manifest.DependencyClosure.ArtifactFormat, StringComparison.Ordinal);
+        Assert.True(result.Manifest.DependencyClosure.BundledEntries > 0);
+        Assert.Empty(result.Manifest.DependencyClosure.Limitations);
+        Assert.Equal(64, result.Manifest.GeneratedSourceSha256.Length);
+        Assert.True(result.Manifest.CompiledMethods == 1,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(0, result.Manifest.OmittedUnits);
 
@@ -126,7 +162,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedExecutablePositionalArray",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var startInfo = new ProcessStartInfo
@@ -157,7 +193,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedExecutableNegativePositional",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var processResult = RunProcess(result.ArtifactPath!, "-3");
@@ -176,7 +212,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedExecutableCulture",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var processResult = RunProcess(result.ArtifactPath!);
@@ -198,7 +234,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedExecutableStructuredOutput",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("PowerShell formatting semantics", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -215,7 +251,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.InvalidOptimization",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             Optimization = PowerShellCompilationExecutableOptimization.Trimmed
         };
@@ -227,20 +263,58 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_RejectsHybridExecutableInsteadOfPublishingPackageWithHybridManifest()
+    public void Build_HybridExecutableRegistersTypedCmdletsAndRetainsScriptFallback()
     {
-        using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        using var fixture = ArtifactFixture.Create(
+            "param([int] $Value); function Get-Double { param([int] $Number) [int] $Result = $Number; $Result += $Number; return $Result }; Get-Double -Number $Value");
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
-            "PowerForge.InvalidHybridExecutable",
+            "PowerForge.HybridExecutable",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
 
-        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationArtifactBuilder().Build(spec));
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
-        Assert.Contains("Hybrid executable", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.RequiresPowerShellRuntime);
+        Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+        Assert.True(result.Manifest.ContainsEmbeddedPowerShellSource);
+        Assert.True(result.Manifest.CompiledMethods == 1,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
+        Assert.Equal(1, result.Manifest.Boundaries!.TypedEntryPoints);
+        var run = RunProcess(result.ArtifactPath!, "-Value", "21");
+        Assert.Equal((0, "42", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridExecutableHashesAndExecutesRewrittenCompiledDependencies()
+    {
+        using var fixture = ArtifactFixture.Create(
+            ". \"$PSScriptRoot/Helper.ps1\"; 'ready'");
+        var helper = Path.Combine(fixture.RootPath, "Helper.ps1");
+        File.WriteAllText(
+            helper,
+            "function Get-Triple { param([int] $Number) [int] $Result = $Number; $Result += $Number; $Result += $Number; return $Result }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.HybridDependencyExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true)
+        {
+            CompilationSourcePaths = new[] { fixture.ScriptPath, helper }
+        };
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.CompiledMethods == 1,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var run = RunProcess(result.ArtifactPath!);
+        Assert.Equal((0, "ready", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
     [Fact]
@@ -252,13 +326,39 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.NativeAotSingleArtifact",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             SingleFile = true,
             Optimization = PowerShellCompilationExecutableOptimization.NativeAot
         };
 
         Assert.False(PowerShellCompilationArtifactBuilder.ShouldEnablePublishSingleFile(spec));
+    }
+
+    [Fact]
+    public void Build_StrictArtifactDoesNotPublishWhenDeliveredClosureCannotBeCertified()
+    {
+        using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        var builder = new PowerShellCompilationArtifactBuilder(_ => new PowerShellCompilationDependencyClosure
+        {
+            Verified = false,
+            Limitations = { "Fixture executable format is opaque." }
+        });
+
+        var result = builder.Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.UncertifiedStrictArtifact",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.ArtifactPath);
+        Assert.Null(result.ManifestPath);
+        Assert.Null(result.Manifest);
+        Assert.Contains("fully certified delivered dependency closure", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("opaque", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
     [Fact]
@@ -270,7 +370,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.SigningFailure",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             SignArtifact = true,
             CertificateThumbprint = new string('0', 40)
@@ -279,7 +379,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("code-signing certificate", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            OperatingSystem.IsWindows() ? "code-signing certificate" : "requires the Windows certificate store",
+            result.Error,
+            StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 

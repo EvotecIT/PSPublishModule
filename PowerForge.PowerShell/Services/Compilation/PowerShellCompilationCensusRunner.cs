@@ -1,12 +1,11 @@
 using System.Diagnostics;
-using System.Management.Automation.Language;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace PowerForge;
 
 /// <summary>Runs repeatable compilation coverage censuses across product source trees.</summary>
-public sealed class PowerShellCompilationCensusRunner
+public sealed partial class PowerShellCompilationCensusRunner
 {
     /// <summary>Analyzes all source roots and optionally compares them with a prior census.</summary>
     public PowerShellCompilationCensusResult Run(
@@ -85,9 +84,18 @@ public sealed class PowerShellCompilationCensusRunner
         var sourceFiles = 0;
         var sourceFingerprint = string.Empty;
         var coverage = new PowerShellCompilationCoverageBreakdown();
+        PowerShellCompilationUnitDispositionLedger? dispositionLedger = null;
+        PowerShellCompilationRegionCandidate[] regionCandidates = Array.Empty<PowerShellCompilationRegionCandidate>();
+        PowerShellCompilationRegionOpportunity[] regionOpportunities = Array.Empty<PowerShellCompilationRegionOpportunity>();
         if (recurse)
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(path);
+            var resolved = new PowerShellCompilationInputResolver().Resolve(
+                path,
+                mode: PowerShellCompilationMode.Hybrid,
+                allowDynamicModuleRuntimeSources: true);
+            var analysisCapabilities = PowerShellCompilationBuildSpec.GetCapabilities(
+                resolved.Kind,
+                PowerShellCompilationMode.Hybrid);
             dependencies = resolved.Dependencies;
             var compilationSources = resolved.CompilationSourceFiles
                 .Select(Path.GetFullPath)
@@ -97,53 +105,67 @@ public sealed class PowerShellCompilationCensusRunner
                     resolved.CompilationSourceFiles,
                     Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory(),
                     targetFramework,
-                    PowerShellCompilationCapabilities.BinaryModule);
+                    analysisCapabilities);
             var emitted = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
                 resolved.CompilationSourceFiles,
                 "PowerForge.Census",
                 "CompiledPowerShell",
-                targetFramework);
+                targetFramework,
+                analysisCapabilities);
             var exportContract = PowerShellModuleExportContract.TryRead(resolved.SourcePath);
             var exportedFunctions = exportContract?.SelectFunctions(emitted.Methods.Select(static method => method.SourceName));
-            emitted = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(emitted, targetFramework);
-            emitted = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(emitted, exportedFunctions, targetFramework);
-            var compiledFiles = ApplyEmittedGraphEvidence(analyzedCompilation.Files, emitted);
+            emitted = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(
+                emitted, targetFramework, capabilities: analysisCapabilities);
+            emitted = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(
+                emitted, exportedFunctions, targetFramework, capabilities: analysisCapabilities);
             var runtimeOnlyFiles = resolved.SourceFiles
                 .Where(source => !compilationSources.Contains(Path.GetFullPath(source)))
                 .SelectMany(source => analyzer.Analyze(new PowerShellCompilationSpec(
                     source,
                     PowerShellCompilationMode.Analyze,
                     targetFramework: targetFramework,
-                    capabilities: PowerShellCompilationCapabilities.BinaryModule)).Files)
+                    capabilities: analysisCapabilities)).Files)
                 .Select(MarkRuntimeOnly)
                 .ToArray();
-            var files = compiledFiles.Concat(runtimeOnlyFiles).ToArray();
-            plan = new PowerShellCompilationPlan(PowerShellCompilationMode.Analyze, files, targetFramework);
+            var files = analyzedCompilation.Files.Concat(runtimeOnlyFiles).ToArray();
+            plan = new PowerShellCompilationPlan(
+                PowerShellCompilationMode.Hybrid,
+                files,
+                targetFramework,
+                dependencies);
+            dispositionLedger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
+                plan,
+                PowerShellCompilationArtifactKind.BinaryModule,
+                emitted,
+                resolved.SourcePath);
             sourceFiles = resolved.SourceFiles.Length;
             sourceFingerprint = ComputeSourceFingerprint(resolved.SourceFiles, path);
-            coverage = BuildCoverageBreakdown(
-                analyzedCompilation.Files,
-                files,
-                runtimeOnlyFiles,
-                emitted.Methods.Length,
-                postEmissionEvaluated: true);
+            coverage = BuildCoverageBreakdown(dispositionLedger);
+            regionCandidates = emitted.RegionCandidates;
+            regionOpportunities = emitted.RegionOpportunities;
         }
         else
         {
+            var analysisCapabilities = PowerShellCompilationBuildSpec.GetCapabilities(
+                PowerShellCompilationInputResolver.InferDefaultArtifactKind(path),
+                PowerShellCompilationMode.Hybrid);
             plan = analyzer.Analyze(new PowerShellCompilationSpec(
                 path,
                 PowerShellCompilationMode.Analyze,
                 recurse: false,
                 targetFramework: targetFramework,
-                capabilities: PowerShellCompilationCapabilities.BinaryModule));
+                capabilities: analysisCapabilities));
             sourceFiles = plan.Files.Length;
             sourceFingerprint = ComputeSourceFingerprint(plan.Files.Select(static file => file.FullPath), path);
-            coverage = BuildCoverageBreakdown(
-                plan.Files,
-                plan.Files,
-                Array.Empty<PowerShellCompilationFilePlan>(),
-                emittedFunctions: 0,
-                postEmissionEvaluated: false);
+            var units = plan.Files.SelectMany(static file => file.Units).ToArray();
+            coverage = new PowerShellCompilationCoverageBreakdown(
+                postEmissionEvaluated: false,
+                totalFunctions: units.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Function),
+                analyzerEligibleFunctions: units.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Function && unit.IsCompilable),
+                fallbackFunctions: units.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Function && !unit.IsCompilable),
+                totalScriptUnits: units.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Script),
+                structurallyEligibleScriptUnits: units.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Script && unit.IsCompilable),
+                fallbackScriptUnits: units.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Script && !unit.IsCompilable));
         }
         stopwatch.Stop();
 
@@ -162,10 +184,15 @@ public sealed class PowerShellCompilationCensusRunner
         var name = Directory.Exists(path)
             ? new DirectoryInfo(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)).Name
             : Path.GetFileNameWithoutExtension(path);
-        var featureEvidence = CollectFeatureEvidence(path, plan).ToArray();
+        var featureEvidence = CollectFeatureEvidence(path, plan, dispositionLedger).ToArray();
         var productMetrics = new[]
         {
-            new ProductMetrics(path, plan.TotalUnits, plan.CompilableUnits, plan.RuntimeFallbackUnits, plan.ParseErrorFiles)
+            new ProductMetrics(
+                path,
+                dispositionLedger?.AnalyzedUnits ?? plan.TotalUnits,
+                dispositionLedger?.EmittedUnits ?? plan.CompilableUnits,
+                dispositionLedger?.RuntimeRoutedUnits ?? plan.RuntimeFallbackUnits,
+                plan.ParseErrorFiles)
         };
         var functionMetrics = new[]
         {
@@ -180,13 +207,17 @@ public sealed class PowerShellCompilationCensusRunner
             name,
             path,
             sourceFiles,
-            plan.TotalUnits,
-            plan.CompilableUnits,
-            plan.RuntimeFallbackUnits,
+            dispositionLedger?.AnalyzedUnits ?? plan.TotalUnits,
+            dispositionLedger?.EmittedUnits ?? plan.CompilableUnits,
+            dispositionLedger?.RuntimeRoutedUnits ?? plan.RuntimeFallbackUnits,
             plan.ParseErrorFiles,
             stopwatch.Elapsed.TotalMilliseconds,
             diagnostics,
-            BuildFeatureImpacts(featureEvidence, plan.CompilableUnits, plan.TotalUnits, productMetrics),
+            BuildFeatureImpacts(
+                featureEvidence,
+                dispositionLedger?.EmittedUnits ?? plan.CompilableUnits,
+                dispositionLedger?.AnalyzedUnits ?? plan.TotalUnits,
+                productMetrics),
             PowerShellCompilationDependencyPlanner.Summarize(dependencies),
             PowerShellCompilationResourceSummary.Create(dependencies),
             coverage,
@@ -196,20 +227,38 @@ public sealed class PowerShellCompilationCensusRunner
                 coverage.EmittedFunctions,
                 coverage.TotalFunctions,
                 functionMetrics,
-                PowerShellCompilationUnitKind.Function));
+                PowerShellCompilationUnitKind.Function),
+            BuildFunctionDispositions(dispositionLedger));
+        product.RegionCandidates = regionCandidates;
+        product.RegionOpportunities = regionOpportunities;
         return new AnalyzedProduct(product, featureEvidence);
     }
 
-    private static IEnumerable<FeatureUnitEvidence> CollectFeatureEvidence(string product, PowerShellCompilationPlan plan)
+    private static IEnumerable<FeatureUnitEvidence> CollectFeatureEvidence(
+        string product,
+        PowerShellCompilationPlan plan,
+        PowerShellCompilationUnitDispositionLedger? ledger)
     {
+        var dispositions = ledger?.Entries.ToDictionary(static entry => entry.UnitId, StringComparer.Ordinal)
+                           ?? new Dictionary<string, PowerShellCompilationUnitDisposition>(StringComparer.Ordinal);
         foreach (var file in plan.Files)
         {
             foreach (var unit in file.Units)
             {
-                var diagnostics = unit.Diagnostics;
+                var relativePath = file.RelativePath.Replace('\\', '/');
+                var unitId = PowerShellCompilationExplanationService.ComputeUnitId(relativePath, unit);
+                var diagnostics = dispositions.TryGetValue(unitId, out var disposition)
+                    ? disposition.DiagnosticChain.Select(cause => new PowerShellCompilationDiagnostic(
+                        cause.Code,
+                        cause.Message,
+                        relativePath,
+                        cause.Line,
+                        cause.Column,
+                        cause.FeatureId)).ToArray()
+                    : unit.Diagnostics;
                 yield return new FeatureUnitEvidence(
                     product,
-                    file.RelativePath + ":" + unit.StartLine + ":" + unit.Name,
+                    unitId,
                     isCompilationUnit: true,
                     unit.Kind,
                     diagnostics);
@@ -349,7 +398,13 @@ public sealed class PowerShellCompilationCensusRunner
                     regressions.Add(new PowerShellCompilationCensusRegression(actual.Name, "PostEmissionEvaluated", 1, 0));
                 AddLowerIsRegression(regressions, actual.Name, "EmittedFunctions", expected.Coverage.EmittedFunctions, actual.Coverage.EmittedFunctions);
                 AddHigherIsRegression(regressions, actual.Name, "FallbackFunctions", expected.Coverage.FallbackFunctions, actual.Coverage.FallbackFunctions);
-                AddHigherIsRegression(regressions, actual.Name, "DroppedEligibleFunctions", expected.Coverage.DroppedEligibleFunctions, actual.Coverage.DroppedEligibleFunctions);
+                AddFunctionDispositionRegressions(
+                    regressions,
+                    actual.Name,
+                    expected.Coverage.TotalFunctions,
+                    expected.FunctionDispositions,
+                    actual.Coverage.TotalFunctions,
+                    actual.FunctionDispositions);
             }
         }
 
@@ -385,34 +440,49 @@ public sealed class PowerShellCompilationCensusRunner
     }
 
     private static PowerShellCompilationCoverageBreakdown BuildCoverageBreakdown(
-        IEnumerable<PowerShellCompilationFilePlan> analyzerFiles,
-        IEnumerable<PowerShellCompilationFilePlan> finalFiles,
-        IEnumerable<PowerShellCompilationFilePlan> runtimeOnlyFiles,
-        int emittedFunctions,
-        bool postEmissionEvaluated)
+        PowerShellCompilationUnitDispositionLedger ledger)
     {
-        var analyzerUnits = analyzerFiles.SelectMany(static file => file.Units).ToArray();
-        var finalUnits = finalFiles.SelectMany(static file => file.Units).ToArray();
-        var runtimeUnits = runtimeOnlyFiles.SelectMany(static file => file.Units).ToArray();
-        var totalFunctions = finalUnits.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Function);
-        var analyzerEligibleFunctions = analyzerUnits.Count(static unit =>
-            unit.Kind == PowerShellCompilationUnitKind.Function && unit.IsCompilable);
-        var totalScriptUnits = finalUnits.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
-        var structurallyEligibleScriptUnits = finalUnits.Count(static unit =>
-            unit.Kind == PowerShellCompilationUnitKind.Script && unit.IsCompilable);
+        var entries = ledger.Entries;
+        var totalFunctions = entries.Count(static entry => entry.Kind == PowerShellCompilationUnitKind.Function);
+        var analyzerEligibleFunctions = entries.Count(static entry =>
+            entry.Kind == PowerShellCompilationUnitKind.Function && entry.SemanticEligible);
+        var emittedFunctions = entries.Count(static entry =>
+            entry.Kind == PowerShellCompilationUnitKind.Function && entry.Emitted);
+        var totalScriptUnits = entries.Count(static entry => entry.Kind == PowerShellCompilationUnitKind.Script);
+        var structurallyEligibleScriptUnits = entries.Count(static entry =>
+            entry.Kind == PowerShellCompilationUnitKind.Script && entry.SemanticEligible);
         return new PowerShellCompilationCoverageBreakdown(
-            postEmissionEvaluated,
+            postEmissionEvaluated: true,
             totalFunctions,
             analyzerEligibleFunctions,
             emittedFunctions,
-            postEmissionEvaluated ? Math.Max(0, analyzerEligibleFunctions - emittedFunctions) : 0,
-            postEmissionEvaluated ? Math.Max(0, totalFunctions - emittedFunctions) : totalFunctions,
+            entries.Count(static entry => entry.Kind == PowerShellCompilationUnitKind.Function && entry.SemanticEligible && !entry.Emitted),
+            entries.Count(static entry => entry.Kind == PowerShellCompilationUnitKind.Function && entry.RuntimeRouted),
             totalScriptUnits,
             structurallyEligibleScriptUnits,
-            totalScriptUnits,
-            runtimeUnits.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Function),
-            runtimeUnits.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Script));
+            entries.Count(static entry => entry.Kind == PowerShellCompilationUnitKind.Script && entry.RuntimeRouted),
+            entries.Count(static entry => entry.Kind == PowerShellCompilationUnitKind.Function &&
+                entry.DiagnosticChain.Any(static cause => cause.Code == PowerShellCompilationDiagnosticCode.RuntimeScope)),
+            entries.Count(static entry => entry.Kind == PowerShellCompilationUnitKind.Script &&
+                entry.DiagnosticChain.Any(static cause => cause.Code == PowerShellCompilationDiagnosticCode.RuntimeScope)));
     }
+
+    private static PowerShellCompilationFunctionDisposition[] BuildFunctionDispositions(
+        PowerShellCompilationUnitDispositionLedger? ledger)
+        => ledger?.Entries
+               .Where(static entry => entry.Kind == PowerShellCompilationUnitKind.Function)
+               .Select(static entry => new PowerShellCompilationFunctionDisposition(
+                   entry.UnitId,
+                   entry.RelativePath,
+                   entry.Name,
+                   entry.StartLine,
+                   entry.SemanticEligible,
+                   entry.Emitted,
+                   entry.RuntimeRouted,
+                   entry.ShapingFallback,
+                   entry.PromotedTypedRegions))
+               .ToArray()
+           ?? Array.Empty<PowerShellCompilationFunctionDisposition>();
 
     private static string ComputeSourceFingerprint(IEnumerable<string> files, string sourceRoot)
     {
@@ -613,90 +683,10 @@ public sealed class PowerShellCompilationCensusRunner
         return new PowerShellCompilationFilePlan(file.FullPath, file.RelativePath, units, file.Diagnostics);
     }
 
-    private static PowerShellCompilationFilePlan[] ApplyEmittedGraphEvidence(
-        IEnumerable<PowerShellCompilationFilePlan> files,
-        PowerShellTypedCompilationResult emitted)
-    {
-        var plannedFiles = files.ToArray();
-        var comparisonPath = emitted.Methods.FirstOrDefault()?.SourcePath ??
-                             plannedFiles.FirstOrDefault()?.FullPath ??
-                             Directory.GetCurrentDirectory();
-        var methods = emitted.Methods
-            .Select(static method => Path.GetFullPath(method.SourcePath) + "\0" + method.SourceName)
-            .ToHashSet(CreateMethodIdentityComparer(comparisonPath));
-        return plannedFiles.Select(file =>
-        {
-            var fullPath = Path.GetFullPath(file.FullPath);
-            var functionExtents = File.Exists(fullPath)
-                ? Parser.ParseFile(fullPath, out _, out _)
-                    .FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: true)
-                    .OfType<FunctionDefinitionAst>()
-                    .Select(static function => (function.Name, BodyStartLine: function.Body.Extent.StartLineNumber, function.Extent))
-                    .ToArray()
-                : Array.Empty<(string Name, int BodyStartLine, IScriptExtent Extent)>();
-            var units = file.Units.Select((unit, index) =>
-            {
-                if (unit.Kind != PowerShellCompilationUnitKind.Function || !unit.IsCompilable || methods.Contains(fullPath + "\0" + unit.Name))
-                    return unit;
-                var occurrence = file.Units.Take(index).Count(candidate =>
-                    candidate.Kind == PowerShellCompilationUnitKind.Function &&
-                    candidate.StartLine == unit.StartLine &&
-                    candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase));
-                var extent = functionExtents
-                    .Where(candidate => candidate.BodyStartLine == unit.StartLine &&
-                                        candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase))
-                    .Skip(occurrence)
-                    .Select(static candidate => candidate.Extent)
-                    .FirstOrDefault();
-                var exact = emitted.Diagnostics
-                    .Where(diagnostic =>
-                        PowerShellCompilationPathSafety.PathEquals(diagnostic.FilePath, fullPath) &&
-                        extent is not null && IsWithinExtent(diagnostic.Line, diagnostic.Column, extent))
-                    .ToArray();
-                if (exact.Length > 0)
-                {
-                    return new PowerShellCompilationUnitPlan(
-                        unit.Name,
-                        unit.Kind,
-                        unit.StartLine,
-                        unit.ReturnType,
-                        unit.Parameters,
-                        exact);
-                }
-                return new PowerShellCompilationUnitPlan(
-                    unit.Name,
-                    unit.Kind,
-                    unit.StartLine,
-                    unit.ReturnType,
-                    unit.Parameters,
-                    unit.Diagnostics.Concat(new[]
-                    {
-                        new PowerShellCompilationDiagnostic(
-                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                            "This function did not survive conservative typed function-graph emission and remains on the PowerShell fallback path.",
-                            file.FullPath,
-                            unit.StartLine,
-                            1,
-                            PowerShellCompilationFeatureIds.FunctionGraph)
-                    }).ToArray());
-            }).ToArray();
-            return new PowerShellCompilationFilePlan(file.FullPath, file.RelativePath, units, file.Diagnostics);
-        }).ToArray();
-    }
-
     internal static StringComparer CreateMethodIdentityComparer(string sourcePath)
         => PowerShellCompilationPathSafety.GetPathComparison(sourcePath) == StringComparison.OrdinalIgnoreCase
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
-
-    private static bool IsWithinExtent(int line, int column, IScriptExtent extent)
-    {
-        if (line < extent.StartLineNumber || line > extent.EndLineNumber)
-            return false;
-        if (line == extent.StartLineNumber && column < extent.StartColumnNumber)
-            return false;
-        return line != extent.EndLineNumber || column <= extent.EndColumnNumber;
-    }
 
     private static string? NormalizeTargetFramework(string? targetFramework)
         => string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework!.Trim();

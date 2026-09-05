@@ -8,6 +8,29 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellHybridModuleComposer
 {
+    internal static string ComposeExecutableRoot(
+        string source,
+        string sourcePath,
+        PowerShellTypedCompilationResult typed)
+    {
+        var ast = Parser.ParseInput(source, out _, out var errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException("Hybrid executable source could not be parsed while composing retained fallback code.");
+        var compiledNames = typed.Methods
+            .Where(method => method.Lifecycle is null && PowerShellCompilationPathSafety.PathEquals(
+                string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+                sourcePath))
+            .Select(static method => method.SourceName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var result = new StringBuilder(ast.Extent.Text);
+        foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                     .Cast<FunctionDefinitionAst>()
+                     .Where(function => compiledNames.Contains(function.Name))
+                     .OrderByDescending(static function => function.Extent.StartOffset))
+            result.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
+        return result.ToString();
+    }
+
     internal static string ComposeRoot(
         string sourcePath,
         string assemblyFileName,
@@ -28,23 +51,46 @@ internal static class PowerShellHybridModuleComposer
             .OrderByDescending(static function => function.Extent.StartOffset)
             .ToArray();
         var runtimeVariables = CreateRuntimeRegionVariableNames(ast);
+        var readModuleStateVariables = typed.Methods
+            .SelectMany(static method => method.RequiredPowerShellModuleVariables)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+        var writtenModuleStateVariables = typed.Methods
+            .SelectMany(static method => method.WrittenPowerShellModuleVariables)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
         var source = new StringBuilder(ast.Extent.Text);
         var exportContract = PowerShellModuleExportContract.TryRead(ast);
         var wrapped = GetWrappedCompiledMethodKeys(sourcePath, typed);
-        var removals = new List<(int Start, int Length)>();
+        var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in functions)
         {
             if (!wrapped.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
                 continue;
             if (function.Extent.StartOffset < prologueEndOffset)
                 throw new InvalidOperationException($"Compiled function '{function.Name}' overlaps the module prologue and cannot be composed safely.");
-            removals.Add((function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset));
+            edits.Add(new PowerShellHybridSourceEdit(
+                function.Extent.StartOffset,
+                function.Extent.EndOffset - function.Extent.StartOffset,
+                string.Empty,
+                "function:" + function.Name));
         }
         if (exportContract is not null)
-            removals.AddRange(exportContract.Commands.Select(static command =>
-                (command.Extent.StartOffset, command.Extent.EndOffset - command.Extent.StartOffset)));
-        foreach (var removal in removals.OrderByDescending(static removal => removal.Start))
-            source.Remove(removal.Start, removal.Length);
+            edits.AddRange(exportContract.Commands.Select(static command => new PowerShellHybridSourceEdit(
+                command.Extent.StartOffset,
+                command.Extent.EndOffset - command.Extent.StartOffset,
+                string.Empty,
+                "export:" + command.Extent.StartOffset)));
+        edits.AddRange(PowerShellHybridRegionRewriter.CreateEdits(sourcePath, ast, typed, wrapped));
+        foreach (var edit in edits.OrderByDescending(static edit => edit.Start))
+        {
+            source.Remove(edit.Start, edit.Length);
+            source.Insert(edit.Start, edit.Replacement);
+        }
 
         var fallbackFunctions = ReadModuleScopeFunctions(typed.SourcePaths)
             .Where(function => !wrapped.Contains(GetCompiledMethodKey(function.Path, function.Name, function.Line)))
@@ -67,48 +113,155 @@ internal static class PowerShellHybridModuleComposer
         if (prologueEndOffset > 0 && source[prologueEndOffset - 1] is not '\r' and not '\n') import.AppendLine();
         import.AppendLine("# Generated by PowerForge hybrid PowerShell compilation.");
         import.AppendLine("Microsoft.PowerShell.Core\\Import-Module -Name (Microsoft.PowerShell.Management\\Join-Path -Path $PSScriptRoot -ChildPath '" + EscapePowerShellSingleQuotedString(assemblyFileName) + "') -Force -ErrorAction Stop");
-        if (typed.Methods.Any(static method => method.RequiresPowerShellCommandRegions))
+        var requiresDispatcher = typed.Methods.Any(static method => method.RequiresPowerShellCommandRegions);
+        var requiresModuleStateRead = readModuleStateVariables.Length > 0;
+        var requiresModuleStateWrite = writtenModuleStateVariables.Length > 0;
+        var requiresModuleState = requiresModuleStateRead || requiresModuleStateWrite;
+        if (requiresDispatcher || requiresModuleState)
+        {
+            import.Append('$').Append(runtimeVariables.RunspaceId).AppendLine(" = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId");
+            AppendRuntimeRegionGuardStart(
+                import,
+                typed,
+                runtimeVariables,
+                requiresDispatcher,
+                requiresModuleStateRead,
+                requiresModuleStateWrite);
+        }
+        if (requiresDispatcher)
         {
             var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
-            import.Append('$').Append(runtimeVariables.RunspaceId).AppendLine(" = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId");
             import.Append(hostType).Append("::SetDispatcher($").Append(runtimeVariables.RunspaceId)
                 .AppendLine(", { param($script, [object[]] $arguments) & ([scriptblock]::Create($script)) @arguments })");
+        }
+        if (requiresModuleStateRead)
+        {
+            var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
+            foreach (var variable in readModuleStateVariables)
+            {
+                import.Append(hostType).Append("::SetModuleVariableReader($").Append(runtimeVariables.RunspaceId)
+                    .Append(", '").Append(EscapePowerShellSingleQuotedString(variable)).Append("', { try { ")
+                    .Append(hostType).Append("::CreateModuleVariableReadSuccess($script:").Append(variable)
+                    .Append(") } catch { ").Append(hostType).AppendLine("::CreateModuleVariableReadFailure($_) } })");
+            }
+        }
+        if (requiresModuleStateWrite)
+        {
+            var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
+            foreach (var variable in writtenModuleStateVariables)
+            {
+                import.Append(hostType).Append("::SetModuleVariableWriter($").Append(runtimeVariables.RunspaceId)
+                    .Append(", '").Append(EscapePowerShellSingleQuotedString(variable)).Append("', { param([object] $value) try { $script:")
+                    .Append(variable).Append(" = $value; ").Append(hostType)
+                    .Append("::CreateModuleVariableWriteSuccess() } catch { ").Append(hostType)
+                    .AppendLine("::CreateModuleVariableWriteFailure($_) } })");
+            }
         }
         import.AppendLine();
         source.Insert(prologueEndOffset, import.ToString());
         var builder = new StringBuilder(source.ToString());
         if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
-        AppendRuntimeRegionCleanup(builder, typed, runtimeVariables);
-        if (manifestControlsExports)
-            return builder.ToString();
-        if (exportContract is not null && exportContract.Commands.Length == 0)
-            return builder.ToString();
-        builder.AppendLine();
-        builder.Append("Microsoft.PowerShell.Core\\Export-ModuleMember -Function @(").Append(JoinPowerShellNames(exportedFallbackFunctions))
-            .Append(") -Cmdlet @(").Append(JoinPowerShellNames(exportedCompiledCmdlets.Concat(additionalCmdlets).Distinct(StringComparer.OrdinalIgnoreCase)))
-            .Append(") -Alias @(").Append(JoinPowerShellNames(aliases)).Append(')');
-        if (variables.Length > 0)
-            builder.Append(" -Variable @(").Append(JoinPowerShellNames(variables)).Append(')');
-        builder.AppendLine();
+        if (!manifestControlsExports && (exportContract is null || exportContract.Commands.Length > 0))
+        {
+            builder.AppendLine();
+            builder.Append("Microsoft.PowerShell.Core\\Export-ModuleMember -Function @(").Append(JoinPowerShellNames(exportedFallbackFunctions))
+                .Append(") -Cmdlet @(").Append(JoinPowerShellNames(exportedCompiledCmdlets.Concat(additionalCmdlets).Distinct(StringComparer.OrdinalIgnoreCase)))
+                .Append(") -Alias @(").Append(JoinPowerShellNames(aliases)).Append(')');
+            if (variables.Length > 0)
+                builder.Append(" -Variable @(").Append(JoinPowerShellNames(variables)).Append(')');
+            builder.AppendLine();
+        }
+        AppendRuntimeRegionGuardEnd(
+            builder,
+            typed,
+            runtimeVariables,
+            requiresDispatcher,
+            requiresModuleStateRead,
+            requiresModuleStateWrite);
         return builder.ToString();
     }
 
-    private static void AppendRuntimeRegionCleanup(
+    private static void AppendRuntimeRegionGuardStart(
         StringBuilder builder,
         PowerShellTypedCompilationResult typed,
-        RuntimeRegionVariableNames variables)
+        RuntimeRegionVariableNames variables,
+        bool requiresDispatcher,
+        bool requiresModuleStateRead,
+        bool requiresModuleStateWrite)
     {
-        if (!typed.Methods.Any(static method => method.RequiresPowerShellCommandRegions))
-            return;
         var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
         builder.Append('$').Append(variables.Module).AppendLine(" = $ExecutionContext.SessionState.Module");
         builder.Append('$').Append(variables.PreviousOnRemove).Append(" = $").Append(variables.Module).AppendLine(".OnRemove");
-        builder.Append('$').Append(variables.Module).AppendLine(".OnRemove = {");
-        builder.Append("    ").Append(hostType).Append("::ClearDispatcher($").Append(variables.RunspaceId).AppendLine(")");
-        builder.Append("    if ($null -ne $").Append(variables.PreviousOnRemove).Append(") { & $").Append(variables.PreviousOnRemove).AppendLine(" }");
+        builder.Append('$').Append(variables.InitializationFailed).AppendLine(" = $false");
+        builder.Append('$').Append(variables.Cleanup).AppendLine(" = {");
+        AppendRuntimeRegionClear(builder, hostType, variables, requiresDispatcher, requiresModuleStateRead, requiresModuleStateWrite, "    ");
         builder.AppendLine("}.GetNewClosure()");
-        builder.Append("Microsoft.PowerShell.Utility\\Remove-Variable -Name ").Append(variables.RunspaceId).Append(", ").Append(variables.Module)
-            .Append(", ").Append(variables.PreviousOnRemove).AppendLine(" -Scope Script -ErrorAction SilentlyContinue");
+        builder.Append('$').Append(variables.InstalledOnRemove).AppendLine(" = {");
+        builder.AppendLine("    try {");
+        builder.Append("        if ($null -ne $").Append(variables.PreviousOnRemove).Append(") { & $").Append(variables.PreviousOnRemove).AppendLine(" }");
+        builder.AppendLine("    } finally {");
+        builder.Append("        & $").Append(variables.Cleanup).AppendLine();
+        builder.AppendLine("    }");
+        builder.AppendLine("}.GetNewClosure()");
+        builder.Append('$').Append(variables.Module).Append(".OnRemove = $").Append(variables.InstalledOnRemove).AppendLine();
+        builder.AppendLine("try {");
+    }
+
+    private static void AppendRuntimeRegionGuardEnd(
+        StringBuilder builder,
+        PowerShellTypedCompilationResult typed,
+        RuntimeRegionVariableNames variables,
+        bool requiresDispatcher,
+        bool requiresModuleStateRead,
+        bool requiresModuleStateWrite)
+    {
+        var requiresModuleState = requiresModuleStateRead || requiresModuleStateWrite;
+        if (!requiresDispatcher && !requiresModuleState)
+            return;
+        var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
+        builder.AppendLine("} catch {");
+        builder.Append("    $").Append(variables.InitializationFailed).AppendLine(" = $true");
+        AppendRuntimeRegionClear(builder, hostType, variables, requiresDispatcher, requiresModuleStateRead, requiresModuleStateWrite, "    ");
+        builder.Append("    $").Append(variables.Module).Append(".OnRemove = $").Append(variables.PreviousOnRemove).AppendLine();
+        builder.AppendLine("    throw");
+        builder.AppendLine("} finally {");
+        builder.Append("    if (-not $").Append(variables.InitializationFailed)
+            .Append(" -and -not [object]::ReferenceEquals($").Append(variables.Module).Append(".OnRemove, $")
+            .Append(variables.InstalledOnRemove).AppendLine(")) {");
+        builder.Append("        $").Append(variables.EffectiveOnRemove).Append(" = $").Append(variables.Module).AppendLine(".OnRemove");
+        builder.Append('$').Append(variables.Module).AppendLine(".OnRemove = {");
+        builder.AppendLine("            try {");
+        builder.Append("                if ($null -ne $").Append(variables.EffectiveOnRemove).Append(") { & $").Append(variables.EffectiveOnRemove).AppendLine(" }");
+        builder.AppendLine("            } finally {");
+        builder.Append("                & $").Append(variables.Cleanup).AppendLine();
+        builder.AppendLine("            }");
+        builder.AppendLine("        }.GetNewClosure()");
+        builder.AppendLine("    }");
+        builder.Append("    [void]$").Append(variables.Module).Append(".SessionState.PSVariable.Remove('").Append(variables.EffectiveOnRemove).AppendLine("')");
+        builder.Append("    [void]$").Append(variables.Module).Append(".SessionState.PSVariable.Remove('").Append(variables.InstalledOnRemove).AppendLine("')");
+        builder.Append("    [void]$").Append(variables.Module).Append(".SessionState.PSVariable.Remove('").Append(variables.Cleanup).AppendLine("')");
+        builder.Append("    [void]$").Append(variables.Module).Append(".SessionState.PSVariable.Remove('").Append(variables.InitializationFailed).AppendLine("')");
+        builder.Append("    [void]$").Append(variables.Module).Append(".SessionState.PSVariable.Remove('").Append(variables.RunspaceId).AppendLine("')");
+        builder.Append("    [void]$").Append(variables.Module).Append(".SessionState.PSVariable.Remove('").Append(variables.PreviousOnRemove).AppendLine("')");
+        builder.Append("    [void]$").Append(variables.Module).Append(".SessionState.PSVariable.Remove('").Append(variables.Module).AppendLine("')");
+        builder.AppendLine("}");
+    }
+
+    private static void AppendRuntimeRegionClear(
+        StringBuilder builder,
+        string hostType,
+        RuntimeRegionVariableNames variables,
+        bool requiresDispatcher,
+        bool requiresModuleStateRead,
+        bool requiresModuleStateWrite,
+        string indentation)
+    {
+        if (requiresDispatcher)
+            builder.Append(indentation).Append(hostType).Append("::ClearDispatcher($").Append(variables.RunspaceId).AppendLine(")");
+        if (requiresModuleStateRead)
+            builder.Append(indentation).Append(hostType).Append("::ClearModuleVariableReaders($").Append(variables.RunspaceId).AppendLine(")");
+        if (requiresModuleStateWrite)
+            builder.Append(indentation).Append(hostType).Append("::ClearModuleVariableWriters($").Append(variables.RunspaceId).AppendLine(")");
     }
 
     internal static string? ComposeDependency(
@@ -123,7 +276,9 @@ internal static class PowerShellHybridModuleComposer
             .Select(method => GetCompiledMethodKey(sourcePath, method.SourceName, method.SourceLine))
             .Where(wrappedCompiledMethods.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (compiled.Count == 0)
+        var hasPromotedRegions = typed.PromotedRegions.Any(region =>
+            PowerShellCompilationPathSafety.PathEquals(region.SourcePath, sourcePath));
+        if (compiled.Count == 0 && !hasPromotedRegions)
             return null;
 
         Token[] tokens;
@@ -132,12 +287,23 @@ internal static class PowerShellHybridModuleComposer
         if (errors.Length > 0)
             throw new InvalidOperationException($"Hybrid module dependency '{sourcePath}' could not be parsed while composing fallback code.");
         var source = new StringBuilder(ast.Extent.Text);
+        var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                      .Cast<FunctionDefinitionAst>()
                      .Where(function => compiled.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
                      .OrderByDescending(static function => function.Extent.StartOffset))
         {
-            source.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
+            edits.Add(new PowerShellHybridSourceEdit(
+                function.Extent.StartOffset,
+                function.Extent.EndOffset - function.Extent.StartOffset,
+                string.Empty,
+                "function:" + function.Name));
+        }
+        edits.AddRange(PowerShellHybridRegionRewriter.CreateEdits(sourcePath, ast, typed, wrappedCompiledMethods));
+        foreach (var edit in edits.OrderByDescending(static edit => edit.Start))
+        {
+            source.Remove(edit.Start, edit.Length);
+            source.Insert(edit.Start, edit.Replacement);
         }
         return source.ToString();
     }
@@ -154,10 +320,18 @@ internal static class PowerShellHybridModuleComposer
             var names = new RuntimeRegionVariableNames(
                 "__powerForgeRunspaceId" + suffix,
                 "__powerForgeModule" + suffix,
-                "__powerForgePreviousOnRemove" + suffix);
+                "__powerForgePreviousOnRemove" + suffix,
+                "__powerForgeRuntimeCleanup" + suffix,
+                "__powerForgeInstalledOnRemove" + suffix,
+                "__powerForgeEffectiveOnRemove" + suffix,
+                "__powerForgeInitializationFailed" + suffix);
             if (!authoredNames.Contains(names.RunspaceId) &&
                 !authoredNames.Contains(names.Module) &&
-                !authoredNames.Contains(names.PreviousOnRemove))
+                !authoredNames.Contains(names.PreviousOnRemove) &&
+                !authoredNames.Contains(names.Cleanup) &&
+                !authoredNames.Contains(names.InstalledOnRemove) &&
+                !authoredNames.Contains(names.EffectiveOnRemove) &&
+                !authoredNames.Contains(names.InitializationFailed))
                 return names;
         }
     }
@@ -182,6 +356,15 @@ internal static class PowerShellHybridModuleComposer
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
+    internal static HashSet<string> GetExecutableCompiledMethodKeys(PowerShellTypedCompilationResult typed)
+        => typed.Methods
+            .Where(static method => method.Lifecycle is null)
+            .Select(method => GetCompiledMethodKey(
+                string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+                method.SourceName,
+                method.SourceLine))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     private static IEnumerable<ModuleScopeFunction> ReadModuleScopeFunctions(IEnumerable<string> sourcePaths)
     {
         foreach (var sourcePath in sourcePaths.Distinct(PowerShellCompilationPathSafety.PathComparer))
@@ -196,7 +379,7 @@ internal static class PowerShellHybridModuleComposer
         }
     }
 
-    private static string GetCompiledMethodKey(string sourcePath, string name, int line)
+    internal static string GetCompiledMethodKey(string sourcePath, string name, int line)
         => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + line;
 
     private static string JoinPowerShellNames(IEnumerable<string> names)
@@ -221,15 +404,30 @@ internal static class PowerShellHybridModuleComposer
 
     private sealed class RuntimeRegionVariableNames
     {
-        internal RuntimeRegionVariableNames(string runspaceId, string module, string previousOnRemove)
+        internal RuntimeRegionVariableNames(
+            string runspaceId,
+            string module,
+            string previousOnRemove,
+            string cleanup,
+            string installedOnRemove,
+            string effectiveOnRemove,
+            string initializationFailed)
         {
             RunspaceId = runspaceId;
             Module = module;
             PreviousOnRemove = previousOnRemove;
+            Cleanup = cleanup;
+            InstalledOnRemove = installedOnRemove;
+            EffectiveOnRemove = effectiveOnRemove;
+            InitializationFailed = initializationFailed;
         }
 
         internal string RunspaceId { get; }
         internal string Module { get; }
         internal string PreviousOnRemove { get; }
+        internal string Cleanup { get; }
+        internal string InstalledOnRemove { get; }
+        internal string EffectiveOnRemove { get; }
+        internal string InitializationFailed { get; }
     }
 }

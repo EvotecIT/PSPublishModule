@@ -42,7 +42,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.CommandCapture",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = targetFramework,
             EmitSource = true
@@ -101,7 +101,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ExtendedCapture",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
@@ -122,7 +122,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ScalarCapture",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var original = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
@@ -145,12 +145,24 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var function = Assert.Single(ast.FindAll(static node => node is FunctionDefinitionAst, false).Cast<FunctionDefinitionAst>());
         var statement = function.Body.EndBlock!.Statements[0];
         var allowed = new HashSet<string>(new[] { "captured", "later" }, StringComparer.OrdinalIgnoreCase);
+        var resolver = new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
 
         if (statement is AssignmentStatementAst)
             Assert.False(PowerShellCommandIslandPolicy.TryGetCapturedRuntimeAssignment(
-                statement, function.Body, localFunctionNames: null, allowed, out _));
+                statement,
+                function.Body,
+                localFunctionNames: null,
+                allowed,
+                PowerShellCompilationCapabilities.BinaryModule,
+                resolver,
+                out _));
         else
             Assert.False(PowerShellCommandIslandPolicy.IsRuntimeRegion(
-                statement, function.Body, localFunctionNames: null, allowed));
+                statement,
+                function.Body,
+                localFunctionNames: null,
+                allowed,
+                PowerShellCompilationCapabilities.BinaryModule,
+                resolver));
     }
 }

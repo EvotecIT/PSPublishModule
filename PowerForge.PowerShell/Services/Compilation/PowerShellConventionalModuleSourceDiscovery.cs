@@ -233,7 +233,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     {
         for (var parent = node.Parent; parent is not null && !ReferenceEquals(parent, root); parent = parent.Parent)
         {
-            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst or IfStatementAst or WhileStatementAst or ForStatementAst or SwitchStatementAst or TryStatementAst or TrapStatementAst ||
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst or IfStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst or ForStatementAst or SwitchStatementAst or TryStatementAst or TrapStatementAst ||
                 parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, root))
                 return false;
             if (parent is ForEachStatementAst loop && !IsDescendantOf(node, loop.Condition))

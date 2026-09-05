@@ -15,7 +15,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ConstantConversion",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(
             result.Succeeded,
@@ -51,7 +51,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.TypedRecursion",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(
             result.Succeeded,
@@ -78,7 +78,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.TypedRecursionExecutable",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(
             result.Succeeded,
@@ -93,8 +93,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Transpile_OutputTypesDoNotPermitMutuallyRecursiveGraph()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Even { [OutputType([bool])] param([long] $Number) if ($Number -le [long] 0) { return $true }; return Get-Odd -Number ($Number - [long] 1) }; " +
-            "function Get-Odd { [OutputType([bool])] param([long] $Number) if ($Number -le [long] 0) { return $false }; return Get-Even -Number ($Number - [long] 1) }",
+            "function Get-Even { [OutputType([bool])] param([long] $Number) if ($Number -le [long] 0) { return $true }; $Number -= [long] 1; return Get-Odd -Number $Number }; " +
+            "function Get-Odd { [OutputType([bool])] param([long] $Number) if ($Number -le [long] 0) { return $false }; $Number -= [long] 1; return Get-Even -Number $Number }",
             ".psm1");
 
         var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
@@ -106,6 +106,25 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Empty(result.Methods);
         Assert.Contains(result.Diagnostics, static diagnostic =>
             diagnostic.Message.Contains("recursive local-call cycle", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Transpile_AdvisoryVoidOutputTypeDoesNotSeedRecursiveValueContract()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Countdown { [OutputType([void])] param([long] $Number) " +
+            "if ($Number -le [long] 0) { return $Number }; $Number -= [long] 1; return Get-Countdown -Number $Number }",
+            ".psm1");
+
+        var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.AdvisoryVoidRecursion",
+            "CompiledPowerShell",
+            "net10.0");
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("without a declared return contract", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]
@@ -151,7 +170,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.LanguageCoverage",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = targetFramework
         });
@@ -224,7 +243,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.OperatorOrder",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net8.0",
             EmitSource = true

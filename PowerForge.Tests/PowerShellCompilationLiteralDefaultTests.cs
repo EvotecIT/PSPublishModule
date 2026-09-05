@@ -64,6 +64,114 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Analyze_PreservesExactStaticEnumMemberDefaults()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-EnumDefaults { param(" +
+            "[DayOfWeek] $Direct = [DayOfWeek]::friday, " +
+            "[EnvironmentVariableTarget] $Parenthesized = ([EnvironmentVariableTarget]::User), " +
+            "[Nullable[DayOfWeek]] $Nullable = [DayOfWeek]::Monday) return $Direct }",
+            ".psm1");
+
+        var unit = Assert.Single(Assert.Single(new PowerShellCompilationAnalyzer().Analyze(
+            new PowerShellCompilationSpec(
+                fixture.ScriptPath,
+                targetFramework: "net10.0",
+                capabilities: PowerShellCompilationCapabilities.BinaryModule)).Files).Units);
+
+        Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.Equal(
+            new[]
+            {
+                ((int)DayOfWeek.Friday).ToString(),
+                ((int)EnvironmentVariableTarget.User).ToString(),
+                ((int)DayOfWeek.Monday).ToString()
+            },
+            unit.Parameters.Select(static parameter => parameter.DefaultValue?.Value));
+        Assert.All(unit.Parameters, static parameter => Assert.Equal(PowerShellCompilationLiteralKind.Enum, parameter.DefaultValue?.Kind));
+        Assert.DoesNotContain(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterDefault);
+    }
+
+    [Fact]
+    public void Analyze_RejectsStaticEnumMemberMissingFromSelectedTarget()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Value { param([StringSplitOptions] $Options = [StringSplitOptions]::TrimEntries) return $Options }",
+            ".psm1");
+
+        var unit = Assert.Single(Assert.Single(new PowerShellCompilationAnalyzer().Analyze(
+            new PowerShellCompilationSpec(
+                fixture.ScriptPath,
+                targetFramework: "net472",
+                capabilities: PowerShellCompilationCapabilities.BinaryModule)).Files).Units);
+
+        Assert.False(unit.IsCompilable);
+        Assert.Null(Assert.Single(unit.Parameters).DefaultValue);
+        Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterDefault);
+    }
+
+    [Fact]
+    public void Analyze_PreservesStaticEnumMemberAvailableInSelectedTarget()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Value { param([StringSplitOptions] $Options = [StringSplitOptions]::RemoveEmptyEntries) return $Options }",
+            ".psm1");
+
+        var unit = Assert.Single(Assert.Single(new PowerShellCompilationAnalyzer().Analyze(
+            new PowerShellCompilationSpec(
+                fixture.ScriptPath,
+                targetFramework: "net472",
+                capabilities: PowerShellCompilationCapabilities.BinaryModule)).Files).Units);
+
+        Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.Equal(
+            ((int)StringSplitOptions.RemoveEmptyEntries).ToString(),
+            Assert.Single(unit.Parameters).DefaultValue?.Value);
+        Assert.DoesNotContain(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterDefault);
+    }
+
+    [Theory]
+    [InlineData("[DayOfWeek] $Value = [ConsoleColor]::Yellow")]
+    [InlineData("[DayOfWeek] $Value = [DayOfWeek]::NotADay")]
+    [InlineData("[string] $Value = [Environment]::NewLine")]
+    public void Analyze_RejectsNonExactStaticMemberDefaults(string parameter)
+    {
+        using var fixture = ArtifactFixture.Create($"function Get-Value {{ param({parameter}) return $Value }}", ".psm1");
+
+        var unit = Assert.Single(Assert.Single(new PowerShellCompilationAnalyzer().Analyze(
+            new PowerShellCompilationSpec(
+                fixture.ScriptPath,
+                targetFramework: "net10.0",
+                capabilities: PowerShellCompilationCapabilities.BinaryModule)).Files).Units);
+
+        Assert.False(unit.IsCompilable);
+        Assert.Null(Assert.Single(unit.Parameters).DefaultValue);
+        Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterDefault);
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModulePreservesStaticEnumDefaultsAndExplicitOverrides()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-DefaultDay { param([DayOfWeek] $FallbackDay = [DayOfWeek]::Friday) return $FallbackDay }; " +
+            "function Get-DefaultTarget { param([EnvironmentVariableTarget] $Target = ([EnvironmentVariableTarget]::User)) return $Target }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.StaticEnumDefaults",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var output = RunModuleProof(
+            result.ArtifactPath!,
+            "Get-DefaultDay; Get-DefaultDay -FallbackDay Monday; Get-DefaultTarget; Get-DefaultTarget -Target Machine");
+        Assert.Equal(new[] { "Friday", "Monday", "User", "Machine" }, output.Split(Environment.NewLine));
+    }
+
+    [Fact]
     public void Build_StrictExecutableDistinguishesOmittedDefaultFromExplicitZero()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Count = 7); return $Count");
@@ -72,7 +180,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.LiteralDefaultExecutable",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var omitted = RunProcess(result.ArtifactPath!);
@@ -94,7 +202,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.LiteralDefaultModule",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var output = RunModuleProof(
@@ -117,7 +225,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.LocalLiteralDefault",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var output = RunModuleProof(result.ArtifactPath!, "Get-OuterDefault; Get-ExplicitDefault");
@@ -144,7 +252,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.PortableLiteralFamilies",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var output = RunModuleProof(

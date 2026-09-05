@@ -1,234 +1,245 @@
 using System.Management.Automation.Language;
+using System.Text;
 
 namespace PowerForge;
 
-/// <summary>Compiles one entry script and its contained dot-source closure into direct CLR methods.</summary>
+/// <summary>Compiles one entry script and its contained dot-source closure through the shared semantic pipeline.</summary>
 internal static class PowerShellTypedExecutableCompiler
 {
+    private const PowerShellCompilationCapability Capabilities = PowerShellCompilationCapabilities.TypedExecutable;
+
     internal static PowerShellTypedExecutableCompilation Compile(
         string entryPointPath,
         IEnumerable<string> sourcePaths,
         PowerShellCompilationPlan plan,
-        string targetFramework)
+        string targetFramework,
+        string semanticProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
     {
-        if (!plan.CanProceed)
-            throw CreatePlanFailure(plan);
+        if (!plan.CanProceed) throw CreatePlanFailure(plan);
 
         var entryPoint = Path.GetFullPath(entryPointPath);
-        var requestedSources = sourcePaths
-            .Select(Path.GetFullPath)
-            .Distinct(PowerShellCompilationPathSafety.PathComparer)
-            .ToArray();
-        var reachableSources = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint);
-        var injectedSources = requestedSources.Except(reachableSources, PowerShellCompilationPathSafety.PathComparer).ToArray();
-        var missingSources = reachableSources.Except(requestedSources, PowerShellCompilationPathSafety.PathComparer).ToArray();
-        if (injectedSources.Length > 0 || missingSources.Length > 0)
-        {
-            var details = injectedSources.Length > 0
-                ? $"unreachable source(s): {string.Join(", ", injectedSources.Select(Path.GetFileName))}"
-                : $"missing reachable source(s): {string.Join(", ", missingSources.Select(Path.GetFileName))}";
-            throw new InvalidOperationException($"The typed executable compilation source set must exactly match the entrypoint's contained dot-source closure; {details}.");
-        }
+        var requestedSources = sourcePaths.Select(Path.GetFullPath)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
+        ValidateSourceClosure(entryPoint, requestedSources);
 
-        var parsed = requestedSources
-            .Select(Parse)
+        var identityRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
+        var parsed = requestedSources.Select(path => Parse(path, identityRoot))
             .ToDictionary(static source => source.Path, PowerShellCompilationPathSafety.PathComparer);
         if (!parsed.TryGetValue(entryPoint, out var entrySource))
             throw new InvalidOperationException("The typed executable entrypoint is not present in its compilation source closure.");
 
         var definitions = parsed.Values
-            .SelectMany(source => GetTopLevelFunctions(source).Select(function => new LocalDefinition(source.Path, function, GetUnit(plan, source.Path, function.Name))))
+            .SelectMany(source => GetTopLevelFunctions(source)
+                .Select(function => new LocalDefinition(source.Path, function, GetUnit(plan, source.Path, function.Name))))
             .ToArray();
-        var duplicate = definitions.GroupBy(static definition => definition.Function.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault(static group => group.Count() > 1);
-        if (duplicate is not null)
-            throw new InvalidOperationException($"Typed executable local function '{duplicate.Key}' is declared more than once in the source closure.");
-        var generatedCollision = definitions.GroupBy(static definition => PowerShellCSharpMethodEmitter.SanitizeIdentifier(definition.Function.Name), StringComparer.Ordinal)
-            .FirstOrDefault(static group => group.Count() > 1);
-        if (generatedCollision is not null)
-            throw new InvalidOperationException($"Typed executable local functions collide after CLR identifier normalization: {string.Join(", ", generatedCollision.Select(static item => item.Function.Name))}.");
-        var entryPointCollision = definitions.FirstOrDefault(static definition =>
-            PowerShellCSharpMethodEmitter.SanitizeIdentifier(definition.Function.Name).Equals("Invoke", StringComparison.Ordinal));
-        if (entryPointCollision is not null)
-            throw new InvalidOperationException($"Typed executable local function '{entryPointCollision.Function.Name}' collides with the reserved generated entry-point method 'Invoke'.");
-
-        foreach (var source in parsed.Values.Where(source => !PowerShellCompilationPathSafety.PathEquals(source.Path, entryPoint)))
-        {
-            if (source.Ast.ParamBlock is not null)
-                throw new InvalidOperationException($"Typed executable dependency '{source.Path}' declares a parameter block whose dot-source binding semantics are not yet supported.");
-            var unsupported = source.Ast.EndBlock?.Statements.FirstOrDefault(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement));
-            if (unsupported is not null)
-                throw new InvalidOperationException($"Typed executable dependency '{source.Path}' contains executable module-scope statement '{unsupported.GetType().Name}'. Dependencies may declare functions and top-level literal dot-source includes only.");
-        }
-
+        ValidateDefinitions(definitions);
+        ValidateDependencyTopLevels(parsed.Values, entryPoint);
         ValidateEntryPointDeclarationOrder(entrySource);
-
-        var byName = definitions.ToDictionary(static definition => definition.Function.Name, StringComparer.OrdinalIgnoreCase);
-        var knownNames = byName.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var signatures = new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
-        var methods = new List<PowerShellCSharpMethodEmission>();
-        var methodDescriptions = new List<PowerShellCompiledMethod>();
-        var states = new Dictionary<string, VisitState>(StringComparer.OrdinalIgnoreCase);
-        var provisionalSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var definition in definitions)
-            EmitFunction(definition, byName, knownNames, signatures, methods, methodDescriptions, states, provisionalSignatures, targetFramework);
 
         var statements = entrySource.Ast.EndBlock?.Statements
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))
             .ToArray() ?? Array.Empty<StatementAst>();
-        ValidateCommands(entrySource.Path, statements, byName);
-        var entryUnit = plan.Files
-            .First(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))
+
+        var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot);
+        var registry = PowerShellCommandSemanticRegistry.Create(commandProviders);
+        var semantic = new PowerShellSemanticCompilationPipeline(registry, semanticProfileId).Compile(
+            parsed.Values.Select(static source => source.Document).Append(entryDocument.Document),
+            targetFramework,
+            Capabilities);
+        var emissions = semantic.Lowered.Functions
+            .Zip(semantic.Emitted.Methods, static (function, emission) => new SemanticEmission(function, emission))
+            .ToArray();
+        var entry = emissions.SingleOrDefault(item =>
+            item.Function.Symbol.DocumentId == entryDocument.Document.DocumentId &&
+            item.Function.Symbol.Name.Equals("Invoke", StringComparison.Ordinal));
+        if (entry is null) throw CreateSemanticFailure(semantic, "entrypoint");
+        entry.Emission.RegionGraph = PowerShellLoweredRegionGraphBuilder.Remap(
+            entry.Emission.RegionGraph,
+            entrySource.Document.DocumentId,
+            entrySource.Document.Text,
+            entryDocument.SourceMappings);
+
+        var localMethods = new List<PowerShellCSharpMethodEmission>();
+        var descriptions = new List<PowerShellCompiledMethod>();
+        foreach (var definition in definitions.OrderBy(static definition => definition.Path, PowerShellCompilationPathSafety.PathComparer)
+                     .ThenBy(static definition => definition.Function.Extent.StartOffset))
+        {
+            var documentId = parsed[definition.Path].Document.DocumentId;
+            var emitted = emissions.SingleOrDefault(item =>
+                item.Function.Symbol.DocumentId == documentId &&
+                item.Function.Symbol.Name.Equals(definition.Function.Name, StringComparison.OrdinalIgnoreCase));
+            if (emitted is null) throw CreateSemanticFailure(semantic, $"local function '{definition.Function.Name}'");
+            localMethods.Add(emitted.Emission);
+            descriptions.Add(CreateMethodDescription(definition.Unit, emitted.Function, emitted.Emission, definition.Path));
+        }
+
+        var entryUnit = plan.Files.First(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))
             .Units.Single(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
-        var entryMethod = new PowerShellCSharpMethodEmitter(
-            entrySource.Path,
-            entrySource.Ast,
-            "<script>",
-            "Invoke",
-            statements,
-            targetFramework,
-            PowerShellCompilationCapability.LocalFunctionCalls |
-            PowerShellCompilationCapability.BoundParameters |
-            PowerShellCompilationCapability.RuntimeStateIntrinsics,
-            signatures,
-            entryUnit.Parameters).Emit();
-        methodDescriptions.Add(CreateMethodDescription(entryUnit, entryMethod, entryPoint));
-        return new PowerShellTypedExecutableCompilation(entrySource.Ast, entryUnit, entryMethod, methods.ToArray(), methodDescriptions.ToArray());
+        var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
+        descriptions.Add(entryDescription);
+        var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);
+        return new PowerShellTypedExecutableCompilation(
+            new PowerShellTypedExecutableContract(entryDescription, entry.Function.Parameters
+                .Select(static parameter => new PowerShellTypedExecutableParameter(parameter.ClrType, parameter.Contract))
+                .ToArray()),
+            entry.Emission,
+            localMethods.ToArray(),
+            descriptions.ToArray(),
+            reachableCommandProviders,
+            semantic.Optimization.ToPublicModel(),
+            PowerShellCompilationIrSnapshotBuilder.Create(semantic));
     }
 
-    private static void EmitFunction(
-        LocalDefinition definition,
-        IReadOnlyDictionary<string, LocalDefinition> definitions,
-        ISet<string> knownNames,
-        Dictionary<string, PowerShellLocalFunctionSignature> signatures,
-        List<PowerShellCSharpMethodEmission> methods,
-        List<PowerShellCompiledMethod> methodDescriptions,
-        Dictionary<string, VisitState> states,
-        ISet<string> provisionalSignatures,
-        string targetFramework)
+    private static PowerShellCompilationCommandProviderContract[] CollectReachableCommandProviders(
+        PowerShellSemanticCompilationResult semantic,
+        PowerShellSymbolId entryPoint)
     {
-        var name = definition.Function.Name;
-        if (states.TryGetValue(name, out var state))
+        var reachable = new HashSet<string>(StringComparer.Ordinal) { entryPoint.StableKey };
+        bool changed;
+        do
         {
-            if (state == VisitState.Complete) return;
-            if (provisionalSignatures.Contains(name)) return;
-            throw new InvalidOperationException($"Typed executable local function cycle reaches '{name}'. Mutual or uncontracted recursive calls require PowerShell runtime semantics.");
-        }
-        const PowerShellCompilationCapability capabilities =
-            PowerShellCompilationCapability.LocalFunctionCalls |
-            PowerShellCompilationCapability.BoundParameters |
-            PowerShellCompilationCapability.RuntimeStateIntrinsics;
-        if (PowerShellRecursiveFunctionPolicy.TryGetDeclaredReturnType(
-                definition.Function,
-                definition.Unit,
-                knownNames,
-                targetFramework,
-                capabilities,
-                out var declaredReturnType) && declaredReturnType is not null)
-        {
-            signatures[name] = CreateSignature(definition, PowerShellCSharpMethodEmitter.SanitizeIdentifier(name), declaredReturnType, false);
-            provisionalSignatures.Add(name);
-        }
-        states[name] = VisitState.Active;
-        var commands = definition.Function.Body.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>().ToArray();
-        foreach (var command in commands)
-        {
-            if (command.InvocationOperator == TokenKind.Dot)
-                throw new InvalidOperationException($"{definition.Path}:{command.Extent.StartLineNumber}: dot-sourcing inside a typed local function is not supported; include dependencies at entrypoint scope.");
-            var commandName = command.GetCommandName();
-            if (commandName is null || !definitions.TryGetValue(commandName, out var dependency))
-                throw new InvalidOperationException($"{definition.Path}:{command.Extent.StartLineNumber}: command '{commandName ?? command.Extent.Text}' is not a statically known local function in this Strict executable.");
-            EmitFunction(dependency, definitions, knownNames, signatures, methods, methodDescriptions, states, provisionalSignatures, targetFramework);
-        }
+            changed = false;
+            foreach (var edge in semantic.Analyzed.CallGraph)
+                if (reachable.Contains(edge.Caller.StableKey) && reachable.Add(edge.Callee.StableKey))
+                    changed = true;
+        } while (changed);
 
-        var method = new PowerShellCSharpMethodEmitter(
-            definition.Path,
-            definition.Function,
-            targetFramework,
-            capabilities,
-            signatures,
-            definition.Unit.Parameters).Emit();
-        if (provisionalSignatures.Contains(name) && signatures[name].ReturnType != method.ReturnType)
-            throw new InvalidOperationException(
-                $"Declared OutputType '{signatures[name].ReturnType.FullName}' does not match inferred recursive return type '{method.ReturnType.FullName}' for '{name}'.");
-        signatures[name] = CreateSignature(definition, method.GeneratedName, method.ReturnType, method.RequiresPowerShellBoundParameters);
-        provisionalSignatures.Remove(name);
-        methods.Add(method);
-        methodDescriptions.Add(CreateMethodDescription(definition.Unit, method, definition.Path));
-        states[name] = VisitState.Complete;
+        return semantic.Lowered.Functions
+            .Where(function => reachable.Contains(function.Symbol.StableKey))
+            .SelectMany(function => PowerShellLoweredCommandProviderCollector.Collect(function.Statements))
+            .GroupBy(static provider => provider.ProviderId, StringComparer.Ordinal)
+            .Select(static group => group.First())
+            .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
+            .ToArray();
     }
 
-    private static PowerShellLocalFunctionSignature CreateSignature(
-        LocalDefinition definition,
-        string generatedName,
-        Type returnType,
-        bool requiresPowerShellBoundParameters)
+    private static void ValidateSourceClosure(string entryPoint, string[] requestedSources)
     {
-        var parameters = definition.Function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
-        return new PowerShellLocalFunctionSignature(
-            definition.Function.Name,
-            generatedName,
-            returnType,
-            parameters.Select(parameter => CreateParameter(parameter, definition.Unit)).ToArray(),
-            PowerShellAdvancedFunctionPolicy.IsAdvanced(definition.Function),
-            requiresPowerShellBoundParameters,
-            requiresPowerShellStreams: false,
-            requiresPowerShellCommandRegions: false,
-            commandBinding: PowerShellAdvancedFunctionPolicy.GetBinding(definition.Function.Body.ParamBlock));
+        var reachableSources = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint);
+        var injected = requestedSources.Except(reachableSources, PowerShellCompilationPathSafety.PathComparer).ToArray();
+        var missing = reachableSources.Except(requestedSources, PowerShellCompilationPathSafety.PathComparer).ToArray();
+        if (injected.Length == 0 && missing.Length == 0) return;
+        var details = injected.Length > 0
+            ? $"unreachable source(s): {string.Join(", ", injected.Select(Path.GetFileName))}"
+            : $"missing reachable source(s): {string.Join(", ", missing.Select(Path.GetFileName))}";
+        throw new InvalidOperationException($"The typed executable compilation source set must exactly match the entrypoint's contained dot-source closure; {details}.");
+    }
+
+    private static void ValidateDefinitions(LocalDefinition[] definitions)
+    {
+        var duplicate = definitions.GroupBy(static definition => definition.Function.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new InvalidOperationException($"Typed executable local function '{duplicate.Key}' is declared more than once in the source closure.");
+        var generatedCollision = definitions.GroupBy(static definition => PowerShellClrSymbolMapper.MapIdentifier(definition.Function.Name), StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (generatedCollision is not null)
+            throw new InvalidOperationException($"Typed executable local functions collide after CLR identifier normalization: {string.Join(", ", generatedCollision.Select(static item => item.Function.Name))}.");
+        var entryPointCollision = definitions.FirstOrDefault(static definition =>
+            PowerShellClrSymbolMapper.MapIdentifier(definition.Function.Name).Equals("Invoke", StringComparison.Ordinal));
+        if (entryPointCollision is not null)
+            throw new InvalidOperationException($"Typed executable local function '{entryPointCollision.Function.Name}' collides with the reserved generated entry-point method 'Invoke'.");
+    }
+
+    private static void ValidateDependencyTopLevels(IEnumerable<ParsedSource> sources, string entryPoint)
+    {
+        foreach (var source in sources.Where(source => !PowerShellCompilationPathSafety.PathEquals(source.Path, entryPoint)))
+        {
+            if (source.Ast.ParamBlock is not null)
+                throw new InvalidOperationException($"Typed executable dependency '{source.Path}' declares a parameter block whose dot-source binding semantics are not yet supported.");
+            var unsupported = source.Ast.EndBlock?.Statements.FirstOrDefault(static statement =>
+                statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement));
+            if (unsupported is not null)
+                throw new InvalidOperationException($"Typed executable dependency '{source.Path}' contains executable module-scope statement '{unsupported.GetType().Name}'. Dependencies may declare functions and top-level literal dot-source includes only.");
+        }
+    }
+
+    private static ExecutableEntryDocument CreateEntryDocument(ParsedSource entrySource, IEnumerable<StatementAst> statements, string identityRoot)
+    {
+        var parameterBlock = PowerShellSourceParser.GetParameterBlockSource(entrySource.Ast.ParamBlock);
+        var builder = new StringBuilder().AppendLine("function Invoke {").AppendLine(parameterBlock);
+        var mappings = new List<PowerShellRegionSourceRemap>();
+        foreach (var statement in statements)
+        {
+            var startOffset = builder.Length;
+            builder.Append(statement.Extent.Text);
+            mappings.Add(new PowerShellRegionSourceRemap(
+                startOffset,
+                builder.Length,
+                statement.Extent.StartOffset,
+                statement.Extent.EndOffset));
+            builder.AppendLine();
+        }
+        builder.Append('}');
+        return new ExecutableEntryDocument(
+            PowerShellSourceParser.Parse(builder.ToString(), entrySource.Path + ".powerforge-entry.ps1", identityRoot),
+            mappings.ToArray());
+    }
+
+    private static InvalidOperationException CreateSemanticFailure(PowerShellSemanticCompilationResult result, string owner)
+    {
+        var diagnostic = result.Lowered.Diagnostics.FirstOrDefault(item =>
+                             item.Code.Equals(PowerShellCompilationFeatureIds.FunctionGraph, StringComparison.Ordinal) ||
+                             item.Message.Contains("cycle", StringComparison.OrdinalIgnoreCase)) ??
+                         result.Lowered.Diagnostics.FirstOrDefault();
+        return new InvalidOperationException(diagnostic is null
+            ? $"The shared semantic compiler did not emit the typed executable {owner}."
+            : $"The shared semantic compiler could not emit the typed executable {owner}: {diagnostic.Message}");
     }
 
     private static PowerShellCompiledMethod CreateMethodDescription(
         PowerShellCompilationUnitPlan unit,
+        PowerShellLoweredFunction function,
         PowerShellCSharpMethodEmission method,
         string sourcePath)
-        => new(
+    {
+        var description = new PowerShellCompiledMethod(
             unit.Name,
             method.GeneratedName,
             method.ReturnType.FullName ?? method.ReturnType.Name,
             unit.Parameters,
-            unit.StartLine,
+            method.SourceSpan.StartLine,
             sourcePath,
-            requiresPowerShellStreams: false,
+            requiresPowerShellStreams: method.RequiresPowerShellStreams,
             requiresPowerShellCommandRegions: false,
-            aliases: null,
+            aliases: function.Aliases.ToArray(),
             requiresPowerShellBoundParameters: method.RequiresPowerShellBoundParameters,
-            isAdvancedFunction: false,
-            commandBinding: null,
+            isAdvancedFunction: function.CommandBinding.IsAdvancedFunction,
+            commandBinding: function.CommandBinding,
             requiresPowerShellRuntimeState: method.RequiresPowerShellRuntimeState,
-            declaredOutputType: method.DeclaredOutputType?.FullName);
-
-    private static PowerShellLocalFunctionParameter CreateParameter(ParameterAst parameter, PowerShellCompilationUnitPlan unit)
-    {
-        var metadata = unit.Parameters.Single(item => item.Name.Equals(parameter.Name.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase));
-        var type = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter) ? typeof(bool) : parameter.StaticType;
-        return new PowerShellLocalFunctionParameter(
-            metadata.Name,
-            type,
-            metadata.IsMandatory,
-            metadata.IsSwitch,
-            metadata.Aliases,
-            metadata.AllowNull,
-            metadata.Validations,
-            metadata.Bindings);
+            declaredOutputType: method.DeclaredOutputTypeName,
+            sourceColumn: method.SourceSpan.StartColumn,
+            sourceEndLine: method.SourceSpan.EndLine,
+            sourceEndColumn: method.SourceSpan.EndColumn,
+            sourceMap: method.SourceMap,
+            commandProviders: method.CommandProviders,
+            outputCardinality: method.OutputCardinality,
+            outputValueStates: method.OutputValueStates,
+            collectionElementType: method.CollectionElementType,
+            outputScalarization: method.OutputScalarization,
+            hostedRegionSiteCount: method.HostedRegionSiteCount,
+            requiresProviderCancellation: method.RequiresProviderCancellation);
+        description.DocumentId = function.Symbol.DocumentId;
+        description.DeclaredOutputTypeIsSemanticContract = method.DeclaredOutputType is not null;
+        description.RequiresPowerShellModuleState = method.RequiresPowerShellModuleState;
+        description.RequiresPowerShellModuleStateRead = method.RequiresPowerShellModuleStateRead;
+        description.RequiresPowerShellModuleStateWrite = method.RequiresPowerShellModuleStateWrite;
+        description.RequiredPowerShellModuleVariables = method.ModuleStateVariableNames;
+        description.PowerShellModuleStateReadSiteCount = method.ModuleStateReadSiteCount;
+        description.WrittenPowerShellModuleVariables = method.WrittenModuleStateVariableNames;
+        description.PowerShellModuleStateWriteSiteCount = method.ModuleStateWriteSiteCount;
+        description.RegionGraph = method.RegionGraph;
+        return description;
     }
 
-    private static void ValidateCommands(string path, IEnumerable<StatementAst> statements, IReadOnlyDictionary<string, LocalDefinition> definitions)
-    {
-        foreach (var command in statements.SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false)).Cast<CommandAst>())
-        {
-            var name = command.GetCommandName();
-            if (command.InvocationOperator == TokenKind.Dot || name is null || !definitions.ContainsKey(name))
-                throw new InvalidOperationException($"{path}:{command.Extent.StartLineNumber}: command '{name ?? command.Extent.Text}' is not a statically known local function in this Strict executable.");
-        }
-    }
-
-    private static ParsedSource Parse(string path)
+    private static ParsedSource Parse(string path, string identityRoot)
     {
         var fullPath = Path.GetFullPath(path);
-        var ast = Parser.ParseFile(fullPath, out _, out ParseError[] errors);
-        if (errors.Length > 0)
+        var document = PowerShellSourceParser.ParseFile(fullPath, identityRoot);
+        if (document.Errors.Length > 0)
             throw new InvalidOperationException($"Typed executable source '{fullPath}' could not be parsed.");
-        return new ParsedSource(fullPath, ast);
+        return new ParsedSource(fullPath, document);
     }
 
     private static IEnumerable<FunctionDefinitionAst> GetTopLevelFunctions(ParsedSource source)
@@ -245,16 +256,13 @@ internal static class PowerShellTypedExecutableCompiler
     private static void ValidateEntryPointDeclarationOrder(ParsedSource entrySource)
     {
         var executableStatementSeen = false;
-        var statements = entrySource.Ast.EndBlock?.Statements.AsEnumerable() ?? Enumerable.Empty<StatementAst>();
-        foreach (var statement in statements)
+        foreach (var statement in entrySource.Ast.EndBlock?.Statements.AsEnumerable() ?? Enumerable.Empty<StatementAst>())
         {
             if (statement is FunctionDefinitionAst || IsTopLevelDotSource(statement))
             {
                 if (executableStatementSeen)
-                {
                     throw new InvalidOperationException(
                         $"Typed executable declaration '{statement.Extent.Text}' at {entrySource.Path}:{statement.Extent.StartLineNumber} appears after executable code. Local functions and dot-source includes must execute before the compiled entrypoint body.");
-                }
                 continue;
             }
             executableStatementSeen = true;
@@ -263,17 +271,33 @@ internal static class PowerShellTypedExecutableCompiler
 
     private static InvalidOperationException CreatePlanFailure(PowerShellCompilationPlan plan)
     {
-        var blocker = plan.Files.SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics))).FirstOrDefault();
-        return new InvalidOperationException(blocker is null
+        var blockers = plan.Files.SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
+            .Select(static diagnostic => diagnostic.Message)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return new InvalidOperationException(blockers.Length == 0
             ? "Strict typed executable generation requires every source-closure unit to be eligible for direct CLR compilation."
-            : $"Strict typed executable generation requires every source-closure unit to be eligible. First blocker: {blocker.Message}");
+            : $"Strict typed executable generation requires every source-closure unit to be eligible. Blockers: {string.Join(" ", blockers)}");
     }
 
     private sealed class ParsedSource
     {
-        internal ParsedSource(string path, ScriptBlockAst ast) { Path = path; Ast = ast; }
+        internal ParsedSource(string path, ParsedSourceDocument document) { Path = path; Document = document; }
         internal string Path { get; }
-        internal ScriptBlockAst Ast { get; }
+        internal ParsedSourceDocument Document { get; }
+        internal ScriptBlockAst Ast => Document.SyntaxRoot;
+    }
+
+    private sealed class ExecutableEntryDocument
+    {
+        internal ExecutableEntryDocument(ParsedSourceDocument document, PowerShellRegionSourceRemap[] sourceMappings)
+        {
+            Document = document;
+            SourceMappings = sourceMappings;
+        }
+
+        internal ParsedSourceDocument Document { get; }
+        internal PowerShellRegionSourceRemap[] SourceMappings { get; }
     }
 
     private sealed class LocalDefinition
@@ -284,87 +308,71 @@ internal static class PowerShellTypedExecutableCompiler
         internal FunctionDefinitionAst Function { get; }
         internal PowerShellCompilationUnitPlan Unit { get; }
     }
-    private enum VisitState { Active, Complete }
+
+    private sealed class SemanticEmission
+    {
+        internal SemanticEmission(PowerShellLoweredFunction function, PowerShellCSharpMethodEmission emission)
+        {
+            Function = function;
+            Emission = emission;
+        }
+
+        internal PowerShellLoweredFunction Function { get; }
+        internal PowerShellCSharpMethodEmission Emission { get; }
+    }
 }
 
 internal sealed class PowerShellTypedExecutableCompilation
 {
-    internal PowerShellTypedExecutableCompilation(ScriptBlockAst entryPoint, PowerShellCompilationUnitPlan entryPointUnit, PowerShellCSharpMethodEmission entryPointMethod, PowerShellCSharpMethodEmission[] localMethods, PowerShellCompiledMethod[] methods)
-    { EntryPoint = entryPoint; EntryPointUnit = entryPointUnit; EntryPointMethod = entryPointMethod; LocalMethods = localMethods; Methods = methods; }
-    internal ScriptBlockAst EntryPoint { get; }
-    internal PowerShellCompilationUnitPlan EntryPointUnit { get; }
+    internal PowerShellTypedExecutableCompilation(
+        PowerShellTypedExecutableContract entryPoint,
+        PowerShellCSharpMethodEmission entryPointMethod,
+        PowerShellCSharpMethodEmission[] localMethods,
+        PowerShellCompiledMethod[] methods,
+        PowerShellCompilationCommandProviderContract[] reachableCommandProviders,
+        PowerShellCompilationOptimizationEvidence optimization,
+        PowerShellCompilationIrSnapshotBundle irSnapshots)
+    {
+        EntryPoint = entryPoint;
+        EntryPointMethod = entryPointMethod;
+        LocalMethods = localMethods;
+        Methods = methods;
+        ReachableCommandProviders = reachableCommandProviders;
+        Optimization = optimization;
+        IrSnapshots = irSnapshots;
+    }
+
+    internal PowerShellTypedExecutableContract EntryPoint { get; }
     internal PowerShellCSharpMethodEmission EntryPointMethod { get; }
     internal PowerShellCSharpMethodEmission[] LocalMethods { get; }
     internal PowerShellCompiledMethod[] Methods { get; }
+    internal PowerShellCompilationCommandProviderContract[] ReachableCommandProviders { get; }
+    internal PowerShellCompilationOptimizationEvidence Optimization { get; }
+    internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
 }
 
-internal sealed class PowerShellLocalFunctionSignature
+internal sealed class PowerShellTypedExecutableContract
 {
-    internal PowerShellLocalFunctionSignature(
-        string sourceName,
-        string generatedName,
-        Type returnType,
-        PowerShellLocalFunctionParameter[] parameters,
-        bool isAdvancedFunction,
-        bool requiresPowerShellBoundParameters = false,
-        bool requiresPowerShellStreams = false,
-        bool requiresPowerShellCommandRegions = false,
-        PowerShellCompilationCommandBinding? commandBinding = null,
-        bool requiresPowerShellRuntimeState = false,
-        bool requiresPowerShellShouldProcess = false)
+    internal PowerShellTypedExecutableContract(
+        PowerShellCompiledMethod method,
+        PowerShellTypedExecutableParameter[] parameters)
     {
-        SourceName = sourceName;
-        GeneratedName = generatedName;
-        ReturnType = returnType;
-        Parameters = parameters;
-        IsAdvancedFunction = isAdvancedFunction;
-        RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
-        RequiresPowerShellStreams = requiresPowerShellStreams;
-        RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
-        RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
-        RequiresPowerShellShouldProcess = requiresPowerShellShouldProcess;
-        CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
+        Method = method;
+        Parameters = parameters ?? Array.Empty<PowerShellTypedExecutableParameter>();
     }
-    internal string SourceName { get; }
-    internal string GeneratedName { get; }
-    internal Type ReturnType { get; }
-    internal PowerShellLocalFunctionParameter[] Parameters { get; }
-    internal bool IsAdvancedFunction { get; }
-    internal bool RequiresPowerShellBoundParameters { get; }
-    internal bool RequiresPowerShellStreams { get; }
-    internal bool RequiresPowerShellCommandRegions { get; }
-    internal bool RequiresPowerShellRuntimeState { get; }
-    internal bool RequiresPowerShellShouldProcess { get; }
-    internal PowerShellCompilationCommandBinding CommandBinding { get; }
+
+    internal PowerShellCompiledMethod Method { get; }
+    internal PowerShellTypedExecutableParameter[] Parameters { get; }
 }
 
-internal sealed class PowerShellLocalFunctionParameter
+internal sealed class PowerShellTypedExecutableParameter
 {
-    internal PowerShellLocalFunctionParameter(
-        string name,
-        Type type,
-        bool isMandatory,
-        bool isSwitch,
-        string[] aliases,
-        bool allowNull,
-        PowerShellCompilationValidation[] validations,
-        PowerShellCompilationParameterBinding[]? bindings = null)
+    internal PowerShellTypedExecutableParameter(Type clrType, PowerShellCompilationParameter contract)
     {
-        Name = name;
-        Type = type;
-        IsMandatory = isMandatory;
-        IsSwitch = isSwitch;
-        Aliases = aliases;
-        AllowNull = allowNull;
-        Validations = validations;
-        Bindings = bindings ?? new[] { new PowerShellCompilationParameterBinding(mandatory: isMandatory) };
+        ClrType = clrType;
+        Contract = contract;
     }
-    internal string Name { get; }
-    internal Type Type { get; }
-    internal bool IsMandatory { get; }
-    internal bool IsSwitch { get; }
-    internal string[] Aliases { get; }
-    internal bool AllowNull { get; }
-    internal PowerShellCompilationValidation[] Validations { get; }
-    internal PowerShellCompilationParameterBinding[] Bindings { get; }
+
+    internal Type ClrType { get; }
+    internal PowerShellCompilationParameter Contract { get; }
 }

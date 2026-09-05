@@ -17,11 +17,22 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
     <ProjectReference Include="..\PowerForge.PowerShell\PowerForge.PowerShell.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell.Provider.Directory\PowerForge.PowerShell.Provider.Directory.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell.Provider.Directory.Runtime\PowerForge.PowerShell.Provider.Directory.Runtime.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell.Provider.Management\PowerForge.PowerShell.Provider.Management.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell.Provider.Management.Runtime\PowerForge.PowerShell.Provider.Management.Runtime.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell.ProviderSdk\PowerForge.PowerShell.ProviderSdk.csproj" />
     <ProjectReference Include="..\PowerForgeStudio.Domain\PowerForgeStudio.Domain.csproj" />
     <ProjectReference Include="..\PSPublishModule\PSPublishModule.csproj" />
     <ProjectReference Include="..\PowerForge.Web\PowerForge.Web.csproj" />
     <ProjectReference Include="..\PowerForge.Web.Cli\PowerForge.Web.Cli.csproj" />
     <ProjectReference Include="..\PowerForge.Cli\PowerForge.Cli.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationProviderRuntimeFixture\PowerShellCompilationProviderRuntimeFixture.csproj" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationProviderWithDependencyFixture\PowerShellCompilationProviderWithDependencyFixture.csproj" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationExternalBinaryDependencyFixture\PowerShellCompilationExternalBinaryDependencyFixture.csproj" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationExternalBinaryModuleFixture\PowerShellCompilationExternalBinaryModuleFixture.csproj" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationProviderFixture\PowerShellCompilationForgedCancellationProviderFixture.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationReferenceProviderFixture\PowerShellCompilationForgedCancellationReferenceProviderFixture.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

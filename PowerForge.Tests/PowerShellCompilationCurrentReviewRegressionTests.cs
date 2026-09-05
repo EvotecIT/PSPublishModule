@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
 {
     [Theory]
@@ -78,7 +79,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             advancedFixture.OutputPath,
             "PowerForge.AdvancedRemainingArgumentsName",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(advanced.Succeeded, advanced.Error + Environment.NewLine + advanced.BuildOutput);
         var escapedPath = advanced.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -98,11 +99,105 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             simpleFixture.OutputPath,
             "PowerForge.SimpleRemainingArgumentsName",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(simple.Succeeded);
         Assert.Contains("generated or inherited", simple.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(simpleFixture.OutputPath));
+    }
+
+    [Theory]
+    [InlineData("__powerForgePipeline")]
+    [InlineData("__powerForgeLifecycleGate")]
+    [InlineData("__powerForgeCleaned")]
+    [InlineData("__powerForgeStopRequested")]
+    [InlineData("__powerForgeStopCompletionStarted")]
+    [InlineData("__powerForgeCleanupTask")]
+    [InlineData("__powerForgeCleanupCompletion")]
+    [InlineData("__powerForgeRunspace")]
+    [InlineData("__powerForgeAvailabilityChanged")]
+    [InlineData("__powerForgeRunspaceStateChanged")]
+    [InlineData("__powerForgePipelineInputExplicitlyBound")]
+    [InlineData("GetLifecyclePipeline")]
+    [InlineData("StopLifecycle")]
+    [InlineData("CompleteStoppedLifecycle")]
+    [InlineData("DetachStoppedLifecycleHandlers")]
+    [InlineData("DisposeStoppedLifecycle")]
+    [InlineData("InvokeLifecycleClean")]
+    [InlineData("WriteLifecycleOutput")]
+    [InlineData("CleanLifecycle")]
+    [InlineData("Dispose")]
+    public void Build_HybridLifecycleRejectsGeneratedMemberNameCollisions(string parameterName)
+    {
+        var source = $"function Invoke-Lifecycle {{ [CmdletBinding()] param([string] ${parameterName}) process {{ ${parameterName} }} }}";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var path = fixture.ScriptPath;
+        var document = PowerShellSourceParser.Parse(
+            source,
+            path);
+        var lifecycleSources = PowerShellLifecycleSourceBinder.Bind(document, "net10.0");
+        var empty = new PowerShellTypedCompilationResult(
+            path,
+            "PowerForge.Compiled",
+            "LifecycleCollisionMethods",
+            string.Empty,
+            Array.Empty<PowerShellCompiledMethod>(),
+            Array.Empty<PowerShellCompilationDiagnostic>(),
+            new[] { path },
+            lifecycleSources);
+        var planned = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(empty, "net10.0");
+
+        var validated = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(planned, new[] { "Invoke-Lifecycle" }, "net10.0");
+
+        Assert.Empty(validated.Methods);
+        var diagnostic = Assert.Single(validated.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == "binary-module.cmdlet-shape");
+        Assert.Contains("generated or inherited", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(parameterName, diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_HybridLifecycleAllowsFormerSyntheticPipelineParameterNameAsAuthoredInput()
+    {
+        const string source = "function Invoke-Lifecycle { [CmdletBinding()] param([string] $__PowerForgeInputObject) process { $__PowerForgeInputObject } }";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var document = PowerShellSourceParser.Parse(source, fixture.ScriptPath);
+        var empty = new PowerShellTypedCompilationResult(
+            fixture.ScriptPath,
+            "PowerForge.Compiled",
+            "LifecycleAuthoredInputMethods",
+            string.Empty,
+            Array.Empty<PowerShellCompiledMethod>(),
+            Array.Empty<PowerShellCompilationDiagnostic>(),
+            new[] { fixture.ScriptPath },
+            PowerShellLifecycleSourceBinder.Bind(document, "net10.0"));
+
+        var planned = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(empty, "net10.0");
+        var validated = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(planned, new[] { "Invoke-Lifecycle" }, "net10.0");
+
+        Assert.Single(validated.Methods);
+        Assert.DoesNotContain(validated.Diagnostics, static diagnostic => diagnostic.FeatureId == "binary-module.cmdlet-shape");
+    }
+
+    [Fact]
+    public void Build_HybridLifecycleDoesNotDetachFunctionsFromModuleScopeState()
+    {
+        const string source = "$script:prefix = 'value'; function Invoke-Lifecycle { [CmdletBinding()] param() process { $script:prefix } }";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var document = PowerShellSourceParser.Parse(source, fixture.ScriptPath);
+        var empty = new PowerShellTypedCompilationResult(
+            fixture.ScriptPath,
+            "PowerForge.Compiled",
+            "LifecycleModuleStateMethods",
+            string.Empty,
+            Array.Empty<PowerShellCompiledMethod>(),
+            Array.Empty<PowerShellCompilationDiagnostic>(),
+            new[] { fixture.ScriptPath },
+            PowerShellLifecycleSourceBinder.Bind(document, "net10.0"));
+
+        var planned = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(empty, "net10.0");
+
+        Assert.Empty(planned.Methods);
     }
 
     [Fact]
@@ -118,7 +213,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ValidateNotNullElements",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -148,7 +243,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.StrictConditionalExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("runtime-controlled", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -230,7 +325,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
                 unsafeOutput,
                 "PowerForge.RecursiveLoaderOverlap",
                 resolved.Kind,
-                resolved.Mode)
+                resolved.Mode, allowUnreviewedDependencyResolution: true)
             {
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 ModuleManifestPath = resolved.ModuleManifestPath
@@ -254,7 +349,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.MandatoryCollection",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -282,7 +377,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     public void Build_HybridBinaryModulePreservesConsumedCommandRegionOutputByRoutingCallerToFallback()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-RegionHelper { [CmdletBinding()] param(); Write-Output 'region'; return 7 } " +
+            "function Get-RegionHelper { [CmdletBinding()] param(); Get-Date -Date '2000-01-01T00:00:00Z'; return 7 } " +
             "function Get-RegionConsumer { [CmdletBinding()] param(); $value = Get-RegionHelper; return $value.Count } " +
             "Export-ModuleMember -Function Get-RegionHelper, Get-RegionConsumer",
             ".psm1");
@@ -291,7 +386,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ConsumedRegionOutput",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
@@ -312,7 +407,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.SimpleAbbreviation",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -341,7 +436,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.PositionalConventionalLoader",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = resolved.CompilationSourceFiles,
             ModuleManifestPath = resolved.ModuleManifestPath
@@ -364,7 +459,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.InvalidModuleExecutable",
             PowerShellCompilationArtifactKind.Executable,
-            mode);
+            mode, allowUnreviewedDependencyResolution: true);
 
         var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationArtifactBuilder().Build(spec));
 
@@ -407,7 +502,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.QualifiedStrictExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -468,7 +563,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.GeneratedHybridDependency",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = resolved.CompilationSourceFiles,
             ModuleManifestPath = resolved.ModuleManifestPath
@@ -503,7 +598,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.QualifiedConventionalLoader",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = resolved.CompilationSourceFiles,
             ModuleManifestPath = resolved.ModuleManifestPath
@@ -524,7 +619,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             name,
             PowerShellCompilationArtifactKind.Executable,
-            mode)
+            mode, allowUnreviewedDependencyResolution: true)
         {
             SingleFile = false,
             EmitSource = true

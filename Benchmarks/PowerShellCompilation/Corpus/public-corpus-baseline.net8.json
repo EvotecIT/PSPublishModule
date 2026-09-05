@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "packetId": "powerforge-public-powershell-modules-net8-v1",
+  "packetSha256": "499e3aa267528175c72b2173c4be3c31f7923e32499e35fe803a1afbf9ecbda5",
+  "recordedOn": "2026-09-04",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "hybrid": {
+    "runtimeIdentifier": "win-x64",
+    "modulesPassed": 10,
+    "modulesTotal": 10,
+    "scenarioFamilies": 10,
+    "cleanImportedCommands": 887,
+    "analyzedUnits": 735,
+    "boundUnits": 7,
+    "emittedClrUnits": 2,
+    "promotedTypedRegions": 13,
+    "exportedCmdletUnits": 2,
+    "hostedRegions": 0,
+    "retainedSourceUnits": 733,
+    "semanticFallbackUnits": 728,
+    "shapingFallbackUnits": 5,
+    "runtimeRoutedUnits": 733,
+    "omittedUnits": 0,
+    "rejectedUnits": 0,
+    "cleanTargetCompleteProgramPassPercentage": 100.0,
+    "emittedClrUnitPercentage": 0.27
+  },
+  "strict": {
+    "programs": 4,
+    "analyzedUnits": 18,
+    "boundUnits": 18,
+    "emittedClrUnits": 18,
+    "completeProgramPassPercentage": 100.0,
+    "emittedClrUnitPercentage": 100.0,
+    "targetHosts": [
+      {
+        "runtimeIdentifier": "win-x64",
+        "programsPassed": 4,
+        "programsTotal": 4,
+        "qualifiedApplications": [
+          {
+            "id": "strict-multifile-application",
+            "dependency": {
+              "lockSha256": "30d737a730055a187a3081da25da0b9f2e1263f8a4794134c2a2016caa6312a2",
+              "sourceFiles": 4,
+              "graphNodes": 5
+            },
+            "resource": {
+              "sha256": "3658a4189f0d5c038f20d4c92e82dd1266fc5a0e802a52c08ed1811388ca7b4f",
+              "includedFiles": 1
+            },
+            "streams": {
+              "successExitCode": 0,
+              "successOutputSha256": "99d2b2dec772e780fc3d31cfb10506da8139ff395e9a9a6133cff1cec26c8644",
+              "emptyStreamSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "failureExitCode": 1,
+              "failureContractSha256": "436358d5bfeb2310bdc545f50f8c189afe95b21532ff02dc74ec2627b4fa3582",
+              "failureMarkerObservedOnBoth": true
+            },
+            "startup": {
+              "warmupsPerSurface": 1,
+              "samples": 6,
+              "orderPolicy": "AlternatingPairs",
+              "maximumArtifactP50Milliseconds": 250,
+              "maximumArtifactP95Milliseconds": 500,
+              "maximumArtifactToSourceP50Ratio": 0.75
+            }
+          }
+        ]
+      },
+      {
+        "runtimeIdentifier": "linux-x64",
+        "programsPassed": 4,
+        "programsTotal": 4,
+        "qualifiedApplications": [
+          {
+            "id": "strict-multifile-application",
+            "dependency": {
+              "lockSha256": "3fa92a83ade9e5c987d4b10d58e9ee3afd9742528d4ec8836fe6bca444e5942f",
+              "sourceFiles": 4,
+              "graphNodes": 5
+            },
+            "resource": {
+              "sha256": "3658a4189f0d5c038f20d4c92e82dd1266fc5a0e802a52c08ed1811388ca7b4f",
+              "includedFiles": 1
+            },
+            "streams": {
+              "successExitCode": 0,
+              "successOutputSha256": "99d2b2dec772e780fc3d31cfb10506da8139ff395e9a9a6133cff1cec26c8644",
+              "emptyStreamSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "failureExitCode": 1,
+              "failureContractSha256": "436358d5bfeb2310bdc545f50f8c189afe95b21532ff02dc74ec2627b4fa3582",
+              "failureMarkerObservedOnBoth": true
+            },
+            "startup": {
+              "warmupsPerSurface": 1,
+              "samples": 6,
+              "orderPolicy": "AlternatingPairs",
+              "maximumArtifactP50Milliseconds": 100,
+              "maximumArtifactP95Milliseconds": 250,
+              "maximumArtifactToSourceP50Ratio": 0.75
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "interpretation": {
+    "powerShellLanguageCoveragePercentage": null,
+    "note": "Complete-program pass rates and emitted-unit ratios are bounded packet measurements, not percentages of the PowerShell language or predictions for arbitrary inputs."
+  }
+}

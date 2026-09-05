@@ -6,6 +6,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationAnalyzerTests
 {
     [Theory]
@@ -20,7 +21,7 @@ public sealed class PowerShellCompilationAnalyzerTests
             "input.ps1",
             Path.GetTempPath(),
             "DefaultMode",
-            kind);
+            kind, allowUnreviewedDependencyResolution: true);
 
         Assert.Equal(expectedMode, spec.Mode);
         Assert.Equal(expectedMode, PowerShellCompilationBuildSpec.GetDefaultMode(kind));
@@ -40,17 +41,17 @@ public sealed class PowerShellCompilationAnalyzerTests
             Path.GetTempPath(),
             "InvalidMode",
             PowerShellCompilationArtifactKind.Executable,
-            (PowerShellCompilationMode)999));
+            (PowerShellCompilationMode)999, allowUnreviewedDependencyResolution: true));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PowerShellCompilationBuildSpec(
             "input.ps1",
             Path.GetTempPath(),
             "InvalidKind",
-            (PowerShellCompilationArtifactKind)999));
+            (PowerShellCompilationArtifactKind)999, allowUnreviewedDependencyResolution: true));
     }
 
     [Theory]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package, true)]
-    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid, false)]
+    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid, true)]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict, true)]
     [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Package, false)]
     [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Hybrid, true)]
@@ -72,7 +73,7 @@ public sealed class PowerShellCompilationAnalyzerTests
     }
 
     [Fact]
-    public void Analyze_RejectsAnExplicitModeThatCannotProduceTheResolvedArtifactKind()
+    public void Analyze_AcceptsHybridForAnExecutableInput()
     {
         using var fixture = CompilationFixture.Create("param([int] $Value); return $Value");
         var resolved = new PowerShellCompilationInputResolver().Resolve(
@@ -80,11 +81,11 @@ public sealed class PowerShellCompilationAnalyzerTests
             PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Package);
 
-        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationAnalyzer().Analyze(
+        var plan = new PowerShellCompilationAnalyzer().Analyze(
             resolved,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid);
 
-        Assert.Contains("Hybrid executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(PowerShellCompilationMode.Hybrid, plan.Mode);
     }
 
     [Fact]
@@ -110,6 +111,19 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Equal(typeof(int).FullName, Assert.Single(unit.Parameters).TypeName);
         Assert.Equal(1, plan.CompilableUnits);
         Assert.Equal(100d, plan.CompilationCoveragePercentage);
+    }
+
+    [Fact]
+    public void Analyze_RoutesFunctionsSharingAHostedTypeDefinitionToFallback()
+    {
+        using var fixture = CompilationFixture.Create(
+            "enum Choice { First = 1; Second = 2 } function Get-Choice { return [Choice]::First }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+
+        var function = Assert.Single(Assert.Single(plan.Files).Units, static unit => unit.Kind == PowerShellCompilationUnitKind.Function);
+        Assert.False(function.IsCompilable);
+        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.TypeDefinition);
     }
 
     [Fact]
@@ -152,6 +166,40 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.ScriptBlock);
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.Code == PowerShellCompilationDiagnosticCode.RuntimeScope);
         Assert.False(plan.CanProceed);
+    }
+
+    [Fact]
+    public void Analyze_AcceptsBoundedTypedArrayParameterEnumeration()
+    {
+        using var fixture = CompilationFixture.Create(
+            "function Get-Value { param([int[]] $Values) [int] $value = 0; $Values | ForEach-Object { $value = $_ }; return $value }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(
+            new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.DoesNotContain(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.PipelineEnumeration);
+    }
+
+    [Theory]
+    [InlineData("40, 2 | ForEach-Object { $_ }; return 42")]
+    [InlineData("40, 2 | ForEach-Object { return }; return 42")]
+    public void Analyze_AttributesRejectedBoundedPipelineShapeToEnumerationOwner(string body)
+    {
+        using var fixture = CompilationFixture.Create(
+            $"function Get-Value {{ {body} }}");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(
+            new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.PipelineEnumeration);
+        Assert.DoesNotContain(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == "syntax.unsupported");
     }
 
     [Fact]
@@ -365,17 +413,18 @@ public sealed class PowerShellCompilationAnalyzerTests
 
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
 
-        Assert.Equal(18, plan.RuntimeFallbackUnits);
-        Assert.All(Assert.Single(plan.Files).Units, static unit => Assert.False(unit.IsCompilable));
+        Assert.Equal(17, plan.RuntimeFallbackUnits);
+        var units = Assert.Single(plan.Files).Units;
+        Assert.True(units.Single(static unit => unit.Name == "Get-LoopLeak").IsCompilable);
+        Assert.All(units.Where(static unit => unit.Name != "Get-LoopLeak"), static unit => Assert.False(unit.IsCompilable));
         var messages = string.Join(Environment.NewLine, plan.Files.SelectMany(static file => file.Units).SelectMany(static unit => unit.Diagnostics).Select(static diagnostic => diagnostic.Message));
         Assert.Contains("truthiness", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("promote on overflow", messages, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("function scope", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("may remain unassigned", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("must end with an explicit return", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("collides with another function", messages, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("outside the loop scope", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("not an implicit CLR conversion", messages, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("runtime conversion semantics", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("language-conversion runtime", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("branch-specific runtime types", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Labeled break", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("break must be inside", messages, StringComparison.OrdinalIgnoreCase);

@@ -747,6 +747,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             bool includeScriptFolders,
             Action? remotePublishAttempted,
             Action? remoteSideEffectObserved,
+            Action<string, string>? finalizeRepositoryModule,
             IGitHubReleaseProgressReporter? gitHubProgress)
         {
             PublishCalls++;

@@ -9,7 +9,9 @@ internal static class PowerShellHybridFunctionCollisionResolver
 {
     internal static PowerShellTypedCompilationResult RouteNameCollisionsToFallback(
         PowerShellTypedCompilationResult typed,
-        string? targetFramework)
+        string? targetFramework,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule)
     {
         var definitions = new List<(string Path, ScriptBlockAst Root, FunctionDefinitionAst Function)>();
         var sources = new List<(string Path, ScriptBlockAst Root, HashSet<string> InvokeCommandAliases)>();
@@ -51,23 +53,16 @@ internal static class PowerShellHybridFunctionCollisionResolver
         if (excludedMethods.Count == 0)
             return typed;
 
-        var excludedNames = typed.Methods
-            .Where(method => fallbackNames.Contains(method.SourceName))
-            .Select(static method => method.SourceName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var filtered = new PowerShellTypedCompilationTranspiler().TranspileExcluding(
+        var filtered = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId).TranspileExcluding(
             typed.SourcePaths,
             typed.NamespaceName,
             typed.TypeName,
             targetFramework,
             excludedMethods,
-            PowerShellCompilationCapabilities.BinaryModule);
-        var diagnostics = excludedNames.Select(name =>
+            capabilities);
+        var diagnostics = definitions.Where(definition => fallbackNames.Contains(definition.Function.Name)).Select(definition =>
         {
-            var definition = definitions
-                .Where(item => item.Function.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(static item => item.Function.Extent.StartOffset)
-                .First();
+            var name = definition.Function.Name;
             var message = duplicateNames.Contains(name)
                 ? $"Function '{name}' has multiple retained definitions, so hybrid compilation keeps PowerShell's runtime replacement semantics."
                 : $"Function '{name}' is referenced by retained module-scope code before or across a separately loaded declaration boundary, so hybrid compilation preserves PowerShell's command-availability timing.";
@@ -78,7 +73,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 definition.Function.Extent.StartLineNumber,
                 definition.Function.Extent.StartColumnNumber);
         });
-        return new PowerShellTypedCompilationResult(
+        var result = new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,
             filtered.TypeName,
@@ -88,7 +83,14 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 .OrderBy(static diagnostic => diagnostic.Line)
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
-            filtered.SourcePaths);
+            filtered.SourcePaths,
+            lifecycleSources: null,
+            optimization: filtered.Optimization,
+            irSnapshots: filtered.IrSnapshots);
+        result.PromotedRegions = filtered.PromotedRegions;
+        result.RegionCandidates = filtered.RegionCandidates;
+        result.RegionOpportunities = filtered.RegionOpportunities;
+        return result;
     }
 
     private static bool IsCommandReferenceCandidate(Ast node, HashSet<string> invokeCommandAliases)

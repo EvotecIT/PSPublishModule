@@ -73,6 +73,36 @@ public sealed partial class ArtefactBuilder
         InformationConfiguration? information = null,
         DeliveryOptionsConfiguration? delivery = null,
         bool includeScriptFolders = true)
+        => BuildWithFinalizer(
+            segment,
+            projectRoot,
+            stagingPath,
+            moduleName,
+            moduleVersion,
+            preRelease,
+            requiredModules,
+            finalizePackedArtefact,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles: null);
+
+    /// <summary>
+    /// Builds an artefact using an exact authoritative module payload.
+    /// </summary>
+    public ArtefactBuildResult BuildWithFinalizer(
+        ConfigurationArtefactSegment segment,
+        string projectRoot,
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
+        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
         if (segment is null) throw new ArgumentNullException(nameof(segment));
         if (string.IsNullOrWhiteSpace(projectRoot)) throw new ArgumentException("ProjectRoot is required.", nameof(projectRoot));
@@ -88,8 +118,8 @@ public sealed partial class ArtefactBuilder
 
         return segment.ArtefactType switch
         {
-            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders),
-            ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact),
+            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizedPayloadFiles),
+            ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
             _ => throw new NotSupportedException($"Artefact type '{segment.ArtefactType}' is not supported yet.")
         };
     }
@@ -99,10 +129,11 @@ public sealed partial class ArtefactBuilder
         string destinationModuleRoot,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
-        bool includeScriptFolders = true)
+        bool includeScriptFolders = true,
+        IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
-        CopyModulePackage(stagingRoot, destinationModuleRoot, include);
+        CopyModulePackage(stagingRoot, destinationModuleRoot, include, finalizedPayloadFiles);
     }
 
     private ArtefactBuildResult BuildUnpacked(
@@ -116,7 +147,8 @@ public sealed partial class ArtefactBuilder
         IReadOnlyList<RequiredModuleReference> requiredModules,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
-        bool includeScriptFolders)
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles)
     {
         if (cfg.DoNotClear != true)
             ClearDirectorySafe(outputRoot);
@@ -132,7 +164,7 @@ public sealed partial class ArtefactBuilder
 
         var mainModuleDest = Path.Combine(modulesRoot, moduleName);
         _logger.Info($"Creating unpacked artefact at '{outputRoot}'");
-        CopyModulePackage(stagingPath, mainModuleDest, include);
+        CopyModulePackage(stagingPath, mainModuleDest, include, finalizedPayloadFiles);
         modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: mainModuleDest));
 
         if (cfg.RequiredModules.Enabled == true)
@@ -176,7 +208,8 @@ public sealed partial class ArtefactBuilder
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders,
-        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact)
+        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact,
+        IReadOnlyList<string>? finalizedPayloadFiles)
     {
         Directory.CreateDirectory(outputRoot);
         if (cfg.DoNotClear != true)
@@ -201,7 +234,7 @@ public sealed partial class ArtefactBuilder
 
             var mainModuleDest = Path.Combine(modulesRoot, moduleName);
             _logger.Info($"Staging packed artefact '{zipPath}'");
-            CopyModulePackage(stagingPath, mainModuleDest, include);
+            CopyModulePackage(stagingPath, mainModuleDest, include, finalizedPayloadFiles);
             modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: mainModuleDest));
 
             if (cfg.RequiredModules.Enabled == true)

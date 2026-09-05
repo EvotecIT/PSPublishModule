@@ -32,7 +32,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.DependencyExit",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = new[] { fixture.ScriptPath, helper }
         });
@@ -53,7 +53,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             nestedFixture.OutputPath,
             "PowerForge.NestedLiteralCmdlet",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(nestedResult.Succeeded, nestedResult.Error + Environment.NewLine + nestedResult.BuildOutput);
 
         using var fixture = ArtifactFixture.Create(
@@ -68,7 +68,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.LiteralNestedExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(new[] { "1", "9" }, RunModuleProof(result.ArtifactPath!, "Get-TypedValue; Get-NestedValue").Split(Environment.NewLine));
@@ -78,7 +78,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridModulePreservesMixedConditionalAndLiteralExports()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-DirectValue { return 1 }; function Get-ConditionalValue { return (Get-Date).Year }; " +
+            "function Get-DirectValue { return 1 }; function Get-ConditionalValue { return [int](Get-Date -Format yyyy) }; " +
             "Export-ModuleMember -Function Get-DirectValue; if ($true) { Export-ModuleMember -Function Get-ConditionalValue }",
             ".psm1");
         File.WriteAllText(
@@ -89,7 +89,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.MixedRuntimeExports",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var proof = RunModuleProof(result.ArtifactPath!, "Get-DirectValue; [int](Get-ConditionalValue) -gt 2000");
@@ -100,7 +100,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridModuleHonorsModuleQualifiedExportCommand()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-QualifiedPublic { return 1 }; function Get-QualifiedPrivate { return (Get-Date).Year }; " +
+            "function Get-QualifiedPublic { return 1 }; function Get-QualifiedPrivate { return [int](Get-Date -Format yyyy) }; " +
             "Microsoft.PowerShell.Core\\Export-ModuleMember -Function Get-QualifiedPublic",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -108,7 +108,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.QualifiedExports",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var proof = RunModuleProof(
@@ -133,7 +133,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.EmptyLoaderDirectory",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(Directory.Exists(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "Public")));
@@ -152,7 +152,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.NullArrayIndex",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var output = RunModuleProof(
@@ -174,7 +174,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.NaNEquality",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var process = RunProcess(result.ArtifactPath!);

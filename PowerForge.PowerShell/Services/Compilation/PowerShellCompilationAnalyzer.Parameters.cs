@@ -25,7 +25,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         foreach (var parameter in paramBlock.Parameters)
         {
             var parameterName = parameter.Name.VariablePath.UserPath;
-            foreach (var authoredName in new[] { parameterName }.Concat(GetAliases(parameter)))
+            foreach (var authoredName in new[] { parameterName }.Concat(PowerShellParameterContractBinder.GetAliases(parameter)))
             {
                 if (automaticBindingNames.Contains(authoredName))
                 {
@@ -130,7 +130,7 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static string DisplayParameterSetName(string? name)
         => string.IsNullOrWhiteSpace(name) ? "__AllParameterSets" : name!;
 
-    private static PowerShellCompilationParameter[] AnalyzeParameters(
+    private PowerShellCompilationParameter[] AnalyzeParameters(
         ParamBlockAst? paramBlock,
         Ast unitRoot,
         string file,
@@ -165,7 +165,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
             var typeCapabilities = hasExplicitType
                 ? PowerShellCompilationParameterTypePolicy.Classify(isSwitch ? typeof(bool) : type, targetFramework)
-                : PowerShellCompilationParameterTypeCapability.None;
+                : PowerShellCompilationParameterTypePolicy.ClassifyUntyped(capabilities);
             if (!typeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod))
             {
                 diagnostics.Add(CreateDiagnostic(
@@ -199,7 +199,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     PowerShellCompilationFeatureIds.ParameterType));
             }
 
-            var bindings = GetParameterBindings(parameter);
+            var bindings = PowerShellParameterContractBinder.GetBindings(parameter);
             if (!isScriptUnit &&
                 capabilities.HasFlag(PowerShellCompilationCapability.ExecutableParameterBinding) &&
                 bindings.Any(static binding => binding.ValueFromRemainingArguments))
@@ -211,13 +211,14 @@ public sealed partial class PowerShellCompilationAnalyzer
                     parameter.Extent,
                     PowerShellCompilationFeatureIds.ParameterBinding));
             }
-            PowerShellCompilationLiteral? defaultValue = null;
             if (parameter.DefaultValue is not null &&
                 (!capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) ||
                  !PowerShellCompilationLiteralPolicy.TryResolve(
                      parameter.DefaultValue,
                      isSwitch ? typeof(bool) : type,
-                     out defaultValue)))
+                     targetFramework,
+                     _semanticProfileId,
+                     out _)))
             {
                 diagnostics.Add(CreateDiagnostic(
                     PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
@@ -227,21 +228,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     PowerShellCompilationFeatureIds.ParameterDefault));
                 AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
             }
-            result.Add(new PowerShellCompilationParameter(
-                parameter.Name.VariablePath.UserPath,
-                (isSwitch ? typeof(bool) : type).FullName ?? type.Name,
-                parameter.DefaultValue is not null,
-                bindings.Length > 0 && bindings.All(static binding => binding.Mandatory),
-                isSwitch,
-                GetAliases(parameter),
-                HasMetadataAttribute(parameter, "AllowNull"),
-                GetValidations(parameter),
-                typeCapabilities,
-                bindings,
-                HasMetadataAttribute(parameter, "AllowEmptyString"),
-                HasMetadataAttribute(parameter, "AllowEmptyCollection"),
-                HasMetadataAttribute(parameter, "SupportsWildcards"),
-                defaultValue));
+            result.Add(PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities, _semanticProfileId));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
                 AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
@@ -252,50 +239,4 @@ public sealed partial class PowerShellCompilationAnalyzer
         return result.ToArray();
     }
 
-    private static PowerShellCompilationParameterBinding[] GetParameterBindings(ParameterAst parameter)
-    {
-        var attributes = parameter.Attributes
-            .OfType<AttributeAst>()
-            .Where(static attribute => IsAttributeNamed(attribute, "Parameter"))
-            .ToArray();
-        if (attributes.Length == 0)
-            return new[] { new PowerShellCompilationParameterBinding() };
-
-        return attributes.Select(attribute =>
-        {
-            var setName = GetNamedString(attribute, "ParameterSetName");
-            if (setName.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase))
-                setName = string.Empty;
-            return new PowerShellCompilationParameterBinding(
-                setName,
-                GetNamedBoolean(attribute, "Mandatory"),
-                GetNamedInteger(attribute, "Position"),
-                GetNamedBoolean(attribute, "ValueFromPipeline"),
-                GetNamedBoolean(attribute, "ValueFromPipelineByPropertyName"),
-                GetNamedBoolean(attribute, "ValueFromRemainingArguments"),
-                GetNamedBoolean(attribute, "DontShow"),
-                GetNamedString(attribute, "HelpMessage"));
-        }).ToArray();
-    }
-
-    private static bool GetNamedBoolean(AttributeAst attribute, string name)
-    {
-        var argument = attribute.NamedArguments.FirstOrDefault(candidate =>
-            candidate.ArgumentName.Equals(name, StringComparison.OrdinalIgnoreCase));
-        return argument is not null && TryGetBooleanAttributeValue(argument, out var value) && value;
-    }
-
-    private static int? GetNamedInteger(AttributeAst attribute, string name)
-    {
-        var argument = attribute.NamedArguments.FirstOrDefault(candidate =>
-            candidate.ArgumentName.Equals(name, StringComparison.OrdinalIgnoreCase));
-        return argument is not null && TryGetIntegerAttributeValue(argument, out var value) ? value : null;
-    }
-
-    private static string GetNamedString(AttributeAst attribute, string name)
-    {
-        var argument = attribute.NamedArguments.FirstOrDefault(candidate =>
-            candidate.ArgumentName.Equals(name, StringComparison.OrdinalIgnoreCase));
-        return argument is not null && TryGetStringAttributeValue(argument, out var value) ? value : string.Empty;
-    }
 }

@@ -18,7 +18,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedThrow",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -42,7 +42,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedArrayMutation",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -53,6 +53,30 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellScript.cs"));
         Assert.Contains("new int[] { 1, 2, 3 }", generated, StringComparison.Ordinal);
         Assert.Contains("global::System.Array.Empty<int>()", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_StrictExecutableKeepsScalarStringForEachBodyInsideLoop()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([string] $Value); [int] $Count = 0; foreach ($Item in $Value) { $Count += 1; break }; return $Count");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedScalarStringForEach",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var process = RunProcess(result.ArtifactPath!, "--Value=PowerForge");
+        Assert.Equal((0, "1", string.Empty), (process.ExitCode, process.StandardOutput.Trim(), process.StandardError.Trim()));
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellScript.cs"));
+        Assert.Contains("foreach (string", generated, StringComparison.Ordinal);
+        Assert.Contains("break;", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -67,7 +91,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedMemberMutation",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal("A", RunModuleProof(result.ArtifactPath!, "Set-FrontierLength -Name Ada"));
@@ -86,7 +110,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedBoundParameters",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var output = RunModuleProof(
@@ -105,7 +129,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedExecutableBoundParameters",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.False(result.Manifest!.RequiresPowerShellRuntime);
@@ -127,7 +151,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedPowerShellObject",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -153,7 +177,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedNonTerminalRegion",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -163,13 +187,70 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("$null = Write-Output 'hidden'", generated, StringComparison.Ordinal);
         Assert.Contains("result = checked((int)(result + 1))", generated, StringComparison.Ordinal);
+        var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest!.UnitDispositionLedger);
+        Assert.Equal(4, ledger.SchemaVersion);
+        var entry = Assert.Single(ledger.Entries, static candidate => candidate.Name == "Invoke-FrontierRegion");
+        var graph = Assert.IsType<PowerShellCompilationRegionGraph>(entry.RegionGraph);
+        Assert.Equal(1, graph.SchemaVersion);
+        Assert.Equal(1, graph.HostedCommandBoundarySites);
+        Assert.Equal(2, graph.StaticBoundaryCostUnits);
+        Assert.Collection(
+            graph.Regions,
+            typedPrefix =>
+            {
+                Assert.Equal(PowerShellCompilationRegionExecution.Typed, typedPrefix.Execution);
+                Assert.Contains("Parameter:VALUE", typedPrefix.Inputs);
+                Assert.Contains("Local:RESULT", typedPrefix.Outputs);
+                Assert.Contains("Local:RESULT", typedPrefix.Mutations);
+                Assert.Equal(0, typedPrefix.StaticBoundaryCostUnits);
+            },
+            hosted =>
+            {
+                Assert.Equal(PowerShellCompilationRegionExecution.Hosted, hosted.Execution);
+                Assert.Equal(new[] { "Success", "Error", "Warning", "Verbose", "Debug", "Information", "Host" }, hosted.Streams);
+                Assert.Equal(new[] { "PowerShellErrorRecord" }, hosted.Errors);
+                Assert.Equal(new[] { "stream:Success" }, hosted.Outputs);
+                Assert.Equal(2, hosted.StaticBoundaryCostUnits);
+            },
+            typedSuffix =>
+            {
+                Assert.Equal(PowerShellCompilationRegionExecution.Typed, typedSuffix.Execution);
+                Assert.Contains("Local:RESULT", typedSuffix.Inputs);
+                Assert.Contains("Local:RESULT", typedSuffix.Mutations);
+                Assert.Contains("stream:Success", typedSuffix.Outputs);
+                Assert.Equal(0, typedSuffix.StaticBoundaryCostUnits);
+            });
+    }
+
+    [Fact]
+    public void Transpile_RegionGraphConservativelyRecordsClrReceiverMutationAndFailureRoute()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Add-RegionValue { [CmdletBinding()] param([System.Collections.Generic.List[int]] $Items) " +
+            "Write-Output 'before'; [void] $Items.Add(1); Write-Output 'after'; return $Items.Count }",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.TypedRegionEffects",
+            "CompiledPowerShell",
+            "net10.0");
+
+        var method = Assert.Single(typed.Methods);
+        var graph = Assert.IsType<PowerShellCompilationRegionGraph>(method.RegionGraph);
+        var mutation = Assert.Single(graph.Regions, static region =>
+            region.Execution == PowerShellCompilationRegionExecution.Typed &&
+            region.Mutations.Contains("Parameter:ITEMS", StringComparer.Ordinal));
+        Assert.Contains("Parameter:ITEMS", mutation.Outputs);
+        Assert.Contains("ClrException", mutation.Errors);
+        Assert.Contains(graph.Regions, static region =>
+            region.Ordinal > 0 && region.Inputs.Contains("Parameter:ITEMS", StringComparer.Ordinal));
     }
 
     [Fact]
     public void Build_StrictBinaryModulePropagatesCommandRegionHostAcrossTypedLocalCall()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierRegionHelper { [CmdletBinding()] param([int] $Value) Write-Verbose 'detail'; Write-Output 'region'; " +
+            "function Get-FrontierRegionHelper { [CmdletBinding()] param([int] $Value) Microsoft.PowerShell.Utility\\Write-Verbose 'detail'; Get-RegionText; " +
             "[int] $result = $Value; $result += 1; return $result }; " +
             "function Get-FrontierRegionOuter { [CmdletBinding()] param([int] $Value) return Get-FrontierRegionHelper -Value $Value }",
             ".psm1");
@@ -178,17 +259,17 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedRegionGraph",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.CompiledMethods);
-        Assert.Equal(new[] { "region", "2" }, RunModuleProof(result.ArtifactPath!, "Get-FrontierRegionOuter -Value 1").Split(Environment.NewLine));
+        Assert.Equal(new[] { "region", "2" }, RunModuleProof(result.ArtifactPath!, "function global:Get-RegionText { 'region' }; Get-FrontierRegionOuter -Value 1").Split(Environment.NewLine));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains(
-            "Get_FrontierRegionHelper(Value, __writeVerbose, __writeDebug, __writeWarning, __invokePowerShellRegion, __invokePowerShellCapture)",
+            "Get_FrontierRegionHelper(Value, __writeOutput, __writeVerbose, __writeDebug, __writeWarning, __writeInformation, __writeHost, __writeError, __invokePowerShellRegion, __invokePowerShellCapture)",
             generated,
             StringComparison.Ordinal);
     }
@@ -220,7 +301,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.RuntimeFreeObjectBoundary",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("requires PowerShell runtime", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -236,7 +317,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedThrowBoundary",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("exception expression", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -253,7 +334,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.PrivateSetterBoundary",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("readable and writable", result.Error, StringComparison.OrdinalIgnoreCase);

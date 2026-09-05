@@ -125,6 +125,9 @@ public sealed class BuildModuleConfiguration
 
     /// <summary>Binary conflict resolution settings.</summary>
     public ResolveBinaryConflictsConfiguration? ResolveBinaryConflicts { get; set; }
+
+    /// <summary>Optional script-to-binary module compilation settings.</summary>
+    public PowerShellModuleCompilationConfiguration? PowerShellCompilation { get; set; }
 }
 
 /// <summary>

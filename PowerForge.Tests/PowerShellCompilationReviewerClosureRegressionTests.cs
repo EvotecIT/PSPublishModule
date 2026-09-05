@@ -50,7 +50,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.DynamicVariableProvider",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -75,7 +75,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.NestedDiscovery",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
@@ -99,7 +99,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.RootPath,
             "PowerForge.RootOutput",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             ResourceMode = PowerShellCompilationResourceMode.CompleteModule
         });
@@ -144,7 +144,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ScriptReference",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = new[] { fixture.ScriptPath, helper },
             SingleFile = false
@@ -174,7 +174,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.AsyncPayload",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             IncludeResource = new[] { "worker.ps1", "data.txt" },
             SingleFile = false
@@ -190,10 +190,21 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         {
             Assert.True(Directory.Exists(extractedRoot), $"Extracted payload root was removed: {extractedRoot}");
             var deadline = DateTime.UtcNow.AddSeconds(20);
-            while (!File.Exists(marker) && DateTime.UtcNow < deadline)
+            string? markerContent = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                try
+                {
+                    if (File.Exists(marker)) markerContent = File.ReadAllText(marker).Trim();
+                    if (markerContent == "async-payload") break;
+                }
+                catch (IOException)
+                {
+                    // The asynchronous writer may have created the file without closing it yet.
+                }
                 Thread.Sleep(100);
-            Assert.True(File.Exists(marker), "The asynchronous child did not consume the extracted payload in time.");
-            Assert.Equal("async-payload", File.ReadAllText(marker).Trim());
+            }
+            Assert.Equal("async-payload", markerContent);
         }
         finally
         {
@@ -249,7 +260,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.CacheIntegrity",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             IncludeResource = new[] { "data.txt" },
             SingleFile = false
@@ -288,7 +299,8 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         using var fixture = ArtifactFixture.Create(
             "function Get-ArrayMutationRoute { param([int[]] $Numbers, [int] $Slot); " +
             "try { $Numbers[$Slot] = 9; return 'assigned' } " +
-            "catch [System.Management.Automation.RuntimeException] { return 'caught' } }; " +
+            "catch [System.IndexOutOfRangeException] { return 'caught-index' } " +
+            "catch [System.Management.Automation.RuntimeException] { return 'caught-runtime' } }; " +
             "Export-ModuleMember -Function Get-ArrayMutationRoute",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -296,18 +308,18 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ArrayMutationRoute",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains("new global::System.Management.Automation.RuntimeException", generated, StringComparison.Ordinal);
+        Assert.Contains("new global::System.IndexOutOfRangeException", generated, StringComparison.Ordinal);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{escapedPath}' -Force; Get-ArrayMutationRoute -Numbers @(1) -Slot 2; Get-ArrayMutationRoute -Numbers @(1) -Slot -2");
-        Assert.Equal((0, "caught" + Environment.NewLine + "caught", string.Empty),
+        Assert.Equal((0, "caught-index" + Environment.NewLine + "caught-index", string.Empty),
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
@@ -323,7 +335,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.MatchCapture",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -350,7 +362,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.MemberCatch",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -377,7 +389,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.OverflowCatch",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -406,7 +418,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.NamedArgumentOrder",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.CompiledMethods);
@@ -443,7 +455,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.DynamicPreDeclaration",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -468,7 +480,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.LooseSimpleBinding",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -508,7 +520,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.AliasTargetTiming",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Diagnostics, static diagnostic =>
@@ -533,7 +545,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.DecimalRuntimeCatch",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -643,7 +655,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.PropertySetterRuntimeCatch",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -683,7 +695,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.PropertyGetterRuntimeCatch",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -707,7 +719,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.BasicCommonParameter",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);

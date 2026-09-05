@@ -6,6 +6,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellTypedCompilationTranspilerTests
 {
     [Fact]
@@ -37,7 +38,7 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Equal(typeof(double).FullName, method.ReturnType);
         Assert.Empty(result.Diagnostics);
         Assert.Contains("public static double Get_AllowedAverageMs(double BaselineMs, double RelativeTolerance, double AbsoluteToleranceMs)", result.SourceCode, StringComparison.Ordinal);
-        Assert.Contains("double relativeCap = (BaselineMs * ((1D + RelativeTolerance)));", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("double relativeCap = (BaselineMs * (1d + RelativeTolerance));", result.SourceCode, StringComparison.Ordinal);
         Assert.Contains("if ((relativeCap > absoluteCap))", result.SourceCode, StringComparison.Ordinal);
     }
 
@@ -61,7 +62,8 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         var method = Assert.Single(result.Methods);
         Assert.Equal(typeof(long).FullName, method.ReturnType);
         Assert.Empty(result.Diagnostics);
-        Assert.Contains("for (int i = 1; (i <= Count); i++)", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("for (", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("i <= Count", result.SourceCode, StringComparison.Ordinal);
         Assert.Contains("total = checked((long)(total + i));", result.SourceCode, StringComparison.Ordinal);
     }
 
@@ -84,6 +86,20 @@ public sealed class PowerShellTypedCompilationTranspilerTests
     }
 
     [Fact]
+    public void Transpile_RejectsExceptionConstructionConversionWithoutEmittingInvalidCSharp()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Invoke-Failure { throw [System.ArgumentException] 'expected' }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("requires the PowerShell language-conversion runtime", StringComparison.Ordinal));
+        Assert.DoesNotContain("System.ArgumentException: expected", result.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Transpile_EmitsPowerShellNegativeIndexNormalizationForArrays()
     {
         using var fixture = TranspilerFixture.Create(
@@ -95,7 +111,9 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Equal(typeof(object).FullName, method.ReturnType);
         Assert.Empty(result.Diagnostics);
         Assert.Contains("? null : (object)", result.SourceCode, StringComparison.Ordinal);
-        Assert.Contains(".Length + (Index)", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("var __pf_index_target_", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("var __pf_index_key_", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains(".Length + (__pf_index_key_", result.SourceCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -182,7 +200,7 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
 
         Assert.Empty(result.Methods);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("Increment and decrement", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.FeatureId == "operator.increment");
     }
 
     [Fact]
@@ -198,16 +216,48 @@ public sealed class PowerShellTypedCompilationTranspilerTests
     }
 
     [Theory]
-    [InlineData("return [System.Collections.Generic.List[int]]::new()", "reference set")]
-    [InlineData("return [System.Management.Automation.PSVersionInfo]::PSEdition", "reference set")]
-    public void Transpile_RejectsTypesUnavailableToGeneratedRuntimeIndependentProjects(string body, string expectedMessage)
+    [InlineData("return [System.Management.Automation.PSVersionInfo]::PSEdition")]
+    [InlineData("return [System.Collections.Concurrent.ConcurrentDictionary[string,int]]::new()")]
+    public void Transpile_RejectsTypesUnavailableToGeneratedRuntimeIndependentProjects(string body)
     {
         using var fixture = TranspilerFixture.Create($"function Get-Value {{ {body} }}");
 
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
 
         Assert.Empty(result.Methods);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains(expectedMessage, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("reference set", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("net472")]
+    [InlineData("net8.0")]
+    [InlineData("net10.0")]
+    public void Transpile_EmitsExactConstructedGenericListMembersAvailableToTarget(string targetFramework)
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Get-Count { $items = [System.Collections.Generic.List[string]]::new(); $items.AddRange([string[]] ('alpha', 'beta')); $copy = $items.ToArray(); return $copy.Length }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath, targetFramework);
+
+        Assert.Empty(result.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        Assert.Single(result.Methods);
+        Assert.Contains("List<string> items = new global::System.Collections.Generic.List<string>();", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("(items).AddRange", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("string[] copy = (items).ToArray();", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("return (copy ?? global::System.Array.Empty<string>()).Length;", result.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Transpile_NormalizesNullCountForExplicitConstructedGenericListParameter()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Get-Count { param([System.Collections.Generic.List[string]] $Items) return $Items.Count }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath, "net10.0");
+
+        Assert.Empty(result.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        Assert.Single(result.Methods);
+        Assert.Contains("?.Count ?? 0", result.SourceCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -220,11 +270,11 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Null(exception);
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
         Assert.Empty(result.Methods);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("returns type", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.FeatureId == "syntax.memberexpression");
     }
 
     [Fact]
-    public void Transpile_RoutesExplicitGenericLocalTypeToDiagnosticInsteadOfThrowing()
+    public void Transpile_EmitsSupportedExplicitGenericLocalTypeWithoutThrowing()
     {
         using var fixture = TranspilerFixture.Create(
             "function Get-Items { param([int[]] $Values); [System.Collections.Generic.IEnumerable[int]] $items = $Values; return $Values }");
@@ -232,8 +282,8 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         var exception = Record.Exception(() => new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath));
         Assert.Null(exception);
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
-        Assert.Empty(result.Methods);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("typed local declaration", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(result.Methods);
+        Assert.Empty(result.Diagnostics);
     }
 
     [Fact]

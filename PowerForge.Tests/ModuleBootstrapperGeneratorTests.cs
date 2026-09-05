@@ -1602,6 +1602,33 @@ public partial class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithUnconfiguredAssemblyInNonPayloadFolder_DoesNotOverwriteExistingPsm1()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-unconfigured-nested-" + Guid.NewGuid().ToString("N"));
+        var unrelatedDirectory = Path.Combine(root, "Lib", "Artifacts");
+        Directory.CreateDirectory(unrelatedDirectory);
+        File.WriteAllText(Path.Combine(unrelatedDirectory, "DemoModule.dll"), string.Empty);
+
+        var psm1Path = Path.Combine(root, "DemoModule.psm1");
+        const string existing = "# existing module content";
+        File.WriteAllText(psm1Path, existing);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, exportAssemblies: null, handleRuntimes: false);
+
+            Assert.Equal(existing, File.ReadAllText(psm1Path));
+            Assert.False(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_WithDevelopmentBinariesAndScriptFolders_CapturesModuleRootBeforeDevelopmentBranch()
     {
         var root = Path.Combine(

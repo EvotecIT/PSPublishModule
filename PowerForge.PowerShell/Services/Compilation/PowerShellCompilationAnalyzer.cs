@@ -7,6 +7,40 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class PowerShellCompilationAnalyzer
 {
+    private readonly PowerShellCommandSemanticRegistry _commandRegistry;
+    private readonly PowerShellCommandSemanticResolver _commandResolver;
+    private readonly string _semanticProfileId;
+
+    /// <summary>Creates an analyzer with the built-in deterministic command providers.</summary>
+    public PowerShellCompilationAnalyzer()
+        : this(PowerShellCommandSemanticRegistry.Default, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+    {
+    }
+
+    /// <summary>Creates an analyzer with additional compile-time-only command providers.</summary>
+    public PowerShellCompilationAnalyzer(IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
+        : this(PowerShellCommandSemanticRegistry.Create(commandProviders), PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+    {
+    }
+
+    /// <summary>Creates an analyzer with additional providers under one exact named semantic profile.</summary>
+    public PowerShellCompilationAnalyzer(IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders, string semanticProfileId)
+        : this(PowerShellCommandSemanticRegistry.Create(commandProviders), semanticProfileId)
+    {
+    }
+
+    internal PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry commandRegistry)
+        : this(commandRegistry, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+    {
+    }
+
+    internal PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry commandRegistry, string semanticProfileId)
+    {
+        _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+        _commandResolver = new PowerShellCommandSemanticResolver(_commandRegistry);
+        _semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
+    }
+
     private static readonly HashSet<string> SupportedBinaryOperators = new(StringComparer.Ordinal)
     {
         "Plus", "Minus", "Multiply", "Divide", "Rem",
@@ -24,7 +58,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         "Equals", "PlusEquals", "MinusEquals", "MultiplyEquals", "DivideEquals", "RemEquals"
     };
 
-    private static PowerShellCompilationFilePlan AnalyzeFile(
+    private PowerShellCompilationFilePlan AnalyzeFile(
         string file,
         string basePath,
         string? targetFramework,
@@ -45,6 +79,18 @@ public sealed partial class PowerShellCompilationAnalyzer
             return new PowerShellCompilationFilePlan(file, relativePath, Array.Empty<PowerShellCompilationUnitPlan>(), diagnostics);
         }
 
+        var unsupportedProfileTokens = PowerShellSourceProfileSyntaxPolicy.FindUnsupportedTokens(tokens, _semanticProfileId);
+        if (unsupportedProfileTokens.Length > 0)
+        {
+            var diagnostics = unsupportedProfileTokens.Select(token => CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.ParseError,
+                $"Numeric literal syntax '{token.Extent.Text}' is not accepted by selected semantic profile '{_semanticProfileId}'; source fallback would not parse on that target.",
+                file,
+                token.Extent,
+                PowerShellCompilationFeatureIds.Parser)).ToArray();
+            return new PowerShellCompilationFilePlan(file, relativePath, Array.Empty<PowerShellCompilationUnitPlan>(), diagnostics);
+        }
+
         var units = new List<PowerShellCompilationUnitPlan>();
         var topLevelStatements = GetEndStatements(
             ast,
@@ -53,30 +99,6 @@ public sealed partial class PowerShellCompilationAnalyzer
         if (topLevelStatements.Length > 0 || ast.ParamBlock is not null || HasUnsupportedNamedBlocks(ast))
         {
             var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements, targetFramework, capabilities, localFunctionNames);
-            if (scriptUnit.IsCompilable && !RequiresArtifactGraphEmission(topLevelStatements, capabilities, localFunctionNames))
-            {
-                try
-                {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements, targetFramework, capabilities, parameterMetadata: scriptUnit.Parameters).Emit();
-                    scriptUnit = ReplaceUnit(scriptUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
-                }
-                catch (PowerShellCSharpEmissionException ex)
-                {
-                    scriptUnit = ReplaceUnit(
-                        scriptUnit,
-                        typeof(object),
-                        new[]
-                        {
-                            new PowerShellCompilationDiagnostic(
-                                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                                ex.Message,
-                                file,
-                                ex.Node.Extent.StartLineNumber,
-                                ex.Node.Extent.StartColumnNumber,
-                                PowerShellCompilationFeatureIds.ForSyntax(ex.Node.GetType().Name))
-                        });
-                }
-            }
             units.Add(scriptUnit);
         }
 
@@ -111,77 +133,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationFeatureIds.FilterFunction)
                     });
             }
-            if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) && function.GetHelpContent() is not null)
-            {
-                functionUnit = ReplaceUnit(
-                    functionUnit,
-                    typeof(object),
-                    new[]
-                    {
-                        CreateDiagnostic(
-                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                            $"Function '{function.Name}' has comment-based help, so binary-module compilation keeps its authored help on the PowerShell function path.",
-                            file,
-                            function.Extent,
-                            PowerShellCompilationFeatureIds.CommentBasedHelp)
-                    });
-            }
-            var functionStatements = GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false);
-            if (functionUnit.IsCompilable && !RequiresArtifactGraphEmission(functionStatements, capabilities, localFunctionNames))
-            {
-                try
-                {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, function, targetFramework, capabilities, parameterMetadata: functionUnit.Parameters).Emit();
-                    functionUnit = ReplaceUnit(functionUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
-                }
-                catch (PowerShellCSharpEmissionException ex)
-                {
-                    functionUnit = ReplaceUnit(
-                        functionUnit,
-                        typeof(object),
-                        new[]
-                        {
-                            new PowerShellCompilationDiagnostic(
-                                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                                ex.Message,
-                                file,
-                                ex.Node.Extent.StartLineNumber,
-                                ex.Node.Extent.StartColumnNumber,
-                                PowerShellCompilationFeatureIds.ForSyntax(ex.Node.GetType().Name))
-                        });
-                }
-            }
             units.Add(functionUnit);
-        }
-
-        var collidingMethodNames = units
-            .Where(static unit => unit.Kind == PowerShellCompilationUnitKind.Function)
-            .GroupBy(static unit => PowerShellCSharpMethodEmitter.SanitizeIdentifier(unit.Name), StringComparer.OrdinalIgnoreCase)
-            .Where(static group => group.Count() > 1)
-            .Select(static group => group.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (collidingMethodNames.Count > 0)
-        {
-            for (var index = 0; index < units.Count; index++)
-            {
-                var unit = units[index];
-                var generatedName = PowerShellCSharpMethodEmitter.SanitizeIdentifier(unit.Name);
-                if (unit.Kind != PowerShellCompilationUnitKind.Function || !collidingMethodNames.Contains(generatedName))
-                    continue;
-                var function = functions.First(candidate => candidate.Name == unit.Name && candidate.Body.Extent.StartLineNumber == unit.StartLine);
-                units[index] = ReplaceUnit(
-                    unit,
-                    typeof(object),
-                    new[]
-                    {
-                        CreateDiagnostic(
-                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                            $"Function '{unit.Name}' collides with another function after CLR identifier normalization to '{generatedName}'.",
-                            file,
-                            function.Extent,
-                            PowerShellCompilationFeatureIds.FunctionNameCollision)
-                    });
-            }
         }
 
         var fileWideDiagnostics = ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
@@ -202,6 +154,19 @@ public sealed partial class PowerShellCompilationAnalyzer
                 file,
                 ast.Extent,
                 PowerShellCompilationFeatureIds.RequiresDirective));
+        }
+        var typeDefinitions = ast.FindAll(static node => node is TypeDefinitionAst, searchNestedScriptBlocks: false)
+            .OfType<TypeDefinitionAst>()
+            .Where(definition => ReferenceEquals(definition.Parent, ast.EndBlock))
+            .ToArray();
+        if (typeDefinitions.Length > 0)
+        {
+            fileWideDiagnostics.Add(CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+                file,
+                typeDefinitions[0].Extent,
+                PowerShellCompilationFeatureIds.TypeDefinition));
         }
         if (fileWideDiagnostics.Count > 0)
         {
@@ -230,7 +195,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             unit.Parameters,
             unit.Diagnostics.Concat(additionalDiagnostics).ToArray());
 
-    private static PowerShellCompilationUnitPlan AnalyzeUnit(
+    private PowerShellCompilationUnitPlan AnalyzeUnit(
         string name,
         PowerShellCompilationUnitKind kind,
         ScriptBlockAst root,
@@ -242,6 +207,10 @@ public sealed partial class PowerShellCompilationAnalyzer
     {
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var localVariables = CollectLocalVariables(root);
+        var runtimeFreeLifecycle = PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(root, capabilities, out _, out _);
+        var unitCapabilities = runtimeFreeLifecycle
+            ? capabilities | PowerShellCompilationCapability.PipelineParameterBinding
+            : capabilities;
         var parameters = AnalyzeParameters(
             root.ParamBlock,
             root,
@@ -249,18 +218,18 @@ public sealed partial class PowerShellCompilationAnalyzer
             diagnostics,
             localVariables,
             targetFramework,
-            capabilities,
+            unitCapabilities,
             localFunctionNames,
             kind == PowerShellCompilationUnitKind.Script);
 
-        AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
+        AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: true);
+        AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: !runtimeFreeLifecycle);
+        AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: !runtimeFreeLifecycle);
+        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: true);
 
         foreach (var statement in executableStatements)
         {
-            AnalyzeNode(statement, root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
+            AnalyzeNode(statement, root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames);
         }
 
         return new PowerShellCompilationUnitPlan(
@@ -272,7 +241,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             Deduplicate(diagnostics));
     }
 
-    private static void AnalyzeNode(
+    private void AnalyzeNode(
         Ast node,
         Ast unitRoot,
         string file,
@@ -333,7 +302,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
                     PowerShellObjectConstructionPolicy.IsLiteral(conversion):
                     break;
-                case ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, targetFramework, capabilities):
+                case ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, targetFramework, capabilities, _semanticProfileId):
                     break;
                 case ConvertExpressionAst conversion:
                     diagnostics.Add(CreateDiagnostic(
@@ -345,22 +314,83 @@ public sealed partial class PowerShellCompilationAnalyzer
                     break;
                 case CommandAst command:
                     var commandName = command.GetCommandName();
+                    var semanticResolution = _commandResolver.Resolve(command, localFunctionNames, capabilities);
+                    if (command.Parent is PipelineAst mappingPipeline &&
+                        PowerShellMappingCommandSemanticBinder.TryGetRuntimeFreeProcess(
+                            mappingPipeline,
+                            _commandResolver,
+                            localFunctionNames,
+                            capabilities,
+                            out _,
+                            out _))
+                        break;
+                    if (capabilities.HasFlag(PowerShellCompilationCapability.ExecutableParameterBinding) &&
+                        PowerShellCommentHelpSemanticBinder.TryGetTargetName(command, out var helpTarget) &&
+                        localFunctionNames?.Contains(helpTarget) == true)
+                        break;
                     if (capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) &&
                         (command.InvocationOperator == TokenKind.Dot ||
-                         commandName is not null && localFunctionNames?.Contains(commandName) == true))
+                         semanticResolution.Origin == PowerShellCommandSemanticOrigin.LocalFunction))
                         break;
-                    if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-                        (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _) ||
-                         (unitRoot is ScriptBlockAst commandBody &&
-                          (PowerShellCommandIslandPolicy.TryGetRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
-                           PowerShellCommandIslandPolicy.TryGetCapturedRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
-                           PowerShellCommandIslandPolicy.TryGetRuntimeTailRegion(command, commandBody, localFunctionNames, out _)))))
+                    if (semanticResolution is
+                        {
+                            IsProvider: true,
+                            Contract.Family: PowerShellCompilationCommandFamily.CommandDiscovery
+                        } && PowerShellCommandDiscoverySemanticBinder.IsSupportedBooleanConsumption(command, capabilities))
+                        break;
+                    if (semanticResolution is
+                        {
+                            IsProvider: true,
+                            Contract.Family: PowerShellCompilationCommandFamily.RuntimeState
+                        } runtimeState && PowerShellRuntimeStateCommandSemanticBinder.IsSupportedShape(command, runtimeState.Contract!, capabilities))
+                        break;
+                    if (semanticResolution is
+                        {
+                            IsProvider: true,
+                            Contract.Family: PowerShellCompilationCommandFamily.ClrConstruction
+                        } && PowerShellNewObjectSemanticBinder.IsSupportedShape(command))
+                        break;
+                    if (PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(
+                            command,
+                            capabilities,
+                            out _,
+                            out _,
+                            out _,
+                            _commandResolver,
+                            localFunctionNames) ||
+                        capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                        (unitRoot is ScriptBlockAst commandBody &&
+                          (PowerShellCommandIslandPolicy.TryGetRuntimeRegion(
+                               command,
+                               commandBody,
+                               localFunctionNames,
+                               localVariables,
+                               capabilities,
+                               _commandResolver,
+                               out _) ||
+                           PowerShellCommandIslandPolicy.TryGetCapturedRuntimeRegion(
+                               command,
+                               commandBody,
+                               localFunctionNames,
+                               localVariables,
+                               capabilities,
+                               _commandResolver,
+                               out _) ||
+                           PowerShellCommandIslandPolicy.TryGetRuntimeTailRegion(
+                               command,
+                               commandBody,
+                               localFunctionNames,
+                               capabilities,
+                               _commandResolver,
+                               out _))))
                         break;
                     diagnostics.Add(CreateDiagnostic(
                         commandName is null ? PowerShellCompilationDiagnosticCode.DynamicCommandInvocation : PowerShellCompilationDiagnosticCode.CommandInvocation,
                         commandName is null
                             ? "Dynamic command resolution requires the PowerShell runtime."
-                            : $"Command invocation '{commandName}' requires the PowerShell runtime.",
+                            : semanticResolution.Origin == PowerShellCommandSemanticOrigin.PowerShellRuntime
+                                ? $"Command invocation '{commandName}' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command."
+                                : $"Command invocation '{commandName}' requires the PowerShell runtime.",
                         file,
                         command.Extent,
                         commandName is null ? PowerShellCompilationFeatureIds.DynamicCommand : PowerShellCompilationFeatureIds.ForCommand(commandName)));
@@ -373,6 +403,14 @@ public sealed partial class PowerShellCompilationAnalyzer
                 case VariableExpressionAst variable when
                     unitRoot is ScriptBlockAst body &&
                     PowerShellRuntimeStateIntrinsicPolicy.IsSupportedReference(variable, body, targetFramework, capabilities):
+                    break;
+                case VariableExpressionAst variable when
+                    variable.Parent is AssignmentStatementAst moduleAssignment &&
+                    ReferenceEquals(moduleAssignment.Left, variable) &&
+                    PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
+                        moduleAssignment,
+                        capabilities,
+                        out _):
                     break;
                 case VariableExpressionAst variable when IsRuntimeVariable(variable, localVariables):
                     diagnostics.Add(CreateDiagnostic(
@@ -412,9 +450,20 @@ public sealed partial class PowerShellCompilationAnalyzer
                     capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                     unitRoot is ScriptBlockAst discardBody &&
                     PowerShellCommandIslandPolicy.IsDiscardAssignment(discard) &&
-                    PowerShellCommandIslandPolicy.IsRuntimeRegion(discard, discardBody, localFunctionNames, localVariables):
+                    PowerShellCommandIslandPolicy.IsRuntimeRegion(
+                        discard,
+                        discardBody,
+                        localFunctionNames,
+                        localVariables,
+                        capabilities,
+                        _commandResolver):
                     break;
                 case AssignmentStatementAst assignment:
+                    if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
+                            assignment,
+                            capabilities,
+                            out _))
+                        break;
                     var assignedVariable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
                     if (assignedVariable is null && IsPotentialTypedMutation(assignment, unitRoot))
                         break;
@@ -507,14 +556,14 @@ public sealed partial class PowerShellCompilationAnalyzer
         => ReferenceEquals(candidate, unitRoot) || candidate is
             NamedBlockAst or StatementBlockAst or ParamBlockAst or ParameterAst or TypeConstraintAst or
             PipelineAst or CommandExpressionAst or AssignmentStatementAst or IfStatementAst or
-            SwitchStatementAst or ForStatementAst or WhileStatementAst or ForEachStatementAst or TryStatementAst or CatchClauseAst or ReturnStatementAst or
+            SwitchStatementAst or ForStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst or ForEachStatementAst or TryStatementAst or CatchClauseAst or ReturnStatementAst or
             ThrowStatementAst or BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
             ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or ExpandableStringExpressionAst or
             VariableExpressionAst or ArrayLiteralAst or ArrayExpressionAst or HashtableAst or TypeExpressionAst or MemberExpressionAst or
             InvokeMemberExpressionAst or IndexExpressionAst;
 
     private static bool HasUnsupportedSwitchFlags(SwitchFlags flags)
-        => (flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0;
+        => (flags & (SwitchFlags.File | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0;
 
     private static bool IsSupportedCatchType(TypeConstraintAst constraint)
     {
@@ -528,7 +577,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             return false;
         if (assignment.Left is MemberExpressionAst
             {
-                Expression: VariableExpressionAst,
+                Expression: VariableExpressionAst or TypeExpressionAst,
                 Member: StringConstantExpressionAst
             })
             return true;
@@ -568,10 +617,6 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static bool IsOrderedHashtableConversion(ConvertExpressionAst conversion)
         => conversion.StaticType == typeof(System.Collections.Specialized.OrderedDictionary) &&
            conversion.Child is HashtableAst;
-
-    private static bool IsAttributeNamed(AttributeAst attribute, string name)
-        => attribute.TypeName.Name.Equals(name, StringComparison.OrdinalIgnoreCase) ||
-           attribute.TypeName.Name.Equals(name + "Attribute", StringComparison.OrdinalIgnoreCase);
 
     private static StatementAst[] GetEndStatements(ScriptBlockAst scriptBlock, bool excludeFunctionDefinitions, bool excludeModuleExports)
         => scriptBlock.EndBlock?.Statements
@@ -621,7 +666,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         return variables;
     }
 
-    private static void AnalyzeUnsupportedNamedBlock(
+    private void AnalyzeUnsupportedNamedBlock(
         NamedBlockAst? block,
         string blockName,
         Ast unitRoot,
@@ -630,17 +675,21 @@ public sealed partial class PowerShellCompilationAnalyzer
         HashSet<string> localVariables,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
-        ISet<string>? localFunctionNames)
+        ISet<string>? localFunctionNames,
+        bool reportLifecycleDiagnostic)
     {
         if (block is null)
             return;
 
-        diagnostics.Add(CreateDiagnostic(
-            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-            $"The '{blockName}' block requires PowerShell pipeline lifecycle semantics.",
-            file,
-            block.Extent,
-            PowerShellCompilationFeatureIds.PipelineLifecycle));
+        if (reportLifecycleDiagnostic)
+        {
+            diagnostics.Add(CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                $"The '{blockName}' block requires PowerShell pipeline lifecycle semantics.",
+                file,
+                block.Extent,
+                PowerShellCompilationFeatureIds.PipelineLifecycle));
+        }
         foreach (var statement in block.Statements)
             AnalyzeNode(statement, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
     }

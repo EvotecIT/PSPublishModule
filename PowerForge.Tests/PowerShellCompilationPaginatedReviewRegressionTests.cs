@@ -21,11 +21,19 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ValidationRouting",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(2, result.Manifest!.AnalyzedUnits);
+        Assert.Equal(1, result.Manifest.EmittedUnits);
+        Assert.Equal(2, result.Manifest.RuntimeRoutedUnits);
+        Assert.Equal(1, result.Manifest.FallbackUnits);
+        Assert.Equal(1, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(50d, result.Manifest.CompilationCoveragePercentage);
+        var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
+        Assert.Equal(2, ledger.Entries.Count(static entry => entry.RetainedHostedSource));
+        Assert.Single(ledger.Entries, static entry => entry.EmittedClrMethod && entry.RetainedHostedSource);
+        Assert.Single(ledger.Entries, static entry => !entry.EmittedClrMethod && entry.RetainedHostedSource);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",
@@ -49,7 +57,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ValidationRoutingIndependent",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("Strict mode rejected", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -70,7 +78,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.NullablePropertyRouting",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -96,7 +104,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.NullablePropertyIndependent",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("runtime-error identity", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -113,7 +121,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.RepeatableResources",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             IncludeResource = new[] { "**/*" }
         };
@@ -138,7 +146,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.StreamMessageBinding",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -161,7 +169,10 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         if (OperatingSystem.IsWindows())
             return;
 
-        using var fixture = ArtifactFixture.Create("& \"$PSScriptRoot/tool.sh\"");
+        using var fixture = ArtifactFixture.Create(
+            "/usr/bin/test -x \"$PSScriptRoot/tool.sh\"; " +
+            "if ($LASTEXITCODE -ne 0) { throw 'Packaged tool is not executable.' }; " +
+            "/bin/sh \"$PSScriptRoot/tool.sh\"");
         var tool = Path.Combine(fixture.RootPath, "tool.sh");
         File.WriteAllText(tool, "#!/bin/sh\nprintf 'unix-resource-proof\\n'\n");
         File.SetUnixFileMode(
@@ -174,7 +185,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.UnixResourceMode",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             IncludeResource = new[] { "tool.sh" }
         });
@@ -198,7 +209,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.InvariantMembership",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -229,7 +240,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.PreDeclarationDiscovery",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
@@ -252,8 +263,12 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             "$script:__powerForgeRunspaceId = 'authored-runspace'; " +
             "$script:__powerForgeModule = 'authored-module'; " +
             "$script:__powerForgePreviousOnRemove = 'authored-previous'; " +
-            "function Get-RegionValue { [CmdletBinding()] param([string] $Name) Write-Output 'region'; return $Name }; " +
-            "function Get-AuthoredDispatcherState { return \"$script:__powerForgeRunspaceId|$script:__powerForgeModule|$script:__powerForgePreviousOnRemove\" }; " +
+            "$script:__powerForgeRuntimeCleanup = 'authored-cleanup'; " +
+            "$script:__powerForgeInstalledOnRemove = 'authored-installed'; " +
+            "$script:__powerForgeEffectiveOnRemove = 'authored-effective'; " +
+            "$script:__powerForgeInitializationFailed = 'authored-failed'; " +
+            "function Get-RegionValue { [CmdletBinding()] param([string] $Name) Microsoft.PowerShell.Utility\\Write-Output 'region'; return $Name }; " +
+            "function Get-AuthoredDispatcherState { return \"$script:__powerForgeRunspaceId|$script:__powerForgeModule|$script:__powerForgePreviousOnRemove|$script:__powerForgeRuntimeCleanup|$script:__powerForgeInstalledOnRemove|$script:__powerForgeEffectiveOnRemove|$script:__powerForgeInitializationFailed\" }; " +
             "Export-ModuleMember -Function Get-RegionValue, Get-AuthoredDispatcherState",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -261,11 +276,15 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.DispatcherVariableIsolation",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(3, result.Manifest!.AnalyzedUnits);
+        Assert.Equal(1, result.Manifest.EmittedUnits);
+        Assert.Equal(2, result.Manifest.RuntimeRoutedUnits);
+        Assert.Equal(1, result.Manifest.FallbackUnits);
+        Assert.Equal(1, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(100d / 3d, result.Manifest.CompilationCoveragePercentage, precision: 8);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",
@@ -273,12 +292,12 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             "-NonInteractive",
             "-Command",
             $"Import-Module -Name '{escapedPath}' -Force; Get-AuthoredDispatcherState");
-        Assert.Equal((0, "authored-runspace|authored-module|authored-previous", string.Empty),
+        Assert.Equal((0, "authored-runspace|authored-module|authored-previous|authored-cleanup|authored-installed|authored-effective|authored-failed", string.Empty),
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
     [Fact]
-    public void Build_HybridModuleRetainsCommentBasedHelpOnFallbackFunction()
+    public void Build_HybridModuleCompilesCommentBasedHelpAndGeneratesExternalHelp()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-HelpedValue {\n<#\n.SYNOPSIS\nAuthored compiler help synopsis.\n.DESCRIPTION\nRetained description.\n#>\nreturn 7\n}; " +
@@ -289,13 +308,12 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.CommentHelpIdentity",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(0, result.Manifest!.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
-        Assert.Contains(result.Manifest.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("comment-based help", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+        Assert.Contains(result.Manifest.Files, file => file.Role == "ExternalHelp" && File.Exists(file.Path));
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",
@@ -308,10 +326,10 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
-    public void Build_StrictBinaryModuleRejectsCommentBasedHelpWithoutGeneratedExternalHelp()
+    public void Build_StrictBinaryModulePreservesCommentBasedHelpWithGeneratedExternalHelp()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-HelpedValue {\n<#\n.SYNOPSIS\nAuthored compiler help synopsis.\n#>\nreturn 7\n}; " +
+            "function Get-HelpedValue {\n<#\n.SYNOPSIS\nAuthored compiler help synopsis.\n.DESCRIPTION\nFull compiled help description.\n.PARAMETER Name\nName parameter help.\n.EXAMPLE\nGet-HelpedValue -Name Ada\n.NOTES\nCompiled help note.\n.LINK\nhttps://example.com/help\n.INPUTS\nSystem.String\n.OUTPUTS\nSystem.Int32\n#>\nparam([string] $Name)\nreturn 7\n}; " +
             "Export-ModuleMember -Function Get-HelpedValue",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -319,11 +337,57 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.CommentHelpStrict",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
-        Assert.False(result.Succeeded);
-        Assert.Null(result.Manifest);
-        Assert.Contains("No PowerShell functions were eligible", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("comment-based help", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);
+        var helpFile = Assert.Single(result.Manifest.Files, file => file.Role == "ExternalHelp" && File.Exists(file.Path));
+        var maml = File.ReadAllText(helpFile.Path);
+        Assert.Contains("Full compiled help description.", maml, StringComparison.Ordinal);
+        Assert.Contains("Name parameter help.", maml, StringComparison.Ordinal);
+        Assert.Contains("Get-HelpedValue -Name Ada", maml, StringComparison.Ordinal);
+        Assert.Contains("Compiled help note.", maml, StringComparison.Ordinal);
+        Assert.Contains("https://example.com/help", maml, StringComparison.Ordinal);
+        Assert.Contains("System.String", maml, StringComparison.Ordinal);
+        Assert.Contains("System.Int32", maml, StringComparison.Ordinal);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; $h = Get-Help Get-HelpedValue -Full; $h.Synopsis; ($h.Parameters.Parameter | Where-Object Name -eq 'Name').Description.Text");
+        Assert.Equal((0, "Authored compiler help synopsis." + Environment.NewLine + "Name parameter help.", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesHelpAcrossTypedAndRetainedCommands()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedHelp {\n<#\n.SYNOPSIS\nTyped command help.\n#>\nreturn 3\n}; " +
+            "function Get-RetainedHelp {\n<#\n.SYNOPSIS\nRetained command help.\n#>\nreturn [int](Get-Date -Format yyyy)\n}; " +
+            "Export-ModuleMember -Function @('Get-TypedHelp', 'Get-RetainedHelp')",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MixedHelp",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; (Get-Command Get-TypedHelp).CommandType; (Get-Help Get-TypedHelp).Synopsis; (Get-Command Get-RetainedHelp).CommandType; (Get-Help Get-RetainedHelp).Synopsis");
+        Assert.Equal((0, "Cmdlet" + Environment.NewLine + "Typed command help." + Environment.NewLine + "Function" + Environment.NewLine + "Retained command help.", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 }

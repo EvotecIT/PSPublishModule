@@ -9,16 +9,18 @@ public sealed partial class ModulePipelineRunner
     internal string? SyncBuildManifestToProjectRoot(
         ModulePipelinePlan plan,
         ModuleBuildResult? buildResult = null,
-        bool syncGeneratedBootstrapper = true)
+        bool syncGeneratedBootstrapper = true,
+        bool syncStagedExports = true)
     {
         var projectManifestPath = GetProjectManifestPath(plan);
         if (!File.Exists(projectManifestPath))
             return null;
 
         RefreshProjectManifestFromPlan(plan, projectManifestPath);
-        var syncedStagedExports = buildResult is not null &&
-                                  !plan.BuildSpec.RefreshManifestOnly;
-        var syncedGeneratedBootstrapper = syncedStagedExports &&
+        var stagedExportsWereSynced = syncStagedExports &&
+                                      buildResult is not null &&
+                                      !plan.BuildSpec.RefreshManifestOnly;
+        var syncedGeneratedBootstrapper = stagedExportsWereSynced &&
                                           SyncBinaryExportsToProjectRoot(plan, buildResult!, projectManifestPath, syncGeneratedBootstrapper);
 
         var label = plan.GateMode == ConfigurationGateMode.Documentation
@@ -28,7 +30,7 @@ public sealed partial class ModulePipelineRunner
                 : "Build";
         var message = syncedGeneratedBootstrapper
             ? $"{label}: refreshed project-root manifest and bootstrapper from staged binary exports."
-            : syncedStagedExports
+            : stagedExportsWereSynced
                 ? $"{label}: refreshed project-root manifest and exports from staged binary manifest."
             : $"{label}: refreshed project-root manifest from source manifest inputs.";
         _logger.Info(message);

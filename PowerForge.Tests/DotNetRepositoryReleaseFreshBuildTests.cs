@@ -860,12 +860,19 @@ public sealed class DotNetRepositoryReleaseFreshBuildTests
         };
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
+        DotNetTestProcessEnvironment.DisableBuildServers(startInfo);
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start dotnet.");
         var standardOutputTask = process.StandardOutput.ReadToEndAsync();
         var standardErrorTask = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
-        Task.WaitAll(standardOutputTask, standardErrorTask);
+        if (!process.WaitForExit(120000))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            Assert.Fail($"dotnet {string.Join(' ', arguments)} timed out");
+        }
+        Assert.True(
+            Task.WaitAll([standardOutputTask, standardErrorTask], TimeSpan.FromSeconds(10)),
+            $"dotnet {string.Join(' ', arguments)} output capture timed out");
 
         Assert.True(process.ExitCode == 0, $"dotnet {string.Join(' ', arguments)} failed.{Environment.NewLine}{standardOutputTask.Result}{Environment.NewLine}{standardErrorTask.Result}");
     }

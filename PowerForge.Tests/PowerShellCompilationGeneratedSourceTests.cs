@@ -11,13 +11,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_EmitSourcePublishesHashedRebuildableProject()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-GeneratedProof { param([int] $Value) return $Value }");
+            "function Get-GeneratedProof {\n" +
+            "    param([int] $Value)\n" +
+            "    [int] $next = $Value\n" +
+            "    $next += 1\n" +
+            "    return $next\n" +
+            "}");
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "GeneratedProof",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         };
@@ -33,15 +38,36 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "Directory.Build.targets")));
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "Directory.Packages.props")));
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "global.json")));
+        var mappedDocumentId = PowerShellSourceParser.CreateDocumentId(fixture.ScriptPath, fixture.RootPath);
+        Assert.Equal(File.ReadAllBytes(fixture.ScriptPath), File.ReadAllBytes(Path.Combine(result.GeneratedSourcePath!, mappedDocumentId)));
         var sourceMapPath = Path.Combine(result.GeneratedSourcePath!, "source-map.json");
         Assert.True(File.Exists(sourceMapPath));
         using (var sourceMap = JsonDocument.Parse(File.ReadAllText(sourceMapPath)))
         {
+            Assert.Equal(2, sourceMap.RootElement.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("input.ps1", sourceMap.RootElement.GetProperty("rootSource").GetString());
             var method = Assert.Single(sourceMap.RootElement.GetProperty("methods").EnumerateArray());
             Assert.Equal("Get-GeneratedProof", method.GetProperty("powershellName").GetString());
             Assert.Equal("input.ps1", method.GetProperty("sourceFile").GetString());
             Assert.Equal(1, method.GetProperty("sourceLine").GetInt32());
+            Assert.Equal("CompiledPowerShell.cs", method.GetProperty("generatedFile").GetString());
+            Assert.True(method.GetProperty("generatedMethodLine").GetInt32() > 0);
+            var methodSource = method.GetProperty("sourceRange");
+            Assert.Equal(1, methodSource.GetProperty("startLine").GetInt32());
+            Assert.Equal(6, methodSource.GetProperty("endLine").GetInt32());
+            var statements = method.GetProperty("statements").EnumerateArray().ToArray();
+            Assert.NotEmpty(statements);
+            Assert.Contains(statements, statement =>
+                statement.GetProperty("sourceRange").GetProperty("startLine").GetInt32() == 3);
+            Assert.All(statements, statement =>
+            {
+                var source = statement.GetProperty("sourceRange");
+                var generated = statement.GetProperty("generatedRange");
+                Assert.True(source.GetProperty("startColumn").GetInt32() > 0);
+                Assert.True(source.GetProperty("endColumn").GetInt32() > 0);
+                Assert.True(generated.GetProperty("startLine").GetInt32() >= method.GetProperty("generatedMethodLine").GetInt32());
+                Assert.True(generated.GetProperty("endLine").GetInt32() >= generated.GetProperty("startLine").GetInt32());
+            });
         }
         Assert.Contains(result.Manifest.Files, file => file.Role == "GeneratedSource" && file.Path.EndsWith("CompiledPowerShell.cs", StringComparison.Ordinal));
         Assert.Contains(result.Manifest.Files, file => file.Role == "GeneratedProject" && file.Path.EndsWith("GeneratedProof.csproj", StringComparison.Ordinal));
@@ -71,7 +97,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "GeneratedIsolation",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -90,6 +116,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         startInfo.ArgumentList.Add("GeneratedIsolation.csproj");
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add("Release");
+        startInfo.ArgumentList.Add("/p:ContinuousIntegrationBuild=true");
         using var process = Process.Start(startInfo)!;
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
@@ -100,7 +127,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("net8.0", "8.0.4")]
+    [InlineData("net8.0", "10.0.11")]
     [InlineData("net10.0", "10.0.11")]
     public void Build_EmittedBinaryModulePinsServicedSecurityXmlDependency(string targetFramework, string expectedVersion)
     {
@@ -110,7 +137,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "GeneratedSecurityDependency",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true,
             TargetFramework = targetFramework
@@ -131,7 +158,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "GeneratedPackagedSecurityDependency",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true,
             TargetFramework = "net10.0"
@@ -140,6 +167,57 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var project = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "GeneratedPackagedSecurityDependency.csproj"));
         Assert.Contains("<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"10.0.11\"", project, StringComparison.Ordinal);
+        var compilerPackages = result.Manifest!.DependencyGraph!.Nodes
+            .Where(static node => node.Kind == PowerShellCompilationDependencyNodeKind.NuGetPackage)
+            .ToArray();
+        Assert.Contains(compilerPackages, static node =>
+            node.Identity.Name == "Microsoft.PowerShell.SDK" &&
+            node.Identity.Version == "7.6.5" &&
+            node.Identity.ContentHashAlgorithm == "SHA-512" &&
+            !string.IsNullOrWhiteSpace(node.Identity.ContentHash) &&
+            node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Build));
+        Assert.Contains(compilerPackages, static node =>
+            node.Identity.Name == "System.Security.Cryptography.Xml" && node.Identity.Version == "10.0.11");
+        var provenance = result.Manifest.Files.Single(static file => file.Role == "BuildProvenance");
+        using (var document = JsonDocument.Parse(File.ReadAllText(provenance.Path)))
+        {
+            var resolvedPackages = document.RootElement.GetProperty("resolvedPackages").EnumerateArray().ToArray();
+            Assert.Contains(resolvedPackages, static package =>
+                package.GetProperty("id").GetString() == "Microsoft.PowerShell.SDK" &&
+                package.GetProperty("version").GetString() == "7.6.5" &&
+                package.GetProperty("directCompilerReference").GetBoolean());
+            Assert.All(resolvedPackages, static package => Assert.False(string.IsNullOrWhiteSpace(package.GetProperty("contentHash").GetString())));
+        }
+        var sbom = result.Manifest.Files.Single(static file => file.Role == "Sbom");
+        using (var document = JsonDocument.Parse(File.ReadAllText(sbom.Path)))
+        {
+            Assert.Contains(document.RootElement.GetProperty("components").EnumerateArray(), static component =>
+                component.TryGetProperty("purl", out var purl) &&
+                purl.GetString() == "pkg:nuget/Microsoft.PowerShell.SDK@7.6.5");
+        }
+    }
+
+    [Fact]
+    public void Build_StrictExecutableHostPinsUtf8AndKeepsAotParameterShapeReachable()
+    {
+        using var fixture = ArtifactFixture.Create("param([Parameter(Mandatory)] [string] $Text); return $Text");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "GeneratedStrictHost",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            EmitSource = true,
+            TargetFramework = "net10.0"
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var program = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "Program.cs"));
+        Assert.Contains("private static readonly bool AcceptsSurplusPositionalArguments", program, StringComparison.Ordinal);
+        Assert.Contains("Console.InputEncoding = new UTF8Encoding", program, StringComparison.Ordinal);
+        Assert.Contains("Console.OutputEncoding = new UTF8Encoding", program, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -152,7 +230,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "GeneratedProof",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         };
@@ -165,7 +243,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "GeneratedProof",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(second.Succeeded, second.Error + Environment.NewLine + second.BuildOutput);
         Assert.Null(second.GeneratedSourcePath);

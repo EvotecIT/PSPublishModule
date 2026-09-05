@@ -128,6 +128,15 @@ internal static class PowerForgePortablePayloadInventoryCms
     internal static byte[] Sign(byte[] content, DotNetPublishSignOptions options)
     {
         X509Certificate2 certificate = FindSigningCertificate(options);
+        return Sign(content, certificate);
+    }
+
+    internal static byte[] Sign(byte[] content, X509Certificate2 certificate)
+    {
+        if (content is null) throw new ArgumentNullException(nameof(content));
+        if (certificate is null) throw new ArgumentNullException(nameof(certificate));
+        if (!certificate.HasPrivateKey)
+            throw new InvalidOperationException("The payload evidence signing certificate does not contain a private key.");
         var cms = new SignedCms(new ContentInfo(content), detached: true);
         cms.ComputeSignature(new CmsSigner(certificate) { IncludeOption = X509IncludeOption.EndCertOnly });
         return cms.Encode();

@@ -83,6 +83,27 @@ function Get-EnvironmentBoundary {
     return $Fallback
 }
 
+function Get-ObjectShape {
+    [CmdletBinding()]
+    param()
+
+    $item = [pscustomobject]@{ Name = 'Ada'; Count = 2 }
+    $item.Name = 'Grace'
+    $item | Microsoft.PowerShell.Utility\Add-Member -NotePropertyName Status -NotePropertyValue 'Ready'
+    return @($item.Name, $item.PSObject.Properties['Status'].Value, $item.Count)
+}
+
+function Get-CollectionShape {
+    [CmdletBinding()]
+    param()
+
+    $items = [System.Collections.ArrayList]::new()
+    $null = $items.Add('alpha')
+    $null = $items.Add('beta')
+    $items[-1] = 'omega'
+    return @($items[0], $items[-1], $items.Count)
+}
+
 Export-ModuleMember -Function @(
     'Measure-TextScore'
     'Get-CountdownValue'
@@ -90,4 +111,6 @@ Export-ModuleMember -Function @(
     'Get-CommandText'
     'Test-TokenPattern'
     'Get-EnvironmentBoundary'
+    'Get-ObjectShape'
+    'Get-CollectionShape'
 )

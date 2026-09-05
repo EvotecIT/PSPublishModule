@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerForgeCliPowerShellCompilationTests
 {
     [Theory]
@@ -13,6 +15,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     [InlineData("powershell build missing.ps1 --kind exe --mode 999 --output json", "powershell.build", "999")]
     [InlineData("powershell build missing.ps1 --resource-mode 999 --output json", "powershell.build", "999")]
     [InlineData("powershell analyze missing.ps1 --resource-mode 999 --output json", "powershell.analyze", "999")]
+    [InlineData("powershell explain missing.ps1 --resource-mode 999 --output json", "powershell.explain", "999")]
     public async Task Commands_RejectInvalidOptions(string arguments, string command, string errorFragment)
     {
         var result = await RunCliAsync(FindRepositoryRoot(), arguments);
@@ -26,7 +29,6 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Theory]
-    [InlineData("exe", "Hybrid", "Hybrid executable")]
     [InlineData("library", "Package", "only for Executable")]
     [InlineData("dll", "Package", "only for Executable")]
     public async Task Analyze_RejectsArtifactModesThatCannotProduceTheRequestedKind(
@@ -57,6 +59,180 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Fact]
+    public async Task Analyze_AcceptsHybridExecutableMode()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Hybrid Analyze Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.ps1");
+        File.WriteAllText(source, "param([int] $Value); return $Value");
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell analyze \"{source}\" --kind exe --mode Hybrid --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("Hybrid", 0, "RuntimeFallback")]
+    [InlineData("Strict", 1, "Rejected")]
+    public async Task Explain_EmitsRelocationSafeCausalDecisionTrace(string mode, int exitCode, string decision)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Explain Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.ps1");
+        File.WriteAllText(source, "Invoke-DynamicThing $Name");
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell explain \"{source}\" --kind exe --mode {mode} --output json");
+
+            Assert.Equal(exitCode, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.Equal("powershell.explain", document.RootElement.GetProperty("command").GetString());
+            var explanation = document.RootElement.GetProperty("result");
+            Assert.Equal(5, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(4, explanation.GetProperty("semanticCompatibilityVersion").GetInt32());
+            var file = Assert.Single(explanation.GetProperty("files").EnumerateArray());
+            Assert.Equal("Input.ps1", file.GetProperty("relativePath").GetString());
+            var unit = Assert.Single(file.GetProperty("units").EnumerateArray());
+            Assert.Equal(decision, unit.GetProperty("decision").GetString());
+            Assert.False(unit.TryGetProperty("regionGraph", out _));
+            Assert.Equal(24, unit.GetProperty("unitId").GetString()!.Length);
+            Assert.NotEmpty(unit.GetProperty("causes").EnumerateArray());
+            Assert.DoesNotContain(root, explanation.GetRawText(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Explain_EmitsCanonicalRegionGraphForTypedUnit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Region Graph Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.ps1");
+        const string sourceText = "# retained line 1\r\n\r\n# retained line 3\r\n\r\nreturn 1";
+        File.WriteAllText(source, sourceText);
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell explain \"{source}\" --kind exe --mode Strict --framework net10.0 --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            var explanation = document.RootElement.GetProperty("result");
+            Assert.Equal(5, explanation.GetProperty("schemaVersion").GetInt32());
+            var unit = Assert.Single(Assert.Single(explanation.GetProperty("files").EnumerateArray())
+                .GetProperty("units").EnumerateArray());
+            Assert.Equal("Typed", unit.GetProperty("decision").GetString());
+            var graph = unit.GetProperty("regionGraph");
+            Assert.Equal(1, graph.GetProperty("schemaVersion").GetInt32());
+            var region = Assert.Single(graph.GetProperty("regions").EnumerateArray());
+            var expectedStartOffset = sourceText.IndexOf("return", StringComparison.Ordinal);
+            Assert.Equal(expectedStartOffset, region.GetProperty("startOffset").GetInt32());
+            Assert.Equal(5, region.GetProperty("startLine").GetInt32());
+            Assert.StartsWith(
+                $"region:{PowerShellSourceParser.CreateDocumentId(source, root)}:{expectedStartOffset}:",
+                region.GetProperty("regionId").GetString(),
+                StringComparison.Ordinal);
+            Assert.Equal(0, graph.GetProperty("staticBoundaryCrossings").GetInt32());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task DiagnoseMapsRuntimeEvidenceThroughPortableManifestContract()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Diagnose Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var sourcePath = Path.Combine(root, "Input.ps1");
+            var outputPath = Path.Combine(root, "output");
+            var failurePath = Path.Combine(root, "runtime.log");
+            File.WriteAllText(sourcePath, "function Get-Value { param([int] $Value) return $Value }");
+            var build = new PowerForge.PowerShellCompilationArtifactBuilder().Build(
+                new PowerForge.PowerShellCompilationBuildSpec(
+                    sourcePath,
+                    outputPath,
+                    "CliDiagnoseProof",
+                    PowerForge.PowerShellCompilationArtifactKind.Library,
+                    PowerForge.PowerShellCompilationMode.Strict,
+                    allowUnreviewedDependencyResolution: true));
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var mapEntry = Assert.Single(build.Manifest!.FailureMap!.Entries);
+            File.WriteAllText(failurePath, $"failure in {mapEntry.DocumentId}:line {mapEntry.SourceStartLine} token=private-value");
+
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell diagnose \"{build.ManifestPath}\" --failure \"{failurePath}\" --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.Equal("powershell.diagnose", document.RootElement.GetProperty("command").GetString());
+            var location = Assert.Single(document.RootElement.GetProperty("result").GetProperty("locations").EnumerateArray());
+            Assert.Equal("Input.ps1", location.GetProperty("relativePath").GetString());
+            Assert.DoesNotContain("private-value", document.RootElement.GetRawText(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Explain_HybridModuleReportsDuplicateFunctionsAfterFinalCollisionRouting()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Final Explain Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.psm1");
+        File.WriteAllText(source, "function Get-Duplicate { return 1 }\nfunction Get-Duplicate { return 2 }");
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell explain \"{source}\" --kind dll --mode Hybrid --framework net10.0 --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            var explanation = document.RootElement.GetProperty("result");
+            Assert.Equal(0, explanation.GetProperty("typedUnits").GetInt32());
+            Assert.Equal(2, explanation.GetProperty("runtimeFallbackUnits").GetInt32());
+            var units = Assert.Single(explanation.GetProperty("files").EnumerateArray())
+                .GetProperty("units").EnumerateArray().ToArray();
+            Assert.All(units, static unit => Assert.Equal("RuntimeFallback", unit.GetProperty("decision").GetString()));
+            Assert.All(units, static unit => Assert.NotEmpty(unit.GetProperty("causes").EnumerateArray()));
+            Assert.Contains(units.SelectMany(static unit => unit.GetProperty("causes").EnumerateArray()), static cause =>
+                cause.GetProperty("message").GetString()!.Contains("multiple retained definitions", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task BuildStrictTypedExecutable_ExposesRuntimeIndependentCliContract()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -77,7 +253,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         {
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --kind exe --mode Strict --framework net10.0 --out \"{output}\" --name TypedCliProof --output json");
+                $"powershell build \"{source}\" --kind exe --mode Strict --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name TypedCliProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("typed executable build", build));
             string artifactPath;
             using (var document = JsonDocument.Parse(build.StdOut))
@@ -132,7 +308,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         {
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{entryPoint}\" --path \"{helper}\" --entry-point \"{entryPoint}\" --kind exe --mode Strict --framework net10.0 --out \"{output}\" --name TypedMultiCliProof --output json");
+                $"powershell build \"{entryPoint}\" --path \"{helper}\" --entry-point \"{entryPoint}\" --kind exe --mode Strict --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name TypedMultiCliProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("multi-file typed executable build", build));
             string artifactPath;
             using (var document = JsonDocument.Parse(build.StdOut))
@@ -204,7 +380,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --include-resource \"Resources/**\" --out \"{output}\" --name CliProof --output json");
+                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --allow-unreviewed-dependencies --include-resource \"Resources/**\" --out \"{output}\" --name CliProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("build", build));
             using (var document = JsonDocument.Parse(build.StdOut))
             {
@@ -224,6 +400,102 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                                   dependency.GetProperty("selection").GetString() == "ExplicitInclude");
                 Assert.Equal(1, manifest.GetProperty("resourceSummary").GetProperty("includedFiles").GetInt32());
             }
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task AnalyzeDependencyGraph_RoundTripsAsReviewedBuildLock()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Dependency Lock Tests", Guid.NewGuid().ToString("N"));
+        var sourceRoot = Path.Combine(root, "source");
+        var output = Path.Combine(root, "output");
+        var source = Path.Combine(sourceRoot, "Locked.psm1");
+        var lockPath = Path.Combine(root, "dependency-lock.json");
+        Directory.CreateDirectory(sourceRoot);
+        File.WriteAllText(source, "function Get-LockedValue { return 42 }");
+        try
+        {
+            var analyze = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{source}\" --kind library --mode Strict --framework net10.0 --out \"{output}\" --output json");
+            Assert.True(analyze.ExitCode == 0, FormatFailure("dependency-lock analyze", analyze));
+            using (var document = JsonDocument.Parse(analyze.StdOut))
+            {
+                var graph = document.RootElement.GetProperty("result").GetProperty("dependencyGraph");
+                Assert.Contains("\"roles\":\"", graph.GetRawText(), StringComparison.Ordinal);
+                File.WriteAllText(lockPath, graph.GetRawText());
+            }
+
+            var build = await RunCliAsync(
+                repositoryRoot,
+                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --out \"{output}\" --dependency-lock \"{lockPath}\" --output json");
+            Assert.True(build.ExitCode == 0, FormatFailure("reviewed dependency-lock build", build));
+            using var buildDocument = JsonDocument.Parse(build.StdOut);
+            var manifest = buildDocument.RootElement.GetProperty("result").GetProperty("manifest");
+            Assert.True(manifest.GetProperty("dependencyLockReviewed").GetBoolean());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ExplicitTargetContractRoundTripsFromAnalyzeAndExplainIntoReviewedBuild()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Target Contract Tests", Guid.NewGuid().ToString("N"));
+        var output = Path.Combine(root, "output");
+        var source = Path.Combine(root, "Target.ps1");
+        var targetPath = Path.Combine(root, "target.json");
+        var lockPath = Path.Combine(root, "lock.json");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(source, "param([int] $Value); return $Value");
+        var architecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        var runtimeIdentifier = OperatingSystem.IsWindows() ? $"win-{architecture}" : OperatingSystem.IsLinux() ? $"linux-{architecture}" : $"osx-{architecture}";
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            "net10.0",
+            runtimeIdentifier,
+            selfContained: false,
+            singleFile: true,
+            PowerShellCompilationExecutableOptimization.None,
+            explicitContract: true);
+        File.WriteAllText(targetPath, JsonSerializer.Serialize(target));
+        try
+        {
+            var analyze = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{source}\" --target-contract \"{targetPath}\" --output json");
+            Assert.True(analyze.ExitCode == 0, FormatFailure("target-contract analyze", analyze));
+            using (var document = JsonDocument.Parse(analyze.StdOut))
+            {
+                var plan = document.RootElement.GetProperty("result");
+                Assert.Equal("Strict", plan.GetProperty("mode").GetString());
+                Assert.Equal("net10.0", plan.GetProperty("targetFramework").GetString());
+                Assert.Equal(runtimeIdentifier, plan.GetProperty("targetContract").GetProperty("runtimeIdentifier").GetString());
+                File.WriteAllText(lockPath, plan.GetProperty("dependencyGraph").GetRawText());
+            }
+
+            var explain = await RunCliAsync(
+                repositoryRoot,
+                $"powershell explain \"{source}\" --target-contract \"{targetPath}\" --output json");
+            Assert.True(explain.ExitCode == 0, FormatFailure("target-contract explain", explain));
+
+            var build = await RunCliAsync(
+                repositoryRoot,
+                $"powershell build \"{source}\" --target-contract \"{targetPath}\" --dependency-lock \"{lockPath}\" --out \"{output}\" --output json");
+            Assert.True(build.ExitCode == 0, FormatFailure("target-contract reviewed build", build));
+            using var buildDocument = JsonDocument.Parse(build.StdOut);
+            var manifest = buildDocument.RootElement.GetProperty("result").GetProperty("manifest");
+            Assert.True(manifest.GetProperty("dependencyLockReviewed").GetBoolean());
+            Assert.Equal(target.ContractSha256, manifest.GetProperty("targetContract").GetProperty("contractSha256").GetString());
         }
         finally
         {
@@ -284,7 +556,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build --mode Strict --kind exe \"{source}\" --framework net10.0 --out \"{output}\" --name PositionalProof --output json");
+                $"powershell build --mode Strict --kind exe \"{source}\" --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name PositionalProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("option-first build", build));
         }
         finally

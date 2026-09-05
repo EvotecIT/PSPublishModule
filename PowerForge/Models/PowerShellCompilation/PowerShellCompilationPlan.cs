@@ -50,7 +50,22 @@ public enum PowerShellCompilationCapability
     PowerShellLanguageOperators = 256,
 
     /// <summary>Generated methods may lower a bounded set of read-only automatic state and host interactions.</summary>
-    RuntimeStateIntrinsics = 512
+    RuntimeStateIntrinsics = 512,
+
+    /// <summary>Runtime-free targets may invoke separately packaged executable provider operations through generated stream delegates.</summary>
+    RuntimeFreeProviderOperations = 1024,
+
+    /// <summary>Generated PowerShell hosts may preserve an untyped parameter as an object-valued binding contract.</summary>
+    UntypedObjectParameters = 2048,
+
+    /// <summary>Generated command hosts may preserve a statically resolved output type name as advisory metadata without using it in a CLR signature.</summary>
+    AdvisoryOutputTypeMetadata = 4096,
+
+    /// <summary>Hybrid binary modules may read live values from their retained parent script-module scope.</summary>
+    PowerShellModuleState = 8192,
+
+    /// <summary>Hybrid binary modules may delegate independently proven bound regions from retained functions to CLR helpers.</summary>
+    HybridTypedRegions = 16384
 }
 
 /// <summary>
@@ -304,7 +319,20 @@ public sealed class PowerShellCompilationPlan
         PowerShellCompilationMode mode,
         PowerShellCompilationFilePlan[] files,
         string? targetFramework = null,
-        PowerShellCompilationDependency[]? dependencies = null)
+        PowerShellCompilationDependency[]? dependencies = null,
+        PowerShellCompilationDependencyGraph? dependencyGraph = null)
+        : this(mode, files, targetFramework, dependencies, dependencyGraph, null)
+    {
+    }
+
+    /// <summary>Creates an aggregate compilation plan for an explicit semantic and deployment target.</summary>
+    public PowerShellCompilationPlan(
+        PowerShellCompilationMode mode,
+        PowerShellCompilationFilePlan[] files,
+        string? targetFramework,
+        PowerShellCompilationDependency[]? dependencies,
+        PowerShellCompilationDependencyGraph? dependencyGraph,
+        PowerShellCompilationTargetContract? targetContract)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
@@ -312,6 +340,8 @@ public sealed class PowerShellCompilationPlan
         TargetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework;
         Files = files ?? Array.Empty<PowerShellCompilationFilePlan>();
         Dependencies = dependencies ?? Array.Empty<PowerShellCompilationDependency>();
+        DependencyGraph = dependencyGraph;
+        TargetContract = targetContract;
         ResourceSummary = PowerShellCompilationResourceSummary.Create(Dependencies);
         TotalUnits = Files.Sum(static file => file.Units.Length);
         CompilableUnits = Files.Sum(static file => file.Units.Count(static unit => unit.IsCompilable));
@@ -330,6 +360,12 @@ public sealed class PowerShellCompilationPlan
 
     /// <summary>Deterministic runtime dependency and resource decisions for the selected artifact shape.</summary>
     public PowerShellCompilationDependency[] Dependencies { get; }
+
+    /// <summary>Locked dependency graph used for analysis and deployment evidence when input resolution supplied one.</summary>
+    public PowerShellCompilationDependencyGraph? DependencyGraph { get; }
+
+    /// <summary>Normalized explicit target whose deployment inputs shaped this plan, when supplied.</summary>
+    public PowerShellCompilationTargetContract? TargetContract { get; }
 
     /// <summary>Included, excluded, required, inferred, and unclassified resource totals.</summary>
     public PowerShellCompilationResourceSummary ResourceSummary { get; }
@@ -383,7 +419,12 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PowerShellHostTypes |
                               PowerShellCompilationCapability.PowerShellLanguageConversions |
                               PowerShellCompilationCapability.PowerShellLanguageOperators |
-                              PowerShellCompilationCapability.RuntimeStateIntrinsics)) != 0)
+                              PowerShellCompilationCapability.RuntimeStateIntrinsics |
+                              PowerShellCompilationCapability.RuntimeFreeProviderOperations |
+                              PowerShellCompilationCapability.UntypedObjectParameters |
+                              PowerShellCompilationCapability.AdvisoryOutputTypeMetadata |
+                              PowerShellCompilationCapability.PowerShellModuleState |
+                              PowerShellCompilationCapability.HybridTypedRegions)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

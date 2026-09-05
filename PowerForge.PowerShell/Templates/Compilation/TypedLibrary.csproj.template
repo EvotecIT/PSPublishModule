@@ -7,8 +7,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
+    <TreatWarningsAsErrors Condition="'$(PublishTrimmed)' == 'true' or '$(PublishAot)' == 'true'">true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     {{TARGET_REFERENCE}}
+    {{PROVIDER_REFERENCES}}
   </ItemGroup>
 </Project>

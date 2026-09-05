@@ -120,6 +120,32 @@ internal sealed class BuildConfigurationRequest
     public string[]? NETAssemblyTypeAccelerators { get; set; }
     public bool NETAssemblyTypeAcceleratorAssembliesSpecified { get; set; }
     public string[]? NETAssemblyTypeAcceleratorAssemblies { get; set; }
+    public bool CompilePowerShellSpecified { get; set; }
+    public bool CompilePowerShell { get; set; }
+    public bool PowerShellCompilationModeSpecified { get; set; }
+    public PowerShellCompilationMode? PowerShellCompilationMode { get; set; }
+    public bool PowerShellCompilationTargetFrameworkSpecified { get; set; }
+    public string? PowerShellCompilationTargetFramework { get; set; }
+    public bool PowerShellCompilationResourceModeSpecified { get; set; }
+    public PowerShellCompilationResourceMode? PowerShellCompilationResourceMode { get; set; }
+    public bool PowerShellCompilationIncludeResourceSpecified { get; set; }
+    public string[]? PowerShellCompilationIncludeResource { get; set; }
+    public bool PowerShellCompilationExcludeResourceSpecified { get; set; }
+    public string[]? PowerShellCompilationExcludeResource { get; set; }
+    public bool PowerShellCompilationUseBuildCacheSpecified { get; set; }
+    public bool PowerShellCompilationUseBuildCache { get; set; }
+    public bool PowerShellCompilationBuildCacheDirectorySpecified { get; set; }
+    public string? PowerShellCompilationBuildCacheDirectory { get; set; }
+    public bool PowerShellCompilationEmitIrSnapshotsSpecified { get; set; }
+    public bool PowerShellCompilationEmitIrSnapshots { get; set; }
+    public bool PowerShellCompilationExpectedPublicAbiSha256Specified { get; set; }
+    public string? PowerShellCompilationExpectedPublicAbiSha256 { get; set; }
+    public bool PowerShellCompilationDependencyLockSpecified { get; set; }
+    public PowerShellCompilationDependencyGraph? PowerShellCompilationDependencyLock { get; set; }
+    public bool PowerShellCompilationAllowUnreviewedDependenciesSpecified { get; set; }
+    public bool PowerShellCompilationAllowUnreviewedDependencies { get; set; }
+    public bool PowerShellCompilationTimeoutSecondsSpecified { get; set; }
+    public int PowerShellCompilationTimeoutSeconds { get; set; }
     public bool KillLockersBeforeInstallSpecified { get; set; }
     public bool KillLockersBeforeInstall { get; set; }
     public bool KillLockersForceSpecified { get; set; }

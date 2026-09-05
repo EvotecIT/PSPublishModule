@@ -5,11 +5,15 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellAnalyzeUsage =
-        "Usage: powerforge powershell analyze <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
+        "Usage: powerforge powershell analyze <path> [--target-contract <target.json>] [--semantic-profile <id>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--semantic-profile <id>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--expected-abi-sha256 <sha256>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--emit-ir] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
         "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
+    private const string PowerShellExplainUsage =
+        "Usage: powerforge powershell explain <path> [--target-contract <target.json>] [--semantic-profile <id>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
+    private const string PowerShellDiagnoseUsage =
+        "Usage: powerforge powershell diagnose <manifest.json> --failure <log.txt> [--output json]";
 
     private static int CommandPowerShell(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -23,10 +27,18 @@ internal static partial class Program
 
         if (!argv[0].Equals("analyze", StringComparison.OrdinalIgnoreCase))
         {
+            if (argv[0].Equals("project", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellProject(argv.Skip(1).ToArray(), outputJson, logger);
+            if (argv[0].Equals("support", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellSupport(argv.Skip(1).ToArray(), outputJson, logger);
             if (argv[0].Equals("build", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("compile", StringComparison.OrdinalIgnoreCase))
                 return CommandPowerShellBuild(argv.Skip(1).ToArray(), outputJson, logger);
             if (argv[0].Equals("census", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("matrix", StringComparison.OrdinalIgnoreCase))
                 return CommandPowerShellCensus(argv.Skip(1).ToArray(), outputJson, logger);
+            if (argv[0].Equals("explain", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellExplain(argv.Skip(1).ToArray(), outputJson, logger);
+            if (argv[0].Equals("diagnose", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellDiagnose(argv.Skip(1).ToArray(), outputJson, logger);
             return WritePowerShellError(outputJson, 2, $"Unknown PowerShell subcommand '{argv[0]}'.", logger);
         }
 
@@ -43,8 +55,8 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
-                new[] { "--self-contained", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
+                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--target-contract", "--semantic-profile", "--framework", "--dependency-lock", "--expected-abi-sha256", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--cache-directory", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
+                new[] { "--self-contained", "--allow-unreviewed-dependencies", "--no-build-cache", "--emit-source", "--emit-ir", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.build");
@@ -81,10 +93,41 @@ internal static partial class Program
 
         try
         {
+            PowerShellCompilationTargetContract? targetContract = null;
+            var targetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0";
+            var semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ??
+                                    PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
+            semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
+            var targetContractPath = TryGetOptionValue(args, "--target-contract");
+            if (!string.IsNullOrWhiteSpace(targetContractPath))
+            {
+                var fullTargetContractPath = Path.GetFullPath(targetContractPath.Trim().Trim('"'));
+                targetContract = JsonSerializer.Deserialize<PowerShellCompilationTargetContract>(
+                    File.ReadAllText(fullTargetContractPath),
+                    CliJson.Options)
+                    ?? throw new InvalidDataException($"Target contract '{fullTargetContractPath}' did not contain a contract.");
+                targetContract = PowerShellCompilationTargetContractService.Normalize(targetContract);
+                if (args.Any(argument => argument.Equals("--semantic-profile", StringComparison.OrdinalIgnoreCase)) &&
+                    !semanticProfileId.Equals(targetContract.SemanticProfileId, StringComparison.Ordinal))
+                    return WritePowerShellError(outputJson, 2, "The explicit semantic profile conflicts with the target contract.", logger, "powershell.build");
+                semanticProfileId = targetContract.SemanticProfileId;
+                if (kindOverride.HasValue && kindOverride.Value != targetContract.ArtifactKind)
+                    return WritePowerShellError(outputJson, 2, "The explicit artifact kind conflicts with the target contract.", logger, "powershell.build");
+                if (modeOverride.HasValue && modeOverride.Value != targetContract.Mode)
+                    return WritePowerShellError(outputJson, 2, "The explicit compilation mode conflicts with the target contract.", logger, "powershell.build");
+                kindOverride = targetContract.ArtifactKind;
+                modeOverride = targetContract.Mode;
+            }
             var fullPaths = paths.Select(path => Path.GetFullPath(path.Trim().Trim('"'))).ToArray();
             var entryPoint = TryGetOptionValue(args, "--entry-point");
             var fullEntryPoint = string.IsNullOrWhiteSpace(entryPoint) ? null : Path.GetFullPath(entryPoint.Trim().Trim('"'));
-            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPaths, kindOverride, modeOverride, fullEntryPoint);
+            var resolved = new PowerShellCompilationInputResolver().Resolve(
+                fullPaths,
+                kindOverride,
+                modeOverride,
+                fullEntryPoint,
+                allowDynamicModuleRuntimeSources: resourceMode == PowerShellCompilationResourceMode.CompleteModule &&
+                                                  modeOverride != PowerShellCompilationMode.Strict);
             var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved);
             var artifactName = TryGetOptionValue(args, "--name") ?? resolved.ArtifactName;
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? nameof(PowerShellCompilationExecutableOptimization.None);
@@ -95,6 +138,16 @@ internal static partial class Program
             if (!Enum.TryParse<CertificateStoreLocation>(certificateStoreValue, ignoreCase: true, out var certificateStore) ||
                 !Enum.IsDefined(typeof(CertificateStoreLocation), certificateStore))
                 return WritePowerShellError(outputJson, 2, $"Unknown certificate store '{certificateStoreValue}'. Use CurrentUser or LocalMachine.", logger, "powershell.build");
+            PowerShellCompilationDependencyGraph? expectedDependencyLock = null;
+            var dependencyLockPath = TryGetOptionValue(args, "--dependency-lock");
+            if (!string.IsNullOrWhiteSpace(dependencyLockPath))
+            {
+                var fullDependencyLockPath = Path.GetFullPath(dependencyLockPath.Trim().Trim('"'));
+                expectedDependencyLock = JsonSerializer.Deserialize<PowerShellCompilationDependencyGraph>(
+                    File.ReadAllText(fullDependencyLockPath),
+                    CliJson.Options)
+                    ?? throw new InvalidDataException($"Dependency lock '{fullDependencyLockPath}' did not contain a graph.");
+            }
             var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputDirectory, artifactName, resolved.Kind, resolved.Mode)
             {
                 ModuleManifestPath = resolved.ModuleManifestPath,
@@ -103,17 +156,25 @@ internal static partial class Program
                 ResourceMode = resourceMode,
                 IncludeResource = GetOptionValues(args, "--include-resource").ToArray(),
                 ExcludeResource = GetOptionValues(args, "--exclude-resource").ToArray(),
-                TargetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0",
+                TargetFramework = targetFramework,
                 RuntimeIdentifier = TryGetOptionValue(args, "--rid"),
                 SelfContained = args.Any(static argument => argument.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)),
                 SingleFile = !args.Any(static argument => argument.Equals("--no-single-file", StringComparison.OrdinalIgnoreCase)),
                 Optimization = optimization,
+                TargetContract = targetContract,
+                SemanticProfileId = semanticProfileId,
+                UseBuildCache = !args.Any(static argument => argument.Equals("--no-build-cache", StringComparison.OrdinalIgnoreCase)),
+                BuildCacheDirectory = TryGetOptionValue(args, "--cache-directory"),
                 SignArtifact = args.Any(static argument => argument.Equals("--sign", StringComparison.OrdinalIgnoreCase)),
                 CertificateThumbprint = TryGetOptionValue(args, "--certificate-thumbprint"),
                 CertificateStoreLocation = certificateStore,
                 TimeStampServer = TryGetOptionValue(args, "--timestamp-server") ?? "http://timestamp.digicert.com",
                 KeepBuildWorkspace = args.Any(static argument => argument.Equals("--keep-workspace", StringComparison.OrdinalIgnoreCase)),
-                EmitSource = args.Any(static argument => argument.Equals("--emit-source", StringComparison.OrdinalIgnoreCase))
+                EmitSource = args.Any(static argument => argument.Equals("--emit-source", StringComparison.OrdinalIgnoreCase)),
+                EmitIrSnapshots = args.Any(static argument => argument.Equals("--emit-ir", StringComparison.OrdinalIgnoreCase)),
+                ExpectedPublicAbiSha256 = TryGetOptionValue(args, "--expected-abi-sha256"),
+                ExpectedDependencyLock = expectedDependencyLock,
+                AllowUnreviewedDependencyResolution = args.Any(static argument => argument.Equals("--allow-unreviewed-dependencies", StringComparison.OrdinalIgnoreCase))
             };
             var signingTimeoutValue = TryGetOptionValue(args, "--signing-timeout");
             if (!string.IsNullOrWhiteSpace(signingTimeoutValue))
@@ -158,7 +219,7 @@ internal static partial class Program
             if (!string.IsNullOrWhiteSpace(result.GeneratedSourcePath))
                 logger.Info($"Generated source: {result.GeneratedSourcePath}");
             logger.Info(result.Manifest!.UsesPowerShellRuntimeFallback
-                ? $"Runtime-packaged artifact: {result.Manifest.RuntimeFallbackUnits} unit(s) execute through PowerShell."
+                ? $"Runtime-packaged artifact: {result.Manifest.RuntimeFallbackUnits} unit(s) execute through PowerShell; {result.Manifest.PromotedTypedRegions} typed region(s) run in generated CLR helpers."
                 : result.Manifest.RequiresPowerShellRuntime
                     ? $"Typed PowerShell binary module: {result.Manifest.CompiledMethods} cmdlet(s), no dynamic script fallback."
                     : $"Typed CLR artifact: {result.Manifest.CompiledMethods} method(s), {result.Manifest.OmittedUnits} unsupported unit(s) omitted, no PowerShell runtime dependency.");
@@ -180,52 +241,18 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
+                new[] { "--path", "--target-contract", "--semantic-profile", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
                 new[] { "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger);
 
-        var path = TryGetOptionValue(args, "--path");
-        if (!string.IsNullOrWhiteSpace(path) && positionalPath is not null)
-            return WritePowerShellError(outputJson, 2, "Specify the PowerShell analysis path either positionally or with --path, not both.", logger, "powershell.analyze");
-        if (string.IsNullOrWhiteSpace(path))
-            path = positionalPath;
-        if (string.IsNullOrWhiteSpace(path))
-            return WritePowerShellError(outputJson, 2, "A PowerShell file or directory path is required.", logger);
-
-        var kindValue = TryGetOptionValue(args, "--kind");
-        PowerShellCompilationArtifactKind? kindOverride = null;
-        if (!string.IsNullOrWhiteSpace(kindValue))
-        {
-            if (!TryParseArtifactKind(kindValue, out var parsedKind))
-                return WritePowerShellError(outputJson, 2, "Artifact kind must be 'exe', 'dll', or 'library'.", logger, "powershell.analyze");
-            kindOverride = parsedKind;
-        }
-
-        var modeValue = TryGetOptionValue(args, "--mode") ?? nameof(PowerShellCompilationMode.Analyze);
-        if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) ||
-            !Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
-            return WritePowerShellError(outputJson, 2, $"Unknown compilation mode '{modeValue}'.", logger);
-        var resourceModeValue = TryGetOptionValue(args, "--resource-mode") ?? nameof(PowerShellCompilationResourceMode.Declared);
-        if (!Enum.TryParse<PowerShellCompilationResourceMode>(resourceModeValue, ignoreCase: true, out var resourceMode) ||
-            !Enum.IsDefined(typeof(PowerShellCompilationResourceMode), resourceMode))
-            return WritePowerShellError(outputJson, 2, $"Unknown resource mode '{resourceModeValue}'. Use Declared, CompleteModule, or None.", logger);
+        if (!TryParsePowerShellAnalysisRequest(args, positionalPath, out var request, out var requestError))
+            return WritePowerShellError(outputJson, 2, requestError, logger, "powershell.analyze");
 
         try
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(
-                path,
-                kindOverride,
-                mode == PowerShellCompilationMode.Analyze ? null : mode);
-            var plan = new PowerShellCompilationAnalyzer().Analyze(
-                resolved,
-                mode,
-                TryGetOptionValue(args, "--framework") ?? "net8.0",
-                resourceMode,
-                GetOptionValues(args, "--include-resource"),
-                GetOptionValues(args, "--exclude-resource"),
-                TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved));
+            var plan = CreatePowerShellAnalysisPlan(args, request!);
             var exitCode = plan.CanProceed ? 0 : 1;
             if (outputJson)
             {
@@ -313,17 +340,24 @@ internal static partial class Program
             }
 
             if (result.PostEmissionEvaluated)
-                logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.EmittedFunctions}/{result.TotalFunctions} functions emitted ({result.EmittedFunctionCoveragePercentage:0.0}%), {result.DroppedEligibleFunctions} analyzer-eligible function(s) dropped after shaping, {result.ParseErrorFiles} parse-error files.");
+                logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.EmittedFunctions}/{result.TotalFunctions} functions emitted ({result.EmittedFunctionCoveragePercentage:0.0}%), {result.PromotedTypedRegions} typed region(s) promoted, {result.Products.Sum(static product => product.RejectedTypedRegions)} candidate region(s) retained, and {result.Products.Sum(static product => product.RegionOpportunities.Length)} analysis-only typed opportunity region(s), {result.DroppedEligibleFunctions} analyzer-eligible function(s) dropped after shaping, {result.ParseErrorFiles} parse-error files.");
             else
                 logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.CompilableUnits}/{result.TotalUnits} units structurally eligible; post-emission shaping was not evaluated, {result.ParseErrorFiles} parse-error files.");
             foreach (var product in result.Products)
             {
                 if (product.Coverage.PostEmissionEvaluated)
-                    logger.Info($"{product.Name}: {product.SourceFiles} files, {product.Coverage.EmittedFunctions}/{product.Coverage.TotalFunctions} functions emitted ({product.Coverage.EmittedFunctionCoveragePercentage:0.0}%), {product.Coverage.TotalScriptUnits} script/init unit(s), {product.AnalysisMilliseconds:0.0} ms.");
+                    logger.Info($"{product.Name}: {product.SourceFiles} files, {product.Coverage.EmittedFunctions}/{product.Coverage.TotalFunctions} functions emitted ({product.Coverage.EmittedFunctionCoveragePercentage:0.0}%), {product.PromotedTypedRegions} typed region(s) promoted, {product.RejectedTypedRegions} candidate region(s) retained, and {product.RegionOpportunities.Length} analysis-only typed opportunity region(s), {product.Coverage.TotalScriptUnits} script/init unit(s), {product.AnalysisMilliseconds:0.0} ms.");
                 else
                     logger.Info($"{product.Name}: {product.SourceFiles} files, {product.CompilableUnits}/{product.TotalUnits} units structurally eligible; post-emission shaping was not evaluated, {product.AnalysisMilliseconds:0.0} ms.");
                 foreach (var feature in product.FunctionImpacts.Take(5))
                     logger.Warn($"  [{feature.FeatureId}] {feature.AffectedUnits} affected, {feature.VisibleSoleBlockerUnits} visible sole-blocker candidate(s), candidate coverage {feature.CandidateCoveragePercentage:0.0}%.");
+                foreach (var decision in product.RegionCandidates
+                             .Where(static candidate => !candidate.Promoted)
+                             .GroupBy(static candidate => candidate.DecisionCode, StringComparer.Ordinal)
+                             .OrderByDescending(static group => group.Count())
+                             .ThenBy(static group => group.Key, StringComparer.Ordinal)
+                             .Take(3))
+                    logger.Warn($"  [{decision.Key}] {decision.Count()} typed-region candidate(s) retained: {decision.First().Reason}");
                 var payload = product.DependencySummary.Where(static summary =>
                     summary.Kind is not PowerShellCompilationDependencyKind.PowerShellSource and not PowerShellCompilationDependencyKind.ModuleManifest).ToArray();
                 if (payload.Length > 0)
@@ -444,14 +478,18 @@ internal static partial class Program
                 Command = "powershell",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage })
+                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, explainUsage = PowerShellExplainUsage, diagnoseUsage = PowerShellDiagnoseUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage, projectUsage = PowerShellProjectUsage, supportUsage = PowerShellSupportUsage })
             });
         }
         else
         {
             Console.WriteLine(PowerShellAnalyzeUsage);
+            Console.WriteLine(PowerShellExplainUsage);
             Console.WriteLine(PowerShellBuildUsage);
             Console.WriteLine(PowerShellCensusUsage);
+            Console.WriteLine(PowerShellDiagnoseUsage);
+            Console.WriteLine(PowerShellProjectUsage);
+            Console.WriteLine(PowerShellSupportUsage);
         }
     }
 

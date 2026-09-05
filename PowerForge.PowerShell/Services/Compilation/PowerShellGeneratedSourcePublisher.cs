@@ -19,6 +19,8 @@ internal static class PowerShellGeneratedSourcePublisher
         var files = Directory.EnumerateFiles(workspace, "*", SearchOption.TopDirectoryOnly)
             .Where(path => Path.GetExtension(path).Equals(".cs", StringComparison.OrdinalIgnoreCase) ||
                            Path.GetExtension(path).Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                           Path.GetFileName(path).Equals("PowerForge.TargetContract.json", StringComparison.OrdinalIgnoreCase) ||
+                           Path.GetFileName(path).Equals("global.json", StringComparison.OrdinalIgnoreCase) ||
                            PowerShellCompilationPathSafety.PathEquals(path, projectPath))
             .OrderBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -29,6 +31,7 @@ internal static class PowerShellGeneratedSourcePublisher
 
         foreach (var file in files)
             File.Copy(file, Path.Combine(sourceDirectory, Path.GetFileName(file)), overwrite: false);
+        CopyMappedSources(sourceDirectory, spec);
         var embeddedDependencies = Path.Combine(workspace, "EmbeddedDependencies");
         if (Directory.Exists(embeddedDependencies))
         {
@@ -37,25 +40,30 @@ internal static class PowerShellGeneratedSourcePublisher
             foreach (var dependency in Directory.EnumerateFiles(embeddedDependencies, "*", SearchOption.TopDirectoryOnly))
                 File.Copy(dependency, Path.Combine(targetDependencies, Path.GetFileName(dependency)), overwrite: false);
         }
-        WriteBuildIsolationFiles(sourceDirectory, spec.TargetFramework);
+        PowerShellCompilationBuildIsolation.Write(sourceDirectory, requireSdkSelection: true, spec.OfflineRestore);
         WriteSourceMap(sourceDirectory, spec, methods);
         return sourceDirectory;
     }
 
-    private static void WriteBuildIsolationFiles(string sourceDirectory, string targetFramework)
+    private static void CopyMappedSources(string sourceDirectory, PowerShellCompilationBuildSpec spec)
     {
-        var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        File.WriteAllText(Path.Combine(sourceDirectory, "Directory.Build.props"), "<Project />" + Environment.NewLine, utf8);
-        File.WriteAllText(Path.Combine(sourceDirectory, "Directory.Build.targets"), "<Project />" + Environment.NewLine, utf8);
-        File.WriteAllText(
-            Path.Combine(sourceDirectory, "Directory.Packages.props"),
-            "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>" + Environment.NewLine,
-            utf8);
-        var sdkVersion = targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "10.0.100" : "8.0.100";
-        File.WriteAllText(
-            Path.Combine(sourceDirectory, "global.json"),
-            "{\n  \"sdk\": {\n    \"version\": \"" + sdkVersion + "\",\n    \"rollForward\": \"latestMajor\",\n    \"allowPrerelease\": true\n  }\n}\n",
-            utf8);
+        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        foreach (var sourcePath in new[] { spec.SourcePath }
+                     .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
+                     .Select(Path.GetFullPath)
+                     .Distinct(PowerShellCompilationPathSafety.PathComparer))
+        {
+            var documentId = PowerShellSourceParser.CreateDocumentId(sourcePath, sourceRoot);
+            File.Copy(sourcePath, Path.Combine(sourceDirectory, documentId), overwrite: false);
+        }
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable &&
+            spec.Mode == PowerShellCompilationMode.Strict)
+        {
+            var entryDocumentId = PowerShellSourceParser.CreateDocumentId(
+                Path.GetFullPath(spec.SourcePath) + ".powerforge-entry.ps1",
+                sourceRoot);
+            File.Copy(spec.SourcePath, Path.Combine(sourceDirectory, entryDocumentId), overwrite: false);
+        }
     }
 
     private static void WriteSourceMap(
@@ -71,12 +79,10 @@ internal static class PowerShellGeneratedSourcePublisher
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal)
             .ToArray();
-        var map = new
+        var mappedMethods = (methods ?? Array.Empty<PowerShellCompiledMethod>()).Select(method =>
         {
-            schemaVersion = 1,
-            rootSource = ToPortableRelativePath(sourceRoot, spec.SourcePath),
-            sourceFiles = sourcePaths.Select(path => ToPortableRelativePath(sourceRoot, path)).ToArray(),
-            methods = (methods ?? Array.Empty<PowerShellCompiledMethod>()).Select(method => new
+            var generated = FindGeneratedLocation(sourceDirectory, method);
+            return new
             {
                 powershellName = method.SourceName,
                 generatedMethod = method.GeneratedName,
@@ -84,8 +90,45 @@ internal static class PowerShellGeneratedSourcePublisher
                     sourceRoot,
                     string.IsNullOrWhiteSpace(method.SourcePath) ? spec.SourcePath : method.SourcePath),
                 sourceLine = method.SourceLine,
+                sourceRange = new
+                {
+                    startLine = method.SourceLine,
+                    startColumn = method.SourceColumn,
+                    endLine = method.SourceEndLine,
+                    endColumn = method.SourceEndColumn
+                },
+                generatedFile = generated.FileName,
+                generatedMethodLine = generated.Line,
+                statements = method.SourceMap
+                    .OrderBy(static entry => entry.SourceStartLine)
+                    .ThenBy(static entry => entry.SourceStartColumn)
+                    .ThenBy(static entry => entry.GeneratedStartLine)
+                    .Select(entry => new
+                    {
+                        sourceRange = new
+                        {
+                            startLine = entry.SourceStartLine,
+                            startColumn = entry.SourceStartColumn,
+                            endLine = entry.SourceEndLine,
+                            endColumn = entry.SourceEndColumn
+                        },
+                        generatedRange = new
+                        {
+                            startLine = generated.Line + entry.GeneratedStartLine - 1,
+                            startColumn = entry.GeneratedStartColumn,
+                            endLine = generated.Line + entry.GeneratedEndLine - 1,
+                            endColumn = entry.GeneratedEndColumn
+                        }
+                    }).ToArray(),
                 returnType = method.ReturnType
-            }).ToArray()
+            };
+        }).ToArray();
+        var map = new
+        {
+            schemaVersion = 2,
+            rootSource = ToPortableRelativePath(sourceRoot, spec.SourcePath),
+            sourceFiles = sourcePaths.Select(path => ToPortableRelativePath(sourceRoot, path)).ToArray(),
+            methods = mappedMethods
         };
         var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(
@@ -96,4 +139,61 @@ internal static class PowerShellGeneratedSourcePublisher
 
     private static string ToPortableRelativePath(string root, string path)
         => FrameworkCompatibility.GetRelativePath(root, Path.GetFullPath(path)).Replace('\\', '/');
+
+    private static GeneratedMethodLocation FindGeneratedMethod(string sourceDirectory, string generatedName)
+    {
+        var pattern = @"^\s*public\s+static\s+.*\s" +
+                      System.Text.RegularExpressions.Regex.Escape(generatedName) + @"\s*\(";
+        GeneratedMethodLocation? match = null;
+        foreach (var path in Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.TopDirectoryOnly)
+                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var lines = File.ReadAllLines(path);
+            for (var index = 0; index < lines.Length; index++)
+            {
+                if (!System.Text.RegularExpressions.Regex.IsMatch(lines[index], pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                    continue;
+                if (match is not null)
+                    throw new InvalidOperationException($"Generated method '{generatedName}' was found more than once while publishing source maps.");
+                match = new GeneratedMethodLocation(Path.GetFileName(path), index + 1);
+            }
+        }
+        return match ?? throw new InvalidOperationException($"Generated method '{generatedName}' was not found while publishing source maps.");
+    }
+
+    private static GeneratedMethodLocation FindGeneratedLocation(string sourceDirectory, PowerShellCompiledMethod method)
+    {
+        if (method.Lifecycle is null)
+            return FindGeneratedMethod(sourceDirectory, method.GeneratedName);
+        var separator = method.SourceName.IndexOf('-');
+        if (separator < 1 || separator == method.SourceName.Length - 1)
+            throw new InvalidOperationException($"Hosted lifecycle command '{method.SourceName}' does not have a Verb-Noun identity for source-map publication.");
+        var className = PowerShellCSharpSymbolRenderer.Identifier(
+            method.SourceName.Substring(0, separator) + method.SourceName.Substring(separator + 1) + "Command");
+        var pattern = @"^\s*public\s+sealed\s+class\s+" +
+                      System.Text.RegularExpressions.Regex.Escape(className) + @"\s*:\s*PSCmdlet";
+        foreach (var path in Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.TopDirectoryOnly)
+                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var lines = File.ReadAllLines(path);
+            for (var index = 0; index < lines.Length; index++)
+            {
+                if (System.Text.RegularExpressions.Regex.IsMatch(lines[index], pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                    return new GeneratedMethodLocation(Path.GetFileName(path), index + 1);
+            }
+        }
+        throw new InvalidOperationException($"Generated lifecycle cmdlet class '{className}' was not found while publishing source maps.");
+    }
+
+    private sealed class GeneratedMethodLocation
+    {
+        internal GeneratedMethodLocation(string fileName, int line)
+        {
+            FileName = fileName;
+            Line = line;
+        }
+
+        internal string FileName { get; }
+        internal int Line { get; }
+    }
 }

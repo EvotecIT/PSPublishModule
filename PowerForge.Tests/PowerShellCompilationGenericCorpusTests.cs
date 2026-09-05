@@ -28,11 +28,11 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             $"{regression.Product}: {regression.Metric} {regression.Baseline} -> {regression.Current}")));
         Assert.Empty(result.SourceDrifts);
         Assert.True(result.PostEmissionEvaluated);
-        Assert.Equal(6, result.TotalFunctions);
-        Assert.Equal(5, result.EmittedFunctions);
+        Assert.Equal(8, result.TotalFunctions);
+        Assert.Equal(8, result.EmittedFunctions);
         Assert.Equal(0, result.DroppedEligibleFunctions);
         Assert.Equal(1, result.RuntimeFallbackUnits);
-        Assert.Contains(result.FunctionFrontier, static impact => impact.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
+        Assert.Empty(result.FunctionFrontier);
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 output,
                 "GenericCompilerCorpus",
                 resolved.Kind,
-                resolved.Mode)
+                resolved.Mode, allowUnreviewedDependencyResolution: true)
             {
                 ModuleManifestPath = resolved.ModuleManifestPath,
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
@@ -62,13 +62,20 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             });
 
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-            Assert.Equal(5, result.Manifest!.CompiledMethods);
+            Assert.Equal(8, result.Manifest!.CompiledMethods);
             Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
             Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+            Assert.True(result.Manifest.AllowsPowerShellRuntimeEvaluation);
+            var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
+            var commandRegion = Assert.Single(ledger.Entries, static entry => entry.Name == "Get-CommandText");
+            Assert.True(commandRegion.EmittedClrMethod);
+            Assert.True(commandRegion.RuntimeRouted);
+            Assert.Equal(1, commandRegion.RuntimeCommandRegions);
             const string proof =
                 "$env:POWERFORGE_COMPILER_CORPUS = 'runtime'; " +
                 "Measure-TextScore -Text Ada; Get-CountdownValue -Number 4; Get-RuntimeState -WhatIf; " +
-                "Get-CommandText -Text Ada; Test-TokenPattern -Token alpha; Get-EnvironmentBoundary";
+                "Get-CommandText -Text Ada; Test-TokenPattern -Token alpha; Get-EnvironmentBoundary; " +
+                "(Get-ObjectShape) -join '|'; (Get-CollectionShape) -join '|'";
             var original = RunCorpusModule(manifest, proof);
             var compiled = RunCorpusModule(result.ArtifactPath!, proof);
 
@@ -76,7 +83,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             Assert.Equal((0, string.Empty), (compiled.ExitCode, compiled.StandardError.Trim()));
             Assert.Equal(original.StandardOutput.Trim(), compiled.StandardOutput.Trim());
             Assert.Equal(
-                new[] { "8", "0", "whatif", "ADA", "True", "runtime" },
+                new[] { "8", "0", "whatif", "ADA", "True", "runtime", "Grace|Ready|2", "alpha|omega|2" },
                 compiled.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
             var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
             Assert.Contains("__invokePowerShellCapture", generated, StringComparison.Ordinal);
@@ -87,11 +94,18 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         }
     }
 
-    [Fact]
-    public void Corpus_StrictProgramBuildsAndRunsWithoutPowerShellRuntime()
+    [Theory]
+    [InlineData("StrictProgram", "8", 3)]
+    [InlineData("StrictCollections", "2", 2)]
+    [InlineData("StrictSwitch", "20", 2)]
+    [InlineData("StrictApplication", "READY|42|15|3|high", 11)]
+    public void Corpus_StrictProgramsBuildAndRunWithoutPowerShellRuntime(
+        string programDirectory,
+        string expectedOutput,
+        int expectedCompiledMethods)
     {
         var corpusRoot = FindGenericCorpusRoot();
-        var entryPoint = Path.Combine(corpusRoot, "StrictProgram", "Main.ps1");
+        var entryPoint = Path.Combine(corpusRoot, programDirectory, "Main.ps1");
         var output = CreateGenericCorpusOutput();
         try
         {
@@ -102,9 +116,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 resolved.SourcePath,
                 output,
-                "GenericCompilerProgram",
+                "GenericCompiler" + programDirectory,
                 resolved.Kind,
-                resolved.Mode)
+                resolved.Mode, allowUnreviewedDependencyResolution: true)
             {
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,
@@ -115,12 +129,12 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
             Assert.False(result.Manifest!.RequiresPowerShellRuntime);
             Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);
-            Assert.Equal(3, result.Manifest.CompiledMethods);
-            var original = Run("pwsh", "-NoProfile", "-NonInteractive", "-File", entryPoint, "-Number", "4", "-Label", "item");
-            var compiled = Run(result.ArtifactPath!, "--Number", "4", "--Label", "item");
+            Assert.Equal(expectedCompiledMethods, result.Manifest.CompiledMethods);
+            var original = Run("pwsh", "-NoProfile", "-NonInteractive", "-File", entryPoint);
+            var compiled = Run(result.ArtifactPath!);
 
-            Assert.Equal((0, "8", string.Empty), (original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()));
-            Assert.Equal((0, "8", string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+            Assert.Equal((0, expectedOutput, string.Empty), (original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()));
+            Assert.Equal((0, expectedOutput, string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
         }
         finally
         {

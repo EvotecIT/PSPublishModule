@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
@@ -32,7 +33,9 @@ internal static class PowerShellGeneratedTypePolicy
         if (type.IsGenericType)
         {
             var definition = type.GetGenericTypeDefinition();
-            if (definition != typeof(Dictionary<,>) && definition != typeof(Nullable<>))
+            if (definition != typeof(Dictionary<,>) &&
+                definition != typeof(List<>) &&
+                definition != typeof(Nullable<>))
                 return false;
             return type.GetGenericArguments().All(argument => IsSupported(argument, targetFramework)) &&
                    IsSupportedNonGeneric(definition, targetFramework);
@@ -40,6 +43,36 @@ internal static class PowerShellGeneratedTypePolicy
         if (type.IsByRef || type.IsPointer)
             return false;
         return IsSupportedNonGeneric(type, targetFramework);
+    }
+
+    internal static bool IsSupportedDelegateSignature(Type type, string? targetFramework = null)
+    {
+        if (!typeof(MulticastDelegate).IsAssignableFrom(type) ||
+            type == typeof(MulticastDelegate) ||
+            type == typeof(Delegate) ||
+            type.ContainsGenericParameters ||
+            !IsSupportedSignatureType(type, targetFramework))
+            return false;
+
+        var invoke = type.GetMethod("Invoke", BindingFlags.Public | BindingFlags.Instance);
+        return invoke is not null &&
+               IsSupportedSignatureType(invoke.ReturnType, targetFramework) &&
+               invoke.GetParameters().All(parameter =>
+                   !parameter.IsOut &&
+                   !parameter.ParameterType.IsByRef &&
+                   IsSupportedSignatureType(parameter.ParameterType, targetFramework));
+    }
+
+    private static bool IsSupportedSignatureType(Type type, string? targetFramework)
+    {
+        if (type.IsByRef || type.IsPointer || type.ContainsGenericParameters)
+            return false;
+        if (type.IsArray)
+            return type.GetArrayRank() == 1 && IsSupportedSignatureType(type.GetElementType()!, targetFramework);
+        if (!type.IsConstructedGenericType)
+            return IsSupportedNonGeneric(type, targetFramework);
+        return IsSupportedNonGeneric(type.GetGenericTypeDefinition(), targetFramework) &&
+               type.GetGenericArguments().All(argument => IsSupportedSignatureType(argument, targetFramework));
     }
 
     private static bool IsSupportedNonGeneric(Type type, string? targetFramework)
@@ -100,6 +133,100 @@ internal static class PowerShellGeneratedTypePolicy
         return types;
     }
 
+    internal static bool TryResolveEnumMember(
+        Type enumType,
+        string memberName,
+        string? targetFramework,
+        out object? value)
+    {
+        value = null;
+        if (!enumType.IsEnum || string.IsNullOrWhiteSpace(memberName))
+            return false;
+        if (string.IsNullOrWhiteSpace(targetFramework))
+        {
+            var hostMatches = Enum.GetNames(enumType)
+                .Where(name => name.Equals(memberName, StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToArray();
+            if (hostMatches.Length != 1)
+                return false;
+            value = Enum.Parse(enumType, hostMatches[0], ignoreCase: false);
+            return true;
+        }
+
+        var fullName = enumType.FullName;
+        if (string.IsNullOrWhiteSpace(fullName))
+            return false;
+        var matches = new List<object>();
+        foreach (var path in GetReferenceAssemblyPaths(targetFramework!))
+        {
+            try
+            {
+                using var stream = File.OpenRead(path);
+                using var pe = new PEReader(stream);
+                if (!pe.HasMetadata)
+                    continue;
+                var reader = pe.GetMetadataReader();
+                foreach (var handle in reader.TypeDefinitions)
+                {
+                    if (!GetTypeDefinitionName(reader, handle).Equals(fullName, StringComparison.Ordinal))
+                        continue;
+                    var definition = reader.GetTypeDefinition(handle);
+                    var memberHandles = definition.GetFields()
+                        .Where(fieldHandle =>
+                        {
+                            var field = reader.GetFieldDefinition(fieldHandle);
+                            var attributes = field.Attributes;
+                            return (attributes & (FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.Literal)) ==
+                                   (FieldAttributes.Public | FieldAttributes.Static | FieldAttributes.Literal) &&
+                                   reader.GetString(field.Name).Equals(memberName, StringComparison.OrdinalIgnoreCase);
+                        })
+                        .Take(2)
+                        .ToArray();
+                    if (memberHandles.Length != 1 ||
+                        !TryReadEnumConstant(reader, memberHandles[0], Enum.GetUnderlyingType(enumType), out var resolved))
+                        return false;
+                    matches.Add(resolved!);
+                }
+            }
+            catch (BadImageFormatException)
+            {
+                // Native or otherwise non-managed reference assets cannot contribute enum members.
+            }
+        }
+        if (matches.Count != 1)
+            return false;
+        value = Enum.ToObject(enumType, matches[0]);
+        return true;
+    }
+
+    private static bool TryReadEnumConstant(
+        MetadataReader reader,
+        FieldDefinitionHandle fieldHandle,
+        Type expectedUnderlyingType,
+        out object? value)
+    {
+        value = null;
+        var constantHandle = reader.GetFieldDefinition(fieldHandle).GetDefaultValue();
+        if (constantHandle.IsNil)
+            return false;
+        var constant = reader.GetConstant(constantHandle);
+        var blob = reader.GetBlobReader(constant.Value);
+        value = constant.TypeCode switch
+        {
+            ConstantTypeCode.SByte => unchecked((sbyte)blob.ReadByte()),
+            ConstantTypeCode.Byte => blob.ReadByte(),
+            ConstantTypeCode.Int16 => blob.ReadInt16(),
+            ConstantTypeCode.UInt16 => blob.ReadUInt16(),
+            ConstantTypeCode.Int32 => blob.ReadInt32(),
+            ConstantTypeCode.UInt32 => blob.ReadUInt32(),
+            ConstantTypeCode.Int64 => blob.ReadInt64(),
+            ConstantTypeCode.UInt64 => blob.ReadUInt64(),
+            _ => null
+        };
+        return value is not null && value.GetType() == expectedUnderlyingType;
+    }
+
     internal static string[] GetReferenceAssemblyPaths(string targetFramework)
     {
         var referenceDirectory = ResolveReferenceDirectory(targetFramework)
@@ -107,6 +234,20 @@ internal static class PowerShellGeneratedTypePolicy
         return (targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
                 ? Net472ImplicitReferenceAssemblies.Select(name => Path.Combine(referenceDirectory, name)).Where(File.Exists)
                 : Directory.EnumerateFiles(referenceDirectory, "*.dll", SearchOption.TopDirectoryOnly))
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal static string[] GetTargetRuntimeAssemblyPaths(string targetFramework)
+    {
+        var referenceDirectory = ResolveReferenceDirectory(targetFramework)
+            ?? throw new InvalidOperationException($"Reference assemblies for target framework '{targetFramework}' could not be located.");
+        return Directory.EnumerateFiles(
+                referenceDirectory,
+                "*.dll",
+                targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
+                    ? SearchOption.AllDirectories
+                    : SearchOption.TopDirectoryOnly)
             .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

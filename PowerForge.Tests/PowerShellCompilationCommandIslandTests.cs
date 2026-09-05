@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationCommandIslandTests
 {
     [Fact]
@@ -17,18 +18,18 @@ public sealed class PowerShellCompilationCommandIslandTests
             function Get-IslandValue {
                 [CmdletBinding()]
                 param([string] $Name)
-                Write-Verbose -Message 'verbose-record'
-                Write-Debug -Message 'debug-record'
-                Write-Warning -Message 'warning-record'
-                Write-Output 'region-one'
-                Write-Output $Name
+                Microsoft.PowerShell.Utility\Write-Verbose -Message 'verbose-record'
+                Microsoft.PowerShell.Utility\Write-Debug -Message 'debug-record'
+                Microsoft.PowerShell.Utility\Write-Warning -Message 'warning-record'
+                Microsoft.PowerShell.Utility\Write-Output 'region-one'
+                Microsoft.PowerShell.Utility\Write-Output $Name
                 return $Name
             }
 
             function Get-PipelineIsland {
                 [CmdletBinding()]
                 param([string] $Name)
-                $Name | ForEach-Object { $_.ToUpperInvariant() }
+                $Name | Microsoft.PowerShell.Core\ForEach-Object { $_.ToUpperInvariant() }
             }
             """);
 
@@ -49,13 +50,13 @@ public sealed class PowerShellCompilationCommandIslandTests
                 output,
                 "PowerForge.StreamIslands",
                 PowerShellCompilationArtifactKind.BinaryModule,
-                PowerShellCompilationMode.Strict)
+                PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
             {
                 TargetFramework = "net10.0"
             });
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
             Assert.Equal(2, result.Manifest!.CompiledMethods);
-            Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+            Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
 
             var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
             var invocation = $"$DebugPreference='Continue'; Import-Module -Name '{escapedPath}' -Force; Get-IslandValue -Name Ada -Verbose; Get-PipelineIsland -Name Ada";
@@ -123,7 +124,7 @@ public sealed class PowerShellCompilationCommandIslandTests
                 output,
                 "PowerForge.CoarseCommandIsland",
                 PowerShellCompilationArtifactKind.BinaryModule,
-                PowerShellCompilationMode.Strict)
+                PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
             {
                 TargetFramework = "net10.0",
                 EmitSource = true

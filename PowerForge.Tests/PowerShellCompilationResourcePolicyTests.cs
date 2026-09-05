@@ -3,6 +3,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationResourcePolicyTests
 {
     [Fact]
@@ -148,6 +149,39 @@ public sealed class PowerShellCompilationResourcePolicyTests
     }
 
     [Fact]
+    public void Analyze_ExplicitAndCompleteResourceContractsRejectInaccessibleContainedDirectories()
+    {
+        if (OperatingSystem.IsWindows() || Environment.UserName.Equals("root", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        using var fixture = new ResourceFixture(module: true);
+        var deniedDirectory = Path.Combine(fixture.RootPath, "Denied");
+        fixture.Write("Denied/secret.txt", "secret");
+        var resolved = fixture.ResolveModule();
+        File.SetUnixFileMode(deniedDirectory, UnixFileMode.None);
+        try
+        {
+            var complete = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationAnalyzer().Analyze(
+                resolved,
+                PowerShellCompilationMode.Hybrid,
+                resourceMode: PowerShellCompilationResourceMode.CompleteModule));
+            Assert.Contains("fail closed", complete.Message, StringComparison.OrdinalIgnoreCase);
+
+            var explicitInclude = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationAnalyzer().Analyze(
+                resolved,
+                PowerShellCompilationMode.Hybrid,
+                includeResource: new[] { "Denied/**" }));
+            Assert.Contains("fail closed", explicitInclude.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.SetUnixFileMode(
+                deniedDirectory,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
     public void Analyze_RejectsExplicitResourceThatOverlapsOutputDirectory()
     {
         using var fixture = new ResourceFixture(module: false);
@@ -282,7 +316,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             output,
             "Resource.Proof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.False(File.Exists(Path.Combine(output, "Templates", "report.txt")));
@@ -317,7 +351,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             output,
             "Dynamic.Resource.Proof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             IncludeResource = new[] { "dynamic.txt" }
         });
@@ -360,7 +394,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             Path.Combine(fixture.RootPath, "out"),
             "Nested.Resource.Proof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = resolved.CompilationSourceFiles,
             RuntimeSourcePaths = resolved.SourceFiles
@@ -420,7 +454,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             output,
             "Complete.Resources",
             resolved.Kind,
-            resolved.Mode)
+            resolved.Mode, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = resolved.ModuleManifestPath,
             CompilationSourcePaths = resolved.CompilationSourceFiles,
@@ -451,7 +485,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             output,
             artifactName,
             resolved.Kind,
-            resolved.Mode)
+            resolved.Mode, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = resolved.ModuleManifestPath,
             CompilationSourcePaths = resolved.CompilationSourceFiles,

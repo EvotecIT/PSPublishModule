@@ -16,7 +16,8 @@ public sealed partial class ModulePipelineRunner
             plan,
             buildResult.ManifestPath,
             manifestRequiredModules,
-            manifestExternalModuleDependencies);
+            manifestExternalModuleDependencies,
+            preserveCompiledRootModule: IsReusingCompiledPowerShellModule(plan));
     }
 
     private void RefreshProjectManifestFromPlan(
@@ -27,20 +28,23 @@ public sealed partial class ModulePipelineRunner
             plan,
             manifestPath,
             plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
-            plan.ExternalModuleDependencies ?? Array.Empty<string>());
+            plan.ExternalModuleDependencies ?? Array.Empty<string>(),
+            preserveCompiledRootModule: false);
     }
 
     private void RefreshManifestPathFromPlan(
         ModulePipelinePlan plan,
         string manifestPath,
         RequiredModuleReference[] manifestRequiredModules,
-        string[] manifestExternalModuleDependencies)
+        string[] manifestExternalModuleDependencies,
+        bool preserveCompiledRootModule)
     {
         var manifest = plan.Manifest;
         var hasManifestSegment = manifest is not null;
 
         _manifestMutator.TrySetTopLevelModuleVersion(manifestPath, plan.BuildSpec.Version);
-        _manifestMutator.TrySetTopLevelString(manifestPath, "RootModule", $"{plan.ModuleName}.psm1");
+        if (!preserveCompiledRootModule)
+            _manifestMutator.TrySetTopLevelString(manifestPath, "RootModule", $"{plan.ModuleName}.psm1");
 
         if (hasManifestSegment)
         {

@@ -36,12 +36,18 @@ public static class PowerShellCompilationFeatureIds
     public const string AutomaticVariableAssignment = "assignment.automatic-variable";
     /// <summary>Switch matching flags.</summary>
     public const string SwitchFlags = "control-flow.switch-flags";
+    /// <summary>Post-test do/while and do/until loop semantics.</summary>
+    public const string PostTestLoop = "control-flow.post-test-loop";
     /// <summary>Typed catch-filter resolution.</summary>
     public const string CatchFilter = "exception.catch-filter";
     /// <summary>PowerShell begin/process/clean pipeline lifecycle blocks.</summary>
     public const string PipelineLifecycle = "pipeline.lifecycle";
+    /// <summary>Bounded runtime-free pipeline input enumeration.</summary>
+    public const string PipelineEnumeration = "pipeline.enumeration";
     /// <summary>Runtime-bearing using statements.</summary>
     public const string RuntimeUsing = "source.using-runtime";
+    /// <summary>PowerShell class or enum declarations whose runtime type identity remains hosted.</summary>
+    public const string TypeDefinition = "source.type-definition";
     /// <summary>Source #requires directives.</summary>
     public const string RequiresDirective = "source.requires";
     /// <summary>Filter function pipeline semantics.</summary>
@@ -104,6 +110,11 @@ public static class PowerShellCompilationFeatureIds
     {
         if (message.IndexOf("default value", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterDefault;
         if (message.IndexOf("parameter alias", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterBinding;
+        if (message.IndexOf("positional-binding contract", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterBinding;
+        if (message.IndexOf("member mutation", StringComparison.OrdinalIgnoreCase) >= 0) return AssignmentTarget;
+        if (message.IndexOf("CLR member", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("MemberExpressionAst");
+        if (message.IndexOf("CLR overload", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("InvokeMemberExpressionAst");
+        if (message.IndexOf("OutputType metadata", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterMetadata;
         if (message.IndexOf("attribute", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("validation", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterMetadata;
         if (message.IndexOf("conversion", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -113,7 +124,10 @@ public static class PowerShellCompilationFeatureIds
         if (message.IndexOf("read-only automatic variable", StringComparison.OrdinalIgnoreCase) >= 0) return AutomaticVariableAssignment;
         if (message.IndexOf("Switch flags", StringComparison.OrdinalIgnoreCase) >= 0) return SwitchFlags;
         if (message.IndexOf("catch filter", StringComparison.OrdinalIgnoreCase) >= 0) return CatchFilter;
+        if (message.IndexOf("pipeline enumeration", StringComparison.OrdinalIgnoreCase) >= 0) return PipelineEnumeration;
         if (message.IndexOf("pipeline lifecycle", StringComparison.OrdinalIgnoreCase) >= 0) return PipelineLifecycle;
+        if (message.IndexOf("foreach collection enumeration", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("foreach variable", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("ForEachStatementAst");
         if (message.IndexOf("runtime-bearing using", StringComparison.OrdinalIgnoreCase) >= 0) return RuntimeUsing;
         if (message.IndexOf("#requires", StringComparison.OrdinalIgnoreCase) >= 0) return RequiresDirective;
         if (message.IndexOf("Filter '", StringComparison.OrdinalIgnoreCase) >= 0) return FilterFunction;
@@ -129,14 +143,15 @@ public static class PowerShellCompilationFeatureIds
         if (message.IndexOf("Typed dictionary local", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("Typed hashtable literal", StringComparison.OrdinalIgnoreCase) >= 0) return DictionaryFlow;
         if (message.IndexOf("PipelineAst", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("PipelineAst");
-        if (message.IndexOf("CLR member", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("MemberExpressionAst");
-        if (message.IndexOf("CLR overload", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("InvokeMemberExpressionAst");
         if (message.IndexOf("foreach currently requires", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("ForEachStatementAst");
         if (message.IndexOf("must be declared at function scope", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("VariableExpressionAst");
         if (message.IndexOf("Increment or decrement", StringComparison.OrdinalIgnoreCase) >= 0) return ForOperator("increment");
         if (message.IndexOf("cmdlet", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("common parameters", StringComparison.OrdinalIgnoreCase) >= 0) return BinaryCmdletShape;
+        if (TryExtractQuotedValue(message, "Operator '-", out var operatorName)) return ForOperator(operatorName);
         if (TryExtractQuotedValue(message, "Syntax node '", out var syntax)) return ForSyntax(syntax);
+        if (TryExtractQuotedValue(message, "Expression '", out syntax)) return ForSyntax(syntax);
+        if (TryExtractQuotedValue(message, "Statement '", out syntax)) return ForSyntax(syntax);
         return "syntax.unsupported";
     }
 

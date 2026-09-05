@@ -126,6 +126,124 @@
     "AppleTestFlightPolicy": {
       "type": "string",
       "enum": ["Automatic", "Disabled", "Internal", "External"]
+    },
+    "PowerShellCompilationDependencyIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Version": { "type": "string" },
+        "MinimumVersion": { "type": "string" },
+        "RequiredVersion": { "type": "string" },
+        "MaximumVersion": { "type": "string" },
+        "Guid": { "type": "string" },
+        "Sha256": { "type": "string", "pattern": "^$|^[A-Fa-f0-9]{64}$" },
+        "ContentHashAlgorithm": { "type": "string" },
+        "ContentHash": { "type": "string" },
+        "Source": { "type": "string" },
+        "Edition": { "type": "string" },
+        "TargetFramework": { "type": "string" },
+        "RuntimeIdentifier": { "type": "string" },
+        "Architecture": { "type": "string" },
+        "PublicKeyToken": { "type": "string" },
+        "Culture": { "type": "string" },
+        "Retargetable": { "type": "boolean" },
+        "ContentType": { "type": "string" },
+        "Provenance": { "type": "string" },
+        "InteropAdapter": { "type": "string" },
+        "ApartmentState": { "type": "string" }
+      },
+      "required": ["Name", "Version", "MinimumVersion", "RequiredVersion", "MaximumVersion", "Guid", "Sha256", "ContentHashAlgorithm", "ContentHash", "Source", "Edition", "TargetFramework", "RuntimeIdentifier", "Architecture", "PublicKeyToken", "Culture", "Retargetable", "ContentType", "Provenance", "InteropAdapter", "ApartmentState"]
+    },
+    "PowerShellCompilationDependencyPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Redistribution": { "type": "string" },
+        "Publisher": { "type": "string" },
+        "Signature": { "type": "string" },
+        "Servicing": { "type": "string" },
+        "License": { "type": "string" }
+      },
+      "required": ["Redistribution", "Publisher", "Signature", "Servicing", "License"]
+    },
+    "PowerShellCompilationInteropBoundaryContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Owner": { "type": "string" },
+        "Platform": { "type": "string" },
+        "Errors": { "type": "string" },
+        "Cancellation": { "type": "string" },
+        "Cleanup": { "type": "string" },
+        "Threading": { "type": "string" }
+      },
+      "required": ["Owner", "Platform", "Errors", "Cancellation", "Cleanup", "Threading"]
+    },
+    "PowerShellCompilationDependencyNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Kind": { "type": "string", "enum": ["Script", "ScriptModule", "ModuleManifest", "BinaryModule", "MixedModule", "CdxmlModule", "DynamicProxyModule", "ManagedLibrary", "NativeLibrary", "ExternalProcess", "ComObject", "TypeData", "FormatData", "Content", "ExternalModule", "NuGetPackage"] },
+        "Roles": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "integer", "minimum": 0 }] },
+        "Identity": { "$ref": "#/$defs/PowerShellCompilationDependencyIdentity" },
+        "Disposition": { "type": "string", "enum": ["Compiled", "Referenced", "Hosted", "Bundled", "PrivateRestored", "External", "Rejected"] },
+        "Exists": { "type": "boolean" },
+        "Note": { "type": "string" },
+        "Policy": { "$ref": "#/$defs/PowerShellCompilationDependencyPolicy" },
+        "Interop": { "$ref": "#/$defs/PowerShellCompilationInteropBoundaryContract" }
+      },
+      "required": ["Id", "Kind", "Roles", "Identity", "Disposition", "Exists", "Note", "Policy", "Interop"]
+    },
+    "PowerShellCompilationDependencyEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string" },
+        "FromId": { "type": "string", "minLength": 1 },
+        "ToId": { "type": "string", "minLength": 1 },
+        "Kind": { "type": "string", "enum": ["BuildInput", "RootModule", "RequiredModule", "NestedModule", "RequiredAssembly", "ModuleInitialization", "Metadata", "DotSource", "UsingModule", "UsingAssembly", "RequiresModule", "ImportModule", "ManagedReference", "NativeLoad", "ProcessTarget", "RuntimeAsset", "ComActivation", "CompilerPackage"] },
+        "Order": { "type": "integer", "minimum": 0 },
+        "Evidence": { "type": "string" }
+      },
+      "required": ["Id", "FromId", "ToId", "Kind", "Order", "Evidence"]
+    },
+    "PowerShellCompilationDependencyGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SchemaVersion": { "type": "integer", "const": 6 },
+        "RootNodeId": { "type": "string", "minLength": 1 },
+        "Nodes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/PowerShellCompilationDependencyNode" } },
+        "Edges": { "type": "array", "items": { "$ref": "#/$defs/PowerShellCompilationDependencyEdge" } },
+        "LockSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+        "Cycles": { "type": "array", "items": { "type": "array", "items": { "type": "string" } } },
+        "Conflicts": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["SchemaVersion", "RootNodeId", "Nodes", "Edges", "LockSha256", "Cycles", "Conflicts"]
+    },
+    "PowerShellModuleCompilationConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Mode": { "type": "string", "enum": ["Hybrid", "Strict"] },
+        "TargetFramework": { "type": "string", "minLength": 1 },
+        "ResourceMode": { "type": "string", "enum": ["Declared", "CompleteModule", "None"] },
+        "IncludeResource": { "type": "array", "items": { "type": "string" } },
+        "ExcludeResource": { "type": "array", "items": { "type": "string" } },
+        "UseBuildCache": { "type": "boolean" },
+        "BuildCacheDirectory": { "type": ["string", "null"] },
+        "DependencyLock": {
+          "anyOf": [
+            { "$ref": "#/$defs/PowerShellCompilationDependencyGraph" },
+            { "type": "null" }
+          ]
+        },
+        "AllowUnreviewedDependencies": { "type": "boolean" },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1 }
+      }
     }
   }
 }

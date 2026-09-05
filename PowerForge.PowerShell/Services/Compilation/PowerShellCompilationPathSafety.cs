@@ -41,6 +41,23 @@ internal static class PowerShellCompilationPathSafety
         EnsureNoLinks(root!, fullPath, error);
     }
 
+    /// <summary>
+    /// Rejects links in every existing ancestor of a prospective path. This is used before creating
+    /// project-owned output, lock, restore, package, and installation paths whose leaf may not exist yet.
+    /// </summary>
+    internal static void EnsureNoLinksInExistingAncestors(string path, string error)
+    {
+        var current = Path.GetFullPath(path);
+        while (!File.Exists(current) && !Directory.Exists(current))
+        {
+            var parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || PathEquals(parent, current))
+                throw new InvalidOperationException(error);
+            current = parent;
+        }
+        EnsureNoLinksFromFileSystemRoot(current, error);
+    }
+
     internal static void EnsureNoLinks(string root, string path, string error)
     {
         var relativePath = FrameworkCompatibility.GetRelativePath(root, path);

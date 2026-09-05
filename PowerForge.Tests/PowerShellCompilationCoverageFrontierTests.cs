@@ -38,7 +38,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedFunctionGraph",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = new[] { fixture.ScriptPath, helper },
             EmitSource = true
@@ -71,7 +71,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedArrayValidation",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = new[] { fixture.ScriptPath, helper }
         });
@@ -101,7 +101,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedObjectArrayValidation",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var nullElement = RunModuleFailureProof(result.ArtifactPath!, "Invoke-NullElement -Values @([object] 1, $null)");
@@ -127,7 +127,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedMandatoryString",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = new[] { fixture.ScriptPath, helper }
         });
@@ -149,7 +149,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.OrderedDictionaryMutation",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var process = RunProcess(result.ArtifactPath!, "--Key=BETA", "--Value=two");
@@ -168,7 +168,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.NullableStringIndex",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal("v", RunModuleProof(result.ArtifactPath!, "Get-FrontierCharacter -Key Known"));
@@ -180,20 +180,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create(
             "function Set-FrontierHeader { [CmdletBinding()] param([System.Collections.IDictionary] $Headers, [string] $Name, [string] $Value) " +
-            "$Headers[$Name] = $Value; return $Headers[$Name] }",
+            "$Headers[$Name] = $Value; return $Headers[$Name] }; " +
+            "function Get-FrontierHeaderCount { [CmdletBinding()] param([System.Collections.IDictionary] $Headers) return $Headers.Count }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.IDictionaryParameter",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var output = RunModuleProof(
             result.ArtifactPath!,
             "$headers = @{}; Set-FrontierHeader -Headers $headers -Name X-Test -Value two; $headers['X-Test']");
         Assert.Equal(new[] { "two", "two" }, output.Split(Environment.NewLine));
+        Assert.Equal("99", RunModuleProof(result.ArtifactPath!, "$headers = @{ Count = 99 }; Get-FrontierHeaderCount -Headers $headers"));
+        Assert.Equal("1", RunModuleProof(result.ArtifactPath!, "$headers = @{ Name = 'ready' }; Get-FrontierHeaderCount -Headers $headers"));
     }
 
     [Fact]
@@ -207,7 +210,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedCatch",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var valid = RunProcess(result.ArtifactPath!, "--Text=42");
@@ -229,7 +232,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedLocalRegion",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -239,6 +242,31 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("new object?[] { captured }", generated, StringComparison.Ordinal);
         Assert.Contains("param(${captured})", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModulePreservesHeterogeneousHashtableValues()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-FrontierMapValue { [CmdletBinding()] param([string] $Key) " +
+            "$map = @{ Text = 'ready'; Count = 2; Enabled = $true }; return $map[$Key] }; " +
+            "function Get-FrontierMapMember { [CmdletBinding()] param() $map = @{ Text = 'ready'; Count = 2 }; return $map.Text }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.HeterogeneousHashtable",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal("2", RunModuleProof(result.ArtifactPath!, "Get-FrontierMapValue -Key Count"));
+        Assert.Equal("ready", RunModuleProof(result.ArtifactPath!, "Get-FrontierMapMember"));
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.Contains("System.Collections.Hashtable", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -252,7 +280,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.SwitchRegion",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -261,7 +289,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("False", RunModuleProof(result.ArtifactPath!, "Get-FrontierSwitch"));
         Assert.Equal("True", RunModuleProof(result.ArtifactPath!, "Get-FrontierSwitch -Force"));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains("param([switch] ${Force})", generated, StringComparison.Ordinal);
+        Assert.Contains("param([bool] ${__PowerForgeSwitchArgument0})", generated, StringComparison.Ordinal);
+        Assert.Contains("${Force} = [System.Management.Automation.SwitchParameter]::new([bool]${__PowerForgeSwitchArgument0})", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -278,7 +307,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.CommandTail",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
@@ -309,7 +338,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridBinaryModuleDoesNotCoalesceTailThatMutatesTypedPrefixLocal()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierMutation { [int] $value = 1; $Output = Get-Date; $value = 2; return $value }; " +
+            "function Get-FrontierMutation { [int] $value = 1; $Output = Get-Date -Format o; $value = 2; return $value }; " +
             "Export-ModuleMember -Function Get-FrontierMutation",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -317,7 +346,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.CommandTailMutation",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
@@ -340,7 +369,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.RecursiveGraph",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);

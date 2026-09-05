@@ -110,16 +110,26 @@ public sealed partial class ModulePipelineRunner
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders)
+        => SignFinalizedModuleOutput(
+            moduleName,
+            rootPath,
+            signing,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles: null);
+
+    private ModuleSigningResult SignFinalizedModuleOutput(
+        string moduleName,
+        string rootPath,
+        SigningOptionsConfiguration? signing,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new ArgumentException("Root path is required.", nameof(rootPath));
-
-        if (signing is null)
-        {
-            throw new InvalidOperationException(
-                "Signing is enabled but no signing options were provided. " +
-                "Configure a certificate (CertificateThumbprint / CertificatePFXPath / CertificatePFXBase64) or disable signing.");
-        }
 
         if (signing is null)
         {
@@ -143,7 +153,8 @@ public sealed partial class ModulePipelineRunner
             rootPath,
             information,
             delivery,
-            includeScriptFolders);
+            includeScriptFolders,
+            finalizedPayloadFiles);
         var include = BuildSigningIncludePatterns(signing);
         var exclude = BuildSigningExcludeSubstrings(signing, delivery);
         return _hostedOperations.SignModuleOutput(moduleName, rootPath, packageFilePaths, include, exclude, signing);

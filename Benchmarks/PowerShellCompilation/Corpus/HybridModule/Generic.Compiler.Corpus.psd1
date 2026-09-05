@@ -12,6 +12,8 @@
         'Get-CommandText'
         'Test-TokenPattern'
         'Get-EnvironmentBoundary'
+        'Get-ObjectShape'
+        'Get-CollectionShape'
     )
     CmdletsToExport = @()
     VariablesToExport = @()

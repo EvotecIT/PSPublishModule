@@ -120,6 +120,11 @@ jobs:
               'PowerForge.Blazor/PowerForge.Blazor.csproj'
               'PowerForge.Cli/PowerForge.Cli.csproj'
               'PowerForge.PowerShell/PowerForge.PowerShell.csproj'
+              'PowerForge.PowerShell.ProviderSdk/PowerForge.PowerShell.ProviderSdk.csproj'
+              'PowerForge.PowerShell.Provider.Directory/PowerForge.PowerShell.Provider.Directory.csproj'
+              'PowerForge.PowerShell.Provider.Directory.Runtime/PowerForge.PowerShell.Provider.Directory.Runtime.csproj'
+              'PowerForge.PowerShell.Provider.Management/PowerForge.PowerShell.Provider.Management.csproj'
+              'PowerForge.PowerShell.Provider.Management.Runtime/PowerForge.PowerShell.Provider.Management.Runtime.csproj'
               'PowerForge.Web/PowerForge.Web.csproj'
               'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
           )
@@ -267,7 +272,19 @@ jobs:
           $release | Add-Member -NotePropertyName tagCommit -NotePropertyValue $tagCommit
           $release | ConvertTo-Json -Depth 5 | Out-File -LiteralPath 'release-receipts/github-release.json' -Encoding utf8
 
-          $packageIds = @('PowerForge', 'PowerForge.PowerShell', 'PowerForge.Build', 'PowerForge.Blazor', 'PowerForge.Web', 'PowerForge.Web.Build')
+          $packageIds = @(
+              'PowerForge',
+              'PowerForge.PowerShell',
+              'PowerForge.PowerShell.ProviderSdk',
+              'PowerForge.PowerShell.Provider.Directory',
+              'PowerForge.PowerShell.Provider.Directory.Runtime',
+              'PowerForge.PowerShell.Provider.Management',
+              'PowerForge.PowerShell.Provider.Management.Runtime',
+              'PowerForge.Build',
+              'PowerForge.Blazor',
+              'PowerForge.Web',
+              'PowerForge.Web.Build'
+          )
           $deadline = [DateTime]::UtcNow.AddMinutes(10)
           do {
               $missing = @()

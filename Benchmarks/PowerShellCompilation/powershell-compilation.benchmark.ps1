@@ -20,6 +20,52 @@ $runtimeIdentifier = Get-BenchmarkInput RuntimeIdentifier $defaultRid
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 $builder = [PowerForge.PowerShellCompilationArtifactBuilder]::new()
+$dependencyPlanner = [PowerForge.PowerShellCompilationDependencyPlanner]::new()
+
+function Set-ReviewedDependencyLock {
+    param([PowerForge.PowerShellCompilationBuildSpec] $Spec)
+
+    if ($Spec.Kind -eq [PowerForge.PowerShellCompilationArtifactKind]::Executable -and
+        [string]::IsNullOrWhiteSpace($Spec.RuntimeIdentifier) -and
+        ($Spec.SingleFile -or $Spec.SelfContained)) {
+        $Spec.RuntimeIdentifier = $runtimeIdentifier
+    }
+    $Spec.ExpectedDependencyLock = $dependencyPlanner.AnalyzeGraph($Spec)
+}
+
+function Invoke-ReviewedCompilationBuild {
+    param([PowerForge.PowerShellCompilationBuildSpec] $Spec)
+
+    Set-ReviewedDependencyLock -Spec $Spec
+    $builder.Build($Spec)
+}
+
+function Invoke-DotNetProcess {
+    param(
+        [string[]] $Arguments,
+        [string] $WorkingDirectory = $repositoryRoot
+    )
+
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = 'dotnet'
+    $startInfo.WorkingDirectory = $WorkingDirectory
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in $Arguments) { [void] $startInfo.ArgumentList.Add($argument) }
+    $process = [System.Diagnostics.Process]::Start($startInfo)
+    $standardOutput = $process.StandardOutput.ReadToEndAsync()
+    $standardError = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit(600000)) {
+        $process.Kill($true)
+        throw 'ReadyToRun benchmark publication exceeded 600 seconds.'
+    }
+    [pscustomobject]@{
+        ExitCode = $process.ExitCode
+        Output = @($standardOutput.GetAwaiter().GetResult(), $standardError.GetAwaiter().GetResult()) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    }
+}
 
 $typedSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
     $workloadPath,
@@ -28,7 +74,7 @@ $typedSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
     [PowerForge.PowerShellCompilationArtifactKind]::Library,
     [PowerForge.PowerShellCompilationMode]::Strict)
 $typedSpec.TargetFramework = $targetFramework
-$typedResult = $builder.Build($typedSpec)
+$typedResult = Invoke-ReviewedCompilationBuild -Spec $typedSpec
 if (-not $typedResult.Succeeded) {
     throw "Typed benchmark library failed: $($typedResult.Error)`n$($typedResult.BuildOutput)"
 }
@@ -40,7 +86,7 @@ $moduleSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
     [PowerForge.PowerShellCompilationArtifactKind]::BinaryModule,
     [PowerForge.PowerShellCompilationMode]::Strict)
 $moduleSpec.TargetFramework = $targetFramework
-$moduleResult = $builder.Build($moduleSpec)
+$moduleResult = Invoke-ReviewedCompilationBuild -Spec $moduleSpec
 if (-not $moduleResult.Succeeded) {
     throw "Binary benchmark module failed: $($moduleResult.Error)`n$($moduleResult.BuildOutput)"
 }
@@ -52,7 +98,7 @@ $executableSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
     [PowerForge.PowerShellCompilationArtifactKind]::Executable,
     [PowerForge.PowerShellCompilationMode]::Package)
 $executableSpec.TargetFramework = $targetFramework
-$executableResult = $builder.Build($executableSpec)
+$executableResult = Invoke-ReviewedCompilationBuild -Spec $executableSpec
 if (-not $executableResult.Succeeded) {
     throw "Packaged benchmark executable failed: $($executableResult.Error)`n$($executableResult.BuildOutput)"
 }
@@ -64,7 +110,7 @@ $typedExecutableSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
     [PowerForge.PowerShellCompilationArtifactKind]::Executable,
     [PowerForge.PowerShellCompilationMode]::Strict)
 $typedExecutableSpec.TargetFramework = $targetFramework
-$typedExecutableResult = $builder.Build($typedExecutableSpec)
+$typedExecutableResult = Invoke-ReviewedCompilationBuild -Spec $typedExecutableSpec
 if (-not $typedExecutableResult.Succeeded) {
     throw "Typed benchmark executable failed: $($typedExecutableResult.Error)`n$($typedExecutableResult.BuildOutput)"
 }
@@ -77,13 +123,94 @@ $localCallSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
     [PowerForge.PowerShellCompilationMode]::Strict)
 $localCallSpec.TargetFramework = $targetFramework
 $localCallSpec.CompilationSourcePaths = @($localCallEntryPath, $localCallHelperPath)
-$localCallResult = $builder.Build($localCallSpec)
+$localCallResult = Invoke-ReviewedCompilationBuild -Spec $localCallSpec
 if (-not $localCallResult.Succeeded) {
     throw "Typed local-call benchmark executable failed: $($localCallResult.Error)`n$($localCallResult.BuildOutput)"
 }
 
 $optimizedExecutableEvidence = [ordered]@{}
 if ($includeOptimizedExecutables) {
+    $readyToRunSpec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+        $optimizedExecutableScriptPath,
+        $buildRoot,
+        'PowerForge.CompilationBenchmark.TypedReadyToRunSeed',
+        [PowerForge.PowerShellCompilationArtifactKind]::Executable,
+        [PowerForge.PowerShellCompilationMode]::Strict)
+    $readyToRunSpec.TargetFramework = $targetFramework
+    $readyToRunSpec.RuntimeIdentifier = $runtimeIdentifier
+    # ReadyToRun remains a benchmark-only lane. Use a framework-dependent reviewed
+    # seed to publish the generated project independently without pretending the
+    # secondary SDK publication is a PowerForge-certified artifact.
+    $readyToRunSpec.SelfContained = $false
+    $readyToRunSpec.SingleFile = $false
+    $readyToRunSpec.EmitSource = $true
+    $readyToRunSeed = Invoke-ReviewedCompilationBuild -Spec $readyToRunSpec
+    if (-not $readyToRunSeed.Succeeded) {
+        throw "ReadyToRun seed executable failed: $($readyToRunSeed.Error)`n$($readyToRunSeed.BuildOutput)"
+    }
+    $readyToRunSeedProject = Get-ChildItem -LiteralPath $readyToRunSeed.GeneratedSourcePath -Filter '*.csproj' | Select-Object -First 1
+    if ($null -eq $readyToRunSeedProject) {
+        throw 'ReadyToRun benchmark could not locate the emitted generated project.'
+    }
+    $readyToRunOutput = Join-Path $buildRoot 'ready-to-run'
+    $readyToRunWorkspace = Join-Path $buildRoot 'ready-to-run-source'
+    foreach ($generatedDirectory in @(
+        (Join-Path $readyToRunSeed.GeneratedSourcePath 'bin'),
+        (Join-Path $readyToRunSeed.GeneratedSourcePath 'obj'),
+        $readyToRunOutput,
+        $readyToRunWorkspace)) {
+        if (Test-Path -LiteralPath $generatedDirectory -PathType Container) {
+            Remove-Item -LiteralPath $generatedDirectory -Recurse -Force
+        }
+    }
+    New-Item -ItemType Directory -Path $readyToRunWorkspace -Force | Out-Null
+    Get-ChildItem -LiteralPath $readyToRunSeed.GeneratedSourcePath -Force |
+        Copy-Item -Destination $readyToRunWorkspace -Recurse -Force
+    $targetFrameworkMajor = [int] $targetFramework.Substring(3).Split('.')[0]
+    $sdkList = Invoke-DotNetProcess -Arguments @('--list-sdks')
+    $readyToRunSdk = @($sdkList.Output | ForEach-Object { $_ -split "`r?`n" } | ForEach-Object {
+        if ($_ -match '^(?<Identity>\d+\.\d+\.\d+)\s+\[') {
+            $parsed = [version] $Matches.Identity
+            if ($parsed.Major -eq $targetFrameworkMajor) {
+                [pscustomobject]@{ Identity = $Matches.Identity; Parsed = $parsed }
+            }
+        }
+    } | Sort-Object Parsed -Descending | Select-Object -First 1)
+    if ($readyToRunSdk.Count -ne 1) {
+        throw "ReadyToRun benchmark requires an installed stable .NET $targetFrameworkMajor SDK."
+    }
+    @{ sdk = @{ version = $readyToRunSdk[0].Identity; rollForward = 'disable'; allowPrerelease = $false } } |
+        ConvertTo-Json -Depth 3 |
+        Set-Content -LiteralPath (Join-Path $readyToRunWorkspace 'global.json') -Encoding utf8NoBOM
+    $readyToRunProject = Get-ChildItem -LiteralPath $readyToRunWorkspace -Filter '*.csproj' | Select-Object -First 1
+    $readyToRunPublish = @(
+        'publish', $readyToRunProject.FullName,
+        '--configuration', 'Release',
+        '--framework', $targetFramework,
+        '--runtime', $runtimeIdentifier,
+        '--self-contained', 'false',
+        '--output', $readyToRunOutput,
+        '/p:PublishReadyToRun=true',
+        '/p:PublishSingleFile=false',
+        '/p:UseAppHost=false',
+        '/p:ContinuousIntegrationBuild=true')
+    $readyToRunBuild = Invoke-DotNetProcess -Arguments $readyToRunPublish -WorkingDirectory $readyToRunWorkspace
+    if ($readyToRunBuild.ExitCode -ne 0) {
+        throw "ReadyToRun benchmark publication failed:`n$($readyToRunBuild.Output -join [Environment]::NewLine)"
+    }
+    $readyToRunArtifact = Join-Path $readyToRunOutput 'PowerForge.CompilationBenchmark.TypedReadyToRunSeed.dll'
+    $readyToRunVerification = Invoke-DotNetProcess -Arguments @($readyToRunArtifact, '--Count=5', '--Values=10', '--Values=-3')
+    $readyToRunValues = @($readyToRunVerification.Output | ForEach-Object { $_ -split "`r?`n" } | Where-Object { $_ -ne '' })
+    if ($readyToRunVerification.ExitCode -ne 0 -or $readyToRunValues.Count -ne 1 -or [long]$readyToRunValues[0] -ne 22L) {
+        throw 'ReadyToRun typed executable returned an invalid verification result.'
+    }
+    $optimizedExecutableEvidence.ReadyToRun = [pscustomobject]@{
+        ArtifactPath = $readyToRunArtifact
+        Sha256 = (Get-FileHash -LiteralPath $readyToRunArtifact -Algorithm SHA256).Hash
+        Bytes = (Get-Item -LiteralPath $readyToRunArtifact).Length
+        DotNetSdkVersion = $readyToRunSdk[0].Identity
+    }
+
     foreach ($optimization in @(
         [PowerForge.PowerShellCompilationExecutableOptimization]::Trimmed,
         [PowerForge.PowerShellCompilationExecutableOptimization]::NativeAot)) {
@@ -99,7 +226,7 @@ if ($includeOptimizedExecutables) {
         $optimizationSpec.SelfContained = $true
         $optimizationSpec.SingleFile = $true
         $optimizationSpec.Optimization = $optimization
-        $optimizationResult = $builder.Build($optimizationSpec)
+        $optimizationResult = Invoke-ReviewedCompilationBuild -Spec $optimizationSpec
         if (-not $optimizationResult.Succeeded) {
             throw "$optimizationName typed executable failed: $($optimizationResult.Error)`n$($optimizationResult.BuildOutput)"
         }
@@ -108,6 +235,7 @@ if ($includeOptimizedExecutables) {
             throw "$optimizationName typed executable returned an invalid verification result."
         }
         $optimizedExecutableEvidence[$optimizationName] = [pscustomobject]@{
+            ArtifactPath = $optimizationResult.ArtifactPath
             Sha256 = (Get-FileHash -LiteralPath $optimizationResult.ArtifactPath -Algorithm SHA256).Hash
             Bytes = (Get-Item -LiteralPath $optimizationResult.ArtifactPath).Length
         }
@@ -123,6 +251,24 @@ $typedExecutableHash = (Get-FileHash -LiteralPath $typedExecutableResult.Artifac
 $localCallExecutableHash = (Get-FileHash -LiteralPath $localCallResult.ArtifactPath -Algorithm SHA256).Hash
 $currentPowerShell = (Get-Process -Id $PID).Path
 $moduleQualifier = [System.IO.Path]::GetFileNameWithoutExtension($moduleResult.ArtifactPath)
+$profileCalls = $(if ($quick) { 25 } else { 250 })
+$profileCount = 1000
+$profileModule = Import-Module $moduleResult.ArtifactPath -Force -PassThru
+try {
+    $boundaryRuntimeProfile = [PowerForge.PowerShellCompilationBoundaryProfiler]::new().Profile(
+        'generated-command-boundary-amortization',
+        $profileCalls,
+        [Action] { [void][PowerForge.CompilationBenchmarks.PowerShellCompilationBenchmarkHarness]::RunTypedRepeatedLoop($profileCalls, $profileCount) },
+        [Action] {
+            for ($profileIndex = 0; $profileIndex -lt $profileCalls; $profileIndex++) {
+                [void](& "$moduleQualifier\Get-TriangularNumber" $profileCount)
+            }
+        },
+        $(if ($quick) { 1 } else { 2 }),
+        $(if ($quick) { 3 } else { 7 }))
+} finally {
+    Remove-Module $profileModule -Force
+}
 
 New-BenchmarkSuite 'powershell-compilation-real-function' -OutputRoot $outputRoot {
     Add-BenchmarkMetadata Workload 'Production threshold calculation'
@@ -192,8 +338,8 @@ New-BenchmarkSuite 'powershell-compilation-real-function' -OutputRoot $outputRoo
     Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
 }
 
-New-BenchmarkSuite 'powershell-compilation-powerinfoblox-ptr' -OutputRoot $outputRoot {
-    Add-BenchmarkMetadata Workload 'PowerInfoBlox IPv4-to-PTR helper'
+New-BenchmarkSuite 'powershell-compilation-ipv4-ptr' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'IPv4-to-PTR conversion helper'
     Add-BenchmarkMetadata TypedArtifactSha256 $typedHash
     Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
     Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax
@@ -370,6 +516,11 @@ New-BenchmarkSuite 'powershell-compilation-indexed-array' -OutputRoot $outputRoo
 New-BenchmarkSuite 'powershell-compilation-binary-dispatch-amortization' -OutputRoot $outputRoot {
     Add-BenchmarkMetadata Workload 'Equivalent triangular-number work through fine or coarse generated commands'
     Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
+    Add-BenchmarkMetadata BoundaryProfileRuntimeIdentifier $boundaryRuntimeProfile.RuntimeIdentifier
+    Add-BenchmarkMetadata BoundaryProfileInvocations $boundaryRuntimeProfile.BoundaryInvocations
+    Add-BenchmarkMetadata BoundaryProfileOverheadNanosecondsPerBoundary $boundaryRuntimeProfile.EstimatedOverheadNanosecondsPerBoundary
+    Add-BenchmarkMetadata BoundaryProfileOverheadRatio $boundaryRuntimeProfile.EstimatedOverheadRatio
+    Add-BenchmarkMetadata BoundaryProfileAdvisory $boundaryRuntimeProfile.Advisory
     Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax
     Add-BenchmarkCase Loop @{ Calls = $loopCalls; Count = 1000; Expected = 500500L }
 
@@ -431,6 +582,9 @@ New-BenchmarkSuite 'powershell-compilation-packaged-startup' -OutputRoot $output
     foreach ($entry in $optimizedExecutableEvidence.GetEnumerator()) {
         Add-BenchmarkMetadata "$($entry.Key)ExecutableSha256" $entry.Value.Sha256
         Add-BenchmarkMetadata "$($entry.Key)ExecutableBytes" $entry.Value.Bytes
+        if ($entry.Value.PSObject.Properties.Name -contains 'DotNetSdkVersion') {
+            Add-BenchmarkMetadata "$($entry.Key)DotNetSdkVersion" $entry.Value.DotNetSdkVersion
+        }
     }
     Set-BenchmarkPolicy -Warmup 2 -Iterations $(if ($quick) { 3 } else { 10 }) -Order Rotated -OutlierMode ExcludeMinMax
     Add-BenchmarkCase Startup @{ Expected = 150.0 }
@@ -490,4 +644,75 @@ New-BenchmarkSuite 'powershell-compilation-typed-local-calls' -OutputRoot $outpu
         Assert-BenchmarkValue -Actual ([long] $run.Result) -Expected ([long] $case.Expected)
     }
     Add-BenchmarkComparison -Dimension Engine -Baseline PowerShellFile -Metric MedianMs -TieTolerance 0.05
+}
+
+New-BenchmarkSuite 'powershell-compilation-build-cost' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Reviewed dependency planning and typed library build'
+    Set-BenchmarkPolicy -Warmup $(if ($quick) { 0 } else { 1 }) -Iterations $(if ($quick) { 2 } else { 5 }) -Order Rotated -MemoryCleanup BeforeIteration -OutlierMode None
+    Add-BenchmarkCase Build @{}
+
+    Add-BenchmarkEngine Compiler {
+        Add-BenchmarkOperation Build {
+            param($case, $run)
+            $process = [System.Diagnostics.Process]::GetCurrentProcess()
+            $process.Refresh()
+            [long] $workingSetBefore = $process.WorkingSet64
+            [long] $allocatedBefore = [GC]::GetTotalAllocatedBytes($false)
+            $spec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+                $workloadPath,
+                (Join-Path $run.OutputDirectory 'artifact'),
+                'PowerForge.CompilationBudget.Library',
+                [PowerForge.PowerShellCompilationArtifactKind]::Library,
+                [PowerForge.PowerShellCompilationMode]::Strict)
+            $spec.TargetFramework = 'net8.0'
+            $spec.UseBuildCache = $false
+            $run.Result = Invoke-ReviewedCompilationBuild -Spec $spec
+            $process.Refresh()
+            $run.ManagedAllocatedBytes = [Math]::Max(0L, [GC]::GetTotalAllocatedBytes($false) - $allocatedBefore)
+            $run.ProcessWorkingSetDeltaBytes = [Math]::Max(0L, $process.WorkingSet64 - $workingSetBefore)
+            $run.PrimaryArtifactBytes = if ($run.Result.Succeeded) { (Get-Item -LiteralPath $run.Result.ArtifactPath).Length } else { 0L }
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        if (-not $run.Result.Succeeded) { throw "Reviewed build failed: $($run.Result.Error)" }
+        $identity = [System.Reflection.AssemblyName]::GetAssemblyName($run.Result.ArtifactPath)
+        Assert-BenchmarkValue -Actual $identity.Name -Expected 'PowerForge.CompilationBudget.Library'
+    }
+    Add-BenchmarkMetric ManagedAllocatedBytes { param($case, $run) [double] $run.ManagedAllocatedBytes }
+    Add-BenchmarkMetric ProcessWorkingSetDeltaBytes { param($case, $run) [double] $run.ProcessWorkingSetDeltaBytes }
+    Add-BenchmarkMetric PrimaryArtifactBytes { param($case, $run) [double] $run.PrimaryArtifactBytes }
+}
+
+New-BenchmarkSuite 'powershell-compilation-import-cost' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Generated binary module import and first validated call'
+    Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
+    Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order Rotated -MemoryCleanup BeforeIteration -OutlierMode ExcludeMinMax
+    Add-BenchmarkCase Import @{ Expected = 150.0 }
+
+    Set-BenchmarkSetup {
+        Remove-Module -Name $moduleQualifier -Force -ErrorAction SilentlyContinue
+    }
+    Add-BenchmarkEngine BinaryModule {
+        Add-BenchmarkOperation Import {
+            param($case, $run)
+            $process = [System.Diagnostics.Process]::GetCurrentProcess()
+            $process.Refresh()
+            [long] $workingSetBefore = $process.WorkingSet64
+            [long] $allocatedBefore = [GC]::GetTotalAllocatedBytes($false)
+            $run.Result = Import-Module -Name $moduleResult.ArtifactPath -Global -Force -PassThru -ErrorAction Stop
+            $process.Refresh()
+            $run.ManagedAllocatedBytes = [Math]::Max(0L, [GC]::GetTotalAllocatedBytes($false) - $allocatedBefore)
+            $run.ProcessWorkingSetDeltaBytes = [Math]::Max(0L, $process.WorkingSet64 - $workingSetBefore)
+        }
+    }
+    Add-BenchmarkValidation {
+        param($case, $run)
+        if ($null -eq $run.Result) { throw 'Generated module import returned no module evidence.' }
+        $actual = & "$moduleQualifier\Get-AllowedAverageMs" 100.0 0.5 30.0
+        Assert-BenchmarkValue -Actual ([double] $actual) -Expected ([double] $case.Expected)
+    }
+    Add-BenchmarkMetric ManagedAllocatedBytes { param($case, $run) [double] $run.ManagedAllocatedBytes }
+    Add-BenchmarkMetric ProcessWorkingSetDeltaBytes { param($case, $run) [double] $run.ProcessWorkingSetDeltaBytes }
 }

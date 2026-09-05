@@ -7,6 +7,47 @@ namespace PowerForge.Tests;
 public sealed class ModulePublisherPackagingTests
 {
     [Fact]
+    [Trait("Category", "PowerShellCompilation")]
+    public void PrepareModulePackageForRepositoryPublish_UsesFinalizedCompilerPayloadExactly()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? publishPath = null;
+        try
+        {
+            const string moduleName = "RandomBinaryModule";
+            var manifest = Path.Combine(root.FullName, moduleName + ".psd1");
+            var assembly = Path.Combine(root.FullName, moduleName + ".dll");
+            var evidence = Path.Combine(root.FullName, moduleName + ".powerforge-compilation.json");
+            var resource = Path.Combine(root.FullName, "Arbitrary", "payload.dat");
+            Directory.CreateDirectory(Path.GetDirectoryName(resource)!);
+            File.WriteAllText(manifest, "@{ ModuleVersion = '1.0.0'; RootModule = 'RandomBinaryModule.dll' }");
+            File.WriteAllText(assembly, "binary");
+            File.WriteAllText(evidence, "{}");
+            File.WriteAllText(resource, "selected");
+            File.WriteAllText(Path.Combine(root.FullName, "ignored.txt"), "not finalized");
+
+            publishPath = ModulePublisher.PrepareModulePackageForRepositoryPublish(
+                root.FullName,
+                moduleName,
+                information: null,
+                delivery: null,
+                includeScriptFolders: false,
+                finalizedPayloadFiles: new[] { manifest, assembly, evidence, resource });
+
+            Assert.True(File.Exists(Path.Combine(publishPath, moduleName + ".psd1")));
+            Assert.True(File.Exists(Path.Combine(publishPath, moduleName + ".dll")));
+            Assert.True(File.Exists(Path.Combine(publishPath, moduleName + ".powerforge-compilation.json")));
+            Assert.True(File.Exists(Path.Combine(publishPath, "Arbitrary", "payload.dat")));
+            Assert.False(File.Exists(Path.Combine(publishPath, "ignored.txt")));
+        }
+        finally
+        {
+            ModulePublisher.CleanupTemporaryPublishPath(publishPath);
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void PrepareModulePackageForRepositoryPublish_CopiesModuleLayoutOnly()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -13,6 +13,8 @@ public sealed class ProcessRunRequest
     private Action? _preStartBoundary;
     private int _startBoundaryInvoked;
     private Action? _startBoundary;
+    private int _startedProcessBoundaryInvoked;
+    private Action<int>? _startedProcessBoundary;
     private int _completionBoundaryInvoked;
     private Action<ProcessRunResult>? _completionBoundary;
     /// <summary>
@@ -194,6 +196,9 @@ public sealed class ProcessRunRequest
     /// </summary>
     public bool CaptureError { get; }
 
+    /// <summary>Maximum characters retained independently for standard output and standard error.</summary>
+    public int MaxCapturedOutputCharacters { get; set; } = int.MaxValue;
+
     /// <summary>Optional callback invoked for each captured standard-output line.</summary>
     public Action<string>? OutputLineReceived { get; }
 
@@ -216,6 +221,23 @@ public sealed class ProcessRunRequest
 
     internal void SetStartBoundary(Action startBoundary)
         => _startBoundary = startBoundary ?? throw new ArgumentNullException(nameof(startBoundary));
+
+    internal void SetStartedProcessBoundary(Action<int> startedProcessBoundary)
+        => _startedProcessBoundary = startedProcessBoundary ?? throw new ArgumentNullException(nameof(startedProcessBoundary));
+
+    /// <summary>
+    /// Supplies the operating-system process identifier immediately after a successful start.
+    /// Custom runners must invoke this boundary before allowing externally visible child work.
+    /// </summary>
+    /// <param name="processId">Started operating-system process identifier.</param>
+    public void InvokeStartedProcessBoundary(int processId)
+    {
+        if (processId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(processId));
+        if (_startedProcessBoundary is null || Interlocked.Exchange(ref _startedProcessBoundaryInvoked, 1) != 0)
+            return;
+        _startedProcessBoundary(processId);
+    }
 
     /// <summary>
     /// Runs a final fail-closed validation immediately before process creation.
@@ -276,13 +298,17 @@ public sealed class ProcessRunResult
     /// <param name="executable">Executable name or path used to launch the process.</param>
     /// <param name="duration">Observed process duration.</param>
     /// <param name="timedOut">Indicates whether the process timed out.</param>
+    /// <param name="standardOutputLimitExceeded">Whether retained standard output exceeded its configured character limit.</param>
+    /// <param name="standardErrorLimitExceeded">Whether retained standard error exceeded its configured character limit.</param>
     public ProcessRunResult(
         int exitCode,
         string stdOut,
         string stdErr,
         string executable,
         TimeSpan duration,
-        bool timedOut)
+        bool timedOut,
+        bool standardOutputLimitExceeded = false,
+        bool standardErrorLimitExceeded = false)
     {
         ExitCode = exitCode;
         StdOut = stdOut;
@@ -290,6 +316,8 @@ public sealed class ProcessRunResult
         Executable = executable;
         Duration = duration;
         TimedOut = timedOut;
+        StandardOutputLimitExceeded = standardOutputLimitExceeded;
+        StandardErrorLimitExceeded = standardErrorLimitExceeded;
     }
 
     /// <summary>
@@ -322,10 +350,16 @@ public sealed class ProcessRunResult
     /// </summary>
     public bool TimedOut { get; }
 
+    /// <summary>Whether standard output exceeded the configured retained-character limit.</summary>
+    public bool StandardOutputLimitExceeded { get; }
+
+    /// <summary>Whether standard error exceeded the configured retained-character limit.</summary>
+    public bool StandardErrorLimitExceeded { get; }
+
     /// <summary>
     /// Gets a value indicating whether the process completed successfully.
     /// </summary>
-    public bool Succeeded => ExitCode == 0 && !TimedOut;
+    public bool Succeeded => ExitCode == 0 && !TimedOut && !StandardOutputLimitExceeded && !StandardErrorLimitExceeded;
 }
 
 /// <summary>
@@ -341,7 +375,8 @@ public interface IProcessRunner
     /// <returns>Structured process execution result.</returns>
     /// <remarks>
     /// Implementations must call <see cref="ProcessRunRequest.InvokePreStartBoundary"/>
-    /// immediately before process creation, then call
+    /// immediately before process creation, then call <see cref="ProcessRunRequest.InvokeStartedProcessBoundary"/>
+    /// with the operating-system process identifier and
     /// <see cref="ProcessRunRequest.InvokeStartBoundary"/> immediately after the process starts
     /// successfully. They must also call
     /// <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
@@ -365,6 +400,8 @@ public sealed class ProcessRunner : IProcessRunner
             throw new ArgumentException("Executable name is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.WorkingDirectory))
             throw new ArgumentException("Working directory is required.", nameof(request));
+        if (request.MaxCapturedOutputCharacters <= 0)
+            throw new ArgumentOutOfRangeException(nameof(request), "The captured-output character limit must be positive.");
 
         using var process = new Process {
             StartInfo = BuildStartInfo(request)
@@ -372,30 +409,48 @@ public sealed class ProcessRunner : IProcessRunner
 
         request.InvokePreStartBoundary();
         var stopwatch = Stopwatch.StartNew();
+        var started = false;
         try
         {
             process.Start();
+            started = true;
+            request.InvokeStartedProcessBoundary(process.Id);
             request.InvokeStartBoundary();
         }
         catch (Exception ex)
         {
+            if (started) TryKill(process);
             stopwatch.Stop();
-            var failedStart = new ProcessRunResult(127, string.Empty, ex.Message, request.FileName, stopwatch.Elapsed, timedOut: false);
+            var boundaryTimedOut = started && ex is TimeoutException;
+            var failedStart = new ProcessRunResult(
+                boundaryTimedOut ? 124 : 127,
+                string.Empty,
+                boundaryTimedOut ? "Timeout" : ex.Message,
+                request.FileName,
+                stopwatch.Elapsed,
+                boundaryTimedOut);
             request.InvokeCompletionBoundary(failedStart);
             return failedStart;
         }
 
         var stdoutTask = request.CaptureOutput
-            ? ReadOutputAsync(process.StandardOutput, request.OutputLineReceived)
-            : Task.FromResult(string.Empty);
+            ? ReadOutputAsync(process.StandardOutput, request.OutputLineReceived, request.MaxCapturedOutputCharacters)
+            : Task.FromResult(CapturedOutput.Empty);
         var stderrTask = request.CaptureError
-            ? ReadOutputAsync(process.StandardError, request.ErrorLineReceived)
-            : Task.FromResult(string.Empty);
+            ? ReadOutputAsync(process.StandardError, request.ErrorLineReceived, request.MaxCapturedOutputCharacters)
+            : Task.FromResult(CapturedOutput.Empty);
         var timedOut = false;
 
         try
         {
-            await WaitForExitAsync(process, request.Timeout, cancellationToken).ConfigureAwait(false);
+            var remainingTimeout = request.Timeout;
+            if (request.Timeout > TimeSpan.Zero && request.Timeout != Timeout.InfiniteTimeSpan)
+            {
+                remainingTimeout = request.Timeout - stopwatch.Elapsed;
+                if (remainingTimeout <= TimeSpan.Zero)
+                    throw new OperationCanceledException();
+            }
+            await WaitForExitAsync(process, remainingTimeout, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -428,36 +483,61 @@ public sealed class ProcessRunner : IProcessRunner
 
         var stdout = request.CaptureOutput
             ? await DrainAsync(stdoutTask).ConfigureAwait(false)
-            : string.Empty;
+            : CapturedOutput.Empty;
         var stderr = request.CaptureError
             ? await DrainAsync(stderrTask).ConfigureAwait(false)
-            : string.Empty;
+            : CapturedOutput.Empty;
         stopwatch.Stop();
 
-        if (timedOut && string.IsNullOrWhiteSpace(stderr))
-            stderr = "Timeout";
+        if (timedOut && string.IsNullOrWhiteSpace(stderr.Value))
+            stderr = new CapturedOutput("Timeout", stderr.LimitExceeded);
 
-        var result = new ProcessRunResult(exitCode, stdout, stderr, process.StartInfo.FileName ?? request.FileName, stopwatch.Elapsed, timedOut);
+        var result = new ProcessRunResult(
+            exitCode,
+            stdout.Value,
+            stderr.Value,
+            process.StartInfo.FileName ?? request.FileName,
+            stopwatch.Elapsed,
+            timedOut,
+            stdout.LimitExceeded,
+            stderr.LimitExceeded);
         request.InvokeCompletionBoundary(result);
         return result;
     }
 
-    private static async Task<string> ReadOutputAsync(
+    private static async Task<CapturedOutput> ReadOutputAsync(
         StreamReader reader,
-        Action<string>? lineReceived)
+        Action<string>? lineReceived,
+        int maximumCharacters)
     {
         if (lineReceived is null)
-            return await reader.ReadToEndAsync().ConfigureAwait(false);
+        {
+            var directOutput = new StringBuilder(Math.Min(maximumCharacters, 4096));
+            var buffer = new char[4096];
+            var exceeded = false;
+            int read;
+            while ((read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
+            {
+                var remaining = maximumCharacters - directOutput.Length;
+                if (remaining > 0) directOutput.Append(buffer, 0, Math.Min(remaining, read));
+                if (read > remaining) exceeded = true;
+            }
+            return new CapturedOutput(directOutput.ToString(), exceeded);
+        }
 
         var output = new StringBuilder();
+        var limitExceeded = false;
         string? line;
         while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
         {
-            output.AppendLine(line);
+            var retainedLine = line + Environment.NewLine;
+            var remaining = maximumCharacters - output.Length;
+            if (remaining > 0) output.Append(retainedLine, 0, Math.Min(remaining, retainedLine.Length));
+            if (retainedLine.Length > remaining) limitExceeded = true;
             try { lineReceived(line); } catch { }
         }
 
-        return output.ToString();
+        return new CapturedOutput(output.ToString(), limitExceeded);
     }
 
     private static ProcessStartInfo BuildStartInfo(ProcessRunRequest request)
@@ -513,7 +593,7 @@ public sealed class ProcessRunner : IProcessRunner
         }
     }
 
-    private static async Task<string> DrainAsync(Task<string> readTask)
+    private static async Task<CapturedOutput> DrainAsync(Task<CapturedOutput> readTask)
     {
         try
         {
@@ -521,8 +601,22 @@ public sealed class ProcessRunner : IProcessRunner
         }
         catch
         {
-            return string.Empty;
+            return CapturedOutput.Empty;
         }
+    }
+
+    private sealed class CapturedOutput
+    {
+        internal static CapturedOutput Empty { get; } = new(string.Empty, false);
+
+        internal CapturedOutput(string value, bool limitExceeded)
+        {
+            Value = value;
+            LimitExceeded = limitExceeded;
+        }
+
+        internal string Value { get; }
+        internal bool LimitExceeded { get; }
     }
 
     private static int SafeGetExitCode(Process process)

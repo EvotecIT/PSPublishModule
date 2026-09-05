@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Generic.External.Binary.Module</AssemblyName>
+    <RootNamespace>Generic.External.Binary.Module</RootNamespace>
+    <Version>4.5.6</Version>
+    <AssemblyVersion>4.5.6.0</AssemblyVersion>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.5" />
+    <ProjectReference Include="..\PowerShellCompilationExternalBinaryDependencyFixture\PowerShellCompilationExternalBinaryDependencyFixture.csproj" />
+  </ItemGroup>
+</Project>

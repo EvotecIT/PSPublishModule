@@ -88,9 +88,11 @@ public sealed partial class ModulePipelineRunner
                 stagingResult,
                 state.MergeExecution,
                 state.ProjectManifestSyncMessage,
-                state.TypeAcceleratorSurfaceReport))
+                state.TypeAcceleratorSurfaceReport,
+                state.PowerShellCompilationResult))
         {
-            TypeAcceleratorSurfaceReport = state.TypeAcceleratorSurfaceReport
+            TypeAcceleratorSurfaceReport = state.TypeAcceleratorSurfaceReport,
+            PowerShellCompilationResult = state.PowerShellCompilationResult
         };
 
         if (diagnosticsPolicy?.PolicyViolated == true)
@@ -110,9 +112,31 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildPipeline.StagingResult? stagingResult,
         MergeExecutionResult? mergeExecution,
         string? projectManifestSyncMessage,
-        ModuleTypeAcceleratorSurfaceReport? typeAcceleratorSurfaceReport)
+        ModuleTypeAcceleratorSurfaceReport? typeAcceleratorSurfaceReport,
+        PowerShellModuleCompilationResult? powerShellCompilationResult)
     {
         var notes = new List<ModuleOwnerNote>();
+
+        if (powerShellCompilationResult is not null)
+        {
+            notes.Add(new ModuleOwnerNote(
+                "PowerShell Compilation",
+                powerShellCompilationResult.UsesPowerShellRuntimeFallback
+                    ? ModuleOwnerNoteSeverity.Warning
+                    : ModuleOwnerNoteSeverity.Info,
+                summary: $"Generated a {powerShellCompilationResult.Mode} binary module with {powerShellCompilationResult.CompiledUnits}/{powerShellCompilationResult.TotalUnits} typed units ({powerShellCompilationResult.CoveragePercentage:F2}%).",
+                nextStep: powerShellCompilationResult.UsesPowerShellRuntimeFallback
+                    ? "Review compiler diagnostics before switching this module to Strict mode."
+                    : string.Empty,
+                details: new[]
+                {
+                    powerShellCompilationResult.UsesPowerShellRuntimeFallback
+                        ? $"{powerShellCompilationResult.RuntimeFallbackUnits} unit(s) retain explicit PowerShell runtime fallback."
+                        : "No authored unit uses PowerShell runtime fallback.",
+                    $"{powerShellCompilationResult.PromotedTypedRegions} typed region(s) execute in generated CLR helpers without counting their retained functions as emitted units.",
+                    $"Assembly: {powerShellCompilationResult.AssemblyPath}"
+                }));
+        }
 
         if (dependencyInstallResults is { Length: > 0 })
         {

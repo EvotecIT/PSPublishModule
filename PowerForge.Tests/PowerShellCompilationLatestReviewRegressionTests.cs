@@ -17,7 +17,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.PackagedDefaultPaths",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "config.json"), "{}");
@@ -78,7 +78,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                     linkedOutput,
                     artifactName,
                     PowerShellCompilationArtifactKind.Library,
-                    PowerShellCompilationMode.Strict)));
+                    PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)));
 
             Assert.Contains("symbolic link or junction", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(sourcePath));
@@ -102,7 +102,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.PackagedDotSource",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("dot-sourced", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -126,7 +126,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 fixture.OutputPath,
                 "PowerForge.PackagedNamedBlock",
                 PowerShellCompilationArtifactKind.Executable,
-                PowerShellCompilationMode.Package));
+                PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
             Assert.False(result.Succeeded);
             Assert.Contains("named block", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -151,7 +151,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 fixture.OutputPath,
                 "PowerForge.PackagedInteractiveHost",
                 PowerShellCompilationArtifactKind.Executable,
-                PowerShellCompilationMode.Package));
+                PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
             Assert.False(result.Succeeded);
             Assert.Contains("interactive", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -160,7 +160,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Analyze_AllowsTypedArrayMutationAndRejectsStaticMemberMutation()
+    public void Analyze_AllowsTypedArrayAndExactStaticMemberMutation()
     {
         using var fixture = ArtifactFixture.Create(
             "function Set-Indexed { param([int[]] $Values) $Values[0] = 9; return $Values[0] } " +
@@ -171,10 +171,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var units = Assert.Single(plan.Files).Units;
         Assert.Equal(2, units.Length);
         Assert.True(units.Single(unit => unit.Name == "Set-Indexed").IsCompilable);
-        var unsafeMember = units.Single(unit => unit.Name == "Set-Member");
-        Assert.False(unsafeMember.IsCompilable);
-        Assert.Contains(unsafeMember.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("direct local-variable assignment", StringComparison.OrdinalIgnoreCase));
+        Assert.True(units.Single(unit => unit.Name == "Set-Member").IsCompilable);
     }
 
     [Fact]
@@ -225,17 +222,17 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.DefaultLibrary",
-            PowerShellCompilationArtifactKind.Library);
+            PowerShellCompilationArtifactKind.Library, allowUnreviewedDependencyResolution: true);
         var module = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.DefaultModule",
-            PowerShellCompilationArtifactKind.BinaryModule);
+            PowerShellCompilationArtifactKind.BinaryModule, allowUnreviewedDependencyResolution: true);
         var executable = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.DefaultExecutable",
-            PowerShellCompilationArtifactKind.Executable);
+            PowerShellCompilationArtifactKind.Executable, allowUnreviewedDependencyResolution: true);
 
         Assert.Equal(PowerShellCompilationMode.Hybrid, library.Mode);
         Assert.Equal(PowerShellCompilationMode.Hybrid, module.Mode);
@@ -268,7 +265,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.NormalizedCollision",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -291,7 +288,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.PackagedAbbreviation",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var run = Run(result.ArtifactPath!, "-Fo", "Ada");
@@ -310,7 +307,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ControlConstants",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
@@ -329,7 +326,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ParameterLiteral",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var run = Run(result.ArtifactPath!, "--" + parameterName, "accepted");
@@ -357,7 +354,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                     fixture.OutputPath,
                     name,
                     PowerShellCompilationArtifactKind.Library,
-                    PowerShellCompilationMode.Hybrid)));
+                    PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)));
 
             Assert.Contains("reserved publication-control namespace", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
@@ -397,7 +394,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 outputPath,
                 "PowerForge.LinkedAlias",
                 PowerShellCompilationArtifactKind.Library,
-                PowerShellCompilationMode.Strict));
+                PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
             Assert.False(result.Succeeded);
             Assert.Contains("symbolic link or junction", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -426,7 +423,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ConditionalManifestExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var run = Run(
@@ -450,7 +447,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.DotnetEntryPath",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             SingleFile = false
         });
@@ -477,7 +474,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.TypedAbbreviation",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var run = Run(result.ArtifactPath!, "-Na", "Ada");
@@ -518,7 +515,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.IncrementSemantics",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
@@ -539,7 +536,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.BigIntegerLiteral",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
@@ -547,6 +544,28 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Equal(
             System.Numerics.BigInteger.Parse(value, System.Globalization.CultureInfo.InvariantCulture),
             type.GetMethod("Get_BigValue")!.Invoke(null, null));
+    }
+
+    [Fact]
+    public void Build_StrictLibraryPreservesCompileTimeBigIntegerConversions()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-BigValue { return [bigint] '42' } " +
+            "function Get-BigValues { return [bigint[]] ('42', '43') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.BigIntegerConversions",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var type = assembly.GetType("PowerForge.Compiled.PowerForge_BigIntegerConversionsMethods", throwOnError: true)!;
+        Assert.Equal(new System.Numerics.BigInteger(42), type.GetMethod("Get_BigValue")!.Invoke(null, null));
+        Assert.Equal(
+            new[] { new System.Numerics.BigInteger(42), new System.Numerics.BigInteger(43) },
+            Assert.IsType<System.Numerics.BigInteger[]>(type.GetMethod("Get_BigValues")!.Invoke(null, null)));
     }
 
     [Fact]
@@ -561,7 +580,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ArrayRuntimeTypes",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
@@ -581,7 +600,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.CommonSwitchAliases",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var run = Run(result.ArtifactPath!, "-vb", "-db", "Ada");

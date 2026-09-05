@@ -9,16 +9,16 @@ namespace PSPublishModule;
 /// Builds a packaged executable, typed CLR library, or importable binary/hybrid module from PowerShell source.
 /// </summary>
 /// <example>
-/// <summary>Build a module directly from its conventional folder layout</summary>
-/// <code>Build-PowerShellArtifact -Path .\MyModule -EmitSource</code>
+/// <summary>Build a module from a separately reviewed dependency graph</summary>
+/// <code>$lock = (powerforge powershell analyze .\MyModule --output json | ConvertFrom-Json).result.dependencyGraph; Build-PowerShellArtifact -Path .\MyModule -EmitSource -DependencyLock $lock</code>
 /// </example>
 /// <example>
 /// <summary>Package a standalone script as a single-file executable</summary>
-/// <code>Build-PowerShellArtifact -Path .\tool.ps1</code>
+/// <code>Build-PowerShellArtifact -Path .\tool.ps1 -AllowUnreviewedDependencies</code>
 /// </example>
 /// <example>
 /// <summary>Compile several loose scripts into one typed cmdlet module</summary>
-/// <code>Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule</code>
+/// <code>Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule -AllowUnreviewedDependencies</code>
 /// </example>
 [Cmdlet("Build", "PowerShellArtifact", SupportsShouldProcess = true)]
 [OutputType(typeof(PowerShellCompilationBuildResult))]
@@ -82,6 +82,18 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public PowerShellCompilationExecutableOptimization Optimization { get; set; }
 
+    /// <summary>Explicit semantic, execution, and deployment target. Its kind and mode must match the resolved input.</summary>
+    [Parameter]
+    public PowerShellCompilationTargetContract? TargetContract { get; set; }
+
+    /// <summary>Use the verified content-addressed generated-build cache.</summary>
+    [Parameter]
+    public bool UseBuildCache { get; set; } = true;
+
+    /// <summary>Optional machine-local content-addressed build-cache root.</summary>
+    [Parameter]
+    public string? BuildCacheDirectory { get; set; }
+
     /// <summary>Authenticode-sign generated signable files before integrity hashes are recorded.</summary>
     [Parameter]
     public SwitchParameter SignArtifact { get; set; }
@@ -111,10 +123,26 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public SwitchParameter EmitSource { get; set; }
 
+    /// <summary>Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.</summary>
+    [Parameter]
+    public SwitchParameter EmitIrSnapshots { get; set; }
+
+    /// <summary>Reviewed public ABI SHA-256 that the generated artifact must match.</summary>
+    [Parameter]
+    public string? ExpectedPublicAbiSha256 { get; set; }
+
     /// <summary>Maximum restore and compile time in seconds.</summary>
     [Parameter]
     [ValidateRange(1, int.MaxValue)]
     public int TimeoutSeconds { get; set; } = 300;
+
+    /// <summary>Dependency graph produced by analysis and reviewed before this build.</summary>
+    [Parameter]
+    public PowerShellCompilationDependencyGraph? DependencyLock { get; set; }
+
+    /// <summary>Explicitly allow a development build to resolve dependencies without a separately reviewed lock.</summary>
+    [Parameter]
+    public SwitchParameter AllowUnreviewedDependencies { get; set; }
 
     /// <inheritdoc />
     protected override void ProcessRecord()
@@ -162,6 +190,9 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             SelfContained = SelfContained.IsPresent,
             SingleFile = SingleFile,
             Optimization = Optimization,
+            TargetContract = TargetContract,
+            UseBuildCache = UseBuildCache,
+            BuildCacheDirectory = BuildCacheDirectory,
             SignArtifact = SignArtifact.IsPresent,
             CertificateThumbprint = CertificateThumbprint,
             CertificateStoreLocation = (PowerForge.CertificateStoreLocation)(int)CertificateStoreLocation,
@@ -169,7 +200,11 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             SigningTimeoutSeconds = SigningTimeoutSeconds,
             KeepBuildWorkspace = KeepBuildWorkspace.IsPresent,
             EmitSource = EmitSource.IsPresent,
-            TimeoutSeconds = TimeoutSeconds
+            EmitIrSnapshots = EmitIrSnapshots.IsPresent,
+            ExpectedPublicAbiSha256 = ExpectedPublicAbiSha256,
+            TimeoutSeconds = TimeoutSeconds,
+            ExpectedDependencyLock = DependencyLock,
+            AllowUnreviewedDependencyResolution = AllowUnreviewedDependencies.IsPresent
         };
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
         if (!result.Succeeded)

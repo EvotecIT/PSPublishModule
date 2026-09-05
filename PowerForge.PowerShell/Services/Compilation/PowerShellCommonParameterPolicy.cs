@@ -30,14 +30,19 @@ internal static class PowerShellCommonParameterPolicy
     };
 
     internal static PowerShellCommonParameter[] GetAvailable(ParamBlockAst? parameterBlock, string? targetFramework)
+        => GetAvailable(PowerShellAdvancedFunctionPolicy.GetBinding(parameterBlock), targetFramework);
+
+    internal static PowerShellCommonParameter[] GetAvailable(
+        PowerShellCompilationCommandBinding commandBinding,
+        string? targetFramework)
     {
-        if (!PowerShellAdvancedFunctionPolicy.IsAdvanced(parameterBlock))
+        if (!commandBinding.IsAdvancedFunction)
             return Array.Empty<PowerShellCommonParameter>();
 
         var parameters = StandardParameters
             .Where(parameter => parameter.IsAvailableFor(targetFramework))
             .ToList();
-        if (PowerShellAdvancedFunctionPolicy.SupportsShouldProcess(parameterBlock))
+        if (commandBinding.SupportsShouldProcess)
             parameters.AddRange(ShouldProcessParameters);
         return parameters.ToArray();
     }

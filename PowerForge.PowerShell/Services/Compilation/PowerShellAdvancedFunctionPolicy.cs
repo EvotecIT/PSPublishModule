@@ -4,6 +4,17 @@ namespace PowerForge;
 
 internal static class PowerShellAdvancedFunctionPolicy
 {
+    internal static string[] GetAliases(FunctionDefinitionAst function)
+        => function.Body.ParamBlock?.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute =>
+                IsAttributeNamed(attribute, "Alias") ||
+                IsAttributeNamed(attribute, "AliasAttribute"))
+            .SelectMany(static attribute => attribute.PositionalArguments.OfType<StringConstantExpressionAst>())
+            .Select(static alias => alias.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? Array.Empty<string>();
+
     internal static bool IsAdvanced(FunctionDefinitionAst function)
         => IsAdvanced(function.Body.ParamBlock);
 

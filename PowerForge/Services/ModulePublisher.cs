@@ -72,6 +72,7 @@ public sealed partial class ModulePublisher
             remotePublishAttempted: null,
             remoteSideEffectObserved: null,
             CancellationToken.None,
+            finalizeRepositoryModule: null,
             gitHubProgress: null);
 
     internal ModulePublishResult Publish(
@@ -83,6 +84,7 @@ public sealed partial class ModulePublisher
         Action? remotePublishAttempted,
         Action? remoteSideEffectObserved,
         CancellationToken cancellationToken = default,
+        Action<string, string>? finalizeRepositoryModule = null,
         IGitHubReleaseProgressReporter? gitHubProgress = null)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
@@ -116,7 +118,8 @@ public sealed partial class ModulePublisher
                 includeScriptFolders,
                 remotePublishAttempted,
                 remoteSideEffectObserved,
-                cancellationToken),
+                cancellationToken,
+                finalizeRepositoryModule),
             PublishDestination.GitHub => PublishToGitHub(
                 publish,
                 plan,
@@ -328,7 +331,8 @@ public sealed partial class ModulePublisher
         bool includeScriptFolders,
         Action? remotePublishAttempted,
         Action? remoteSideEffectObserved,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<string, string>? finalizeRepositoryModule)
     {
         var (repositoryName, repoConfig) = ResolveRepository(publish);
         repoConfig = NormalizeRepositoryPaths(repoConfig, plan.ProjectRoot);
@@ -368,20 +372,21 @@ public sealed partial class ModulePublisher
                     includeScriptFolders,
                     remotePublishAttempted,
                     remoteSideEffectObserved,
-                    cancellationToken);
+                    cancellationToken,
+                    finalizeRepositoryModule);
             }
 
             try
             {
-                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
+                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken, finalizeRepositoryModule);
             }
             catch (PowerShellToolNotAvailableException)
             {
-                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
+                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken, finalizeRepositoryModule);
             }
         }
 
-        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken);
+        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken, finalizeRepositoryModule);
     }
 
     private ModulePublishResult PublishToRepositoryWithTool(
@@ -394,7 +399,8 @@ public sealed partial class ModulePublisher
         bool includeScriptFolders,
         Action? remotePublishAttempted,
         Action? remoteSideEffectObserved,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<string, string>? finalizeRepositoryModule)
     {
         if (publish.PublishRequiredModules && tool == PublishTool.PowerShellGet)
         {
@@ -424,7 +430,9 @@ public sealed partial class ModulePublisher
                 moduleName: plan.ModuleName,
                 information: plan.Information,
                 delivery: plan.Delivery,
-                includeScriptFolders: includeScriptFolders);
+                includeScriptFolders: includeScriptFolders,
+                finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
+            finalizeRepositoryModule?.Invoke(temporaryPublishPath, plan.ModuleName);
 
             if (tool != PublishTool.ManagedModule && repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
@@ -559,7 +567,8 @@ public sealed partial class ModulePublisher
         string moduleName,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
-        bool includeScriptFolders)
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
         if (string.IsNullOrWhiteSpace(stagingPath))
             throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
@@ -578,7 +587,8 @@ public sealed partial class ModulePublisher
             destinationModuleRoot: publishPath,
             information: information,
             delivery: delivery,
-            includeScriptFolders: includeScriptFolders);
+            includeScriptFolders: includeScriptFolders,
+            finalizedPayloadFiles: finalizedPayloadFiles);
 
         return publishPath;
     }
