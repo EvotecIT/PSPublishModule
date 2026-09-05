@@ -47,6 +47,9 @@ Complete in the engine and deployed on the Evotec website.
 - `agents.json` reports WebMCP only after rendered-artifact verification passes.
 - A theme can bind its existing search implementation instead of maintaining a
   second ranking engine.
+- A theme whose visible search cannot reliably react to a synthetic input event
+  can predeclare `renderVisibleResults(response, context)` and render the
+  runtime's already-normalized, bounded results without loading a second index.
 
 ### Phase 2: Public documentation portfolio
 

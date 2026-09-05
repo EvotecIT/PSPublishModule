@@ -18,6 +18,9 @@
 
   var api = global.PowerForgeWebMcpSearch || {};
   var adapter = api.adapter || null;
+  var renderVisibleResults = typeof api.renderVisibleResults === 'function'
+    ? api.renderVisibleResults
+    : null;
   var registrationController = null;
   var indexPromise = null;
 
@@ -111,11 +114,30 @@
     };
   }
 
-  function syncVisibleSearch(query) {
+  function throwIfAborted(signal) {
+    if (signal && signal.aborted) {
+      throw new DOMException('The WebMCP search was cancelled.', 'AbortError');
+    }
+  }
+
+  async function syncVisibleSearch(response, request, usesAdapter) {
+    throwIfAborted(request.signal);
+
+    if (renderVisibleResults) {
+      var visibleResponse = JSON.parse(JSON.stringify(response));
+      await awaitWithSignal(Promise.resolve().then(function () {
+        throwIfAborted(request.signal);
+        return renderVisibleResults(visibleResponse, { signal: request.signal });
+      }), request.signal);
+      return;
+    }
+
+    if (usesAdapter) return;
     var input = surface.querySelector('[data-search-page-input], #pf-search-query');
-    if (!input) return;
-    input.value = query;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
+    if (input) {
+      input.value = response.query;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }
 
   function loadIndex() {
@@ -214,9 +236,7 @@
 
   async function genericSearch(request) {
     var entries = await awaitWithSignal(loadIndex(), request.signal);
-    var result = searchEntries(entries, request.query, request.limit);
-    syncVisibleSearch(request.query);
-    return result;
+    return searchEntries(entries, request.query, request.limit);
   }
 
   function normalizeResponse(result, request) {
@@ -260,10 +280,13 @@
       limit: boundedInteger(input.limit, DEFAULT_RESULT_LIMIT, 1, MAX_RESULT_LIMIT),
       signal: context && context.signal
     };
-    var result = adapter && typeof adapter.search === 'function'
+    var usesAdapter = Boolean(adapter && typeof adapter.search === 'function');
+    var result = usesAdapter
       ? await adapter.search(request)
       : await genericSearch(request);
-    return normalizeResponse(result, request);
+    var response = normalizeResponse(result, request);
+    await syncVisibleSearch(response, request, usesAdapter);
+    return response;
   }
 
   api.bindAdapter = function (nextAdapter) {

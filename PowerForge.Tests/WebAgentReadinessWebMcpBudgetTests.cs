@@ -248,6 +248,31 @@ public partial class WebAgentReadinessTests
     }
 
     [Fact]
+    public void Runtime_NormalizesBeforeThemeVisibilityHookAndPreservesGenericBounds()
+    {
+        var runtime = WebSiteBuilder.GetWebMcpSiteSearchAssetContent();
+        var normalizeIndex = runtime.IndexOf("var response = normalizeResponse(result, request);", StringComparison.Ordinal);
+        var synchronizeIndex = runtime.IndexOf("await syncVisibleSearch(response, request, usesAdapter);", StringComparison.Ordinal);
+        var hookBranchIndex = runtime.IndexOf("if (renderVisibleResults) {", StringComparison.Ordinal);
+        var adapterBranchIndex = runtime.IndexOf("if (usesAdapter) return;", StringComparison.Ordinal);
+        var inputBranchIndex = runtime.IndexOf("var input = surface.querySelector", StringComparison.Ordinal);
+
+        Assert.True(normalizeIndex >= 0, "The runtime must normalize the tool response.");
+        Assert.True(synchronizeIndex > normalizeIndex, "Visible synchronization must receive only the normalized response.");
+        Assert.True(hookBranchIndex >= 0 && adapterBranchIndex > hookBranchIndex && inputBranchIndex > adapterBranchIndex,
+            "The renderer hook must replace synthetic input, while bound adapters retain their visible-search ownership.");
+        Assert.Contains("var renderVisibleResults = typeof api.renderVisibleResults === 'function'", runtime, StringComparison.Ordinal);
+        Assert.Contains("var visibleResponse = JSON.parse(JSON.stringify(response));", runtime, StringComparison.Ordinal);
+        Assert.Contains("throwIfAborted(request.signal);", runtime, StringComparison.Ordinal);
+        Assert.Contains("return renderVisibleResults(visibleResponse, { signal: request.signal });", runtime, StringComparison.Ordinal);
+        Assert.Contains("var entries = await awaitWithSignal(loadIndex(), request.signal);", runtime, StringComparison.Ordinal);
+        Assert.Contains("if (entries.length > MAX_INDEX_ENTRIES)", runtime, StringComparison.Ordinal);
+        Assert.Contains("if (total > MAX_INDEX_BYTES)", runtime, StringComparison.Ordinal);
+        Assert.Contains("var selected = source.slice(0, request.limit);", runtime, StringComparison.Ordinal);
+        Assert.Contains("if (JSON.stringify(response).length > MAX_OUTPUT_CHARACTERS)", runtime, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BehavioralObservation_ProvesRegistrationOutputBudgetAndVisibleSynchronization()
     {
         var output = new

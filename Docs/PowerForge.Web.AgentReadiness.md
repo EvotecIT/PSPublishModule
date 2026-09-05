@@ -194,9 +194,10 @@ Remote verification resolves relative resources against the final page URL and
 rejects cross-origin redirects for the page, index, or runtime asset.
 
 The read-only `site-search` kind emits
-`/assets/powerforge/webmcp-site-search.v1.js`. Its script must be byte-for-byte
-the canonical embedded PowerForge runtime, and the declared index must be a
-bounded JSON array. A theme search page should expose
+`/assets/powerforge/webmcp-site-search.v1.js`. Its script must match the
+canonical embedded PowerForge runtime, allowing only LF/CRLF line-ending
+conversion by the artifact host. The declared index must be a bounded JSON
+array. A theme search page should expose
 the tool name, description, and index route on its existing search surface:
 
 ```html
@@ -243,6 +244,31 @@ without WebMCP continue to use the normal search page. Engine-generated fallback
 pages use route-relative index/runtime URLs so sites hosted below an origin path
 remain functional; theme-owned pages should do the same or include the deployed
 base path explicitly.
+
+If a theme cannot reliably synchronize its visible results from the runtime's
+synthetic `input` event, it can predeclare a `renderVisibleResults(response,
+context)` function before the PowerForge runtime loads. The runtime calls it only
+after enforcing the result-count, URL, and 1,500-character response limits, and
+passes a defensive copy plus `context.signal`. The hook should render the supplied
+results rather than loading or ranking the search index again:
+
+```html
+<script>
+  window.PowerForgeWebMcpSearch = {
+    renderVisibleResults: function (response) {
+      searchInput.value = response.query;
+      renderSearchResults(response.results, response.query);
+    }
+  };
+</script>
+<script src="/assets/powerforge/webmcp-site-search.v1.js"
+        data-powerforge-webmcp defer></script>
+```
+
+The predeclared renderer replaces synthetic input dispatch. A bound search adapter
+continues to own its visible interaction unless the page also predeclares this
+renderer explicitly. Both adapters and renderers should honor the supplied abort
+signal and avoid visible changes after cancellation.
 
 The `page-tool` kind is a verification contract for a product-owned adapter;
 PowerForge does not generate its behavior. Use it only when an existing visible
