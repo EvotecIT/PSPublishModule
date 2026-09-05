@@ -1,6 +1,6 @@
 # PowerShell Compilation Architecture Roadmap
 
-Last updated: 2026-09-04
+Last updated: 2026-09-05
 
 This roadmap is the execution plan for growing PowerForge PowerShell compilation without turning the analyzer, transpiler, command handling, or C# emitter into increasingly coupled catch-all components.
 
@@ -45,7 +45,7 @@ The product succeeds when users can predict which of these outcomes they are get
 
 ## Current position
 
-The current `feature/powershell-compilation-roadmap` candidate contains `origin/main` and was re-proven on 2026-09-04 after the semantic-pipeline migration, exact-closure remediation, Milestone 14–22 implementation waves, and the current Milestone 23 state, region, and candidate-decision slices. The results below prove a branch candidate, not a default-branch merge, published package, or released product.
+The current `feature/powershell-compilation-roadmap` candidate contains `origin/main` as of 2026-09-05. After that integration, the compiler category and multi-target solution build were re-proven; the corpus and target-host figures below retain their separately recorded evidence dates. The branch includes the semantic-pipeline migration, exact-closure remediation, Milestone 14–22 implementation waves, and the current Milestone 23 state, region, and candidate-decision slices. These results prove a branch candidate, not a default-branch merge, published package, or released product.
 
 The compiler already provides:
 
