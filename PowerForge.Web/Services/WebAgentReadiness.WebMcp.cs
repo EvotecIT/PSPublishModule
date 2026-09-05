@@ -499,7 +499,7 @@ public static partial class WebAgentReadiness
 
             if (TryResolveLocalWebMcpResourcePath(siteRoot, siteBaseUri, assetUri, out var assetPath) &&
                 File.Exists(assetPath) &&
-                string.Equals(File.ReadAllText(assetPath), canonicalRuntime, StringComparison.Ordinal))
+                MatchesCanonicalWebMcpRuntime(File.ReadAllText(assetPath), canonicalRuntime))
                 return true;
         }
 
@@ -528,7 +528,7 @@ public static partial class WebAgentReadiness
             if (asset.Success &&
                 finalAssetUri is not null &&
                 HasSameOrigin(pageUri, finalAssetUri) &&
-                string.Equals(asset.Text, canonicalRuntime, StringComparison.Ordinal))
+                MatchesCanonicalWebMcpRuntime(asset.Text, canonicalRuntime))
             {
                 return true;
             }
@@ -536,6 +536,12 @@ public static partial class WebAgentReadiness
 
         return false;
     }
+
+    private static bool MatchesCanonicalWebMcpRuntime(string candidate, string canonical) =>
+        string.Equals(
+            candidate.Replace("\r\n", "\n", StringComparison.Ordinal),
+            canonical.Replace("\r\n", "\n", StringComparison.Ordinal),
+            StringComparison.Ordinal);
 
     private static bool ScriptsResolveInsideRenderedSite(
         string siteRoot,

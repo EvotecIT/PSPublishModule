@@ -194,9 +194,10 @@ Remote verification resolves relative resources against the final page URL and
 rejects cross-origin redirects for the page, index, or runtime asset.
 
 The read-only `site-search` kind emits
-`/assets/powerforge/webmcp-site-search.v1.js`. Its script must be byte-for-byte
-the canonical embedded PowerForge runtime, and the declared index must be a
-bounded JSON array. A theme search page should expose
+`/assets/powerforge/webmcp-site-search.v1.js`. Its script must match the
+canonical embedded PowerForge runtime, allowing only LF/CRLF line-ending
+conversion by the artifact host. The declared index must be a bounded JSON
+array. A theme search page should expose
 the tool name, description, and index route on its existing search surface:
 
 ```html
