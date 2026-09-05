@@ -99,7 +99,8 @@ while (($# > 0)); do
 done
 
 [[ "$remote" =~ ^[A-Za-z_][A-Za-z0-9_-]{0,31}@[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || die 'remote must be a fixed user@host value'
-[[ "$remote_root" =~ ^/[A-Za-z0-9._/-]*/$ && "$remote_root" != *'//'* ]] || die 'remote root must be an absolute path ending in /'
+[[ "$remote_root" == '/' || ( "$remote_root" =~ ^/[A-Za-z0-9._/-]*/$ && "$remote_root" != *'//'* ) ]] ||
+  die 'remote root must be an absolute path ending in /'
 [[ ! "$remote_root" =~ (^|/)\.{1,2}(/|$) ]] || die 'remote root contains a traversal segment'
 assert_local_path "$destination"
 assert_local_path "$identity"
@@ -164,6 +165,7 @@ cleanup() {
   for temporary in "${verification_temps[@]:-}" "$remote_listing" "$remote_manifest"; do
     [[ -n "$temporary" && "$temporary" == "$destination/"* && -f "$temporary" && ! -L "$temporary" ]] && rm -f -- "$temporary"
   done
+  return 0
 }
 trap cleanup EXIT INT TERM
 

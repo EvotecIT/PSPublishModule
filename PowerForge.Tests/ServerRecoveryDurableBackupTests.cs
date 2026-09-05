@@ -127,6 +127,8 @@ public sealed class ServerRecoveryDurableBackupTests
         Assert.Contains("snapshot contains a link or special entry", script, StringComparison.Ordinal);
         Assert.Contains("destination must be a canonical physical path", script, StringComparison.Ordinal);
         Assert.Contains("flock_bin", script, StringComparison.Ordinal);
+        Assert.Contains("[[ \"$remote_root\" == '/' ||", script, StringComparison.Ordinal);
+        Assert.Contains("return 0\n}\ntrap cleanup EXIT INT TERM", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--delete", script, StringComparison.Ordinal);
         Assert.DoesNotContain("StrictHostKeyChecking=no", script, StringComparison.Ordinal);
     }
