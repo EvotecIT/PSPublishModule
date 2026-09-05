@@ -1,6 +1,6 @@
 # PowerForge.Web Server Recovery
 
-Last updated: 2026-07-18
+Last updated: 2026-09-05
 
 This document defines the reusable PowerForge pattern for rebuilding a Linux-hosted static website from source control, encrypted secrets, and a site-owned recovery manifest.
 
@@ -165,6 +165,24 @@ Encrypted capture requires an explicit recipient such as an age or GPG public ke
 
 Mark capture entries with `required: true` when a successful recovery depends on them. Plain archives containing a required entry remain strict, while an all-optional plain archive retains best-effort missing-file behavior. Remote encrypted capture preflights every required entry and includes each optional entry only when it exists, so one absent optional secret cannot discard otherwise valid encrypted recovery state.
 
+## Durable Application Data
+
+Git-backed recovery captures are appropriate for configuration and small encrypted secrets. They are not the storage owner for mutable databases or large binary stores. A schema-v2 manifest may therefore add a `durableBackup` contract that declares:
+
+- one dedicated root-owned export directory and a read-only export group
+- PostgreSQL databases written as custom-format dumps and checked with `pg_restore --list`
+- exact files that must be included only inside an age-encrypted recovery bundle
+- immutable artifact stores copied into timestamped snapshots with hard-link reuse
+- the short staging retention period on the source server
+
+`Deployment/Linux/powerforge-server-data-capture.sh` executes that contract as root. It accepts only a root-owned manifest that is not group- or world-writable, validates identifiers and exact paths without evaluating manifest text, creates its database work area outside the export tree, and publishes a snapshot only after encryption, metadata generation, SHA-256 calculation, and an immediate checksum verification succeed. A final atomic rename and `READY` marker distinguish complete snapshots from interrupted work. The source server retains at least two complete snapshots even when the configured staging window has expired.
+
+The export directory is staging, not disaster recovery. Put the matching pull job on a second failure domain. `Deployment/Linux/powerforge-server-backup-pull.sh` uses a fixed SSH identity, a pinned known-hosts file, and batch-only strict host-key checking. Pair it with a forced read-only `rrsync` key rooted at the export directory; the source server then holds no credential that can write to or delete the destination. The pull verifies every declared hash and the age header before adding `VERIFIED`, never deletes remote data, and prunes only locally verified timestamped snapshots. Its default policy keeps 56 recent snapshots, eight additional weekly restore points, and twelve additional monthly restore points.
+
+The destination must be prepared deliberately with a mode-600 marker containing `powerforge-server-backup-v1` at `.powerforge-server-backup-root`. This marker prevents a missing mount or mistyped destination from turning retention into a broad filesystem cleanup. The runtime also requires Bash, rsync, SSH, SHA-256 tools, and a `date` implementation that can calculate ISO weeks with `date -u -d <date> +%G-%V`.
+
+Checksum and age-header validation proves that the transported ciphertext matches the source snapshot; it does not prove that the decryption identity is available or that application restore steps still work. Keep the age private identity outside the source server and run a periodic isolated restore drill: decrypt `recovery.tar.gz.age`, re-run `pg_restore --list` for each dump, restore into disposable database names, compare expected schema/data checks, and validate representative artifact hashes before deleting the drill environment.
+
 ## Bootstrap Stages
 
 The engine should plan and run these stages:
@@ -254,7 +272,7 @@ concurrency:
   cancel-in-progress: false
 ```
 
-The action requires remote age encryption, a non-empty plain archive, a non-empty encrypted archive, a warning-free capture summary, exact source/engine/run provenance, and SHA-256 checksums before it clones the backup repository. It commits a timestamped directory under `backupTarget.path`, applies `backupTarget.retention.keepLatestInTree`, and retries fetch/rebase/push races without uploading recovery material as a GitHub Actions artifact. The older `keepLatest` property remains a compatibility alias.
+The action requires remote age encryption, a non-empty plain archive, a non-empty encrypted archive, a warning-free capture summary, exact source/engine/run provenance, and SHA-256 checksums before it clones the backup repository. It commits a timestamped directory under `backupTarget.path`, applies `backupTarget.retention.keepLatestInTree`, and retries fetch/rebase/push races without uploading recovery material as a GitHub Actions artifact. After retention, and again after any rebase, it regenerates `LATEST.txt` and `index.json` from the captures actually present in the checkout. The catalog hashes every nested artifact rather than assuming a fixed top-level file set, so consumers cannot silently keep selecting an old capture. The older `keepLatest` property remains a compatibility alias.
 
 This setting deliberately controls only the captures visible in the current Git tree. Git history is preserved, so it is not a data-destruction or repository-size retention policy. Use a separately reviewed history rewrite or a non-Git backup backend if historical deletion is required.
 

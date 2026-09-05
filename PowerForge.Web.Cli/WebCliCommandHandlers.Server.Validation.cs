@@ -19,6 +19,7 @@ internal static partial class WebCliCommandHandlers
         ValidateNamedCommandText(manifest.Capture?.Commands, "capture.commands", errors);
         ValidateNamedCommandText(manifest.Deploy?.Commands, "deploy.commands", errors);
         ValidateNamedCommandText(manifest.Verify?.Commands, "verify.commands", errors);
+        ValidateDurableBackup(manifest.DurableBackup, errors);
 
         var plainFiles = manifest.Capture?.PlainFiles ?? Array.Empty<PowerForgeServerManagedFile>();
         var encryptedFiles = manifest.Capture?.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();

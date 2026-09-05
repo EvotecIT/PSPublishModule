@@ -25,6 +25,7 @@ internal sealed class PowerForgeServerRecoveryManifest
     public PowerForgeServerDeploy? Deploy { get; set; }
     public PowerForgeServerVerify? Verify { get; set; }
     public PowerForgeServerBackupTarget? BackupTarget { get; set; }
+    public PowerForgeServerDurableBackup? DurableBackup { get; set; }
     public string[]? Notes { get; set; }
 }
 

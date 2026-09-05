@@ -57,16 +57,18 @@ public sealed class GitHubServerBackupActionTests
     public void Action_ShouldSurfaceBoundedArchiveDiagnosticsWithoutPrintingCommandCaptures()
     {
         var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");
+        var support = ReadRepoFile(".github", "actions", "powerforge-server-backup", "PowerForgeBackupSupport.ps1");
 
         Assert.Contains("Write-CaptureFailureDiagnostic", script, StringComparison.Ordinal);
-        Assert.Contains("plain-files.stderr.txt", script, StringComparison.Ordinal);
-        Assert.Contains("encrypted-secrets.stderr.txt", script, StringComparison.Ordinal);
-        Assert.Contains("-TotalCount 40", script, StringComparison.Ordinal);
-        Assert.Contains("$diagnostic.Length -gt 4096", script, StringComparison.Ordinal);
-        Assert.Contains("::stop-commands::$stopToken", script, StringComparison.Ordinal);
-        Assert.Contains("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("commands/*.stderr", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("commands\\*.stderr", script, StringComparison.Ordinal);
+        Assert.Contains("PowerForgeBackupSupport.ps1", script, StringComparison.Ordinal);
+        Assert.Contains("plain-files.stderr.txt", support, StringComparison.Ordinal);
+        Assert.Contains("encrypted-secrets.stderr.txt", support, StringComparison.Ordinal);
+        Assert.Contains("-TotalCount 40", support, StringComparison.Ordinal);
+        Assert.Contains("$diagnostic.Length -gt 4096", support, StringComparison.Ordinal);
+        Assert.Contains("::stop-commands::$stopToken", support, StringComparison.Ordinal);
+        Assert.Contains("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", support, StringComparison.Ordinal);
+        Assert.DoesNotContain("commands/*.stderr", support, StringComparison.Ordinal);
+        Assert.DoesNotContain("commands\\*.stderr", support, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -86,12 +88,59 @@ public sealed class GitHubServerBackupActionTests
     }
 
     [Fact]
+    public void Action_ShouldPublishACatalogThatSelectsAndHashesTheNewestCapture()
+    {
+        var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");
+        var catalog = ReadRepoFile(".github", "actions", "powerforge-server-backup", "PowerForgeBackupCatalog.ps1");
+
+        Assert.Contains("PowerForgeBackupCatalog.ps1", script, StringComparison.Ordinal);
+        Assert.Contains("function Update-BackupCatalog", catalog, StringComparison.Ordinal);
+        Assert.Contains("LATEST.txt", catalog, StringComparison.Ordinal);
+        Assert.Contains("index.json", catalog, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash", catalog, StringComparison.Ordinal);
+        Assert.Contains("keepLatestInTree", catalog, StringComparison.Ordinal);
+        Assert.Contains("ReparsePoint", catalog, StringComparison.Ordinal);
+        Assert.Contains("Update-BackupCatalog -TargetRoot $targetRoot", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BackupCatalog_ShouldSelectLatestAndHashEveryCaptureArtifact()
+    {
+        var testScript = GetRepoPath("PowerForge.Tests", "Scripts", "Test-BackupCatalog.ps1");
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "pwsh",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(testScript);
+
+        using var process = System.Diagnostics.Process.Start(startInfo);
+        Assert.NotNull(process);
+        var standardOutput = process.StandardOutput.ReadToEndAsync();
+        var standardError = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await process.WaitForExitAsync(timeout.Token);
+
+        Assert.True(
+            process.ExitCode == 0,
+            $"Backup catalog contract failed with exit code {process.ExitCode}.{Environment.NewLine}{await standardOutput}{Environment.NewLine}{await standardError}");
+    }
+
+    [Fact]
     public void Action_ShouldBoundAndRetryPrivateBackupGitTransport()
     {
         var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");
+        var support = ReadRepoFile(".github", "actions", "powerforge-server-backup", "PowerForgeBackupSupport.ps1");
 
-        Assert.Contains("function Invoke-GitWithRetry", script, StringComparison.Ordinal);
-        Assert.Contains("[ValidateRange(1, 5)][int] $MaxAttempts = 3", script, StringComparison.Ordinal);
+        Assert.Contains("PowerForgeBackupSupport.ps1", script, StringComparison.Ordinal);
+        Assert.Contains("function Invoke-GitWithRetry", support, StringComparison.Ordinal);
+        Assert.Contains("[ValidateRange(1, 5)][int] $MaxAttempts = 3", support, StringComparison.Ordinal);
         Assert.Contains("'--depth', '1'", script, StringComparison.Ordinal);
         Assert.Contains("'--no-tags'", script, StringComparison.Ordinal);
         Assert.Contains("-ResetPath $backupCheckout", script, StringComparison.Ordinal);
