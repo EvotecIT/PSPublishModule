@@ -555,6 +555,28 @@ public partial class WebAgentReadinessTests
             Assert.Contains("data-webmcp-tool-name=\"search_site\"", searchHtml, StringComparison.Ordinal);
             Assert.Contains("data-powerforge-webmcp", searchHtml, StringComparison.Ordinal);
             Assert.Contains("../assets/powerforge/webmcp-site-search.v1.js", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("window.PowerForgeWebMcpSearch.renderVisibleResults = function(response)", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("const rows = Array.isArray(response && response.results) ? response.results : [];", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("let indexState = 'loading';", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("indexState = 'ready';", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("indexState = 'failed';", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("if (indexState === 'loading')", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("if (indexState === 'failed')", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("renderIndexUnavailable(indexError);", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("webMcpResultsVisible = true;", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("webMcpResultsVisible = false;", searchHtml, StringComparison.Ordinal);
+            Assert.Contains("if (!webMcpResultsVisible) run();", searchHtml, StringComparison.Ordinal);
+
+            var hookIndex = searchHtml.IndexOf("renderVisibleResults = function(response)", StringComparison.Ordinal);
+            var listenerIndex = searchHtml.IndexOf("input.addEventListener('input'", StringComparison.Ordinal);
+            var fetchIndex = searchHtml.IndexOf("await fetch(", StringComparison.Ordinal);
+            Assert.True(hookIndex >= 0 && listenerIndex > hookIndex && fetchIndex > listenerIndex,
+                "The generated fallback must expose its bounded renderer and manual-input ownership before index loading can settle.");
+
+            var catchIndex = searchHtml.IndexOf("} catch (error){", StringComparison.Ordinal);
+            var guardedErrorIndex = searchHtml.IndexOf("if (!webMcpResultsVisible){", catchIndex, StringComparison.Ordinal);
+            Assert.True(catchIndex >= 0 && guardedErrorIndex > catchIndex,
+                "A late index failure must not overwrite tool-owned visible results.");
         }
         finally
         {

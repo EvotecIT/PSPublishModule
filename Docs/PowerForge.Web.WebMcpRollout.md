@@ -50,6 +50,9 @@ Complete in the engine and deployed on the Evotec website.
 - A theme whose visible search cannot reliably react to a synthetic input event
   can predeclare `renderVisibleResults(response, context)` and render the
   runtime's already-normalized, bounded results without loading a second index.
+- The engine-generated fallback predeclares that renderer itself, preserves the
+  bounded tool cards across late local-index success or failure, and restores
+  normal search ownership on the next manual input.
 
 ### Phase 2: Public documentation portfolio
 

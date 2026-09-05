@@ -243,7 +243,10 @@ loads and reuses the generated index for the lifetime of the page;
 without WebMCP continue to use the normal search page. Engine-generated fallback
 pages use route-relative index/runtime URLs so sites hosted below an origin path
 remain functional; theme-owned pages should do the same or include the deployed
-base path explicitly.
+base path explicitly. Generated fallback pages also install a bounded-results
+renderer before loading their local index. This keeps the exact tool response
+visible if local index initialization settles later, while subsequent manual
+input returns ownership to the normal search page.
 
 If a theme cannot reliably synchronize its visible results from the runtime's
 synthetic `input` event, it can predeclare a `renderVisibleResults(response,
