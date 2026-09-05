@@ -756,15 +756,8 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.5, )",
-          "PowerForge": "[3.0.131, )",
-          "PowerForge.PowerShell.Provider.Management": "[3.0.126, )",
+          "PowerForge": "[3.0.133, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
-        }
-      },
-      "powerforge.powershell.provider.management": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure": "[3.0.0, )"
         }
       }
     },
@@ -1483,15 +1476,8 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.18, )",
-          "PowerForge": "[3.0.131, )",
-          "PowerForge.PowerShell.Provider.Management": "[3.0.126, )",
+          "PowerForge": "[3.0.133, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
-        }
-      },
-      "powerforge.powershell.provider.management": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure": "[3.0.0, )"
         }
       }
     }

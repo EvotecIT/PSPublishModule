@@ -2437,18 +2437,20 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
     private static void RunDotNet(string root, string arguments)
     {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = arguments,
+            WorkingDirectory = root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        DotNetTestProcessEnvironment.DisableBuildServers(startInfo);
         using var process = new Process
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "dotnet",
-                Arguments = arguments,
-                WorkingDirectory = root,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
+            StartInfo = startInfo
         };
         Assert.True(process.Start(), $"dotnet {arguments} failed to start");
         Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
@@ -2459,7 +2461,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.Fail($"dotnet {arguments} timed out");
         }
 
-        Task.WaitAll(outputTask, errorTask);
+        Assert.True(
+            Task.WaitAll([outputTask, errorTask], TimeSpan.FromSeconds(10)),
+            $"dotnet {arguments} output capture timed out");
         string output = outputTask.Result;
         string error = errorTask.Result;
         Assert.True(process.ExitCode == 0, $"dotnet {arguments} failed: {output}{error}");

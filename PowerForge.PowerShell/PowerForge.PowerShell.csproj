@@ -52,7 +52,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
-    <ProjectReference Include="..\PowerForge.PowerShell.Provider.Management\PowerForge.PowerShell.Provider.Management.csproj" />
   </ItemGroup>
 
   <ItemGroup>

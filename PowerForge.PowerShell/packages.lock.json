@@ -60,25 +60,6 @@
           "System.Runtime.CompilerServices.Unsafe": "6.1.2"
         }
       },
-      "Microsoft.Management.Infrastructure": {
-        "type": "Transitive",
-        "resolved": "3.0.0",
-        "contentHash": "cGZi0q5IujCTVYKo9h22Pw+UwfZDV82HXO8HTxMG2HqntPlT3Ls8jY6punLp4YzCypJNpfCAu2kae3TIyuAiJw==",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure.Runtime.Unix": "3.0.0",
-          "Microsoft.Management.Infrastructure.Runtime.Win": "3.0.0"
-        }
-      },
-      "Microsoft.Management.Infrastructure.Runtime.Unix": {
-        "type": "Transitive",
-        "resolved": "3.0.0",
-        "contentHash": "QZE3uEDvZ0m7LabQvcmNOYHp7v1QPBVMpB/ild0WEE8zqUVAP5y9rRI5we37ImI1bQmW5pZ+3HNC70POPm0jBQ=="
-      },
-      "Microsoft.Management.Infrastructure.Runtime.Win": {
-        "type": "Transitive",
-        "resolved": "3.0.0",
-        "contentHash": "uwMyWN33+iQ8Wm/n1yoPXgFoiYNd0HzJyoqSVhaQZyJfaQrJR3udgcIHjqa1qbc3lS6kvfuUMN4TrF4U4refCQ=="
-      },
       "Microsoft.NETFramework.ReferenceAssemblies.net472": {
         "type": "Transitive",
         "resolved": "1.0.3",
@@ -243,13 +224,6 @@
           "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
           "System.Text.Json": "[10.0.11, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
-        }
-      },
-      "powerforge.powershell.provider.management": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure": "[3.0.0, )",
-          "System.Text.Json": "[10.0.11, )"
         }
       }
     },
@@ -991,12 +965,6 @@
           "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
-      },
-      "powerforge.powershell.provider.management": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure": "[3.0.0, )"
-        }
       }
     },
     "net8.0": {
@@ -1696,12 +1664,6 @@
           "System.Security.Cryptography.Pkcs": "[10.0.11, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
-        }
-      },
-      "powerforge.powershell.provider.management": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure": "[3.0.0, )"
         }
       }
     }
