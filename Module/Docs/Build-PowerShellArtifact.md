@@ -11,7 +11,7 @@ Builds a packaged executable, typed CLR library, or importable binary/hybrid mod
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-ResourceMode <PowerShellCompilationResourceMode>] [-IncludeResource <string[]>] [-ExcludeResource <string[]>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-TargetContract <PowerShellCompilationTargetContract>] [-UseBuildCache <bool>] [-BuildCacheDirectory <string>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-TimeoutSeconds <int>] [-DependencyLock <PowerShellCompilationDependencyGraph>] [-AllowUnreviewedDependencies] [-WhatIf] [-Confirm] [<CommonParameters>]
+Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-ResourceMode <PowerShellCompilationResourceMode>] [-IncludeResource <string[]>] [-ExcludeResource <string[]>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-TargetContract <PowerShellCompilationTargetContract>] [-UseBuildCache <bool>] [-BuildCacheDirectory <string>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-EmitIrSnapshots] [-ExpectedPublicAbiSha256 <string>] [-TimeoutSeconds <int>] [-DependencyLock <PowerShellCompilationDependencyGraph>] [-AllowUnreviewedDependencies] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -119,6 +119,22 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -EmitIrSnapshots
+Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -EmitSource
 Publish an independently buildable generated C# source project beside the artifact.
 
@@ -156,6 +172,22 @@ Contained resource paths or glob patterns to exclude from optional payload.
 
 ```yaml
 Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ExpectedPublicAbiSha256
+Reviewed public ABI SHA-256 that the generated artifact must match.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
