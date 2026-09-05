@@ -147,9 +147,10 @@ runs:
         if ($enabled -and $env:POWERFORGE_DEPLOYMENT_JOB_ID -notmatch '^[1-9][0-9]*$') {
           throw 'Managed incremental purge requires the exact GitHub Pages deployment-job-id.'
         }
-        if ($enabled -and (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_HOSTNAME_OVERRIDE) -or
-                          -not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_BASE_PATH_OVERRIDE))) {
-          throw 'Managed incremental purge does not support hostname or base-path overrides; configure the canonical BaseUrl in site-config.'
+        if ($env:POWERFORGE_MANAGE_INCREMENTAL_PURGE -eq 'true' -and
+            (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_HOSTNAME_OVERRIDE) -or
+             -not [string]::IsNullOrWhiteSpace($env:POWERFORGE_CLOUDFLARE_BASE_PATH_OVERRIDE))) {
+          throw 'Managed purge does not support hostname or base-path overrides; configure the canonical BaseUrl in site-config.'
         }
         $relativeConfig = [IO.Path]::GetRelativePath($workspace, $siteConfig).Replace([IO.Path]::DirectorySeparatorChar, '/')
         $scopeBytes = [Text.Encoding]::UTF8.GetBytes("$($env:POWERFORGE_GITHUB_REPOSITORY_ID)|$relativeConfig")
@@ -254,6 +255,18 @@ runs:
         if ($LASTEXITCODE -ne 0) {
           throw "Purging the Cloudflare hostname after policy application failed with exit code $LASTEXITCODE."
         }
+
+    - name: Purge configured Cloudflare scope after policy application
+      if: ${{ inputs.manage-incremental-purge == 'true' && steps.incremental.outputs.enabled != 'true' }}
+      shell: pwsh
+      env:
+        POWERFORGE_CLOUDFLARE_API_TOKEN: ${{ inputs.api-token }}
+        POWERFORGE_CLOUDFLARE_CLI_PROJECT: ${{ github.action_path }}/../../../PowerForge.Web.Cli/PowerForge.Web.Cli.csproj
+        POWERFORGE_CLOUDFLARE_DRY_RUN: ${{ inputs.dry-run }}
+        POWERFORGE_CLOUDFLARE_HOSTNAME: ${{ inputs.hostname }}
+        POWERFORGE_CLOUDFLARE_SITE_CONFIG: ${{ inputs.site-config }}
+        POWERFORGE_CLOUDFLARE_ZONE_ID: ${{ inputs.zone-id }}
+      run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeCloudflareConfiguredPurge.ps1"'
 
     - name: Purge changed Cloudflare URLs
       if: ${{ steps.incremental.outputs.enabled == 'true' && steps.baseline_order.outputs.stale != 'true' }}
