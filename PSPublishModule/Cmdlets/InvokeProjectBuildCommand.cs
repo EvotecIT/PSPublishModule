@@ -139,6 +139,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                 Success = workflow.Result.Success,
                 ErrorMessage = workflow.Result.ErrorMessage
             });
+            summary.Success = workflow.Result.Success;
             var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: preparation.PlanOnly || !executeBuild);
             SpectreProjectBuildSummaryWriter.Write(display);
 

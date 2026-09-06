@@ -26,7 +26,7 @@ public sealed class DotNetRepositoryReleaseSummaryService
                 VersionDisplay = BuildVersionDisplay(project),
                 PackageCount = project.Packages.Count + project.SymbolPackages.Count,
                 PackageBuildDuration = project.PackageBuildDuration,
-                Status = ResolveStatus(project),
+                Status = ResolveStatus(project, result.IsPlan),
                 ErrorMessage = project.ErrorMessage?.Trim() ?? string.Empty,
                 ErrorPreview = TrimForSummary(project.ErrorMessage, maxErrorLength)
             })
@@ -34,6 +34,9 @@ public sealed class DotNetRepositoryReleaseSummaryService
 
         return new DotNetRepositoryReleaseSummary
         {
+            Success = result.Success,
+            IsPlan = result.IsPlan,
+            PublishOrderDeferred = result.PublishOrderDeferred,
             Projects = rows,
             Totals = new DotNetRepositoryReleaseSummaryTotals
             {
@@ -103,10 +106,13 @@ public sealed class DotNetRepositoryReleaseSummaryService
         return $"{project.OldVersion ?? "?"} -> {project.NewVersion ?? "?"}";
     }
 
-    private static DotNetRepositoryReleaseProjectStatus ResolveStatus(DotNetRepositoryProjectResult project)
+    private static DotNetRepositoryReleaseProjectStatus ResolveStatus(DotNetRepositoryProjectResult project, bool isPlan)
     {
         if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
             return DotNetRepositoryReleaseProjectStatus.Failed;
+
+        if (isPlan && project.IsPackable)
+            return DotNetRepositoryReleaseProjectStatus.Planned;
 
         return project.IsPackable
             ? DotNetRepositoryReleaseProjectStatus.Ok

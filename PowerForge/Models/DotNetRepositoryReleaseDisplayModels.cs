@@ -5,6 +5,8 @@ namespace PowerForge;
 
 internal sealed class DotNetRepositoryReleaseDisplayModel
 {
+    internal bool Success { get; set; } = true;
+    internal bool IsPlan { get; set; }
     internal string Title { get; set; } = string.Empty;
     internal IReadOnlyList<DotNetRepositoryReleaseProjectDisplayRow> Projects { get; set; } =
         Array.Empty<DotNetRepositoryReleaseProjectDisplayRow>();

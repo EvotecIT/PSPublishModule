@@ -10,6 +10,12 @@ public sealed class DotNetRepositoryReleaseResult
     /// <summary>Whether the workflow completed without fatal errors.</summary>
     public bool Success { get; set; } = true;
 
+    /// <summary>Whether this result describes a preview rather than executed operations.</summary>
+    public bool IsPlan { get; set; }
+
+    /// <summary>Whether publish ordering must be validated from artifacts during execution.</summary>
+    public bool PublishOrderDeferred { get; set; }
+
     /// <summary>Optional error message for fatal failures.</summary>
     public string? ErrorMessage { get; set; }
 
