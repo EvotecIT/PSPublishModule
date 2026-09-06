@@ -52,14 +52,14 @@ The continuation candidate adds a bounded prefix that transfers stable scalar lo
 
 At source revision `dba6175aa`, the Windows gate passed **247 compiler cases and all six Strict programs**. The compiler also built for `net472`, `net8.0`, and `net10.0` without warnings. These are local candidate results, not a merged or published release.
 
-Two complete command workloads passed original/generated output checks but **failed the performance exit gate**. The report workload used the unchanged `CreateColorLegenedReportHTA` function from the pinned SamErde snapshot above, including its file write; the surrounding administration application was not executed. The diagnostic workload called Pester 6.1.0's unchanged `Format-Hashtable2` inside the complete original and generated module contexts, including nested formatting and sorting.
+Two complete command workloads passed original/generated output checks but **did not meet the former performance exit gate**. The report workload used the unchanged `CreateColorLegenedReportHTA` function from the pinned SamErde snapshot above, including its file write; the surrounding administration application was not executed. The diagnostic workload called Pester 6.1.0's unchanged `Format-Hashtable2` inside the complete original and generated module contexts, including nested formatting and sorting.
 
 | Complete workload, 300 calls per sample | Original median, CCD0 / CCD1 | Hybrid median, CCD0 / CCD1 | Interpretation |
 | --- | ---: | ---: | --- |
 | Report generation and file output | 151.74 / 156.98 ms | 153.04 / 153.82 ms | Within the 5% tie tolerance; no demonstrated benefit |
 | Nested diagnostic formatting | 69.17 / 65.40 ms | 76.46 / 74.01 ms | 10.5% / 13.2% slower |
 
-The canonical benchmark runner used five warmup and twenty measured samples per lane, rotated engine order, and no outlier removal. Both processor cache domains were measured independently on a Ryzen 9 9950X3D2, Windows build 26200, PowerShell 7.6.5, with matching affinity per comparison and normal process priority. Each report sample checked file-byte identity and absent success output; every formatting result matched the original. Thread allocations were slightly worse for the report and about 0.5% lower for formatting. Neither result demonstrates a useful allocation benefit. These constant-heavy prefixes do not establish that the crossing cost is amortized, and the milestone remains experimental.
+The canonical benchmark runner used five warmup and twenty measured samples per lane, rotated engine order, and no outlier removal. Both processor cache domains were measured independently on a Ryzen 9 9950X3D2, Windows build 26200, PowerShell 7.6.5, with matching affinity per comparison and normal process priority. Each report sample checked file-byte identity and absent success output; every formatting result matched the original. Thread allocations were slightly worse for the report and about 0.5% lower for formatting. Neither result demonstrates a useful allocation benefit. These constant-heavy prefixes do not establish that the crossing cost is amortized. That performance result does not block subsequent correctness or coverage work.
 
 Qualification also exposed two independent correctness defects. Project restore now derives SDK properties from the actual artifact template, so single-file executable restore includes the same implicit package closure as build. Strict and Hybrid single-file projects passed lock, online restore, offline restore, build, and execution. Runtime-free targets now reject hosted command tails even when stream-provider capability is enabled. An unchanged algorithm that previously emitted a dispatcher-dependent library while claiming no PowerShell runtime now fails analysis; the old emitted-unit count is not native execution evidence.
 
@@ -74,7 +74,7 @@ The unchanged `trialDivision` function from the pinned algorithm snapshot now em
 | Prime input `1000000007` | 49.82 / 46.95 ms | 11.35 / 11.10 ms | 4.39 / 4.23 times faster |
 | Composite input `1001` | 4.74 / 4.73 ms | 5.09 / 5.25 ms | 7.4% / 11.1% slower |
 
-Both domains used five warmups, twenty measured samples, rotated order, no outlier removal, and the same host settings described above. Every measured result was validated. The computation-heavy case amortizes the helper call; the cheap case does not. These are workstation timings for one workload family, with no allocation-benefit or general speedup claim. The two-family computational-region gate remains open, including useful nonterminal continuation evidence.
+Both domains used five warmups, twenty measured samples, rotated order, no outlier removal, and the same host settings described above. Every measured result was validated. The computation-heavy case amortizes the helper call; the cheap case does not. These are workstation timings for one workload family, with no allocation-benefit or general speedup claim. Further coverage and continuation work is governed by semantic correctness; a two-family speedup is no longer required.
 
 The binder also proves bounded Int32 addition and subtraction from operand intervals. A descending loop can refine its counter after a proven initializer and positive guard when the body cannot write or indirectly expose the counter. The fact stays within the loop's cloned symbol state; unproved arithmetic still retains PowerShell execution.
 
@@ -90,9 +90,11 @@ This proves the enabled-state path on Windows build 26200. It does not qualify d
 
 ## Next implementation gate
 
+Correctness and useful coverage take priority over speed. Preserve how the author designed the program, including errors and continuation, and unlock broader scripts/modules through reusable compiler contracts. The earlier two-family performance requirement has been retired; its measurements remain historical evidence, not a prerequisite for adding support.
+
 - [ ] Minimize the remaining lifecycle, pipeline, scope, object/member, and collection blockers into generic contracts. Rank complete workflow unlocks and co-blockers, not diagnostic frequency alone.
 - [x] Implement a bounded scalar continuation and compare two unrelated complete commands. Output parity passed; performance did not.
-- [ ] Demonstrate useful computational regions in two unrelated real commands, including benefit after crossing cost. Do not treat the constant-prefix results as promotion evidence.
+- [ ] Unlock additional real commands or complete workflows and verify original/generated binding, values, types, output shape, scope, ordering, errors, and continuation on supported hosts. Report compiled and retained behavior separately.
 - [x] Qualify the complete detection executable's enabled-state path on a controlled Windows target without modifying the registry.
 - [ ] Extend detection qualification to absent, disabled, and failure states on a disposable target. Qualify remediation separately with before/after state and cleanup.
 - [ ] Keep broader target-host and public-package lifecycle qualification explicit before making a stable toolchain claim.
