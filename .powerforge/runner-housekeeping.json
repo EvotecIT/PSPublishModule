@@ -16,8 +16,8 @@
     "WorkspacesRetentionDays": 0,
     "CleanWorkspaces": true,
     "ToolCacheRetentionDays": 30,
-    "DotNetRootPath": "/usr/share/dotnet",
     "PruneDotNetSdks": true,
-    "DotNetSdkVersionsToKeepPerMajorMinor": 1
+    "DotNetSdkVersionsToKeepPerMajorMinor": 1,
+    "CleanWindowsComponentStore": true
   }
 }

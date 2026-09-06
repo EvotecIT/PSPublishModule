@@ -104,6 +104,56 @@ public sealed class RunnerHousekeepingServiceTests
     }
 
     [Fact]
+    public void Clean_DryRun_PlansWindowsComponentStoreCleanupOnlyOnWindows()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var runnerRoot = Path.Combine(root, "runner");
+            var workRoot = Path.Combine(runnerRoot, "_work");
+            var runnerTemp = Path.Combine(workRoot, "_temp");
+            Directory.CreateDirectory(runnerTemp);
+
+            var service = new RunnerHousekeepingService(new NullLogger());
+            var result = service.Clean(new RunnerHousekeepingSpec
+            {
+                RunnerTempPath = runnerTemp,
+                RunnerRootPath = runnerRoot,
+                WorkRootPath = workRoot,
+                MinFreeGb = null,
+                DryRun = true,
+                Aggressive = true,
+                CleanDiagnostics = false,
+                CleanRunnerTemp = false,
+                CleanActionsCache = false,
+                CleanWorkspaces = false,
+                CleanToolCache = false,
+                ClearDotNetCaches = false,
+                PruneDotNetSdks = false,
+                CleanWindowsComponentStore = true,
+                PruneDocker = false
+            });
+
+            var step = Assert.Single(result.Steps);
+            Assert.Equal("windows-component-store", step.Id);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.False(step.Skipped);
+                Assert.True(step.DryRun);
+                Assert.Equal("dism /Online /Cleanup-Image /StartComponentCleanup /NoRestart", step.Command);
+            }
+            else
+            {
+                Assert.True(step.Skipped);
+            }
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Clean_Apply_RemovesOldRepositoryWorkspacesButKeepsCurrentAndInternalDirectories()
     {
         var root = CreateSandbox();
@@ -601,6 +651,75 @@ public sealed class RunnerHousekeepingServiceTests
     public void IsPackageOwnershipProbeFailureFatal_FailsClosedOnUnexpectedErrors(int exitCode, bool expected)
     {
         Assert.Equal(expected, RunnerHousekeepingService.IsPackageOwnershipProbeFailureFatal(exitCode));
+    }
+
+    [Fact]
+    public void SelectWindowsPackageOwnedSdkDirectories_ProtectsOnlyRegisteredInstalledVersions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.RunnerHousekeepingWindowsSdkSelection");
+        var directories = new[]
+        {
+            Path.Combine(root, "3.1.426"),
+            Path.Combine(root, "8.0.413"),
+            Path.Combine(root, "8.0.424"),
+            Path.Combine(root, "9.0.304"),
+            Path.Combine(root, "10.0.100-preview.1")
+        };
+
+        var result = RunnerHousekeepingService.SelectWindowsPackageOwnedSdkDirectories(
+            directories,
+            new[]
+            {
+                "Microsoft .NET Core SDK 3.1.426 (x64)",
+                "Microsoft .NET SDK 8.0.413 (x64)",
+                "Microsoft .NET SDK 9.0.304 (x64)",
+                "Microsoft .NET Runtime - 9.0.8 (x64)",
+                "Unrelated package 8.0.424"
+            });
+
+        Assert.Equal(
+            new[]
+            {
+                Path.GetFullPath(Path.Combine(root, "3.1.426")),
+                Path.GetFullPath(Path.Combine(root, "8.0.413")),
+                Path.GetFullPath(Path.Combine(root, "9.0.304"))
+            },
+            result.OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("Microsoft .NET Core SDK 3.1.426 (x64)", true, "3.1.426")]
+    [InlineData("Microsoft .NET SDK 8.0.413 (x64)", true, "8.0.413")]
+    [InlineData("Microsoft .NET SDK 10.0.100", true, "10.0.100")]
+    [InlineData("Microsoft .NET SDK 10.0.100-preview.1 (x64)", false, null)]
+    [InlineData("Microsoft .NET Runtime - 8.0.19 (x64)", false, null)]
+    [InlineData("Microsoft .NET SDK 08.0.413 (x64)", false, null)]
+    public void TryParseWindowsRegisteredSdkVersion_RequiresCanonicalSdkPackageName(string displayName, bool expected, string? expectedVersion)
+    {
+        Assert.Equal(expected, RunnerHousekeepingService.TryParseWindowsRegisteredSdkVersion(displayName, out var version));
+        Assert.Equal(expectedVersion, version);
+    }
+
+    [Fact]
+    public void SelectDotNetSdkDirectoriesToPrune_PreservesLegacyWindowsPackageOwnedSdk()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.RunnerHousekeepingLegacyWindowsSdkSelection");
+        var installedDirectories = new[]
+        {
+            Path.Combine(root, "3.1.425"),
+            Path.Combine(root, "3.1.426")
+        };
+        var packageOwnedDirectories = RunnerHousekeepingService.SelectWindowsPackageOwnedSdkDirectories(
+            installedDirectories,
+            new[] { "Microsoft .NET Core SDK 3.1.425 (x64)" });
+
+        var result = RunnerHousekeepingService.SelectDotNetSdkDirectoriesToPrune(
+            installedDirectories,
+            activeVersion: string.Empty,
+            packageOwnedDirectories,
+            versionsToKeepPerMajorMinor: 1);
+
+        Assert.Empty(result);
     }
 
     [Theory]

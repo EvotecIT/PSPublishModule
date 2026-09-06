@@ -18,6 +18,10 @@ inputs:
     description: Optional runner free-disk threshold override in GiB.
     required: false
     default: ""
+  runner-tool-cache-path:
+    description: Optional explicit runner tool cache path.
+    required: false
+    default: ""
   report-path:
     description: Optional JSON report output path relative to the workspace.
     required: false
@@ -86,6 +90,7 @@ runs:
         INPUT_CONFIG_PATH: ${{ inputs['config-path'] }}
         INPUT_APPLY: ${{ inputs.apply }}
         INPUT_RUNNER_MIN_FREE_GB: ${{ inputs['runner-min-free-gb'] }}
+        RUNNER_TOOL_CACHE: ${{ inputs['runner-tool-cache-path'] }}
         GITHUB_TOKEN: ${{ inputs['github-token'] != '' && inputs['github-token'] || github.token }}
         POWERFORGE_GITHUB_HOUSEKEEPING_REPORT_PATH: ${{ inputs['report-path'] }}
         POWERFORGE_GITHUB_HOUSEKEEPING_SUMMARY_PATH: ${{ inputs['summary-path'] }}

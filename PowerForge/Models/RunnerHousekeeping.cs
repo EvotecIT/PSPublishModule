@@ -117,10 +117,17 @@ public sealed class RunnerHousekeepingSpec
     public bool ClearDotNetCaches { get; set; } = true;
 
     /// <summary>
-    /// When true on Debian-family Linux runners, superseded unowned stable SDK directories under
-    /// <c>DOTNET_ROOT/sdk</c> are pruned during aggressive cleanup.
+    /// When true, superseded unowned stable SDK directories under <c>DOTNET_ROOT/sdk</c> are pruned
+    /// during aggressive cleanup. Linux package ownership is detected with <c>dpkg-query</c>; Windows
+    /// package ownership is detected through registered uninstall metadata.
     /// </summary>
     public bool PruneDotNetSdks { get; set; }
+
+    /// <summary>
+    /// When true on Windows runners, DISM performs a non-resetting component-store cleanup during
+    /// aggressive cleanup. Installed update rollback remains available.
+    /// </summary>
+    public bool CleanWindowsComponentStore { get; set; }
 
     /// <summary>
     /// When true, <c>docker system prune</c> is executed during aggressive cleanup.
