@@ -78,9 +78,9 @@ flock -n 9 || fail "Another Linux root-capacity operation is already running on 
 worker_count="$(pgrep -xc Runner.Worker || true)"
 [[ "$worker_count" -eq 1 ]] || fail "Expected exactly this workflow's Runner.Worker process; found $worker_count."
 
-root_source="$(findmnt -n -o SOURCE /)"
-root_filesystem="$(findmnt -n -o FSTYPE /)"
-root_major_minor="$(findmnt -n -o MAJ:MIN /)"
+root_source="$(trim "$(findmnt -n -o SOURCE /)")"
+root_filesystem="$(trim "$(findmnt -n -o FSTYPE /)")"
+root_major_minor="$(trim "$(findmnt -n -o MAJ:MIN /)")"
 [[ -n "$root_source" && -n "$root_major_minor" ]] || fail "Unable to resolve the root filesystem device."
 [[ "$root_filesystem" == "ext4" ]] || fail "Expected the verified ext4 root filesystem; found '$root_filesystem'."
 
