@@ -24,17 +24,22 @@ internal static class PowerShellRuntimeExceptionCatchPolicy
             .Cast<FunctionDefinitionAst>().GroupBy(static function => function.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         var observed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var pending = new Queue<string>(roots.SelectMany(root => root.FindAll(static node => node is CommandAst, true))
+        var pending = new Queue<string?>(roots.SelectMany(root => root.FindAll(static node => node is CommandAst, true))
             .Cast<CommandAst>().Where(ContainsNumericErrorWrapping)
-            .Select(static command => command.GetCommandName()).OfType<string>());
+            .Select(static command => command.GetCommandName()));
         while (pending.Count > 0)
         {
             var name = pending.Dequeue();
-            if (!functions.TryGetValue(name, out var declarations) || !observed.Add(name)) continue;
+            // Dynamic calls and unresolved names (including local aliases) do not
+            // have a closed target set. Preserve every potentially observed numeric
+            // callee; the bound check still permits unrelated non-numeric helpers.
+            if (name is null || !functions.TryGetValue(name, out var declarations))
+                return functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!observed.Add(name)) continue;
             foreach (var command in declarations.SelectMany(declaration => declaration.Body.FindAll(static node => node is CommandAst, true))
                          .Cast<CommandAst>())
             {
-                if (command.GetCommandName() is { } callee) pending.Enqueue(callee);
+                pending.Enqueue(command.GetCommandName());
             }
         }
         return observed;

@@ -7,6 +7,58 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Trait("Category", "PowerShellCompilerGate")]
     [Theory]
+    [MemberData(nameof(NumericArtifactTargets))]
+    public void Build_HybridPreservesNumericWrappersThroughUnresolvedCallTargets(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Get-Number {
+                [CmdletBinding()] [Alias('Read-Number')]
+                param([int] $Left, [int] $Right)
+                $Left += $Right; return $Left
+            }
+            function Get-Bridge {
+                [CmdletBinding()] param()
+                $Name = 'Get-Number'
+                return & $Name -Left ([int]::MaxValue) -Right 1
+            }
+            function Test-Direct {
+                [CmdletBinding()] param()
+                $Name = 'Get-Number'
+                try { & $Name -Left ([int]::MaxValue) -Right 1; return 'missed' }
+                catch [System.Management.Automation.PSInvalidCastException] { return 'caught' }
+            }
+            function Test-Bridge {
+                [CmdletBinding()] param()
+                try { Get-Bridge; return 'missed' }
+                catch [System.Management.Automation.PSInvalidCastException] { return 'caught' }
+            }
+            function Test-Alias {
+                [CmdletBinding()] param()
+                try { Read-Number -Left ([int]::MaxValue) -Right 1; return 'missed' }
+                catch [System.Management.Automation.PSInvalidCastException] { return 'caught' }
+            }
+            function Get-Safe { [CmdletBinding()] param() return 7 }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.NumericDynamicCall", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.EmittedUnits >= 1);
+        const string invocation = "Test-Direct; Test-Bridge; Test-Alias; Get-Safe";
+        var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module '{fixture.ScriptPath.Replace("'", "''")}'; {invocation}");
+        var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module '{result.ArtifactPath!.Replace("'", "''")}'; {invocation}");
+        Assert.Equal(0, original.ExitCode);
+        Assert.Equal(0, compiled.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
+        Assert.Equal(string.Join(Environment.NewLine, "caught", "caught", "caught", "7"), original.StandardOutput.Trim());
+        Assert.Equal(original.StandardOutput.Trim(), compiled.StandardOutput.Trim());
+    }
+
+    [Trait("Category", "PowerShellCompilerGate")]
+    [Theory]
     [InlineData("System.Management.Automation.PSInvalidCastException", false)]
     [InlineData("System.InvalidCastException", true)]
     public void Bind_NumericErrorObservationCrossesDocumentsWithoutRejectingClrCatchContracts(string exception, bool typed)
