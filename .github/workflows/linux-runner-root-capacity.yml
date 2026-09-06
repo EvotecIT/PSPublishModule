@@ -1,0 +1,102 @@
+name: Linux Runner Root Capacity
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Expand each verified Linux runner root (true/false)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      confirmation:
+        description: "For apply=true, enter EXPAND-ALL-LINUX-RUNNER-ROOTS"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-runner-root-capacity-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  validate-root:
+    if: ${{ github.repository == 'EvotecIT/PSPublishModule' }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - name: github-runner-linux
+            labels: '["self-hosted","linux","runner-github-runner-linux"]'
+          - name: github-runner-linux-01
+            labels: '["self-hosted","linux","runner-github-runner-linux-01"]'
+          - name: github-runner-linux-02
+            labels: '["self-hosted","linux","runner-github-runner-linux-02"]'
+          - name: github-runner-linux-03
+            labels: '["self-hosted","linux","runner-github-runner-linux-03"]'
+          - name: github-runner-linux-04
+            labels: '["self-hosted","linux","runner-github-runner-linux-04"]'
+          - name: github-runner-linux-05
+            labels: '["self-hosted","linux","runner-github-runner-linux-05"]'
+    name: ${{ matrix.runner.name }} / validate root capacity
+    runs-on: ${{ fromJSON(matrix.runner.labels) }}
+    steps:
+      - name: Check out PSPublishModule
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate root expansion plan
+        shell: bash
+        env:
+          APPLY: "false"
+          EXPECTED_RUNNER_NAME: ${{ matrix.runner.name }}
+          EXPECTED_PV: /dev/sda3
+          EXPECTED_DISK_BYTES: "136365211648"
+          EXPECTED_PARTITION_BYTES: "133088411648"
+          EXPECTED_INITIAL_LV_BYTES: "66542632960"
+          EXPECTED_INITIAL_FS_BYTES: "65174941696"
+        run: bash ./.github/scripts/expand-linux-runner-root.sh
+
+  expand-root:
+    if: ${{ inputs.apply == 'true' && needs.validate-root.result == 'success' }}
+    needs: validate-root
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - name: github-runner-linux
+            labels: '["self-hosted","linux","runner-github-runner-linux"]'
+          - name: github-runner-linux-01
+            labels: '["self-hosted","linux","runner-github-runner-linux-01"]'
+          - name: github-runner-linux-02
+            labels: '["self-hosted","linux","runner-github-runner-linux-02"]'
+          - name: github-runner-linux-03
+            labels: '["self-hosted","linux","runner-github-runner-linux-03"]'
+          - name: github-runner-linux-04
+            labels: '["self-hosted","linux","runner-github-runner-linux-04"]'
+          - name: github-runner-linux-05
+            labels: '["self-hosted","linux","runner-github-runner-linux-05"]'
+    name: ${{ matrix.runner.name }} / expand root capacity
+    runs-on: ${{ fromJSON(matrix.runner.labels) }}
+    steps:
+      - name: Check out PSPublishModule
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Expand root volume
+        shell: bash
+        env:
+          APPLY: "true"
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_RUNNER_NAME: ${{ matrix.runner.name }}
+          EXPECTED_PV: /dev/sda3
+          EXPECTED_DISK_BYTES: "136365211648"
+          EXPECTED_PARTITION_BYTES: "133088411648"
+          EXPECTED_INITIAL_LV_BYTES: "66542632960"
+          EXPECTED_INITIAL_FS_BYTES: "65174941696"
+        run: bash ./.github/scripts/expand-linux-runner-root.sh
