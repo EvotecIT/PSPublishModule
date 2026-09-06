@@ -104,7 +104,11 @@ internal static class PowerShellOperatorSemanticBinder
             if (operation == "Divide" && PowerShellClrTypeSemantics.IsIntegral(leftType) && PowerShellClrTypeSemantics.IsIntegral(rightType))
                 return Reject(diagnostics, span, "PSB2206", "PowerShell integral division changes runtime result type based on the quotient and is not supported by one static CLR return type.");
             if (operation != "Divide" && PowerShellClrTypeSemantics.IsIntegral(leftType) && PowerShellClrTypeSemantics.IsIntegral(rightType))
+            {
+                if (PowerShellInt32RangePolicy.TryBindArithmetic(span, operation, left, right, out var boundedArithmetic))
+                    return boundedArithmetic;
                 return Reject(diagnostics, span, "PSB2207", "Unconstrained integral arithmetic can promote on overflow in PowerShell; use an explicitly typed accumulator with compound assignment.");
+            }
             // PowerShell evaluates floating arithmetic in Double, including two Single
             // operands. Widen before the operation so rounding cannot occur in Single.
             var resultType = leftType == typeof(decimal) ? typeof(decimal) : typeof(double);

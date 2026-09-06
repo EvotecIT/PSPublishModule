@@ -34,9 +34,9 @@ internal static class PowerShellArraySemanticBinder
             var element = bindExpression(item, elementType);
             if (element is null) return null;
             if (kind == PowerShellBoundArrayKind.CollectedExpression &&
-                (element.Type.ClrType.IsArray || element.ValueState == PowerShellValueState.Null))
+                (!PowerShellStableScalarTypePolicy.IsSupported(element.Type.ClrType) || element.ValueState == PowerShellValueState.Null))
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2503", "Typed @() expressions do not accept array-valued or null pipeline output.", element.Span));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2503", "Typed @() expressions require closed scalar output; potentially enumerable, dynamically typed, and null values retain PowerShell collection and error semantics.", element.Span));
                 return null;
             }
             if (arrayType != typeof(object[]) && !PowerShellClrTypeSemantics.CanAssign(elementType, element.Type.ClrType))

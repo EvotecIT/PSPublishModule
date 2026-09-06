@@ -16,6 +16,8 @@ internal sealed class PowerShellSemanticSymbolBinding
     internal PowerShellValueState ValueState { get; private set; }
     internal bool IsModuleStateDerived { get; private set; }
 
+    internal void SetInt32Range(PowerShellInt32Range range) => Type = Type.WithInt32Range(range);
+
     internal void Refine(PowerShellTypeFact type, PowerShellValueState valueState)
     {
         if (Type.Provenance == PowerShellTypeFactProvenance.Unknown) Type = type;
@@ -179,7 +181,9 @@ internal static class PowerShellMutationSemanticBinder
         }
         var operand = UnwrapExpression(syntax.Child) as VariableExpressionAst;
         if (operand is null || !symbols.TryGetValue(operand.VariablePath.UserPath, out var target)) return false;
-        if (!PowerShellCSharpOperatorPolicy.SupportsIncrement(target.Type.ClrType) || target.Type.Provenance != PowerShellTypeFactProvenance.Explicit)
+        var boundedDecrement = PowerShellInt32RangePolicy.CanDecrement(target, operation.Value);
+        if (!PowerShellCSharpOperatorPolicy.SupportsIncrement(target.Type.ClrType) ||
+            target.Type.Provenance != PowerShellTypeFactProvenance.Explicit && !boundedDecrement)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2404", $"Increment or decrement of '${target.Symbol.Name}' requires one explicitly typed supported CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return true;
@@ -198,7 +202,7 @@ internal static class PowerShellMutationSemanticBinder
             null,
             new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "Increment and decrement are statement-valued on the conservative path."),
             false,
-            SelectIntegralSemantics(operation.Value, target.Type.ClrType, target.Type.ClrType));
+            boundedDecrement ? PowerShellIntegralMutationSemantics.None : SelectIntegralSemantics(operation.Value, target.Type.ClrType, target.Type.ClrType));
         return true;
     }
 

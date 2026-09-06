@@ -65,13 +65,15 @@ internal sealed class PowerShellTypeFact
         PowerShellTypeFactProvenance provenance,
         string explanation,
         IReadOnlyDictionary<string, PowerShellTypeFact>? knownProperties = null,
-        PowerShellDictionaryValueKind dictionaryValueKind = PowerShellDictionaryValueKind.None)
+        PowerShellDictionaryValueKind dictionaryValueKind = PowerShellDictionaryValueKind.None,
+        PowerShellInt32Range? int32Range = null)
     {
         ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
         Provenance = provenance;
         Explanation = explanation ?? string.Empty;
         KnownProperties = CopyKnownProperties(knownProperties);
         DictionaryValueKind = dictionaryValueKind;
+        Int32Range = clrType == typeof(int) ? int32Range : null;
     }
 
     internal Type ClrType { get; }
@@ -79,6 +81,10 @@ internal sealed class PowerShellTypeFact
     internal string Explanation { get; }
     internal IReadOnlyDictionary<string, PowerShellTypeFact> KnownProperties { get; }
     internal PowerShellDictionaryValueKind DictionaryValueKind { get; }
+    internal PowerShellInt32Range? Int32Range { get; }
+
+    internal PowerShellTypeFact WithInt32Range(PowerShellInt32Range range)
+        => new(ClrType, Provenance, Explanation, KnownProperties, DictionaryValueKind, range);
 
     internal bool TryGetKnownProperty(string name, out PowerShellTypeFact property)
         => KnownProperties.TryGetValue(name, out property!);
@@ -87,7 +93,7 @@ internal sealed class PowerShellTypeFact
     {
         var properties = CopyKnownProperties(KnownProperties);
         properties[name] = property;
-        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind);
+        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind, Int32Range);
     }
 
     private static Dictionary<string, PowerShellTypeFact> CopyKnownProperties(
