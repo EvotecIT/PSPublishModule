@@ -96,6 +96,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             return false;
         // Validation and transformation attributes can execute user behavior during binding.
         var constrained = false;
+        var constraintSyntax = string.Empty;
         var target = authoredAssignment.Left;
         if (target is AttributedExpressionAst attributed)
         {
@@ -104,12 +105,13 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 typeConstraint.TypeName.GetReflectionType() != assignment.Value.Type.ClrType)
                 return false;
             constrained = true;
+            constraintSyntax = typeConstraint.Extent.Text;
             target = attributed.Child;
         }
         if (target is not VariableExpressionAst variable || !variable.VariablePath.IsUnqualified)
             return false;
         transfer = new PowerShellCompiledRegionLocal(assignment.Target.Name,
-            assignment.Value.Type.ClrType.FullName ?? assignment.Value.Type.ClrType.Name, constrained);
+            assignment.Value.Type.ClrType.FullName ?? assignment.Value.Type.ClrType.Name, constrained, constraintSyntax);
         return true;
     }
 }

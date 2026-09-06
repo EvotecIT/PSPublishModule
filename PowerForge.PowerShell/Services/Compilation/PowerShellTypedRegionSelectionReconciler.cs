@@ -12,7 +12,13 @@ internal static class PowerShellTypedRegionSelectionReconciler
         IReadOnlyList<PowerShellCompiledMethod> methods,
         ICollection<PowerShellCompilationDiagnostic> diagnostics)
     {
+        var covered = approved.Where(region => methods.Any(method =>
+                method.SourceName.Equals(region.SourceName, StringComparison.OrdinalIgnoreCase) &&
+                method.SourceLine == region.SourceLine &&
+                PowerShellCompilationPathSafety.PathEquals(method.SourcePath, region.SourcePath)))
+            .Select(static region => region.RegionId).ToHashSet(StringComparer.Ordinal);
         var colliding = approved
+            .Where(region => !covered.Contains(region.RegionId))
             .Where(region => methods.Any(method => method.GeneratedName.Equals(region.GeneratedName, StringComparison.Ordinal)))
             .ToArray();
         foreach (var region in colliding)
@@ -27,8 +33,10 @@ internal static class PowerShellTypedRegionSelectionReconciler
 
         var collidingIds = colliding.Select(static region => region.RegionId).ToHashSet(StringComparer.Ordinal);
         return new PowerShellTypedRegionSelection(
-            approved.Where(region => !collidingIds.Contains(region.RegionId)).ToArray(),
-            candidates.Select(candidate => collidingIds.Contains(candidate.RegionId)
+            approved.Where(region => !covered.Contains(region.RegionId) && !collidingIds.Contains(region.RegionId)).ToArray(),
+            candidates.Select(candidate => covered.Contains(candidate.RegionId)
+                ? RejectWholeFunctionCoverage(candidate)
+                : collidingIds.Contains(candidate.RegionId)
                 ? RejectGeneratedNameCollision(candidate)
                 : candidate).ToArray());
     }
@@ -78,6 +86,18 @@ internal static class PowerShellTypedRegionSelectionReconciler
             generatedName: string.Empty,
             candidate.RegionGraph,
             candidate.ContinuationLocals);
+
+    private static PowerShellCompilationRegionCandidate RejectWholeFunctionCoverage(PowerShellCompilationRegionCandidate candidate)
+        => new(
+            candidate.RegionId, candidate.SourceSha256, candidate.SourceDocumentSha256,
+            candidate.SourceName, candidate.SourceLine, candidate.SourcePath,
+            candidate.StartOffset, candidate.EndOffset, candidate.StartLine, candidate.StartColumn,
+            candidate.EndLine, candidate.EndColumn,
+            promoted: false,
+            "region.whole-function-selected",
+            "The containing function is already selected for whole-function emission.",
+            generatedName: string.Empty,
+            candidate.RegionGraph, candidate.ContinuationLocals);
 }
 
 internal sealed class PowerShellTypedRegionSelection

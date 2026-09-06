@@ -5,6 +5,73 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridWholeFunctionOwnsItsBoundPrefix()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Get-WholePrefix {
+                [CmdletBinding()]
+                param()
+                $First = 'hello'
+                $Second = 'world'
+                Write-Output "$First $Second"
+            }
+            """, ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "WholePrefixMethods", "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+        Assert.Single(typed.Methods);
+        Assert.Empty(typed.PromotedRegions);
+        Assert.Contains(typed.RegionCandidates, candidate => candidate.DecisionCode == "region.whole-function-selected");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.WholePrefix",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = "net10.0" });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            "Import-Module '" + result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal) + "'; Get-WholePrefix");
+        Assert.Equal(0, run.ExitCode);
+        Assert.Equal("hello world", run.StandardOutput.Trim());
+        Assert.Empty(run.StandardError);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("net10.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
+    public void Build_HybridPrefixPreservesNullableConstraintAndNullTransfer(string framework, string host)
+    {
+        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
+        using var fixture = ArtifactFixture.Create("""
+            function Get-NullablePrefix {
+                [CmdletBinding()]
+                param([Nullable[int]] $Number)
+                [Nullable[int]] $Value = $Number
+                $Count = 1
+                & { if ($null -eq $Value) { 'null' } else { $Value } }
+                $Value = '9'
+                $Value.GetType().Name
+                $Count
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.NullablePrefix",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.PromotedTypedRegions > 0);
+        const string probe = "@(Get-NullablePrefix $null; Get-NullablePrefix 0; Get-NullablePrefix 7) -join '|'";
+        var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
+            "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
+        var compiled = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
+            "Import-Module '" + result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
+        Assert.Equal(0, original.ExitCode);
+        Assert.Equal("null|Int32|1|0|Int32|1|7|Int32|1", original.StandardOutput.Trim());
+        Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
+            (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+    }
+
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
