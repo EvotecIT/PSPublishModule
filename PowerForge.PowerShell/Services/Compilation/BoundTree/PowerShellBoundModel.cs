@@ -44,7 +44,10 @@ internal enum PowerShellTypeFactProvenance
     Inferred,
     CommandContract,
     Widened,
-    Unknown
+    Unknown,
+    // Internal numeric value representation. The authored Int32-or-Double identity
+    // must be unobservable, and every consumer is checked before semantic emission.
+    NumericValueProjection
 }
 
 internal enum PowerShellDictionaryValueKind

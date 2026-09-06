@@ -32,12 +32,23 @@ internal static class PowerShellTypedRegionSelectionReconciler
         }
 
         var collidingIds = colliding.Select(static region => region.RegionId).ToHashSet(StringComparer.Ordinal);
+        var enclosed = approved.Where(region => !covered.Contains(region.RegionId) && !collidingIds.Contains(region.RegionId) &&
+                approved.Any(outer => outer.RegionId != region.RegionId &&
+                    !covered.Contains(outer.RegionId) && !collidingIds.Contains(outer.RegionId) &&
+                    outer.SourceName.Equals(region.SourceName, StringComparison.OrdinalIgnoreCase) &&
+                    outer.SourceLine == region.SourceLine &&
+                    PowerShellCompilationPathSafety.PathEquals(outer.SourcePath, region.SourcePath) &&
+                    outer.StartOffset <= region.StartOffset && outer.EndOffset >= region.EndOffset &&
+                    outer.EndOffset - outer.StartOffset > region.EndOffset - region.StartOffset))
+            .Select(static region => region.RegionId).ToHashSet(StringComparer.Ordinal);
         return new PowerShellTypedRegionSelection(
-            approved.Where(region => !covered.Contains(region.RegionId) && !collidingIds.Contains(region.RegionId)).ToArray(),
+            approved.Where(region => !covered.Contains(region.RegionId) && !collidingIds.Contains(region.RegionId) && !enclosed.Contains(region.RegionId)).ToArray(),
             candidates.Select(candidate => covered.Contains(candidate.RegionId)
                 ? RejectWholeFunctionCoverage(candidate)
                 : collidingIds.Contains(candidate.RegionId)
                 ? RejectGeneratedNameCollision(candidate)
+                : enclosed.Contains(candidate.RegionId)
+                ? RejectEnclosedRegion(candidate)
                 : candidate).ToArray());
     }
 
@@ -96,6 +107,18 @@ internal static class PowerShellTypedRegionSelectionReconciler
             promoted: false,
             "region.whole-function-selected",
             "The containing function is already selected for whole-function emission.",
+            generatedName: string.Empty,
+            candidate.RegionGraph, candidate.ContinuationLocals);
+
+    private static PowerShellCompilationRegionCandidate RejectEnclosedRegion(PowerShellCompilationRegionCandidate candidate)
+        => new(
+            candidate.RegionId, candidate.SourceSha256, candidate.SourceDocumentSha256,
+            candidate.SourceName, candidate.SourceLine, candidate.SourcePath,
+            candidate.StartOffset, candidate.EndOffset, candidate.StartLine, candidate.StartColumn,
+            candidate.EndLine, candidate.EndColumn,
+            promoted: false,
+            "region.enclosed-by-approved-region",
+            "A larger approved region covers this candidate's complete authored span.",
             generatedName: string.Empty,
             candidate.RegionGraph, candidate.ContinuationLocals);
 }

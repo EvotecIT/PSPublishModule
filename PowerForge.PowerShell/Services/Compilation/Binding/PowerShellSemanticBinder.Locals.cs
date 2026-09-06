@@ -34,6 +34,10 @@ internal sealed partial class PowerShellSemanticBinder
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
             var type = ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
+            if (type.ClrType == typeof(int) && type.Provenance == PowerShellTypeFactProvenance.Inferred &&
+                PowerShellNumericValueProjectionPolicy.CanProject(function, name, assignments))
+                type = new PowerShellTypeFact(typeof(double), PowerShellTypeFactProvenance.NumericValueProjection,
+                    "Literal Int32 additive updates have an exact Double value representation when every consumer discards the authored Int32-or-Double identity.");
             if (type.Provenance == PowerShellTypeFactProvenance.Unknown &&
                 TryInferNullSeededReferenceType(name, assignment, assignments, functions, capabilities, commandResolver, out var inferred))
                 type = inferred;

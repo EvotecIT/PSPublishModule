@@ -28,12 +28,19 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             .ToArray();
         if (suffix.Length == 0 ||
             suffix[0].AuthoredStatementIndex != lastFailedStatementIndex + 1 ||
-            suffix[suffix.Length - 1].AuthoredStatementEndIndex != authoredStatements.Count - 1 ||
-            !AlwaysReturns(suffix[suffix.Length - 1].Statement))
+            suffix[suffix.Length - 1].AuthoredStatementEndIndex != authoredStatements.Count - 1)
             return false;
 
+        var statements = suffix.Select(static binding => binding.Statement).ToArray();
+        // Only the final top-level scalar expression is an implicit function return.
+        // Earlier output remains in the graph and must pass its ordinary cardinality proof.
+        if (statements[statements.Length - 1] is PowerShellBoundExpressionStatement
+            { EmitsOutput: true, RequiresOutputContinuation: false } terminal &&
+            PowerShellStableScalarTypePolicy.IsSupported(terminal.Expression.Type.ClrType))
+            statements[statements.Length - 1] = new PowerShellBoundReturnStatement(terminal.Span, terminal.Expression);
+        if (!AlwaysReturns(statements[statements.Length - 1])) return false;
         return TryCreateBound(document, syntax, sourceFunction, parameters, locals,
-            suffix.Select(static binding => binding.Statement).ToArray(), out candidate);
+            statements, out candidate);
     }
 
     private static bool TryCreateBound(
@@ -70,8 +77,9 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 !PowerShellStableScalarTypePolicy.IsSupported(parameter.Type.ClrType)))
             return false;
         var selectedLocals = locals.Where(local => usedSymbols.Contains(local.Symbol.StableKey)).ToArray();
-        if (selectedLocals.Any(static local =>
+        if (selectedLocals.Any(local =>
                 local.Type.Provenance == PowerShellTypeFactProvenance.Unknown ||
+                continuationLocals is { Length: > 0 } && local.Type.Provenance == PowerShellTypeFactProvenance.NumericValueProjection ||
                 !PowerShellStableScalarTypePolicy.IsSupported(local.Type.ClrType)))
             return false;
 

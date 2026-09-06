@@ -259,13 +259,14 @@ internal static class PowerShellLoweredRegionGraphBuilder
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(CanThrowClr) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>
                 statement is PowerShellLoweredIndexAssignmentStatement or PowerShellLoweredClrMemberAssignmentStatement ||
-                statement is PowerShellLoweredAssignmentStatement { Operation: not PowerShellBoundMutationOperator.Assign }))
+                statement is PowerShellLoweredAssignmentStatement { Operation: not PowerShellBoundMutationOperator.Assign } assignment &&
+                    assignment.ClrType != typeof(double)))
             result.Add("ClrException");
         return result.Distinct(StringComparer.Ordinal).OrderBy(static item => item, StringComparer.Ordinal).ToArray();
     }
 
     private static bool CanThrowClr(PowerShellLoweredExpression expression)
-        => expression is PowerShellLoweredConversionExpression
+        => !PowerShellLoweredPrimitiveErrorPolicy.IsNonThrowing(expression) && expression is PowerShellLoweredConversionExpression
             or PowerShellLoweredMutationExpression
             or PowerShellLoweredBinaryExpression
             or PowerShellLoweredUnaryExpression

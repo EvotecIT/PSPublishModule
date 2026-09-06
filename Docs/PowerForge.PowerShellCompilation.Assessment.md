@@ -63,6 +63,21 @@ The canonical benchmark runner used five warmup and twenty measured samples per 
 
 Qualification also exposed two independent correctness defects. Project restore now derives SDK properties from the actual artifact template, so single-file executable restore includes the same implicit package closure as build. Strict and Hybrid single-file projects passed lock, online restore, offline restore, build, and execution. Runtime-free targets now reject hosted command tails even when stream-provider capability is enabled. An unchanged algorithm that previously emitted a dispatcher-dependent library while claiming no PowerShell runtime now fails analysis; the old emitted-unit count is not native execution evidence.
 
+## Numeric computation candidate
+
+A bounded numeric representation can keep an inferred Int32 counter in Double storage when literal additive updates preserve its numeric value and every read combines it with an existing Double operand. Direct type observation, boxing, interpolation, wider mutations, opaque observers, and transfer back into retained PowerShell remain rejected. Complete typed bodies can also use the existing region ABI when binary cmdlet shaping requires retaining the authored function header. Neither change introduces another backend.
+
+The unchanged `trialDivision` function from the pinned algorithm snapshot now emits one complete-body helper in a Hybrid binary module while retaining its original function name and parameter header. Original/generated parity covers sixteen inputs, including fractional values, NaN, and infinities, and checks Boolean type and scalar cardinality.
+
+| Complete command, 100 calls per sample | Original median, CCD0 / CCD1 | Hybrid median, CCD0 / CCD1 | Interpretation |
+| --- | ---: | ---: | --- |
+| Prime input `1000000007` | 49.82 / 46.95 ms | 11.35 / 11.10 ms | 4.39 / 4.23 times faster |
+| Composite input `1001` | 4.74 / 4.73 ms | 5.09 / 5.25 ms | 7.4% / 11.1% slower |
+
+Both domains used five warmups, twenty measured samples, rotated order, no outlier removal, and the same host settings described above. Every measured result was validated. The computation-heavy case amortizes the helper call; the cheap case does not. These are workstation timings for one workload family, with no allocation-benefit or general speedup claim. The two-family computational-region gate remains open, including useful nonterminal continuation evidence.
+
+Focused tests passed 54 cases, including generated-artifact parity on Windows PowerShell 5.1 and PowerShell 7.6, overflow promotion, preceding success output, and retained exception routes. The tagged compiler subset passed 91 cases, all three compiler frameworks built without warnings, and an independent read-only review found no actionable P0-P2 issue. These are local candidate results; the complete repository compiler gate and publication follow-through are separate checks.
+
 ## Detection executable qualification
 
 The complete unchanged `Scripts/LocalSecurityAuthority/Detect-LsaProtection.ps1` from the pinned MicrosoftIntune snapshot passed project initialization, lock, restore, build, test, and pack as a framework-dependent Hybrid `net10.0` `win-x64` executable. Its source SHA-256 is `f3c152538dad482adc91a2df860d9eca9ee38981207a433060d476e5e87fe369`. The original PowerShell process and generated executable both exited zero and printed the same enabled-state message, with empty stderr. The observed `RunAsPPL` registry value was 1 before and after execution; qualification did not change the setting.

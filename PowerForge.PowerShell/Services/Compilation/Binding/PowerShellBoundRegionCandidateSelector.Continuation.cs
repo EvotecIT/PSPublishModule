@@ -13,6 +13,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         FunctionDefinitionAst syntax,
         PowerShellSymbolId sourceFunction,
         IReadOnlyList<PowerShellBoundParameter> parameters,
+        IReadOnlyList<PowerShellBoundLocal> functionLocals,
         IReadOnlyList<StatementAst> authoredStatements,
         IReadOnlyList<PowerShellBoundStatementBinding> bindings,
         out PowerShellBoundRegionCandidate candidate)
@@ -36,6 +37,9 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             if (binding.Statement is PowerShellBoundAssignmentStatement assignment &&
                 !locals.Any(local => local.Symbol.StableKey == assignment.Target.StableKey))
             {
+                if (functionLocals.Any(local => local.Symbol.StableKey == assignment.Target.StableKey &&
+                        local.Type.Provenance == PowerShellTypeFactProvenance.NumericValueProjection))
+                    break;
                 if (!TryCreateContinuationLocal(assignment, authoredStatements[binding.AuthoredStatementIndex], out newTransfer))
                     break;
                 candidateLocals.Add(new PowerShellBoundLocal(assignment.Target, assignment.Value.Type));
