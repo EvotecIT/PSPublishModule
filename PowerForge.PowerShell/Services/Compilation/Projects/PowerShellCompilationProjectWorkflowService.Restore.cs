@@ -172,8 +172,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             : $"<RuntimeIdentifier>{EscapeXml(artifact.Target.RuntimeIdentifier)}</RuntimeIdentifier>";
         var project = $"""
             <Project Sdk="Microsoft.NET.Sdk">
+              {PowerShellCompilationArtifactBuilder.RenderRestoreProjectProperties(artifact.Target)}
               <PropertyGroup>
-                <TargetFramework>{EscapeXml(artifact.Target.TargetFramework)}</TargetFramework>
                 {rid}
                 <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
                 <NuGetLockFilePath>packages.lock.json</NuGetLockFilePath>
