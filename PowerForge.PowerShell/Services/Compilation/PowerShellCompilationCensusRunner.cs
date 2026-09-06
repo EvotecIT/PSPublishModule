@@ -720,8 +720,8 @@ public sealed partial class PowerShellCompilationCensusRunner
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 
-    private static string? NormalizeTargetFramework(string? targetFramework)
-        => string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework!.Trim();
+    private static string NormalizeTargetFramework(string? targetFramework)
+        => string.IsNullOrWhiteSpace(targetFramework) ? "net8.0" : targetFramework!.Trim();
 
     private sealed class AnalyzedProduct
     {

@@ -80,6 +80,18 @@ public sealed partial class PowerShellCompilationCensusTests
         Assert.Equal(good, Assert.Single(result.Products).Path);
     }
 
+    [Fact]
+    public void Run_AcceptsLegacyDefaultFrameworkBaselineAndRejectsDifferentExplicitTarget()
+    {
+        using var fixture = new CensusInputFixture();
+        var good = fixture.Write("Good.psm1", "function Get-Answer { return 42 }");
+        var runner = new PowerShellCompilationCensusRunner();
+        var current = runner.Run(new[] { good });
+        var legacy = new PowerShellCompilationCensusResult(null, current.Products, current.Regressions, sourceDrifts: null);
+        Assert.True(runner.Run(new[] { good }, baseline: legacy).Passed);
+        Assert.Throws<ArgumentException>(() => runner.Run(new[] { good }, "net10.0", legacy));
+    }
+
     private sealed class CensusInputFixture : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "PowerForge Census Contracts", Guid.NewGuid().ToString("N"));
