@@ -19,7 +19,7 @@ internal static class PowerShellTypedRegionSelectionReconciler
         {
             diagnostics.Add(new PowerShellCompilationDiagnostic(
                 PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                $"Terminal region in function '{region.SourceName}' collides with generated CLR method name '{region.GeneratedName}'.",
+                $"Typed region in function '{region.SourceName}' collides with generated CLR method name '{region.GeneratedName}'.",
                 region.SourcePath,
                 region.SourceLine,
                 1));
@@ -54,7 +54,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             decision.Policy.Code,
             decision.Policy.Reason,
             decision.Policy.IsSafe ? decision.Emission?.GeneratedName ?? string.Empty : string.Empty,
-            decision.Emission?.RegionGraph);
+            decision.Emission?.RegionGraph,
+            candidate.ContinuationLocals.ToArray());
     }
 
     private static PowerShellCompilationRegionCandidate RejectGeneratedNameCollision(PowerShellCompilationRegionCandidate candidate)
@@ -75,7 +76,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             "region.generated-name-collision",
             $"The generated helper name '{candidate.GeneratedName}' collides with a selected whole-function method.",
             generatedName: string.Empty,
-            candidate.RegionGraph);
+            candidate.RegionGraph,
+            candidate.ContinuationLocals);
 }
 
 internal sealed class PowerShellTypedRegionSelection

@@ -54,10 +54,10 @@ internal static class PowerShellHybridRegionRewriter
             if (!HasSafeGraph(region.RegionGraph))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' does not carry a fail-closed typed boundary graph.");
             var arguments = string.Join(", ", region.InputParameters.Select(static parameter => "${" + parameter.Name + "}"));
-            var receiver = string.IsNullOrEmpty(region.ContinuationVariable)
+            var receiver = region.ContinuationLocals.Count == 0
                 ? "return "
-                : (string.IsNullOrEmpty(region.ContinuationTypeConstraint) ? string.Empty :
-                    "[" + region.ContinuationTypeConstraint + "]") + "${" + region.ContinuationVariable + "} = ";
+                : string.Join(", ", region.ContinuationLocals.Select(static local =>
+                    (local.HasTypeConstraint ? "[" + local.TypeName + "]" : string.Empty) + "${" + local.Name + "}")) + " = ";
             var invocation = receiver + "[" + typed.NamespaceName + "." + typed.TypeName + "]::" +
                              region.GeneratedName + "(" + arguments + ")";
             edits.Add(new PowerShellHybridSourceEdit(

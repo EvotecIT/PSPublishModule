@@ -165,6 +165,7 @@ public sealed class PowerShellCompilationParameter
     }
 
     /// <summary>Creates a parameter description including PowerShell binding and validation metadata.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
     public PowerShellCompilationParameter(
         string name,
         string typeName,

@@ -156,7 +156,7 @@ internal sealed class PowerShellBoundRegionOpportunityAnalyzer
                     ? PowerShellCompilationRegionContinuation.UnboundFallThrough
                     : PowerShellCompilationRegionContinuation.BoundFallThrough;
         var insideTerminalCandidate = terminalCandidates.Any(candidate =>
-            string.IsNullOrEmpty(candidate.ContinuationVariable) &&
+            candidate.ContinuationLocals.Length == 0 &&
             PowerShellCompilationPathSafety.PathEquals(candidate.SourcePath, opportunity.SourcePath) &&
             candidate.SourceName.Equals(opportunity.SourceName, StringComparison.OrdinalIgnoreCase) &&
             candidate.RegionFunction.Body.Span.StartOffset <= authoredSpan.StartOffset &&

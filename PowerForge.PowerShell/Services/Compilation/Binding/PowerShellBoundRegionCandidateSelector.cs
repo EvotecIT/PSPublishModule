@@ -44,8 +44,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         IReadOnlyList<PowerShellBoundLocal> locals,
         PowerShellBoundStatement[] statements,
         out PowerShellBoundRegionCandidate candidate,
-        string continuationVariable = "",
-        string continuationTypeConstraint = "")
+        PowerShellCompiledRegionLocal[]? continuationLocals = null)
     {
         candidate = null!;
         var first = statements[0].Span;
@@ -120,7 +119,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             syntax.Body.Extent.StartLineNumber,
             helper,
             helperParameters.Select(static parameter => parameter.Contract).ToArray(),
-            continuationVariable, continuationTypeConstraint);
+            continuationLocals);
         return true;
     }
 
@@ -223,8 +222,7 @@ internal sealed class PowerShellBoundRegionCandidate
         int sourceLine,
         PowerShellBoundFunction regionFunction,
         PowerShellCompilationParameter[] inputParameters,
-        string continuationVariable = "",
-        string continuationTypeConstraint = "")
+        PowerShellCompiledRegionLocal[]? continuationLocals = null)
     {
         RegionId = regionId;
         SourceSha256 = sourceSha256;
@@ -234,8 +232,7 @@ internal sealed class PowerShellBoundRegionCandidate
         SourceLine = sourceLine;
         RegionFunction = regionFunction;
         InputParameters = inputParameters ?? Array.Empty<PowerShellCompilationParameter>();
-        ContinuationVariable = continuationVariable;
-        ContinuationTypeConstraint = continuationTypeConstraint;
+        ContinuationLocals = continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>();
     }
 
     internal string RegionId { get; }
@@ -246,6 +243,5 @@ internal sealed class PowerShellBoundRegionCandidate
     internal int SourceLine { get; }
     internal PowerShellBoundFunction RegionFunction { get; }
     internal PowerShellImmutableArray<PowerShellCompilationParameter> InputParameters { get; }
-    internal string ContinuationVariable { get; }
-    internal string ContinuationTypeConstraint { get; }
+    internal PowerShellImmutableArray<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
 }

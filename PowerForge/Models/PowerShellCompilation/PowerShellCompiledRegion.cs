@@ -29,8 +29,7 @@ public sealed class PowerShellCompiledRegion
         IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
         PowerShellCompilationRegionGraph regionGraph,
         string documentId,
-        string continuationVariable = "",
-        string continuationTypeConstraint = "")
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -50,8 +49,7 @@ public sealed class PowerShellCompiledRegion
         SourceMap = Array.AsReadOnly((sourceMap ?? Array.Empty<PowerShellCompilationSourceMapEntry>()).ToArray());
         RegionGraph = regionGraph ?? new PowerShellCompilationRegionGraph(Array.Empty<PowerShellCompilationRegion>());
         DocumentId = documentId ?? string.Empty;
-        ContinuationVariable = continuationVariable ?? string.Empty;
-        ContinuationTypeConstraint = continuationTypeConstraint ?? string.Empty;
+        ContinuationLocals = Array.AsReadOnly((continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -91,10 +89,8 @@ public sealed class PowerShellCompiledRegion
     /// <summary>Relocation-safe authored document identity.</summary>
     public string DocumentId { get; }
 
-    /// <summary>Local receiving the scalar result before PowerShell resumes; empty for a terminal return.</summary>
-    public string ContinuationVariable { get; }
-    /// <summary>Authored CLR type constraint to preserve on the receiving local, or empty when unconstrained.</summary>
-    public string ContinuationTypeConstraint { get; }
+    /// <summary>Ordered scalar locals restored before PowerShell resumes; empty for a terminal return.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
 
     [JsonIgnore]
     internal string GeneratedSource { get; set; } = string.Empty;

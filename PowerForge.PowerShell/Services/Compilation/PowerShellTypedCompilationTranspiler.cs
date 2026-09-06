@@ -465,8 +465,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.SourceMap,
             emitted.RegionGraph,
             emitted.SourceSpan.DocumentId,
-            candidate.ContinuationVariable,
-            candidate.ContinuationTypeConstraint);
+            candidate.ContinuationLocals.ToArray());
         compiled.GeneratedSource = emitted.Source;
         return compiled;
     }
