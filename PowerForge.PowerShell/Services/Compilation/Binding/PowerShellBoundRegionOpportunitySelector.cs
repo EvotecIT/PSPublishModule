@@ -4,8 +4,8 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>
-/// Finds maximal contiguous runs that the canonical binder represented inside an otherwise
-/// rejected function. The runs are analysis inputs only; this selector never approves emission.
+/// Finds maximal contiguous runs represented by the canonical binder. Final method selection
+/// keeps evidence only for retained functions; this selector never approves emission.
 /// </summary>
 internal static class PowerShellBoundRegionOpportunitySelector
 {

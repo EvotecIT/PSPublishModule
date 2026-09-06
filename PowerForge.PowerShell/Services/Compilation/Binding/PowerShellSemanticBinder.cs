@@ -171,6 +171,19 @@ internal sealed partial class PowerShellSemanticBinder
             statements.Add(bound);
             statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, bound));
         }
+        // Preserve canonical runs even when binding succeeds: semantic analysis, call-graph
+        // closure, and artifact shaping can still retain this function later in the pipeline.
+        if (regionOpportunities is not null)
+            AddRegionOpportunities(
+                regionOpportunities,
+                document,
+                function,
+                functionSymbol,
+                parameters,
+                symbols,
+                locals,
+                authoredStatements,
+                statementBindings);
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
             if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&
@@ -185,17 +198,6 @@ internal sealed partial class PowerShellSemanticBinder
                     lastFailedStatementIndex,
                     out var candidate))
                 regionCandidates[candidate.RegionId] = candidate;
-            if (regionOpportunities is not null)
-                AddRegionOpportunities(
-                    regionOpportunities,
-                    document,
-                    function,
-                    functionSymbol,
-                    parameters,
-                    symbols,
-                    locals,
-                    authoredStatements,
-                    statementBindings);
             return null;
         }
 
