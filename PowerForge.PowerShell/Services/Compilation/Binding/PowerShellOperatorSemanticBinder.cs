@@ -159,6 +159,15 @@ internal static class PowerShellOperatorSemanticBinder
                     right,
                     typeof(bool));
             }
+            // Double represents every value of these integral types exactly. PowerShell
+            // compares this mixed numeric pair in Double in either operand order.
+            if (leftType == typeof(double) && IsExactlyRepresentableDoubleIntegral(rightType) ||
+                rightType == typeof(double) && IsExactlyRepresentableDoubleIntegral(leftType))
+            {
+                left = WidenArithmeticOperand(left, typeof(double));
+                right = WidenArithmeticOperand(right, typeof(double));
+                leftType = rightType = typeof(double);
+            }
             var liftedEquality = equality && IsNullableUnderlyingPair(leftType, rightType);
             var leftNumericType = Nullable.GetUnderlyingType(leftType) ?? leftType;
             if (leftType != rightType &&
@@ -506,6 +515,10 @@ internal static class PowerShellOperatorSemanticBinder
             expression,
             usePowerShellTruthiness: true);
     }
+
+    private static bool IsExactlyRepresentableDoubleIntegral(Type type)
+        => type == typeof(sbyte) || type == typeof(byte) || type == typeof(short) ||
+           type == typeof(ushort) || type == typeof(int) || type == typeof(uint);
 
     private static PowerShellBoundExpression WidenArithmeticOperand(PowerShellBoundExpression operand, Type type)
         => operand.Type.ClrType == type ? operand : new PowerShellBoundConversionExpression(
