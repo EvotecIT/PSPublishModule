@@ -23,7 +23,7 @@ public sealed partial class PowerShellCompilationCensusRunner
     {
         if (paths is null) throw new ArgumentNullException(nameof(paths));
         if (options is null) throw new ArgumentNullException(nameof(options));
-        var targetFramework = string.IsNullOrWhiteSpace(options.TargetFramework) ? "net8.0" : options.TargetFramework.Trim();
+        var targetFramework = string.IsNullOrWhiteSpace(options.TargetFramework) ? "net8.0" : options.TargetFramework!.Trim();
         var profile = PowerShellCompilationSemanticOracleCatalog.Get(string.IsNullOrWhiteSpace(options.SemanticProfileId)
             ? PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework)
             : options.SemanticProfileId).ProfileId;
