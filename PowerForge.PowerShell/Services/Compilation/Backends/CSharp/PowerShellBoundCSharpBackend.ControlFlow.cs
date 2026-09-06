@@ -4,7 +4,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private static string EmitCommandRegionArguments(IEnumerable<PowerShellLoweredCommandRegionArgument> arguments)
+    private string EmitCommandRegionArguments(IEnumerable<PowerShellLoweredCommandRegionArgument> arguments)
     {
         var values = arguments.Select(argument => PowerShellCSharpSymbolRenderer.Identifier(argument.Symbol.Name)).ToArray();
         return values.Length == 0
@@ -12,7 +12,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             : "new object?[] { " + string.Join(", ", values) + " }";
     }
 
-    private static void EmitCommandCapture(
+    private void EmitCommandCapture(
         StringBuilder builder,
         PowerShellLoweredCommandCaptureStatement capture,
         string prefix)
@@ -27,7 +27,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(" = ").Append(converted).AppendLine(";");
     }
 
-    private static void EmitBlock(
+    private void EmitBlock(
         StringBuilder builder,
         IEnumerable<PowerShellLoweredStatement> statements,
         int indent,
@@ -42,7 +42,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("}");
     }
 
-    private static void EmitForEach(
+    private void EmitForEach(
         StringBuilder builder,
         PowerShellLoweredForEachStatement loop,
         int indent,
@@ -75,7 +75,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("}");
     }
 
-    private static void EmitSystemArrayForEach(
+    private void EmitSystemArrayForEach(
         StringBuilder builder,
         PowerShellLoweredForEachStatement loop,
         string collection,
@@ -94,7 +94,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("}");
     }
 
-    private static void EmitArrayForEach(
+    private void EmitArrayForEach(
         StringBuilder builder,
         PowerShellLoweredForEachStatement loop,
         string collection,
@@ -134,7 +134,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("}");
     }
 
-    private static void EmitForEachBody(
+    private void EmitForEachBody(
         StringBuilder builder,
         PowerShellLoweredForEachStatement loop,
         string itemIdentifier,
@@ -155,7 +155,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
     }
 
-    private static void EmitSwitch(
+    private void EmitSwitch(
         StringBuilder builder,
         PowerShellLoweredSwitchStatement statement,
         int indent,

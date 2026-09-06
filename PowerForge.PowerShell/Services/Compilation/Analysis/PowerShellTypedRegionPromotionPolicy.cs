@@ -1,8 +1,8 @@
 namespace PowerForge;
 
 /// <summary>
-/// Fail-closed promotion policy for a bound terminal suffix. The first contract permits only a
-/// scalar success value, parameter inputs, region-local mutations, and no modeled failure route.
+/// Fail-closed promotion policy for terminal scalar returns and prefixes transferring scalar locals.
+/// Both contracts require parameter inputs, local mutations, and no modeled failure route.
 /// </summary>
 internal static class PowerShellTypedRegionPromotionPolicy
 {
@@ -14,9 +14,12 @@ internal static class PowerShellTypedRegionPromotionPolicy
         if (candidate is null) throw new ArgumentNullException(nameof(candidate));
         if (lowered is null) throw new ArgumentNullException(nameof(lowered));
         if (emitted is null) throw new ArgumentNullException(nameof(emitted));
-        if (lowered.OutputCardinality != PowerShellOutputCardinality.Scalar)
+        if (candidate.ContinuationLocals.Length > 0 && !HasCompleteContinuationResult(candidate))
+            return Reject("region.continuation-result", "The helper does not return the exact ordered scalar local transfer contract.");
+        var transfersMultipleLocals = candidate.ContinuationLocals.Length > 1;
+        if (!transfersMultipleLocals && lowered.OutputCardinality != PowerShellOutputCardinality.Scalar)
             return Reject("region.return-cardinality", "The candidate does not return exactly one scalar value on every accepted path.");
-        if (!PowerShellStableScalarTypePolicy.IsSupported(lowered.ReturnType))
+        if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !PowerShellStableScalarTypePolicy.IsSupported(lowered.ReturnType))
             return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a stable scalar transfer type.");
         if (lowered.RequiresPowerShellStreams)
             return Reject("region.stream-contract", "The candidate requires PowerShell stream semantics beyond the single scalar Success result contract.");
@@ -50,14 +53,34 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.input-transfer", "The candidate reads a live value that is not a retained-function parameter.");
         if (!region.Mutations.All(static mutation => mutation.StartsWith("Local:", StringComparison.Ordinal)))
             return Reject("region.mutation", "The candidate mutates state outside its region-local values.");
+        if (candidate.ContinuationLocals.Length > 0 &&
+            region.Mutations.Any(mutation => !candidate.ContinuationLocals.Any(local =>
+                mutation.Equals("Local:" + local.Name, StringComparison.OrdinalIgnoreCase))))
+            return Reject("region.continuation-transfer", "The prefix mutates a local outside its scalar continuation transfer.");
         return new PowerShellTypedRegionPromotionDecision(
             isSafe: true,
             "region.promoted",
-            "The candidate satisfies the bounded terminal scalar promotion contract.");
+            candidate.ContinuationLocals.Length == 0
+                ? "The candidate satisfies the bounded terminal scalar promotion contract."
+                : "The candidate satisfies the bounded prefix scalar continuation contract.");
     }
 
     private static PowerShellTypedRegionPromotionDecision Reject(string code, string reason)
         => new(isSafe: false, code, reason);
+
+    private static bool HasCompleteContinuationResult(PowerShellBoundRegionCandidate candidate)
+    {
+        if (candidate.RegionFunction.Body.Statements.LastOrDefault() is not PowerShellBoundReturnStatement tail)
+            return false;
+        var values = tail.Expression is PowerShellBoundArrayExpression array
+            ? array.Elements.ToArray()
+            : tail.Expression is not null ? new[] { tail.Expression } : Array.Empty<PowerShellBoundExpression>();
+        return values.Length == candidate.ContinuationLocals.Length && values.Select((value, index) =>
+            value is PowerShellBoundVariableExpression variable && variable.Symbol.Kind == PowerShellSymbolKind.Local &&
+            variable.Symbol.Name.Equals(candidate.ContinuationLocals[index].Name, StringComparison.OrdinalIgnoreCase) &&
+            PowerShellStableScalarTypePolicy.IsSupported(variable.Type.ClrType) &&
+            (variable.Type.ClrType.FullName ?? variable.Type.ClrType.Name) == candidate.ContinuationLocals[index].TypeName).All(static valid => valid);
+    }
 }
 
 internal sealed class PowerShellTypedRegionPromotionDecision

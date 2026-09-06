@@ -75,7 +75,17 @@ internal static class PowerShellTypedExecutableCompiler
         }
 
         var entryUnit = plan.Files.First(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))
-            .Units.Single(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+            .Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        if (entryUnit is null)
+        {
+            if (statements.Length != 0)
+                throw new InvalidOperationException("The executable entrypoint has executable statements but no analyzed script unit.");
+            // Empty and declaration-only scripts still have a valid no-op process
+            // entrypoint. Keep this generated method out of authored-unit counts.
+            entryUnit = new PowerShellCompilationUnitPlan("<script>", PowerShellCompilationUnitKind.Script, 1,
+                typeof(void).FullName!, entry.Function.Parameters.Select(static parameter => parameter.Contract).ToArray(),
+                Array.Empty<PowerShellCompilationDiagnostic>());
+        }
         var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
         descriptions.Add(entryDescription);
         var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);

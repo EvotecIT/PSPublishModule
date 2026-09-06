@@ -22,10 +22,14 @@ internal static class PowerShellCommandIslandPolicy
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
         PowerShellCommandSemanticResolver? commandResolver = null)
     {
+        // Runtime-free provider sinks also use PowerShellStreams. They do not authorize
+        // execution of arbitrary authored PowerShell through a command dispatcher.
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+            return -1;
         commandResolver ??= new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
-        var parameters = body.ParamBlock?.Parameters
+        var parameters = PowerShellParameterSyntax.GetParameters(body)
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < statements.Count; index++)
         {
             var assignmentCommands = statements[index]
@@ -126,6 +130,8 @@ internal static class PowerShellCommandIslandPolicy
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
         PowerShellCommandSemanticResolver? commandResolver = null)
     {
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+            return false;
         commandResolver ??= new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
         if (!ReferenceEquals(statement.Parent, body.EndBlock))
             return false;
@@ -245,6 +251,8 @@ internal static class PowerShellCommandIslandPolicy
         out AssignmentStatementAst assignment)
     {
         assignment = null!;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+            return false;
         if (!ReferenceEquals(statement.Parent, body.EndBlock) ||
             statement is not AssignmentStatementAst candidate ||
             candidate.Operator.ToString() != "Equals" ||
@@ -407,9 +415,9 @@ internal static class PowerShellCommandIslandPolicy
         StatementAst boundary,
         ISet<string>? allowedVariables)
     {
-        var available = body.ParamBlock?.Parameters
+        var available = PowerShellParameterSyntax.GetParameters(body)
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var earlierAssignments = body.EndBlock?.Statements
             .Where(statement => statement.Extent.StartOffset < boundary.Extent.StartOffset)
             .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
@@ -424,7 +432,7 @@ internal static class PowerShellCommandIslandPolicy
         }
         if (allowedVariables is not null)
             available.RemoveWhere(name => !allowedVariables.Contains(name) &&
-                                          body.ParamBlock?.Parameters.Any(parameter =>
+                                          PowerShellParameterSyntax.GetParameters(body).Any(parameter =>
                                               parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) != true);
         return available;
     }

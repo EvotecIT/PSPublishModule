@@ -131,7 +131,7 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
         bool declare,
         PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         bool normalizeNullString = false,
-        bool checkedIntegral = false)
+        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None)
         : base(span)
     {
         Target = target;
@@ -140,7 +140,7 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
         Declare = declare;
         Operation = operation;
         NormalizeNullString = normalizeNullString;
-        CheckedIntegral = checkedIntegral;
+        IntegralSemantics = integralSemantics;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -149,7 +149,7 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
     internal bool Declare { get; }
     internal PowerShellBoundMutationOperator Operation { get; }
     internal bool NormalizeNullString { get; }
-    internal bool CheckedIntegral { get; }
+    internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
 }
 
 internal sealed class PowerShellLoweredLocalDeclarationStatement : PowerShellLoweredStatement

@@ -1,5 +1,13 @@
 namespace PowerForge;
 
+/// <summary>Selected overflow evaluation and constrained-conversion contract.</summary>
+internal enum PowerShellIntegralMutationSemantics
+{
+    None,
+    CheckedConversion,
+    PromotedBigIntegerProduct
+}
+
 internal enum PowerShellBoundMutationOperator
 {
     Assign,
@@ -24,7 +32,7 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         PowerShellBoundExpression? value,
         PowerShellTypeFact type,
         bool normalizeNullString,
-        bool checkedIntegral)
+        PowerShellIntegralMutationSemantics integralSemantics)
         : base(
             span,
             type,
@@ -37,7 +45,7 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         Operation = operation;
         Value = value;
         NormalizeNullString = normalizeNullString;
-        CheckedIntegral = checkedIntegral;
+        IntegralSemantics = integralSemantics;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -45,5 +53,5 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
     internal PowerShellBoundMutationOperator Operation { get; }
     internal PowerShellBoundExpression? Value { get; }
     internal bool NormalizeNullString { get; }
-    internal bool CheckedIntegral { get; }
+    internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
 }

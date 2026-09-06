@@ -21,7 +21,7 @@ internal static class PowerShellCSharpOperatorPolicy
             return false;
         if ((left == typeof(decimal)) != (right == typeof(decimal)))
             return false;
-        return operation is "PlusEquals" or "MinusEquals" or "MultiplyEquals" or "DivideEquals" or "RemEquals";
+        return operation is "PlusEquals" or "MinusEquals" or "MultiplyEquals" or "DivideEquals" or "RemainderEquals";
     }
 
     internal static bool SupportsEquality(Type type)

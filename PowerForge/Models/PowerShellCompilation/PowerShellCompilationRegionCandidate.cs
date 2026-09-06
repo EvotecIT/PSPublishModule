@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace PowerForge;
 
 /// <summary>
-/// One terminal region considered by the canonical Hybrid promotion policy, including the exact
+/// One region considered by the canonical Hybrid promotion policy, including the exact
 /// reason it was promoted or retained as authored PowerShell.
 /// </summary>
 public sealed class PowerShellCompilationRegionCandidate
@@ -27,7 +27,8 @@ public sealed class PowerShellCompilationRegionCandidate
         string decisionCode,
         string reason,
         string generatedName,
-        PowerShellCompilationRegionGraph? regionGraph)
+        PowerShellCompilationRegionGraph? regionGraph,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -46,6 +47,7 @@ public sealed class PowerShellCompilationRegionCandidate
         Reason = reason ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
         RegionGraph = regionGraph;
+        ContinuationLocals = Array.AsReadOnly((continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -82,4 +84,6 @@ public sealed class PowerShellCompilationRegionCandidate
     public string GeneratedName { get; }
     /// <summary>Canonical lowered graph when the candidate reached lowering; otherwise null.</summary>
     public PowerShellCompilationRegionGraph? RegionGraph { get; }
+    /// <summary>Ordered scalar locals transferred to the continuation, or empty for a terminal candidate.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
 }

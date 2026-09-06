@@ -44,7 +44,10 @@ internal enum PowerShellTypeFactProvenance
     Inferred,
     CommandContract,
     Widened,
-    Unknown
+    Unknown,
+    // Internal numeric value representation. The authored Int32-or-Double identity
+    // must be unobservable, and every consumer is checked before semantic emission.
+    NumericValueProjection
 }
 
 internal enum PowerShellDictionaryValueKind
@@ -62,13 +65,15 @@ internal sealed class PowerShellTypeFact
         PowerShellTypeFactProvenance provenance,
         string explanation,
         IReadOnlyDictionary<string, PowerShellTypeFact>? knownProperties = null,
-        PowerShellDictionaryValueKind dictionaryValueKind = PowerShellDictionaryValueKind.None)
+        PowerShellDictionaryValueKind dictionaryValueKind = PowerShellDictionaryValueKind.None,
+        PowerShellInt32Range? int32Range = null)
     {
         ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
         Provenance = provenance;
         Explanation = explanation ?? string.Empty;
         KnownProperties = CopyKnownProperties(knownProperties);
         DictionaryValueKind = dictionaryValueKind;
+        Int32Range = clrType == typeof(int) ? int32Range : null;
     }
 
     internal Type ClrType { get; }
@@ -76,6 +81,10 @@ internal sealed class PowerShellTypeFact
     internal string Explanation { get; }
     internal IReadOnlyDictionary<string, PowerShellTypeFact> KnownProperties { get; }
     internal PowerShellDictionaryValueKind DictionaryValueKind { get; }
+    internal PowerShellInt32Range? Int32Range { get; }
+
+    internal PowerShellTypeFact WithInt32Range(PowerShellInt32Range range)
+        => new(ClrType, Provenance, Explanation, KnownProperties, DictionaryValueKind, range);
 
     internal bool TryGetKnownProperty(string name, out PowerShellTypeFact property)
         => KnownProperties.TryGetValue(name, out property!);
@@ -84,7 +93,7 @@ internal sealed class PowerShellTypeFact
     {
         var properties = CopyKnownProperties(KnownProperties);
         properties[name] = property;
-        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind);
+        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind, Int32Range);
     }
 
     private static Dictionary<string, PowerShellTypeFact> CopyKnownProperties(
@@ -336,7 +345,7 @@ internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
 
 internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput)
+    internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput, bool requiresOutputContinuation = false)
         : base(span,
             expression.Effects |
             (emitsOutput ? PowerShellSemanticEffect.SuccessOutput : PowerShellSemanticEffect.None) |
@@ -345,10 +354,13 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
     {
         Expression = expression;
         EmitsOutput = emitsOutput;
+        RequiresOutputContinuation = requiresOutputContinuation;
     }
 
     internal PowerShellBoundExpression Expression { get; }
     internal bool EmitsOutput { get; }
+    /// <summary>Success output must continue execution rather than become the method return.</summary>
+    internal bool RequiresOutputContinuation { get; }
 }
 
 internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatement
@@ -359,21 +371,21 @@ internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatem
         PowerShellBoundExpression value,
         PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         bool normalizeNullString = false,
-        bool checkedIntegral = false)
+        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None)
         : base(span, PowerShellSemanticEffect.Mutation | value.Effects, value.Capabilities)
     {
         Target = target;
         Value = value;
         Operation = operation;
         NormalizeNullString = normalizeNullString;
-        CheckedIntegral = checkedIntegral;
+        IntegralSemantics = integralSemantics;
     }
 
     internal PowerShellSymbolId Target { get; }
     internal PowerShellBoundExpression Value { get; }
     internal PowerShellBoundMutationOperator Operation { get; }
     internal bool NormalizeNullString { get; }
-    internal bool CheckedIntegral { get; }
+    internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
 }
 
 internal sealed class PowerShellBoundParameter

@@ -323,6 +323,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+          dotnet-version: 8.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -353,6 +354,43 @@ jobs:
         shell: pwsh
         timeout-minutes: 30
         run: .\Build\Test-ProductBuild.ps1 -Runtime win-x64
+
+      - name: Run bounded PowerShell compiler gate
+        shell: pwsh
+        timeout-minutes: 20
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./Benchmarks/PowerShellCompilation/Corpus/Corpus.Runner.Common.ps1
+          $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
+          $pins = Get-Content ./PowerForge/Resources/PowerShellCompilation/SemanticOracle/host-artifact-pins.json -Raw | ConvertFrom-Json
+          $pin = @($pins.pins | Where-Object profileId -eq 'PowerForge.Oracle.PowerShell/7.6')
+          if ($pin.Count -ne 1) { throw 'The compiler gate requires one pinned PowerShell 7.6 host.' }
+          $payload = Get-VerifiedCorpusPayload -Uri $pin[0].releaseAssetUri -Sha256 $pin[0].releaseAssetSha256 -CacheRoot (Join-Path $gateRoot 'payloads') -CacheExtension '.zip' -Label 'compiler semantic host'
+          $hostRoot = Join-Path $gateRoot 'host'
+          Expand-VerifiedCorpusArchive -PayloadPath $payload -Target $hostRoot -ContainmentRoot $gateRoot -Label 'compiler semantic host'
+          $env:PATH = $hostRoot + [IO.Path]::PathSeparator + $env:PATH
+          & (Join-Path $hostRoot 'pwsh.exe') -NoProfile -File ./Build/Invoke-PowerShellCompilerGate.ps1 -EvidencePath (Join-Path $gateRoot 'evidence') -NoBuild
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload compiler gate evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: powershell-compiler-gate-windows
+          path: |
+            ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.trx
+            ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Clean compiler gate workspace
+        if: always()
+        shell: pwsh
+        run: |
+          . ./Benchmarks/PowerShellCompilation/Corpus/Corpus.Runner.Common.ps1
+          $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
+          Assert-ContainedPath -Root $env:RUNNER_TEMP -Path $gateRoot -Label 'compiler gate cleanup' | Out-Null
+          if (Test-Path -LiteralPath $gateRoot) { Remove-Item -LiteralPath $gateRoot -Recurse -Force }
   LinuxBuild:
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.

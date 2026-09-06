@@ -4,7 +4,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private static void EmitProviderStreamWrite(
+    private void EmitProviderStreamWrite(
         StringBuilder builder,
         PowerShellLoweredStreamWriteStatement stream,
         string prefix,

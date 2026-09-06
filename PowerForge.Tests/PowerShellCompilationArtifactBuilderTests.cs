@@ -740,9 +740,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         public string ScriptPath { get; }
         public string OutputPath { get; }
 
-        public static ArtifactFixture Create(string source, string extension = ".ps1")
+        public static ArtifactFixture Create(string source, string extension = ".ps1", bool compactPath = false)
         {
-            var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+            var rootPath = compactPath
+                ? Path.Combine(Path.GetTempPath(), "PFC", Guid.NewGuid().ToString("N").Substring(0, 16))
+                : Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
             var outputPath = Path.Combine(rootPath, "output");
             Directory.CreateDirectory(outputPath);
             var scriptPath = Path.Combine(rootPath, "input" + extension);

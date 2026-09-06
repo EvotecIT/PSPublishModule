@@ -5,6 +5,8 @@ namespace PowerForge;
 /// <summary>One product or source tree included in a compilation census.</summary>
 public sealed class PowerShellCompilationCensusProduct
 {
+    /// <summary>Resolved artifact shape assessed for this input; null denotes a legacy result.</summary>
+    public PowerShellCompilationArtifactKind? ArtifactKind { get; set; }
     /// <summary>Creates a product census result using the original public contract.</summary>
     public PowerShellCompilationCensusProduct(
         string name,
@@ -355,6 +357,18 @@ public sealed class PowerShellCompilationCensusBlocker
 /// <summary>Repeatable compilation coverage and analyzer-performance census.</summary>
 public sealed class PowerShellCompilationCensusResult
 {
+    /// <summary>Requested artifact shape; null infers a shape for each input.</summary>
+    public PowerShellCompilationArtifactKind? ArtifactKind { get; set; }
+    /// <summary>Compilation mode used for analysis and final shaping.</summary>
+    public PowerShellCompilationMode Mode { get; set; } = PowerShellCompilationMode.Hybrid;
+    /// <summary>Exact named semantic profile used by the analyzer and emitter.</summary>
+    public string SemanticProfileId { get; set; } = string.Empty;
+    /// <summary>Whether source closures and artifact shaping were evaluated.</summary>
+    public bool Recurse { get; set; } = true;
+    /// <summary>Inputs whose assessment failed, without discarding successful products.</summary>
+    public PowerShellCompilationCensusInputFailure[] InputFailures { get; set; } = Array.Empty<PowerShellCompilationCensusInputFailure>();
+    /// <summary>Whether every requested input was assessed.</summary>
+    public bool Complete => InputFailures.Length == 0;
     /// <summary>Creates an aggregate census result using the original public contract.</summary>
     public PowerShellCompilationCensusResult(
         string? targetFramework,
@@ -424,7 +438,7 @@ public sealed class PowerShellCompilationCensusResult
     public int SourceFiles => Sum(static product => product.SourceFiles);
 
     /// <summary>Whether every product was evaluated through final typed artifact shaping.</summary>
-    public bool PostEmissionEvaluated => Products.Length > 0 && Products.All(static product => product.Coverage.PostEmissionEvaluated);
+    public bool PostEmissionEvaluated => Complete && Products.Length > 0 && Products.All(static product => product.Coverage.PostEmissionEvaluated);
 
     /// <summary>Total executable units discovered.</summary>
     public int TotalUnits => Sum(static product => product.TotalUnits);
@@ -454,7 +468,7 @@ public sealed class PowerShellCompilationCensusResult
     public double EmittedFunctionCoveragePercentage => TotalFunctions == 0 ? 0 : EmittedFunctions * 100d / TotalFunctions;
 
     /// <summary>Whether the current result meets or improves the supplied baseline.</summary>
-    public bool Passed => Regressions.Length == 0 && SourceDrifts.Length == 0;
+    public bool Passed => Complete && Regressions.Length == 0 && SourceDrifts.Length == 0;
 
     private int Sum(Func<PowerShellCompilationCensusProduct, int> selector)
     {

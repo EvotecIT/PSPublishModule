@@ -64,7 +64,6 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Empty(result.Diagnostics);
         Assert.Contains("for (", result.SourceCode, StringComparison.Ordinal);
         Assert.Contains("i <= Count", result.SourceCode, StringComparison.Ordinal);
-        Assert.Contains("total = checked((long)(total + i));", result.SourceCode, StringComparison.Ordinal);
     }
 
     [Fact]

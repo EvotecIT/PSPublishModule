@@ -91,14 +91,29 @@ internal static class PowerShellOperatorSemanticBinder
                 return Reject(diagnostics, span, "PSB2204", $"Arithmetic operator '{syntax.Operator}' requires two numeric operands of known compatible types.");
             if ((leftType == typeof(decimal)) != (rightType == typeof(decimal)))
                 return Reject(diagnostics, span, "PSB2205", "Mixed decimal and non-decimal arithmetic relies on PowerShell coercion and is not supported.");
+            if (leftType == typeof(decimal) && PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+                return Reject(diagnostics, span, "PSB2216", "Decimal arithmetic inside a RuntimeException catch requires PowerShell arithmetic-error wrapping.");
+            if (operation == "Rem" && PowerShellClrTypeSemantics.IsIntegral(leftType) && leftType == rightType)
+            {
+                if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+                    return Reject(diagnostics, span, "PSB2216", "Integral remainder inside a RuntimeException catch requires PowerShell divide-by-zero error wrapping.");
+                var integralType = PowerShellClrTypeSemantics.PromoteIntegral(leftType);
+                return Binary(span, PowerShellBoundBinaryOperator.IntegralRemainder,
+                    WidenArithmeticOperand(left, integralType), WidenArithmeticOperand(right, integralType), integralType);
+            }
             if (operation == "Divide" && PowerShellClrTypeSemantics.IsIntegral(leftType) && PowerShellClrTypeSemantics.IsIntegral(rightType))
                 return Reject(diagnostics, span, "PSB2206", "PowerShell integral division changes runtime result type based on the quotient and is not supported by one static CLR return type.");
             if (operation != "Divide" && PowerShellClrTypeSemantics.IsIntegral(leftType) && PowerShellClrTypeSemantics.IsIntegral(rightType))
+            {
+                if (PowerShellInt32RangePolicy.TryBindArithmetic(span, operation, left, right, out var boundedArithmetic))
+                    return boundedArithmetic;
                 return Reject(diagnostics, span, "PSB2207", "Unconstrained integral arithmetic can promote on overflow in PowerShell; use an explicitly typed accumulator with compound assignment.");
-            var resultType = operation is "Divide" or "Rem"
-                ? leftType == typeof(decimal) && rightType == typeof(decimal) ? typeof(decimal) : typeof(double)
-                : TryUnify(leftType, rightType, diagnostics, span);
-            if (resultType is null) return null;
+            }
+            // PowerShell evaluates floating arithmetic in Double, including two Single
+            // operands. Widen before the operation so rounding cannot occur in Single.
+            var resultType = leftType == typeof(decimal) ? typeof(decimal) : typeof(double);
+            left = WidenArithmeticOperand(left, resultType);
+            right = WidenArithmeticOperand(right, resultType);
             var bound = operation switch
             {
                 "Plus" => PowerShellBoundBinaryOperator.Add,
@@ -147,6 +162,15 @@ internal static class PowerShellOperatorSemanticBinder
                     left,
                     right,
                     typeof(bool));
+            }
+            // Double represents every value of these integral types exactly. PowerShell
+            // compares this mixed numeric pair in Double in either operand order.
+            if (leftType == typeof(double) && IsExactlyRepresentableDoubleIntegral(rightType) ||
+                rightType == typeof(double) && IsExactlyRepresentableDoubleIntegral(leftType))
+            {
+                left = WidenArithmeticOperand(left, typeof(double));
+                right = WidenArithmeticOperand(right, typeof(double));
+                leftType = rightType = typeof(double);
             }
             var liftedEquality = equality && IsNullableUnderlyingPair(leftType, rightType);
             var leftNumericType = Nullable.GetUnderlyingType(leftType) ?? leftType;
@@ -437,6 +461,19 @@ internal static class PowerShellOperatorSemanticBinder
         if (operation is "Plus" or "Minus")
         {
             if (!PowerShellClrTypeSemantics.IsNumeric(type) || PowerShellClrTypeSemantics.IsIntegral(type)) return null;
+            if (type == typeof(float))
+            {
+                type = typeof(double);
+                operand = WidenArithmeticOperand(operand, type);
+            }
+            if (type == typeof(double))
+            {
+                var zero = new PowerShellBoundLiteralExpression(span, 0d,
+                    new PowerShellTypeFact(typeof(double), PowerShellTypeFactProvenance.Literal, "PowerShell unary floating arithmetic starts with zero."),
+                    PowerShellValueState.Known);
+                return Binary(span, operation == "Plus" ? PowerShellBoundBinaryOperator.Add : PowerShellBoundBinaryOperator.Subtract,
+                    zero, operand, type);
+            }
             return Unary(span, operation == "Plus" ? PowerShellBoundUnaryOperator.Identity : PowerShellBoundUnaryOperator.Negate, operand, type);
         }
         return null;
@@ -483,12 +520,15 @@ internal static class PowerShellOperatorSemanticBinder
             usePowerShellTruthiness: true);
     }
 
-    private static Type? TryUnify(Type left, Type right, ICollection<PowerShellSemanticDiagnostic> diagnostics, SourceSpan span)
-    {
-        if (PowerShellClrTypeSemantics.TryUnify(left, right, out var result)) return result;
-        Reject(diagnostics, span, "PSB2215", $"Types '{left.FullName}' and '{right.FullName}' cannot be unified without dynamic PowerShell coercion.");
-        return null;
-    }
+    private static bool IsExactlyRepresentableDoubleIntegral(Type type)
+        => type == typeof(sbyte) || type == typeof(byte) || type == typeof(short) ||
+           type == typeof(ushort) || type == typeof(int) || type == typeof(uint);
+
+    private static PowerShellBoundExpression WidenArithmeticOperand(PowerShellBoundExpression operand, Type type)
+        => operand.Type.ClrType == type ? operand : new PowerShellBoundConversionExpression(
+            operand.Span,
+            Fact(type, "PowerShell arithmetic selects this exact CLR operand representation before evaluation."),
+            operand);
 
     private static PowerShellBoundExpression? Reject(ICollection<PowerShellSemanticDiagnostic> diagnostics, SourceSpan span, string code, string message)
     {

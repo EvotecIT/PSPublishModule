@@ -156,6 +156,18 @@
   ],
   "strictPrograms": [
     {
+      "id": "strict-number-theory",
+      "entryPoint": "StrictNumberTheory/Main.ps1",
+      "expectedOutput": "21|25",
+      "scenarioFamily": "integral-remainder-number-theory"
+    },
+    {
+      "id": "strict-calendar-rules",
+      "entryPoint": "StrictCalendar/Main.ps1",
+      "expectedOutput": "1900-2100|49|False|True",
+      "scenarioFamily": "calendar-rule-evaluation"
+    },
+    {
       "id": "strict-recursion-local-call",
       "entryPoint": "StrictProgram/Main.ps1",
       "expectedOutput": "8",

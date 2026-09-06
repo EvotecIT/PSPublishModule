@@ -7,7 +7,7 @@ namespace PowerForge;
 /// Selects a conservative terminal suffix from already-bound statements. This owner never inspects
 /// generated C# or the final disposition ledger and therefore cannot create a second semantic path.
 /// </summary>
-internal static class PowerShellBoundRegionCandidateSelector
+internal static partial class PowerShellBoundRegionCandidateSelector
 {
     internal static bool TryCreate(
         ParsedSourceDocument document,
@@ -28,12 +28,34 @@ internal static class PowerShellBoundRegionCandidateSelector
             .ToArray();
         if (suffix.Length == 0 ||
             suffix[0].AuthoredStatementIndex != lastFailedStatementIndex + 1 ||
-            suffix[suffix.Length - 1].AuthoredStatementEndIndex != authoredStatements.Count - 1 ||
-            !AlwaysReturns(suffix[suffix.Length - 1].Statement))
+            suffix[suffix.Length - 1].AuthoredStatementEndIndex != authoredStatements.Count - 1)
             return false;
 
-        var first = suffix[0].Statement.Span;
-        var last = suffix[suffix.Length - 1].Statement.Span;
+        var statements = suffix.Select(static binding => binding.Statement).ToArray();
+        // Only the final top-level scalar expression is an implicit function return.
+        // Earlier output remains in the graph and must pass its ordinary cardinality proof.
+        if (statements[statements.Length - 1] is PowerShellBoundExpressionStatement
+            { EmitsOutput: true, RequiresOutputContinuation: false } terminal &&
+            PowerShellStableScalarTypePolicy.IsSupported(terminal.Expression.Type.ClrType))
+            statements[statements.Length - 1] = new PowerShellBoundReturnStatement(terminal.Span, terminal.Expression);
+        if (!AlwaysReturns(statements[statements.Length - 1])) return false;
+        return TryCreateBound(document, syntax, sourceFunction, parameters, locals,
+            statements, out candidate);
+    }
+
+    private static bool TryCreateBound(
+        ParsedSourceDocument document,
+        System.Management.Automation.Language.FunctionDefinitionAst syntax,
+        PowerShellSymbolId sourceFunction,
+        IReadOnlyList<PowerShellBoundParameter> parameters,
+        IReadOnlyList<PowerShellBoundLocal> locals,
+        PowerShellBoundStatement[] statements,
+        out PowerShellBoundRegionCandidate candidate,
+        PowerShellCompiledRegionLocal[]? continuationLocals = null)
+    {
+        candidate = null!;
+        var first = statements[0].Span;
+        var last = statements[statements.Length - 1].Span;
         var span = new SourceSpan(
             document.DocumentId,
             first.StartOffset,
@@ -42,7 +64,6 @@ internal static class PowerShellBoundRegionCandidateSelector
             first.StartColumn,
             last.EndLine,
             last.EndColumn);
-        var statements = suffix.Select(static binding => binding.Statement).ToArray();
         if (PowerShellSemanticAnalyzer.EnumerateStatements(new PowerShellBoundBlock(first, statements))
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
@@ -56,8 +77,9 @@ internal static class PowerShellBoundRegionCandidateSelector
                 !PowerShellStableScalarTypePolicy.IsSupported(parameter.Type.ClrType)))
             return false;
         var selectedLocals = locals.Where(local => usedSymbols.Contains(local.Symbol.StableKey)).ToArray();
-        if (selectedLocals.Any(static local =>
+        if (selectedLocals.Any(local =>
                 local.Type.Provenance == PowerShellTypeFactProvenance.Unknown ||
+                continuationLocals is { Length: > 0 } && local.Type.Provenance == PowerShellTypeFactProvenance.NumericValueProjection ||
                 !PowerShellStableScalarTypePolicy.IsSupported(local.Type.ClrType)))
             return false;
 
@@ -104,7 +126,8 @@ internal static class PowerShellBoundRegionCandidateSelector
             sourceFunction.Name,
             syntax.Body.Extent.StartLineNumber,
             helper,
-            helperParameters.Select(static parameter => parameter.Contract).ToArray());
+            helperParameters.Select(static parameter => parameter.Contract).ToArray(),
+            continuationLocals);
         return true;
     }
 
@@ -206,7 +229,8 @@ internal sealed class PowerShellBoundRegionCandidate
         string sourceName,
         int sourceLine,
         PowerShellBoundFunction regionFunction,
-        PowerShellCompilationParameter[] inputParameters)
+        PowerShellCompilationParameter[] inputParameters,
+        PowerShellCompiledRegionLocal[]? continuationLocals = null)
     {
         RegionId = regionId;
         SourceSha256 = sourceSha256;
@@ -216,6 +240,7 @@ internal sealed class PowerShellBoundRegionCandidate
         SourceLine = sourceLine;
         RegionFunction = regionFunction;
         InputParameters = inputParameters ?? Array.Empty<PowerShellCompilationParameter>();
+        ContinuationLocals = continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>();
     }
 
     internal string RegionId { get; }
@@ -226,4 +251,5 @@ internal sealed class PowerShellBoundRegionCandidate
     internal int SourceLine { get; }
     internal PowerShellBoundFunction RegionFunction { get; }
     internal PowerShellImmutableArray<PowerShellCompilationParameter> InputParameters { get; }
+    internal PowerShellImmutableArray<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
 }

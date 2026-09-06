@@ -9,7 +9,7 @@ internal static partial class Program
     private const string PowerShellBuildUsage =
         "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--semantic-profile <id>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--expected-abi-sha256 <sha256>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--emit-ir] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
-        "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
+        "Usage: powerforge powershell census <path> [--path <product-root> ...] [--kind <exe|library|module>] [--mode <Strict|Hybrid>] [--framework <tfm>] [--semantic-profile <id>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
     private const string PowerShellExplainUsage =
         "Usage: powerforge powershell explain <path> [--target-contract <target.json>] [--semantic-profile <id>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellDiagnoseUsage =
@@ -286,7 +286,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--framework", "--baseline", "--write-baseline", "--output" },
+                new[] { "--path", "--framework", "--kind", "--mode", "--semantic-profile", "--baseline", "--write-baseline", "--output" },
                 new[] { "--no-recurse", "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
@@ -311,11 +311,28 @@ internal static partial class Program
                     ?? throw new InvalidDataException($"Compilation census baseline is empty: {fullBaselinePath}");
             }
 
-            var result = new PowerShellCompilationCensusRunner().Run(
-                paths,
-                TryGetOptionValue(args, "--framework"),
-                baseline,
-                recurse: !args.Any(static argument => argument.Equals("--no-recurse", StringComparison.OrdinalIgnoreCase)));
+            var options = new PowerShellCompilationCensusOptions
+            {
+                TargetFramework = TryGetOptionValue(args, "--framework"),
+                SemanticProfileId = TryGetOptionValue(args, "--semantic-profile") ?? string.Empty,
+                Recurse = !args.Any(static argument => argument.Equals("--no-recurse", StringComparison.OrdinalIgnoreCase))
+            };
+            var kindValue = TryGetOptionValue(args, "--kind");
+            if (kindValue is not null)
+            {
+                if (!TryParseArtifactKind(kindValue, out var kind))
+                    return WritePowerShellError(outputJson, 2, $"Unknown census artifact kind '{kindValue}'.", logger, "powershell.census");
+                options.ArtifactKind = kind;
+            }
+            var modeValue = TryGetOptionValue(args, "--mode");
+            if (modeValue is not null)
+            {
+                if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, true, out var mode) ||
+                    mode is not (PowerShellCompilationMode.Strict or PowerShellCompilationMode.Hybrid))
+                    return WritePowerShellError(outputJson, 2, $"Unknown typed census mode '{modeValue}'.", logger, "powershell.census");
+                options.Mode = mode;
+            }
+            var result = new PowerShellCompilationCensusRunner().RunWithOptions(paths, options, baseline);
             var writeBaselinePath = TryGetOptionValue(args, "--write-baseline");
             if (!string.IsNullOrWhiteSpace(writeBaselinePath))
             {
@@ -384,6 +401,8 @@ internal static partial class Program
             }
             foreach (var drift in result.SourceDrifts)
                 logger.Error($"{drift.Product}: census source content differs from the baseline fingerprint.");
+            foreach (var failure in result.InputFailures)
+                logger.Error($"{failure.Path}: {failure.Message}");
             foreach (var regression in result.Regressions)
                 logger.Error($"Census regression in {regression.Product}: {regression.Metric} was {regression.Baseline:0.###}, now {regression.Current:0.###}.");
             return exitCode;

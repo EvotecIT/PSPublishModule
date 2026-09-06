@@ -33,7 +33,8 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Contains("?? new int[] { 0 }", lifecycleSource, StringComparison.Ordinal);
         Assert.Contains("int Total = 0;", lifecycleSource, StringComparison.Ordinal);
         Assert.Contains("int Value = __foreachItem_", lifecycleSource, StringComparison.Ordinal);
-        Assert.Contains("Total = checked((int)(Total + Value));", lifecycleSource, StringComparison.Ordinal);
+        Assert.Equal(PowerShellIntegralMutationSemantics.CheckedConversion,
+            Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(loop.Body.Statements)).IntegralSemantics);
         Assert.Contains("return Total;", lifecycleSource, StringComparison.Ordinal);
         var callerSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Invoke_Measure").Source;
         Assert.Contains("return Measure_Total(new int[] { 40, 2 });", callerSource, StringComparison.Ordinal);

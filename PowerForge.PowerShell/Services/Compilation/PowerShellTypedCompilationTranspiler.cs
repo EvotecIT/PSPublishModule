@@ -464,7 +464,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.SourceSpan.EndColumn,
             emitted.SourceMap,
             emitted.RegionGraph,
-            emitted.SourceSpan.DocumentId);
+            emitted.SourceSpan.DocumentId,
+            candidate.ContinuationLocals.ToArray());
         compiled.GeneratedSource = emitted.Source;
         return compiled;
     }
@@ -516,7 +517,12 @@ public sealed class PowerShellTypedCompilationTranspiler
             irSnapshots);
         result.PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
         result.RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
-        result.RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
+        result.RegionOpportunities = (regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>())
+            .Where(opportunity => !methods.Any(method =>
+                PowerShellCompilationPathSafety.PathEquals(method.SourcePath, opportunity.SourcePath) &&
+                method.SourceName.Equals(opportunity.SourceName, StringComparison.OrdinalIgnoreCase) &&
+                method.SourceLine == opportunity.SourceLine))
+            .ToArray();
         return result;
     }
 

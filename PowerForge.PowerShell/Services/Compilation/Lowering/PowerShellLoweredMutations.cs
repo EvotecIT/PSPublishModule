@@ -10,7 +10,7 @@ internal sealed class PowerShellLoweredMutationExpression : PowerShellLoweredExp
         PowerShellBoundMutationOperator operation,
         PowerShellLoweredExpression? value,
         bool normalizeNullString,
-        bool checkedIntegral)
+        PowerShellIntegralMutationSemantics integralSemantics)
         : base(span, clrType)
     {
         Target = target;
@@ -18,7 +18,7 @@ internal sealed class PowerShellLoweredMutationExpression : PowerShellLoweredExp
         Operation = operation;
         Value = value;
         NormalizeNullString = normalizeNullString;
-        CheckedIntegral = checkedIntegral;
+        IntegralSemantics = integralSemantics;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -26,5 +26,5 @@ internal sealed class PowerShellLoweredMutationExpression : PowerShellLoweredExp
     internal PowerShellBoundMutationOperator Operation { get; }
     internal PowerShellLoweredExpression? Value { get; }
     internal bool NormalizeNullString { get; }
-    internal bool CheckedIntegral { get; }
+    internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
 }

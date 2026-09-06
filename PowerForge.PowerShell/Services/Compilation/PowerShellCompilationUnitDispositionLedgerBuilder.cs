@@ -57,6 +57,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var emitted = method is not null ||
                               plan.Mode == PowerShellCompilationMode.Strict &&
                               artifactKind == PowerShellCompilationArtifactKind.Executable &&
+                              methods.Length > 0 &&
                               unit.Kind == PowerShellCompilationUnitKind.Script &&
                               unit.IsCompilable;
                 var emittedBinaryCmdlet = artifactKind == PowerShellCompilationArtifactKind.BinaryModule &&

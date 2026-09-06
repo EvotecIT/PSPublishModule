@@ -2,14 +2,14 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private static string EmitArray(PowerShellLoweredArrayExpression array)
+    private string EmitArray(PowerShellLoweredArrayExpression array)
     {
         var elementType = array.ClrType.GetElementType()!;
         if (array.Elements.Length == 0) return $"global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(elementType)}>()";
         return $"new {PowerShellCSharpSymbolRenderer.TypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
     }
 
-    private static string EmitArrayConcatenation(PowerShellLoweredArrayConcatenationExpression concatenation)
+    private string EmitArrayConcatenation(PowerShellLoweredArrayConcatenationExpression concatenation)
     {
         var left = EmitExpression(concatenation.Left);
         var right = EmitExpression(concatenation.Right);

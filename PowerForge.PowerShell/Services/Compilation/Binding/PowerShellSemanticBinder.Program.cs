@@ -21,6 +21,7 @@ internal sealed partial class PowerShellSemanticBinder
         var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
         var regionOpportunities = new Dictionary<string, PowerShellBoundRegionOpportunity>(StringComparer.Ordinal);
         var declarations = DeclareFunctions(orderedDocuments, diagnostics);
+        var numericErrorObservedCallees = PowerShellRuntimeExceptionCatchPolicy.FindNumericErrorObservedCallees(orderedDocuments);
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() == 1)
@@ -77,6 +78,15 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
                         ? regionOpportunities
                         : null);
+                if (bound is not null && numericErrorObservedCallees.Contains(declaration.Syntax.Name) &&
+                    PowerShellRuntimeExceptionCatchPolicy.RequiresNumericErrorWrapping(bound))
+                {
+                    functionDiagnostics.Add(new PowerShellSemanticDiagnostic(
+                        "PSB2411",
+                        "A local caller observes PowerShell-specific numeric error wrapping; this numeric callee must retain its PowerShell command behavior.",
+                        bound.Body.Span));
+                    bound = null;
+                }
                 if (bound is not null)
                 {
                     functions.Add(bound);

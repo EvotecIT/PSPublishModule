@@ -132,6 +132,7 @@ internal sealed partial class PowerShellSemanticBinder
             : BindExpression(document, statement.Condition, loopSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
         if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics);
         if (statement.Condition is not null && condition is null) return null;
+        PowerShellInt32RangePolicy.RefineDescendingCounter(statement, initializer, loopSymbols);
         var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
         if (body is null) return null;
         var iterator = statement.Iterator is null

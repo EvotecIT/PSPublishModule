@@ -199,7 +199,7 @@ internal sealed partial class PowerShellSemanticBinder
             new PowerShellLexicalScope(functionSymbol, scopeSymbols),
             PowerShellCommentHelpBinder.Bind(function),
             PowerShellAdvancedFunctionPolicy.GetAliases(function),
-            PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
+            PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             declaredOutputType,
             declaredOutputTypeName,
             body,

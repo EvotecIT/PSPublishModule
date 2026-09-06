@@ -64,8 +64,11 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.False(lowered.DeclareInitializer);
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("int index = default!;", source, StringComparison.Ordinal);
-        Assert.Contains("for (index = 0; (index < Count); index++)", source, StringComparison.Ordinal);
-        Assert.Contains("total = checked((int)(total + index));", source, StringComparison.Ordinal);
+        Assert.Equal(PowerShellIntegralMutationSemantics.CheckedConversion, loop.Iterator.IntegralSemantics);
+        Assert.Equal(loop.Iterator.IntegralSemantics, lowered.Iterator!.IntegralSemantics);
+        var update = Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(loop.Body.Statements));
+        Assert.Equal(PowerShellBoundMutationOperator.Add, update.Operation);
+        Assert.Equal(PowerShellIntegralMutationSemantics.CheckedConversion, update.IntegralSemantics);
     }
 
     [Theory]
@@ -144,7 +147,9 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.True(lowered.DeclareVariable);
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("int __pf_pipeline_item_", source, StringComparison.Ordinal);
-        Assert.Contains("total = checked((int)(total + __pf_pipeline_item_", source, StringComparison.Ordinal);
+        Assert.Equal(PowerShellIntegralMutationSemantics.CheckedConversion, assignment.IntegralSemantics);
+        Assert.Equal(assignment.IntegralSemantics,
+            Assert.IsType<PowerShellLoweredAssignmentStatement>(Assert.Single(lowered.Statements)).IntegralSemantics);
         Assert.DoesNotContain("PowerShell", source, StringComparison.Ordinal);
     }
 
@@ -167,7 +172,8 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Equal(0, nullElement.Value);
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("Values ?? new int[] { 0 }", source, StringComparison.Ordinal);
-        Assert.Contains("total = checked((int)(total + __pf_pipeline_item_", source, StringComparison.Ordinal);
+        Assert.Equal(PowerShellIntegralMutationSemantics.CheckedConversion,
+            Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(loop.Body.Statements)).IntegralSemantics);
     }
 
     [Fact]

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packetId": "powerforge-public-powershell-modules-net8-v1",
-  "packetSha256": "499e3aa267528175c72b2173c4be3c31f7923e32499e35fe803a1afbf9ecbda5",
+  "packetSha256": "9afce834cfca8147ec73a6918e8d3ba41af20d37a4e71ad2aea1c3eb81f65801",
   "recordedOn": "2026-09-04",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "hybrid": {
@@ -26,17 +26,18 @@
     "emittedClrUnitPercentage": 0.27
   },
   "strict": {
-    "programs": 4,
-    "analyzedUnits": 18,
-    "boundUnits": 18,
-    "emittedClrUnits": 18,
+    "recordedOn": "2026-09-06",
+    "programs": 6,
+    "analyzedUnits": 24,
+    "boundUnits": 24,
+    "emittedClrUnits": 24,
     "completeProgramPassPercentage": 100.0,
     "emittedClrUnitPercentage": 100.0,
     "targetHosts": [
       {
         "runtimeIdentifier": "win-x64",
-        "programsPassed": 4,
-        "programsTotal": 4,
+        "programsPassed": 6,
+        "programsTotal": 6,
         "qualifiedApplications": [
           {
             "id": "strict-multifile-application",
@@ -70,8 +71,8 @@
       },
       {
         "runtimeIdentifier": "linux-x64",
-        "programsPassed": 4,
-        "programsTotal": 4,
+        "programsPassed": 6,
+        "programsTotal": 6,
         "qualifiedApplications": [
           {
             "id": "strict-multifile-application",

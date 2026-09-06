@@ -34,7 +34,7 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
             reason = "Runtime-free pipeline lifecycle lowering requires explicit begin, process, and end blocks without dynamicparam or clean.";
             return false;
         }
-        var parameters = body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
+        var parameters = PowerShellParameterSyntax.GetParameters(body).ToArray();
         if (parameters.Length != 1)
         {
             reason = "Runtime-free pipeline lifecycle lowering currently requires exactly one typed ValueFromPipeline parameter.";

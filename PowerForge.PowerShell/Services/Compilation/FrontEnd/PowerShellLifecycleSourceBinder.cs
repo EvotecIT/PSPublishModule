@@ -41,20 +41,20 @@ internal static class PowerShellLifecycleSourceBinder
             SourceColumn = function.Body.Extent.StartColumnNumber,
             SourceEndLine = function.Body.Extent.EndLineNumber,
             SourceEndColumn = function.Body.Extent.EndColumnNumber,
-            HostedBodySource = function.Body.Extent.Text,
+            HostedBodySource = PowerShellParameterSyntax.GetInvocableBodySource(function),
             SourceSha256 = ComputeSha256(source),
             HasBegin = function.Body.BeginBlock is not null,
             HasProcess = function.Body.ProcessBlock is not null,
             HasEnd = function.Body.EndBlock is not null,
             HasClean = clean is not null,
             MinimumPowerShellVersion = clean is null ? "5.1" : "7.3",
-            Parameters = function.Body.ParamBlock?.Parameters
+            Parameters = PowerShellParameterSyntax.GetParameters(function.Body)
                 .Select(parameter => PowerShellParameterContractBinder.Bind(
                     parameter,
                     targetFramework,
                     semanticProfileId: semanticProfileId))
-                .ToArray() ?? Array.Empty<PowerShellCompilationParameter>(),
-            CommandBinding = PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
+                .ToArray(),
+            CommandBinding = PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             Aliases = PowerShellAdvancedFunctionPolicy.GetAliases(function),
             Help = PowerShellCommentHelpBinder.Bind(function)?.ToPublicModel()
         };

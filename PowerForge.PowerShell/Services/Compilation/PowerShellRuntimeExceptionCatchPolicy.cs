@@ -6,6 +6,65 @@ namespace PowerForge;
 internal static class PowerShellRuntimeExceptionCatchPolicy
 {
     internal static bool Contains(Ast node)
+        => Contains(node, static type => type == typeof(RuntimeException));
+
+    internal static bool ContainsNumericErrorWrapping(Ast node)
+        => Contains(node, static type => type == typeof(RuntimeException) || type == typeof(PSInvalidCastException));
+
+    /// <summary>
+    /// Records local callees whose errors can reach a PowerShell-specific catch,
+    /// including callers that cannot bind and will remain authored PowerShell.
+    /// Source observations select the boundary; bound expressions determine which
+    /// callees actually require an unsupported numeric wrapper.
+    /// </summary>
+    internal static HashSet<string> FindNumericErrorObservedCallees(IEnumerable<ParsedSourceDocument> documents)
+    {
+        var roots = documents.Select(static document => document.SyntaxRoot).ToArray();
+        var functions = roots.SelectMany(root => root.FindAll(static node => node is FunctionDefinitionAst, true))
+            .Cast<FunctionDefinitionAst>().GroupBy(static function => function.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        var observed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Queue<string?>(roots.SelectMany(root => root.FindAll(static node => node is CommandAst, true))
+            .Cast<CommandAst>().Where(ContainsNumericErrorWrapping)
+            .Select(static command => command.GetCommandName()));
+        while (pending.Count > 0)
+        {
+            var name = pending.Dequeue();
+            // Dynamic calls and unresolved names (including local aliases) do not
+            // have a closed target set. Preserve every potentially observed numeric
+            // callee; the bound check still permits unrelated non-numeric helpers.
+            if (name is null || !functions.TryGetValue(name, out var declarations))
+                return functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!observed.Add(name)) continue;
+            foreach (var command in declarations.SelectMany(declaration => declaration.Body.FindAll(static node => node is CommandAst, true))
+                         .Cast<CommandAst>())
+            {
+                pending.Enqueue(command.GetCommandName());
+            }
+        }
+        return observed;
+    }
+
+    internal static bool RequiresNumericErrorWrapping(PowerShellBoundFunction function)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
+            .OfType<PowerShellBoundAssignmentStatement>()
+            .Any(static assignment => assignment.IntegralSemantics != PowerShellIntegralMutationSemantics.None ||
+                assignment.Operation != PowerShellBoundMutationOperator.Assign && assignment.Value.Type.ClrType == typeof(decimal)) ||
+            PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .Any(static expression => expression switch
+            {
+                PowerShellBoundMutationExpression mutation => mutation.Operation != PowerShellBoundMutationOperator.Assign &&
+                    (mutation.IntegralSemantics != PowerShellIntegralMutationSemantics.None || mutation.TargetClrType == typeof(decimal)),
+                PowerShellBoundBinaryExpression binary => binary.Operation == PowerShellBoundBinaryOperator.IntegralRemainder ||
+                    binary.Type.ClrType == typeof(decimal) && binary.Operation is PowerShellBoundBinaryOperator.Add or
+                        PowerShellBoundBinaryOperator.Subtract or PowerShellBoundBinaryOperator.Multiply or
+                        PowerShellBoundBinaryOperator.Divide or PowerShellBoundBinaryOperator.Remainder,
+                _ => false
+            });
+
+    private static bool Contains(Ast node, Func<Type?, bool> matches)
     {
         for (var current = node.Parent; current is not null; current = current.Parent)
         {
@@ -13,9 +72,8 @@ internal static class PowerShellRuntimeExceptionCatchPolicy
                 !ContainsExtent(tryStatement.Body, node))
                 continue;
 
-            if (tryStatement.CatchClauses.Any(static clause =>
-                    clause.CatchTypes.Any(static constraint =>
-                        constraint.TypeName.GetReflectionType() == typeof(RuntimeException))))
+            if (tryStatement.CatchClauses.Any(clause =>
+                    clause.CatchTypes.Any(constraint => matches(constraint.TypeName.GetReflectionType()))))
                 return true;
         }
 

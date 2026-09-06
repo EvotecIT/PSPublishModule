@@ -13,11 +13,32 @@ public sealed partial class PowerShellCompilationCensusRunner
         string? targetFramework = null,
         PowerShellCompilationCensusResult? baseline = null,
         bool recurse = true)
+        => RunWithOptions(paths, new PowerShellCompilationCensusOptions { TargetFramework = targetFramework, Recurse = recurse }, baseline);
+
+    /// <summary>Assesses each input under an explicit artifact and semantic contract.</summary>
+    public PowerShellCompilationCensusResult RunWithOptions(
+        IEnumerable<string> paths,
+        PowerShellCompilationCensusOptions options,
+        PowerShellCompilationCensusResult? baseline = null)
     {
         if (paths is null) throw new ArgumentNullException(nameof(paths));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        var targetFramework = string.IsNullOrWhiteSpace(options.TargetFramework) ? "net8.0" : options.TargetFramework!.Trim();
+        var profile = PowerShellCompilationSemanticOracleCatalog.Get(string.IsNullOrWhiteSpace(options.SemanticProfileId)
+            ? PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework)
+            : options.SemanticProfileId).ProfileId;
+        if (options.Mode is not (PowerShellCompilationMode.Strict or PowerShellCompilationMode.Hybrid))
+            throw new ArgumentException("A typed census requires Strict or Hybrid mode.", nameof(options));
+        if (options.ArtifactKind.HasValue && !Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), options.ArtifactKind.Value))
+            throw new ArgumentException("Unknown census artifact kind.", nameof(options));
+        if (baseline is not null && (baseline.ArtifactKind != options.ArtifactKind || baseline.Mode != options.Mode || baseline.Recurse != options.Recurse ||
+            !string.Equals(string.IsNullOrWhiteSpace(baseline.SemanticProfileId)
+                ? PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(baseline.TargetFramework)
+                : baseline.SemanticProfileId, profile, StringComparison.Ordinal)))
+            throw new ArgumentException("Compilation census baseline artifact, mode, recursion, or semantic profile does not match the requested contract.", nameof(baseline));
         var normalized = paths
             .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Select(static path => Path.GetFullPath(path.Trim().Trim('"')))
+            .Select(static path => path.Trim().Trim('"'))
             .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
         if (normalized.Length == 0)
@@ -33,8 +54,21 @@ public sealed partial class PowerShellCompilationCensusRunner
         }
 
         var analyses = new List<AnalyzedProduct>(normalized.Length);
+        var failures = new List<PowerShellCompilationCensusInputFailure>();
+        var seen = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         foreach (var path in normalized)
-            analyses.Add(AnalyzeProduct(path, targetFramework, recurse));
+        {
+            try
+            {
+                var fullPath = Path.GetFullPath(path);
+                if (seen.Add(fullPath))
+                    analyses.Add(AnalyzeProduct(fullPath, targetFramework, options.Recurse, options.ArtifactKind, options.Mode, profile));
+            }
+            catch (Exception error) when (error is ArgumentException or IOException or InvalidOperationException or NotSupportedException or UnauthorizedAccessException)
+            {
+                failures.Add(new PowerShellCompilationCensusInputFailure { Path = path, ErrorType = error.GetType().FullName!, Message = error.Message });
+            }
+        }
 
         var products = analyses.Select(static analysis => analysis.Product).ToArray();
 
@@ -72,13 +106,19 @@ public sealed partial class PowerShellCompilationCensusRunner
             coBlockers,
             sourceDrifts,
             functionFrontier,
-            functionCoBlockers);
+            functionCoBlockers)
+        {
+            ArtifactKind = options.ArtifactKind, Mode = options.Mode, SemanticProfileId = profile,
+            Recurse = options.Recurse, InputFailures = failures.ToArray()
+        };
     }
 
-    private static AnalyzedProduct AnalyzeProduct(string path, string? targetFramework, bool recurse)
+    private static AnalyzedProduct AnalyzeProduct(string path, string? targetFramework, bool recurse,
+        PowerShellCompilationArtifactKind? requestedKind, PowerShellCompilationMode mode, string profile)
     {
         var stopwatch = Stopwatch.StartNew();
-        var analyzer = new PowerShellCompilationAnalyzer();
+        var artifactKind = requestedKind ?? PowerShellCompilationInputResolver.InferDefaultArtifactKind(path);
+        var analyzer = new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), profile);
         PowerShellCompilationPlan plan;
         PowerShellCompilationDependency[] dependencies = Array.Empty<PowerShellCompilationDependency>();
         var sourceFiles = 0;
@@ -91,11 +131,13 @@ public sealed partial class PowerShellCompilationCensusRunner
         {
             var resolved = new PowerShellCompilationInputResolver().Resolve(
                 path,
-                mode: PowerShellCompilationMode.Hybrid,
+                kind: requestedKind,
+                mode: mode,
                 allowDynamicModuleRuntimeSources: true);
+            artifactKind = resolved.Kind;
             var analysisCapabilities = PowerShellCompilationBuildSpec.GetCapabilities(
                 resolved.Kind,
-                PowerShellCompilationMode.Hybrid);
+                mode);
             dependencies = resolved.Dependencies;
             var compilationSources = resolved.CompilationSourceFiles
                 .Select(Path.GetFullPath)
@@ -106,18 +148,6 @@ public sealed partial class PowerShellCompilationCensusRunner
                     Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory(),
                     targetFramework,
                     analysisCapabilities);
-            var emitted = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-                resolved.CompilationSourceFiles,
-                "PowerForge.Census",
-                "CompiledPowerShell",
-                targetFramework,
-                analysisCapabilities);
-            var exportContract = PowerShellModuleExportContract.TryRead(resolved.SourcePath);
-            var exportedFunctions = exportContract?.SelectFunctions(emitted.Methods.Select(static method => method.SourceName));
-            emitted = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(
-                emitted, targetFramework, capabilities: analysisCapabilities);
-            emitted = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(
-                emitted, exportedFunctions, targetFramework, capabilities: analysisCapabilities);
             var runtimeOnlyFiles = resolved.SourceFiles
                 .Where(source => !compilationSources.Contains(Path.GetFullPath(source)))
                 .SelectMany(source => analyzer.Analyze(new PowerShellCompilationSpec(
@@ -129,26 +159,27 @@ public sealed partial class PowerShellCompilationCensusRunner
                 .ToArray();
             var files = analyzedCompilation.Files.Concat(runtimeOnlyFiles).ToArray();
             plan = new PowerShellCompilationPlan(
-                PowerShellCompilationMode.Hybrid,
+                mode,
                 files,
                 targetFramework,
                 dependencies);
+            var emitted = PowerShellCompilationExplainShaper.Shape(resolved, plan, targetFramework!, profile);
             dispositionLedger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
                 plan,
-                PowerShellCompilationArtifactKind.BinaryModule,
+                resolved.Kind,
                 emitted,
                 resolved.SourcePath);
             sourceFiles = resolved.SourceFiles.Length;
             sourceFingerprint = ComputeSourceFingerprint(resolved.SourceFiles, path);
             coverage = BuildCoverageBreakdown(dispositionLedger);
-            regionCandidates = emitted.RegionCandidates;
-            regionOpportunities = emitted.RegionOpportunities;
+            regionCandidates = emitted?.RegionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
+            regionOpportunities = emitted?.RegionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
         }
         else
         {
             var analysisCapabilities = PowerShellCompilationBuildSpec.GetCapabilities(
-                PowerShellCompilationInputResolver.InferDefaultArtifactKind(path),
-                PowerShellCompilationMode.Hybrid);
+                requestedKind ?? PowerShellCompilationInputResolver.InferDefaultArtifactKind(path),
+                mode);
             plan = analyzer.Analyze(new PowerShellCompilationSpec(
                 path,
                 PowerShellCompilationMode.Analyze,
@@ -231,6 +262,7 @@ public sealed partial class PowerShellCompilationCensusRunner
             BuildFunctionDispositions(dispositionLedger));
         product.RegionCandidates = regionCandidates;
         product.RegionOpportunities = regionOpportunities;
+        product.ArtifactKind = artifactKind;
         return new AnalyzedProduct(product, featureEvidence);
     }
 
@@ -688,8 +720,8 @@ public sealed partial class PowerShellCompilationCensusRunner
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 
-    private static string? NormalizeTargetFramework(string? targetFramework)
-        => string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework!.Trim();
+    private static string NormalizeTargetFramework(string? targetFramework)
+        => string.IsNullOrWhiteSpace(targetFramework) ? "net8.0" : targetFramework!.Trim();
 
     private sealed class AnalyzedProduct
     {

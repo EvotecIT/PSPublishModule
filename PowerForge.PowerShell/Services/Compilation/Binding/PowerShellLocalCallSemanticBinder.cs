@@ -78,7 +78,7 @@ internal static class PowerShellLocalCallSemanticBinder
         PowerShellCompilationCapability capabilities,
         string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
-        var parameters = (function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
+        var parameters = PowerShellParameterSyntax.GetParameters(function.Body)
             .Select(parameter =>
             {
                 var name = parameter.Name.VariablePath.UserPath;
@@ -111,7 +111,7 @@ internal static class PowerShellLocalCallSemanticBinder
             symbol,
             parameters,
             PowerShellAdvancedFunctionPolicy.IsAdvanced(function),
-            PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
+            PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             declaredReturnType,
             PowerShellCommentHelpBinder.Bind(function),
             pipelineLifecycleParameterIndex);

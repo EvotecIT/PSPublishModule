@@ -16,7 +16,16 @@ internal static class PowerShellAdvancedFunctionPolicy
             .ToArray() ?? Array.Empty<string>();
 
     internal static bool IsAdvanced(FunctionDefinitionAst function)
-        => IsAdvanced(function.Body.ParamBlock);
+        => IsAdvancedBody(function.Body);
+
+    internal static bool IsAdvancedBody(ScriptBlockAst body)
+        => IsAdvanced(body.ParamBlock) || PowerShellParameterSyntax.GetParameters(body).Any(static parameter =>
+            parameter.Attributes.OfType<AttributeAst>().Any(static attribute => IsAttributeNamed(attribute, "Parameter")));
+
+    internal static PowerShellCompilationCommandBinding GetBodyBinding(ScriptBlockAst body)
+        => body.ParamBlock is not null
+            ? GetBinding(body.ParamBlock)
+            : new PowerShellCompilationCommandBinding(IsAdvancedBody(body));
 
     internal static bool IsAdvanced(ParamBlockAst? parameterBlock)
     {

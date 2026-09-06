@@ -171,9 +171,41 @@ internal sealed partial class PowerShellSemanticBinder
             statements.Add(bound);
             statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, bound));
         }
+        var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
+        locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
+        var numericProjectionIsValid = PowerShellNumericValueProjectionPolicy.Validate(
+                new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent), statements.ToArray()),
+                locals, diagnostics);
+        if (!numericProjectionIsValid) bodyIsValid = false;
+        // A fully bound body may still need its authored PowerShell header after cmdlet shaping.
+        // Keep the ordinary terminal-region candidate so that final shaping can retain that header
+        // while delegating the proven body through the same region ABI.
+        if (regionCandidates is not null && bodyIsValid && diagnostics.Count == functionDiagnosticStart &&
+            PowerShellBoundRegionCandidateSelector.TryCreate(
+                document, function, functionSymbol, parameters, locals, authoredStatements,
+                statementBindings, -1, out var completeBodyCandidate))
+            regionCandidates[completeBodyCandidate.RegionId] = completeBodyCandidate;
+        // Preserve canonical runs even when binding succeeds: semantic analysis, call-graph
+        // closure, and artifact shaping can still retain this function later in the pipeline.
+        if (regionOpportunities is not null)
+            AddRegionOpportunities(
+                regionOpportunities,
+                document,
+                function,
+                functionSymbol,
+                parameters,
+                symbols,
+                locals,
+                authoredStatements,
+                statementBindings);
+        if (regionCandidates is not null && numericProjectionIsValid &&
+            PowerShellBoundRegionCandidateSelector.TryCreateContinuation(
+                document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
+                out var continuationCandidate))
+            regionCandidates[continuationCandidate.RegionId] = continuationCandidate;
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
-            if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&
+            if (regionCandidates is not null && numericProjectionIsValid && lastFailedStatementIndex >= 0 &&
                 PowerShellBoundRegionCandidateSelector.TryCreate(
                     document,
                     function,
@@ -185,22 +217,8 @@ internal sealed partial class PowerShellSemanticBinder
                     lastFailedStatementIndex,
                     out var candidate))
                 regionCandidates[candidate.RegionId] = candidate;
-            if (regionOpportunities is not null)
-                AddRegionOpportunities(
-                    regionOpportunities,
-                    document,
-                    function,
-                    functionSymbol,
-                    parameters,
-                    symbols,
-                    locals,
-                    authoredStatements,
-                    statementBindings);
             return null;
         }
-
-        var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
-        locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
 
         var body = new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent), statements.ToArray());
         var scopeSymbols = parameters.Select(static parameter => parameter.Symbol)
@@ -214,7 +232,7 @@ internal sealed partial class PowerShellSemanticBinder
             new PowerShellLexicalScope(functionSymbol, scopeSymbols),
             PowerShellCommentHelpBinder.Bind(function),
             PowerShellAdvancedFunctionPolicy.GetAliases(function),
-            PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
+            PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             outputTypeContract.SemanticType,
             outputTypeContract.MetadataTypeName,
             body,
@@ -235,7 +253,7 @@ internal sealed partial class PowerShellSemanticBinder
     {
         var parameters = new List<PowerShellBoundParameter>();
         var invalid = false;
-        foreach (var parameter in function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
+        foreach (var parameter in PowerShellParameterSyntax.GetParameters(function.Body))
         {
             var name = parameter.Name.VariablePath.UserPath;
             var span = PowerShellSourceParser.GetSpan(document, parameter.Extent);
@@ -423,7 +441,7 @@ internal sealed partial class PowerShellSemanticBinder
                     mutation.Value!,
                     mutation.Operation,
                     mutation.NormalizeNullString,
-                    mutation.CheckedIntegral);
+                    mutation.IntegralSemantics);
         }
         if (statement is ReturnStatementAst returnStatement)
         {
@@ -651,7 +669,9 @@ internal sealed partial class PowerShellSemanticBinder
                 return new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
             return expression is null
                 ? null
-                : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
+                : new PowerShellBoundExpressionStatement(
+                    PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput,
+                    requiresOutputContinuation: emitsOutput && !isTerminal && !allowNonTerminalSuccessOutput);
         }
         return null;
     }
