@@ -50,6 +50,9 @@ public sealed class LinuxRunnerRootCapacityWorkflowTests
         Assert.Contains("RUNNER_NAME\" == \"$expected_runner_name", script, StringComparison.Ordinal);
         Assert.Contains("pgrep -xc Runner.Worker", script, StringComparison.Ordinal);
         Assert.Contains("flock -n 9", script, StringComparison.Ordinal);
+        Assert.Contains("root_source=\"$(trim \"$(findmnt -n -o SOURCE /)\")\"", script, StringComparison.Ordinal);
+        Assert.Contains("root_filesystem=\"$(trim \"$(findmnt -n -o FSTYPE /)\")\"", script, StringComparison.Ordinal);
+        Assert.Contains("root_major_minor=\"$(trim \"$(findmnt -n -o MAJ:MIN /)\")\"", script, StringComparison.Ordinal);
         Assert.Contains("Expected the verified ext4 root filesystem", script, StringComparison.Ordinal);
         Assert.Contains("Expected exactly one LVM logical volume", script, StringComparison.Ordinal);
         Assert.Contains("must contain exactly one physical volume", script, StringComparison.Ordinal);
