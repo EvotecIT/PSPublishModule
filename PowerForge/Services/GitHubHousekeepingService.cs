@@ -173,6 +173,7 @@ public sealed class GitHubHousekeepingService
                 CleanToolCache = spec.Runner.CleanToolCache,
                 ClearDotNetCaches = spec.Runner.ClearDotNetCaches,
                 PruneDotNetSdks = spec.Runner.PruneDotNetSdks,
+                CleanWindowsComponentStore = spec.Runner.CleanWindowsComponentStore,
                 PruneDocker = spec.Runner.PruneDocker,
                 IncludeDockerVolumes = spec.Runner.IncludeDockerVolumes,
                 AllowSudo = spec.Runner.AllowSudo

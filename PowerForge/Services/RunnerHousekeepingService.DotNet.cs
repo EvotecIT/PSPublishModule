@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using Microsoft.Win32;
 
 namespace PowerForge;
 
@@ -30,8 +31,10 @@ public sealed partial class RunnerHousekeepingService
         const string id = "dotnet-sdk-prune";
         const string title = "Prune superseded dotnet SDKs";
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return SkippedStep(id, title, "SDK pruning is supported only on Linux runners.");
+        var isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        if (!isLinux && !isWindows)
+            return SkippedStep(id, title, "SDK pruning is supported only on Linux and Windows runners.");
 
         if (string.IsNullOrWhiteSpace(dotNetRootPath))
             return SkippedStep(id, title, "DOTNET_ROOT is not configured.");
@@ -43,9 +46,6 @@ public sealed partial class RunnerHousekeepingService
         if (!CommandExists("dotnet"))
             return SkippedStep(id, title, "dotnet is not available on PATH; active SDK cannot be protected.");
 
-        if (!CommandExists("dpkg-query"))
-            return SkippedStep(id, title, "SDK pruning currently supports Debian-family Linux runners; dpkg-query is unavailable.");
-
         var versionProbe = RunProcess("dotnet", new[] { "--version" }, activeSdkProbePath);
         var activeVersion = versionProbe.ExitCode == 0 ? versionProbe.StdOut.Trim() : string.Empty;
         if (!Version.TryParse(activeVersion, out _))
@@ -56,20 +56,31 @@ public sealed partial class RunnerHousekeepingService
             .ToArray();
         var protectedDirectories = new HashSet<string>(GetPathStringComparer());
 
-        foreach (var directory in installedDirectories)
+        if (isLinux)
         {
-            var markerPath = Path.Combine(directory, "dotnet.dll");
-            if (!File.Exists(markerPath))
-            {
-                protectedDirectories.Add(directory);
-                continue;
-            }
+            if (!CommandExists("dpkg-query"))
+                return SkippedStep(id, title, "SDK pruning currently supports Debian-family Linux runners; dpkg-query is unavailable.");
 
-            var ownershipProbe = RunProcess("dpkg-query", new[] { "-S", markerPath }, sdkRoot);
-            if (ownershipProbe.ExitCode == 0)
-                protectedDirectories.Add(directory);
-            else if (IsPackageOwnershipProbeFailureFatal(ownershipProbe.ExitCode))
-                return SkippedStep(id, title, $"dpkg-query failed with exit code {ownershipProbe.ExitCode}; no SDKs were pruned.");
+            foreach (var directory in installedDirectories)
+            {
+                var markerPath = Path.Combine(directory, "dotnet.dll");
+                if (!File.Exists(markerPath))
+                {
+                    protectedDirectories.Add(directory);
+                    continue;
+                }
+
+                var ownershipProbe = RunProcess("dpkg-query", new[] { "-S", markerPath }, sdkRoot);
+                if (ownershipProbe.ExitCode == 0)
+                    protectedDirectories.Add(directory);
+                else if (IsPackageOwnershipProbeFailureFatal(ownershipProbe.ExitCode))
+                    return SkippedStep(id, title, $"dpkg-query failed with exit code {ownershipProbe.ExitCode}; no SDKs were pruned.");
+            }
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                 && !TryGetWindowsPackageOwnedSdkDirectories(installedDirectories, out protectedDirectories))
+        {
+            return SkippedStep(id, title, "Unable to inspect registered Windows SDK packages; no SDKs were pruned.");
         }
 
         var targets = SelectDotNetSdkDirectoriesToPrune(
@@ -132,6 +143,96 @@ public sealed partial class RunnerHousekeepingService
     }
 
     internal static bool IsPackageOwnershipProbeFailureFatal(int exitCode) => exitCode is not (0 or 1);
+
+#if NET8_0_OR_GREATER
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+#endif
+    private static bool TryGetWindowsPackageOwnedSdkDirectories(
+        IEnumerable<string> installedDirectories,
+        out HashSet<string> protectedDirectories)
+    {
+        protectedDirectories = new HashSet<string>(GetPathStringComparer());
+        try
+        {
+            var displayNames = new List<string>();
+            foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                using var localMachine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
+                using var uninstall = localMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
+                if (uninstall is null)
+                    continue;
+
+                foreach (var subKeyName in uninstall.GetSubKeyNames())
+                {
+                    using var subKey = uninstall.OpenSubKey(subKeyName);
+                    if (subKey?.GetValue("DisplayName") is string displayName)
+                        displayNames.Add(displayName);
+                }
+            }
+
+            protectedDirectories = SelectWindowsPackageOwnedSdkDirectories(installedDirectories, displayNames);
+            return true;
+        }
+        catch
+        {
+            protectedDirectories.Clear();
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Maps registered Windows SDK package display names to their corresponding SDK directories.
+    /// Unregistered directories installed by dotnet-install remain eligible for normal retention selection.
+    /// </summary>
+    internal static HashSet<string> SelectWindowsPackageOwnedSdkDirectories(
+        IEnumerable<string> installedDirectories,
+        IEnumerable<string> registeredDisplayNames)
+    {
+        if (installedDirectories is null) throw new ArgumentNullException(nameof(installedDirectories));
+        if (registeredDisplayNames is null) throw new ArgumentNullException(nameof(registeredDisplayNames));
+
+        var registeredVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var displayName in registeredDisplayNames)
+        {
+            if (TryParseWindowsRegisteredSdkVersion(displayName, out var version))
+                registeredVersions.Add(version!);
+        }
+
+        return new HashSet<string>(
+            installedDirectories
+                .Where(path => registeredVersions.Contains(Path.GetFileName(path)))
+                .Select(Path.GetFullPath),
+            GetPathStringComparer());
+    }
+
+    /// <summary>
+    /// Extracts a canonical SDK version from a Windows package display name.
+    /// </summary>
+    internal static bool TryParseWindowsRegisteredSdkVersion(string? displayName, out string? version)
+    {
+        var prefixes = new[]
+        {
+            "Microsoft .NET SDK ",
+            "Microsoft .NET Core SDK "
+        };
+        version = null;
+        if (string.IsNullOrWhiteSpace(displayName))
+            return false;
+
+        var normalizedDisplayName = displayName!;
+        var prefix = prefixes.FirstOrDefault(candidate => normalizedDisplayName.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
+        if (prefix is null)
+            return false;
+
+        var remainder = normalizedDisplayName.Substring(prefix.Length);
+        var separator = remainder.IndexOf(' ');
+        var candidate = separator < 0 ? remainder : remainder.Substring(0, separator);
+        if (!TryParseStableSdkVersion(candidate, out _))
+            return false;
+
+        version = candidate;
+        return true;
+    }
 
     internal static bool TryParseStableSdkVersion(string? value, out Version? version)
     {

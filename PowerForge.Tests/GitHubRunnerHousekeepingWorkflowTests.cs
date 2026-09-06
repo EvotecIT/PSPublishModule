@@ -24,7 +24,13 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         Assert.Contains(".powerforge/runner-housekeeping.json", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("runner-min-free-gb", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("report-artifact-name", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("runner-tool-cache-path: ${{ runner.tool_cache }}", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("actions: write", workflowYaml, StringComparison.Ordinal);
+
+        var actionPath = Path.Combine(repoRoot, ".github", "actions", "github-housekeeping", "action.yml");
+        var actionYaml = File.ReadAllText(actionPath);
+        Assert.Contains("runner-tool-cache-path:", actionYaml, StringComparison.Ordinal);
+        Assert.Contains("RUNNER_TOOL_CACHE: ${{ inputs['runner-tool-cache-path'] }}", actionYaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -74,7 +80,8 @@ public sealed class GitHubRunnerHousekeepingWorkflowTests
         Assert.Equal(0, runner.GetProperty("WorkspacesRetentionDays").GetInt32());
         Assert.True(runner.GetProperty("PruneDotNetSdks").GetBoolean());
         Assert.Equal(1, runner.GetProperty("DotNetSdkVersionsToKeepPerMajorMinor").GetInt32());
-        Assert.Equal("/usr/share/dotnet", runner.GetProperty("DotNetRootPath").GetString());
+        Assert.True(runner.GetProperty("CleanWindowsComponentStore").GetBoolean());
+        Assert.False(runner.TryGetProperty("DotNetRootPath", out _));
     }
 
     private static string FindRepoRoot()

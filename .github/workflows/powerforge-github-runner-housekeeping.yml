@@ -189,6 +189,7 @@ jobs:
           apply: ${{ inputs.apply && 'true' || 'false' }}
           github-token: ${{ secrets['github-token'] != '' && secrets['github-token'] || github.token }}
           runner-min-free-gb: ${{ steps.resolved.outputs.runner_min_free_gb }}
+          runner-tool-cache-path: ${{ runner.tool_cache }}
           report-path: ${{ steps.resolved.outputs.report_path }}
           summary-path: ${{ steps.resolved.outputs.summary_path }}
 

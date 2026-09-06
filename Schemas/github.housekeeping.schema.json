@@ -152,7 +152,11 @@
         "ClearDotNetCaches": { "type": "boolean" },
         "PruneDotNetSdks": {
           "type": "boolean",
-          "description": "Prunes superseded unowned stable SDKs during aggressive cleanup on Debian-family Linux runners."
+          "description": "Prunes superseded unowned stable SDKs during aggressive cleanup on Linux and Windows runners."
+        },
+        "CleanWindowsComponentStore": {
+          "type": "boolean",
+          "description": "Runs non-resetting DISM component-store cleanup during aggressive cleanup on Windows runners."
         },
         "PruneDocker": { "type": "boolean" },
         "IncludeDockerVolumes": { "type": "boolean" },

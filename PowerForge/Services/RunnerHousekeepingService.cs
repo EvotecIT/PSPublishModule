@@ -135,6 +135,13 @@ public sealed partial class RunnerHousekeepingService
                     allowSudo: normalized.AllowSudo));
             }
 
+            if (normalized.CleanWindowsComponentStore)
+            {
+                steps.Add(CleanWindowsComponentStore(
+                    workingDirectory: normalized.WorkRootPath,
+                    dryRun: normalized.DryRun));
+            }
+
             if (normalized.PruneDocker)
             {
                 var args = normalized.IncludeDockerVolumes
@@ -240,6 +247,7 @@ public sealed partial class RunnerHousekeepingService
         public bool CleanToolCache { get; set; }
         public bool ClearDotNetCaches { get; set; }
         public bool PruneDotNetSdks { get; set; }
+        public bool CleanWindowsComponentStore { get; set; }
         public bool PruneDocker { get; set; }
         public bool IncludeDockerVolumes { get; set; }
         public bool AllowSudo { get; set; }
@@ -291,6 +299,7 @@ public sealed partial class RunnerHousekeepingService
             CleanToolCache = spec.CleanToolCache,
             ClearDotNetCaches = spec.ClearDotNetCaches,
             PruneDotNetSdks = spec.PruneDotNetSdks,
+            CleanWindowsComponentStore = spec.CleanWindowsComponentStore,
             PruneDocker = spec.PruneDocker,
             IncludeDockerVolumes = spec.IncludeDockerVolumes,
             AllowSudo = spec.AllowSudo
