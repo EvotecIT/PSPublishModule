@@ -22,6 +22,10 @@ internal static class PowerShellCommandIslandPolicy
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
         PowerShellCommandSemanticResolver? commandResolver = null)
     {
+        // Runtime-free provider sinks also use PowerShellStreams. They do not authorize
+        // execution of arbitrary authored PowerShell through a command dispatcher.
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+            return -1;
         commandResolver ??= new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
         var parameters = PowerShellParameterSyntax.GetParameters(body)
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
@@ -126,6 +130,8 @@ internal static class PowerShellCommandIslandPolicy
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
         PowerShellCommandSemanticResolver? commandResolver = null)
     {
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+            return false;
         commandResolver ??= new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
         if (!ReferenceEquals(statement.Parent, body.EndBlock))
             return false;
@@ -245,6 +251,8 @@ internal static class PowerShellCommandIslandPolicy
         out AssignmentStatementAst assignment)
     {
         assignment = null!;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+            return false;
         if (!ReferenceEquals(statement.Parent, body.EndBlock) ||
             statement is not AssignmentStatementAst candidate ||
             candidate.Operator.ToString() != "Equals" ||
