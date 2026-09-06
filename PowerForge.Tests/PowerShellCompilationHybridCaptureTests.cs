@@ -67,7 +67,6 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("__invokePowerShellCapture", generated, StringComparison.Ordinal);
         Assert.Contains("Get_CapturedHelper(", generated, StringComparison.Ordinal);
-        Assert.Contains("count = checked((int)(count + 1))", generated, StringComparison.Ordinal);
     }
 
     [Fact]

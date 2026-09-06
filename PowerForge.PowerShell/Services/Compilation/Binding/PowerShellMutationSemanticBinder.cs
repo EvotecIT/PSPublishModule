@@ -82,7 +82,7 @@ internal static class PowerShellMutationSemanticBinder
             "MinusEquals" => PowerShellBoundMutationOperator.Subtract,
             "MultiplyEquals" => PowerShellBoundMutationOperator.Multiply,
             "DivideEquals" => PowerShellBoundMutationOperator.Divide,
-            "RemEquals" => PowerShellBoundMutationOperator.Remainder,
+            "RemainderEquals" => PowerShellBoundMutationOperator.Remainder,
             _ => (PowerShellBoundMutationOperator?)null
         };
         if (operation is null) return null;
@@ -127,6 +127,18 @@ internal static class PowerShellMutationSemanticBinder
             return null;
         }
         var explicitType = target.Type.Provenance == PowerShellTypeFactProvenance.Explicit;
+        if (operation != PowerShellBoundMutationOperator.Assign && targetType == typeof(float) && !explicitType)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2410", "Compound arithmetic on an unconstrained Single local produces a Double result and changes its CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return null;
+        }
+        if (operation != PowerShellBoundMutationOperator.Assign &&
+            (PowerShellClrTypeSemantics.IsIntegral(targetType) || targetType == typeof(decimal)) &&
+            PowerShellRuntimeExceptionCatchPolicy.ContainsNumericErrorWrapping(syntax))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2409", "Numeric compound assignment inside a PowerShell-specific typed catch cannot preserve PowerShell error wrapping.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return null;
+        }
         if (operation != PowerShellBoundMutationOperator.Assign && PowerShellClrTypeSemantics.IsIntegral(targetType) && !explicitType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2403", $"Integral compound assignment to untyped local '${target.Symbol.Name}' can promote dynamically in PowerShell and is not eligible for typed compilation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
@@ -140,7 +152,7 @@ internal static class PowerShellMutationSemanticBinder
             value,
             target.Type,
             operation == PowerShellBoundMutationOperator.Assign && explicitType && targetType == typeof(string),
-            operation != PowerShellBoundMutationOperator.Assign && PowerShellClrTypeSemantics.IsIntegral(targetType));
+            SelectIntegralSemantics(operation.Value, targetType, value.Type.ClrType));
     }
 
     internal static bool TryBindIncrement(
@@ -172,7 +184,8 @@ internal static class PowerShellMutationSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2404", $"Increment or decrement of '${target.Symbol.Name}' requires one explicitly typed supported CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return true;
         }
-        if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax) && PowerShellClrTypeSemantics.IsIntegral(target.Type.ClrType))
+        if (PowerShellRuntimeExceptionCatchPolicy.ContainsNumericErrorWrapping(syntax) &&
+            (PowerShellClrTypeSemantics.IsIntegral(target.Type.ClrType) || target.Type.ClrType == typeof(decimal)))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2409", "Integral increment or decrement inside a RuntimeException catch cannot preserve PowerShell overflow-error wrapping.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return true;
@@ -185,8 +198,21 @@ internal static class PowerShellMutationSemanticBinder
             null,
             new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "Increment and decrement are statement-valued on the conservative path."),
             false,
-            PowerShellClrTypeSemantics.IsIntegral(target.Type.ClrType));
+            SelectIntegralSemantics(operation.Value, target.Type.ClrType, target.Type.ClrType));
         return true;
+    }
+
+    private static PowerShellIntegralMutationSemantics SelectIntegralSemantics(
+        PowerShellBoundMutationOperator operation, Type target, Type right)
+    {
+        if (operation == PowerShellBoundMutationOperator.Assign || !PowerShellClrTypeSemantics.IsIntegral(target))
+            return PowerShellIntegralMutationSemantics.None;
+        // PowerShell's 64-bit product promotes through BigInteger. Its conversion
+        // to Double differs from Decimal rounding near Int64's negative boundary.
+        return operation == PowerShellBoundMutationOperator.Multiply &&
+            (target == typeof(long) || target == typeof(ulong) || right == typeof(long) || right == typeof(ulong))
+            ? PowerShellIntegralMutationSemantics.PromotedBigIntegerProduct
+            : PowerShellIntegralMutationSemantics.CheckedConversion;
     }
 
     private static Ast UnwrapExpression(Ast syntax)

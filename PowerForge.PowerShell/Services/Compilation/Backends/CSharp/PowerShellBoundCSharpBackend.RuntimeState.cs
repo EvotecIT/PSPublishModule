@@ -2,7 +2,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private static string EmitRuntimeState(PowerShellLoweredRuntimeStateExpression expression)
+    private string EmitRuntimeState(PowerShellLoweredRuntimeStateExpression expression)
     {
         if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget)
             return $"__shouldProcessTarget({EmitExpression(expression.Arguments[0])})";

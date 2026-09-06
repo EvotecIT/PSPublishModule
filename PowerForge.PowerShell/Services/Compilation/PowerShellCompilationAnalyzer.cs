@@ -55,7 +55,7 @@ public sealed partial class PowerShellCompilationAnalyzer
 
     private static readonly HashSet<string> SupportedAssignmentOperators = new(StringComparer.Ordinal)
     {
-        "Equals", "PlusEquals", "MinusEquals", "MultiplyEquals", "DivideEquals", "RemEquals"
+        "Equals", "PlusEquals", "MinusEquals", "MultiplyEquals", "DivideEquals", "RemainderEquals"
     };
 
     private PowerShellCompilationFilePlan AnalyzeFile(

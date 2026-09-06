@@ -33,7 +33,8 @@ internal enum PowerShellBoundBinaryOperator
     BitwiseOr,
     BitwiseExclusiveOr,
     ShiftLeft,
-    ShiftRight
+    ShiftRight,
+    IntegralRemainder
 }
 
 internal enum PowerShellBoundUnaryOperator

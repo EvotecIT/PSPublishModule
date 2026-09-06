@@ -48,3 +48,22 @@ Run the separate opt-in qualification lane only when local execution of the revi
 ```
 
 This lane builds a Hybrid artifact, verifies that the packet's named unit was emitted as CLR, loads the original and generated surfaces in separate clean child processes, and compares the selected command invocation. The reviewed metadata can select manifest import, direct root-module import, safe dot-sourcing, or the generated typed assembly independently; these are harness choices and never compiler eligibility inputs. The fixed packet currently proves four commands across three scenario families. A passing qualification proves only the selected command, not the complete workload.
+
+## Artifact-aware discovery and the bounded compiler gate
+
+The separate `compiler-discovery.net10.json` packet pins four repository snapshots, archive hashes, license status, source selection, artifact kind, mode, and semantic profile. `Invoke-CompilerDiscovery.ps1` assesses each selected input independently in bounded process batches and records successful products plus source-closure failures. It never imports or executes the external source and does not rewrite either acceptance baseline.
+
+```powershell
+./Benchmarks/PowerShellCompilation/Corpus/Invoke-CompilerDiscovery.ps1 `
+    -WorkspacePath ./assessment/discovery
+
+powerforge powershell census ./Main.ps1 --kind exe --mode Strict `
+    --framework net10.0 --semantic-profile PowerForge.Oracle.PowerShell/7.6 --output json
+
+./Build/Invoke-PowerShellCompilerGate.ps1 `
+    -EvidencePath ./assessment/compiler-gate -RuntimeIdentifier win-x64
+```
+
+Census accepts `--kind exe|dll|library`, `--mode Strict|Hybrid`, and `--semantic-profile`. Omitted kind is inferred per input. Incomplete input assessment retains successful products and `InputFailures` in JSON with a nonzero CLI exit code. Baselines require matching artifact, mode, profile, framework, and recursion contracts. The existing overload remains available to C# callers; use `RunWithOptions` for explicit contracts.
+
+The gate requires the repository SDK, .NET 8 artifact references/runtime, and the selected PowerShell host. It runs contract tests plus six Strict programs (24 authored units), including number-theory and calendar scenarios. Run `linux-x64` on Linux itself. Windows PowerShell 5.1 numeric cases are selected only on Windows; host-capability JSON records their unavailability on Linux. The broader Hybrid module and NativeAOT lanes retain their own separately dated evidence.

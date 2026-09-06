@@ -4,7 +4,7 @@ Last updated: 2026-09-06
 
 This roadmap is the execution plan for growing PowerForge PowerShell compilation without turning the analyzer, transpiler, command handling, or C# emitter into increasingly coupled catch-all components.
 
-The default branch contains a typed semantic compiler core with immutable bound IR, deterministic analysis and lowering, a lowered-only C# method backend, generated-project publication, help/module-contract flow, consumed dependency locks, typed command-family contracts, runtime-free provider injection, and canonical hosted lifecycle binding. Compiler-selected payloads remain authoritative through delivery, reusable checkpoints authenticate the compiler and normalized release plan, and artifacts carry decision and reproduction evidence. Completed architecture checkpoints do not imply semantic completeness: the 2026-09-06 assessment reproduced accepted-code arithmetic defects and census gaps that now take priority.
+The default branch contains a typed semantic compiler core with immutable bound IR, deterministic analysis and lowering, a lowered-only C# method backend, generated-project publication, help/module-contract flow, consumed dependency locks, typed command-family contracts, runtime-free provider injection, and canonical hosted lifecycle binding. Compiler-selected payloads remain authoritative through delivery, reusable checkpoints authenticate the compiler and normalized release plan, and artifacts carry decision and reproduction evidence. Completed architecture checkpoints do not imply semantic completeness: the 2026-09-06 assessment led to a corrective source implementation for arithmetic semantics, artifact-aware census, and bounded compiler validation; PR settlement and broader workload coverage remain open.
 
 The companion [PowerShell Compilation guide](PowerForge.PowerShellCompilation.md) documents current behavior, artifact modes, supported syntax, measured performance, census evidence, and distribution limits. This file records completed architecture gates as well as the remaining implementation plan.
 
@@ -47,27 +47,26 @@ The product succeeds when users can predict which of these outcomes they are get
 
 The compiler implementation is present on `origin/main`, assessed at `045d9ccab` on 2026-09-06. It includes the semantic-pipeline migration, exact-closure remediation, Milestone 14–22 implementation waves, and Milestone 23 state, region, and candidate-decision slices. The [current readiness assessment](PowerForge.PowerShellCompilation.Assessment.md) records fresh tests, a baseline-preserving external census, Windows Strict execution, and discovery of three additional source repositories. Earlier multi-target and target-host results below retain their own evidence dates. Merged source is not proof of a published package or released product.
 
-### Current corrective gate: accepted semantics and artifact-aware measurement
+### Current corrective gate: implemented source, pending PR settlement
 
-The architecture remains the intended owner. Complete this bounded corrective gate before expanding arithmetic acceptance or region promotion; analysis-only source discovery may proceed now.
+The 2026-09-06 corrective implementation keeps semantic decisions in the existing binder, bound IR, lowering, and backend owners. See the [assessment](PowerForge.PowerShellCompilation.Assessment.md) for current execution evidence and limits.
 
-- [ ] **Correct Single arithmetic.** Accepted `Single + Single` loses precision and returns `Single` where PowerShell returns `Double`; multiplication also has the wrong return type. Bind operand conversions and operation/result types together, then sweep related arithmetic and verify both values and CLR types.
-- [ ] **Correct overflow error semantics.** Accepted typed compound assignment and increment select `OverflowException` catches in generated code where PowerShell selects `InvalidCastException`. Preserve the authored catch, failure state, and host/runtime-free error contracts without rewriting unrelated CLR exceptions.
-- [ ] **Protect the compiler in PR validation.** Add a bounded compiler semantic/artifact test gate; the current automatic workflows build these projects but do not run the compiler category or compiler corpus. Keep broader corpus and physical-target qualification separate and budgeted.
-- [ ] **Measure each intended artifact.** Recursive census currently shapes `.ps1` inputs as binary modules. Add explicit artifact/mode/profile selection and canonical executable shaping, with a separate EXE baseline; retain the existing module baseline unchanged.
-- [ ] **Preserve failed discovery inputs.** Record per-input dependency/staging failures alongside successful census rows. One unsupported dot-source must not erase an entire repository batch, and failures must remain in the submitted denominator.
-
-This gate corrects current accepted behavior and measurement; it does not reopen the compiler architecture migration or authorize a release. The assessment includes minimal reproductions and owning code paths. Historical milestone completion records describe their bounded checkpoints and must not be used to dismiss these newly reproduced defects.
+- [x] Correct Single arithmetic operand precision and CLR result types.
+- [x] Preserve constrained numeric promotion, authored CLR catch selection, RHS exceptions, and state after failure across integral widths and loop iterators. Reject forms requiring unsupported PowerShell-specific error wrapping.
+- [x] Add a bounded compiler PR gate with pinned Windows PowerShell 7.6.5 acquisition, .NET 8 artifact references, contract tests, six Strict programs, and uploaded evidence.
+- [x] Make census artifact/mode/profile-aware through canonical final shaping and reject incomparable baselines.
+- [x] Preserve successful inputs alongside dependency-resolution and malformed-path failures, with incomplete results still failing acceptance.
+- [x] Add generic integral remainder and remainder assignment, then qualify authored number-theory and calendar programs on Windows/Linux x64. The Strict packet now has 6/6 complete programs and 24/24 emitted units.
+- [ ] Settle the corrective PR's current-head CI and reviews. Local implementation is not merged or publicly released evidence.
 
 ### Corpus expansion and pilot order
 
-- [x] Run analysis-only discovery of exact SamErde/PowerShell, CleanupMonster, and MicrosoftIntune revisions. The assessment records 230 successful SamErde script inputs plus two resolution failures, CleanupMonster's 68-file module closure, and 20 Intune scripts. None has complete-workload execution credit from this scan.
-- [ ] Add a separate pinned discovery packet using existing acquisition/census owners, explicit source selection, per-input failures, intended artifacts, and execution policies. Do not merge these changing discovery denominators into the existing acceptance baseline.
-- [ ] After the corrective gate, choose a repeated bounded semantic/continuation shape using co-blockers and complete workflow unlocks. Include a pure computation/data-transformation family so administration-heavy inputs do not determine the entire compiler agenda.
-- [ ] Qualify promoted regions in real commands from at least two unrelated scenario families, with original/generated state, stream, error, and cleanup parity plus measured benefit after crossing cost.
-- [ ] Qualify a complete standalone script as an EXE with parameter, exit-code, stdout/stderr, dependency/resource, and clean-directory proof. An importable DLL or emitted helper cannot substitute for this result.
+- [x] Add a separate immutable discovery packet for heterogeneous scripts, a real module, standalone administration scripts, and a computation family. Each Strict/Hybrid scan assessed 277/290 inputs and retained all 13 source-closure failures. External sources were neither imported nor executed.
+- [ ] Minimize repeated remaining lifecycle, pipeline, scope, and object/collection blockers using complete-workflow unlocks and co-blockers.
+- [ ] Qualify promoted regions in real commands from at least two unrelated families, with original/generated state, stream, error, cleanup, and crossing-cost evidence.
+- [ ] Qualify an administration detection script as an EXE on a controlled target image. Keep remediation operations and cleanup separate from analysis-only discovery.
 
-Start narrow internal pilots when their specific correctness and execution contracts pass. Broaden source discovery now; broaden accepted semantics after the corrective gate. Public-feed lifecycle proof, disposable-target reboot/reconnect, and additional physical platforms remain distinct release/provider/target work rather than prerequisites for collecting new source evidence.
+Start narrow internal pilots only for specifically qualified workflows. Public-feed lifecycle proof, disposable-target reboot/reconnect, and additional physical platforms remain separate release/provider/target gates.
 
 The compiler already provides:
 
@@ -1523,13 +1522,11 @@ Exit gate: **Partial / Current.** Direct Hybrid reads/writes, authored-cast memb
 
 The active corrective checklist near the start of this roadmap takes precedence over completed milestone history. Use this order:
 
-1. [ ] Correct Single arithmetic and typed-overflow catch selection through canonical semantic contracts, with value/type/error differential tests and artifact execution.
-2. [ ] Add bounded compiler PR validation, artifact-aware census, and per-input discovery failures. Keep the existing acceptance baselines intact.
-3. [ ] Expand the separate pinned discovery packet with heterogeneous scripts, a real stateful module, standalone detection/remediation entrypoints, and a pure data/computation family. Discovery is analysis-only until an individual execution case is reviewed.
-4. [ ] Continue Milestone 23 with one repeated bounded continuation/transfer shape. Prove original/generated behavior and measured region benefit in unrelated real commands before adding wider state, pipelines, or providers. Keep emitted units, promoted regions, and runtime-routed behavior separate.
-5. [ ] Qualify a complete standalone script on its intended executable target, then begin narrow internal pilots for specifically proven workflows.
-6. [ ] Complete provider and platform qualification independently: the disposable management-target reboot/reconnect case, native-Linux test capability partition, and one selected physical RID/deployment profile at a time.
-7. [ ] Use an explicitly authorized release lane for public compiler/core/CLI/provider publication and install, upgrade, rollback, and clean-consumer proof. No publication is authorized by this roadmap.
+1. [ ] Settle CI/reviews for the implemented corrective gate and retain the measured Strict and discovery evidence above.
+2. [ ] Continue Milestone 23 with one bounded continuation/transfer shape. Prove original/generated behavior and measured region benefit in unrelated real commands before adding wider state, pipelines, or providers.
+3. [ ] Qualify a complete administration detection script on its intended target, then begin narrow internal pilots for specifically proven workflows.
+4. [ ] Complete provider and platform qualification independently: disposable management-target reboot/reconnect, native-Linux test capability partition beyond the bounded gate, and one selected physical RID/deployment profile at a time.
+5. [ ] Use an explicitly authorized release lane for public compiler/core/CLI/provider publication and install, upgrade, rollback, and clean-consumer proof. No publication is authorized by this roadmap.
 
 Two semantic boundaries remain explicit. Unqualified `Write-*` calls need preserved streams, ordering, preferences/actions, and record identity before they can enter a generic hosted region. Routing only success output or classifying records by CLR type is insufficient. Basic functions whose parameters collide with generated cmdlet common parameters must retain their authored script command surface until the wrapper/dispatch contract is proved; any body acceleration still counts as runtime-routed.
 

@@ -94,7 +94,7 @@ internal sealed class PowerShellBoundOptimizer
         {
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(
                 assignment.Span, assignment.Target, OptimizeExpression(assignment.Value), assignment.Operation,
-                assignment.NormalizeNullString, assignment.CheckedIntegral),
+                assignment.NormalizeNullString, assignment.IntegralSemantics),
             PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellBoundModuleVariableAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
@@ -180,7 +180,7 @@ internal sealed class PowerShellBoundOptimizer
                 invocation.AuthoredEvaluationOrder.ToArray(), invocation.BoundParameterNames.ToArray());
         if (expression is PowerShellBoundMutationExpression mutation)
             return new PowerShellBoundMutationExpression(mutation.Span, mutation.Target, mutation.TargetClrType, mutation.Operation,
-                mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString, mutation.CheckedIntegral);
+                mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString, mutation.IntegralSemantics);
         if (expression is PowerShellBoundArrayExpression array)
             return new PowerShellBoundArrayExpression(array.Span, array.Type.ClrType, array.Kind, array.Elements.Select(OptimizeExpression).ToArray());
         return expression;

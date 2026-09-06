@@ -423,7 +423,7 @@ internal sealed partial class PowerShellSemanticBinder
                     mutation.Value!,
                     mutation.Operation,
                     mutation.NormalizeNullString,
-                    mutation.CheckedIntegral);
+                    mutation.IntegralSemantics);
         }
         if (statement is ReturnStatementAst returnStatement)
         {

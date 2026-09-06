@@ -2,7 +2,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private static string EmitIndex(PowerShellLoweredIndexExpression index)
+    private string EmitIndex(PowerShellLoweredIndexExpression index)
     {
         var target = index.TargetTemporary;
         var key = index.IndexTemporary;
@@ -12,7 +12,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"new global::System.Func<{returnType}>(() => {{ var {target} = {EmitExpression(index.Target)}; var {key} = {EmitExpression(index.Index)}; return {body}; }})()";
     }
 
-    private static string EmitIndexBody(PowerShellLoweredIndexExpression index, string target, string key)
+    private string EmitIndexBody(PowerShellLoweredIndexExpression index, string target, string key)
     {
         if (index.Kind == PowerShellBoundIndexKind.StringDictionary)
             return $"({target} is null ? null : {target}.ContainsKey({key}) ? {target}[{key}] : null)";
@@ -40,7 +40,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"({normalized} < 0 || {normalized} >= {target}.Length ? null : (object){target}[{normalized}])";
     }
 
-    private static string EmitIndexAssignment(PowerShellLoweredIndexAssignmentStatement assignment)
+    private string EmitIndexAssignment(PowerShellLoweredIndexAssignmentStatement assignment)
     {
         var target = assignment.TargetTemporary;
         var index = assignment.IndexTemporary;
@@ -55,7 +55,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                body + "; })()";
     }
 
-    private static string EmitIndexAssignmentBody(
+    private string EmitIndexAssignmentBody(
         PowerShellLoweredIndexAssignmentStatement assignment,
         string target,
         string index,
@@ -101,7 +101,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"{checkedTarget}[{checkedIndex}] = {value}";
     }
 
-    private static string EmitPowerShellRuntimeException(
+    private string EmitPowerShellRuntimeException(
         string message,
         string errorId,
         string category,

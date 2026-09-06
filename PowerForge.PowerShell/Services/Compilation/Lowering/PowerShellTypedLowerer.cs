@@ -352,7 +352,7 @@ internal sealed partial class PowerShellTypedLowerer
                 localTypes.ContainsKey(assignment.Target.StableKey) && declared.Add(assignment.Target.StableKey),
                 assignment.Operation,
                 assignment.NormalizeNullString,
-                assignment.CheckedIntegral),
+                assignment.IntegralSemantics),
             PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellLoweredModuleVariableAssignmentStatement(
                 assignment.Span,
                 assignment.Name,
@@ -621,7 +621,7 @@ internal sealed partial class PowerShellTypedLowerer
                 mutation.Operation,
                 mutation.Value is null ? null : LowerExpression(mutation.Value, functions, names, targetCapabilities),
                 mutation.NormalizeNullString,
-                mutation.CheckedIntegral),
+                mutation.IntegralSemantics),
             PowerShellBoundArrayExpression array => new PowerShellLoweredArrayExpression(
                 array.Span,
                 array.Type.ClrType,

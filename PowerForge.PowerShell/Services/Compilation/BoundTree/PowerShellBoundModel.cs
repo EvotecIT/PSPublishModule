@@ -359,21 +359,21 @@ internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatem
         PowerShellBoundExpression value,
         PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         bool normalizeNullString = false,
-        bool checkedIntegral = false)
+        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None)
         : base(span, PowerShellSemanticEffect.Mutation | value.Effects, value.Capabilities)
     {
         Target = target;
         Value = value;
         Operation = operation;
         NormalizeNullString = normalizeNullString;
-        CheckedIntegral = checkedIntegral;
+        IntegralSemantics = integralSemantics;
     }
 
     internal PowerShellSymbolId Target { get; }
     internal PowerShellBoundExpression Value { get; }
     internal PowerShellBoundMutationOperator Operation { get; }
     internal bool NormalizeNullString { get; }
-    internal bool CheckedIntegral { get; }
+    internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
 }
 
 internal sealed class PowerShellBoundParameter

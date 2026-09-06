@@ -5,7 +5,7 @@ using Xunit;
 namespace PowerForge.Tests;
 
 [Trait("Category", "PowerShellCompilation")]
-public sealed class PowerShellCompilationCensusTests
+public sealed partial class PowerShellCompilationCensusTests
 {
     [Fact]
     public void Run_RanksStableFeaturesByVisibleCounterfactualImpact()

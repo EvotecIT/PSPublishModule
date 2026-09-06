@@ -4,7 +4,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private static string EmitHostedBooleanCommand(PowerShellLoweredHostedBooleanCommandExpression command)
+    private string EmitHostedBooleanCommand(PowerShellLoweredHostedBooleanCommandExpression command)
     {
         var module = command.Provider.ModuleNames.FirstOrDefault();
         if (string.IsNullOrWhiteSpace(module))
@@ -29,6 +29,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
         return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(" +
                PowerShellCSharpLiteral.QuoteString(script.ToString()) + ", new object?[] { " +
-               string.Join(", ", values.Select(static argument => EmitExpression(argument.Value!))) + " }))";
+               string.Join(", ", values.Select(argument => EmitExpression(argument.Value!))) + " }))";
     }
 }

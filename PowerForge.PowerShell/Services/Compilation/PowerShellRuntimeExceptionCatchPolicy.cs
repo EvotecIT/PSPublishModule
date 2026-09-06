@@ -6,6 +6,12 @@ namespace PowerForge;
 internal static class PowerShellRuntimeExceptionCatchPolicy
 {
     internal static bool Contains(Ast node)
+        => Contains(node, static type => type == typeof(RuntimeException));
+
+    internal static bool ContainsNumericErrorWrapping(Ast node)
+        => Contains(node, static type => type == typeof(RuntimeException) || type == typeof(PSInvalidCastException));
+
+    private static bool Contains(Ast node, Func<Type?, bool> matches)
     {
         for (var current = node.Parent; current is not null; current = current.Parent)
         {
@@ -13,9 +19,8 @@ internal static class PowerShellRuntimeExceptionCatchPolicy
                 !ContainsExtent(tryStatement.Body, node))
                 continue;
 
-            if (tryStatement.CatchClauses.Any(static clause =>
-                    clause.CatchTypes.Any(static constraint =>
-                        constraint.TypeName.GetReflectionType() == typeof(RuntimeException))))
+            if (tryStatement.CatchClauses.Any(clause =>
+                    clause.CatchTypes.Any(constraint => matches(constraint.TypeName.GetReflectionType()))))
                 return true;
         }
 

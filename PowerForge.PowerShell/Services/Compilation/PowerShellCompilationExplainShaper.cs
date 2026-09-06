@@ -21,18 +21,21 @@ public static class PowerShellCompilationExplainShaper
         return PowerShellCompilationExplanationService.CreateFinal(plan, ledger);
     }
 
-    private static PowerShellTypedCompilationResult? Shape(
+    internal static PowerShellTypedCompilationResult? Shape(
         PowerShellCompilationResolvedInput input,
         PowerShellCompilationPlan plan,
-        string targetFramework)
+        string targetFramework,
+        string? semanticProfileId = null)
     {
+        var profile = semanticProfileId ?? plan.TargetContract?.SemanticProfileId ??
+            PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
         if (plan.Mode is PowerShellCompilationMode.Analyze or PowerShellCompilationMode.Package)
             return null;
         if (plan.Mode == PowerShellCompilationMode.Strict && !plan.CanProceed)
             return null;
         if (input.Kind == PowerShellCompilationArtifactKind.Executable && plan.Mode == PowerShellCompilationMode.Strict)
         {
-            var executable = PowerShellTypedExecutableEmitter.Emit(input.SourcePath, input.CompilationSourceFiles, plan, targetFramework);
+            var executable = PowerShellTypedExecutableEmitter.Emit(input.SourcePath, input.CompilationSourceFiles, plan, targetFramework, profile);
             return new PowerShellTypedCompilationResult(
                 input.SourcePath,
                 "PowerForge.Compiled",
@@ -46,7 +49,7 @@ public static class PowerShellCompilationExplainShaper
                 irSnapshots: executable.IrSnapshots);
         }
 
-        var transpiler = new PowerShellTypedCompilationTranspiler();
+        var transpiler = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), profile);
         var typeName = PowerShellCSharpSymbolRenderer.Identifier(input.ArtifactName) + "Methods";
         var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, plan.Mode);
         var typed = input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable
@@ -55,7 +58,7 @@ public static class PowerShellCompilationExplainShaper
         if (plan.Mode == PowerShellCompilationMode.Hybrid &&
             input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable)
         {
-            typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, targetFramework, capabilities: capabilities);
+            typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, targetFramework, profile, capabilities);
         }
         if (input.Kind == PowerShellCompilationArtifactKind.BinaryModule)
         {
@@ -63,11 +66,11 @@ public static class PowerShellCompilationExplainShaper
                 typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, targetFramework);
             var exportContract = PowerShellModuleExportContract.TryRead(input.SourcePath);
             var exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
-            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, targetFramework, capabilities: capabilities);
+            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, targetFramework, profile, capabilities);
         }
         else if (input.Kind == PowerShellCompilationArtifactKind.Executable)
         {
-            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework, capabilities: capabilities);
+            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework, profile, capabilities);
         }
         return typed;
     }

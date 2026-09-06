@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "packetId": "powerforge-compiler-discovery-net10-v1",
+  "fixedOn": "2026-09-06",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "targetFramework": "net10.0",
+  "purpose": "Pinned source discovery only. Inputs are never imported or executed; independent scripts retain separate compilation closures. These counts are not language coverage or complete-workload qualification.",
+  "excludeTestScripts": true,
+  "excludeHiddenPaths": true,
+  "workloads": [
+    {
+      "id": "samerde-powershell",
+      "scenarioFamily": "heterogeneous-administration-scripts",
+      "repositoryUrl": "https://github.com/SamErde/PowerShell",
+      "revision": "786225096078651d0fcbc535136d074b4c500698",
+      "license": "Unspecified in repository metadata; payload remains external",
+      "archiveUrl": "https://codeload.github.com/SamErde/PowerShell/zip/786225096078651d0fcbc535136d074b4c500698",
+      "sha256": "9c2fe80428a4aeeb45d45766b404971efa3892dc44b63fdffb770a9e627d5645",
+      "entryPoint": "PowerShell-786225096078651d0fcbc535136d074b4c500698",
+      "selection": "Scripts",
+      "artifactKind": "Executable",
+      "modes": ["Strict", "Hybrid"]
+    },
+    {
+      "id": "cleanupmonster",
+      "scenarioFamily": "stateful-administration-module",
+      "repositoryUrl": "https://github.com/EvotecIT/CleanupMonster",
+      "revision": "f215b32ca86b38d9150629c08f6c0c232bfafb27",
+      "license": "Unspecified in repository metadata; payload remains external",
+      "archiveUrl": "https://codeload.github.com/EvotecIT/CleanupMonster/zip/f215b32ca86b38d9150629c08f6c0c232bfafb27",
+      "sha256": "a05f42e1fbe03d430fea27d64c259f1ecb958bb6d77b535817f6e695ceca79e9",
+      "entryPoint": "CleanupMonster-f215b32ca86b38d9150629c08f6c0c232bfafb27/CleanupMonster.psd1",
+      "selection": "Module",
+      "artifactKind": "BinaryModule",
+      "modes": ["Strict", "Hybrid"]
+    },
+    {
+      "id": "microsoftintune",
+      "scenarioFamily": "endpoint-detection-and-remediation",
+      "repositoryUrl": "https://github.com/EvotecIT/MicrosoftIntune",
+      "revision": "876f8c8602ed3f31d5d5c36ad33818d42b5e9638",
+      "license": "Unspecified in repository metadata; payload remains external",
+      "archiveUrl": "https://codeload.github.com/EvotecIT/MicrosoftIntune/zip/876f8c8602ed3f31d5d5c36ad33818d42b5e9638",
+      "sha256": "168b6a20491df4f28f1aec59c3a8673488a1314c3ebff33306185ef5deb497fa",
+      "entryPoint": "MicrosoftIntune-876f8c8602ed3f31d5d5c36ad33818d42b5e9638/Scripts",
+      "selection": "Scripts",
+      "artifactKind": "Executable",
+      "modes": ["Strict", "Hybrid"]
+    },
+    {
+      "id": "powershell-algorithms",
+      "scenarioFamily": "pure-computation-and-data-transformation",
+      "repositoryUrl": "https://github.com/dfinke/powershell-algorithms",
+      "revision": "5e1f95b3111adb8c788786f773e63f087ac3d07b",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/dfinke/powershell-algorithms/blob/5e1f95b3111adb8c788786f773e63f087ac3d07b/LICENSE",
+      "archiveUrl": "https://codeload.github.com/dfinke/powershell-algorithms/zip/5e1f95b3111adb8c788786f773e63f087ac3d07b",
+      "sha256": "c8f89de422ca38686b509ef386f666b780f07fc2acffa9c082c0d6623b288021",
+      "entryPoint": "powershell-algorithms-5e1f95b3111adb8c788786f773e63f087ac3d07b/src",
+      "selection": "Scripts",
+      "artifactKind": "Library",
+      "modes": ["Strict", "Hybrid"]
+    }
+  ]
+}

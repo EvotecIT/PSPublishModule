@@ -1,4 +1,6 @@
 Module/PSPublishModule.Tests.ps1 text eol=crlf
+Benchmarks/PowerShellCompilation/Corpus/*.json text eol=lf
+Benchmarks/PowerShellCompilation/Corpus/**/*.ps1 text eol=lf
 Module/PSPublishModule.psd1 -text whitespace=cr-at-eol
 Module/PSPublishModule.psm1 -text whitespace=cr-at-eol
 Module/Docs/Import-BenchmarkResult.md -text whitespace=cr-at-eol

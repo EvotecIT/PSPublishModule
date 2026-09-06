@@ -2,7 +2,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private static string EmitLocalInvocation(PowerShellLoweredInvocationExpression invocation)
+    private string EmitLocalInvocation(PowerShellLoweredInvocationExpression invocation)
     {
         var arguments = invocation.Arguments.Select(EmitExpression).ToArray();
         var authored = invocation.AuthoredEvaluationOrder;
@@ -39,7 +39,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"new global::System.Func<{PowerShellCSharpSymbolRenderer.TypeName(invocation.ClrType)}>(() => {{ {string.Join(" ", evaluations)} return {call}; }})()";
     }
 
-    private static string EmitBoundParameterSet(IEnumerable<string> names)
+    private string EmitBoundParameterSet(IEnumerable<string> names)
         => "new global::System.Collections.Generic.HashSet<string>(global::System.StringComparer.OrdinalIgnoreCase) { " +
            string.Join(", ", names.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).Select(PowerShellCSharpLiteral.QuoteString)) + " }";
 }

@@ -11,11 +11,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
-        var methods = program.Functions.Select(function => EmitFunction(function, program.TargetCapabilities)).ToArray();
+        // Each function owns its temporary names and generated helper registry.
+        var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend().EmitFunction(function, program.TargetCapabilities)).ToArray();
         return new PowerShellBoundCSharpResult(methods, program.Diagnostics.ToArray());
     }
 
-    private static PowerShellCSharpMethodEmission EmitFunction(
+    private PowerShellCSharpMethodEmission EmitFunction(
         PowerShellLoweredFunction function,
         PowerShellCompilationCapability targetCapabilities)
     {
@@ -39,6 +40,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             do { candidate = $"__{prefix}_{temporaryIndex++}"; } while (!usedIdentifiers.Add(candidate));
             return candidate;
         }
+        _getTemporaryIdentifier = GetTemporaryIdentifier;
         var discardHelper = ContainsDiscardValue(function.Statements)
             ? GetTemporaryIdentifier("discardValue")
             : null;
@@ -81,6 +83,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
         foreach (var statement in function.Statements)
             EmitStatement(builder, statement, 3, GetTemporaryIdentifier, discardHelper, sourceMap);
+
+        foreach (var helper in _numericHelpers.Values)
+            builder.AppendLine(helper.Source);
 
         builder.AppendLine("        }").Append("    }");
         var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function);
@@ -136,7 +141,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             regionGraph: regionGraph);
     }
 
-    private static void EmitStatement(
+    private void EmitStatement(
         StringBuilder builder,
         PowerShellLoweredStatement statement,
         int indent,
@@ -163,7 +168,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             end.Column));
     }
 
-    private static void EmitStatementCore(
+    private void EmitStatementCore(
         StringBuilder builder,
         PowerShellLoweredStatement statement,
         int indent,
@@ -187,7 +192,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     assignment.Operation,
                     assignment.Value,
                     assignment.NormalizeNullString,
-                    assignment.CheckedIntegral)).AppendLine(";");
+                    assignment.IntegralSemantics)).AppendLine(";");
                 return;
             case PowerShellLoweredModuleVariableAssignmentStatement assignment:
                 builder.Append(prefix).Append("__writePowerShellModuleVariable(")
@@ -326,7 +331,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
     }
 
-    private static string EmitExpression(PowerShellLoweredExpression expression)
+    private string EmitExpression(PowerShellLoweredExpression expression)
         => expression switch
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
@@ -352,7 +357,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.Operation,
                 mutation.Value,
                 mutation.NormalizeNullString,
-                mutation.CheckedIntegral),
+                mutation.IntegralSemantics),
             PowerShellLoweredArrayExpression array => EmitArray(array),
             PowerShellLoweredArrayConcatenationExpression concatenation => EmitArrayConcatenation(concatenation),
             PowerShellLoweredDictionaryExpression dictionary => EmitDictionary(dictionary),
@@ -364,13 +369,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
 
-    private static string EmitConstantBooleanDelegate(PowerShellLoweredConstantBooleanDelegateExpression expression)
+    private string EmitConstantBooleanDelegate(PowerShellLoweredConstantBooleanDelegateExpression expression)
     {
         var parameters = string.Join(", ", expression.ParameterNames);
         return $"({parameters}) => {(expression.Value ? "true" : "false")}";
     }
 
-    private static string EmitCommandAvailability(PowerShellLoweredCommandAvailabilityExpression discovery)
+    private string EmitCommandAvailability(PowerShellLoweredCommandAvailabilityExpression discovery)
     {
         const string script = "param([string] $__pfName, [string] $__pfErrorAction) [bool](Microsoft.PowerShell.Core\\Get-Command -Name $__pfName -ErrorAction $__pfErrorAction)";
         var errorAction = discovery.ErrorAction switch
@@ -384,7 +389,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                EmitExpression(discovery.Name) + ", " + PowerShellCSharpLiteral.QuoteString(errorAction) + " }))";
     }
 
-    private static string EmitConversion(PowerShellLoweredConversionExpression conversion)
+    private string EmitConversion(PowerShellLoweredConversionExpression conversion)
     {
         var type = PowerShellCSharpSymbolRenderer.TypeName(conversion.ClrType);
         if (conversion.UsePowerShellTruthiness)
@@ -394,7 +399,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             : $"({type})({EmitExpression(conversion.Operand)})";
     }
 
-    private static string EmitTypeTest(PowerShellLoweredTypeTestExpression expression)
+    private string EmitTypeTest(PowerShellLoweredTypeTestExpression expression)
     {
         var operand = EmitExpression(expression.Operand);
         if (Nullable.GetUnderlyingType(expression.TargetType) is not null)
@@ -403,7 +408,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return expression.Negate ? $"!{test}" : test;
     }
 
-    private static string EmitRegex(PowerShellLoweredRegexExpression expression)
+    private string EmitRegex(PowerShellLoweredRegexExpression expression)
     {
         var input = EmitExpression(expression.Input);
         var pattern = EmitExpression(expression.Pattern);
@@ -419,7 +424,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return expression.Operation == PowerShellBoundRegexOperation.NotMatch ? $"!({match})" : match;
     }
 
-    private static string EmitWildcard(PowerShellLoweredWildcardExpression expression)
+    private string EmitWildcard(PowerShellLoweredWildcardExpression expression)
     {
         var options = expression.IgnoreCase
             ? "global::System.Management.Automation.WildcardOptions.IgnoreCase"
@@ -429,7 +434,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"new global::System.Func<bool>(() => {{ var {expression.InputTemporary} = {EmitExpression(expression.Input)}; var {expression.PatternTemporary} = {EmitExpression(expression.Pattern)}; return {match}; }})()";
     }
 
-    private static string EmitMembership(PowerShellLoweredMembershipExpression expression)
+    private string EmitMembership(PowerShellLoweredMembershipExpression expression)
     {
         var collection = expression.CollectionOnRight ? expression.RightTemporary : expression.LeftTemporary;
         var candidate = expression.CollectionOnRight ? expression.LeftTemporary : expression.RightTemporary;
@@ -438,7 +443,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"new global::System.Func<bool>(() => {{ var {expression.LeftTemporary} = {EmitExpression(expression.Left)}; var {expression.RightTemporary} = {EmitExpression(expression.Right)}; return {comparison}; }})()";
     }
 
-    private static string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)
+    private string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)
     {
         var entries = string.Join(", ", dictionary.Entries.Select(entry => $"{{ {EmitExpression(entry.Key)}, {EmitExpression(entry.Value)} }}"));
         return dictionary.Kind switch
@@ -451,7 +456,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         };
     }
 
-    private static string EmitPowerShellObject(PowerShellLoweredPowerShellObjectExpression powerShellObject)
+    private string EmitPowerShellObject(PowerShellLoweredPowerShellObjectExpression powerShellObject)
     {
         var statements = new List<string>
         {
@@ -463,7 +468,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return "new global::System.Func<global::System.Management.Automation.PSObject>(() => { " + string.Join(" ", statements) + " })()";
     }
 
-    private static string EmitStringSplit(PowerShellLoweredStringSplitExpression split)
+    private string EmitStringSplit(PowerShellLoweredStringSplitExpression split)
     {
         var options = split.IgnoreCase
             ? "global::System.Text.RegularExpressions.RegexOptions.IgnoreCase"
@@ -471,10 +476,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"global::System.Text.RegularExpressions.Regex.Split(({EmitExpression(split.Input)} ?? string.Empty), ({EmitExpression(split.Pattern)} ?? string.Empty), {options})";
     }
 
-    private static string EmitStringJoin(PowerShellLoweredStringJoinExpression join)
+    private string EmitStringJoin(PowerShellLoweredStringJoinExpression join)
         => $"new global::System.Func<string>(() => {{ var {join.ValuesTemporary} = {EmitExpression(join.Values)}; var {join.SeparatorTemporary} = {EmitExpression(join.Separator)}; return global::System.String.Join(({join.SeparatorTemporary} ?? string.Empty), ({join.ValuesTemporary} ?? global::System.Array.Empty<string>())); }})()";
 
-    private static string EmitInterpolatedString(PowerShellLoweredInterpolatedStringExpression interpolated)
+    private string EmitInterpolatedString(PowerShellLoweredInterpolatedStringExpression interpolated)
     {
         var parts = interpolated.Parts.Select(part => part.Expression is null
             ? PowerShellCSharpLiteral.QuoteString(part.Text ?? string.Empty)
@@ -489,7 +494,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         };
     }
 
-    private static string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
+    private string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
     {
         if (assignment.Receiver is null)
             return $"{PowerShellCSharpSymbolRenderer.TypeName(assignment.DeclaringType)}.{assignment.MemberName} = {EmitExpression(assignment.Value)}";
@@ -521,7 +526,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"{receiver}.{assignment.MemberName} = {EmitExpression(assignment.Value)}";
     }
 
-    private static string EmitClrMember(PowerShellLoweredClrMemberExpression member)
+    private string EmitClrMember(PowerShellLoweredClrMemberExpression member)
     {
         if (member.IsStatic)
             return $"{PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType)}.{member.MemberName}";
@@ -546,7 +551,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         };
     }
 
-    private static string EmitDictionaryKeyLookup(PowerShellLoweredClrMemberExpression member, string receiver, bool hasClrFallback)
+    private string EmitDictionaryKeyLookup(PowerShellLoweredClrMemberExpression member, string receiver, bool hasClrFallback)
     {
         var name = PowerShellCSharpLiteral.QuoteString(member.MemberName);
         var dictionaryTemporary = member.DictionaryTemporary;
@@ -561,7 +566,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"new global::System.Func<object?>(() => {{ var {dictionaryTemporary} = (global::System.Collections.IDictionary?)({receiver}); return {dictionaryTemporary} is null ? null : {dictionaryTemporary}.Contains({name}) ? {dictionaryTemporary}[{name}] : {fallback}; }})()";
     }
 
-    private static string EmitClrInvocation(PowerShellLoweredClrInvocationExpression invocation)
+    private string EmitClrInvocation(PowerShellLoweredClrInvocationExpression invocation)
     {
         var arguments = string.Join(", ", invocation.Arguments.Select(EmitExpression));
         if (invocation.InvocationKind == PowerShellClrInvocationKind.Constructor)
@@ -579,15 +584,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"{receiver}.{invocation.MemberName}({arguments})";
     }
 
-    private static string EmitMutation(
+    private string EmitMutation(
         PowerShellSymbolId target,
         Type targetType,
         PowerShellBoundMutationOperator operation,
         PowerShellLoweredExpression? value,
         bool normalizeNullString,
-        bool checkedIntegral)
+        PowerShellIntegralMutationSemantics integralSemantics)
     {
         var identifier = PowerShellCSharpSymbolRenderer.Identifier(target.Name);
+        if (integralSemantics != PowerShellIntegralMutationSemantics.None)
+            return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics);
         if (operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement or
             PowerShellBoundMutationOperator.PostIncrement or PowerShellBoundMutationOperator.PostDecrement)
         {
@@ -609,15 +616,21 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellBoundMutationOperator.Remainder => "%",
             _ => throw new InvalidOperationException($"Mutation '{operation}' has no C# rendering owner.")
         };
-        return checkedIntegral
-            ? $"{identifier} = checked(({PowerShellCSharpSymbolRenderer.TypeName(targetType)})({identifier} {symbol} {right}))"
+        return targetType == typeof(float)
+            ? $"{identifier} = (float)((double){identifier} {symbol} (double)({right}))"
             : $"{identifier} {symbol}= {right}";
     }
 
-    private static string EmitBinary(PowerShellLoweredBinaryExpression expression)
+    private string EmitBinary(PowerShellLoweredBinaryExpression expression)
     {
         var left = EmitExpression(expression.Left);
         var right = EmitExpression(expression.Right);
+        if (expression.Operation == PowerShellBoundBinaryOperator.IntegralRemainder)
+        {
+            var helper = GetIntegralArithmeticHelper(expression.ClrType, expression.ClrType,
+                PowerShellBoundMutationOperator.Remainder, PowerShellIntegralMutationSemantics.CheckedConversion);
+            return $"{helper}({left}, {right})";
+        }
         if (IsNullOrderedComparison(expression.Operation))
             return EmitNullOrderedComparison(expression, left, right);
         if (expression.Operation is PowerShellBoundBinaryOperator.NullEqual or PowerShellBoundBinaryOperator.NullNotEqual)
@@ -678,7 +691,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"({left} {symbol} {right})";
     }
 
-    private static string EmitNullOrderedComparison(PowerShellLoweredBinaryExpression expression, string left, string right)
+    private string EmitNullOrderedComparison(PowerShellLoweredBinaryExpression expression, string left, string right)
     {
         var underlyingType = Nullable.GetUnderlyingType(expression.Left.ClrType);
         if (underlyingType is null || Nullable.GetUnderlyingType(expression.Right.ClrType) != underlyingType ||
@@ -710,7 +723,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellBoundBinaryOperator.NullOrderedGreaterThan or
             PowerShellBoundBinaryOperator.NullOrderedGreaterThanOrEqual;
 
-    private static string EmitUnary(PowerShellLoweredUnaryExpression expression)
+    private string EmitUnary(PowerShellLoweredUnaryExpression expression)
     {
         var symbol = expression.Operation switch
         {
