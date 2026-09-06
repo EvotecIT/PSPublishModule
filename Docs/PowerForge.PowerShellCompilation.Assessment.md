@@ -46,11 +46,36 @@ The initial audit's module-shaped script numbers are superseded by this artifact
 
 The algorithm snapshot records MIT licensing; the other three snapshots record an unrecognized SPDX license. No external source was vendored. The new acceptance programs are locally authored generic computation examples.
 
+## Scalar continuation candidate
+
+The continuation candidate adds a bounded prefix that transfers stable scalar locals back to the retained PowerShell function in declaration order. The canonical binder, optimizer, semantic analysis, lowerer, and region graph still decide eligibility. Whole-function selection takes precedence over overlapping regions. Authored nullable constraints survive transfer on both Windows PowerShell 5.1 and PowerShell 7; modeled CLR errors, host effects, unsupported scope, and incomplete value contracts retain the source.
+
+At source revision `dba6175aa`, the Windows gate passed **247 compiler cases and all six Strict programs**. The compiler also built for `net472`, `net8.0`, and `net10.0` without warnings. These are local candidate results, not a merged or published release.
+
+Two complete command workloads passed original/generated output checks but **failed the performance exit gate**. The report workload used the unchanged `CreateColorLegenedReportHTA` function from the pinned SamErde snapshot above, including its file write; the surrounding administration application was not executed. The diagnostic workload called Pester 6.1.0's unchanged `Format-Hashtable2` inside the complete original and generated module contexts, including nested formatting and sorting.
+
+| Complete workload, 300 calls per sample | Original median, CCD0 / CCD1 | Hybrid median, CCD0 / CCD1 | Interpretation |
+| --- | ---: | ---: | --- |
+| Report generation and file output | 151.74 / 156.98 ms | 153.04 / 153.82 ms | Within the 5% tie tolerance; no demonstrated benefit |
+| Nested diagnostic formatting | 69.17 / 65.40 ms | 76.46 / 74.01 ms | 10.5% / 13.2% slower |
+
+The canonical benchmark runner used five warmup and twenty measured samples per lane, rotated engine order, and no outlier removal. Both processor cache domains were measured independently on a Ryzen 9 9950X3D2, Windows build 26200, PowerShell 7.6.5, with matching affinity per comparison and normal process priority. Each report sample checked file-byte identity and absent success output; every formatting result matched the original. Thread allocations were slightly worse for the report and about 0.5% lower for formatting. Neither result demonstrates a useful allocation benefit. These constant-heavy prefixes do not establish that the crossing cost is amortized, and the milestone remains experimental.
+
+Qualification also exposed two independent correctness defects. Project restore now derives SDK properties from the actual artifact template, so single-file executable restore includes the same implicit package closure as build. Strict and Hybrid single-file projects passed lock, online restore, offline restore, build, and execution. Runtime-free targets now reject hosted command tails even when stream-provider capability is enabled. An unchanged algorithm that previously emitted a dispatcher-dependent library while claiming no PowerShell runtime now fails analysis; the old emitted-unit count is not native execution evidence.
+
+## Detection executable qualification
+
+The complete unchanged `Scripts/LocalSecurityAuthority/Detect-LsaProtection.ps1` from the pinned MicrosoftIntune snapshot passed project initialization, lock, restore, build, test, and pack as a framework-dependent Hybrid `net10.0` `win-x64` executable. Its source SHA-256 is `f3c152538dad482adc91a2df860d9eca9ee38981207a433060d476e5e87fe369`. The original PowerShell process and generated executable both exited zero and printed the same enabled-state message, with empty stderr. The observed `RunAsPPL` registry value was 1 before and after execution; qualification did not change the setting.
+
+This proves the enabled-state path on Windows build 26200. It does not qualify disabled, missing-value, denied-access, reboot, or other-platform paths. The executable retains PowerShell execution and has no native computation claim. A compact temporary project directory was required on this Windows host because long-path support was disabled; the earlier deeper package location exceeded the effective path limit. This is a deployment limitation, not a reason to change machine policy automatically.
+
 ## Next implementation gate
 
 - [ ] Minimize the remaining lifecycle, pipeline, scope, object/member, and collection blockers into generic contracts. Rank complete workflow unlocks and co-blockers, not diagnostic frequency alone.
-- [ ] Continue Milestone 23 with one bounded continuation/transfer shape, then qualify promoted regions in real commands from at least two unrelated families. Compare streams, state, errors, cleanup, and benefit after crossing cost.
-- [ ] Qualify an administration detection script on a controlled target image, including exit codes, process/registry boundaries, resources, and failure behavior. Qualify remediation separately with before/after state and cleanup.
+- [x] Implement a bounded scalar continuation and compare two unrelated complete commands. Output parity passed; performance did not.
+- [ ] Demonstrate useful computational regions in two unrelated real commands, including benefit after crossing cost. Do not treat the constant-prefix results as promotion evidence.
+- [x] Qualify the complete detection executable's enabled-state path on a controlled Windows target without modifying the registry.
+- [ ] Extend detection qualification to absent, disabled, and failure states on a disposable target. Qualify remediation separately with before/after state and cleanup.
 - [ ] Keep broader target-host and public-package lifecycle qualification explicit before making a stable toolchain claim.
 
 Retain generated C# as the backend and semantic decisions in the binder, immutable IR, analysis, and lowering. No finding requires another backend, named-repository special cases, or a second eligibility owner.
