@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace PowerForge;
 
 /// <summary>
-/// One terminal region considered by the canonical Hybrid promotion policy, including the exact
+/// One region considered by the canonical Hybrid promotion policy, including the exact
 /// reason it was promoted or retained as authored PowerShell.
 /// </summary>
 public sealed class PowerShellCompilationRegionCandidate

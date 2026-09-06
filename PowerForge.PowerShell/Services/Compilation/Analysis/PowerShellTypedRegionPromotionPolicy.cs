@@ -50,10 +50,15 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.input-transfer", "The candidate reads a live value that is not a retained-function parameter.");
         if (!region.Mutations.All(static mutation => mutation.StartsWith("Local:", StringComparison.Ordinal)))
             return Reject("region.mutation", "The candidate mutates state outside its region-local values.");
+        if (!string.IsNullOrEmpty(candidate.ContinuationVariable) &&
+            region.Mutations.Any(mutation => !mutation.Equals("Local:" + candidate.ContinuationVariable, StringComparison.OrdinalIgnoreCase)))
+            return Reject("region.continuation-transfer", "The prefix mutates a local outside its scalar continuation transfer.");
         return new PowerShellTypedRegionPromotionDecision(
             isSafe: true,
             "region.promoted",
-            "The candidate satisfies the bounded terminal scalar promotion contract.");
+            string.IsNullOrEmpty(candidate.ContinuationVariable)
+                ? "The candidate satisfies the bounded terminal scalar promotion contract."
+                : "The candidate satisfies the bounded prefix scalar continuation contract.");
     }
 
     private static PowerShellTypedRegionPromotionDecision Reject(string code, string reason)

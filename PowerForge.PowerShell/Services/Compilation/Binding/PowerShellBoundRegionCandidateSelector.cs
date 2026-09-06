@@ -7,7 +7,7 @@ namespace PowerForge;
 /// Selects a conservative terminal suffix from already-bound statements. This owner never inspects
 /// generated C# or the final disposition ledger and therefore cannot create a second semantic path.
 /// </summary>
-internal static class PowerShellBoundRegionCandidateSelector
+internal static partial class PowerShellBoundRegionCandidateSelector
 {
     internal static bool TryCreate(
         ParsedSourceDocument document,
@@ -32,8 +32,24 @@ internal static class PowerShellBoundRegionCandidateSelector
             !AlwaysReturns(suffix[suffix.Length - 1].Statement))
             return false;
 
-        var first = suffix[0].Statement.Span;
-        var last = suffix[suffix.Length - 1].Statement.Span;
+        return TryCreateBound(document, syntax, sourceFunction, parameters, locals,
+            suffix.Select(static binding => binding.Statement).ToArray(), out candidate);
+    }
+
+    private static bool TryCreateBound(
+        ParsedSourceDocument document,
+        System.Management.Automation.Language.FunctionDefinitionAst syntax,
+        PowerShellSymbolId sourceFunction,
+        IReadOnlyList<PowerShellBoundParameter> parameters,
+        IReadOnlyList<PowerShellBoundLocal> locals,
+        PowerShellBoundStatement[] statements,
+        out PowerShellBoundRegionCandidate candidate,
+        string continuationVariable = "",
+        string continuationTypeConstraint = "")
+    {
+        candidate = null!;
+        var first = statements[0].Span;
+        var last = statements[statements.Length - 1].Span;
         var span = new SourceSpan(
             document.DocumentId,
             first.StartOffset,
@@ -42,7 +58,6 @@ internal static class PowerShellBoundRegionCandidateSelector
             first.StartColumn,
             last.EndLine,
             last.EndColumn);
-        var statements = suffix.Select(static binding => binding.Statement).ToArray();
         if (PowerShellSemanticAnalyzer.EnumerateStatements(new PowerShellBoundBlock(first, statements))
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
@@ -104,7 +119,8 @@ internal static class PowerShellBoundRegionCandidateSelector
             sourceFunction.Name,
             syntax.Body.Extent.StartLineNumber,
             helper,
-            helperParameters.Select(static parameter => parameter.Contract).ToArray());
+            helperParameters.Select(static parameter => parameter.Contract).ToArray(),
+            continuationVariable, continuationTypeConstraint);
         return true;
     }
 
@@ -206,7 +222,9 @@ internal sealed class PowerShellBoundRegionCandidate
         string sourceName,
         int sourceLine,
         PowerShellBoundFunction regionFunction,
-        PowerShellCompilationParameter[] inputParameters)
+        PowerShellCompilationParameter[] inputParameters,
+        string continuationVariable = "",
+        string continuationTypeConstraint = "")
     {
         RegionId = regionId;
         SourceSha256 = sourceSha256;
@@ -216,6 +234,8 @@ internal sealed class PowerShellBoundRegionCandidate
         SourceLine = sourceLine;
         RegionFunction = regionFunction;
         InputParameters = inputParameters ?? Array.Empty<PowerShellCompilationParameter>();
+        ContinuationVariable = continuationVariable;
+        ContinuationTypeConstraint = continuationTypeConstraint;
     }
 
     internal string RegionId { get; }
@@ -226,4 +246,6 @@ internal sealed class PowerShellBoundRegionCandidate
     internal int SourceLine { get; }
     internal PowerShellBoundFunction RegionFunction { get; }
     internal PowerShellImmutableArray<PowerShellCompilationParameter> InputParameters { get; }
+    internal string ContinuationVariable { get; }
+    internal string ContinuationTypeConstraint { get; }
 }

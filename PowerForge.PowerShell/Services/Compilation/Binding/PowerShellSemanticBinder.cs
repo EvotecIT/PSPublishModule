@@ -184,6 +184,11 @@ internal sealed partial class PowerShellSemanticBinder
                 locals,
                 authoredStatements,
                 statementBindings);
+        if (regionCandidates is not null &&
+            PowerShellBoundRegionCandidateSelector.TryCreateContinuation(
+                document, function, functionSymbol, parameters, authoredStatements, statementBindings,
+                out var continuationCandidate))
+            regionCandidates[continuationCandidate.RegionId] = continuationCandidate;
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
             if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&

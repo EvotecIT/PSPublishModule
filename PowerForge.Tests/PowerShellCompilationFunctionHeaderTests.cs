@@ -15,6 +15,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         """;
 
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Transpile_FunctionHeaderPreservesParameterTypesMetadataAndPresence()
     {
         using var fixture = ArtifactFixture.Create(FunctionHeaderSource, ".psm1");
@@ -34,14 +35,17 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_FunctionHeaderBinaryModuleMatchesPowerShell7Binding()
         => VerifyFunctionHeaderModule("net10.0", "pwsh");
 
     [WindowsFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_FunctionHeaderBinaryModuleMatchesWindowsPowerShell51Binding()
         => VerifyFunctionHeaderModule("net472", "powershell.exe");
 
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_FunctionHeaderLocalCallsPreserveAliasesAndDefaultsInStrictExecutable()
     {
         using var fixture = ArtifactFixture.Create(
@@ -60,6 +64,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_FunctionHeaderHostedLifecyclePreservesPipelineBinding()
     {
         using var fixture = ArtifactFixture.Create("""
@@ -85,6 +90,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("[Parameter()][Alias('vb')][int]$Number")]
     [InlineData("[Parameter()][int]$Verbose")]
     public void Transpile_FunctionHeaderRejectsAdvancedCommonParameterCollisions(string parameters)

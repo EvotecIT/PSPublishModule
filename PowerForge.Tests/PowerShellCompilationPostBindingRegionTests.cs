@@ -5,6 +5,7 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Transpile_HybridDiscoversRegionWhenDefiniteAssignmentRetainsFunction()
     {
         using var fixture = ArtifactFixture.Create(
@@ -24,6 +25,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Transpile_HybridDiscoversRegionAfterCmdletParameterShapingRejectsFunction()
     {
         using var fixture = ArtifactFixture.Create(
@@ -53,6 +55,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Transpile_HybridDiscoversRetainedFunctionWithResolvedLocalCallClosure()
     {
         using var fixture = ArtifactFixture.Create(

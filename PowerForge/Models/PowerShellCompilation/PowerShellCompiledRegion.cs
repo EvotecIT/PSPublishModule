@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace PowerForge;
 
 /// <summary>
-/// One terminal typed region promoted from a function whose authored PowerShell source remains the
+/// One typed region promoted from a function whose authored PowerShell source remains the
 /// command surface. The region is not counted as a fully emitted function or binary cmdlet.
 /// </summary>
 public sealed class PowerShellCompiledRegion
@@ -28,7 +28,9 @@ public sealed class PowerShellCompiledRegion
         int endColumn,
         IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
         PowerShellCompilationRegionGraph regionGraph,
-        string documentId)
+        string documentId,
+        string continuationVariable = "",
+        string continuationTypeConstraint = "")
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -48,6 +50,8 @@ public sealed class PowerShellCompiledRegion
         SourceMap = Array.AsReadOnly((sourceMap ?? Array.Empty<PowerShellCompilationSourceMapEntry>()).ToArray());
         RegionGraph = regionGraph ?? new PowerShellCompilationRegionGraph(Array.Empty<PowerShellCompilationRegion>());
         DocumentId = documentId ?? string.Empty;
+        ContinuationVariable = continuationVariable ?? string.Empty;
+        ContinuationTypeConstraint = continuationTypeConstraint ?? string.Empty;
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -86,6 +90,11 @@ public sealed class PowerShellCompiledRegion
     public PowerShellCompilationRegionGraph RegionGraph { get; }
     /// <summary>Relocation-safe authored document identity.</summary>
     public string DocumentId { get; }
+
+    /// <summary>Local receiving the scalar result before PowerShell resumes; empty for a terminal return.</summary>
+    public string ContinuationVariable { get; }
+    /// <summary>Authored CLR type constraint to preserve on the receiving local, or empty when unconstrained.</summary>
+    public string ContinuationTypeConstraint { get; }
 
     [JsonIgnore]
     internal string GeneratedSource { get; set; } = string.Empty;

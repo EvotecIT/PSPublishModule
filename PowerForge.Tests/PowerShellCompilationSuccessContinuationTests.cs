@@ -5,6 +5,7 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Transpile_PreservesOutputFreeLocalCallsBeforeTerminalValue()
     {
         using var fixture = ArtifactFixture.Create(
@@ -17,6 +18,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("Get-Number; Get-Number")]
     [InlineData("if ($Enabled) { Get-Number }; return 2")]
     [InlineData("for ([int]$i = 0; $i -lt 2; $i++) { Get-Number }; return 2")]
@@ -37,6 +39,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_StrictExecutableRejectsNonTerminalLocalCallOutput()
     {
         using var fixture = ArtifactFixture.Create("function Get-Number { return 1 }; Get-Number; Get-Number");
@@ -49,6 +52,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridRetainedSequencePreservesBothSuccessValues()
     {
         using var fixture = ArtifactFixture.Create(
