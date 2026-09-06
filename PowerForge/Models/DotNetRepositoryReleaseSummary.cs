@@ -8,6 +8,15 @@ namespace PowerForge;
 /// </summary>
 public sealed class DotNetRepositoryReleaseSummary
 {
+    /// <summary>Whether the summarized operation succeeded.</summary>
+    public bool Success { get; set; } = true;
+
+    /// <summary>Whether the summary describes planned operations.</summary>
+    public bool IsPlan { get; set; }
+
+    /// <summary>Whether dependency ordering will be checked from artifacts during execution.</summary>
+    public bool PublishOrderDeferred { get; set; }
+
     /// <summary>
     /// Gets or sets the per-project summary rows.
     /// </summary>
@@ -130,5 +139,8 @@ public enum DotNetRepositoryReleaseProjectStatus
     /// <summary>
     /// The project failed.
     /// </summary>
-    Failed = 2
+    Failed = 2,
+
+    /// <summary>The project was planned but no release operations were executed.</summary>
+    Planned = 3
 }

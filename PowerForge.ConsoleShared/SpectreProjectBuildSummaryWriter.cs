@@ -23,16 +23,17 @@ internal static class SpectreProjectBuildSummaryWriter
 
         var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
-        var icon = unicode ? "✅" : "*";
+        var icon = unicode ? (display.Success ? (display.IsPlan ? "ℹ" : "✅") : "❌") : "*";
+        var titleColor = display.Success ? (display.IsPlan ? "grey" : "green") : "red";
 
-        AnsiConsole.Write(new Rule($"[green]{icon} {Esc(display.Title)}[/]").LeftJustified());
+        AnsiConsole.Write(new Rule($"[{titleColor}]{icon} {Esc(display.Title)}[/]").LeftJustified());
 
         var table = new Table()
             .Border(border)
             .AddColumn(new TableColumn("Project").NoWrap())
             .AddColumn(new TableColumn("Packable").NoWrap())
             .AddColumn(new TableColumn("Version").NoWrap())
-            .AddColumn(new TableColumn("Packages").NoWrap())
+            .AddColumn(new TableColumn(display.IsPlan ? "Planned packages" : "Packages").NoWrap())
             .AddColumn(new TableColumn("Duration").RightAligned().NoWrap())
             .AddColumn(new TableColumn("Status").NoWrap())
             .AddColumn(new TableColumn("Error"));

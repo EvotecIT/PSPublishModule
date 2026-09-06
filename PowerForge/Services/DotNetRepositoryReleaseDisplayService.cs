@@ -13,7 +13,9 @@ internal sealed class DotNetRepositoryReleaseDisplayService
 
         return new DotNetRepositoryReleaseDisplayModel
         {
-            Title = isPlan ? "Plan" : "Summary",
+            Success = summary.Success,
+            IsPlan = isPlan || summary.IsPlan,
+            Title = isPlan || summary.IsPlan ? (summary.Success ? "Plan" : "Plan failed") : (summary.Success ? "Summary" : "Release failed"),
             Projects = summary.Projects.Select(project => new DotNetRepositoryReleaseProjectDisplayRow
             {
                 ProjectName = project.ProjectName,
@@ -27,22 +29,25 @@ internal sealed class DotNetRepositoryReleaseDisplayService
                 StatusColor = ResolveStatusColor(project.Status),
                 ErrorPreview = project.ErrorPreview
             }).ToArray(),
-            Totals = CreateTotals(summary.Totals)
+            Totals = CreateTotals(summary.Totals, isPlan || summary.IsPlan, summary.PublishOrderDeferred)
         };
     }
 
-    private static IReadOnlyList<DotNetRepositoryReleaseTotalsDisplayRow> CreateTotals(DotNetRepositoryReleaseSummaryTotals totals)
+    private static IReadOnlyList<DotNetRepositoryReleaseTotalsDisplayRow> CreateTotals(DotNetRepositoryReleaseSummaryTotals totals, bool isPlan, bool publishOrderDeferred)
     {
         var rows = new List<DotNetRepositoryReleaseTotalsDisplayRow>
         {
             Row("Projects", totals.ProjectCount),
             Row("Packable", totals.PackableCount),
             Row("Failed", totals.FailedProjectCount),
-            Row("Packages", totals.PackageCount)
+            Row(isPlan ? "Planned packages" : "Packages", totals.PackageCount)
         };
 
+        if (publishOrderDeferred)
+            rows.Add(new DotNetRepositoryReleaseTotalsDisplayRow { Label = "Publish order", Value = "Deferred until artifacts are available" });
+
         if (totals.PublishedPackageCount > 0)
-            rows.Add(Row("Published", totals.PublishedPackageCount));
+            rows.Add(Row(isPlan ? "Planned publishes" : "Published", totals.PublishedPackageCount));
         if (totals.SkippedDuplicatePackageCount > 0)
             rows.Add(Row("Skipped duplicates", totals.SkippedDuplicatePackageCount));
         if (totals.FailedPublishCount > 0)
@@ -58,6 +63,7 @@ internal sealed class DotNetRepositoryReleaseDisplayService
         {
             DotNetRepositoryReleaseProjectStatus.Ok => "Ok",
             DotNetRepositoryReleaseProjectStatus.Skipped => "Skipped",
+            DotNetRepositoryReleaseProjectStatus.Planned => "Planned",
             _ => "Fail"
         };
 
@@ -66,6 +72,7 @@ internal sealed class DotNetRepositoryReleaseDisplayService
         {
             DotNetRepositoryReleaseProjectStatus.Ok => ConsoleColor.Green,
             DotNetRepositoryReleaseProjectStatus.Skipped => ConsoleColor.Gray,
+            DotNetRepositoryReleaseProjectStatus.Planned => ConsoleColor.Gray,
             _ => ConsoleColor.Red
         };
 

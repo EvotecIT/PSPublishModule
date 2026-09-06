@@ -165,9 +165,12 @@ public sealed partial class DotNetRepositoryReleaseService
 
         if (spec.WhatIf && spec.HasPendingVersionBindingChanges)
         {
-            result.Success = false;
-            result.ErrorMessage = "A safe NuGet publish order cannot be planned while version-binding files have pending WhatIf changes. Apply the version changes or build the packages, then use artifact-based ordering.";
-            return true;
+            result.PublishOrderDeferred = true;
+            const string message = "NuGet publish ordering is deferred until version bindings are applied and package artifacts are available. Execution will validate the package dependency order before publishing.";
+            _logger.Info(message);
+            progress?.PhaseStarted(ProjectBuildProgressPhase.NuGetPublish, 0, message);
+            progress?.PhaseCompleted(ProjectBuildProgressPhase.NuGetPublish, message);
+            return false;
         }
 
         var publishPlan = CreatePublishPlan(

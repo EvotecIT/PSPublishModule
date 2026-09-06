@@ -43,6 +43,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (spec is null) throw new ArgumentNullException(nameof(spec));
+            result.IsPlan = spec.WhatIf;
             spec.HasPendingVersionBindingChanges = false;
             if (string.IsNullOrWhiteSpace(spec.RootPath))
             {
