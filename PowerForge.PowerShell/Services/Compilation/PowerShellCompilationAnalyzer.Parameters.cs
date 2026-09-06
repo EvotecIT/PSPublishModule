@@ -5,7 +5,7 @@ namespace PowerForge;
 public sealed partial class PowerShellCompilationAnalyzer
 {
     private static void ValidateParameterBindingNames(
-        ParamBlockAst paramBlock,
+        PowerShellParameterSyntax paramBlock,
         string? targetFramework,
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics)
@@ -18,7 +18,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                 bindingNames.Add(name, name);
         }
         var automaticBindingNames = PowerShellCommonParameterPolicy
-            .GetAvailable(paramBlock, targetFramework)
+            .GetAvailable(PowerShellAdvancedFunctionPolicy.GetBodyBinding(paramBlock.Body), targetFramework)
             .SelectMany(static parameter => new[] { parameter.Name, parameter.Alias })
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -55,12 +55,12 @@ public sealed partial class PowerShellCompilationAnalyzer
     }
 
     private static void ValidateParameterBindingContract(
-        ParamBlockAst paramBlock,
+        PowerShellParameterSyntax paramBlock,
         IReadOnlyList<PowerShellCompilationParameter> parameters,
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics)
     {
-        var commandBinding = PowerShellAdvancedFunctionPolicy.GetBinding(paramBlock);
+        var commandBinding = PowerShellAdvancedFunctionPolicy.GetBodyBinding(paramBlock.Body);
         var namedSets = parameters
             .SelectMany(static parameter => parameter.Bindings)
             .Select(static binding => binding.ParameterSetName)
@@ -131,7 +131,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         => string.IsNullOrWhiteSpace(name) ? "__AllParameterSets" : name!;
 
     private PowerShellCompilationParameter[] AnalyzeParameters(
-        ParamBlockAst? paramBlock,
+        PowerShellParameterSyntax paramBlock,
         Ast unitRoot,
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics,
@@ -141,9 +141,6 @@ public sealed partial class PowerShellCompilationAnalyzer
         ISet<string>? localFunctionNames,
         bool isScriptUnit)
     {
-        if (paramBlock is null)
-            return Array.Empty<PowerShellCompilationParameter>();
-
         foreach (var attribute in paramBlock.Attributes)
             AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
 

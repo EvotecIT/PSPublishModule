@@ -135,6 +135,14 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         blockingDiagnostic.Code,
                         blockingDiagnostic.Message));
                 }
+                if (EnumerateStatements(function.Body).OfType<PowerShellBoundExpressionStatement>().Any(statement =>
+                        statement.RequiresOutputContinuation && ResolveType(statement.Expression, lookup).ClrType != typeof(void)))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.output.continuation",
+                        "Non-terminal success output requires a continuation-preserving output contract; it cannot become an early CLR return."));
+                }
                 if ((function.ReturnType.ClrType == typeof(Dictionary<string, string>) ||
                      function.ReturnType.ClrType == typeof(System.Collections.Hashtable) ||
                      function.ReturnType.ClrType == typeof(System.Collections.Specialized.OrderedDictionary)) &&

@@ -13,8 +13,7 @@ internal static class PowerShellParameterSemanticValidator
         PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        var paramBlock = function.Body.ParamBlock;
-        if (paramBlock is null) return true;
+        var paramBlock = PowerShellParameterSyntax.Create(function.Body);
         var valid = true;
         var executableEntryPoint = function.Name.StartsWith("__PowerForgeScript_", StringComparison.Ordinal) ||
                                    function.Name.Equals("Invoke", StringComparison.Ordinal) &&
@@ -162,11 +161,11 @@ internal static class PowerShellParameterSemanticValidator
                PowerShellParameterContractBinder.TryGetIntegerAttributeValue(argument, out var position) && position >= 0;
     }
 
-    private static bool ValidateBindingNames(ParsedSourceDocument document, ParamBlockAst paramBlock, string? targetFramework, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    private static bool ValidateBindingNames(ParsedSourceDocument document, PowerShellParameterSyntax paramBlock, string? targetFramework, ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var valid = true;
         var names = paramBlock.Parameters.ToDictionary(static parameter => parameter.Name.VariablePath.UserPath, static parameter => parameter.Name.VariablePath.UserPath, StringComparer.OrdinalIgnoreCase);
-        var automatic = PowerShellCommonParameterPolicy.GetAvailable(paramBlock, targetFramework)
+        var automatic = PowerShellCommonParameterPolicy.GetAvailable(PowerShellAdvancedFunctionPolicy.GetBodyBinding(paramBlock.Body), targetFramework)
             .SelectMany(static parameter => new[] { parameter.Name, parameter.Alias })
             .Where(static name => !string.IsNullOrWhiteSpace(name))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -195,10 +194,10 @@ internal static class PowerShellParameterSemanticValidator
         return valid;
     }
 
-    private static bool ValidateBindingContract(ParsedSourceDocument document, ParamBlockAst paramBlock, IReadOnlyList<PowerShellCompilationParameter> parameters, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    private static bool ValidateBindingContract(ParsedSourceDocument document, PowerShellParameterSyntax paramBlock, IReadOnlyList<PowerShellCompilationParameter> parameters, ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var valid = true;
-        var defaultSet = PowerShellAdvancedFunctionPolicy.GetBinding(paramBlock).DefaultParameterSetName;
+        var defaultSet = PowerShellAdvancedFunctionPolicy.GetBodyBinding(paramBlock.Body).DefaultParameterSetName;
         var namedSets = parameters.SelectMany(static parameter => parameter.Bindings).Select(static binding => binding.ParameterSetName)
             .Append(defaultSet).Where(static name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var sets = namedSets.Length == 0 ? new[] { string.Empty } : namedSets;

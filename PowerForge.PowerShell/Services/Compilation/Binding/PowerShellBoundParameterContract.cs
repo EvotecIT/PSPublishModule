@@ -23,7 +23,7 @@ internal sealed class PowerShellBoundParameterContract
     {
         var byName = (metadata ?? Array.Empty<PowerShellCompilationParameter>())
             .ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
-        return (body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
+        return (PowerShellParameterSyntax.GetParameters(body).ToArray())
             .Select(parameter =>
             {
                 var name = parameter.Name.VariablePath.UserPath;

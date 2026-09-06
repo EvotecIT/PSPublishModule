@@ -446,7 +446,7 @@ internal sealed partial class PowerShellTypedLowerer
         PowerShellCompilationCapability targetCapabilities)
     {
         var expression = LowerExpression(statement.Expression, functions, names, targetCapabilities);
-        return statement.EmitsOutput && expression.ClrType != typeof(void)
+        return statement.EmitsOutput && expression.ClrType != typeof(void) && !statement.RequiresOutputContinuation
             ? new PowerShellLoweredReturnStatement(statement.Span, expression, emitsValue: true)
             : new PowerShellLoweredExpressionStatement(
                 statement.Span,

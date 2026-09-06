@@ -212,7 +212,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             ? capabilities | PowerShellCompilationCapability.PipelineParameterBinding
             : capabilities;
         var parameters = AnalyzeParameters(
-            root.ParamBlock,
+            PowerShellParameterSyntax.Create(root),
             root,
             file,
             diagnostics,
@@ -585,7 +585,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             return false;
         var name = target.VariablePath.UserPath;
         if (unitRoot is ScriptBlockAst scriptBlock &&
-            scriptBlock.ParamBlock?.Parameters.FirstOrDefault(parameter =>
+            PowerShellParameterSyntax.GetParameters(scriptBlock).FirstOrDefault(parameter =>
                 parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } parameter &&
             (parameter.StaticType.IsArray && parameter.StaticType.GetArrayRank() == 1 ||
              typeof(System.Collections.IDictionary).IsAssignableFrom(parameter.StaticType)))
@@ -638,11 +638,8 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static HashSet<string> CollectLocalVariables(ScriptBlockAst scriptBlock)
     {
         var variables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (scriptBlock.ParamBlock is not null)
-        {
-            foreach (var parameter in scriptBlock.ParamBlock.Parameters)
-                variables.Add(parameter.Name.VariablePath.UserPath);
-        }
+        foreach (var parameter in PowerShellParameterSyntax.GetParameters(scriptBlock))
+            variables.Add(parameter.Name.VariablePath.UserPath);
 
         var assignments = scriptBlock.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
             .Cast<AssignmentStatementAst>();

@@ -372,7 +372,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
     }
 
     private static bool HasLocalDefinition(ScriptBlockAst body, string name)
-        => body.ParamBlock?.Parameters.Any(parameter =>
+        => PowerShellParameterSyntax.GetParameters(body).Any(parameter =>
                parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true ||
            body.FindAll(
                    node => (node is AssignmentStatementAst assignment &&

@@ -336,7 +336,7 @@ internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
 
 internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput)
+    internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput, bool requiresOutputContinuation = false)
         : base(span,
             expression.Effects |
             (emitsOutput ? PowerShellSemanticEffect.SuccessOutput : PowerShellSemanticEffect.None) |
@@ -345,10 +345,13 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
     {
         Expression = expression;
         EmitsOutput = emitsOutput;
+        RequiresOutputContinuation = requiresOutputContinuation;
     }
 
     internal PowerShellBoundExpression Expression { get; }
     internal bool EmitsOutput { get; }
+    /// <summary>Success output must continue execution rather than become the method return.</summary>
+    internal bool RequiresOutputContinuation { get; }
 }
 
 internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatement

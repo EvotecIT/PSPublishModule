@@ -23,9 +23,9 @@ internal static class PowerShellCommandIslandPolicy
         PowerShellCommandSemanticResolver? commandResolver = null)
     {
         commandResolver ??= new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
-        var parameters = body.ParamBlock?.Parameters
+        var parameters = PowerShellParameterSyntax.GetParameters(body)
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < statements.Count; index++)
         {
             var assignmentCommands = statements[index]
@@ -407,9 +407,9 @@ internal static class PowerShellCommandIslandPolicy
         StatementAst boundary,
         ISet<string>? allowedVariables)
     {
-        var available = body.ParamBlock?.Parameters
+        var available = PowerShellParameterSyntax.GetParameters(body)
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var earlierAssignments = body.EndBlock?.Statements
             .Where(statement => statement.Extent.StartOffset < boundary.Extent.StartOffset)
             .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
@@ -424,7 +424,7 @@ internal static class PowerShellCommandIslandPolicy
         }
         if (allowedVariables is not null)
             available.RemoveWhere(name => !allowedVariables.Contains(name) &&
-                                          body.ParamBlock?.Parameters.Any(parameter =>
+                                          PowerShellParameterSyntax.GetParameters(body).Any(parameter =>
                                               parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) != true);
         return available;
     }

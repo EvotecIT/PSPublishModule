@@ -216,7 +216,7 @@ internal sealed partial class PowerShellSemanticBinder
             new PowerShellLexicalScope(functionSymbol, scopeSymbols),
             PowerShellCommentHelpBinder.Bind(function),
             PowerShellAdvancedFunctionPolicy.GetAliases(function),
-            PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
+            PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             outputTypeContract.SemanticType,
             outputTypeContract.MetadataTypeName,
             body,
@@ -237,7 +237,7 @@ internal sealed partial class PowerShellSemanticBinder
     {
         var parameters = new List<PowerShellBoundParameter>();
         var invalid = false;
-        foreach (var parameter in function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
+        foreach (var parameter in PowerShellParameterSyntax.GetParameters(function.Body))
         {
             var name = parameter.Name.VariablePath.UserPath;
             var span = PowerShellSourceParser.GetSpan(document, parameter.Extent);
@@ -653,7 +653,9 @@ internal sealed partial class PowerShellSemanticBinder
                 return new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
             return expression is null
                 ? null
-                : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
+                : new PowerShellBoundExpressionStatement(
+                    PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput,
+                    requiresOutputContinuation: emitsOutput && !isTerminal && !allowNonTerminalSuccessOutput);
         }
         return null;
     }

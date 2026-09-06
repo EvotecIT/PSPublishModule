@@ -191,7 +191,7 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities,
                     diagnostics);
             case InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out var parameterName):
-                if (functionBody?.ParamBlock?.Parameters.Any(parameter =>
+                if (PowerShellParameterSyntax.GetParameters(functionBody).Any(parameter =>
                         parameter.Name.VariablePath.UserPath.Equals(parameterName, StringComparison.OrdinalIgnoreCase)) != true)
                 {
                     diagnostics.Add(new PowerShellSemanticDiagnostic(
