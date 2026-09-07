@@ -10,6 +10,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("[int]$Values=0; $Values=for ([int]$i=0;$i -lt 2;$i++) { $i }")]
     [InlineData("$script:Values=for ([int]$i=0;$i -lt 2;$i++) { $i }")]
     [InlineData("$Values=$null; $Values=for ([int]$i=0;$i -lt 2;$i++) { [int]::Parse('bad') }")]
+    [InlineData("$Values=for ([int]$i=0;$i -lt 2;$i++) { $Values='x'; $i }")]
+    [InlineData("$Values=for ([int]$i=0;$i -lt 2;$i++) { [string]$Values='x'; $i }")]
+    [InlineData("$Values=foreach ($Values in 1,2) { $Values }")]
+    [InlineData("[int]$i=0; $Values=while ($i -lt 2) { $Values='x'; $i; $i++ }")]
+    [InlineData("[int]$i=0; $Values=do { $Values='x'; $i; $i++ } while ($i -lt 2)")]
+    [InlineData("[int]$i=0; $Values=do { [string]$Values='x'; $i; $i++ } until ($i -eq 2)")]
     public void OutputCapture_RetainsUnqualifiedTransfersAndTargets(string body)
     {
         using var fixture = ArtifactFixture.Create("function Get-Values { [CmdletBinding()] param(); " + body + "; 'after' }", ".psm1");

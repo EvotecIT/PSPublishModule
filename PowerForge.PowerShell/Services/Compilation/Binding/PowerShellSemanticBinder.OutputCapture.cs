@@ -30,6 +30,15 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var body = BindStatement(document, assignment.Right, symbols, functions, diagnostics, false, targetFramework, capabilities);
         if (body is null) return null;
+        // Binding a loop can merge assignments and declarations back into its enclosing
+        // symbol table. The capture destination must still accept its collapsed result.
+        if (target.Type.ClrType != typeof(object) ||
+            target.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Int32OrDouble)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2935",
+                "The captured body changes its destination's type or constraint; the final assignment requires a qualified conversion contract.", span));
+            return null;
+        }
         if (body.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2932",

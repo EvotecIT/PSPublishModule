@@ -142,7 +142,8 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             SearchOption.AllDirectories).Single();
         var moduleAssembly = Assembly.LoadFrom(moduleAssemblyPath);
         var commandType = moduleAssembly.GetTypes().Single(static type =>
-            type.Name == "InvokePackageCancellationCommand");
+            type.GetCustomAttribute<System.Management.Automation.CmdletAttribute>() is
+                { VerbName: "Invoke", NounName: "PackageCancellation" });
         var command = Activator.CreateInstance(commandType)!;
         var cancellationSource = Assert.IsType<CancellationTokenSource>(commandType
             .GetField("_providerCancellation", BindingFlags.Instance | BindingFlags.NonPublic)!

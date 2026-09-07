@@ -32,7 +32,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
-    public void Build_ImplicitScalarOutputPreservesContinuationAndLocalCallStreams(string framework, string host)
+    public void Build_ImplicitScalarOutputPreservesContinuationWithRetainedFallibleCleanup(string framework, string host)
     {
         if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
@@ -61,14 +61,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             """, ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "ImplicitOutput", framework);
-        Assert.Equal(5, typed.Methods.Length);
+        Assert.Equal(4, typed.Methods.Length);
+        Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Get-StopRecords");
         Assert.All(typed.Methods, method => Assert.False(method.RequiresPowerShellCommandRegions));
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "PowerForge.ImplicitOutput",
-            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(5, result.Manifest!.CompiledMethods);
+        Assert.Equal(4, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
         const string probe = """
             foreach ($enabled in $false,$true) {
                 foreach ($text in $null,'','text') {
