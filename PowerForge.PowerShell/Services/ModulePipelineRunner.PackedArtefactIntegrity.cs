@@ -24,6 +24,15 @@ public sealed partial class ModulePipelineRunner
                 throw new FileNotFoundException("A finalized signed artefact or its evidence was not found.", path);
             state.FinalizedPackedArtefactHashes[path] = ComputeFileSha256(path);
         }
+
+        foreach (string root in EnumerateFinalizedScriptLayoutRoots(artefact))
+        {
+            state.FinalizedPackedArtefactDirectoryInventories[root] = Directory
+                .EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                .Select(Path.GetFullPath)
+                .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer)
+                .ToArray();
+        }
     }
 
     private static void ValidateFinalizedPackedArtefactIntegrity(ModulePipelineRunState state)
@@ -35,6 +44,21 @@ public sealed partial class ModulePipelineRunner
             {
                 throw new InvalidOperationException(
                     $"The finalized signed artefact or its evidence changed after signing: '{expected.Key}'. " +
+                    "Artifact actions must not mutate signed release outputs after finalization.");
+            }
+        }
+        foreach (KeyValuePair<string, string[]> inventory in state.FinalizedPackedArtefactDirectoryInventories)
+        {
+            var expectedPaths = new HashSet<string>(inventory.Value, PowerShellCompilationPathSafety.PathComparer);
+            string? unexpectedPath = Directory.Exists(inventory.Key)
+                ? Directory.EnumerateFiles(inventory.Key, "*", SearchOption.AllDirectories)
+                    .Select(Path.GetFullPath)
+                    .FirstOrDefault(path => !expectedPaths.Contains(path))
+                : null;
+            if (unexpectedPath is not null)
+            {
+                throw new InvalidOperationException(
+                    $"The finalized signed artefact or its evidence changed after signing: '{unexpectedPath}'. " +
                     "Artifact actions must not mutate signed release outputs after finalization.");
             }
         }
@@ -53,5 +77,16 @@ public sealed partial class ModulePipelineRunner
             .Concat(artefact.EvidencePaths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+            .Distinct(PowerShellCompilationPathSafety.PathComparer);
+
+    private static IEnumerable<string> EnumerateFinalizedScriptLayoutRoots(ArtefactBuildResult artefact)
+        => artefact.Type == ArtefactType.Script
+            ? new[] { artefact.OutputPath }
+                .Concat(artefact.Modules
+                    .Where(static module => module.IsMainModule)
+                    .Select(static module => module.Path))
+                .Where(Directory.Exists)
+                .Select(Path.GetFullPath)
+                .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            : Array.Empty<string>();
 }

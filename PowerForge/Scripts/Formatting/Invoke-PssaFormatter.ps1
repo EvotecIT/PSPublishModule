@@ -30,9 +30,9 @@ try {
         Write-Output 'PSSA_NOT_FOUND'
         exit 3
     }
-    # Keep unrelated discoverable modules from affecting PSSA's AST/type analysis.
-    # Discovery above is filesystem-only; PowerShell module discovery begins after isolation.
-    $env:PSModulePath = [System.IO.Path]::Combine($PSHOME, 'Modules')
+    # Discovery is filesystem-only so unrelated module manifests are never imported while
+    # selecting PSSA. Preserve the original roots because scripts can explicitly reference
+    # installed class modules through name-based `using module` directives.
     Import-Module -Name $PssaModulePath -ErrorAction Stop
 } catch {
     Write-Output 'PSSA_NOT_FOUND'

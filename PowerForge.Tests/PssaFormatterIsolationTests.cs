@@ -6,19 +6,18 @@ namespace PowerForge.Tests;
 public sealed class PssaFormatterIsolationTests
 {
     [Fact]
-    public void EmbeddedFormatter_UsesFilesystemDiscoveryBeforeIsolatingPowerShellModuleDiscovery()
+    public void EmbeddedFormatter_UsesFilesystemDiscoveryWithoutRemovingExplicitModuleResolutionRoots()
     {
         var buildScript = typeof(PssaFormatter).GetMethod("BuildScript", BindingFlags.NonPublic | BindingFlags.Static);
         var script = Assert.IsType<string>(buildScript?.Invoke(null, null));
 
         var discoveryIndex = script.IndexOf("[System.IO.Directory]::EnumerateDirectories($PssaRoot)", StringComparison.Ordinal);
-        var isolationIndex = script.IndexOf("$env:PSModulePath =", StringComparison.Ordinal);
         var importIndex = script.IndexOf("Import-Module -Name $PssaModulePath", StringComparison.Ordinal);
 
         Assert.True(discoveryIndex >= 0);
-        Assert.True(isolationIndex > discoveryIndex);
-        Assert.True(importIndex > isolationIndex);
+        Assert.True(importIndex > discoveryIndex);
         Assert.DoesNotContain("Get-Module -ListAvailable", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("$env:PSModulePath =", script, StringComparison.Ordinal);
     }
 
     [Fact]

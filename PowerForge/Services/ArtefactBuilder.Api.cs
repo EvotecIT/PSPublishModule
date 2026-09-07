@@ -269,10 +269,14 @@ public sealed partial class ArtefactBuilder
             if (finalizePackedArtefact is not null)
             {
                 string version = ModulePathTokenFormatter.FormatVersionWithPreRelease(moduleVersion, preRelease);
+                string manifestPath = Path.Combine(mainModuleDest, moduleName + ".psd1");
+                string entryPointPath = ResolvePackedEntryPointPath(mainModuleDest, manifestPath);
                 var context = new PackedArtefactFinalizationContext(
+                    ArtefactType.Packed,
                     tempRoot,
                     mainModuleDest,
-                    Path.Combine(mainModuleDest, moduleName + ".psd1"),
+                    manifestPath,
+                    entryPointPath,
                     zipPath,
                     moduleName,
                     version);
@@ -293,6 +297,24 @@ public sealed partial class ArtefactBuilder
             modules.ToArray(),
             copied.ToArray(),
             evidencePaths);
+    }
+
+    private static string ResolvePackedEntryPointPath(string mainModulePath, string manifestPath)
+    {
+        var rootModule = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule");
+        if (string.IsNullOrWhiteSpace(rootModule))
+            return manifestPath;
+
+        var entryPointPath = Path.GetFullPath(Path.Combine(mainModulePath, rootModule!));
+        if (!IsSameOrBelowPath(entryPointPath, mainModulePath))
+        {
+            throw new InvalidOperationException(
+                $"Packed artefact RootModule '{rootModule}' resolves outside the primary module directory '{Path.GetFullPath(mainModulePath)}'.");
+        }
+        if (!File.Exists(entryPointPath))
+            throw new FileNotFoundException("The packed artefact RootModule entry point was not found.", entryPointPath);
+
+        return entryPointPath;
     }
 
     private static bool IsSameOrBelowPath(string path, string root)

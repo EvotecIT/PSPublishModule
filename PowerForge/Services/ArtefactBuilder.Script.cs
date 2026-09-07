@@ -70,7 +70,7 @@ public sealed partial class ArtefactBuilder
             string version = ModulePathTokenFormatter.FormatVersionWithPreRelease(moduleVersion, preRelease);
             var context = new PackedArtefactFinalizationContext(
                 ArtefactType.Script,
-                scriptRoot,
+                outputRoot,
                 scriptRoot,
                 string.Empty,
                 scriptPath,
@@ -277,13 +277,18 @@ public sealed partial class ArtefactBuilder
         if (exportBoundary >= 0)
             lines.RemoveRange(exportBoundary, lines.Count - exportBoundary);
 
-        var sections = new List<string>(3);
+        var moduleContent = string.Join(newline, lines).TrimEnd('\r', '\n');
+        var preamble = ModuleMergeComposer.ExtractMergedScriptPreamble(moduleContent, out var body);
+
+        var sections = new List<string>(4);
+        if (!string.IsNullOrWhiteSpace(preamble))
+            sections.Add(NormalizeNewlines(preamble.Trim(), newline));
+
         if (!string.IsNullOrWhiteSpace(preScriptMerge))
             sections.Add(NormalizeNewlines(preScriptMerge!.Trim(), newline));
 
-        var body = string.Join(newline, lines).TrimEnd('\r', '\n');
         if (!string.IsNullOrEmpty(body))
-            sections.Add(body);
+            sections.Add(NormalizeNewlines(body.TrimEnd('\r', '\n'), newline));
 
         if (!string.IsNullOrWhiteSpace(postScriptMerge))
             sections.Add(NormalizeNewlines(postScriptMerge!.Trim(), newline));

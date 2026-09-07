@@ -144,7 +144,8 @@ public sealed partial class ModulePipelineRunner
         if (scriptsToProcess.Length == 0)
             return;
 
-        var pathComparer = Path.DirectorySeparatorChar == '\\'
+        var pathComparer = FrameworkCompatibility.GetPathStringComparison(buildResult.StagingPath) ==
+                           StringComparison.OrdinalIgnoreCase
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
         var mergedScripts = new HashSet<string>(

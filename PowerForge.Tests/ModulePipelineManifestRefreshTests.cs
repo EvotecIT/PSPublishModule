@@ -332,6 +332,68 @@ public sealed class ModulePipelineManifestRefreshTests
     }
 
     [Fact]
+    public void Run_MergedModulePrunesScriptsToProcessUsingStagingFileSystemCaseRules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var classes = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes"));
+            File.WriteAllText(Path.Combine(classes.FullName, "Initialize.ps1"), "class TestClass { }");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
+            File.WriteAllText(
+                Path.Combine(root.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    ScriptsToProcess = @('.\\classes\\initialize.ps1')" + Environment.NewLine +
+                "}");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { Enable = true, Merge = true }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var result = runner.Run(spec, runner.Plan(spec));
+            bool caseInsensitive = FrameworkCompatibility.GetPathStringComparison(result.BuildResult.StagingPath) ==
+                                   StringComparison.OrdinalIgnoreCase;
+
+            bool hasScriptsToProcess = ManifestEditor.TryGetTopLevelStringArray(
+                result.BuildResult.ManifestPath,
+                "ScriptsToProcess",
+                out var remainingScripts);
+            if (caseInsensitive)
+            {
+                Assert.False(hasScriptsToProcess);
+            }
+            else
+            {
+                Assert.True(hasScriptsToProcess);
+                Assert.Equal(new[] { ".\\classes\\initialize.ps1" }, remainingScripts);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_WritesPrereleaseToPsDataAndRemovesTopLevelPrerelease()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -36,7 +36,8 @@ public sealed partial class ModulePipelineRunner
         public ModuleTypeAcceleratorSurfaceReport? TypeAcceleratorSurfaceReport { get; set; }
         public BuildDiagnostic[] AutomaticBinaryConflictDiagnostics { get; set; } = Array.Empty<BuildDiagnostic>();
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
-        public Dictionary<string, string> FinalizedPackedArtefactHashes { get; } = new(System.StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> FinalizedPackedArtefactHashes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
+        public Dictionary<string, string[]> FinalizedPackedArtefactDirectoryInventories { get; } = new(PowerShellCompilationPathSafety.PathComparer);
         public Dictionary<string, string> FinalizedModulePayloadHashes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
         public List<ModulePublishResult> PublishResults { get; } = new();
         public List<ProjectBuildHostExecutionResult> ProjectBuildResults { get; } = new();

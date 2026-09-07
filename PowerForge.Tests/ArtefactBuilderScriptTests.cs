@@ -139,6 +139,127 @@ public sealed class ArtefactBuilderScriptTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_ScriptPreservesMergedPreambleBeforeInjectedContent(ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            File.WriteAllText(
+                Path.Combine(stagingRoot.FullName, moduleName + ".psm1"),
+                "#requires -Version 5.1" + Environment.NewLine +
+                "using namespace System.Text" + Environment.NewLine +
+                "function Invoke-DemoModule { [StringBuilder]::new().Append('ok').ToString() }" + Environment.NewLine +
+                "# Export functions and aliases as required" + Environment.NewLine +
+                "Export-ModuleMember -Function Invoke-DemoModule" + Environment.NewLine);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", artefactType.ToString());
+
+            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).Build(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = artefactType,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = outputRoot,
+                        ScriptName = "Invoke-DemoModule.ps1",
+                        ArtefactName = "DemoModule.zip",
+                        PreScriptMerge = "param([switch] $PassThru)"
+                    }
+                },
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>());
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-preamble");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, "Invoke-DemoModule.ps1"));
+            Assert.True(script.IndexOf("#requires -Version 5.1", StringComparison.Ordinal) <
+                        script.IndexOf("param([switch] $PassThru)", StringComparison.Ordinal));
+            Assert.True(script.IndexOf("using namespace System.Text", StringComparison.Ordinal) <
+                        script.IndexOf("param([switch] $PassThru)", StringComparison.Ordinal));
+            System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Build_ScriptFinalizerReceivesCompleteOutputLayoutWhenMainScriptUsesSubdirectory()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", "Script");
+            string extraSource = Path.Combine(root.FullName, "helper.ps1");
+            File.WriteAllText(extraSource, "'helper'");
+
+            _ = new ArtefactBuilder(new NullLogger()).BuildWithFinalizer(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Script,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = outputRoot,
+                        ScriptName = "Invoke-DemoModule.ps1",
+                        DestinationFilesRelative = true,
+                        RequiredModules = new ArtefactRequiredModulesConfiguration
+                        {
+                            ModulesPath = "app"
+                        },
+                        FilesOutput = new[]
+                        {
+                            new ArtefactCopyMapping
+                            {
+                                Source = extraSource,
+                                Destination = Path.Combine("support", "helper.ps1")
+                            }
+                        }
+                    }
+                },
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>(),
+                finalizePackedArtefact: context =>
+                {
+                    Assert.Equal(Path.GetFullPath(outputRoot), context.RootPath);
+                    Assert.Equal(Path.Combine(outputRoot, "app"), context.MainModulePath);
+                    Assert.Equal(Path.Combine(outputRoot, "app", "Invoke-DemoModule.ps1"), context.EntryPointPath);
+                    Assert.True(File.Exists(Path.Combine(context.RootPath, "support", "helper.ps1")));
+                    return Array.Empty<string>();
+                });
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Build_ScriptUsesModuleNameByDefault()
     {

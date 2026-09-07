@@ -126,6 +126,10 @@ public sealed class ArtefactBuilderLayoutTests
                 {
                     observedManifest = context.ManifestPath;
                     Assert.True(File.Exists(context.ManifestPath));
+                    Assert.Equal(
+                        Path.Combine(context.MainModulePath, moduleName + ".psm1"),
+                        context.EntryPointPath);
+                    Assert.True(File.Exists(context.EntryPointPath));
                     File.WriteAllText(Path.Combine(context.MainModulePath, "finalized.txt"), "finalized");
                     Directory.CreateDirectory(Path.GetDirectoryName(evidencePath)!);
                     File.WriteAllText(evidencePath, "{}");

@@ -172,7 +172,7 @@ public sealed partial class ModulePipelineRunner
                 outputRoot,
                 $"artefact output root for '{artefact.ArtefactType}'");
 
-            if (artefact.ArtefactType is not ArtefactType.Unpacked)
+            if (artefact.ArtefactType is not (ArtefactType.Unpacked or ArtefactType.Script))
                 continue;
 
             if (cfg.RequiredModules.Enabled == true)
