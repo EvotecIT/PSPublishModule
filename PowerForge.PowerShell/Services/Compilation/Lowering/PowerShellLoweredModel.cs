@@ -66,7 +66,10 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
         bool requiresPowerShellModuleStateRead,
-        bool requiresPowerShellModuleStateWrite)
+        bool requiresPowerShellModuleStateWrite,
+        bool requiresPowerShellStatementErrors = false,
+        string statementErrorContextTemporary = "",
+        string statementErrorTemporary = "")
         : base(span, clrType)
     {
         Target = target;
@@ -81,6 +84,9 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         RequiresPowerShellModuleStateRead = requiresPowerShellModuleStateRead;
         RequiresPowerShellModuleStateWrite = requiresPowerShellModuleStateWrite;
+        RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
+        StatementErrorContextTemporary = statementErrorContextTemporary;
+        StatementErrorTemporary = statementErrorTemporary;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -96,6 +102,9 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal bool RequiresPowerShellModuleStateRead { get; }
     internal bool RequiresPowerShellModuleStateWrite { get; }
     internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
+    internal bool RequiresPowerShellStatementErrors { get; }
+    internal string StatementErrorContextTemporary { get; }
+    internal string StatementErrorTemporary { get; }
 }
 
 internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
@@ -208,7 +217,8 @@ internal sealed class PowerShellLoweredFunction
         PowerShellValueState[] outputValueStates,
         Type? collectionElementType,
         PowerShellLoweredStatement[] statements,
-        SourceSpan span)
+        SourceSpan span,
+        bool requiresPowerShellStatementErrors = false)
     {
         Symbol = symbol;
         GeneratedName = generatedName;
@@ -234,6 +244,7 @@ internal sealed class PowerShellLoweredFunction
         CollectionElementType = collectionElementType;
         Statements = statements;
         Span = span;
+        RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -250,6 +261,7 @@ internal sealed class PowerShellLoweredFunction
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresRuntimeFreeProviderOperations { get; }
     internal bool RequiresPowerShellHostStreams { get; }
+    internal bool RequiresPowerShellStatementErrors { get; }
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }

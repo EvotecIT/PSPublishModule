@@ -447,6 +447,15 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine("    {");
         var arguments = cmdlet.Method.Parameters.Select(parameter =>
             PowerShellCSharpSymbolRenderer.Identifier(parameter.Name) + (parameter.IsSwitch ? ".IsPresent" : string.Empty));
+        if (cmdlet.Method.RequiresPowerShellStatementErrors)
+        {
+            arguments = arguments.Append("__statementErrors");
+            builder.AppendLine("        var __statementErrors = new global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext(this, " + PowerShellCSharpLiteral.QuoteString(cmdlet.Method.SourceName) + ");");
+            builder.AppendLine("        try");
+            builder.AppendLine("        {");
+            builder.AppendLine("        try");
+            builder.AppendLine("        {");
+        }
         if (cmdlet.Method.RequiresPowerShellStreams)
             arguments = arguments.Concat(new[]
             {
@@ -500,6 +509,16 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine($"        catch (global::System.Exception exception) when ({GetRuntimeRegionHostTypeName(typed)}.TryTakePowerShellModuleStateError(exception, out var moduleStateError))");
             builder.AppendLine("        {");
             builder.AppendLine("            ThrowTerminatingError(moduleStateError);");
+            builder.AppendLine("        }");
+        }
+        if (cmdlet.Method.RequiresPowerShellStatementErrors)
+        {
+            builder.AppendLine("        }");
+            builder.AppendLine("        finally { __statementErrors.Dispose(); }");
+            builder.AppendLine("        }");
+            builder.AppendLine("        catch (global::System.Exception __statementError) when (global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.IsOperationFailure(__statementError))");
+            builder.AppendLine("        {");
+            builder.AppendLine("            throw __statementErrors.LeaveCommand(__statementError);");
             builder.AppendLine("        }");
         }
         builder.AppendLine("    }");

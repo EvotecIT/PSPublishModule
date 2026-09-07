@@ -158,7 +158,8 @@ internal enum PowerShellRequiredCapability
     RuntimeFreeProviderOperations = 4096,
     PowerShellModuleState = 8192,
     PowerShellModuleStateRead = 16384,
-    PowerShellModuleStateWrite = 32768
+    PowerShellModuleStateWrite = 32768,
+    PowerShellStatementErrors = 65536
 }
 
 internal enum PowerShellExecutionDispositionKind
@@ -561,18 +562,20 @@ internal sealed class PowerShellBoundFunction
 
 internal sealed class PowerShellBoundSourceDocument
 {
-    internal PowerShellBoundSourceDocument(string documentId, string path, SourceSpan span, PowerShellSymbolId[] functions)
+    internal PowerShellBoundSourceDocument(string documentId, string path, SourceSpan span, PowerShellSymbolId[] functions, string sourceText = "")
     {
         DocumentId = documentId;
         Path = path;
         Span = span;
         Functions = functions ?? Array.Empty<PowerShellSymbolId>();
+        SourceText = sourceText;
     }
 
     internal string DocumentId { get; }
     internal string Path { get; }
     internal SourceSpan Span { get; }
     internal PowerShellImmutableArray<PowerShellSymbolId> Functions { get; }
+    internal string SourceText { get; }
 }
 
 internal sealed class PowerShellBoundProgram

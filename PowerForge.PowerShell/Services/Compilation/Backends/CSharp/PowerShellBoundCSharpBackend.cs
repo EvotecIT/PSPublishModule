@@ -113,6 +113,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
             requiresPowerShellModuleStateRead: function.RequiresPowerShellModuleStateRead,
             requiresPowerShellModuleStateWrite: function.RequiresPowerShellModuleStateWrite,
+            requiresPowerShellStatementErrors: function.RequiresPowerShellStatementErrors,
             help: function.Help?.ToPublicModel(),
             declaredOutputType: function.DeclaredOutputType,
             declaredOutputTypeName: function.DeclaredOutputTypeName,
@@ -283,11 +284,31 @@ internal sealed partial class PowerShellBoundCSharpBackend
             case PowerShellLoweredSwitchStatement switchStatement:
                 EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 return;
+            case PowerShellLoweredThrowStatement { Expression: null, PreserveStatementErrors: true } thrown:
+                builder.Append(prefix).Append("throw __statementErrors.PrepareRethrow(")
+                    .Append(PowerShellCSharpLiteral.QuoteString(thrown.SourcePath))
+                    .Append(", ").Append(thrown.Span.StartLine).Append(", ").Append(thrown.Span.StartColumn)
+                    .Append(", ").Append(thrown.Span.EndLine).Append(", ").Append(thrown.Span.EndColumn)
+                    .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(thrown.SourceText)).AppendLine(");");
+                return;
             case PowerShellLoweredThrowStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("throw;");
                 return;
+            case PowerShellLoweredThrowStatement { PreserveStatementErrors: true } thrown:
+                builder.Append(prefix).Append("throw __statementErrors.PrepareThrow(").Append(EmitExpression(thrown.Expression!))
+                    .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(thrown.SourcePath))
+                    .Append(", ").Append(thrown.Span.StartLine).Append(", ").Append(thrown.Span.StartColumn)
+                    .Append(", ").Append(thrown.Span.EndLine).Append(", ").Append(thrown.Span.EndColumn)
+                    .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(thrown.SourceText)).AppendLine(");");
+                return;
             case PowerShellLoweredThrowStatement thrown:
                 builder.Append(prefix).Append("throw ").Append(EmitExpression(thrown.Expression!)).AppendLine(";");
+                return;
+            case PowerShellLoweredStatementErrorBoundary boundary:
+                EmitStatementErrorBoundary(builder, boundary, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                return;
+            case PowerShellLoweredTryStatement { PreserveStatementErrors: true } attempted:
+                EmitNativeTry(builder, attempted, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 return;
             case PowerShellLoweredTryStatement tryStatement:
                 builder.Append(prefix).AppendLine("try");
@@ -574,6 +595,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitClrInvocation(PowerShellLoweredClrInvocationExpression invocation)
     {
+        if (invocation.PreserveStatementErrors) return EmitProtectedClrInvocation(invocation);
         var arguments = string.Join(", ", invocation.Arguments.Select(EmitExpression));
         if (invocation.InvocationKind == PowerShellClrInvocationKind.Constructor)
             return $"new {PowerShellCSharpSymbolRenderer.TypeName(invocation.DeclaringType)}({arguments})";

@@ -43,7 +43,12 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
         PowerShellLoweredExpression? receiver,
         PowerShellClrReceiverBehavior receiverBehavior,
         PowerShellLoweredExpression[] arguments,
-        Type[] parameterTypes)
+        Type[] parameterTypes,
+        bool preserveStatementErrors = false,
+        string receiverTemporary = "",
+        string[]? argumentTemporaries = null,
+        string exceptionTemporary = "",
+        bool receiverByReference = false)
         : base(span, clrType)
     {
         DeclaringType = declaringType;
@@ -53,6 +58,11 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
         ReceiverBehavior = receiverBehavior;
         Arguments = arguments;
         ParameterTypes = parameterTypes;
+        PreserveStatementErrors = preserveStatementErrors;
+        ReceiverTemporary = receiverTemporary;
+        ArgumentTemporaries = argumentTemporaries ?? Array.Empty<string>();
+        ExceptionTemporary = exceptionTemporary;
+        ReceiverByReference = receiverByReference;
     }
 
     internal Type DeclaringType { get; }
@@ -62,6 +72,11 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
     internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }
     internal PowerShellImmutableArray<PowerShellLoweredExpression> Arguments { get; }
     internal PowerShellImmutableArray<Type> ParameterTypes { get; }
+    internal bool PreserveStatementErrors { get; }
+    internal string ReceiverTemporary { get; }
+    internal PowerShellImmutableArray<string> ArgumentTemporaries { get; }
+    internal string ExceptionTemporary { get; }
+    internal bool ReceiverByReference { get; }
 }
 
 internal sealed class PowerShellLoweredClrMemberAssignmentStatement : PowerShellLoweredStatement

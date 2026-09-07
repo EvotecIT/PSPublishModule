@@ -92,6 +92,8 @@ internal sealed class PowerShellBoundOptimizer
     private PowerShellBoundStatement OptimizeStatement(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
+                OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText),
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(
                 assignment.Span, assignment.Target, OptimizeExpression(assignment.Value), assignment.Operation,
                 assignment.NormalizeNullString, assignment.IntegralSemantics),
@@ -118,7 +120,8 @@ internal sealed class PowerShellBoundOptimizer
                 loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement),
                 loop.SystemArray),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
-                thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression)),
+                thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression),
+                thrown.PreserveStatementErrors, thrown.SourcePath, thrown.SourceText),
             PowerShellBoundTryStatement attempted => new PowerShellBoundTryStatement(
                 attempted.Span,
                 OptimizeBlock(attempted.Body),

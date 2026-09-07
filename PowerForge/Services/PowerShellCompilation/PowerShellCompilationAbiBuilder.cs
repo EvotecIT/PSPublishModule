@@ -181,7 +181,7 @@ internal static class PowerShellCompilationAbiBuilder
             NoOutputDistinctFromNull = true,
             Nullable = canProduceNull || IsNullableTypeName(method.ReturnType),
             StreamContract = method.RequiresPowerShellStreams ? "SuccessAndNonSuccessStreams" : "SuccessOutputOnly",
-            ExceptionContract = "ClrDirect",
+            ExceptionContract = method.RequiresPowerShellStatementErrors ? "PowerShellStatementErrors" : "ClrDirect",
             Aliases = method.Aliases.ToArray(),
             IsAdvancedFunction = method.CommandBinding.IsAdvancedFunction,
             PositionalBinding = method.CommandBinding.PositionalBinding,
@@ -197,6 +197,8 @@ internal static class PowerShellCompilationAbiBuilder
         PowerShellCompiledMethod method,
         ICollection<PowerShellCompilationAbiParameter> parameters)
     {
+        if (method.RequiresPowerShellStatementErrors)
+            AddCompilerParameter(parameters, "__statementErrors", "PowerForge.Generated.Runtime.PowerShellStatementErrorContext", "PowerShellStatementErrors");
         if (method.RequiresPowerShellStreams)
         {
             AddCompilerParameter(parameters, "__writeOutput", "System.Action<System.Object>", "SuccessStream");

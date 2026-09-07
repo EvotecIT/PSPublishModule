@@ -89,6 +89,8 @@ internal static class PowerShellCompilationIrSnapshotBuilder
         var capabilities = PowerShellRequiredCapability.None;
         if (function.RequiresPowerShellBoundParameters) capabilities |= PowerShellRequiredCapability.PowerShellHost;
         if (function.RequiresPowerShellHostStreams) capabilities |= PowerShellRequiredCapability.PowerShellStreams;
+        if (function.RequiresPowerShellStatementErrors)
+            capabilities |= PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes;
         if (function.RequiresRuntimeFreeProviderOperations) capabilities |= PowerShellRequiredCapability.RuntimeFreeProviderOperations;
         if (function.RequiresPowerShellCommandRegions) capabilities |= PowerShellRequiredCapability.CommandRegion;
         if (function.RequiresPowerShellRuntimeState) capabilities |= PowerShellRequiredCapability.RuntimeStateIntrinsics;

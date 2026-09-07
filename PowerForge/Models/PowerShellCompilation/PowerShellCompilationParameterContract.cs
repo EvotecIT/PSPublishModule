@@ -22,6 +22,7 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.PowerShellHostTypes |
         PowerShellCompilationCapability.PowerShellLanguageConversions |
         PowerShellCompilationCapability.PowerShellLanguageOperators |
+        PowerShellCompilationCapability.PowerShellStatementErrors |
         PowerShellCompilationCapability.RuntimeStateIntrinsics |
         PowerShellCompilationCapability.UntypedObjectParameters |
         PowerShellCompilationCapability.AdvisoryOutputTypeMetadata;

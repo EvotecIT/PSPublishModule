@@ -68,13 +68,16 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
         PowerShellClrReceiverBehavior receiverBehavior,
         PowerShellBoundExpression[] arguments,
         Type[] parameterTypes,
-        PowerShellTypeFact type)
+        PowerShellTypeFact type,
+        bool preserveStatementErrors = false,
+        bool receiverByReference = false)
         : base(
             span,
             type,
             invocationKind == PowerShellClrInvocationKind.Constructor ? PowerShellValueState.Known : PowerShellValueState.Unknown,
             arguments.Aggregate(GetDirectEffects(declaringType, memberName, receiver), static (effects, argument) => effects | argument.Effects),
-            arguments.Aggregate(GetDirectCapabilities(declaringType, memberName, receiver), static (capabilities, argument) => capabilities | argument.Capabilities))
+            arguments.Aggregate(GetDirectCapabilities(declaringType, memberName, receiver), static (capabilities, argument) => capabilities | argument.Capabilities) |
+            (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes : PowerShellRequiredCapability.None))
     {
         DeclaringType = declaringType;
         MemberName = memberName;
@@ -83,6 +86,8 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
         ReceiverBehavior = receiverBehavior;
         Arguments = arguments ?? Array.Empty<PowerShellBoundExpression>();
         ParameterTypes = parameterTypes ?? Array.Empty<Type>();
+        PreserveStatementErrors = preserveStatementErrors;
+        ReceiverByReference = receiverByReference;
     }
 
     internal Type DeclaringType { get; }
@@ -92,11 +97,14 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
     internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }
     internal PowerShellImmutableArray<PowerShellBoundExpression> Arguments { get; }
     internal PowerShellImmutableArray<Type> ParameterTypes { get; }
+    internal bool PreserveStatementErrors { get; }
+    /// <summary>Preserves mutable value-type variable storage across the protected call.</summary>
+    internal bool ReceiverByReference { get; }
 
     private static PowerShellSemanticEffect GetDirectEffects(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
         => (receiver?.Effects ?? PowerShellSemanticEffect.None) |
            (IsProcessStart(declaringType, memberName) ? PowerShellSemanticEffect.Process : PowerShellSemanticEffect.None) |
-           (IsPotentiallyMutatingListInvocation(declaringType, receiver) ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None);
+           (IsPotentiallyMutatingInvocation(declaringType, receiver) ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None);
 
     private static PowerShellRequiredCapability GetDirectCapabilities(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
         => (receiver?.Capabilities ?? PowerShellRequiredCapability.None) |
@@ -106,10 +114,10 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
         => declaringType == typeof(System.Diagnostics.Process) &&
            memberName.Equals(nameof(System.Diagnostics.Process.Start), StringComparison.Ordinal);
 
-    private static bool IsPotentiallyMutatingListInvocation(Type declaringType, PowerShellBoundExpression? receiver)
+    private static bool IsPotentiallyMutatingInvocation(Type declaringType, PowerShellBoundExpression? receiver)
         => receiver is not null &&
-           declaringType.IsConstructedGenericType &&
-           declaringType.GetGenericTypeDefinition() == typeof(List<>);
+           (declaringType.IsValueType || declaringType.IsConstructedGenericType &&
+            declaringType.GetGenericTypeDefinition() == typeof(List<>));
 }
 
 internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBoundStatement

@@ -273,6 +273,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         if (retainedHostedSource) causes.Add("Authored source remains on the hosted PowerShell path after artifact shaping.");
         if (method?.RequiresPowerShellCommandRegions == true) causes.Add("The emitted CLR method contains hosted PowerShell command regions.");
         if (method?.RequiresPowerShellRuntimeState == true) causes.Add("The emitted CLR method captures PowerShell runtime state.");
+        if (method?.RequiresPowerShellStatementErrors == true) causes.Add("The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.");
         if (method?.RequiredPowerShellModuleVariables.Length > 0)
             causes.Add("The emitted CLR method reads live parent Hybrid script-module state: " +
                        string.Join(", ", method.RequiredPowerShellModuleVariables.Select(static name => "$script:" + name)) + ".");

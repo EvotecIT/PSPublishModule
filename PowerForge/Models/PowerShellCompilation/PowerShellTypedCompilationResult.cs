@@ -246,6 +246,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Whether the generated method expects a cooperative provider cancellation token.</summary>
     public bool RequiresProviderCancellation { get; }
 
+    /// <summary>Whether the generated command requires native statement-error dispatch.</summary>
+    public bool RequiresPowerShellStatementErrors { get; internal set; }
+
     /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
     public bool RequiresPowerShellCommandRegions { get; }
 

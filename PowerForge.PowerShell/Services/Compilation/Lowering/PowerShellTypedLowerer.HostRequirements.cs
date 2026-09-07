@@ -49,13 +49,15 @@ internal sealed partial class PowerShellTypedLowerer
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
         bool requiresPowerShellModuleStateRead,
-        bool requiresPowerShellModuleStateWrite)
+        bool requiresPowerShellModuleStateWrite,
+        bool requiresPowerShellStatementErrors = false)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal)
         {
             requiresProviderCancellation ? "__providerCancellationToken" : string.Empty,
             requiresBoundParameters ? "__boundParameters" : string.Empty
         };
+        if (requiresPowerShellStatementErrors) generated.Add("__statementErrors");
         if (requiresPowerShellStreams) generated.UnionWith(StreamHostParameterNames);
         if (requiresPowerShellCommandRegions) generated.UnionWith(CommandRegionHostParameterNames);
         if (requiresPowerShellRuntimeState) generated.UnionWith(RuntimeStateHostParameterNames);
@@ -64,6 +66,7 @@ internal sealed partial class PowerShellTypedLowerer
         generated.Remove(string.Empty);
         return function.Parameters
             .Select(static parameter => PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name))
+            .Concat(function.Locals.Select(static local => PowerShellCSharpSymbolRenderer.Identifier(local.Symbol.Name)))
             .FirstOrDefault(generated.Contains);
     }
 
@@ -89,6 +92,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool StatementContainsCooperativeProvider(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundStatementErrorBoundary boundary => ContainsCooperativeProvider(boundary.Body),
             PowerShellBoundStreamWriteStatement stream =>
                 stream.Provider?.Adapter.Cancellation is
                     PowerShellCompilationProviderCancellation.Cooperative or
@@ -110,6 +114,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool StatementContainsPowerShellStreamWrite(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundStatementErrorBoundary boundary => ContainsPowerShellStreamWrite(boundary.Body),
             PowerShellBoundStreamWriteStatement => true,
             PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ContainsPowerShellStreamWrite(clause.Body)) ||
                 (conditional.ElseBlock is not null && ContainsPowerShellStreamWrite(conditional.ElseBlock)),

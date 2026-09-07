@@ -392,8 +392,8 @@ public sealed class PowerShellTypedCompilationTranspiler
     {
         if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) ||
             PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function) ||
-            !emitted.RequiresPowerShellStreams && !emitted.RequiresPowerShellCommandRegions ||
-            emitted.SupportsBasicCommandQuerySurface)
+            !emitted.RequiresPowerShellStreams && !emitted.RequiresPowerShellCommandRegions && !emitted.RequiresPowerShellStatementErrors ||
+            emitted.SupportsBasicCommandQuerySurface && !emitted.RequiresPowerShellStatementErrors)
             return;
         throw new PowerShellCSharpEmissionException(
             source.Function,
@@ -434,6 +434,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         method.RequiresPowerShellModuleState = emitted.RequiresPowerShellModuleState;
         method.RequiresPowerShellModuleStateRead = emitted.RequiresPowerShellModuleStateRead;
         method.RequiresPowerShellModuleStateWrite = emitted.RequiresPowerShellModuleStateWrite;
+        method.RequiresPowerShellStatementErrors = emitted.RequiresPowerShellStatementErrors;
         method.RequiredPowerShellModuleVariables = emitted.ModuleStateVariableNames;
         method.PowerShellModuleStateReadSiteCount = emitted.ModuleStateReadSiteCount;
         method.WrittenPowerShellModuleVariables = emitted.WrittenModuleStateVariableNames;
@@ -650,7 +651,8 @@ internal sealed class PowerShellCSharpMethodEmission
         int moduleStateReadSiteCount = 0,
         string[]? writtenModuleStateVariableNames = null,
         int moduleStateWriteSiteCount = 0,
-        PowerShellCompilationRegionGraph? regionGraph = null)
+        PowerShellCompilationRegionGraph? regionGraph = null,
+        bool requiresPowerShellStatementErrors = false)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -663,6 +665,7 @@ internal sealed class PowerShellCSharpMethodEmission
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         RequiresPowerShellModuleStateRead = requiresPowerShellModuleStateRead;
         RequiresPowerShellModuleStateWrite = requiresPowerShellModuleStateWrite;
+        RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? declaredOutputType?.FullName ?? string.Empty;
         Help = help;
@@ -694,6 +697,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellRuntimeState { get; }
     internal bool RequiresPowerShellModuleStateRead { get; }
     internal bool RequiresPowerShellModuleStateWrite { get; }
+    internal bool RequiresPowerShellStatementErrors { get; }
     internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }

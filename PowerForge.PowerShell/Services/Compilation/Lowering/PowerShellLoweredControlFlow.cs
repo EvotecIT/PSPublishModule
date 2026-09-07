@@ -145,8 +145,18 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
 
 internal sealed class PowerShellLoweredThrowStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredThrowStatement(SourceSpan span, PowerShellLoweredExpression? expression) : base(span) => Expression = expression;
+    internal PowerShellLoweredThrowStatement(SourceSpan span, PowerShellLoweredExpression? expression,
+        bool preserveStatementErrors = false, string sourcePath = "", string sourceText = "") : base(span)
+    {
+        Expression = expression;
+        PreserveStatementErrors = preserveStatementErrors;
+        SourcePath = sourcePath;
+        SourceText = sourceText;
+    }
     internal PowerShellLoweredExpression? Expression { get; }
+    internal bool PreserveStatementErrors { get; }
+    internal string SourcePath { get; }
+    internal string SourceText { get; }
 }
 
 internal sealed class PowerShellLoweredCatchClause
@@ -179,17 +189,29 @@ internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement
         SourceSpan span,
         PowerShellLoweredStatement[] statements,
         PowerShellLoweredCatchClause[] catches,
-        PowerShellLoweredStatement[]? finallyStatements)
+        PowerShellLoweredStatement[]? finallyStatements,
+        bool preserveStatementErrors = false,
+        string exceptionTemporary = "",
+        string clauseTemporary = "",
+        string recordTemporary = "")
         : base(span)
     {
         Statements = statements;
         Catches = catches;
         FinallyStatements = finallyStatements is null ? null : new PowerShellImmutableArray<PowerShellLoweredStatement>(finallyStatements);
+        PreserveStatementErrors = preserveStatementErrors;
+        ExceptionTemporary = exceptionTemporary;
+        ClauseTemporary = clauseTemporary;
+        RecordTemporary = recordTemporary;
     }
 
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCatchClause> Catches { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement>? FinallyStatements { get; }
+    internal bool PreserveStatementErrors { get; }
+    internal string ExceptionTemporary { get; }
+    internal string ClauseTemporary { get; }
+    internal string RecordTemporary { get; }
 }
 
 internal sealed class PowerShellLoweredBreakStatement : PowerShellLoweredStatement

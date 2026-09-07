@@ -7,6 +7,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredFunction function,
         bool requiresBoundParameters)
     {
+        if (function.RequiresPowerShellStatementErrors)
+            parameters.Add("global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext __statementErrors");
         if (function.RequiresPowerShellStreams)
         {
             parameters.Add("global::System.Action<object?> __writeOutput");

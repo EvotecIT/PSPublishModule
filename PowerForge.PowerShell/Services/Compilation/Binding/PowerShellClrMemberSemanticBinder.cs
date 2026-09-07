@@ -282,7 +282,8 @@ internal static class PowerShellClrMemberSemanticBinder
                 argumentSyntax,
                 bindExpression,
                 targetFramework,
-                diagnostics);
+                diagnostics,
+                capabilities);
 
         var arguments = new PowerShellBoundExpression[argumentSyntax.Length];
         for (var index = 0; index < argumentSyntax.Length; index++)
@@ -317,7 +318,7 @@ internal static class PowerShellClrMemberSemanticBinder
 
         if (!PowerShellGeneratedTypePolicy.IsSupported(resultType, targetFramework))
             return Reject(diagnostics, "PSB2607", $"CLR invocation returns target-incompatible type '{resultType.FullName}'.", span);
-        if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+        if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax) && !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
             return Reject(diagnostics, "PSB2619", $"CLR method invocation '{target.Type.FullName}.{selected.Name}' inside a RuntimeException catch cannot preserve PowerShell runtime-error wrapping.", span);
         if (!TrySelectInvocationBehavior(target, capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects), out var receiverBehavior))
             return Reject(diagnostics, "PSB2608", $"CLR method invocation '{target.Type.FullName}.{selected.Name}' on a potentially null receiver requires PowerShell runtime-error identity.", span);
@@ -325,6 +326,17 @@ internal static class PowerShellClrMemberSemanticBinder
         var parameters = selected.GetParameters();
         for (var index = 0; index < arguments.Length; index++)
             arguments[index] = NormalizeLiteralArgument(arguments[index], argumentSyntax[index], parameters[index].ParameterType);
+
+        var receiverByReference = false;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) && !target.IsStatic && target.Type.IsValueType)
+        {
+            // A PowerShell variable holds the box selected before argument evaluation. A CLR ref
+            // preserves its mutation only when argument evaluation cannot replace that storage.
+            if (target.Receiver is not PowerShellBoundVariableExpression ||
+                arguments.Any(argument => argument is not (PowerShellBoundLiteralExpression or PowerShellBoundVariableExpression)))
+                return Reject(diagnostics, "PSB2622", "Protected value-type method invocation requires direct variable storage and literal or variable arguments; other receiver storage and argument side effects remain on the PowerShell runtime path.", span);
+            receiverByReference = true;
+        }
 
         return new PowerShellBoundClrInvocationExpression(
             span,
@@ -335,7 +347,11 @@ internal static class PowerShellClrMemberSemanticBinder
             receiverBehavior,
             arguments,
             parameters.Select(static parameter => parameter.ParameterType).ToArray(),
-            new PowerShellTypeFact(resultType, PowerShellTypeFactProvenance.Inferred, "The semantic binder selected one exact target-compatible CLR overload."));
+            new PowerShellTypeFact(resultType, PowerShellTypeFactProvenance.Inferred, "The semantic binder selected one exact target-compatible CLR overload."),
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) &&
+            !PowerShellClrPrimitiveInvocationPolicy.IsNonThrowing(target.Type, selected.Name, kind, resultType,
+                parameters.Select(static parameter => parameter.ParameterType)),
+            receiverByReference);
     }
 
     internal static PowerShellBoundExpression? BindConstructor(
@@ -345,7 +361,8 @@ internal static class PowerShellClrMemberSemanticBinder
         ExpressionAst[] argumentSyntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!PowerShellGeneratedTypePolicy.IsSupported(targetType, targetFramework))
@@ -373,7 +390,7 @@ internal static class PowerShellClrMemberSemanticBinder
             span,
             $"constructor for '{targetType.FullName}'")!;
         if (selected is null) return null;
-        if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+        if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax) && !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
             return Reject(diagnostics, "PSB2619", $"CLR constructor invocation '{targetType.FullName}' inside a RuntimeException catch cannot preserve PowerShell runtime-error wrapping.", span);
 
         var parameters = selected.GetParameters();
@@ -389,7 +406,8 @@ internal static class PowerShellClrMemberSemanticBinder
             PowerShellClrReceiverBehavior.None,
             arguments,
             parameters.Select(static parameter => parameter.ParameterType).ToArray(),
-            new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Inferred, "The semantic binder selected one exact target-compatible CLR constructor."));
+            new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Inferred, "The semantic binder selected one exact target-compatible CLR constructor."),
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors));
     }
 
     private static MethodBase? SelectBest<TMember>(

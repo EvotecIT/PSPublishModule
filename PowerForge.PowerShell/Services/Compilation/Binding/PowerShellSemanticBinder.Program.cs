@@ -125,7 +125,7 @@ internal sealed partial class PowerShellSemanticBinder
             declarations.Where(declaration => declaration.Document.DocumentId == document.DocumentId)
                 .Select(static declaration => declaration.Symbol)
                 .OrderBy(static symbol => symbol.StableKey, StringComparer.Ordinal)
-                .ToArray())).ToArray();
+                .ToArray(), document.Text)).ToArray();
 
         var program = new PowerShellBoundProgram(
             boundDocuments,

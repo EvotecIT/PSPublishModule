@@ -167,14 +167,23 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
 
 internal sealed class PowerShellBoundThrowStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundThrowStatement(SourceSpan span, PowerShellBoundExpression? expression)
-        : base(span, PowerShellSemanticEffect.TerminatingError | (expression?.Effects ?? PowerShellSemanticEffect.None), expression?.Capabilities ?? PowerShellRequiredCapability.None)
+    internal PowerShellBoundThrowStatement(SourceSpan span, PowerShellBoundExpression? expression,
+        bool preserveStatementErrors = false, string sourcePath = "", string sourceText = "")
+        : base(span, PowerShellSemanticEffect.TerminatingError | (expression?.Effects ?? PowerShellSemanticEffect.None),
+            (expression?.Capabilities ?? PowerShellRequiredCapability.None) |
+            (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes : PowerShellRequiredCapability.None))
     {
         Expression = expression;
+        PreserveStatementErrors = preserveStatementErrors;
+        SourcePath = sourcePath;
+        SourceText = sourceText;
     }
 
     internal PowerShellBoundExpression? Expression { get; }
     internal bool IsRethrow => Expression is null;
+    internal bool PreserveStatementErrors { get; }
+    internal string SourcePath { get; }
+    internal string SourceText { get; }
 }
 
 internal sealed class PowerShellBoundCatchClause

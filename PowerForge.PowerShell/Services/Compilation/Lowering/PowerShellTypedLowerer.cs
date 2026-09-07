@@ -27,6 +27,8 @@ internal sealed partial class PowerShellTypedLowerer
         var streamBindings = PropagateHostRequirement(program, static function => ContainsPowerShellStreamWrite(function.Body));
         var providerCancellationBindings = PropagateHostRequirement(program, static function => ContainsCooperativeProvider(function.Body));
         var commandRegionBindings = PropagateHostRequirement(program, static function => ContainsPowerShellCommandRegion(function.Body));
+        var statementErrorBindings = PropagateHostRequirement(program, static function =>
+            function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors));
         var bySymbol = program.Functions.ToDictionary(
             static function => function.Symbol.StableKey,
             function => new LoweringFunctionContext(
@@ -37,7 +39,8 @@ internal sealed partial class PowerShellTypedLowerer
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
                 moduleStateReadBindings.Contains(function.Symbol.StableKey),
-                moduleStateWriteBindings.Contains(function.Symbol.StableKey)),
+                moduleStateWriteBindings.Contains(function.Symbol.StableKey),
+                statementErrorBindings.Contains(function.Symbol.StableKey)),
             StringComparer.Ordinal);
         foreach (var function in program.Functions)
         {
@@ -46,6 +49,15 @@ internal sealed partial class PowerShellTypedLowerer
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     string.IsNullOrWhiteSpace(function.Disposition.ReasonCode) ? "PSL1001" : function.Disposition.ReasonCode,
                     function.Disposition.Explanation,
+                    function.Symbol.Declaration));
+                continue;
+            }
+            if (statementErrorBindings.Contains(function.Symbol.StableKey) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1012",
+                    "Statement-error continuation requires the qualified PowerShell statement-error target capability.",
                     function.Symbol.Declaration));
                 continue;
             }
@@ -138,7 +150,8 @@ internal sealed partial class PowerShellTypedLowerer
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
                 moduleStateReadBindings.Contains(function.Symbol.StableKey),
-                moduleStateWriteBindings.Contains(function.Symbol.StableKey));
+                moduleStateWriteBindings.Contains(function.Symbol.StableKey),
+                statementErrorBindings.Contains(function.Symbol.StableKey));
             if (generatedHostParameterCollision is not null)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -204,7 +217,8 @@ internal sealed partial class PowerShellTypedLowerer
                     .ToArray(),
                 ResolveCollectionElementType(function),
                 statements.ToArray(),
-                function.Body.Span));
+                function.Body.Span,
+                statementErrorBindings.Contains(function.Symbol.StableKey)));
         }
 
         return new PowerShellLoweredProgram(
@@ -235,7 +249,11 @@ internal sealed partial class PowerShellTypedLowerer
     {
         foreach (var statement in block.Statements)
         {
-            if (statement is PowerShellBoundIfStatement conditional)
+            if (statement is PowerShellBoundStatementErrorBoundary boundary)
+            {
+                foreach (var assignment in EnumerateAssignments(boundary.Body)) yield return assignment;
+            }
+            else if (statement is PowerShellBoundIfStatement conditional)
             {
                 foreach (var clause in conditional.Clauses)
                 {
@@ -288,7 +306,11 @@ internal sealed partial class PowerShellTypedLowerer
         foreach (var statement in block.Statements)
         {
             if (statement is PowerShellBoundAssignmentStatement assignment) yield return (assignment.Target.StableKey, assignment.Span.StartOffset);
-            if (statement is PowerShellBoundIfStatement conditional)
+            if (statement is PowerShellBoundStatementErrorBoundary boundary)
+            {
+                foreach (var nested in EnumerateAssignments(boundary.Body)) yield return nested;
+            }
+            else if (statement is PowerShellBoundIfStatement conditional)
             {
                 foreach (var clause in conditional.Clauses)
                 foreach (var nested in EnumerateAssignments(clause.Body))
@@ -344,6 +366,9 @@ internal sealed partial class PowerShellTypedLowerer
         PowerShellCompilationCapability targetCapabilities)
         => statement switch
         {
+            PowerShellBoundStatementErrorBoundary boundary => new PowerShellLoweredStatementErrorBoundary(
+                boundary.Span, LowerStatements(boundary.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
+                boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error")),
             PowerShellBoundAssignmentStatement assignment => new PowerShellLoweredAssignmentStatement(
                 assignment.Span,
                 assignment.Target,
@@ -424,7 +449,8 @@ internal sealed partial class PowerShellTypedLowerer
                 switchStatement.CaseSensitive),
             PowerShellBoundThrowStatement thrown => new PowerShellLoweredThrowStatement(
                 thrown.Span,
-                thrown.Expression is null ? null : LowerExpression(thrown.Expression, functions, names, targetCapabilities)),
+                thrown.Expression is null ? null : LowerExpression(thrown.Expression, functions, names, targetCapabilities),
+                thrown.PreserveStatementErrors, thrown.SourcePath, thrown.SourceText),
             PowerShellBoundTryStatement tryStatement => new PowerShellLoweredTryStatement(
                 tryStatement.Span,
                 LowerStatements(tryStatement.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
@@ -434,7 +460,9 @@ internal sealed partial class PowerShellTypedLowerer
                     names.Allocate("pf_caught_exception"),
                     targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects),
                     targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))).ToArray(),
-                tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
+                tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
+                tryStatement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors),
+                names.Allocate("pf_handler_exception"), names.Allocate("pf_handler_clause"), names.Allocate("pf_handler_record")),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
             PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
@@ -682,7 +710,12 @@ internal sealed partial class PowerShellTypedLowerer
                 invocation.Receiver is null ? null : LowerExpression(invocation.Receiver, functions, names, targetCapabilities),
                 invocation.ReceiverBehavior,
                 invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
-                invocation.ParameterTypes.ToArray()),
+                invocation.ParameterTypes.ToArray(),
+                invocation.PreserveStatementErrors,
+                invocation.PreserveStatementErrors ? names.Allocate("pf_clr_receiver") : string.Empty,
+                invocation.PreserveStatementErrors ? invocation.Arguments.Select(_ => names.Allocate("pf_clr_argument")).ToArray() : Array.Empty<string>(),
+                invocation.PreserveStatementErrors ? names.Allocate("pf_clr_error") : string.Empty,
+                invocation.ReceiverByReference),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,
@@ -698,7 +731,10 @@ internal sealed partial class PowerShellTypedLowerer
                     target.RequiresPowerShellCommandRegions,
                     target.RequiresPowerShellRuntimeState,
                     target.RequiresPowerShellModuleStateRead,
-                    target.RequiresPowerShellModuleStateWrite),
+                    target.RequiresPowerShellModuleStateWrite,
+                    target.RequiresPowerShellStatementErrors,
+                    target.RequiresPowerShellStatementErrors ? names.Allocate("pf_call_error_context") : string.Empty,
+                    target.RequiresPowerShellStatementErrors ? names.Allocate("pf_call_error") : string.Empty),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
 

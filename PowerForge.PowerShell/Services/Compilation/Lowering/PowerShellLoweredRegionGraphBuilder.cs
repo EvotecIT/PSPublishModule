@@ -229,6 +229,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
         if (CountHostedCommandBoundarySites(statements) > 0) result.UnionWith(NonSuccessPowerShellStreams);
         foreach (var statement in PowerShellLoweredTreeEnumerator.EnumerateStatements(statements))
         {
+            if (statement is PowerShellLoweredStatementErrorBoundary) result.Add("Error");
             if (statement is PowerShellLoweredCommandRegionStatement) result.Add("Success");
             if (statement is PowerShellLoweredReturnStatement { EmitsValue: true } ||
                 statement is PowerShellLoweredExpressionStatement { DiscardValue: false })
@@ -246,6 +247,9 @@ internal static class PowerShellLoweredRegionGraphBuilder
     private static string[] GetErrors(PowerShellLoweredStatement[] statements)
     {
         var result = new List<string>();
+        if (PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
+            .Any(static statement => statement is PowerShellLoweredStatementErrorBoundary))
+            result.Add("PowerShellStatementError");
         if (CountHostedCommandBoundarySites(statements) > 0) result.Add("PowerShellErrorRecord");
         if (CountModuleStateReadBoundarySites(statements) + CountModuleStateWriteBoundarySites(statements) > 0)
             result.Add("PowerShellModuleStateErrorRecord");

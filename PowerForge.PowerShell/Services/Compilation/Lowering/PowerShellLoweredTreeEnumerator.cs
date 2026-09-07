@@ -31,6 +31,7 @@ internal static class PowerShellLoweredTreeEnumerator
     {
         IEnumerable<PowerShellLoweredStatement> nested = statement switch
         {
+            PowerShellLoweredStatementErrorBoundary boundary => boundary.Statements,
             PowerShellLoweredIfStatement conditional => conditional.Clauses
                 .SelectMany(static clause => clause.Statements)
                 .Concat(conditional.ElseStatements is null

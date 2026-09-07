@@ -42,6 +42,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
 
     private static IEnumerable<IPowerShellSemanticPass> CreateDefaultPasses()
     {
+        yield return new PowerShellStatementErrorCallPass();
         yield return new PowerShellImplicitOutputPass();
         yield return new PowerShellDefiniteAssignmentPass();
         yield return new LocalTypePass();
@@ -328,7 +329,11 @@ internal sealed partial class PowerShellSemanticAnalyzer
         foreach (var statement in block.Statements)
         {
             yield return statement;
-            if (statement is PowerShellBoundIfStatement conditional)
+            if (statement is PowerShellBoundStatementErrorBoundary boundary)
+            {
+                foreach (var nested in EnumerateStatements(boundary.Body)) yield return nested;
+            }
+            else if (statement is PowerShellBoundIfStatement conditional)
             {
                 foreach (var clause in conditional.Clauses)
                 foreach (var nested in EnumerateStatements(clause.Body))

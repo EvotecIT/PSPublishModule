@@ -65,7 +65,10 @@ public enum PowerShellCompilationCapability
     PowerShellModuleState = 8192,
 
     /// <summary>Hybrid binary modules may delegate independently proven bound regions from retained functions to CLR helpers.</summary>
-    HybridTypedRegions = 16384
+    HybridTypedRegions = 16384,
+
+    /// <summary>Generated commands may preserve statement errors through a qualified native PowerShell host.</summary>
+    PowerShellStatementErrors = 32768
 }
 
 /// <summary>
@@ -420,6 +423,7 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PowerShellHostTypes |
                               PowerShellCompilationCapability.PowerShellLanguageConversions |
                               PowerShellCompilationCapability.PowerShellLanguageOperators |
+                              PowerShellCompilationCapability.PowerShellStatementErrors |
                               PowerShellCompilationCapability.RuntimeStateIntrinsics |
                               PowerShellCompilationCapability.RuntimeFreeProviderOperations |
                               PowerShellCompilationCapability.UntypedObjectParameters |

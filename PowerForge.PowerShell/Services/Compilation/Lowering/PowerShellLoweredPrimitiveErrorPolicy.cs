@@ -15,9 +15,8 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
             PowerShellLoweredUnaryExpression unary => unary.Operand.ClrType == typeof(double) &&
                 unary.Operation is PowerShellBoundUnaryOperator.Identity or PowerShellBoundUnaryOperator.Negate ||
                 unary.Operand.ClrType == typeof(bool) && unary.Operation == PowerShellBoundUnaryOperator.LogicalNot,
-            PowerShellLoweredClrInvocationExpression invocation => invocation.InvocationKind == PowerShellClrInvocationKind.StaticMethod &&
-                invocation.DeclaringType == typeof(Math) && invocation.MemberName == nameof(Math.Sqrt) &&
-                invocation.ClrType == typeof(double) && invocation.ParameterTypes.SequenceEqual(new[] { typeof(double) }),
+            PowerShellLoweredClrInvocationExpression invocation => PowerShellClrPrimitiveInvocationPolicy.IsNonThrowing(
+                invocation.DeclaringType, invocation.MemberName, invocation.InvocationKind, invocation.ClrType, invocation.ParameterTypes),
             _ => false
         };
 

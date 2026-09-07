@@ -240,6 +240,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
+                    if (typed.Methods.Any(static method => method.RequiresPowerShellStatementErrors))
+                        File.WriteAllText(Path.Combine(workspace, "StatementErrors.g.cs"), PowerShellStatementErrorRuntimeSource.Render(), new UTF8Encoding(false));
                     File.WriteAllText(
                         Path.Combine(workspace, "CompiledCmdlets.cs"),
                         PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions, spec.TargetFramework),

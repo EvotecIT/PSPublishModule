@@ -17,6 +17,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             foreach (var pair in temporaries) arguments[pair.Key] = pair.Value;
         }
         var callArguments = arguments.ToList();
+        if (invocation.RequiresPowerShellStatementErrors)
+            callArguments.Add(invocation.StatementErrorContextTemporary);
         if (invocation.RequiresPowerShellStreams)
             callArguments.AddRange(new[] { "__writeOutput", "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeHost", "__writeError" });
         if (invocation.RequiresProviderCancellation)
@@ -31,6 +33,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
             callArguments.Add("__writePowerShellModuleVariable");
         if (invocation.RequiresBoundParameters) callArguments.Add(EmitBoundParameterSet(invocation.BoundParameterNames));
         var call = $"{PowerShellCSharpSymbolRenderer.Identifier(invocation.Target.Name)}({string.Join(", ", callArguments)})";
+        if (invocation.RequiresPowerShellStatementErrors)
+        {
+            var context = invocation.StatementErrorContextTemporary;
+            var error = invocation.StatementErrorTemporary;
+            var result = invocation.ClrType == typeof(void) ? call + ";" : "return " + call + ";";
+            call = "new " + (invocation.ClrType == typeof(void) ? "global::System.Action" :
+                "global::System.Func<" + PowerShellCSharpSymbolRenderer.TypeName(invocation.ClrType) + ">") +
+                "(() => { using (var " + context + " = __statementErrors.EnterFunction(" + PowerShellCSharpLiteral.QuoteString(invocation.Target.Name) +
+                ")) { try { " + result + " } catch (global::System.Exception " + error +
+                ") when (" + StatementErrorContextType + ".IsOperationFailure(" + error + ")) { throw " + context + ".LeaveCommand(" + error + "); } } })()";
+        }
         if (!reordered) return call;
         var evaluations = authored.Select(parameterIndex =>
             $"{PowerShellCSharpSymbolRenderer.TypeName(invocation.Arguments[parameterIndex].ClrType)} {temporaries[parameterIndex]} = {EmitExpression(invocation.Arguments[parameterIndex])};");

@@ -235,6 +235,7 @@ internal static class PowerShellTypedExecutableCompiler
         description.RequiresPowerShellModuleState = method.RequiresPowerShellModuleState;
         description.RequiresPowerShellModuleStateRead = method.RequiresPowerShellModuleStateRead;
         description.RequiresPowerShellModuleStateWrite = method.RequiresPowerShellModuleStateWrite;
+        description.RequiresPowerShellStatementErrors = method.RequiresPowerShellStatementErrors;
         description.RequiredPowerShellModuleVariables = method.ModuleStateVariableNames;
         description.PowerShellModuleStateReadSiteCount = method.ModuleStateReadSiteCount;
         description.WrittenPowerShellModuleVariables = method.WrittenModuleStateVariableNames;

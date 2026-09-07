@@ -24,6 +24,9 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo MakeTuple, SetTupleValue, GetTupleValue, FindMatchingHandler, ConvertToRuntimeException, ConvertToThrownException;
             internal readonly ConstructorInfo FunctionContextConstructor, FunctionInfoConstructor, InvocationInfoConstructor, CommandExceptionConstructor;
             internal readonly MethodInfo ConvertToMethodInvocationException;
+            internal readonly MethodInfo NewInterpreterException;
+            internal readonly MethodInfo AppendErrorToVariables;
+            internal readonly PropertyInfo NullInvocationResource;
             internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
             internal readonly object MergeToOutput;
             internal readonly Type ObjectTupleType, CatchAllType;
@@ -63,6 +66,7 @@ namespace PowerForge.Generated.Runtime
                 RemoveScope = Method(state, "RemoveScope", false, typeof(void), scope);
                 SetVariableLists = Method(CommandRuntimeType, "SetVariableListsInPipe", false, typeof(void));
                 RemoveVariableLists = Method(CommandRuntimeType, "RemoveVariableListsInPipe", false, typeof(void));
+                AppendErrorToVariables = Method(CommandRuntimeType, "AppendErrorToVariables", false, typeof(void), typeof(object));
                 CheckActionPreference = Method(errors, "CheckActionPreference", true, typeof(void), function, typeof(Exception));
                 ConvertToRuntimeException = Method(errors, "ConvertToRuntimeException", true, typeof(RuntimeException), typeof(Exception), typeof(IScriptExtent));
                 ThrowConversionTakesRethrow = major == 7;
@@ -80,6 +84,10 @@ namespace PowerForge.Generated.Runtime
                 CommandExceptionConstructor = Constructor(typeof(CmdletInvocationException), typeof(Exception), typeof(InvocationInfo));
                 ConvertToMethodInvocationException = Method(errors, "ConvertToMethodInvocationException", true, typeof(void),
                     typeof(Exception), typeof(Type), typeof(string), typeof(int), typeof(MemberInfo));
+                NewInterpreterException = Method(RequireType(assembly, "System.Management.Automation.InterpreterError"),
+                    "NewInterpreterException", true, typeof(RuntimeException), typeof(object), typeof(Type), typeof(IScriptExtent),
+                    typeof(string), typeof(string), typeof(object[]));
+                NullInvocationResource = Property(RequireType(assembly, "ParserStrings"), "InvokeMethodOnNull", typeof(string), isStatic: true);
                 FunctionExecutionContext = Field(function, "_executionContext", context);
                 FunctionOutputPipe = Field(function, "_outputPipe", pipe);
                 FunctionSequencePoints = Field(function, "_sequencePoints", typeof(IScriptExtent[]));

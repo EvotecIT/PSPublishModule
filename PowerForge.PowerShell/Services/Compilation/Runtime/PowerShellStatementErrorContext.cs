@@ -20,6 +20,8 @@ namespace PowerForge.Generated.Runtime
         private readonly bool _mergeErrorToOutput;
         private readonly bool _redirectError;
         private readonly string _sourceName;
+        private readonly bool _ownsVariableLists;
+        private IScriptExtent? _lastErrorExtent;
         private int _handlerDepth;
         private bool _disposed;
 
@@ -28,6 +30,7 @@ namespace PowerForge.Generated.Runtime
             _contract = NativeContract.Shared;
             if (cmdlet is null) throw new ArgumentNullException(nameof(cmdlet));
             _sourceName = sourceName ?? throw new ArgumentNullException(nameof(sourceName));
+            _ownsVariableLists = true;
             _context = _contract.GetRequired(_contract.CmdletContext, cmdlet);
             _runtime = cmdlet.CommandRuntime;
             if (!_contract.CommandRuntimeType.IsInstanceOfType(_runtime))
@@ -67,6 +70,7 @@ namespace PowerForge.Generated.Runtime
         {
             ThrowIfDisposed();
             var extent = CreateExtent(file, line, column, endLine, endColumn, sourceText);
+            _lastErrorExtent = extent;
             var function = NativeContract.Construct(_contract.FunctionContextConstructor);
             _contract.FunctionExecutionContext.SetValue(function, _context);
             _contract.FunctionOutputPipe.SetValue(function, _outputPipe);
@@ -98,16 +102,24 @@ namespace PowerForge.Generated.Runtime
             }
         }
 
-        internal Exception LeaveCommand(RuntimeException error)
+        internal Exception LeaveCommand(Exception error)
         {
-            if (error.WasThrownFromThrowStatement) return error;
-            var extent = error.ErrorRecord.InvocationInfo is null
-                ? CreateExtent(string.Empty, 1, 1, 1, 1, string.Empty)
-                : (IScriptExtent)_contract.GetRequired(_contract.InvocationScriptPosition, error.ErrorRecord.InvocationInfo);
+            if (error is RuntimeException { WasThrownFromThrowStatement: true }) return error;
+            if (error is CmdletInvocationException)
+            {
+                if (!_ownsVariableLists) NativeContract.Invoke(_contract.AppendErrorToVariables, _runtime, error);
+                return error;
+            }
+            var errorInvocation = (error as RuntimeException)?.ErrorRecord.InvocationInfo;
+            var extent = errorInvocation is null
+                ? _lastErrorExtent ?? CreateExtent(string.Empty, 1, 1, 1, 1, string.Empty)
+                : (IScriptExtent)_contract.GetRequired(_contract.InvocationScriptPosition, errorInvocation);
             var function = NativeContract.Construct(_contract.FunctionInfoConstructor,
                 _sourceName, ScriptBlock.Create(string.Empty), _context);
             var invocation = NativeContract.Construct(_contract.InvocationInfoConstructor, function, extent, _context);
-            return (Exception)NativeContract.Construct(_contract.CommandExceptionConstructor, error, invocation);
+            var wrapped = (Exception)NativeContract.Construct(_contract.CommandExceptionConstructor, error, invocation);
+            if (!_ownsVariableLists) NativeContract.Invoke(_contract.AppendErrorToVariables, _runtime, wrapped);
+            return wrapped;
         }
 
         private static IScriptExtent CreateExtent(string file, int line, int column, int endLine, int endColumn, string text)
@@ -123,7 +135,7 @@ namespace PowerForge.Generated.Runtime
         {
             if (_disposed) return;
             _disposed = true;
-            NativeContract.Invoke(_contract.RemoveVariableLists, _runtime);
+            if (_ownsVariableLists) NativeContract.Invoke(_contract.RemoveVariableLists, _runtime);
         }
 
         private void ThrowIfDisposed()

@@ -30,7 +30,8 @@ internal sealed partial class PowerShellTypedLowerer
             bool requiresPowerShellCommandRegions,
             bool requiresPowerShellRuntimeState,
             bool requiresPowerShellModuleStateRead,
-            bool requiresPowerShellModuleStateWrite)
+            bool requiresPowerShellModuleStateWrite,
+            bool requiresPowerShellStatementErrors = false)
         {
             Function = function;
             RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
@@ -40,6 +41,7 @@ internal sealed partial class PowerShellTypedLowerer
             RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
             RequiresPowerShellModuleStateRead = requiresPowerShellModuleStateRead;
             RequiresPowerShellModuleStateWrite = requiresPowerShellModuleStateWrite;
+            RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
         }
 
         internal PowerShellBoundFunction Function { get; }
@@ -50,6 +52,7 @@ internal sealed partial class PowerShellTypedLowerer
         internal bool RequiresPowerShellRuntimeState { get; }
         internal bool RequiresPowerShellModuleStateRead { get; }
         internal bool RequiresPowerShellModuleStateWrite { get; }
+        internal bool RequiresPowerShellStatementErrors { get; }
         internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
     }
 }

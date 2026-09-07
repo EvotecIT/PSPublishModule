@@ -25,6 +25,12 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
     {
         foreach (var statement in block.Statements)
         {
+            if (statement is PowerShellBoundStatementErrorBoundary boundary)
+            {
+                // A failed statement can skip its first assignment and still reach the next statement.
+                Analyze(boundary.Body, assigned.ToHashSet(StringComparer.Ordinal), locals, diagnostics);
+                continue;
+            }
             if (statement is PowerShellBoundIfStatement conditional)
             {
                 foreach (var clause in conditional.Clauses) ReportReads(clause.Condition, assigned, locals, diagnostics);

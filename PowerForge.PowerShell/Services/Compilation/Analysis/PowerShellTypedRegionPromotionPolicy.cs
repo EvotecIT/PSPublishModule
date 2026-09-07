@@ -23,6 +23,8 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a stable scalar transfer type.");
         if (lowered.RequiresPowerShellStreams)
             return Reject("region.stream-contract", "The candidate requires PowerShell stream semantics beyond the single scalar Success result contract.");
+        if (lowered.RequiresPowerShellStatementErrors)
+            return Reject("region.statement-errors", "The candidate requires a PowerShell statement-error host not represented by the helper ABI.");
         if (lowered.RequiresProviderCancellation)
             return Reject("region.provider-cancellation", "The candidate requires provider cancellation and cannot execute as an isolated helper.");
         if (lowered.RequiresPowerShellCommandRegions)
