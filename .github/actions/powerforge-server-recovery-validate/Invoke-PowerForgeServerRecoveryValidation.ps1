@@ -148,6 +148,7 @@ try {
     $artifactsRoot = Join-Path $validationRoot 'artifacts'
     $bootstrapRoot = Join-Path $validationRoot 'bootstrap'
     $restoreRoot = Join-Path $validationRoot 'restore-secrets'
+    $externalRepositoryRoot = Join-Path $validationRoot 'external-repositories'
 
     $manifestJson = Get-Content -LiteralPath $manifestPath -Raw
     $schemaPath = Join-Path $engineRoot 'Schemas/powerforge.web.serverrecovery.schema.json'
@@ -171,7 +172,8 @@ try {
         -CallerRepository $env:GITHUB_REPOSITORY `
         -EngineRepository $env:POWERFORGE_ENGINE_REPOSITORY `
         -CaptureUser $env:POWERFORGE_CAPTURE_USER `
-        -VisudoPath $visudoPath
+        -VisudoPath $visudoPath `
+        -ExternalRepositoryRoot $externalRepositoryRoot
 
     $project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
     $build = Invoke-ProcessCapture -FileName 'dotnet' -Arguments @(
