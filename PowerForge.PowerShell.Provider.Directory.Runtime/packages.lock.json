@@ -47,8 +47,8 @@
       },
       "System.DirectoryServices.Protocols": {
         "type": "Transitive",
-        "resolved": "10.0.5",
-        "contentHash": "9cxxK3ulK9KHqifCyvxvATTYNda1WxZxvrC41loC/9j1/+qF6q/E2RCgqSNrKWB7WtFNDOWuJQSOoPF88OTskQ=="
+        "resolved": "10.0.11",
+        "contentHash": "Q4DEPB0wfAMAM6zjCjioFQoDZGC6uCeAZMU30sdjMgVtKbSuSBjhASVlxVOTYmQKCdUqZInnDwZ3W/ZTWB4m3Q=="
       },
       "System.IO.Packaging": {
         "type": "Transitive",
@@ -90,7 +90,7 @@
       "powerforge.powershell.provider.directory": {
         "type": "Project",
         "dependencies": {
-          "System.DirectoryServices.Protocols": "[10.0.5, )"
+          "System.DirectoryServices.Protocols": "[10.0.11, )"
         }
       },
       "powerforge.powershell.providersdk": {
