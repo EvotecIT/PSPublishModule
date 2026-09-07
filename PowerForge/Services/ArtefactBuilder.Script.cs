@@ -23,10 +23,7 @@ public sealed partial class ArtefactBuilder
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizeArtefact,
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
-        if (cfg.DoNotClear != true)
-            ClearDirectorySafe(outputRoot);
-        else
-            Directory.CreateDirectory(outputRoot);
+        ValidateScriptSourceLayout(stagingPath, moduleName, cfg.PreScriptMerge);
 
         var requiredRoot = ResolveRequiredModulesRootForUnpacked(
             cfg,
@@ -44,6 +41,21 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
+        ValidateScriptCopyMappings(
+            cfg,
+            outputRoot,
+            scriptRoot,
+            Path.Combine(scriptRoot, scriptName),
+            moduleName,
+            moduleVersion,
+            preRelease,
+            enforceRelativeDestination: false);
+
+        if (cfg.DoNotClear != true)
+            ClearDirectorySafe(outputRoot);
+        else
+            Directory.CreateDirectory(outputRoot);
 
         var copied = new List<ArtefactCopyEntry>();
         var modules = new List<ArtefactModuleEntry>();
@@ -105,13 +117,39 @@ public sealed partial class ArtefactBuilder
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizeArtefact,
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
-        Directory.CreateDirectory(outputRoot);
-        if (cfg.DoNotClear != true)
-            ClearDirectoryContentsSafe(outputRoot, excludePatterns: new[] { "*.zip" }, includeDirectories: false);
-
+        ValidateScriptSourceLayout(stagingPath, moduleName, cfg.PreScriptMerge);
         var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
         var zipPath = Path.Combine(outputRoot, artefactName);
         var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", $"{moduleName}_{Guid.NewGuid():N}");
+        var requiredRoot = ResolveRequiredModulesRootForPacked(
+            cfg,
+            outputRoot,
+            tempRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        var scriptRoot = ResolveModulesRootForPacked(
+            cfg,
+            outputRoot,
+            tempRoot,
+            requiredRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
+        ValidateScriptCopyMappings(
+            cfg,
+            tempRoot,
+            scriptRoot,
+            Path.Combine(scriptRoot, scriptName),
+            moduleName,
+            moduleVersion,
+            preRelease,
+            enforceRelativeDestination: true);
+
+        Directory.CreateDirectory(outputRoot);
+        if (cfg.DoNotClear != true)
+            ClearDirectoryContentsSafe(outputRoot, excludePatterns: new[] { "*.zip" }, includeDirectories: false);
         Directory.CreateDirectory(tempRoot);
 
         var copied = new List<ArtefactCopyEntry>();
@@ -119,22 +157,6 @@ public sealed partial class ArtefactBuilder
         var evidencePaths = Array.Empty<string>();
         try
         {
-            var requiredRoot = ResolveRequiredModulesRootForPacked(
-                cfg,
-                outputRoot,
-                tempRoot,
-                moduleName,
-                moduleVersion,
-                preRelease);
-            var scriptRoot = ResolveModulesRootForPacked(
-                cfg,
-                outputRoot,
-                tempRoot,
-                requiredRoot,
-                moduleName,
-                moduleVersion,
-                preRelease);
-
             _logger.Info($"Staging packed script artefact '{zipPath}'");
             string scriptPath = BuildScriptLayout(
                 cfg,
@@ -207,6 +229,8 @@ public sealed partial class ArtefactBuilder
     {
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
         CopyModulePackage(stagingPath, scriptRoot, include, finalizedPayloadFiles, clearDestination);
+
+        RemoveCompilationEvidenceFromTransformedScript(scriptRoot, moduleName);
 
         var manifestPath = Path.Combine(scriptRoot, moduleName + ".psd1");
         if (!File.Exists(manifestPath))

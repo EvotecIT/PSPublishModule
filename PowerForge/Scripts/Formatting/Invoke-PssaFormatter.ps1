@@ -23,17 +23,32 @@ try {
             }
         }
     }
-    $PssaModulePath = $PssaCandidates |
-        Sort-Object -Property Version -Descending |
-        Select-Object -ExpandProperty Path -First 1
-    if (-not $PssaModulePath) {
+    $PssaModulePaths = @($PssaCandidates |
+        Sort-Object -Property @{ Expression = 'Version'; Descending = $true }, @{ Expression = 'Path'; Descending = $false } |
+        Select-Object -ExpandProperty Path -Unique)
+    if ($PssaModulePaths.Count -eq 0) {
         Write-Output 'PSSA_NOT_FOUND'
         exit 3
     }
     # Discovery is filesystem-only so unrelated module manifests are never imported while
     # selecting PSSA. Preserve the original roots because scripts can explicitly reference
     # installed class modules through name-based `using module` directives.
-    Import-Module -Name $PssaModulePath -ErrorAction Stop
+    $PssaImported = $false
+    foreach ($PssaModulePath in $PssaModulePaths) {
+        try {
+            Import-Module -Name $PssaModulePath -Force -ErrorAction Stop
+            $PssaImported = $true
+            break
+        } catch {
+            # A newer installation can target a different PowerShell runtime. Continue with the
+            # remaining filesystem-discovered candidates instead of reporting PSSA as absent.
+            Remove-Module -Name PSScriptAnalyzer -Force -ErrorAction SilentlyContinue
+        }
+    }
+    if (-not $PssaImported) {
+        Write-Output 'PSSA_NOT_FOUND'
+        exit 3
+    }
 } catch {
     Write-Output 'PSSA_NOT_FOUND'
     exit 3

@@ -52,6 +52,81 @@ public sealed class PssaFormatterIsolationTests
         Assert.Contains(logger.Warnings, warning => warning.Contains("module.psm1", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void EmbeddedFormatter_TriesDiscoveredCandidatesNewestFirstUntilOneImports()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var moduleRoot = Path.Combine(root, "modules", "PSScriptAnalyzer");
+            var newestRoot = Path.Combine(moduleRoot, "999.0.0");
+            var olderRoot = Path.Combine(moduleRoot, "998.0.0");
+            Directory.CreateDirectory(newestRoot);
+            Directory.CreateDirectory(olderRoot);
+
+            WriteTestModule(
+                newestRoot,
+                "999.0.0",
+                """
+                [System.IO.File]::AppendAllText($env:PSSA_IMPORT_LOG, "999.0.0`n")
+                throw 'The newest test module is incompatible with this host.'
+                """);
+            WriteTestModule(
+                olderRoot,
+                "998.0.0",
+                """
+                [System.IO.File]::AppendAllText($env:PSSA_IMPORT_LOG, "998.0.0`n")
+                function Invoke-Formatter {
+                    param([string] $ScriptDefinition, [hashtable] $Settings)
+                    return $ScriptDefinition
+                }
+                Export-ModuleMember -Function Invoke-Formatter
+                """);
+
+            var importLogPath = Path.Combine(root, "imports.log");
+            var inputPath = Path.Combine(root, "module.ps1");
+            File.WriteAllText(inputPath, "Get-Date");
+            var runner = new EnvironmentPowerShellRunner(new Dictionary<string, string?>
+            {
+                ["PSModulePath"] = Path.Combine(root, "modules"),
+                ["PSSA_IMPORT_LOG"] = importLogPath
+            });
+            var formatter = new PssaFormatter(runner, new CollectingLogger());
+
+            FormatterResult result = Assert.Single(formatter.FormatFiles(new[] { inputPath }));
+
+            Assert.Equal(new[] { "999.0.0", "998.0.0" }, File.ReadAllLines(importLogPath));
+            Assert.False(result.Changed);
+            Assert.Equal("Unchanged", result.Message);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // Best-effort cleanup for test-owned temporary files.
+            }
+        }
+
+        static void WriteTestModule(string versionRoot, string version, string moduleScript)
+        {
+            File.WriteAllText(
+                Path.Combine(versionRoot, "PSScriptAnalyzer.psd1"),
+                $$"""
+                @{
+                    RootModule = 'PSScriptAnalyzer.psm1'
+                    ModuleVersion = '{{version}}'
+                    FunctionsToExport = @('Invoke-Formatter')
+                }
+                """);
+            File.WriteAllText(Path.Combine(versionRoot, "PSScriptAnalyzer.psm1"), moduleScript);
+        }
+    }
+
     private sealed class StubRunner : IPowerShellRunner
     {
         private readonly PowerShellRunResult _result;
@@ -59,6 +134,29 @@ public sealed class PssaFormatterIsolationTests
         public StubRunner(PowerShellRunResult result) => _result = result;
 
         public PowerShellRunResult Run(PowerShellRunRequest request) => _result;
+    }
+
+    private sealed class EnvironmentPowerShellRunner : IPowerShellRunner
+    {
+        private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
+        private readonly PowerShellRunner _inner = new();
+
+        public EnvironmentPowerShellRunner(IReadOnlyDictionary<string, string?> environmentVariables)
+            => _environmentVariables = environmentVariables;
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+            => _inner.Run(new PowerShellRunRequest(
+                request.ScriptPath!,
+                request.Arguments,
+                request.Timeout,
+                request.PreferPwsh,
+                request.WorkingDirectory,
+                _environmentVariables,
+                request.ExecutableOverride,
+                request.CaptureOutput,
+                request.CaptureError,
+                request.OutputLineReceived,
+                request.ErrorLineReceived));
     }
 
     private sealed class CollectingLogger : ILogger

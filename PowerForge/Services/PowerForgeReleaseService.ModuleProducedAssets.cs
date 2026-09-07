@@ -8,7 +8,7 @@ internal sealed partial class PowerForgeReleaseService
     private static PowerForgeReleaseAssetEntry CreateModuleProducedAssetEntry(
         string fullPath,
         PowerForgeModuleReleasePlanSummary? plan,
-        HashSet<string>? producedArtifactPaths)
+        IReadOnlyCollection<string>? producedArtifactPaths)
     {
         if (IsNuGetPackagePath(fullPath))
         {
@@ -27,7 +27,7 @@ internal sealed partial class PowerForgeReleaseService
                 Target = packageId,
                 PackageId = packageId,
                 Version = packageVersion ?? releaseVersion,
-                IsFinalPackageOutput = producedArtifactPaths?.Contains(fullPath) == true &&
+                IsFinalPackageOutput = ContainsProducedModuleArtifact(producedArtifactPaths, fullPath) &&
                                        hasIdentity &&
                                        versionMatches
             };
@@ -39,9 +39,58 @@ internal sealed partial class PowerForgeReleaseService
             Category = PowerForgeReleaseAssetCategory.Module,
             Source = "Module",
             Version = ResolveModuleReleaseVersion(plan),
-            IsFinalPackageOutput = producedArtifactPaths?.Contains(fullPath) == true &&
-                                   IsFinalPowerShellModulePackage(fullPath, plan)
+            IsFinalPackageOutput = ContainsProducedModuleArtifact(producedArtifactPaths, fullPath) &&
+                                   (IsFinalPowerShellModulePackage(fullPath, plan) ||
+                                    IsFinalPowerShellScriptPackage(fullPath))
         };
+    }
+
+    private static bool ContainsProducedModuleArtifact(
+        IReadOnlyCollection<string>? producedArtifactPaths,
+        string candidatePath)
+    {
+        if (producedArtifactPaths is null || producedArtifactPaths.Count == 0)
+            return false;
+
+        var fullCandidate = Path.GetFullPath(candidatePath);
+        return producedArtifactPaths.Any(producedPath =>
+        {
+            var fullProduced = Path.GetFullPath(producedPath);
+            var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(fullProduced) == StringComparison.OrdinalIgnoreCase ||
+                             FrameworkCompatibility.GetPathStringComparisonForPath(fullCandidate) == StringComparison.OrdinalIgnoreCase
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return string.Equals(fullProduced, fullCandidate, comparison);
+        });
+    }
+
+    private static bool IsFinalPowerShellScriptPackage(string path)
+    {
+        if (!File.Exists(path) ||
+            !string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var archive = ZipFile.OpenRead(path);
+            if (archive.Entries.Count == 0 || archive.Entries.Count > 50000)
+                return false;
+
+            var topLevelScripts = archive.Entries.Count(entry =>
+                !string.IsNullOrWhiteSpace(entry.Name) &&
+                string.Equals(Path.GetExtension(entry.Name), ".ps1", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(
+                    entry.FullName.Replace('\\', '/').TrimStart('/'),
+                    entry.Name,
+                    StringComparison.Ordinal));
+            return topLevelScripts == 1;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool IsNuGetPackagePath(string path)

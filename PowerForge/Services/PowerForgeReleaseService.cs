@@ -5205,11 +5205,10 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(path))
             yield break;
 
-        var produced = producedArtifactPaths is null
-            ? null
-            : new HashSet<string>(
-                producedArtifactPaths.Select(Path.GetFullPath),
-                StringComparer.OrdinalIgnoreCase);
+        var produced = producedArtifactPaths?
+            .Where(static candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Select(Path.GetFullPath)
+            .ToArray();
 
         if (File.Exists(path))
         {
@@ -5223,7 +5222,9 @@ internal sealed partial class PowerForgeReleaseService
 
         foreach (var file in Directory
             .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly)
-            .Where(file => IsModuleArtifactForResolvedVersion(file, plan))
+            .Where(file => produced is not null
+                ? ContainsProducedModuleArtifact(produced, file)
+                : IsModuleArtifactForResolvedVersion(file, plan))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
         {
             var fullPath = Path.GetFullPath(file);
