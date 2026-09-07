@@ -244,10 +244,11 @@ internal static class PowerShellLocalCallSemanticBinder
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellBoundExpression? pipelineInput = null)
     {
         var span = PowerShellSourceParser.GetSpan(document, command.Extent);
-        if (signature.IsPipelineLifecycle)
+        if (signature.IsPipelineLifecycle && pipelineInput is null)
             return Reject(diagnostics, "PSB2920", $"Local function '{signature.Symbol.Name}' has a begin/process/end lifecycle and must be invoked through a bounded typed input pipeline.", span);
         if (command.Redirections.Count != 0)
             return Reject(diagnostics, "PSB2801", "Typed local function calls do not support stream redirection.", span);
@@ -257,6 +258,11 @@ internal static class PowerShellLocalCallSemanticBinder
 
         var bound = new Dictionary<int, PowerShellBoundExpression>();
         var authoredOrder = new List<int>();
+        if (pipelineInput is not null)
+        {
+            bound.Add(signature.PipelineLifecycleParameterIndex, pipelineInput);
+            authoredOrder.Add(signature.PipelineLifecycleParameterIndex);
+        }
         var positionalParameters = GetPositionalParameters(signature);
         var positionalIndex = 0;
         var elements = command.CommandElements.Skip(1).ToArray();
@@ -338,9 +344,12 @@ internal static class PowerShellLocalCallSemanticBinder
                 return Reject(diagnostics, "PSB2809", $"Mandatory local function parameter '-{parameter.Contract.Name}' was not supplied.", span);
             arguments[index] = DefaultValue(span, parameter.Type);
         }
-        var returnType = signature.DeclaredReturnType is null
+        var invocationReturnType = signature.DeclaredReturnType is not null && signature.PipelineLifecycleReturnsCollection
+            ? signature.DeclaredReturnType.MakeArrayType()
+            : signature.DeclaredReturnType;
+        var returnType = invocationReturnType is null
             ? PowerShellTypeFact.Unknown
-            : new PowerShellTypeFact(signature.DeclaredReturnType, PowerShellTypeFactProvenance.Explicit, $"Local function '{signature.Symbol.Name}' declares its success-output type.");
+            : new PowerShellTypeFact(invocationReturnType, PowerShellTypeFactProvenance.Explicit, $"Local function '{signature.Symbol.Name}' declares its success-output type.");
         return new PowerShellBoundInvocationExpression(
             span,
             signature.Symbol,

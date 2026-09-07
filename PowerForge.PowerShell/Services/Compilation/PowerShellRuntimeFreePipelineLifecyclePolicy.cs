@@ -5,7 +5,8 @@ namespace PowerForge;
 /// <summary>
 /// Defines the deliberately bounded, runtime-free begin/process/end lifecycle shape.
 /// The executable ABI receives the complete typed input collection so one generated
-/// method can run begin once, process once per record, and end once. A bounded process
+/// method can run begin once, process once per record, and an authored end once. Optional
+/// switch arguments retain their source order and are available throughout the invocation. A bounded process
 /// block may emit homogeneous top-level stable scalars; the compiler materializes those
 /// values and the terminal end value in authored order.
 /// </summary>
@@ -29,18 +30,31 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
             return false;
         }
         if (body.DynamicParamBlock is not null || GetCleanBlock(body) is not null ||
-            body.BeginBlock is null || body.ProcessBlock is null || body.EndBlock is null)
+            body.BeginBlock is null || body.ProcessBlock is null)
         {
-            reason = "Runtime-free pipeline lifecycle lowering requires explicit begin, process, and end blocks without dynamicparam or clean.";
+            reason = "Runtime-free pipeline lifecycle lowering requires begin and process blocks without dynamicparam or clean.";
             return false;
         }
         var parameters = PowerShellParameterSyntax.GetParameters(body).ToArray();
-        if (parameters.Length != 1)
+        var pipelineParameters = parameters.Where(candidate => PowerShellParameterContractBinder.GetBindings(candidate)
+            .Any(static binding => binding.ValueFromPipeline || binding.ValueFromPipelineByPropertyName || binding.ValueFromRemainingArguments)).ToArray();
+        if (pipelineParameters.Length != 1)
         {
-            reason = "Runtime-free pipeline lifecycle lowering currently requires exactly one typed ValueFromPipeline parameter.";
+            reason = "Runtime-free pipeline lifecycle lowering requires exactly one typed ValueFromPipeline parameter.";
             return false;
         }
-        var candidate = parameters[0];
+        var candidate = pipelineParameters[0];
+        if (parameters.Where(parameter => !ReferenceEquals(parameter, candidate)).Any(parameter =>
+                parameter.StaticType != typeof(System.Management.Automation.SwitchParameter) ||
+                parameter.DefaultValue is not null ||
+                parameter.Attributes.OfType<AttributeAst>().Any(attribute =>
+                    !PowerShellParameterContractBinder.IsAttributeNamed(attribute, "Parameter")) ||
+                PowerShellParameterContractBinder.GetBindings(parameter).Any(static binding =>
+                    binding.Mandatory || !string.IsNullOrWhiteSpace(binding.ParameterSetName))))
+        {
+            reason = "Additional runtime-free lifecycle parameters currently support optional all-parameter-sets switches without defaults or transforms.";
+            return false;
+        }
         var bindings = PowerShellParameterContractBinder.GetBindings(candidate);
         if (bindings.Length != 1 || !bindings[0].ValueFromPipeline ||
             bindings[0].ValueFromPipelineByPropertyName || bindings[0].ValueFromRemainingArguments ||
@@ -75,8 +89,8 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
             reason = "Runtime-free process blocks do not yet support return, exit, trap, break, or continue lifecycle control flow.";
             return false;
         }
-        if (body.EndBlock.Statements.Count == 0 ||
-            body.EndBlock.Statements[body.EndBlock.Statements.Count - 1] is not PipelineAst and not ReturnStatementAst)
+        if (body.EndBlock is { Statements.Count: > 0 } end &&
+            end.Statements[end.Statements.Count - 1] is not PipelineAst and not ReturnStatementAst)
         {
             reason = "Runtime-free pipeline lifecycle lowering requires one terminal end-block success-output expression.";
             return false;
@@ -85,10 +99,10 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
         return true;
     }
 
-    private static bool ReferencesVariable(NamedBlockAst block, string name)
-        => block.FindAll(node => node is VariableExpressionAst variable &&
+    private static bool ReferencesVariable(NamedBlockAst? block, string name)
+        => block?.FindAll(node => node is VariableExpressionAst variable &&
                 variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase), searchNestedScriptBlocks: false)
-            .Any();
+            .Any() == true;
 
     private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
         => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;

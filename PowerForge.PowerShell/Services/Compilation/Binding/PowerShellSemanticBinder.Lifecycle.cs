@@ -62,19 +62,22 @@ internal sealed partial class PowerShellSemanticBinder
         PrepareLoopFlowState(processSymbols, functions, capabilities, function.Body.ProcessBlock);
         var process = BindLifecycleBlock(document, function.Body.ProcessBlock!, processSymbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: true, semanticOutputType, targetFramework, capabilities);
         MergeSymbolValueStates(symbols, processBaselineSymbols, processSymbols);
-        var end = BindLifecycleBlock(document, function.Body.EndBlock!, symbols, functions, diagnostics, terminalLast: true, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
+        var end = function.Body.EndBlock is null
+            ? new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent), Array.Empty<PowerShellBoundStatement>())
+            : BindLifecycleBlock(document, function.Body.EndBlock, symbols, functions, diagnostics, terminalLast: true, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
         if (begin is null || process is null || end is null || diagnostics.Count > functionDiagnosticStart)
             return null;
-        if (ContainsSuccessOutput(begin) || !HasOneDefiniteTerminalSuccessOutput(end))
+        var processOutputs = GetSuccessOutputs(process);
+        if (ContainsSuccessOutput(begin) ||
+            !HasOneDefiniteTerminalSuccessOutput(end) && (end.Statements.Length != 0 || processOutputs.Length == 0))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2925",
-                "Runtime-free pipeline lifecycle lowering requires an output-free begin block and exactly one terminal end-block success output.",
+                "Runtime-free pipeline lifecycle lowering requires an output-free begin block and either process output with an empty/absent end block or exactly one terminal end-block success output.",
                 PowerShellSourceParser.GetSpan(document, function.Body.Extent)));
             return null;
         }
 
-        var processOutputs = GetSuccessOutputs(process);
         var returnsCollection = processOutputs.Length > 0;
         Type? outputElementType = null;
         if (returnsCollection != signatureReturnsCollection ||
@@ -189,13 +192,15 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, function.Body.Extent),
                 begin.Statements.Concat(new PowerShellBoundStatement[] { lifecycleLoop }).Concat(end.Statements).ToArray());
         }
-        var scopeSymbols = new[] { collectionSymbol }
+        var lifecycleParameters = sourceParameters.Select(parameter => parameter.Symbol.Equals(sourceParameter.Symbol)
+            ? collectionParameter : parameter).ToArray();
+        var scopeSymbols = lifecycleParameters.Select(static parameter => parameter.Symbol)
             .Concat(locals.Select(static local => local.Symbol))
             .OrderBy(static symbol => symbol.StableKey, StringComparer.Ordinal)
             .ToArray();
         return new PowerShellBoundFunction(
             functionSymbol,
-            new[] { collectionParameter },
+            lifecycleParameters,
             locals,
             new PowerShellLexicalScope(functionSymbol, scopeSymbols),
             PowerShellCommentHelpBinder.Bind(function),
@@ -304,33 +309,10 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, pipeline.Extent)));
             return null;
         }
-        if (targetCommand.CommandElements.Count != 1)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic(
-                "PSB2923",
-                $"Runtime-free lifecycle invocation of '{signature.Symbol.Name}' binds its sole parameter from the pipeline and does not accept command arguments.",
-                PowerShellSourceParser.GetSpan(document, targetCommand.Extent)));
-            return null;
-        }
-        var invocationReturnType = signature.DeclaredReturnType is not null && signature.PipelineLifecycleReturnsCollection
-            ? signature.DeclaredReturnType.MakeArrayType()
-            : signature.DeclaredReturnType;
-        var returnType = invocationReturnType is null
-            ? PowerShellTypeFact.Unknown
-            : new PowerShellTypeFact(
-                invocationReturnType,
-                PowerShellTypeFactProvenance.Explicit,
-                signature.PipelineLifecycleReturnsCollection
-                    ? $"Lifecycle function '{signature.Symbol.Name}' materializes ordered process/end success output."
-                    : $"Lifecycle function '{signature.Symbol.Name}' declares one end-block success-output type.");
-        return new PowerShellBoundInvocationExpression(
-            PowerShellSourceParser.GetSpan(document, pipeline.Extent),
-            signature.Symbol,
-            new[] { input },
-            returnType,
-            new[] { 0 },
-            new[] { parameter.Contract.Name },
-            signature.ReturnsModuleStateDerived);
+        return PowerShellLocalCallSemanticBinder.Bind(
+            document, targetCommand, signature,
+            (syntax, expectedType) => BindExpression(document, syntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities),
+            targetFramework, capabilities, diagnostics, input);
     }
 
     private static bool IsRuntimeFreePipelineLifecycleInvocation(
@@ -372,8 +354,8 @@ internal sealed partial class PowerShellSemanticBinder
     {
         outputElementType = null;
         var endOutput = GetSuccessOutputs(end);
-        if (endOutput.Length != 1) return false;
-        var types = processOutputs.Append(endOutput[0])
+        if (endOutput.Length > 1 || endOutput.Length == 0 && end.Statements.Length != 0) return false;
+        var types = processOutputs.Concat(endOutput)
             .Select(static expression => expression.Type.ClrType)
             .Distinct()
             .ToArray();
