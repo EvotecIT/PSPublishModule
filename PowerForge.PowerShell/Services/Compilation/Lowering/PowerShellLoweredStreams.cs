@@ -5,7 +5,7 @@ internal sealed class PowerShellLoweredStreamWriteStatement : PowerShellLoweredS
     internal PowerShellLoweredStreamWriteStatement(
         SourceSpan span,
         PowerShellStreamCommandKind kind,
-        PowerShellCompilationCommandProviderContract provider,
+        PowerShellCompilationCommandProviderContract? provider,
         PowerShellLoweredExpression message)
         : base(span)
     {
@@ -15,6 +15,6 @@ internal sealed class PowerShellLoweredStreamWriteStatement : PowerShellLoweredS
     }
 
     internal PowerShellStreamCommandKind Kind { get; }
-    internal PowerShellCompilationCommandProviderContract Provider { get; }
+    internal PowerShellCompilationCommandProviderContract? Provider { get; }
     internal PowerShellLoweredExpression Message { get; }
 }

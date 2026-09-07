@@ -22,7 +22,7 @@ internal static class PowerShellLoweredCommandProviderCollector
     {
         switch (statement)
         {
-            case PowerShellLoweredStreamWriteStatement stream:
+            case PowerShellLoweredStreamWriteStatement { Provider: not null } stream:
                 yield return stream.Provider;
                 break;
             case PowerShellLoweredCommandRegionStatement region:

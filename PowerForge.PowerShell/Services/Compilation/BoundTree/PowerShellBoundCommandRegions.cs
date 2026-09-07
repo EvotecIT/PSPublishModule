@@ -68,7 +68,7 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
         PowerShellBoundCommandRegionArgument[] arguments,
         PowerShellBoundCommandStage[]? stages = null,
         int statementCount = 1)
-        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput, PowerShellRequiredCapability.CommandRegion)
+        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput | PowerShellSemanticEffect.NonSuccessStream, PowerShellRequiredCapability.CommandRegion)
     {
         HostedFallbackSource = source;
         Arguments = arguments ?? Array.Empty<PowerShellBoundCommandRegionArgument>();
@@ -91,7 +91,7 @@ internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundSt
         string source,
         PowerShellBoundCommandRegionArgument[] arguments,
         PowerShellBoundCommandStage[]? stages = null)
-        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation, PowerShellRequiredCapability.CommandRegion)
+        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.NonSuccessStream, PowerShellRequiredCapability.CommandRegion)
     {
         Target = target;
         TargetType = targetType;

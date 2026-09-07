@@ -90,7 +90,7 @@ internal sealed partial class PowerShellTypedLowerer
         => statement switch
         {
             PowerShellBoundStreamWriteStatement stream =>
-                stream.Provider.Adapter.Cancellation is
+                stream.Provider?.Adapter.Cancellation is
                     PowerShellCompilationProviderCancellation.Cooperative or
                     PowerShellCompilationProviderCancellation.PostInitializationCooperative or
                     PowerShellCompilationProviderCancellation.ProcessIsolated,

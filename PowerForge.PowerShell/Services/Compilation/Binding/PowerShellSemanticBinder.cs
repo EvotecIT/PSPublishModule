@@ -664,6 +664,14 @@ internal sealed partial class PowerShellSemanticBinder
                 capabilities);
             if (expression is null) return null;
             var emitsOutput = expression is not PowerShellBoundMutationExpression && expression.Type.ClrType != typeof(void);
+            if (!isTerminal && !allowNonTerminalSuccessOutput && emitsOutput &&
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
+                expression is PowerShellBoundLiteralExpression or PowerShellBoundVariableExpression &&
+                PowerShellStableScalarTypePolicy.IsSupported(expression.Type.ClrType))
+                return new PowerShellBoundStreamWriteStatement(
+                    PowerShellSourceParser.GetSpan(document, statement.Extent),
+                    PowerShellStreamCommandKind.Success, provider: null, expression);
             if (!isTerminal && emitsOutput && !IsLocalFunctionPipeline(pipeline, functions, capabilities) && !allowNonTerminalSuccessOutput) return null;
             if (isTerminal && IsLocalFunctionPipeline(pipeline, functions, capabilities))
                 return new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);

@@ -10,6 +10,18 @@ internal sealed partial class PowerShellBoundCSharpBackend
         string prefix,
         Func<string, string> getTemporaryIdentifier)
     {
+        if (stream.Provider is null)
+        {
+            if (stream.Kind != PowerShellStreamCommandKind.Success)
+                throw new InvalidOperationException("Implicit stream output must target the success stream.");
+            if (stream.Message.ClrType == typeof(void))
+            {
+                builder.Append(prefix).Append(EmitExpression(stream.Message)).AppendLine(";");
+                return;
+            }
+            builder.Append(prefix).Append("__writeOutput((object?)").Append(EmitExpression(stream.Message)).AppendLine(");");
+            return;
+        }
         var sink = stream.Kind switch
         {
             PowerShellStreamCommandKind.Success => "__writeOutput",

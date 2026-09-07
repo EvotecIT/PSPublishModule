@@ -19,10 +19,14 @@ internal static class PowerShellHostedStatementBinder
     {
         bound = null;
         var statement = authoredStatements[index];
+        // Keep cleanup visible to typed control-flow analysis. Hiding it inside a
+        // hosted region bypasses the downstream-stop preference/capture contract.
+        if (ContainsFinally(statement)) return false;
         var available = GetAvailableSymbols(symbols, statement.Extent.StartOffset);
         if (index == runtimeTailStart)
         {
             var tail = authoredStatements.Skip(index).ToArray();
+            if (tail.Any(ContainsFinally)) return false;
             if (PowerShellModuleStateOriginPolicy.ReferencesDerivedModuleState(tail, available, capabilities))
                 return false;
             bound = PowerShellCommandRegionSemanticBinder.BindRegion(
@@ -67,6 +71,7 @@ internal static class PowerShellHostedStatementBinder
         var region = new List<StatementAst> { statement };
         var regionEnd = index;
         while (regionEnd + 1 < authoredStatements.Length &&
+               !ContainsFinally(authoredStatements[regionEnd + 1]) &&
                PowerShellCommandIslandPolicy.IsRuntimeRegion(
                    authoredStatements[regionEnd + 1],
                    body,
@@ -88,6 +93,9 @@ internal static class PowerShellHostedStatementBinder
             capabilities);
         return true;
     }
+
+    private static bool ContainsFinally(Ast syntax)
+        => syntax.FindAll(static node => node is TryStatementAst { Finally: not null }, searchNestedScriptBlocks: false).Any();
 
     private static IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> GetAvailableSymbols(
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
