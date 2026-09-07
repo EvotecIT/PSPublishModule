@@ -60,7 +60,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         "A captured local call requires qualified hosted-region routing and statement-error continuation."));
                 if (EnumerateStatements(function.Body).OfType<PowerShellBoundTryStatement>().Any(statement =>
                         statement.FinallyBlock is not null &&
-                        BlockHasEffect(statement.FinallyBlock, PowerShellSemanticEffect.NonSuccessStream, lookup) &&
+                        HasNonSuccessStreamWrites(statement.FinallyBlock, lookup) &&
                         (BlockHasEffect(statement.Body, PowerShellSemanticEffect.SuccessOutput, lookup) ||
                          statement.Catches.Any(clause => BlockHasEffect(clause.Body, PowerShellSemanticEffect.SuccessOutput, lookup)))))
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
@@ -153,6 +153,33 @@ internal sealed partial class PowerShellSemanticAnalyzer
                     : function.WithAnalysis(disposition: new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "call.fallback", $"Local function '{blocked.Symbol.Name}' requires fallback."));
             }, static (left, right) => left.Disposition.Kind == right.Disposition.Kind && left.Disposition.ReasonCode == right.Disposition.ReasonCode);
             return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
+        }
+
+        // Qualified statement errors use the native error bridge. Their conservative
+        // NonSuccessStream effect is not an unqualified direct warning/error sink.
+        private static bool HasNonSuccessStreamWrites(PowerShellBoundBlock block,
+            IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        {
+            var pending = new Stack<PowerShellBoundBlock>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            pending.Push(block);
+            while (pending.Count > 0)
+            {
+                foreach (var statement in EnumerateStatements(pending.Pop()))
+                {
+                    if (statement is PowerShellBoundStreamWriteStatement { Kind: not PowerShellStreamCommandKind.Success } or
+                        PowerShellBoundCommandRegionStatement or PowerShellBoundCommandCaptureStatement)
+                        return true;
+                    foreach (var expression in EnumerateDirectExpressions(statement))
+                    {
+                        if (expression.Effects.HasFlag(PowerShellSemanticEffect.NonSuccessStream)) return true;
+                        foreach (var invocation in EnumerateInvocations(expression))
+                            if (visited.Add(invocation.Target.StableKey) && functions.TryGetValue(invocation.Target.StableKey, out var target))
+                                pending.Push(target.Body);
+                    }
+                }
+            }
+            return false;
         }
 
         private static bool BlockReturnsValue(PowerShellBoundBlock block)
