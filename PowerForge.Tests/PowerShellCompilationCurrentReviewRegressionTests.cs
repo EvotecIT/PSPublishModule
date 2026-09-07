@@ -200,8 +200,9 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Empty(planned.Methods);
     }
 
-    [Fact]
-    public void Build_BinaryModuleMatchesValidateNotNullCollectionElementBinding()
+    [Theory]
+    [MemberData(nameof(PowerShellCompilationArtifactBuilderTests.StatementErrorHosts), MemberType = typeof(PowerShellCompilationArtifactBuilderTests))]
+    public void Build_BinaryModuleMatchesValidateNotNullCollectionElementBinding(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-StringElementCount { [CmdletBinding()] param([ValidateNotNull()] [string[]] $Values) return $Values.Length }; " +
@@ -213,23 +214,29 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ValidateNotNullElements",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
-        var run = Run(
-            "pwsh",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            $"Import-Module -Name '{escapedPath}' -Force; " +
-            "try { 'string=' + (Get-StringElementCount -Values @('ok', $null)) } catch { 'string-rejected=' + $_.Exception.Message }; " +
-            "try { Get-ObjectElementCount -Values @([object] 'ok', $null); 'unexpected-object' } catch { 'object-rejected=' + $_.Exception.Message }");
-
-        Assert.Equal(0, run.ExitCode);
-        Assert.Contains("string=2", run.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains("object-rejected=", run.StandardOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain("unexpected-object", run.StandardOutput, StringComparison.Ordinal);
+        const string probe = """
+            $typed=[string[]]::new(2); $typed[0]='ok'
+            foreach ($values in @(@('ok',$null),$typed,@(),$null,@('ok',''),@('ok','value'))) {
+                foreach ($command in 'Get-StringElementCount','Get-ObjectElementCount') {
+                    try { $result=& $command -Values $values; $command + ':accepted:' + $result }
+                    catch { $command + ':rejected' }
+                }
+            }
+            """;
+        var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
+        var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; " + probe);
+        Assert.Equal(0, original.ExitCode);
+        Assert.Empty(original.StandardError);
+        Assert.Contains("Get-StringElementCount:accepted:2", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("Get-StringElementCount:rejected", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
+            (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
     }
 
     [Fact]

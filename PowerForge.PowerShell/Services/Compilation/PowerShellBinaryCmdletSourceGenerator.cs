@@ -304,6 +304,10 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         var type = Type.GetType(parameter.TypeName, throwOnError: false);
         if (type is null)
             return false;
+        // Script parameter binding converts null elements from untyped input to empty
+        // strings, but preserves an existing string[] and its null elements by identity.
+        if (type == typeof(string[]))
+            return true;
         if (type.IsArray)
             type = type.GetElementType()!;
         type = Nullable.GetUnderlyingType(type) ?? type;

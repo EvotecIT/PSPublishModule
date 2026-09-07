@@ -328,7 +328,9 @@ internal static class PowerShellClrMemberSemanticBinder
             arguments[index] = NormalizeLiteralArgument(arguments[index], argumentSyntax[index], parameters[index].ParameterType);
 
         var receiverByReference = false;
-        if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) && !target.IsStatic && target.Type.IsValueType)
+        // Enum receivers are immutable values; their methods do not require writable storage.
+        if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) &&
+            !target.IsStatic && target.Type.IsValueType && !target.Type.IsEnum)
         {
             // A PowerShell variable holds the box selected before argument evaluation. A CLR ref
             // preserves its mutation only when argument evaluation cannot replace that storage.

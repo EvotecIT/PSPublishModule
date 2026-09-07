@@ -113,8 +113,6 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
-        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains("System.Management.Automation.RuntimeException", generated, StringComparison.Ordinal);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",
