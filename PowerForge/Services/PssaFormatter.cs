@@ -93,6 +93,17 @@ public sealed class PssaFormatter : IFormatter
                     outputs.Add(new FormatterResult(p, false, $"Error: {msg}"));
                 }
             }
+            else if (line.StartsWith("WARNING::", StringComparison.Ordinal))
+            {
+                var rest = line.Substring("WARNING::".Length);
+                var idx = rest.IndexOf("::", StringComparison.Ordinal);
+                if (idx > 0)
+                {
+                    var p = rest.Substring(0, idx);
+                    var msg = rest.Substring(idx + 2);
+                    _logger.Warn($"PSSA: {p} - {msg}");
+                }
+            }
         }
 
         // Ensure we return entries for all inputs (in case of missing outputs)

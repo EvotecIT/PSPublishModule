@@ -13,6 +13,9 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         PackedArtefactFinalizationContext context)
     {
+        if (context.ArtefactType == ArtefactType.Script || context.ArtefactType == ArtefactType.ScriptPacked)
+            return FinalizeSignedScriptArtefact(plan, state, context);
+
         PreparePackedReleaseProtection(plan, state, context);
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
             "Signing is enabled but no signing options were provided.");
@@ -146,6 +149,47 @@ public sealed partial class ModulePipelineRunner
         return externalEvidence;
     }
 
+    private IReadOnlyList<string> FinalizeSignedScriptArtefact(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state,
+        PackedArtefactFinalizationContext context)
+    {
+        PreparePackedReleaseProtection(plan, state, context);
+        SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
+            "Signing is enabled but no signing options were provided.");
+        string rootPath = Path.GetFullPath(context.RootPath);
+        string entryPointPath = Path.GetFullPath(context.EntryPointPath);
+        if (!File.Exists(entryPointPath) || !IsSameOrChildPath(rootPath, entryPointPath))
+        {
+            throw new InvalidOperationException(
+                "The finalized script entry point must exist inside the completed script artefact layout before signing.");
+        }
+
+        string[] packageFiles = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories)
+            .Select(Path.GetFullPath)
+            .ToArray();
+        ModuleSigningResult signingResult = _hostedOperations.SignModuleOutput(
+            context.ModuleName,
+            rootPath,
+            packageFiles,
+            BuildSigningIncludePatterns(signing),
+            BuildSigningExcludeSubstrings(signing, plan.Delivery, excludeBundledRequiredModules: false),
+            signing);
+        string[] verifiedPaths = (signingResult.VerifiedFilePaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .ToArray();
+        if (signingResult.Failed > 0 ||
+            !verifiedPaths.Contains(entryPointPath, PowerShellCompilationPathSafety.PathComparer))
+        {
+            throw new InvalidOperationException(
+                $"The finalized script entry point was not successfully signed: '{entryPointPath}'.");
+        }
+
+        state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
+        return Array.Empty<string>();
+    }
+
     private static void CaptureAuthorizedProjectManifest(
         ModulePipelinePlan plan,
         ModulePipelineRunState state)
@@ -181,6 +225,9 @@ public sealed partial class ModulePipelineRunner
         PackedArtefactFinalizationContext context)
     {
         PreparePackedReleaseProtection(plan, state, context);
+        if (context.ArtefactType == ArtefactType.Script || context.ArtefactType == ArtefactType.ScriptPacked)
+            return Array.Empty<string>();
+
         _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
             context.MainModulePath,
             context.ModuleName,

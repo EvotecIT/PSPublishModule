@@ -42,7 +42,8 @@ public sealed partial class ModulePipelineRunner
                 totalInlinedFunctions: 0,
                 scriptFilesDetected: 0,
                 hasBinaryOutputs: mergeInfo.HasLib,
-                hasScriptSources: false);
+                hasScriptSources: false,
+                mergedScriptFiles: Array.Empty<string>());
         }
         string? analysisCode = mergeInfo.HasScripts ? mergeInfo.MergedScriptContent : null;
         string? analysisPath = mergeInfo.HasScripts ? null : mergeInfo.Psm1Path;
@@ -76,7 +77,8 @@ public sealed partial class ModulePipelineRunner
             totalInlinedFunctions: mergeOutcome.TotalInlinedFunctions,
             scriptFilesDetected: mergeOutcome.ScriptFilesDetected,
             hasBinaryOutputs: mergeOutcome.HasBinaryOutputs,
-            hasScriptSources: mergeOutcome.HasScriptSources);
+            hasScriptSources: mergeOutcome.HasScriptSources,
+            mergedScriptFiles: mergeOutcome.MergedModule ? mergeInfo.ScriptFiles : Array.Empty<string>());
     }
 
     private void ApplyPlaceholders(ModulePipelinePlan plan, ModuleBuildResult buildResult)

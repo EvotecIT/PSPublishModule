@@ -100,25 +100,18 @@ public sealed partial class ArtefactBuilder
         => ArtefactLayoutPathResolver.ResolveOutputRoot(configuredPath, projectRoot, moduleName, moduleVersion, preRelease, type);
 
     internal static string ResolveArtefactFileName(ArtefactConfiguration cfg, string moduleName, string moduleVersion, string? preRelease)
-    {
-        if (!string.IsNullOrWhiteSpace(cfg.ArtefactName))
-            return ModulePathTokenFormatter.ReplacePathTokens(cfg.ArtefactName!.Trim(), moduleName, moduleVersion, preRelease);
-
-        var tagWithPre = ModulePathTokenFormatter.ReplacePathTokens("<TagModuleVersionWithPreRelease>", moduleName, moduleVersion, preRelease);
-        return cfg.IncludeTagName == true
-            ? $"{moduleName}.{tagWithPre}.zip"
-            : $"{moduleName}.zip";
-    }
+        => ArtefactLayoutPathResolver.ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
 
     private static void CopyModulePackage(
         string stagingRoot,
         string destinationModuleRoot,
         PackagingInformation include,
-        IReadOnlyList<string>? finalizedPayloadFiles = null)
+        IReadOnlyList<string>? finalizedPayloadFiles = null,
+        bool clearDestination = true)
     {
         var src = Path.GetFullPath(stagingRoot);
 
-        if (Directory.Exists(destinationModuleRoot))
+        if (clearDestination && Directory.Exists(destinationModuleRoot))
             Directory.Delete(destinationModuleRoot, recursive: true);
         Directory.CreateDirectory(destinationModuleRoot);
         var sourceFiles = finalizedPayloadFiles is { Count: > 0 }

@@ -270,6 +270,68 @@ public sealed class ModulePipelineManifestRefreshTests
     }
 
     [Fact]
+    public void Run_MergedModuleRemovesMergedScriptsToProcessFromDeliveredManifest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var classes = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes"));
+            File.WriteAllText(Path.Combine(classes.FullName, "Initialize.ps1"), "class TestClass { [string] GetValue() { return 'ok' } }");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
+            File.WriteAllText(
+                Path.Combine(root.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    ScriptsToProcess = @('.\\Classes\\Initialize.ps1')" + Environment.NewLine +
+                "}");
+
+            var artefactRoot = Path.Combine(root.FullName, "Artefacts", "Unpacked");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { Enable = true, Merge = true }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration { Enabled = true, Path = artefactRoot }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var result = runner.Run(spec, runner.Plan(spec));
+            var deliveredManifest = Path.Combine(
+                Assert.Single(result.ArtefactResults).OutputPath,
+                moduleName,
+                moduleName + ".psd1");
+            var deliveredModule = Path.Combine(Path.GetDirectoryName(deliveredManifest)!, moduleName + ".psm1");
+
+            Assert.True(File.Exists(deliveredManifest));
+            Assert.Contains("class TestClass", File.ReadAllText(deliveredModule), StringComparison.Ordinal);
+            Assert.False(ManifestEditor.TryGetTopLevelStringArray(deliveredManifest, "ScriptsToProcess", out _));
+            Assert.False(Directory.Exists(Path.Combine(Path.GetDirectoryName(deliveredManifest)!, "Classes")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_WritesPrereleaseToPsDataAndRemovesTopLevelPrerelease()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

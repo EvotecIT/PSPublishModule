@@ -7,6 +7,47 @@ namespace PowerForge;
 /// </summary>
 internal static class ArtefactLayoutPathResolver
 {
+    internal static string ResolveArtefactFileName(
+        ArtefactConfiguration cfg,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        string fileName;
+        if (!string.IsNullOrWhiteSpace(cfg.ArtefactName))
+        {
+            fileName = ModulePathTokenFormatter.ReplacePathTokens(
+                cfg.ArtefactName!.Trim(),
+                moduleName,
+                moduleVersion,
+                preRelease);
+        }
+        else
+        {
+            var tagWithPre = ModulePathTokenFormatter.ReplacePathTokens(
+                "<TagModuleVersionWithPreRelease>",
+                moduleName,
+                moduleVersion,
+                preRelease);
+            fileName = cfg.IncludeTagName == true
+                ? $"{moduleName}.{tagWithPre}.zip"
+                : $"{moduleName}.zip";
+        }
+
+        fileName = fileName.Trim();
+        if (string.IsNullOrWhiteSpace(fileName) ||
+            Path.IsPathRooted(fileName) ||
+            fileName.IndexOf('/') >= 0 ||
+            fileName.IndexOf('\\') >= 0 ||
+            !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"ArtefactName must be a file name that stays inside the artefact output root, but got '{fileName}'.");
+        }
+
+        return fileName;
+    }
+
     internal static string ResolveOutputRoot(
         string? configuredPath,
         string projectRoot,

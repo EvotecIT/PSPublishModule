@@ -1,0 +1,297 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+
+namespace PowerForge;
+
+public sealed partial class ArtefactBuilder
+{
+    private ArtefactBuildResult BuildScript(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string projectRoot,
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
+        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizeArtefact,
+        IReadOnlyList<string>? finalizedPayloadFiles)
+    {
+        if (cfg.DoNotClear != true)
+            ClearDirectorySafe(outputRoot);
+        else
+            Directory.CreateDirectory(outputRoot);
+
+        var requiredRoot = ResolveRequiredModulesRootForUnpacked(
+            cfg,
+            outputRoot,
+            projectRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        var scriptRoot = ResolveModulesRootForUnpacked(
+            cfg,
+            outputRoot,
+            requiredRoot,
+            projectRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+
+        var copied = new List<ArtefactCopyEntry>();
+        var modules = new List<ArtefactModuleEntry>();
+        var evidencePaths = Array.Empty<string>();
+        _logger.Info($"Creating script artefact at '{scriptRoot}'");
+        string scriptPath = BuildScriptLayout(
+            cfg,
+            scriptRoot,
+            stagingPath,
+            moduleName,
+            moduleVersion,
+            preRelease,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles,
+            clearDestination: cfg.DoNotClear != true);
+        modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: scriptRoot));
+
+        AddRequiredModules(cfg, requiredRoot, requiredModules, modules);
+        CopyExtraMappings(cfg, projectRoot, outputRoot, moduleName, moduleVersion, preRelease, copied);
+
+        if (finalizeArtefact is not null)
+        {
+            string version = ModulePathTokenFormatter.FormatVersionWithPreRelease(moduleVersion, preRelease);
+            var context = new PackedArtefactFinalizationContext(
+                ArtefactType.Script,
+                scriptRoot,
+                scriptRoot,
+                string.Empty,
+                scriptPath,
+                outputRoot,
+                moduleName,
+                version);
+            evidencePaths = FinalizeArtefactLayout(finalizeArtefact, context);
+        }
+
+        return new ArtefactBuildResult(
+            ArtefactType.Script,
+            cfg.ID,
+            outputRoot,
+            modules.ToArray(),
+            copied.ToArray(),
+            evidencePaths);
+    }
+
+    private ArtefactBuildResult BuildScriptPacked(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string projectRoot,
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
+        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizeArtefact,
+        IReadOnlyList<string>? finalizedPayloadFiles)
+    {
+        Directory.CreateDirectory(outputRoot);
+        if (cfg.DoNotClear != true)
+            ClearDirectoryContentsSafe(outputRoot, excludePatterns: new[] { "*.zip" }, includeDirectories: false);
+
+        var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
+        var zipPath = Path.Combine(outputRoot, artefactName);
+        var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", $"{moduleName}_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+
+        var copied = new List<ArtefactCopyEntry>();
+        var modules = new List<ArtefactModuleEntry>();
+        var evidencePaths = Array.Empty<string>();
+        try
+        {
+            var requiredRoot = ResolveRequiredModulesRootForPacked(
+                cfg,
+                outputRoot,
+                tempRoot,
+                moduleName,
+                moduleVersion,
+                preRelease);
+            var scriptRoot = ResolveModulesRootForPacked(
+                cfg,
+                outputRoot,
+                tempRoot,
+                requiredRoot,
+                moduleName,
+                moduleVersion,
+                preRelease);
+
+            _logger.Info($"Staging packed script artefact '{zipPath}'");
+            string scriptPath = BuildScriptLayout(
+                cfg,
+                scriptRoot,
+                stagingPath,
+                moduleName,
+                moduleVersion,
+                preRelease,
+                information,
+                delivery,
+                includeScriptFolders,
+                finalizedPayloadFiles,
+                clearDestination: true);
+            modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: scriptRoot));
+
+            AddRequiredModules(cfg, requiredRoot, requiredModules, modules);
+            CopyExtraMappings(
+                cfg,
+                projectRoot,
+                tempRoot,
+                moduleName,
+                moduleVersion,
+                preRelease,
+                copied,
+                enforceRelativeDestination: true);
+
+            if (finalizeArtefact is not null)
+            {
+                string version = ModulePathTokenFormatter.FormatVersionWithPreRelease(moduleVersion, preRelease);
+                var context = new PackedArtefactFinalizationContext(
+                    ArtefactType.ScriptPacked,
+                    tempRoot,
+                    scriptRoot,
+                    string.Empty,
+                    scriptPath,
+                    zipPath,
+                    moduleName,
+                    version);
+                evidencePaths = FinalizeArtefactLayout(finalizeArtefact, context);
+            }
+
+            CreateZipFromDirectoryContents(tempRoot, zipPath);
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, recursive: true); } catch { /* best effort */ }
+        }
+
+        return new ArtefactBuildResult(
+            ArtefactType.ScriptPacked,
+            cfg.ID,
+            zipPath,
+            modules.ToArray(),
+            copied.ToArray(),
+            evidencePaths);
+    }
+
+    private string BuildScriptLayout(
+        ArtefactConfiguration cfg,
+        string scriptRoot,
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles,
+        bool clearDestination)
+    {
+        var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
+        CopyModulePackage(stagingPath, scriptRoot, include, finalizedPayloadFiles, clearDestination);
+
+        var manifestPath = Path.Combine(scriptRoot, moduleName + ".psd1");
+        if (!File.Exists(manifestPath))
+            throw new FileNotFoundException("The staged module manifest required for a script artefact was not found.", manifestPath);
+        File.Delete(manifestPath);
+
+        var modulePath = Path.Combine(scriptRoot, moduleName + ".psm1");
+        if (!File.Exists(modulePath))
+            throw new FileNotFoundException("The staged root module required for a script artefact was not found.", modulePath);
+
+        var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
+        var scriptPath = Path.Combine(scriptRoot, scriptName);
+        if (File.Exists(scriptPath))
+            File.Delete(scriptPath);
+        File.Move(modulePath, scriptPath);
+        RewriteScriptContent(scriptPath, cfg.PreScriptMerge, cfg.PostScriptMerge);
+        return scriptPath;
+    }
+
+    private void AddRequiredModules(
+        ArtefactConfiguration cfg,
+        string requiredRoot,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
+        List<ArtefactModuleEntry> modules)
+    {
+        if (cfg.RequiredModules.Enabled != true)
+            return;
+
+        var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
+        var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
+        foreach (var requiredModule in FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName))
+        {
+            modules.Add(SaveRequiredModuleToFolder(
+                requiredModule,
+                requiredRoot,
+                cfg.RequiredModules.Repository,
+                cfg.RequiredModules.Credential,
+                tool,
+                source));
+        }
+    }
+
+    private static string ResolveScriptName(string? configuredName, string moduleName, string moduleVersion, string? preRelease)
+    {
+        var replaced = ModulePathTokenFormatter.ReplacePathTokens(configuredName, moduleName, moduleVersion, preRelease).Trim();
+        var scriptName = string.IsNullOrWhiteSpace(replaced) ? moduleName + ".ps1" : replaced;
+        if (!scriptName.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+            scriptName += ".ps1";
+
+        if (Path.IsPathRooted(scriptName) || scriptName.IndexOf('/') >= 0 || scriptName.IndexOf('\\') >= 0)
+            throw new InvalidOperationException($"ScriptName must be a file name, but got '{scriptName}'.");
+
+        return scriptName;
+    }
+
+    private static void RewriteScriptContent(string scriptPath, string? preScriptMerge, string? postScriptMerge)
+    {
+        var content = File.ReadAllText(scriptPath);
+        var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
+
+        var exportBoundary = lines.FindLastIndex(static line =>
+            string.Equals(line.Trim(), "# Export functions and aliases as required", StringComparison.Ordinal));
+        if (exportBoundary < 0)
+        {
+            exportBoundary = lines.FindLastIndex(static line =>
+                line.IndexOf("Export-ModuleMember ", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+        if (exportBoundary >= 0)
+            lines.RemoveRange(exportBoundary, lines.Count - exportBoundary);
+
+        var sections = new List<string>(3);
+        if (!string.IsNullOrWhiteSpace(preScriptMerge))
+            sections.Add(NormalizeNewlines(preScriptMerge!.Trim(), newline));
+
+        var body = string.Join(newline, lines).TrimEnd('\r', '\n');
+        if (!string.IsNullOrEmpty(body))
+            sections.Add(body);
+
+        if (!string.IsNullOrWhiteSpace(postScriptMerge))
+            sections.Add(NormalizeNewlines(postScriptMerge!.Trim(), newline));
+
+        var rewritten = string.Join(newline, sections) + newline;
+        File.WriteAllText(scriptPath, rewritten, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    private static string NormalizeNewlines(string value, string newline)
+        => value.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", newline);
+}

@@ -99,7 +99,12 @@ public sealed partial class ModulePipelineRunner
         try
         {
             if (!IsReusingCompiledPowerShellModule(plan))
-                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+                RefreshManifestFromPlan(
+                    plan,
+                    buildResult,
+                    manifestRequiredModules,
+                    manifestExternalModuleDependencies,
+                    state.MergeExecution.MergedScriptFiles);
 
             if (!IsReusingCompiledPowerShellModule(plan) && plan.Delivery is not null && plan.Delivery.Enable)
             {
@@ -290,7 +295,12 @@ public sealed partial class ModulePipelineRunner
         try
         {
             if (!IsReusingCompiledPowerShellModule(plan))
-                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+                RefreshManifestFromPlan(
+                    plan,
+                    buildResult,
+                    manifestRequiredModules,
+                    manifestExternalModuleDependencies,
+                    state.MergeExecution.MergedScriptFiles);
             if (state.MergeExecution.MergedModule) {
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }

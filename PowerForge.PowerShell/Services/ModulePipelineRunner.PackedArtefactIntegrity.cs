@@ -12,13 +12,16 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         ArtefactBuildResult artefact)
     {
-        if (!plan.SignModule || artefact.Type != ArtefactType.Packed)
+        if (!plan.SignModule ||
+            (artefact.Type != ArtefactType.Packed &&
+             artefact.Type != ArtefactType.Script &&
+             artefact.Type != ArtefactType.ScriptPacked))
             return;
 
         foreach (string path in EnumerateFinalizedPackedArtefactPaths(artefact))
         {
             if (!File.Exists(path))
-                throw new FileNotFoundException("A finalized signed packed artefact or its evidence was not found.", path);
+                throw new FileNotFoundException("A finalized signed artefact or its evidence was not found.", path);
             state.FinalizedPackedArtefactHashes[path] = ComputeFileSha256(path);
         }
     }
@@ -31,7 +34,7 @@ public sealed partial class ModulePipelineRunner
                 !string.Equals(ComputeFileSha256(expected.Key), expected.Value, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"The finalized signed packed artefact or its evidence changed after signing: '{expected.Key}'. " +
+                    $"The finalized signed artefact or its evidence changed after signing: '{expected.Key}'. " +
                     "Artifact actions must not mutate signed release outputs after finalization.");
             }
         }
@@ -39,6 +42,14 @@ public sealed partial class ModulePipelineRunner
 
     private static IEnumerable<string> EnumerateFinalizedPackedArtefactPaths(ArtefactBuildResult artefact)
         => new[] { artefact.OutputPath }
+            .Concat(artefact.Type == ArtefactType.Script
+                ? artefact.Modules
+                    .Where(static module => module.IsMainModule)
+                    .Select(static module => module.Path)
+                : Array.Empty<string>())
+            .SelectMany(static path => Directory.Exists(path)
+                ? Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                : new[] { path })
             .Concat(artefact.EvidencePaths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)

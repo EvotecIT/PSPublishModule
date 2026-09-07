@@ -10,7 +10,8 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         RequiredModuleReference[] manifestRequiredModules,
-        string[] manifestExternalModuleDependencies)
+        string[] manifestExternalModuleDependencies,
+        IReadOnlyList<string> mergedScriptFiles)
     {
         RefreshManifestPathFromPlan(
             plan,
@@ -18,6 +19,9 @@ public sealed partial class ModulePipelineRunner
             manifestRequiredModules,
             manifestExternalModuleDependencies,
             preserveCompiledRootModule: IsReusingCompiledPowerShellModule(plan));
+
+        if (mergedScriptFiles.Count > 0)
+            PruneMergedScriptsToProcess(buildResult, mergedScriptFiles);
     }
 
     private void RefreshProjectManifestFromPlan(
@@ -122,11 +126,49 @@ public sealed partial class ModulePipelineRunner
         // Normalize ScriptsToProcess layout by rewriting the key once using the current value.
         // This cleans up historical insertion formatting artifacts (extra blank line before the key).
         _manifestMutator.TryRemoveTopLevelKey(manifestPath, "ScriptsToProcess");
-        _manifestMutator.TrySetTopLevelStringArray(manifestPath, "ScriptsToProcess", scriptsToProcess);
+        if (scriptsToProcess.Length > 0)
+            _manifestMutator.TrySetTopLevelStringArray(manifestPath, "ScriptsToProcess", scriptsToProcess);
 
         // Keep command/module hints in the in-memory plan only.
         // Persisting them into the PSD1 breaks downstream Import-Module consumers such as the documentation engine.
         _manifestMutator.TryRemoveTopLevelKey(manifestPath, "CommandModuleDependencies");
+    }
+
+    private void PruneMergedScriptsToProcess(
+        ModuleBuildResult buildResult,
+        IReadOnlyList<string> mergedScriptFiles)
+    {
+        var scriptsToProcess = ModuleManifestValueReader.ReadTopLevelStringOrArray(
+            buildResult.ManifestPath,
+            "ScriptsToProcess");
+        if (scriptsToProcess.Length == 0)
+            return;
+
+        var pathComparer = Path.DirectorySeparatorChar == '\\'
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var mergedScripts = new HashSet<string>(
+            mergedScriptFiles
+                .Select(path => NormalizeManifestScriptPath(
+                    FrameworkCompatibility.GetRelativePath(buildResult.StagingPath, path))),
+            pathComparer);
+        var remaining = scriptsToProcess
+            .Where(script => !mergedScripts.Contains(NormalizeManifestScriptPath(script)))
+            .ToArray();
+        if (remaining.Length == scriptsToProcess.Length)
+            return;
+
+        _manifestMutator.TryRemoveTopLevelKey(buildResult.ManifestPath, "ScriptsToProcess");
+        if (remaining.Length > 0)
+            _manifestMutator.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", remaining);
+    }
+
+    private static string NormalizeManifestScriptPath(string path)
+    {
+        var normalized = (path ?? string.Empty).Trim().Replace('\\', '/');
+        while (normalized.StartsWith("./", StringComparison.Ordinal))
+            normalized = normalized.Substring(2);
+        return normalized.TrimStart('/');
     }
 
     private void SetOrRemoveTopLevelString(string manifestPath, string key, string? value, bool removeWhenEmpty)

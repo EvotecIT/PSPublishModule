@@ -171,6 +171,13 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException(
                 "GenerateProvenance requires module signing, at least one artefact, and a GitHub release destination.");
         }
+        if (plan.GenerateReleaseProvenance &&
+            plan.Artefacts.Any(static artefact => artefact.ArtefactType == ArtefactType.ScriptPacked))
+        {
+            throw new InvalidOperationException(
+                "GenerateProvenance does not support ScriptPacked artefacts. " +
+                "Use a Packed module artefact for provenance-bound GitHub releases, or disable provenance for the standalone script archive.");
+        }
         if (!plan.RequireCleanReleaseSource) return;
 
         var generatedProvenancePaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot);

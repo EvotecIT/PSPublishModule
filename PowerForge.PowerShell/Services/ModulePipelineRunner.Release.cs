@@ -68,8 +68,9 @@ public sealed partial class ModulePipelineRunner
             plan.PreRelease,
             artefact.ArtefactType);
 
-        if (artefact.ArtefactType == ArtefactType.Unpacked)
+        if (artefact.ArtefactType == ArtefactType.Unpacked || artefact.ArtefactType == ArtefactType.Script)
         {
+            bool scriptArtefact = artefact.ArtefactType == ArtefactType.Script;
             var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
                 cfg,
                 outputRoot,
@@ -93,8 +94,8 @@ public sealed partial class ModulePipelineRunner
             }
 
             paths.Add(new ArtefactDestructivePath(
-                Path.Combine(modulesRoot, plan.ModuleName),
-                "main module copy root",
+                scriptArtefact ? modulesRoot : Path.Combine(modulesRoot, plan.ModuleName),
+                scriptArtefact ? "main script copy root" : "main module copy root",
                 ArtefactDestructivePathKind.DirectoryTree));
 
             if (cfg.RequiredModules.Enabled == true)
@@ -112,8 +113,9 @@ public sealed partial class ModulePipelineRunner
             return paths;
         }
 
-        if (artefact.ArtefactType == ArtefactType.Packed)
+        if (artefact.ArtefactType == ArtefactType.Packed || artefact.ArtefactType == ArtefactType.ScriptPacked)
         {
+            bool scriptArtefact = artefact.ArtefactType == ArtefactType.ScriptPacked;
             var packedRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", "validation", plan.ModuleName);
             var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForPacked(
                 cfg,
@@ -140,13 +142,13 @@ public sealed partial class ModulePipelineRunner
             }
 
             paths.Add(new ArtefactDestructivePath(
-                Path.Combine(outputRoot, ResolveArtefactFileNameForValidation(cfg, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease)),
+                Path.Combine(outputRoot, ArtefactLayoutPathResolver.ResolveArtefactFileName(cfg, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease)),
                 "zip output file",
                 ArtefactDestructivePathKind.ExactFile));
 
             paths.Add(new ArtefactDestructivePath(
-                Path.Combine(modulesRoot, plan.ModuleName),
-                "main packed module copy root",
+                scriptArtefact ? modulesRoot : Path.Combine(modulesRoot, plan.ModuleName),
+                scriptArtefact ? "main packed script copy root" : "main packed module copy root",
                 ArtefactDestructivePathKind.DirectoryTree));
 
             if (cfg.RequiredModules.Enabled == true)
@@ -259,21 +261,6 @@ public sealed partial class ModulePipelineRunner
         }
 
         return Path.GetFullPath(raw);
-    }
-
-    private static string ResolveArtefactFileNameForValidation(
-        ArtefactConfiguration cfg,
-        string moduleName,
-        string moduleVersion,
-        string? preRelease)
-    {
-        if (!string.IsNullOrWhiteSpace(cfg.ArtefactName))
-            return ModulePathTokenFormatter.ReplacePathTokens(cfg.ArtefactName!.Trim(), moduleName, moduleVersion, preRelease);
-
-        var tagWithPre = ModulePathTokenFormatter.ReplacePathTokens("<TagModuleVersionWithPreRelease>", moduleName, moduleVersion, preRelease);
-        return cfg.IncludeTagName == true
-            ? $"{moduleName}.{tagWithPre}.zip"
-            : $"{moduleName}.zip";
     }
 
     private static bool IsDirectChildPath(string parentPath, string candidatePath)
