@@ -57,10 +57,22 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("Resolve-ManagedSourcePath", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("Resolve-ExternalRepositoryRoot", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("https://github.com/$RepositorySlug.git", sourceValidation, StringComparison.Ordinal);
-        Assert.Contains("GIT_TERMINAL_PROMPT = '0'", sourceValidation, StringComparison.Ordinal);
-        Assert.Contains("GCM_INTERACTIVE = 'Never'", sourceValidation, StringComparison.Ordinal);
-        Assert.Contains("credential.helper= clone --quiet --no-checkout --filter=blob:none", sourceValidation, StringComparison.Ordinal);
-        Assert.Contains("checkout --quiet --detach $RepositoryRef", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgeAnonymousGit.ps1", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgeAnonymousGit", sourceValidation, StringComparison.Ordinal);
+        var anonymousGit = ReadRepoFile(
+            ".github", "actions", "powerforge-server-recovery-validate", "Invoke-PowerForgeAnonymousGit.ps1");
+        Assert.Contains("GIT_TERMINAL_PROMPT = '0'", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("GCM_INTERACTIVE = 'Never'", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("GIT_CONFIG_NOSYSTEM = '1'", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("GIT_CONFIG_GLOBAL = $emptyGlobalConfig", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("GIT_CONFIG_COUNT = '0'", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("StartsWith('GIT_'", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("StartsWith('GCM_'", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("anonymous-git-askpass", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("'credential.helper='", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("'http.extraHeader='", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("'clone', '--quiet', '--no-checkout', '--filter=blob:none'", sourceValidation, StringComparison.Ordinal);
+        Assert.Contains("'checkout', '--quiet', '--detach', $RepositoryRef", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("External managed recovery source checkout did not resolve the pinned revision", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("git -C $root ls-tree $repositoryRef -- $relativePath", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("$Matches['mode'] -notin @('100644', '100755')", sourceValidation, StringComparison.Ordinal);

@@ -50,7 +50,11 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
 
         Assert.Contains("using: composite", action, StringComparison.Ordinal);
         Assert.Contains("service-validation-script", action, StringComparison.Ordinal);
+        Assert.Contains("source-sha:", action, StringComparison.Ordinal);
         Assert.Contains("actions/checkout@", action, StringComparison.Ordinal);
+        Assert.Contains("ref: ${{ inputs.source-sha || github.sha }}", action, StringComparison.Ordinal);
+        Assert.Contains("fetch-depth: 0", action, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_SOURCE_SHA: ${{ inputs.source-sha || github.sha }}", action, StringComparison.Ordinal);
         Assert.DoesNotContain("github.event.pull_request.head.sha", action, StringComparison.Ordinal);
         Assert.Contains("actions/upload-artifact@", action, StringComparison.Ordinal);
         Assert.Contains("overwrite: true", action, StringComparison.Ordinal);
@@ -66,6 +70,8 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.Contains("tar --directory $resolvedServiceRoot", script, StringComparison.Ordinal);
         Assert.Contains("package.json", script, StringComparison.Ordinal);
         Assert.Contains("sourceRepository", script, StringComparison.Ordinal);
+        Assert.Contains("git -C $workspace rev-parse HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("does not match its exact provenance commit", script, StringComparison.Ordinal);
         Assert.Contains("workflowRunId", script, StringComparison.Ordinal);
         Assert.DoesNotContain("POWERFORGE_DEPLOYMENT_SSH", script, StringComparison.Ordinal);
         Assert.InRange(NormalizedLineCount(script), 1, 150);

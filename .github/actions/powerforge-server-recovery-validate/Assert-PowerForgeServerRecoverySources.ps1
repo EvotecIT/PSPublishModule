@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
+. "$PSScriptRoot/Invoke-PowerForgeAnonymousGit.ps1"
 
 $approvedPrivilegedCaptureCommands = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 $approvedPrivilegedCaptureCommands.Add('apachectl -S', '/usr/sbin/apachectl -S')
@@ -106,28 +107,25 @@ function Resolve-ExternalRepositoryRoot {
         throw "External repository validation checkout already exists: $RepositorySlug"
     }
 
-    $previousTerminalPrompt = $env:GIT_TERMINAL_PROMPT
-    $previousCredentialManagerPrompt = $env:GCM_INTERACTIVE
-    try {
-        $env:GIT_TERMINAL_PROMPT = '0'
-        $env:GCM_INTERACTIVE = 'Never'
-        & git -c credential.helper= clone --quiet --no-checkout --filter=blob:none -- $canonicalUrl $checkout
-        if ($LASTEXITCODE -ne 0) {
-            throw "External managed recovery source repository is not publicly available at its pinned GitHub URL: $RepositorySlug"
-        }
-        & git -c core.hooksPath=/dev/null -c filter.lfs.smudge= -c filter.lfs.process= `
-            -C $checkout checkout --quiet --detach $RepositoryRef
-        if ($LASTEXITCODE -ne 0) {
-            throw "External managed recovery source revision is not available from its public repository: $RepositorySlug@$RepositoryRef"
-        }
-    } finally {
-        $env:GIT_TERMINAL_PROMPT = $previousTerminalPrompt
-        $env:GCM_INTERACTIVE = $previousCredentialManagerPrompt
+    $clone = Invoke-PowerForgeAnonymousGit -IsolationRoot $root -Arguments @(
+        'clone', '--quiet', '--no-checkout', '--filter=blob:none', '--', $canonicalUrl, $checkout
+    )
+    if ($clone.ExitCode -ne 0) {
+        throw "External managed recovery source repository is not publicly available at its pinned GitHub URL: $RepositorySlug"
+    }
+    $checkoutResult = Invoke-PowerForgeAnonymousGit -IsolationRoot $root -Arguments @(
+        '-c', 'core.hooksPath=/dev/null', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.process=',
+        '-C', $checkout, 'checkout', '--quiet', '--detach', $RepositoryRef
+    )
+    if ($checkoutResult.ExitCode -ne 0) {
+        throw "External managed recovery source revision is not available from its public repository: $RepositorySlug@$RepositoryRef"
     }
 
-    $resolvedHead = @(& git -C $checkout rev-parse HEAD 2>$null)
-    if ($LASTEXITCODE -ne 0 -or $resolvedHead.Count -ne 1 -or
-        -not [string]::Equals($resolvedHead[0], $RepositoryRef, [StringComparison]::OrdinalIgnoreCase)) {
+    $resolvedHead = Invoke-PowerForgeAnonymousGit -IsolationRoot $root -Arguments @(
+        '-C', $checkout, 'rev-parse', 'HEAD'
+    )
+    if ($resolvedHead.ExitCode -ne 0 -or $resolvedHead.Output.Count -ne 1 -or
+        -not [string]::Equals($resolvedHead.Output[0], $RepositoryRef, [StringComparison]::OrdinalIgnoreCase)) {
         throw "External managed recovery source checkout did not resolve the pinned revision: $RepositorySlug@$RepositoryRef"
     }
     $resolvedCheckout = [IO.Path]::GetFullPath($checkout).TrimEnd([IO.Path]::DirectorySeparatorChar)

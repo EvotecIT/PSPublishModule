@@ -42,6 +42,11 @@ if ($env:GITHUB_RUN_ID -notmatch '^\d+$' -or $env:GITHUB_RUN_ATTEMPT -notmatch '
 }
 
 $workspace = Resolve-CanonicalPath -Path $env:GITHUB_WORKSPACE
+$checkedOutSha = @(& git -C $workspace rev-parse HEAD 2>$null)
+if ($LASTEXITCODE -ne 0 -or $checkedOutSha.Count -ne 1 -or
+    -not [string]::Equals($checkedOutSha[0], $env:POWERFORGE_SOURCE_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The checked-out service source does not match its exact provenance commit.'
+}
 $serviceRoot = [IO.Path]::GetFullPath((Join-Path $workspace $env:POWERFORGE_SERVICE_ROOT))
 Assert-WorkspacePath -Path $serviceRoot -Workspace $workspace -Description 'service-root'
 
