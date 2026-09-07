@@ -292,6 +292,10 @@ internal static class PowerShellLocalCallSemanticBinder
             }
             else if (elements[elementIndex] is ExpressionAst positional)
             {
+                if (pipelineInput is not null)
+                    return Reject(diagnostics, "PSB2923",
+                        "Runtime-free lifecycle calls currently accept named switch arguments only; positional command binding must precede pipeline binding.",
+                        PowerShellSourceParser.GetSpan(document, positional.Extent));
                 while (positionalIndex < positionalParameters.Length && bound.ContainsKey(positionalParameters[positionalIndex])) positionalIndex++;
                 if (positionalIndex >= positionalParameters.Length)
                 {
