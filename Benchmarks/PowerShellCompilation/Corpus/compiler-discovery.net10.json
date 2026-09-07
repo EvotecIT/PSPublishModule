@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "packetId": "powerforge-compiler-discovery-net10-v1",
-  "fixedOn": "2026-09-06",
+  "packetId": "powerforge-compiler-discovery-net10-v2",
+  "fixedOn": "2026-09-07",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
   "purpose": "Pinned source discovery only. Inputs are never imported or executed; independent scripts retain separate compilation closures. These counts are not language coverage or complete-workload qualification.",
@@ -45,6 +45,19 @@
       "entryPoint": "MicrosoftIntune-876f8c8602ed3f31d5d5c36ad33818d42b5e9638/Scripts",
       "selection": "Scripts",
       "artifactKind": "Executable",
+      "modes": ["Strict", "Hybrid"]
+    },
+    {
+      "id": "pssharedgoods",
+      "scenarioFamily": "shared-data-and-administration-helpers",
+      "repositoryUrl": "https://github.com/EvotecIT/PSSharedGoods",
+      "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "license": "MIT",
+      "archiveUrl": "https://codeload.github.com/EvotecIT/PSSharedGoods/zip/2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "sha256": "0bbbc3934c871399026e5c17b530e356a5d00f15b255e713c6f991b1b911e429",
+      "entryPoint": "PSSharedGoods-2a807a4f11ba458b7bc405ce3674d93838639af1/PSSharedGoods.psd1",
+      "selection": "Module",
+      "artifactKind": "BinaryModule",
       "modes": ["Strict", "Hybrid"]
     },
     {
