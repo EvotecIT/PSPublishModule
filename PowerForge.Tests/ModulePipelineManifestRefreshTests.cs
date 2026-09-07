@@ -331,8 +331,13 @@ public sealed class ModulePipelineManifestRefreshTests
         }
     }
 
-    [Fact]
-    public void Run_MergedModulePrunesScriptsToProcessUsingStagingFileSystemCaseRules()
+    [Theory]
+    [InlineData(".\\classes\\initialize.ps1", false)]
+    [InlineData(".\\Classes\\..\\Classes\\Initialize.ps1", true)]
+    [InlineData("./Classes/../Classes/Initialize.ps1", true)]
+    public void Run_MergedModulePrunesScriptsToProcessUsingCanonicalStagingFileSystemPaths(
+        string manifestScriptPath,
+        bool removeOnCaseSensitiveFileSystem)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -346,7 +351,7 @@ public sealed class ModulePipelineManifestRefreshTests
                 "@{" + Environment.NewLine +
                 "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
                 "    ModuleVersion = '1.0.0'" + Environment.NewLine +
-                "    ScriptsToProcess = @('.\\classes\\initialize.ps1')" + Environment.NewLine +
+                "    ScriptsToProcess = @('" + manifestScriptPath + "')" + Environment.NewLine +
                 "}");
 
             var spec = new ModulePipelineSpec
@@ -377,14 +382,14 @@ public sealed class ModulePipelineManifestRefreshTests
                 result.BuildResult.ManifestPath,
                 "ScriptsToProcess",
                 out var remainingScripts);
-            if (caseInsensitive)
+            if (caseInsensitive || removeOnCaseSensitiveFileSystem)
             {
                 Assert.False(hasScriptsToProcess);
             }
             else
             {
                 Assert.True(hasScriptsToProcess);
-                Assert.Equal(new[] { ".\\classes\\initialize.ps1" }, remainingScripts);
+                Assert.Equal(new[] { manifestScriptPath }, remainingScripts);
             }
         }
         finally

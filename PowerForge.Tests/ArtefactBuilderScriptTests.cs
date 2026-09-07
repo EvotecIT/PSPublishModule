@@ -202,6 +202,78 @@ public sealed class ArtefactBuilderScriptTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Script, "Export-ModuleMember")]
+    [InlineData(ArtefactType.Script, "Microsoft.PowerShell.Core\\Export-ModuleMember")]
+    [InlineData(ArtefactType.ScriptPacked, "Export-ModuleMember")]
+    [InlineData(ArtefactType.ScriptPacked, "Microsoft.PowerShell.Core\\Export-ModuleMember")]
+    public void Build_ScriptPreservesContentAfterHandWrittenExportInvocation(
+        ArtefactType artefactType,
+        string exportCommand)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            File.WriteAllText(
+                Path.Combine(stagingRoot.FullName, moduleName + ".psm1"),
+                "function Invoke-DemoModule { $script:State }" + Environment.NewLine +
+                "$help = @'" + Environment.NewLine +
+                exportCommand + " -Function LiteralText" + Environment.NewLine +
+                "'@" + Environment.NewLine +
+                "<#" + Environment.NewLine +
+                exportCommand + " -Function CommentText" + Environment.NewLine +
+                "#>" + Environment.NewLine +
+                "    " + exportCommand + " -Function Invoke-DemoModule" + Environment.NewLine +
+                "$script:State = 'ready'" + Environment.NewLine +
+                "function Get-DemoState { $script:State }" + Environment.NewLine);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", artefactType.ToString());
+
+            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).Build(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = artefactType,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = outputRoot,
+                        ScriptName = "Invoke-DemoModule.ps1",
+                        ArtefactName = "DemoModule.zip"
+                    }
+                },
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>());
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-hand-written-export");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, "Invoke-DemoModule.ps1"));
+            Assert.DoesNotContain(exportCommand + " -Function Invoke-DemoModule", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(exportCommand + " -Function LiteralText", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(exportCommand + " -Function CommentText", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("$script:State = 'ready'", script, StringComparison.Ordinal);
+            Assert.Contains("function Get-DemoState", script, StringComparison.Ordinal);
+            System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Build_ScriptFinalizerReceivesCompleteOutputLayoutWhenMainScriptUsesSubdirectory()
     {

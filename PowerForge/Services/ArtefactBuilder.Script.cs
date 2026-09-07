@@ -269,13 +269,14 @@ public sealed partial class ArtefactBuilder
 
         var exportBoundary = lines.FindLastIndex(static line =>
             string.Equals(line.Trim(), "# Export functions and aliases as required", StringComparison.Ordinal));
-        if (exportBoundary < 0)
-        {
-            exportBoundary = lines.FindLastIndex(static line =>
-                line.IndexOf("Export-ModuleMember ", StringComparison.OrdinalIgnoreCase) >= 0);
-        }
         if (exportBoundary >= 0)
+        {
             lines.RemoveRange(exportBoundary, lines.Count - exportBoundary);
+        }
+        else
+        {
+            RemoveHandWrittenExportInvocations(lines);
+        }
 
         var moduleContent = string.Join(newline, lines).TrimEnd('\r', '\n');
         var preamble = ModuleMergeComposer.ExtractMergedScriptPreamble(moduleContent, out var body);
@@ -299,4 +300,145 @@ public sealed partial class ArtefactBuilder
 
     private static string NormalizeNewlines(string value, string newline)
         => value.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", newline);
+
+    private static void RemoveHandWrittenExportInvocations(List<string> lines)
+    {
+        var state = ScriptLexicalState.Normal;
+        var blockCommentDepth = 0;
+        for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+        {
+            var line = lines[lineIndex] ?? string.Empty;
+            if (state == ScriptLexicalState.Normal &&
+                blockCommentDepth == 0 &&
+                IsExportModuleMemberInvocationLine(line))
+            {
+                var removeCount = 1;
+                while (lineIndex + removeCount < lines.Count &&
+                       lines[lineIndex + removeCount - 1].TrimEnd().EndsWith("`", StringComparison.Ordinal))
+                {
+                    removeCount++;
+                }
+                lines.RemoveRange(lineIndex, removeCount);
+                lineIndex--;
+                continue;
+            }
+
+            UpdateScriptLexicalState(line, ref state, ref blockCommentDepth);
+        }
+    }
+
+    private static void UpdateScriptLexicalState(
+        string line,
+        ref ScriptLexicalState state,
+        ref int blockCommentDepth)
+    {
+        if (state is ScriptLexicalState.SingleQuotedHereString or ScriptLexicalState.DoubleQuotedHereString)
+        {
+            var terminator = state == ScriptLexicalState.SingleQuotedHereString ? "'@" : "\"@";
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith(terminator, StringComparison.Ordinal))
+            {
+                var suffix = trimmed.Substring(terminator.Length);
+                if (string.IsNullOrWhiteSpace(suffix) || suffix.TrimStart().StartsWith("#", StringComparison.Ordinal))
+                    state = ScriptLexicalState.Normal;
+            }
+            return;
+        }
+
+        for (var characterIndex = 0; characterIndex < line.Length; characterIndex++)
+        {
+            var current = line[characterIndex];
+            var next = characterIndex + 1 < line.Length ? line[characterIndex + 1] : '\0';
+            if (blockCommentDepth > 0)
+            {
+                if (current == '<' && next == '#')
+                {
+                    blockCommentDepth++;
+                    characterIndex++;
+                }
+                else if (current == '#' && next == '>')
+                {
+                    blockCommentDepth--;
+                    characterIndex++;
+                }
+                continue;
+            }
+            if (state == ScriptLexicalState.SingleQuotedString)
+            {
+                if (current != '\'')
+                    continue;
+                if (next == '\'')
+                {
+                    characterIndex++;
+                    continue;
+                }
+                state = ScriptLexicalState.Normal;
+                continue;
+            }
+            if (state == ScriptLexicalState.DoubleQuotedString)
+            {
+                if (current == '`')
+                {
+                    characterIndex++;
+                    continue;
+                }
+                if (current == '"')
+                    state = ScriptLexicalState.Normal;
+                continue;
+            }
+            if (current == '<' && next == '#')
+            {
+                blockCommentDepth++;
+                characterIndex++;
+                continue;
+            }
+            if (current == '#')
+                break;
+            if (current == '@' && next is '\'' or '"')
+            {
+                state = next == '\''
+                    ? ScriptLexicalState.SingleQuotedHereString
+                    : ScriptLexicalState.DoubleQuotedHereString;
+                break;
+            }
+            if (current == '\'')
+            {
+                state = ScriptLexicalState.SingleQuotedString;
+                continue;
+            }
+            if (current == '"')
+            {
+                state = ScriptLexicalState.DoubleQuotedString;
+                continue;
+            }
+            if (current == '`')
+                characterIndex++;
+        }
+    }
+
+    private static bool IsExportModuleMemberInvocationLine(string line)
+    {
+        var trimmed = (line ?? string.Empty).TrimStart();
+        return StartsWithCommandName(trimmed, "Export-ModuleMember") ||
+               StartsWithCommandName(trimmed, "Microsoft.PowerShell.Core\\Export-ModuleMember");
+    }
+
+    private static bool StartsWithCommandName(string line, string commandName)
+    {
+        if (!line.StartsWith(commandName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return line.Length == commandName.Length ||
+               char.IsWhiteSpace(line[commandName.Length]) ||
+               line[commandName.Length] is '`' or ';' or '|';
+    }
+
+    private enum ScriptLexicalState
+    {
+        Normal,
+        SingleQuotedString,
+        DoubleQuotedString,
+        SingleQuotedHereString,
+        DoubleQuotedHereString
+    }
 }

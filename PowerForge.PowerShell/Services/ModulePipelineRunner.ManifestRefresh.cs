@@ -149,12 +149,11 @@ public sealed partial class ModulePipelineRunner
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
         var mergedScripts = new HashSet<string>(
-            mergedScriptFiles
-                .Select(path => NormalizeManifestScriptPath(
-                    FrameworkCompatibility.GetRelativePath(buildResult.StagingPath, path))),
+            mergedScriptFiles.Select(Path.GetFullPath),
             pathComparer);
         var remaining = scriptsToProcess
-            .Where(script => !mergedScripts.Contains(NormalizeManifestScriptPath(script)))
+            .Where(script => ResolveManifestScriptPath(buildResult.StagingPath, script) is not { } resolvedPath ||
+                             !mergedScripts.Contains(resolvedPath))
             .ToArray();
         if (remaining.Length == scriptsToProcess.Length)
             return;
@@ -164,12 +163,25 @@ public sealed partial class ModulePipelineRunner
             _manifestMutator.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", remaining);
     }
 
-    private static string NormalizeManifestScriptPath(string path)
+    private static string? ResolveManifestScriptPath(string stagingPath, string path)
     {
-        var normalized = (path ?? string.Empty).Trim().Replace('\\', '/');
-        while (normalized.StartsWith("./", StringComparison.Ordinal))
-            normalized = normalized.Substring(2);
-        return normalized.TrimStart('/');
+        var normalized = (path ?? string.Empty)
+            .Trim()
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        if (normalized.Length == 0)
+            return null;
+
+        try
+        {
+            return Path.GetFullPath(Path.IsPathRooted(normalized)
+                ? normalized
+                : Path.Combine(stagingPath, normalized));
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private void SetOrRemoveTopLevelString(string manifestPath, string key, string? value, bool removeWhenEmpty)
