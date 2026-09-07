@@ -724,7 +724,7 @@ internal sealed partial class PowerShellTypedLowerer
                     invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
                     invocation.AuthoredEvaluationOrder.ToArray(),
                     invocation.BoundParameterNames.ToArray(),
-                    CreateEvaluationTemporaryNames(invocation, names),
+                    CreateEvaluationTemporaryNames(invocation, names, target.RequiresPowerShellStatementErrors),
                     target.RequiresPowerShellBoundParameters,
                     target.RequiresPowerShellStreams,
                     target.RequiresProviderCancellation,
@@ -746,10 +746,12 @@ internal sealed partial class PowerShellTypedLowerer
 
     private static string?[] CreateEvaluationTemporaryNames(
         PowerShellBoundInvocationExpression invocation,
-        LoweredNameAllocator names)
+        LoweredNameAllocator names,
+        bool preserveCallerErrorScope)
     {
         var result = new string?[invocation.Arguments.Length];
-        if (invocation.AuthoredEvaluationOrder.SequenceEqual(invocation.AuthoredEvaluationOrder.OrderBy(static index => index)))
+        // Authored argument failures belong to the caller, before a nested command acquires its error identity.
+        if (!preserveCallerErrorScope && invocation.AuthoredEvaluationOrder.SequenceEqual(invocation.AuthoredEvaluationOrder.OrderBy(static index => index)))
             return result;
         foreach (var parameterIndex in invocation.AuthoredEvaluationOrder)
             result[parameterIndex] = names.Allocate("pf_local_argument");

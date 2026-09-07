@@ -6,14 +6,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var arguments = invocation.Arguments.Select(EmitExpression).ToArray();
         var authored = invocation.AuthoredEvaluationOrder;
-        var declarationOrder = authored.OrderBy(static index => index).ToArray();
-        var reordered = !authored.SequenceEqual(declarationOrder);
+        var evaluateArguments = invocation.EvaluationTemporaryNames.Any(static name => name is not null);
         var temporaries = new Dictionary<int, string>();
-        if (reordered)
+        if (evaluateArguments)
         {
             foreach (var parameterIndex in authored)
                 temporaries[parameterIndex] = invocation.EvaluationTemporaryNames[parameterIndex]
-                    ?? throw new InvalidOperationException("Lowered local-call evaluation order is missing its collision-free temporary name.");
+                    ?? throw new InvalidOperationException("Lowered local-call evaluation plan is missing its collision-free temporary name.");
             foreach (var pair in temporaries) arguments[pair.Key] = pair.Value;
         }
         var callArguments = arguments.ToList();
@@ -44,7 +43,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 ")) { try { " + result + " } catch (global::System.Exception " + error +
                 ") when (" + StatementErrorContextType + ".IsOperationFailure(" + error + ")) { throw " + context + ".LeaveCommand(" + error + "); } } })()";
         }
-        if (!reordered) return call;
+        if (!evaluateArguments) return call;
         var evaluations = authored.Select(parameterIndex =>
             $"{PowerShellCSharpSymbolRenderer.TypeName(invocation.Arguments[parameterIndex].ClrType)} {temporaries[parameterIndex]} = {EmitExpression(invocation.Arguments[parameterIndex])};");
         if (invocation.ClrType == typeof(void))

@@ -399,9 +399,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)!;
-        var standardOutput = process.StandardOutput.ReadToEnd();
-        var standardError = process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(60_000), "Typed executable did not exit within 60 seconds.");
-        return (process.ExitCode, standardOutput, standardError);
+        var standardOutput = process.StandardOutput.ReadToEndAsync();
+        var standardError = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(60_000))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+            Assert.Fail("Typed executable did not exit within 60 seconds.");
+        }
+        return (process.ExitCode, standardOutput.GetAwaiter().GetResult(), standardError.GetAwaiter().GetResult());
     }
 }
