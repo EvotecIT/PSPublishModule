@@ -1,3 +1,5 @@
+using System.Management.Automation.Language;
+
 namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
@@ -34,6 +36,35 @@ internal sealed partial class PowerShellSemanticBinder
             var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
             if (variable is not null && symbols.TryGetValue(variable.VariablePath.UserPath, out var binding))
                 binding.ForgetValueState();
+        }
+    }
+
+    private static void ForgetLoopWrittenValueStates(
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        params Ast?[] regions)
+    {
+        // The body is emitted once and reused for every iteration. Entry facts
+        // about a written variable do not establish facts at the next backedge.
+        // Keep immutable CLR representation/type constraints, but discard these
+        // value facts until a statement in the body proves them again.
+        foreach (var region in regions)
+        {
+            if (region is null) continue;
+            foreach (var write in region.FindAll(
+                         static node => node is AssignmentStatementAst or ForEachStatementAst ||
+                                        node is UnaryExpressionAst { TokenKind: TokenKind.PlusPlus or TokenKind.PostfixPlusPlus or TokenKind.MinusMinus or TokenKind.PostfixMinusMinus },
+                         searchNestedScriptBlocks: false))
+            {
+                var variable = write switch
+                {
+                    AssignmentStatementAst assignment => PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left),
+                    ForEachStatementAst loop => loop.Variable,
+                    UnaryExpressionAst unary => PowerShellAssignmentTargetPolicy.FindDirectVariable(unary.Child),
+                    _ => null
+                };
+                if (variable is not null && symbols.TryGetValue(variable.VariablePath.UserPath, out var binding))
+                    binding.ForgetValueState();
+            }
         }
     }
 }
