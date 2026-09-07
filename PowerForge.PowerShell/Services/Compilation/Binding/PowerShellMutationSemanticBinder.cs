@@ -22,13 +22,18 @@ internal sealed class PowerShellSemanticSymbolBinding
     internal void Refine(PowerShellTypeFact type, PowerShellValueState valueState, bool isBraceFreeString = false)
     {
         if (Type.Provenance == PowerShellTypeFactProvenance.Unknown) Type = type;
-        else if (Type.ClrType == type.ClrType && type.DictionaryValueKind != PowerShellDictionaryValueKind.None)
+        else if (Type.ClrType.IsAssignableFrom(type.ClrType) &&
+                 type.DictionaryValueKind is PowerShellDictionaryValueKind.String or PowerShellDictionaryValueKind.Object ||
+                 Type.ClrType == type.ClrType && type.DictionaryValueKind != PowerShellDictionaryValueKind.None)
             Type = new PowerShellTypeFact(
                 Type.ClrType,
                 Type.Provenance,
                 Type.Explanation,
                 type.KnownProperties,
                 type.DictionaryValueKind);
+        else if (Type.DictionaryValueKind is PowerShellDictionaryValueKind.String or PowerShellDictionaryValueKind.Object)
+            Type = new PowerShellTypeFact(Type.ClrType, Type.Provenance,
+                "The assigned value does not preserve the preceding dictionary shape.");
         ValueState = valueState;
         SetStringContent(isBraceFreeString);
     }
@@ -69,6 +74,11 @@ internal sealed class PowerShellSemanticSymbolBinding
                 .ToArray();
             if (concreteTypes.Length == 1) Type = concreteTypes[0].First();
         }
+        if (Type.DictionaryValueKind != PowerShellDictionaryValueKind.None &&
+            materialized.Any(path => path.Type.DictionaryValueKind != Type.DictionaryValueKind))
+            Type = new PowerShellTypeFact(Type.ClrType, Type.Provenance,
+                "Control-flow paths preserve dictionary storage but do not share one narrowed value contract.",
+                dictionaryValueKind: PowerShellDictionaryValueKind.Object);
         var states = materialized.Select(static path => path.ValueState).Distinct().Take(2).ToArray();
         ValueState = states.Length == 1 ? states[0] : PowerShellValueState.Unknown;
         IsModuleStateDerived = materialized.Any(static path => path.IsModuleStateDerived);
@@ -107,7 +117,11 @@ internal static class PowerShellMutationSemanticBinder
         };
         if (operation is null) return null;
         var targetType = target.Type.ClrType;
-        var value = bindExpression(syntax.Right, target.Type.Provenance == PowerShellTypeFactProvenance.Unknown ? null : targetType);
+        // An inferred storage type is not an authored Hashtable/IDictionary constraint.
+        var contextualType = target.Type.Provenance == PowerShellTypeFactProvenance.Unknown ||
+            target.Type.Provenance != PowerShellTypeFactProvenance.Explicit &&
+            typeof(System.Collections.IDictionary).IsAssignableFrom(targetType) ? null : targetType;
+        var value = bindExpression(syntax.Right, contextualType);
         if (value is null) return null;
         if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
         {

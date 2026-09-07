@@ -206,7 +206,8 @@ internal static class PowerShellDictionarySemanticBinder
         Type? contextualType)
     {
         if (contextualType == typeof(Hashtable) || contextualType == typeof(IDictionary)) return true;
-        return syntax.KeyValuePairs.Any(static pair => GetValueExpression(pair.Item2) is not StringConstantExpressionAst);
+        return syntax.KeyValuePairs.Any(static pair => GetValueExpression(pair.Item2) is not StringConstantExpressionAst) ||
+            !PowerShellDictionaryShapePolicy.HasClosedStringValues(syntax);
     }
 
     internal static PowerShellTypeFact InferLiteralType(
@@ -258,7 +259,8 @@ internal static class PowerShellDictionarySemanticBinder
         {
             kind = PowerShellBoundIndexKind.StringDictionary; indexType = typeof(string); resultType = typeof(string); return true;
         }
-        if (type == typeof(Hashtable) && typeFact.DictionaryValueKind == PowerShellDictionaryValueKind.String)
+        if (typeof(IDictionary).IsAssignableFrom(type) && type != typeof(OrderedDictionary) &&
+            typeFact.DictionaryValueKind == PowerShellDictionaryValueKind.String)
         {
             kind = PowerShellBoundIndexKind.StringHashtable; indexType = typeof(string); resultType = typeof(string); return true;
         }

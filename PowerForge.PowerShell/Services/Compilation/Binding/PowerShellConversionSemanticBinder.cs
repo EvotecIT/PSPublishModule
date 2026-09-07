@@ -40,9 +40,13 @@ internal static class PowerShellConversionSemanticBinder
             return null;
         }
 
+        var preserveDictionaryShape = !usePowerShellLanguageRuntime &&
+            operand.Type.DictionaryValueKind is PowerShellDictionaryValueKind.String or PowerShellDictionaryValueKind.Object;
         return new PowerShellBoundConversionExpression(
             span,
-            new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Explicit, "An authored conversion selects a CLR-compatible representation."),
+            new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Explicit, "An authored conversion selects a CLR-compatible representation.",
+                preserveDictionaryShape ? operand.Type.KnownProperties : null,
+                preserveDictionaryShape ? operand.Type.DictionaryValueKind : PowerShellDictionaryValueKind.None),
             operand,
             usePowerShellLanguageRuntime);
     }
