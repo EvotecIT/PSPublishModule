@@ -68,7 +68,10 @@ public enum PowerShellCompilationCapability
     HybridTypedRegions = 16384,
 
     /// <summary>Generated commands may preserve statement errors through a qualified native PowerShell host.</summary>
-    PowerShellStatementErrors = 32768
+    PowerShellStatementErrors = 32768,
+
+    /// <summary>CLR-callable lifecycle methods accept typed collections with explicit CLR argument validation.</summary>
+    ClrPipelineCollectionBinding = 65536
 }
 
 /// <summary>
@@ -424,6 +427,7 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PowerShellLanguageConversions |
                               PowerShellCompilationCapability.PowerShellLanguageOperators |
                               PowerShellCompilationCapability.PowerShellStatementErrors |
+                              PowerShellCompilationCapability.ClrPipelineCollectionBinding |
                               PowerShellCompilationCapability.RuntimeStateIntrinsics |
                               PowerShellCompilationCapability.RuntimeFreeProviderOperations |
                               PowerShellCompilationCapability.UntypedObjectParameters |

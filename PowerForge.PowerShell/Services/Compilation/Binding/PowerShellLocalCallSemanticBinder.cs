@@ -25,7 +25,8 @@ internal sealed class PowerShellLocalCallSignature
         PowerShellCompilationCommandBinding commandBinding,
         Type? declaredReturnType,
         PowerShellBoundHelpMetadata? help,
-        int pipelineLifecycleParameterIndex = -1)
+        int pipelineLifecycleParameterIndex = -1,
+        bool pipelineLifecycleRequiresNonNullInput = false)
     {
         Symbol = symbol;
         Parameters = parameters;
@@ -34,6 +35,7 @@ internal sealed class PowerShellLocalCallSignature
         DeclaredReturnType = declaredReturnType;
         Help = help;
         PipelineLifecycleParameterIndex = pipelineLifecycleParameterIndex;
+        PipelineLifecycleRequiresNonNullInput = pipelineLifecycleRequiresNonNullInput;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -45,6 +47,7 @@ internal sealed class PowerShellLocalCallSignature
     internal int PipelineLifecycleParameterIndex { get; }
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
     internal bool PipelineLifecycleReturnsCollection { get; private set; }
+    internal bool PipelineLifecycleRequiresNonNullInput { get; }
     internal bool ReturnsModuleStateDerived { get; private set; }
 
     internal bool RefineReturnType(Type type)
@@ -114,7 +117,9 @@ internal static class PowerShellLocalCallSemanticBinder
             PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             declaredReturnType,
             PowerShellCommentHelpBinder.Bind(function),
-            pipelineLifecycleParameterIndex);
+            pipelineLifecycleParameterIndex,
+            pipelineLifecycleParameterIndex >= 0 && PowerShellRuntimeFreePipelineLifecyclePolicy.RequiresNonNullCollection(
+                parameters[pipelineLifecycleParameterIndex].Type, capabilities));
     }
 
     internal static Type? InferReturnType(

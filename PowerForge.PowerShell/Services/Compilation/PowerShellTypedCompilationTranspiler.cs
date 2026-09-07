@@ -37,7 +37,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
-        => TranspileCore(new[] { sourcePath }, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.StaticRuntimeFacts, _commandRegistry, _semanticProfileId);
+        => TranspileCore(new[] { sourcePath }, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.TypedLibrary, _commandRegistry, _semanticProfileId);
 
     /// <summary>Translates eligible functions from files sharing one PowerShell module scope.</summary>
     public PowerShellTypedCompilationResult Transpile(
@@ -45,7 +45,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
-        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.StaticRuntimeFacts, _commandRegistry, _semanticProfileId);
+        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.TypedLibrary, _commandRegistry, _semanticProfileId);
 
     internal PowerShellTypedCompilationResult TranspileForBinaryModule(
         IEnumerable<string> sourcePaths,

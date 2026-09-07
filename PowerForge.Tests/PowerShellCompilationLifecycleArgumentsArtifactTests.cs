@@ -32,6 +32,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(result.Manifest.RequiresPowerShellRuntime);
         Assert.False(result.Manifest.ContainsEmbeddedPowerShellSource);
         Assert.False(result.Manifest.AllowsPowerShellRuntimeEvaluation);
+        var lifecycleAbi = Assert.Single(result.Manifest.PublicAbi!.Methods, static method => method.PowerShellName == "Format-C0");
+        Assert.Equal(new[] { typeof(bool).FullName, typeof(int[]).FullName, typeof(bool).FullName },
+            lifecycleAbi.Parameters.Select(static parameter => parameter.TypeName));
         var assemblyPath = Assert.Single(result.Manifest.Files, static file => file.Role == "GeneratedAssembly").Path;
         const string probe = """
             $cases=[Collections.Generic.List[object]]::new()

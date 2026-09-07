@@ -4,7 +4,7 @@ namespace PowerForge;
 
 /// <summary>
 /// Defines the deliberately bounded, runtime-free begin/process/end lifecycle shape.
-/// The executable ABI receives the complete typed input collection so one generated
+/// The executable or CLR library ABI receives the complete typed input collection so one generated
 /// method can run begin once, process once per record, and an authored end once. Optional
 /// switch arguments retain their source order and are available throughout the invocation. A bounded process
 /// block may emit homogeneous top-level stable scalars; the compiler materializes those
@@ -24,9 +24,11 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
         parameter = null!;
         reason = string.Empty;
         if (!HasNamedLifecycle(body)) return false;
-        if (!capabilities.HasFlag(PowerShellCompilationCapability.ExecutableParameterBinding))
+        if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) ||
+            !capabilities.HasFlag(PowerShellCompilationCapability.ExecutableParameterBinding) &&
+            !capabilities.HasFlag(PowerShellCompilationCapability.ClrPipelineCollectionBinding))
         {
-            reason = "Runtime-free pipeline lifecycle lowering currently requires the typed executable collection ABI.";
+            reason = "Runtime-free pipeline lifecycle lowering requires a typed executable or CLR library collection ABI.";
             return false;
         }
         if (body.DynamicParamBlock is not null || GetCleanBlock(body) is not null ||
@@ -78,6 +80,12 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
             reason = "Runtime-free pipeline lifecycle lowering does not yet apply aliases, validation, or other parameter transforms per pipeline record.";
             return false;
         }
+        if (bindings[0].Mandatory &&
+            (!candidate.StaticType.IsValueType || Nullable.GetUnderlyingType(candidate.StaticType) is not null))
+        {
+            reason = "Mandatory nullable pipeline records require per-record PowerShell validation and error continuation.";
+            return false;
+        }
         var parameterName = candidate.Name.VariablePath.UserPath;
         if (ReferencesVariable(body.BeginBlock, parameterName) || ReferencesVariable(body.EndBlock, parameterName))
         {
@@ -103,6 +111,10 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
         => block?.FindAll(node => node is VariableExpressionAst variable &&
                 variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase), searchNestedScriptBlocks: false)
             .Any() == true;
+
+    internal static bool RequiresNonNullCollection(Type elementType, PowerShellCompilationCapability capabilities)
+        => capabilities.HasFlag(PowerShellCompilationCapability.ClrPipelineCollectionBinding) &&
+           !PowerShellPipelineNullInputSemanticPolicy.CanBindNullRecord(elementType);
 
     private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
         => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;

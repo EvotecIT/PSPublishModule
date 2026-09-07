@@ -35,6 +35,8 @@ internal sealed partial class PowerShellSemanticBinder
             pipelineParameter.Name.VariablePath.UserPath,
             StringComparison.OrdinalIgnoreCase));
         var arrayType = sourceParameter.Type.ClrType.MakeArrayType();
+        var requiresNonNullCollection = PowerShellRuntimeFreePipelineLifecyclePolicy.RequiresNonNullCollection(
+            sourceParameter.Type.ClrType, capabilities);
         var locals = DeclareLocals(document, function, symbols, functions, capabilities, _commandResolver)
             .Append(new PowerShellBoundLocal(sourceParameter.Symbol, sourceParameter.Type))
             .OrderBy(static local => local.Symbol.StableKey, StringComparer.Ordinal)
@@ -49,11 +51,14 @@ internal sealed partial class PowerShellSemanticBinder
         var collectionType = new PowerShellTypeFact(
             arrayType,
             PowerShellTypeFactProvenance.Inferred,
-            "The typed executable lifecycle ABI supplies the complete stable input collection.");
+            "The typed lifecycle ABI supplies the complete stable input collection.");
         var collectionParameter = new PowerShellBoundParameter(
             collectionSymbol,
             collectionType,
-            new PowerShellCompilationParameter(collectionName, arrayType.FullName ?? arrayType.Name, hasDefaultValue: false));
+            new PowerShellCompilationParameter(
+                collectionName, arrayType.FullName ?? arrayType.Name, hasDefaultValue: false,
+                isMandatory: requiresNonNullCollection, isSwitch: false, aliases: null,
+                allowNull: !requiresNonNullCollection, validations: null, allowEmptyCollection: true));
 
         var semanticOutputType = declaredOutputType == typeof(void) ? null : declaredOutputType;
         var begin = BindLifecycleBlock(document, function.Body.BeginBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
@@ -67,6 +72,16 @@ internal sealed partial class PowerShellSemanticBinder
             : BindLifecycleBlock(document, function.Body.EndBlock, symbols, functions, diagnostics, terminalLast: true, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
         if (begin is null || process is null || end is null || diagnostics.Count > functionDiagnosticStart)
             return null;
+        var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
+        locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
+        if (sourceParameter.Type.ClrType == typeof(string))
+        {
+            var rawRecord = new PowerShellBoundVariableExpression(
+                sourceParameter.Symbol.Declaration, sourceParameter.Symbol, sourceParameter.Type, PowerShellValueState.Unknown);
+            var normalize = new PowerShellBoundAssignmentStatement(
+                rawRecord.Span, sourceParameter.Symbol, PowerShellConversionSemanticBinder.BindClosedStringConversion(rawRecord)!);
+            process = new PowerShellBoundBlock(process.Span, new PowerShellBoundStatement[] { normalize }.Concat(process.Statements).ToArray());
+        }
         var processOutputs = GetSuccessOutputs(process);
         if (ContainsSuccessOutput(begin) ||
             !HasOneDefiniteTerminalSuccessOutput(end) && (end.Statements.Length != 0 || processOutputs.Length == 0))
@@ -98,7 +113,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (!PowerShellPipelineNullInputSemanticPolicy.TryBindElement(
                 sourceParameter.Type.ClrType,
                 sourceParameter.Symbol.Declaration,
-                out var nullCollectionElement))
+                out var nullCollectionElement) && !requiresNonNullCollection)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2927",
@@ -307,6 +322,14 @@ internal sealed partial class PowerShellSemanticBinder
                 "PSB2922",
                 $"Runtime-free lifecycle invocation of '{signature.Symbol.Name}' requires one statically typed '{arrayType.FullName}' array expression or variable.",
                 PowerShellSourceParser.GetSpan(document, pipeline.Extent)));
+            return null;
+        }
+        if (signature.PipelineLifecycleRequiresNonNullInput && input is not PowerShellBoundArrayExpression)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2927",
+                $"The CLR collection argument for '{signature.Symbol.Name}' rejects null. An authored pipeline call requires a proven non-null array so PowerShell binding-error continuation cannot be changed.",
+                input.Span));
             return null;
         }
         return PowerShellLocalCallSemanticBinder.Bind(

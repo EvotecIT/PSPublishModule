@@ -130,7 +130,7 @@ public sealed class PowerShellCompilationBuildSpec
               kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Hybrid
             ? PowerShellCompilationCapabilities.BinaryModule
             : kind == PowerShellCompilationArtifactKind.Library
-                ? PowerShellCompilationCapabilities.StaticRuntimeFacts
+                ? PowerShellCompilationCapabilities.TypedLibrary
             : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict
                 ? PowerShellCompilationCapabilities.TypedExecutable
                 : PowerShellCompilationCapability.None;
