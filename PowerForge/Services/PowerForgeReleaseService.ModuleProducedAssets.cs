@@ -78,14 +78,32 @@ internal sealed partial class PowerForgeReleaseService
             if (archive.Entries.Count == 0 || archive.Entries.Count > 50000)
                 return false;
 
-            var topLevelScripts = archive.Entries.Count(entry =>
-                !string.IsNullOrWhiteSpace(entry.Name) &&
-                string.Equals(Path.GetExtension(entry.Name), ".ps1", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(
-                    entry.FullName.Replace('\\', '/').TrimStart('/'),
-                    entry.Name,
-                    StringComparison.Ordinal));
-            return topLevelScripts == 1;
+            var files = archive.Entries
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name))
+                .Select(static entry => entry.FullName.Replace('\\', '/'))
+                .ToArray();
+            if (files.Length == 0 ||
+                files.Any(static name =>
+                    name.StartsWith("/", StringComparison.Ordinal) ||
+                    Path.IsPathRooted(name) ||
+                    name.Split('/').Any(static segment => segment is "." or "..") ||
+                    name.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("/.git/", StringComparison.OrdinalIgnoreCase) ||
+                    name.StartsWith(".github/", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("/.github/", StringComparison.OrdinalIgnoreCase) ||
+                    name.StartsWith("tests/", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("/tests/", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            return files.Any(static name =>
+                string.Equals(Path.GetExtension(name), ".ps1", StringComparison.OrdinalIgnoreCase));
         }
         catch
         {

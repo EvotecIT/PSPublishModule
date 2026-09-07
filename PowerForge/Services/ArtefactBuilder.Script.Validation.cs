@@ -7,7 +7,15 @@ namespace PowerForge;
 
 public sealed partial class ArtefactBuilder
 {
-    private static void ValidateScriptSourceLayout(string stagingPath, string moduleName, string? preScriptMerge)
+    private static void ValidateScriptSourceLayout(
+        string stagingPath,
+        string moduleName,
+        string? preScriptMerge,
+        string scriptName,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles)
     {
         var manifestPath = Path.Combine(stagingPath, moduleName + ".psd1");
         if (!File.Exists(manifestPath))
@@ -55,11 +63,28 @@ public sealed partial class ArtefactBuilder
                 string.Join(", ", manifestLoadedKeys) + ".");
         }
 
-        if (!string.IsNullOrWhiteSpace(preScriptMerge) && HasLeadingScriptParameterBlock(File.ReadAllText(modulePath)))
+        if (!string.IsNullOrWhiteSpace(preScriptMerge) &&
+            HasLeadingScriptParameterBlock(ModuleManifestValueReader.ReadPowerShellCompatibleText(modulePath)))
         {
             throw new InvalidOperationException(
                 "PreScriptMerge cannot be injected before a staged module parameter block. " +
                 "Merge the script-level parameters into one leading param block before building a Script or ScriptPacked artefact.");
+        }
+
+        var scriptSourcePath = Path.GetFullPath(Path.Combine(stagingPath, scriptName));
+        if (ResolveModulePackageSourceFiles(
+                stagingPath,
+                information,
+                delivery,
+                includeScriptFolders,
+                finalizedPayloadFiles)
+            .Any(sourcePath => string.Equals(
+                Path.GetFullPath(sourcePath),
+                scriptSourcePath,
+                GetPathComparison(sourcePath, scriptSourcePath))))
+        {
+            throw new InvalidOperationException(
+                $"ScriptName '{scriptName}' conflicts with a packaged payload file. Choose an entry point name that does not replace included module content.");
         }
     }
 

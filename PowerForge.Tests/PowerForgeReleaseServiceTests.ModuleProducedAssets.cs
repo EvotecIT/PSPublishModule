@@ -209,4 +209,48 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Theory]
+    [InlineData("app/Company.Tools.ps1", null)]
+    [InlineData("Company.Tools.ps1", "Invoke-Helper.ps1")]
+    public void CreateModuleAssetEntries_RecognizesSupportedManifestlessScriptPackedLayouts(
+        string entryPoint,
+        string? additionalScript)
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry script = archive.CreateEntry(entryPoint);
+                using (var writer = new StreamWriter(script.Open()))
+                    writer.Write("Get-Date");
+                if (!string.IsNullOrWhiteSpace(additionalScript))
+                {
+                    ZipArchiveEntry helper = archive.CreateEntry(additionalScript);
+                    using var writer = new StreamWriter(helper.Open());
+                    writer.Write("Get-ChildItem");
+                }
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    root,
+                    new PowerForgeModuleReleasePlanSummary
+                    {
+                        ManifestPath = Path.Combine(root, "Company.Tools.psd1"),
+                        ModuleName = "Company.Tools",
+                        ModuleVersion = "4.0.0"
+                    },
+                    new[] { scriptPackedPath }));
+
+            Assert.Equal(scriptPackedPath, entry.Path);
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 }

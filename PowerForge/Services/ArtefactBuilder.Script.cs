@@ -23,7 +23,16 @@ public sealed partial class ArtefactBuilder
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizeArtefact,
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
-        ValidateScriptSourceLayout(stagingPath, moduleName, cfg.PreScriptMerge);
+        var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
+        ValidateScriptSourceLayout(
+            stagingPath,
+            moduleName,
+            cfg.PreScriptMerge,
+            scriptName,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
 
         var requiredRoot = ResolveRequiredModulesRootForUnpacked(
             cfg,
@@ -41,7 +50,6 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
-        var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
         ValidateScriptCopyMappings(
             cfg,
             outputRoot,
@@ -117,7 +125,16 @@ public sealed partial class ArtefactBuilder
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizeArtefact,
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
-        ValidateScriptSourceLayout(stagingPath, moduleName, cfg.PreScriptMerge);
+        var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
+        ValidateScriptSourceLayout(
+            stagingPath,
+            moduleName,
+            cfg.PreScriptMerge,
+            scriptName,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
         var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
         var zipPath = Path.Combine(outputRoot, artefactName);
         var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", $"{moduleName}_{Guid.NewGuid():N}");
@@ -136,7 +153,6 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
-        var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
         ValidateScriptCopyMappings(
             cfg,
             tempRoot,
@@ -288,7 +304,7 @@ public sealed partial class ArtefactBuilder
 
     private static void RewriteScriptContent(string scriptPath, string? preScriptMerge, string? postScriptMerge)
     {
-        var content = RemoveTrailingAuthenticodeSignatureBlock(File.ReadAllText(scriptPath));
+        var content = RemoveTrailingAuthenticodeSignatureBlock(ModuleManifestValueReader.ReadPowerShellCompatibleText(scriptPath));
         var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
 
@@ -352,12 +368,14 @@ public sealed partial class ArtefactBuilder
             {
                 var endLine = FindPowerShellCommandEnd(lines, lineIndex, commandStart, out var suffixStart);
                 var removeCount = endLine - lineIndex + 1;
+                var prefix = line.Substring(0, commandStart);
                 var suffix = suffixStart >= 0
                     ? lines[endLine].Substring(suffixStart).TrimStart()
                     : string.Empty;
                 lines.RemoveRange(lineIndex, removeCount);
-                if (!string.IsNullOrWhiteSpace(suffix))
-                    lines.Insert(lineIndex, suffix);
+                var replacement = prefix + suffix;
+                if (!string.IsNullOrWhiteSpace(replacement))
+                    lines.Insert(lineIndex, replacement);
                 lineIndex--;
                 continue;
             }
@@ -493,6 +511,12 @@ public sealed partial class ArtefactBuilder
                     return lineIndex;
                 }
 
+                if (current == '}' && parenthesisDepth == 0 && bracketDepth == 0 && braceDepth == 0)
+                {
+                    suffixStart = characterIndex;
+                    return lineIndex;
+                }
+
                 switch (current)
                 {
                     case '(':
@@ -625,10 +649,94 @@ public sealed partial class ArtefactBuilder
     private static bool TryGetExportModuleMemberInvocationStart(string line, out int commandStart)
     {
         var source = line ?? string.Empty;
-        var trimmed = source.TrimStart();
-        commandStart = source.Length - trimmed.Length;
-        return StartsWithCommandName(trimmed, "Export-ModuleMember") ||
-               StartsWithCommandName(trimmed, "Microsoft.PowerShell.Core\\Export-ModuleMember");
+        var state = ScriptLexicalState.Normal;
+        var blockCommentDepth = 0;
+        var previousSignificant = '\0';
+        for (var index = 0; index < source.Length; index++)
+        {
+            var current = source[index];
+            var next = index + 1 < source.Length ? source[index + 1] : '\0';
+            if (blockCommentDepth > 0)
+            {
+                if (current == '<' && next == '#')
+                {
+                    blockCommentDepth++;
+                    index++;
+                }
+                else if (current == '#' && next == '>')
+                {
+                    blockCommentDepth--;
+                    index++;
+                }
+                continue;
+            }
+
+            if (state == ScriptLexicalState.SingleQuotedString)
+            {
+                if (current != '\'')
+                    continue;
+                if (next == '\'')
+                {
+                    index++;
+                    continue;
+                }
+                state = ScriptLexicalState.Normal;
+                continue;
+            }
+
+            if (state == ScriptLexicalState.DoubleQuotedString)
+            {
+                if (current == '`')
+                {
+                    index++;
+                    continue;
+                }
+                if (current == '"')
+                    state = ScriptLexicalState.Normal;
+                continue;
+            }
+
+            if (current == '<' && next == '#')
+            {
+                blockCommentDepth++;
+                index++;
+                continue;
+            }
+            if (current == '#')
+                break;
+            if (current == '@' && next is '\'' or '"')
+                break;
+            if (current == '\'')
+            {
+                state = ScriptLexicalState.SingleQuotedString;
+                continue;
+            }
+            if (current == '"')
+            {
+                state = ScriptLexicalState.DoubleQuotedString;
+                continue;
+            }
+            if (current == '`')
+            {
+                index++;
+                continue;
+            }
+            if (char.IsWhiteSpace(current))
+                continue;
+
+            if ((previousSignificant == '\0' || previousSignificant is ';' or '{') &&
+                (StartsWithCommandName(source.Substring(index), "Export-ModuleMember") ||
+                 StartsWithCommandName(source.Substring(index), "Microsoft.PowerShell.Core\\Export-ModuleMember")))
+            {
+                commandStart = index;
+                return true;
+            }
+
+            previousSignificant = current;
+        }
+
+        commandStart = -1;
+        return false;
     }
 
     private static bool StartsWithCommandName(string line, string commandName)

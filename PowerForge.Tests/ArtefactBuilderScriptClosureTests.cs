@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -278,6 +279,138 @@ public sealed class ArtefactBuilderScriptClosureTests
 
             Assert.Contains("file copy destination", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("entry point", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_RemovesExportCommandsEmbeddedInCompoundStatements(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        string? extractionRoot = null;
+        try
+        {
+            const string moduleName = "CompoundExportModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                "@{ RootModule = 'CompoundExportModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "$script:Enabled = $true; Export-ModuleMember -Function Invoke-CompoundExportModule\n" +
+                "if ($script:Enabled) { Microsoft.PowerShell.Core\\Export-ModuleMember -Function Invoke-CompoundExportModule }\n" +
+                "function Invoke-CompoundExportModule { 'ok' }");
+
+            ArtefactBuildResult result = Build(
+                root.FullName,
+                stagingRoot,
+                Path.Combine(root.FullName, "output"),
+                moduleName,
+                artefactType);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractionRoot = Path.Combine(root.FullName, "extracted");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractionRoot);
+                inspectionRoot = extractionRoot;
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            Assert.DoesNotContain("Export-ModuleMember", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("$script:Enabled = $true;", script, StringComparison.Ordinal);
+            Assert.Contains("if ($script:Enabled) { }", script, StringComparison.Ordinal);
+            Assert.Contains("function Invoke-CompoundExportModule", script, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_PreservesLegacyWindowsEncodedScriptText(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        string? extractionRoot = null;
+        try
+        {
+            const string moduleName = "LegacyEncodingModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                "@{ RootModule = 'LegacyEncodingModule.psm1'; ModuleVersion = '1.0.0' }");
+            byte[] prefix = Encoding.ASCII.GetBytes("function Get-LegacyText { 'caf");
+            byte[] suffix = Encoding.ASCII.GetBytes("' }");
+            File.WriteAllBytes(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                prefix.Concat(new byte[] { 0xE9 }).Concat(suffix).ToArray());
+
+            ArtefactBuildResult result = Build(
+                root.FullName,
+                stagingRoot,
+                Path.Combine(root.FullName, "output"),
+                moduleName,
+                artefactType);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractionRoot = Path.Combine(root.FullName, "extracted");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractionRoot);
+                inspectionRoot = extractionRoot;
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"), Encoding.UTF8);
+            Assert.Contains("café", script, StringComparison.Ordinal);
+            Assert.DoesNotContain('\uFFFD', script);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_ScriptNameCannotReplacePackagedPayloadBeforeOutputChanges(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "CollisionModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteScriptModule(stagingRoot, moduleName);
+            string collidingName = moduleName + ".Libraries.ps1";
+            File.WriteAllText(Path.Combine(stagingRoot, collidingName), "'library loader'");
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string marker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(marker, "preserve");
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, artefactType);
+            segment.Configuration.ScriptName = collidingName;
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    root.FullName,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    Array.Empty<RequiredModuleReference>()));
+
+            Assert.Contains("ScriptName", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("packaged payload", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(marker));
+            Assert.Equal("preserve", File.ReadAllText(marker));
         }
         finally
         {
