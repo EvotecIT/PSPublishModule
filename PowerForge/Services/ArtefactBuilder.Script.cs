@@ -35,6 +35,7 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+
         var scriptRoot = ResolveModulesRootForUnpacked(
             cfg,
             outputRoot,
@@ -263,7 +264,7 @@ public sealed partial class ArtefactBuilder
 
     private static void RewriteScriptContent(string scriptPath, string? preScriptMerge, string? postScriptMerge)
     {
-        var content = File.ReadAllText(scriptPath);
+        var content = RemoveTrailingAuthenticodeSignatureBlock(File.ReadAllText(scriptPath));
         var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
 
@@ -300,6 +301,19 @@ public sealed partial class ArtefactBuilder
 
     private static string NormalizeNewlines(string value, string newline)
         => value.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", newline);
+
+    private static string RemoveTrailingAuthenticodeSignatureBlock(string content)
+    {
+        const string begin = "# SIG # Begin signature block";
+        int markerIndex = content.LastIndexOf(begin, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0 ||
+            (markerIndex > 0 && content[markerIndex - 1] != '\r' && content[markerIndex - 1] != '\n'))
+        {
+            return content;
+        }
+
+        return content.Substring(0, markerIndex).TrimEnd() + Environment.NewLine;
+    }
 
     private static void RemoveHandWrittenExportInvocations(List<string> lines)
     {

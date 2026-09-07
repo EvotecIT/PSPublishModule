@@ -134,6 +134,8 @@ internal static partial class ModuleMergeComposer
         var lines = normalized.Split('\n');
         var preamble = new List<string>();
         var leadingTrivia = new List<string>();
+        var pendingTrivia = new List<string>();
+        var pendingTriviaStart = -1;
         var foundDirective = false;
         var blockCommentDepth = 0;
         var index = 0;
@@ -149,16 +151,20 @@ internal static partial class ModuleMergeComposer
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(line))
-                    continue;
-
-                break;
+                if (pendingTriviaStart < 0)
+                    pendingTriviaStart = index;
+                pendingTrivia.Add(line);
+                continue;
             }
 
             if (kind == PreambleLineKind.Requires)
             {
                 if (!foundDirective)
                     preamble.AddRange(leadingTrivia);
+                else
+                    preamble.AddRange(pendingTrivia);
+                pendingTrivia.Clear();
+                pendingTriviaStart = -1;
                 preamble.Add(line);
                 foundDirective = true;
                 continue;
@@ -168,6 +174,10 @@ internal static partial class ModuleMergeComposer
             {
                 if (!foundDirective)
                     preamble.AddRange(leadingTrivia);
+                else
+                    preamble.AddRange(pendingTrivia);
+                pendingTrivia.Clear();
+                pendingTriviaStart = -1;
                 var directiveEnd = FindUsingDirectiveEnd(lines, index, directiveStart);
                 for (; index <= directiveEnd; index++)
                     preamble.Add(lines[index]);
@@ -181,6 +191,9 @@ internal static partial class ModuleMergeComposer
 
         if (!foundDirective)
             return string.Empty;
+
+        if (pendingTriviaStart >= 0)
+            index = pendingTriviaStart;
 
         body = string.Join(System.Environment.NewLine, lines.Skip(index)).TrimStart('\r', '\n');
         return string.Join(System.Environment.NewLine, preamble);

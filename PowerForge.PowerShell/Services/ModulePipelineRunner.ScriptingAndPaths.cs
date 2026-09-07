@@ -102,6 +102,39 @@ public sealed partial class ModulePipelineRunner
             string.Join(Environment.NewLine, conflicts.Select(static message => "- " + message)));
     }
 
+    private static void ValidateSignedScriptArtefactLayouts(
+        bool signModule,
+        string projectRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IReadOnlyList<ConfigurationArtefactSegment>? artefacts)
+    {
+        if (!signModule || artefacts is null)
+            return;
+
+        foreach (ConfigurationArtefactSegment artefact in artefacts.Where(static item => item is not null))
+        {
+            if (artefact.ArtefactType != ArtefactType.Script)
+                continue;
+
+            ArtefactConfiguration cfg = artefact.Configuration ?? new ArtefactConfiguration();
+            string outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
+                cfg.Path,
+                projectRoot,
+                moduleName,
+                moduleVersion,
+                preRelease,
+                artefact.ArtefactType);
+            ArtefactLayoutPathResolver.ValidateFinalizedScriptLayout(
+                cfg,
+                outputRoot,
+                moduleName,
+                moduleVersion,
+                preRelease);
+        }
+    }
+
     private static void AddDeliveryExcludedDirectoryConflict(
         List<string> conflicts,
         string projectRoot,

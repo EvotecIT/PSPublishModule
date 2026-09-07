@@ -330,11 +330,19 @@ public sealed partial class ArtefactBuilder
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?> finalizer,
         PackedArtefactFinalizationContext context)
     {
-        string[] evidencePaths = (finalizer(context) ?? Array.Empty<string>())
+        string[] normalizedEvidencePaths = (finalizer(context) ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var evidencePaths = new List<string>(normalizedEvidencePaths.Length);
+        foreach (string path in normalizedEvidencePaths)
+        {
+            bool duplicate = evidencePaths.Any(existing =>
+                string.Equals(existing, path, GetPathComparison(existing, path)));
+            if (!duplicate)
+                evidencePaths.Add(path);
+        }
+
         string? internalEvidence = evidencePaths.FirstOrDefault(path => IsSameOrBelowPath(path, context.RootPath));
         if (internalEvidence is not null)
             throw new InvalidOperationException(
@@ -343,8 +351,14 @@ public sealed partial class ArtefactBuilder
         if (missingEvidence is not null)
             throw new FileNotFoundException("Artefact finalization evidence was not found.", missingEvidence);
 
-        return evidencePaths;
+        return evidencePaths.ToArray();
     }
+
+    private static StringComparison GetPathComparison(string firstPath, string secondPath)
+        => FrameworkCompatibility.GetPathStringComparisonForPath(firstPath) == StringComparison.OrdinalIgnoreCase ||
+           FrameworkCompatibility.GetPathStringComparisonForPath(secondPath) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 
     private IReadOnlyList<RequiredModuleReference> FilterRequiredModulesForArtefact(
         IReadOnlyList<RequiredModuleReference>? requiredModules,

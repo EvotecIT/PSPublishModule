@@ -362,22 +362,38 @@ public sealed class ModuleMergeComposerTests
     {
         var content =
             "#requires -Version 5.1" + Environment.NewLine +
+            "# comment between directives" + Environment.NewLine +
+            "<#" + Environment.NewLine +
+            "block comment between directives" + Environment.NewLine +
+            "#>" + Environment.NewLine +
             "using module @{" + Environment.NewLine +
             "    ModuleName = './Types.psm1'" + Environment.NewLine +
             "    ModuleVersion = '1.0.0'" + Environment.NewLine +
-            "}" + Environment.NewLine + Environment.NewLine +
+            "}" + Environment.NewLine +
+            "# another directive separator" + Environment.NewLine +
+            "using namespace System.Text" + Environment.NewLine +
+            "# body comment must remain with the body" + Environment.NewLine +
             "function Get-Demo { [SharedType]::new() }";
 
         var preamble = ModuleMergeComposer.ExtractMergedScriptPreamble(content, out var body);
 
         Assert.Equal(
             "#requires -Version 5.1" + Environment.NewLine +
+            "# comment between directives" + Environment.NewLine +
+            "<#" + Environment.NewLine +
+            "block comment between directives" + Environment.NewLine +
+            "#>" + Environment.NewLine +
             "using module @{" + Environment.NewLine +
             "    ModuleName = './Types.psm1'" + Environment.NewLine +
             "    ModuleVersion = '1.0.0'" + Environment.NewLine +
-            "}",
+            "}" + Environment.NewLine +
+            "# another directive separator" + Environment.NewLine +
+            "using namespace System.Text",
             preamble);
-        Assert.Equal("function Get-Demo { [SharedType]::new() }", body);
+        Assert.Equal(
+            "# body comment must remain with the body" + Environment.NewLine +
+            "function Get-Demo { [SharedType]::new() }",
+            body);
     }
 
     [Fact]

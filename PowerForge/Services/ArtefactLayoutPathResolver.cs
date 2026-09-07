@@ -1,4 +1,5 @@
 using System.IO;
+using System.Collections.Generic;
 
 namespace PowerForge;
 
@@ -190,6 +191,88 @@ internal static class ArtefactLayoutPathResolver
         return string.IsNullOrWhiteSpace(normalized) ? "Internals" : normalized;
     }
 
+    internal static void ValidateFinalizedScriptLayout(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        string fullOutputRoot = Path.GetFullPath(outputRoot);
+        string requiredModulesRoot = ResolveRequiredModulesRootForUnpacked(
+            cfg,
+            fullOutputRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        string modulesRoot = ResolveModulesRootForUnpacked(
+            cfg,
+            fullOutputRoot,
+            requiredModulesRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+
+        EnsureFinalizedScriptPathIsContained(fullOutputRoot, modulesRoot, "main script root");
+        if (cfg.RequiredModules.Enabled == true)
+            EnsureFinalizedScriptPathIsContained(fullOutputRoot, requiredModulesRoot, "required modules root");
+
+        ValidateFinalizedScriptCopyMappings(
+            cfg.DirectoryOutput,
+            cfg.DestinationDirectoriesRelative == true,
+            "directory copy destination",
+            fullOutputRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        ValidateFinalizedScriptCopyMappings(
+            cfg.FilesOutput,
+            cfg.DestinationFilesRelative == true,
+            "file copy destination",
+            fullOutputRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+    }
+
+    private static void ValidateFinalizedScriptCopyMappings(
+        IEnumerable<ArtefactCopyMapping>? mappings,
+        bool relativeToRoot,
+        string label,
+        string outputRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        foreach (ArtefactCopyMapping mapping in mappings ?? Array.Empty<ArtefactCopyMapping>())
+        {
+            if (mapping is null || string.IsNullOrWhiteSpace(mapping.Destination))
+                continue;
+
+            string raw = ModulePathTokenFormatter.ReplacePathTokens(
+                    mapping.Destination,
+                    moduleName,
+                    moduleVersion,
+                    preRelease)
+                .Trim()
+                .Trim('"');
+            string destination = relativeToRoot || !Path.IsPathRooted(raw)
+                ? Path.GetFullPath(Path.Combine(outputRoot, raw))
+                : Path.GetFullPath(raw);
+            EnsureFinalizedScriptPathIsContained(outputRoot, destination, label);
+        }
+    }
+
+    private static void EnsureFinalizedScriptPathIsContained(string outputRoot, string candidatePath, string label)
+    {
+        if (IsSameOrChildPath(outputRoot, candidatePath))
+            return;
+
+        throw new InvalidOperationException(
+            $"A signed Script artefact must keep its complete finalized layout under output root '{Path.GetFullPath(outputRoot)}', " +
+            $"but the {label} resolves outside it to '{Path.GetFullPath(candidatePath)}'.");
+    }
+
     private static bool IsSameOrChildPath(string rootPath, string candidatePath)
     {
         var root = Path.GetFullPath(rootPath)
@@ -197,11 +280,17 @@ internal static class ArtefactLayoutPathResolver
         var candidate = Path.GetFullPath(candidatePath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        if (string.Equals(root, candidate, StringComparison.OrdinalIgnoreCase))
+        StringComparison comparison =
+            FrameworkCompatibility.GetPathStringComparisonForPath(root) == StringComparison.OrdinalIgnoreCase ||
+            FrameworkCompatibility.GetPathStringComparisonForPath(candidate) == StringComparison.OrdinalIgnoreCase
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+        if (string.Equals(root, candidate, comparison))
             return true;
 
         var rootWithSeparator = root + Path.DirectorySeparatorChar;
         var candidateWithSeparator = candidate + Path.DirectorySeparatorChar;
-        return candidateWithSeparator.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+        return candidateWithSeparator.StartsWith(rootWithSeparator, comparison);
     }
 }

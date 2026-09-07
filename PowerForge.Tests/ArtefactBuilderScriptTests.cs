@@ -160,6 +160,8 @@ public sealed class ArtefactBuilderScriptTests
                 "# ordinary leading comment" + Environment.NewLine +
                 Environment.NewLine +
                 "#requires -Version 5.1" + Environment.NewLine +
+                "# directive separator" + Environment.NewLine +
+                "<# block separator #>" + Environment.NewLine +
                 "using namespace System.Text" + Environment.NewLine +
                 "function Invoke-DemoModule { [StringBuilder]::new().Append('ok').ToString() }" + Environment.NewLine +
                 "# Export functions and aliases as required" + Environment.NewLine +
@@ -203,6 +205,117 @@ public sealed class ArtefactBuilderScriptTests
                         script.IndexOf("param([switch] $PassThru)", StringComparison.Ordinal));
             System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
             Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_ScriptRemovesStaleAuthenticodeSignatureAfterRewrite(ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            File.WriteAllText(
+                Path.Combine(stagingRoot.FullName, moduleName + ".psm1"),
+                "function Invoke-DemoModule { $script:State }" + Environment.NewLine +
+                "Export-ModuleMember -Function Invoke-DemoModule" + Environment.NewLine +
+                "$script:State = 'preserved'" + Environment.NewLine +
+                "# SIG # Begin signature block" + Environment.NewLine +
+                "# stale-signature" + Environment.NewLine +
+                "# SIG # End signature block" + Environment.NewLine);
+
+            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).Build(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = artefactType,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = Path.Combine(root.FullName, "Artefacts", artefactType.ToString()),
+                        ScriptName = "Invoke-DemoModule.ps1",
+                        ArtefactName = "DemoModule.zip"
+                    }
+                },
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>());
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-signature");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, "Invoke-DemoModule.ps1"));
+            Assert.DoesNotContain("# SIG # Begin signature block", script, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("stale-signature", script, StringComparison.Ordinal);
+            Assert.Contains("$script:State = 'preserved'", script, StringComparison.Ordinal);
+            System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Build_FinalizerPreservesCaseDistinctEvidencePathsOnCaseSensitiveFileSystem()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.Ordinal)
+                return;
+
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            string evidenceRoot = Path.Combine(root.FullName, "evidence");
+            string lowerEvidence = Path.Combine(evidenceRoot, "proof.json");
+            string upperEvidence = Path.Combine(evidenceRoot, "PROOF.json");
+
+            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).BuildWithFinalizer(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Script,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = Path.Combine(root.FullName, "Artefacts", "Script")
+                    }
+                },
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>(),
+                finalizePackedArtefact: _ =>
+                {
+                    Directory.CreateDirectory(evidenceRoot);
+                    File.WriteAllText(lowerEvidence, "lower");
+                    File.WriteAllText(upperEvidence, "upper");
+                    return new[] { lowerEvidence, upperEvidence };
+                });
+
+            Assert.Equal(2, result.EvidencePaths.Length);
+            Assert.Contains(Path.GetFullPath(lowerEvidence), result.EvidencePaths);
+            Assert.Contains(Path.GetFullPath(upperEvidence), result.EvidencePaths);
         }
         finally
         {
