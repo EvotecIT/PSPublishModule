@@ -22,7 +22,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("Get-Number; Get-Number")]
     [InlineData("if ($Enabled) { Get-Number }; return 2")]
     [InlineData("for ([int]$i = 0; $i -lt 2; $i++) { Get-Number }; return 2")]
-    [InlineData("try { Get-Number; return 2 } finally { [int]$Done = 1 }")]
     public void Transpile_RetainsNonTerminalLocalCallOutputInsteadOfReturningEarly(string body)
     {
         using var fixture = ArtifactFixture.Create(
@@ -35,6 +34,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains(typed.Methods, method => method.SourceName == "Get-Number");
         Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Invoke-Sequence");
         Assert.Contains(typed.Diagnostics, diagnostic => diagnostic.Message.Contains("Non-terminal success output", StringComparison.Ordinal));
+        Assert.Empty(typed.PromotedRegions);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData(PowerShellCompilationCapabilities.BinaryModule)]
+    [InlineData(PowerShellCompilationCapabilities.HybridModule)]
+    public void Transpile_StreamsLocalCallAndReturnBeforeFinally(PowerShellCompilationCapability capabilities)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Number { return 1 }; function Invoke-Sequence { [CmdletBinding()] param() " +
+            "try { Get-Number; return 2 } finally { [int]$Done = 1 } }", ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "SequenceMethods", "net10.0", capabilities);
+
+        var sequence = Assert.Single(typed.Methods, method => method.SourceName == "Invoke-Sequence");
+        Assert.True(sequence.RequiresPowerShellStreams);
+        Assert.False(sequence.RequiresPowerShellCommandRegions);
+        Assert.DoesNotContain(typed.Diagnostics, diagnostic => diagnostic.Message.Contains("Non-terminal success output", StringComparison.Ordinal));
         Assert.Empty(typed.PromotedRegions);
     }
 
