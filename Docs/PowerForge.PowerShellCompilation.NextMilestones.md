@@ -50,6 +50,8 @@ The first closed-value implementation accepts inferred empty `@()` arrays and or
 
 The loop-state sweep also removes stale value facts across loop writes, iterator assignment, backedges, and exits, including `continue` paths into a `for` iterator. A receiver that starts non-null but can become null no longer receives an unsafe Strict CLR call; an assignment inside the body can establish a fresh non-null fact before use. Possible module-state origin propagates across loop-carried aliases and local-function returns so later iterations cannot bypass the live-state boundary. Hybrid nullable-loop checks preserve the original error identity and later statements through retained PowerShell execution. This is correctness protection, not compiled-workflow credit.
 
+Authored array expressions now preserve one enumeration level inside `@()`: `@((1,2))` collects two numbers, while `@((1,2),(3,4))` collects two nested arrays. A comma wrapper such as `@(,$Value)` preserves the wrapped object's identity without enumerating it. Original/generated Strict binary-module checks cover both PowerShell hosts, including nested and empty arrays, ordinary null, typed scalar records, and a wrapped enumerable that throws if enumerated. Arbitrary unwrapped enumerables and records requiring unsupported element conversions still retain PowerShell behavior. Complete workflow qualification remains open.
+
 ## Milestone 25 — Compile complete pipelines and advanced functions
 
 **Outcome:** compile an entire command workflow, including multiple success outputs, instead of restricting useful work to a scalar terminal return.

@@ -26,28 +26,45 @@ internal static class PowerShellArraySemanticBinder
         {
             var element = bindExpression(item, elementType);
             if (element is null) return null;
-            if (element.ValueState == PowerShellValueState.Null && elementType != typeof(object))
+            if (kind == PowerShellBoundArrayKind.CollectedExpression && element is PowerShellBoundArrayExpression array)
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2504", "Null elements in typed arrays require PowerShell element conversion.", element.Span));
-                return null;
+                // A command expression enumerates its result exactly once. The values
+                // inside an authored array are already records, including nested arrays
+                // and dynamic objects; enumerating those records again changes grouping.
+                foreach (var record in array.Elements)
+                {
+                    if (!CanStore(record)) return null;
+                    elements.Add(record);
+                }
+                continue;
             }
-            // Ordinary $null is one collected value. A typed destination may convert it
-            // (for example, string[] replaces null with an empty string), so only the
-            // unconstrained Object[] contract can preserve it directly.
+            if (!CanStore(element)) return null;
+            // Ordinary $null is one collected value. Dynamic objects still require
+            // runtime enumeration unless an authored array has wrapped them above.
             var preservesNull = element is PowerShellBoundLiteralExpression { Value: null } && arrayType == typeof(object[]);
             if (kind == PowerShellBoundArrayKind.CollectedExpression && !preservesNull &&
                 (!PowerShellStableScalarTypePolicy.IsSupported(element.Type.ClrType) || element.ValueState == PowerShellValueState.Null))
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2503", "Typed @() expressions require closed scalar output; potentially enumerable, dynamically typed, and null values retain PowerShell collection and error semantics.", element.Span));
-                return null;
-            }
-            if (arrayType != typeof(object[]) && !PowerShellClrTypeSemantics.CanAssign(elementType, element.Type.ClrType))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2504", $"Array element type '{element.Type.ClrType.FullName}' cannot be assigned to explicit element type '{elementType.FullName}' without PowerShell runtime conversion.", element.Span));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2503", "Typed @() expressions require closed scalar output or authored array records; other values retain PowerShell collection and error semantics.", element.Span));
                 return null;
             }
             elements.Add(element);
         }
         return new PowerShellBoundArrayExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent), arrayType, kind, elements.ToArray());
+
+        bool CanStore(PowerShellBoundExpression element)
+        {
+            if (element.ValueState == PowerShellValueState.Null && elementType != typeof(object))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2504", "Null elements in typed arrays require PowerShell element conversion.", element.Span));
+                return false;
+            }
+            if (arrayType != typeof(object[]) && !PowerShellClrTypeSemantics.CanAssign(elementType, element.Type.ClrType))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2504", $"Array element type '{element.Type.ClrType.FullName}' cannot be assigned to explicit element type '{elementType.FullName}' without PowerShell runtime conversion.", element.Span));
+                return false;
+            }
+            return true;
+        }
     }
 }

@@ -69,8 +69,7 @@ internal sealed partial class PowerShellSemanticBinder
                         diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501", "Typed @() expressions accept only side-effect-free expression statements.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
                         return null;
                     }
-                    if (command.Expression is ArrayLiteralAst literal) elements.AddRange(literal.Elements);
-                    else elements.Add(command.Expression);
+                    elements.Add(command.Expression);
                 }
                 return PowerShellArraySemanticBinder.Bind(
                     document,

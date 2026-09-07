@@ -18,7 +18,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
         Assert.False(unit.IsCompilable);
         Assert.Contains(unit.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("pipeline output", StringComparison.OrdinalIgnoreCase));
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax);
     }
 
     [Fact]
