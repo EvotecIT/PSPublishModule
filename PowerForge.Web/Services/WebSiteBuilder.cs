@@ -207,6 +207,7 @@ public static partial class WebSiteBuilder
                 }
             }
 
+            WriteTemplateExports(outDir, spec, plan.RootPath, renderItems, data, projectMap, menuSpecs);
             ReportProgress("writing navigation/search/diagnostic outputs");
             WriteSiteNavData(spec, outDir, menuSpecs);
             WriteSearchIndex(spec, outDir, renderItems);

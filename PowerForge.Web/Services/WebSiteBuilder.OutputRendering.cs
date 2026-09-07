@@ -56,7 +56,8 @@ public static partial class WebSiteBuilder
         IReadOnlyDictionary<string, ProjectSpec> projectMap,
         MenuSpec[] menuSpecs,
         IReadOnlyList<OutputRuntime> outputs,
-        string alternateHeadLinksHtml)
+        string alternateHeadLinksHtml,
+        string? layoutOverride = null)
     {
         var pageTimer = Stopwatch.StartNew();
         var renderCache = BuildRenderCacheScope.Value ?? CreateBuildRenderCache(spec, rootPath);
@@ -72,7 +73,7 @@ public static partial class WebSiteBuilder
         Func<string, string?>? partialResolver = null;
         if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
         {
-            var layoutName = item.Template ?? item.Layout ?? manifest?.DefaultLayout ?? "base";
+            var layoutName = layoutOverride ?? item.Template ?? item.Layout ?? manifest?.DefaultLayout ?? "base";
             var layoutPath = loader.ResolveLayoutPath(themeRoot, manifest, layoutName);
             if (!string.IsNullOrWhiteSpace(layoutPath))
             {
@@ -82,6 +83,9 @@ public static partial class WebSiteBuilder
                     assetSlotTemplateKind = AssetSlotTemplateKind.Scriban;
             }
         }
+
+        if (layoutOverride is not null && themeTemplate is null)
+            throw new InvalidOperationException($"Template export layout '{layoutOverride}' was not found in the selected theme.");
 
         if (themeTemplate is not null && themeRoot is not null)
         {

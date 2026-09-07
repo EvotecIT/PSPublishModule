@@ -281,6 +281,20 @@ When rendering a page:
 3) Otherwise use theme `defaultLayout`.
 4) If layout is missing, fallback to base theme `page`.
 
+## Template exports for generated surfaces
+
+Use `TemplateExports` in `site.json` when a generated surface, such as API reference, needs the same theme navigation as a regular page:
+
+```json
+"TemplateExports": [
+  { "Name": "documentation-shell", "SourceRoute": "/docs/", "Layout": "documentation-shell" }
+]
+```
+
+The build renders the named layout with the source page's data and navigation context into `_powerforge/fragments/documentation-shell.html`. An API generation step can use that file as its `headerHtml`. The export does not create another content page or search/sitemap entry. Shared partial changes are reflected in both page and export output on the next build.
+
+The source route must identify a non-draft page included in the build, and the layout must exist. Export names must be unique lowercase letters, digits, and hyphens, starting with a letter or digit. Invalid declarations fail the build.
+
 ## Partials + components
 Partials are shared building blocks (header, footer, nav, cards, tabs).
 They should be pure HTML with placeholders or Scriban logic.

@@ -236,6 +236,26 @@ large JSON indexes delivered without `Content-Encoding` as a warning. When
 Apache support is enabled, the generated managed block prefers Brotli and falls
 back to deflate for JSON if the corresponding modules are available.
 
+Visible search interfaces can call `PowerForgeWebMcpSearch.search({ query, limit })`
+to use the same generated index and ranking as the built-in WebMCP search. The
+visible interface accepts up to 100 results; agent responses retain their separate
+five-result and output-size limits. The index loads on demand and is shared by
+both interfaces. API aliases participate in ranking, so an unqualified type name
+can find its fully qualified reference entry.
+
+To include generated API types and PowerShell commands alongside content pages,
+configure output-relative API roots in the site specification:
+
+```json
+"Search": { "ApiRoots": ["api"] }
+```
+
+Generate API documentation before the final site build. The builder reads the
+generated `search.json` catalogs, links existing HTML reference pages, and updates
+the aggregate index, collection shards, language shards, and manifest together.
+Rebuilding uses the current catalogs rather than retaining old reference entries.
+The manifest reports any truncation caused by the shared index budgets.
+
 Themes with richer ranking can call `PowerForgeWebMcpSearch.bindAdapter(...)` to
 reuse their visible search implementation. If no adapter is bound, the runtime
 loads and reuses the generated index for the lifetime of the page;

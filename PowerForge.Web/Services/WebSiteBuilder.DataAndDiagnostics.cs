@@ -650,7 +650,7 @@ public static partial class WebSiteBuilder
 
     private static void WriteSearchIndex(SiteSpec spec, string outputRoot, IReadOnlyList<ContentItem> items)
     {
-        if (items.Count == 0) return;
+        if (items.Count == 0 && spec.Search?.ApiRoots.Length is not > 0) return;
 
         var entries = new List<SearchIndexEntry>();
         foreach (var item in items)
@@ -679,9 +679,15 @@ public static partial class WebSiteBuilder
                 Meta = BuildSearchMeta(item)
             });
         }
-        if (entries.Count == 0)
+        AppendApiSearchEntries(spec, outputRoot, entries);
+        if (entries.Count == 0 && spec.Search?.ApiRoots.Length is not > 0)
             return;
 
+        WriteSearchArtifacts(spec, outputRoot, entries);
+    }
+
+    private static void WriteSearchArtifacts(SiteSpec spec, string outputRoot, List<SearchIndexEntry> entries)
+    {
         entries = entries
             .OrderByDescending(static entry => entry.Weight)
             .ThenBy(static entry => entry.Title, StringComparer.OrdinalIgnoreCase)
