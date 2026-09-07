@@ -34,7 +34,18 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
             if (statement is PowerShellBoundStatementErrorBoundary boundary)
             {
                 // A failed statement can skip its first assignment and still reach the next statement.
-                Analyze(boundary.Body, assigned.ToHashSet(StringComparer.Ordinal), locals, diagnostics);
+                // A closed primitive call may need the host solely to unwrap Object
+                // arguments. That conversion cannot introduce a failed-assignment edge.
+                var preservesAssignment = boundary.Body.Statements.Length == 1 &&
+                    boundary.Body.Statements[0] is PowerShellBoundAssignmentStatement
+                    { Operation: PowerShellBoundMutationOperator.Assign, Value: PowerShellBoundClrInvocationExpression
+                        { InvocationKind: PowerShellClrInvocationKind.StaticMethod } primitive } &&
+                    primitive.Arguments.All(static argument => argument is PowerShellBoundLiteralExpression or PowerShellBoundVariableExpression) &&
+                    primitive.ArgumentConversions.All(static conversion => conversion.Kind is PowerShellClrArgumentConversionKind.None or
+                        PowerShellClrArgumentConversionKind.PowerShellObjectToClrObject) &&
+                    PowerShellClrPrimitiveInvocationPolicy.IsNonThrowing(primitive.DeclaringType, primitive.MemberName,
+                        primitive.InvocationKind, primitive.Type.ClrType, primitive.ParameterTypes);
+                Analyze(boundary.Body, preservesAssignment ? assigned : assigned.ToHashSet(StringComparer.Ordinal), locals, diagnostics);
                 if (boundary.Body.Statements.Length == 1 &&
                     boundary.Body.Statements[0] is PowerShellBoundOutputCaptureStatement capture &&
                     locals.TryGetValue(capture.Target.StableKey, out var captureType) &&

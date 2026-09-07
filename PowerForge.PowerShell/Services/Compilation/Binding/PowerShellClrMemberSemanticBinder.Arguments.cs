@@ -1,4 +1,5 @@
 using System.Management.Automation.Language;
+using System.Management.Automation;
 using System.Reflection;
 
 namespace PowerForge;
@@ -20,13 +21,15 @@ internal static partial class PowerShellClrMemberSemanticBinder
             .Select(candidate => new { Candidate = (MethodBase)candidate, Parameters = candidate.GetParameters() }).ToArray();
         var shapes = candidatesWithParameters.Where(match => match.Parameters.Length == arguments.Length).ToArray();
         var numericUnion = arguments.Any(static argument => argument.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble);
+        var dynamicObject = arguments.Any(static argument => argument.Type.ClrType == typeof(object) ||
+            typeof(PSObject).IsAssignableFrom(argument.Type.ClrType));
         // Object is the storage representation, not the dynamic type used by
         // PowerShell overload selection. Until variant dispatch is qualified,
         // require one authored-arity shape, including otherwise unsupported shapes.
-        if (numericUnion && candidatesWithParameters.Count(match => CouldAcceptArgumentCount(match.Parameters, arguments.Length)) != 1)
+        if ((numericUnion || dynamicObject) && candidatesWithParameters.Count(match => CouldAcceptArgumentCount(match.Parameters, arguments.Length)) != 1)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2623",
-                $"CLR invocation of {description} with a numeric-union argument requires one unambiguous arity shape; overload dispatch remains on the PowerShell runtime path.", span));
+                $"CLR invocation of {description} with a numeric-union or object argument requires one unambiguous arity shape; overload dispatch remains on the PowerShell runtime path.", span));
             return null;
         }
         var matches = shapes
@@ -67,6 +70,8 @@ internal static partial class PowerShellClrMemberSemanticBinder
         {
             var source = arguments[index].Type.ClrType;
             var target = parameters[index].ParameterType;
+            if (RequiresObjectUnwrapping(arguments[index]) &&
+                !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors)) return -1;
             if (arguments[index].Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
             {
                 if (target == typeof(object)) continue;
@@ -91,7 +96,14 @@ internal static partial class PowerShellClrMemberSemanticBinder
         => arguments.Select((argument, index) =>
             argument.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble && parameters[index].ParameterType == typeof(int)
                 ? new PowerShellClrArgumentConversion(PowerShellClrArgumentConversionKind.Int32OrDoubleToInt32, parameters[index].Name ?? string.Empty)
+                : RequiresObjectUnwrapping(argument) && parameters[index].ParameterType == typeof(object)
+                    ? new PowerShellClrArgumentConversion(PowerShellClrArgumentConversionKind.PowerShellObjectToClrObject, parameters[index].Name ?? string.Empty)
                 : default).ToArray();
+
+    private static bool RequiresObjectUnwrapping(PowerShellBoundExpression argument)
+        => argument.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble &&
+           argument is not PowerShellBoundLiteralExpression { Value: null } &&
+           (argument.Type.ClrType == typeof(object) || typeof(PSObject).IsAssignableFrom(argument.Type.ClrType));
 
     private static PowerShellBoundExpression NormalizeLiteralArgument(PowerShellBoundExpression argument, ExpressionAst syntax, Type targetType)
     {

@@ -108,6 +108,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     PowerShellClrArgumentConversionKind.Int32OrDoubleToInt32 =>
                         "__statementErrors.ConvertArgument<int>(" + invocation.RawArgumentTemporaries[index] + ", " +
                         PowerShellCSharpLiteral.QuoteString(conversion.ParameterName) + ", " + PowerShellCSharpLiteral.QuoteString(invocation.MemberName) + ")",
+                    PowerShellClrArgumentConversionKind.PowerShellObjectToClrObject =>
+                        "__statementErrors.UnwrapObjectArgument(" + invocation.RawArgumentTemporaries[index] + ")",
                     _ => throw new InvalidOperationException("Unsupported lowered CLR argument conversion.")
                 };
                 body.Append(PowerShellCSharpSymbolRenderer.TypeName(invocation.ParameterTypes[index])).Append(' ')

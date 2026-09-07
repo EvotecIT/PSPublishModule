@@ -15,6 +15,13 @@ namespace PowerForge.Generated.Runtime
             return (string)NativeContract.Invoke(_contract.FormatOperator, null, format, value)!;
         }
 
+        /// <summary>Converts a stored PowerShell value to the base object seen by a CLR Object parameter.</summary>
+        internal object? UnwrapObjectArgument(object? value)
+        {
+            ThrowIfDisposed();
+            return NativeContract.Invoke(_contract.UnwrapObjectArgument, null, value);
+        }
+
         internal IDisposable EnterCatch(Exception error)
         {
             ThrowIfDisposed();

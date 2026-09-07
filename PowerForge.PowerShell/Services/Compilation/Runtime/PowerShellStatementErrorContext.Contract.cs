@@ -26,6 +26,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo ConvertToMethodInvocationException, ConvertToArgumentConversionException;
             internal readonly MethodInfo NewInterpreterException;
             internal readonly MethodInfo FormatOperator;
+            internal readonly MethodInfo UnwrapObjectArgument;
             internal readonly MethodInfo AppendErrorToVariables;
             internal readonly PropertyInfo NullInvocationResource;
             internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
@@ -49,6 +50,7 @@ namespace PowerForge.Generated.Runtime
                 var errors = RequireType(assembly, "System.Management.Automation.ExceptionHandlingOps");
                 FormatOperator = Method(RequireType(assembly, "System.Management.Automation.StringOps"),
                     "FormatOperator", true, typeof(string), typeof(string), typeof(object));
+                UnwrapObjectArgument = Method(typeof(PSObject), "Base", true, typeof(object), typeof(object));
                 var tuple = RequireType(assembly, "System.Management.Automation.MutableTuple");
                 ObjectTupleType = RequireType(assembly, "System.Management.Automation.MutableTuple`1").MakeGenericType(typeof(object));
                 CatchAllType = RequireType(assembly, "System.Management.Automation.ExceptionHandlingOps+CatchAll");

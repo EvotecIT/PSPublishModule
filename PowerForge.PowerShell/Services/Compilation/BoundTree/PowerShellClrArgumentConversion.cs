@@ -4,7 +4,8 @@ namespace PowerForge;
 internal enum PowerShellClrArgumentConversionKind
 {
     None,
-    Int32OrDoubleToInt32
+    Int32OrDoubleToInt32,
+    PowerShellObjectToClrObject
 }
 
 /// <summary>Preserves the selected parameter's conversion and native error identity through lowering.</summary>
