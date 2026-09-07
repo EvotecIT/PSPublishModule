@@ -52,6 +52,10 @@ internal static class PowerShellCompilationConversionPolicy
                 case TryStatementAst:
                 case CatchClauseAst:
                     continue;
+                case AssignmentStatementAst { Right: ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst }:
+                    // Statements inside a captured loop still discard [void]
+                    // operands; the outer assignment collects only success output.
+                    continue;
                 default:
                     return false;
             }

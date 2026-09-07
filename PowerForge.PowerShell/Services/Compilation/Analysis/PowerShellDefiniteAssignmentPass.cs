@@ -35,6 +35,14 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
             {
                 // A failed statement can skip its first assignment and still reach the next statement.
                 Analyze(boundary.Body, assigned.ToHashSet(StringComparer.Ordinal), locals, diagnostics);
+                if (boundary.Body.Statements.Length == 1 &&
+                    boundary.Body.Statements[0] is PowerShellBoundOutputCaptureStatement capture &&
+                    locals.TryGetValue(capture.Target.StableKey, out var captureType) &&
+                    captureType.ClrType == typeof(object) &&
+                    captureType.Provenance != PowerShellTypeFactProvenance.Explicit)
+                    // A failed first capture leaves its unconstrained local slot null;
+                    // later failures preserve the value assigned before the capture.
+                    assigned.Add(capture.Target.StableKey);
                 if (boundary.Body.Statements.Length == 1 && boundary.Body.Statements[0] is PowerShellBoundAssignmentStatement
                     { Operation: PowerShellBoundMutationOperator.Assign, Value: PowerShellBoundClrInvocationExpression } initialization &&
                     locals.TryGetValue(initialization.Target.StableKey, out var targetType) &&

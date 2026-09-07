@@ -39,7 +39,12 @@ internal sealed class PowerShellStatementErrorCallPass : IPowerShellSemanticPass
                 if (statement is PowerShellBoundStatementErrorBoundary boundary)
                     return (PowerShellBoundStatement)new PowerShellBoundStatementErrorBoundary(
                         RewriteBlock(boundary.Body, true), boundary.SourcePath, boundary.SourceText);
-                var rewritten = PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement, nested => RewriteBlock(nested));
+                // A capture's top-level RHS is part of its assignment, not a
+                // separately resumable statement. Preserve inner body boundaries
+                // without inserting an error handler that would complete the RHS.
+                var rewritten = statement is PowerShellBoundOutputCaptureStatement capture
+                    ? new PowerShellBoundOutputCaptureStatement(capture.Span, capture.Target, RewriteBlock(capture.Body, true))
+                    : PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement, nested => RewriteBlock(nested));
                 if (alreadyProtected) return rewritten;
                 var callsErrorHost = PowerShellSemanticAnalyzer.EnumerateDirectExpressions(rewritten)
                     .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)

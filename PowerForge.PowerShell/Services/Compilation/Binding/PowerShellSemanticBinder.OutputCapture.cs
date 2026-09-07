@@ -28,7 +28,10 @@ internal sealed partial class PowerShellSemanticBinder
                 "A return inside captured statement output requires an explicit enclosing-function transfer contract.", span));
             return null;
         }
-        var body = BindStatement(document, assignment.Right, symbols, functions, diagnostics, false, targetFramework, capabilities);
+        // The assignment owns errors that escape the loop (including its condition
+        // and iterator). Handling them inside the collector would assign partial
+        // records after a failed RHS. Inner authored statements keep their boundaries.
+        var body = BindStatementCore(document, assignment.Right, symbols, functions, diagnostics, false, targetFramework, capabilities);
         if (body is null) return null;
         // Binding a loop can merge assignments and declarations back into its enclosing
         // symbol table. The capture destination must still accept its collapsed result.
@@ -43,12 +46,6 @@ internal sealed partial class PowerShellSemanticBinder
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2932",
                 "Captured statement output cannot yet redirect hosted command-region records into its collector.", span));
-            return null;
-        }
-        if (body.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors))
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2934",
-                "Captured statement failures require qualification of partial output and assignment continuation.", span));
             return null;
         }
         target.Refine(new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred,

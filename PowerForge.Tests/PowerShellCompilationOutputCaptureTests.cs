@@ -9,7 +9,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$Values=for ([int]$i=0;$i -lt 2;$i++) { return $i }")]
     [InlineData("[int]$Values=0; $Values=for ([int]$i=0;$i -lt 2;$i++) { $i }")]
     [InlineData("$script:Values=for ([int]$i=0;$i -lt 2;$i++) { $i }")]
-    [InlineData("$Values=$null; $Values=for ([int]$i=0;$i -lt 2;$i++) { [int]::Parse('bad') }")]
     [InlineData("$Values=for ([int]$i=0;$i -lt 2;$i++) { $Values='x'; $i }")]
     [InlineData("$Values=for ([int]$i=0;$i -lt 2;$i++) { [string]$Values='x'; $i }")]
     [InlineData("$Values=foreach ($Values in 1,2) { $Values }")]
