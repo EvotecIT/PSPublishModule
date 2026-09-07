@@ -435,6 +435,10 @@ jobs:
         shell: bash
         run: sudo bash Deployment/Linux/tests/powerforge-secret-restore-fixture.sh
 
+      - name: Test Certbot Apache reload hook
+        shell: bash
+        run: bash Deployment/Linux/tests/powerforge-certbot-reload-apache-fixture.sh
+
       - name: Test with Pester
         shell: pwsh
         timeout-minutes: 10
