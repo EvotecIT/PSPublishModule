@@ -171,8 +171,11 @@ internal sealed class PowerShellBoundOptimizer
         {
             var operand = OptimizeExpression(conversion.Operand);
             if (!conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness && !conversion.NormalizeNullString &&
+                operand.Type.Provenance != PowerShellTypeFactProvenance.Unknown &&
+                operand is not PowerShellBoundInvocationExpression &&
                 operand.Type.ClrType == conversion.Type.ClrType)
             {
+                // Local-call types are provisional until semantic fixed-point analysis.
                 _identityConversionsRemoved++;
                 return operand;
             }
