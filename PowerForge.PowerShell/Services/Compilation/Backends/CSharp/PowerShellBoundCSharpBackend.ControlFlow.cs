@@ -64,8 +64,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
 
         var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
+        if (loop.ScalarString)
+        {
+            // Evaluate the collection once. A null scalar has no iterations, while
+            // an empty string is still one scalar value in PowerShell foreach.
+            var scalarIdentifier = getTemporaryIdentifier("foreachScalar");
+            builder.Append(prefix).Append("var ").Append(scalarIdentifier).Append(" = ").Append(collection).AppendLine(";");
+            collection = scalarIdentifier;
+        }
         var enumerable = loop.ScalarString
-            ? $"new[] {{ {collection} }}"
+            ? $"({collection} is null ? global::System.Array.Empty<string>() : new[] {{ {collection} }})"
             : $"({collection} ?? global::System.Array.Empty<{elementTypeName}>())";
         var iterationVariable = getTemporaryIdentifier("foreachItem");
         builder.Append(prefix).Append("foreach (").Append(elementTypeName).Append(' ')
