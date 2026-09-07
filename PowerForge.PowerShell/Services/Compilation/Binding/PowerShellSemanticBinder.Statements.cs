@@ -307,14 +307,28 @@ internal sealed partial class PowerShellSemanticBinder
                 out var streamKind,
                 out var messageSyntax,
                 out var streamProvider,
+                out var outputBinding,
                 _commandResolver,
                 functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)))
         {
+            var namedNoEnumerate = outputBinding == PowerShellOutputBindingKind.NoEnumerate;
+            if (outputBinding == PowerShellOutputBindingKind.PositionalNoEnumerate)
+                outputBinding = _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7
+                    ? PowerShellOutputBindingKind.PositionalNoEnumeratePowerShell7
+                    : PowerShellOutputBindingKind.NoEnumerate;
             var expectedType = streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
             var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);
+            if (message is not null && namedNoEnumerate &&
+                _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
+                !PowerShellStableScalarTypePolicy.IsSupported(message.Type))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2940",
+                    "Windows PowerShell named Write-Output input requires qualified PSObject[] conversion and enumeration; non-scalar inputs retain the host binder.", message.Span));
+                return null;
+            }
             return message is null
                 ? null
-                : new PowerShellBoundStreamWriteStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), streamKind, streamProvider!, message);
+                : new PowerShellBoundStreamWriteStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), streamKind, streamProvider!, message, outputBinding);
         }
         if (statement is PipelineAst mappingPipeline &&
             TryBindRuntimeFreePipelineEnumeration(

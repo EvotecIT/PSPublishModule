@@ -78,9 +78,18 @@ internal static class PowerShellStreamCommandSemanticBinder
         PowerShellCompilationCommandProviderContract provider,
         out PowerShellStreamCommandKind kind,
         out ExpressionAst message)
+        => TryBind(command, provider, out kind, out message, out _);
+
+    internal static bool TryBind(
+        CommandAst command,
+        PowerShellCompilationCommandProviderContract provider,
+        out PowerShellStreamCommandKind kind,
+        out ExpressionAst message,
+        out PowerShellOutputBindingKind outputBinding)
     {
         kind = default;
         message = null!;
+        outputBinding = PowerShellOutputBindingKind.Default;
         if (command.Parent is not PipelineAst pipeline ||
             pipeline.PipelineElements.Count != 1 ||
             command.Redirections.Count != 0)
@@ -101,6 +110,9 @@ internal static class PowerShellStreamCommandSemanticBinder
         }
 
         var arguments = command.CommandElements.Skip(1).ToArray();
+        if (provider.ProviderId.Equals("powerforge.command.stream.output", StringComparison.Ordinal) &&
+            PowerShellOutputCommandSemanticBinder.TryBindNoEnumerate(arguments, out message, out outputBinding))
+            return true;
         var valueParameter = provider.Parameters.SingleOrDefault();
         if (valueParameter is null)
             return false;

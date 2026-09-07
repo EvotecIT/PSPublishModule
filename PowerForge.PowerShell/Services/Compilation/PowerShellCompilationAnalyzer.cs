@@ -356,6 +356,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                             out _,
                             out _,
                             out _,
+                            out _,
                             _commandResolver,
                             localFunctionNames) ||
                         capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&

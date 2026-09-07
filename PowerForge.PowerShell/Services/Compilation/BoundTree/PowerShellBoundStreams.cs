@@ -1,12 +1,21 @@
 namespace PowerForge;
 
+internal enum PowerShellOutputBindingKind
+{
+    Default,
+    NoEnumerate,
+    PositionalNoEnumerate,
+    PositionalNoEnumeratePowerShell7
+}
+
 internal sealed class PowerShellBoundStreamWriteStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundStreamWriteStatement(
         SourceSpan span,
         PowerShellStreamCommandKind kind,
         PowerShellCompilationCommandProviderContract? provider,
-        PowerShellBoundExpression message)
+        PowerShellBoundExpression message,
+        PowerShellOutputBindingKind outputBinding = PowerShellOutputBindingKind.Default)
         : base(
             span,
             (kind == PowerShellStreamCommandKind.Success
@@ -21,10 +30,12 @@ internal sealed class PowerShellBoundStreamWriteStatement : PowerShellBoundState
         Kind = kind;
         Provider = provider;
         Message = message;
+        OutputBinding = outputBinding;
     }
 
     internal PowerShellStreamCommandKind Kind { get; }
     /// <summary>Null for language-owned implicit success output, which cannot be shadowed by a command.</summary>
     internal PowerShellCompilationCommandProviderContract? Provider { get; }
     internal PowerShellBoundExpression Message { get; }
+    internal PowerShellOutputBindingKind OutputBinding { get; }
 }

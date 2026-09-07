@@ -492,13 +492,25 @@ internal static class PowerShellCommandIslandPolicy
         PowerShellCommandSemanticResolver resolver,
         ISet<string>? localFunctionNames,
         PowerShellCompilationCapability capabilities)
+        => TryGetStreamCommand(command, out kind, out message, out provider, out _, resolver, localFunctionNames, capabilities);
+
+    private static bool TryGetStreamCommand(
+        CommandAst command,
+        out PowerShellStreamCommandKind kind,
+        out ExpressionAst message,
+        out PowerShellCompilationCommandProviderContract? provider,
+        out PowerShellOutputBindingKind outputBinding,
+        PowerShellCommandSemanticResolver resolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
     {
         kind = default;
         message = null!;
         provider = null;
+        outputBinding = PowerShellOutputBindingKind.Default;
         var resolution = resolver.Resolve(command, localFunctionNames, capabilities);
         if (!resolution.IsProvider || resolution.Contract is null ||
-            !PowerShellStreamCommandSemanticBinder.TryBind(command, resolution.Contract, out kind, out message))
+            !PowerShellStreamCommandSemanticBinder.TryBind(command, resolution.Contract, out kind, out message, out outputBinding))
             return false;
         provider = resolution.Contract;
         return true;
@@ -510,14 +522,17 @@ internal static class PowerShellCommandIslandPolicy
         out PowerShellStreamCommandKind kind,
         out ExpressionAst message,
         out PowerShellCompilationCommandProviderContract? provider,
+        out PowerShellOutputBindingKind outputBinding,
         PowerShellCommandSemanticResolver resolver,
         ISet<string>? localFunctionNames)
     {
+        outputBinding = PowerShellOutputBindingKind.Default;
         if (!TryGetStreamCommand(
                 command,
                 out kind,
                 out message,
                 out provider,
+                out outputBinding,
                 resolver,
                 localFunctionNames,
                 capabilities))

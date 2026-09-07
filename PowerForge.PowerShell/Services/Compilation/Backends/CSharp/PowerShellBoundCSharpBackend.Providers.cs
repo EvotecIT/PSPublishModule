@@ -10,6 +10,24 @@ internal sealed partial class PowerShellBoundCSharpBackend
         string prefix,
         Func<string, string> getTemporaryIdentifier)
     {
+        if (stream.OutputBinding != PowerShellOutputBindingKind.Default)
+        {
+            var value = getTemporaryIdentifier("outputArgument");
+            builder.Append(prefix).Append("object? ").Append(value).Append(" = (object?)")
+                .Append(EmitExpression(stream.Message)).AppendLine(";");
+            builder.Append(prefix).Append("if (global::System.Object.ReferenceEquals(").Append(value)
+                .Append(", global::System.Management.Automation.Internal.AutomationNull.Value)) ")
+                .Append(value).AppendLine(" = null;");
+            if (stream.OutputBinding == PowerShellOutputBindingKind.PositionalNoEnumeratePowerShell7)
+            {
+                builder.Append(prefix).Append("if (global::System.Management.Automation.LanguagePrimitives.GetEnumerable(")
+                    .Append(value).AppendLine(") is null)")
+                    .Append(prefix).Append("    ").Append(value)
+                    .Append(" = new global::System.Collections.Generic.List<object?> { ").Append(value).AppendLine(" };");
+            }
+            builder.Append(prefix).Append("__writeOutput(").Append(value).AppendLine(");");
+            return;
+        }
         if (stream.Provider is null)
         {
             if (stream.Kind != PowerShellStreamCommandKind.Success)
