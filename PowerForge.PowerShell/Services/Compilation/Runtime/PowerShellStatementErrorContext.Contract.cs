@@ -27,6 +27,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo NewInterpreterException;
             internal readonly MethodInfo FormatOperator;
             internal readonly MethodInfo UnwrapObjectArgument;
+            internal readonly MethodInfo CheckEnumerationInterrupts;
             internal readonly MethodInfo AppendErrorToVariables;
             internal readonly PropertyInfo NullInvocationResource;
             internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
@@ -43,6 +44,8 @@ namespace PowerForge.Generated.Runtime
                 if (!(major == 5 && minor == 1 || major == 7 && (minor == 4 || minor == 6)))
                     throw new NotSupportedException("The loaded PowerShell version is outside the statement-error host profiles.");
                 var context = RequireType(assembly, "System.Management.Automation.ExecutionContext");
+                CheckEnumerationInterrupts = Method(RequireType(assembly, "System.Management.Automation.PipelineOps"),
+                    "CheckForInterrupts", true, typeof(void), context);
                 var function = RequireType(assembly, "System.Management.Automation.Language.FunctionContext");
                 var pipe = RequireType(assembly, "System.Management.Automation.Internal.Pipe");
                 var state = RequireType(assembly, "System.Management.Automation.SessionStateInternal");

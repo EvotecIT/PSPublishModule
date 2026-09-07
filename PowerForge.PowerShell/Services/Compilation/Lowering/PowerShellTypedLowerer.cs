@@ -532,13 +532,12 @@ internal sealed partial class PowerShellTypedLowerer
             loop.Variable,
             loop.ElementType,
             LowerExpression(loop.Collection, functions, names, targetCapabilities),
-            loop.ScalarString,
+            loop.EnumerationKind,
             LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
             loop.DeclareVariable,
             loop.NullCollectionElement is null
                 ? null
-                : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities),
-            loop.SystemArray);
+                : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities));
     }
 
     private static PowerShellLoweredStatement[] LowerStatements(

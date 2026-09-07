@@ -19,10 +19,24 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(", global::System.Management.Automation.Internal.AutomationNull.Value)) ")
             .Append(records).Append(".Add(").Append(record).AppendLine("); };");
         builder.Append(prefix).AppendLine("try");
-        EmitBlock(builder, capture.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
-        builder.Append(prefix).Append("finally { __writeOutput = ").Append(previous).AppendLine("; }");
-        builder.Append(prefix).Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target.Name)).Append(" = ")
+        builder.Append(prefix).AppendLine("{");
+        foreach (var statement in capture.Statements)
+            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+        builder.Append(prefix).Append("    ").Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target.Name)).Append(" = ")
             .Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
             .Append(records).Append("[0] : ").Append(records).AppendLine(".ToArray();");
+        builder.Append(prefix).Append("    ").Append(records).AppendLine(".Clear();");
+        builder.Append(prefix).AppendLine("}");
+        // PowerShell discards assignment output for RuntimeException, but flushes
+        // pending records when a raw CLR exception escapes (for example MoveNext).
+        builder.Append(prefix).Append("catch (global::System.Management.Automation.RuntimeException) { ")
+            .Append(records).AppendLine(".Clear(); throw; }");
+        var flushedRecord = getTemporaryIdentifier("flushedCaptureRecord");
+        builder.Append(prefix).AppendLine("finally");
+        builder.Append(prefix).AppendLine("{");
+        builder.Append(prefix).Append("    __writeOutput = ").Append(previous).AppendLine(";");
+        builder.Append(prefix).Append("    foreach (var ").Append(flushedRecord).Append(" in ").Append(records)
+            .Append(") ").Append(previous).Append('(').Append(flushedRecord).AppendLine(");");
+        builder.Append(prefix).AppendLine("}");
     }
 }

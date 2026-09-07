@@ -104,7 +104,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var loop = Assert.IsType<PowerShellBoundForEachStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
-        Assert.Equal(parameter.Contains("[]", StringComparison.Ordinal), !loop.ScalarString);
+        Assert.Equal(parameter.Contains("[]", StringComparison.Ordinal), loop.EnumerationKind == PowerShellForEachEnumerationKind.TypedArray);
         Assert.IsType<PowerShellLoweredForEachStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForEachStatement));
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("string value = default!;", source, StringComparison.Ordinal);
@@ -356,11 +356,11 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.IsType<PowerShellBoundIndexAssignmentStatement>(map.Body.Statements[1]);
         Assert.IsType<PowerShellLoweredIndexAssignmentStatement>(Assert.Single(result.Lowered.Functions, static function => function.Symbol.Name == "Get-MapValue").Statements[1]);
         var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_MapValue").Source;
-        Assert.Contains("Dictionary<string, string>", source, StringComparison.Ordinal);
+        Assert.Contains("System.Collections.Hashtable", source, StringComparison.Ordinal);
         Assert.Contains("__pf_index_value_", source, StringComparison.Ordinal);
         Assert.Contains("__pf_index_target_", source, StringComparison.Ordinal);
         Assert.Contains("__pf_index_key_", source, StringComparison.Ordinal);
-        Assert.Contains(".ContainsKey(__pf_index_key_", source, StringComparison.Ordinal);
+        Assert.Contains(".Contains(__pf_index_key_", source, StringComparison.Ordinal);
         Assert.Contains("var __pf_index_target_", source, StringComparison.Ordinal);
         Assert.Contains("var __pf_index_key_", source, StringComparison.Ordinal);
     }

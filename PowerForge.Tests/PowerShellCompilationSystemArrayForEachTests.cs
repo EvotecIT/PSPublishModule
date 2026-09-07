@@ -32,7 +32,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(semantic.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var loop = Assert.IsType<PowerShellLoweredForEachStatement>(
             Assert.Single(Assert.Single(semantic.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForEachStatement));
-        Assert.True(loop.SystemArray);
+        Assert.Equal(PowerShellForEachEnumerationKind.SystemArray, loop.EnumerationKind);
         Assert.Equal(typeof(object), loop.ElementType);
         Assert.Equal(typeof(Array), loop.Collection.ClrType);
     }

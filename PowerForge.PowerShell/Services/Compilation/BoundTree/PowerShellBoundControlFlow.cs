@@ -89,34 +89,34 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         PowerShellSymbolId variable,
         Type elementType,
         PowerShellBoundExpression collection,
-        bool scalarString,
+        PowerShellForEachEnumerationKind enumerationKind,
         PowerShellBoundBlock body,
         bool declareVariable = false,
-        PowerShellBoundExpression? nullCollectionElement = null,
-        bool systemArray = false)
+        PowerShellBoundExpression? nullCollectionElement = null)
         : base(
             span,
-            PowerShellSemanticEffect.Mutation | collection.Effects | body.Effects | (nullCollectionElement?.Effects ?? PowerShellSemanticEffect.None),
-            collection.Capabilities | body.Capabilities | (nullCollectionElement?.Capabilities ?? PowerShellRequiredCapability.None))
+            PowerShellSemanticEffect.Mutation | collection.Effects | body.Effects | (nullCollectionElement?.Effects ?? PowerShellSemanticEffect.None) |
+                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.NonSuccessStream : PowerShellSemanticEffect.None),
+            collection.Capabilities | body.Capabilities | (nullCollectionElement?.Capabilities ?? PowerShellRequiredCapability.None) |
+                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable
+                    ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes : PowerShellRequiredCapability.None))
     {
         Variable = variable;
         ElementType = elementType;
         Collection = collection;
-        ScalarString = scalarString;
+        EnumerationKind = enumerationKind;
         Body = body;
         DeclareVariable = declareVariable;
         NullCollectionElement = nullCollectionElement;
-        SystemArray = systemArray;
     }
 
     internal PowerShellSymbolId Variable { get; }
     internal Type ElementType { get; }
     internal PowerShellBoundExpression Collection { get; }
-    internal bool ScalarString { get; }
+    internal PowerShellForEachEnumerationKind EnumerationKind { get; }
     internal PowerShellBoundBlock Body { get; }
     internal bool DeclareVariable { get; }
     internal PowerShellBoundExpression? NullCollectionElement { get; }
-    internal bool SystemArray { get; }
 }
 
 internal sealed class PowerShellBoundSwitchClause

@@ -6,6 +6,73 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("object[]", "GetType", false)]
+    [InlineData("array", "GetType", false)]
+    [InlineData("Collections.IEnumerable", "GetType", false)]
+    [InlineData("Collections.IEnumerator", "GetType", false)]
+    [InlineData("object[]", "ToString", false)]
+    [InlineData("object[]", "GetHashCode", false)]
+    [InlineData("int[]", "GetType", true)]
+    [InlineData("string[]", "GetType", true)]
+    public void ObjectReceivers_RequireAClosedMethodDispatchContract(string collectionType, string method, bool supported)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Add-RecordMethods { [CmdletBinding()] param([" + collectionType +
+            "]$Items,[Collections.Generic.List[object]]$Observed) foreach($Item in $Items) { $Observed.Add($Item." + method + "()) } }", ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "ObjectReceiverMethods", "net10.0");
+        Assert.Equal(supported ? 1 : 0, typed.Methods.Length);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void ObjectReceivers_HybridRetainsWrappedMethodDispatch(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Add-RecordTypes {
+                [CmdletBinding()] param([object[]]$Items,[Collections.Generic.List[object]]$Observed)
+                foreach($Item in $Items) { $Observed.Add($Item.GetType()) }
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.ObjectReceiverDispatch", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        const string probe = """
+            Add-Type -TypeDefinition @'
+            using System;
+            using System.Management.Automation;
+            public static class WrappedReceiverInput {
+                public static object[] Values() {
+                    var adapted=new PSObject((object)13);
+                    adapted.Methods.Add(new PSScriptMethod("GetType",ScriptBlock.Create("'adapted'")));
+                    return new object[] { 7, new PSObject((object)7), new PSObject((object)DateTime.MinValue), adapted };
+                }
+            }
+            '@
+            $observed=[Collections.Generic.List[object]]::new()
+            Add-RecordTypes -Items ([WrappedReceiverInput]::Values()) -Observed $observed -ErrorAction Stop
+            foreach($value in $observed) {
+                if($value -is [Type]) { $value.FullName } else { $value }
+            }
+            """;
+        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "original-object-receiver");
+        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "compiled-object-receiver");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
+        Assert.Contains("adapted", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("object", false)]
     [InlineData("int", true)]
     [InlineData("string", true)]
@@ -35,7 +102,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void ObjectArguments_PreserveClrArgumentUnwrappingWithoutChangingArrayStorage(string framework, string host)
+    public void ObjectArguments_PreserveClrArgumentAndCallerStorageSemantics(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""
             function Add-ObjectArguments {
@@ -122,7 +189,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("AutomationNull", original.StandardOutput, StringComparison.Ordinal);
         using var observations = System.Text.Json.JsonDocument.Parse(original.StandardOutput);
         Assert.Equal(81, observations.RootElement.GetProperty("same").GetArrayLength());
-        Assert.Equal(observations.RootElement.GetProperty("before").GetString(), observations.RootElement.GetProperty("after").GetString());
+        // Native object-array parameter binding normalizes AutomationNull entries
+        // in the caller's array. Argument unwrapping must preserve that host behavior
+        // and leave the array's PSObject elements wrapped.
+        Assert.Contains("System.Management.Automation.PSObject:", observations.RootElement.GetProperty("after").GetString(), StringComparison.Ordinal);
         Assert.Equal(observations.RootElement.GetProperty("objects").GetString(), observations.RootElement.GetProperty("constructors").GetString());
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
     }

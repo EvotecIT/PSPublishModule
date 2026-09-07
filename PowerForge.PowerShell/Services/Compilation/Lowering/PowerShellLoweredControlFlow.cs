@@ -79,31 +79,28 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
         PowerShellSymbolId variable,
         Type elementType,
         PowerShellLoweredExpression collection,
-        bool scalarString,
+        PowerShellForEachEnumerationKind enumerationKind,
         PowerShellLoweredStatement[] statements,
         bool declareVariable,
-        PowerShellLoweredExpression? nullCollectionElement,
-        bool systemArray)
+        PowerShellLoweredExpression? nullCollectionElement)
         : base(span)
     {
         Variable = variable;
         ElementType = elementType;
         Collection = collection;
-        ScalarString = scalarString;
+        EnumerationKind = enumerationKind;
         Statements = statements;
         DeclareVariable = declareVariable;
         NullCollectionElement = nullCollectionElement;
-        SystemArray = systemArray;
     }
 
     internal PowerShellSymbolId Variable { get; }
     internal Type ElementType { get; }
     internal PowerShellLoweredExpression Collection { get; }
-    internal bool ScalarString { get; }
+    internal PowerShellForEachEnumerationKind EnumerationKind { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal bool DeclareVariable { get; }
     internal PowerShellLoweredExpression? NullCollectionElement { get; }
-    internal bool SystemArray { get; }
 }
 
 internal sealed class PowerShellLoweredSwitchClause

@@ -59,6 +59,7 @@ internal sealed class PowerShellBoundArrayConcatenationExpression : PowerShellBo
 internal enum PowerShellBoundDictionaryKind
 {
     StringDictionary,
+    StringHashtable,
     OrderedStringDictionary,
     ObjectDictionary,
     OrderedObjectDictionary
@@ -102,6 +103,7 @@ internal enum PowerShellBoundIndexKind
     Array,
     List,
     StringDictionary,
+    StringHashtable,
     OrderedStringDictionary,
     ObjectDictionary
 }

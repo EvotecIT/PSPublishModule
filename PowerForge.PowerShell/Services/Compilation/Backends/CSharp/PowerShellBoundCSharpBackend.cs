@@ -479,7 +479,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             PowerShellBoundDictionaryKind.OrderedStringDictionary or PowerShellBoundDictionaryKind.OrderedObjectDictionary =>
                 $"new global::System.Collections.Specialized.OrderedDictionary(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}",
-            PowerShellBoundDictionaryKind.ObjectDictionary =>
+            PowerShellBoundDictionaryKind.ObjectDictionary or PowerShellBoundDictionaryKind.StringHashtable =>
                 $"new global::System.Collections.Hashtable(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}",
             _ => $"new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}"
         };

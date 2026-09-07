@@ -184,19 +184,12 @@ internal sealed partial class PowerShellSemanticBinder
             return null;
         }
         var collectionType = collection.Type.ClrType;
-        var scalarString = collectionType == typeof(string);
-        var systemArray = collectionType == typeof(Array) &&
-                          PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities);
-        var elementType = collectionType.IsArray && collectionType.GetArrayRank() == 1
-            ? collectionType.GetElementType()
-            : scalarString
-                ? typeof(string)
-                : systemArray ? typeof(object) : null;
+        var elementType = PowerShellForEachCollectionPolicy.GetElementType(collectionType, capabilities, out var enumerationKind);
         if (elementType is null || elementType != target.Type.ClrType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2303",
-                "foreach collection enumeration requires a statically typed one-dimensional array, a statically represented scalar string, or a generated PowerShell host that preserves System.Array items as objects.",
+                "foreach requires a typed vector, scalar string, or a qualified PowerShell host for System.Array and IEnumerable/IEnumerator object elements.",
                 collection.Span));
             return null;
         }
@@ -214,8 +207,7 @@ internal sealed partial class PowerShellSemanticBinder
             target.Symbol,
             elementType,
             collection,
-            scalarString,
-            body,
-            systemArray: systemArray);
+            enumerationKind,
+            body);
     }
 }

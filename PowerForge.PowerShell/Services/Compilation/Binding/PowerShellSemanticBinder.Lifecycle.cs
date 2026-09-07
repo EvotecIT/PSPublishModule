@@ -126,7 +126,7 @@ internal sealed partial class PowerShellSemanticBinder
             sourceParameter.Symbol,
             sourceParameter.Type.ClrType,
             collection,
-            scalarString: false,
+            PowerShellForEachEnumerationKind.TypedArray,
             process,
             declareVariable: true,
             nullCollectionElement);
@@ -170,11 +170,10 @@ internal sealed partial class PowerShellSemanticBinder
                 lifecycleLoop.Variable,
                 lifecycleLoop.ElementType,
                 lifecycleLoop.Collection,
-                lifecycleLoop.ScalarString,
+                lifecycleLoop.EnumerationKind,
                 collectedProcess,
                 lifecycleLoop.DeclareVariable,
-                lifecycleLoop.NullCollectionElement,
-                lifecycleLoop.SystemArray);
+                lifecycleLoop.NullCollectionElement);
             var collectedEnd = RewriteLifecycleOutputs(end, outputVariable, outputListType, outputType);
             var outputArrayFact = new PowerShellTypeFact(
                 outputArrayType,

@@ -52,29 +52,30 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var prefix = new string(' ', indent * 4);
         var collection = EmitExpression(loop.Collection);
-        if (loop.SystemArray)
+        if (loop.EnumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable)
+        {
+            EmitPowerShellForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            return;
+        }
+        if (loop.EnumerationKind == PowerShellForEachEnumerationKind.SystemArray)
         {
             EmitSystemArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
             return;
         }
-        if (!loop.ScalarString && loop.Collection.ClrType.IsArray)
+        if (loop.EnumerationKind == PowerShellForEachEnumerationKind.TypedArray)
         {
             EmitArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
             return;
         }
 
         var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
-        if (loop.ScalarString)
-        {
-            // Evaluate the collection once. A null scalar has no iterations, while
-            // an empty string is still one scalar value in PowerShell foreach.
-            var scalarIdentifier = getTemporaryIdentifier("foreachScalar");
-            builder.Append(prefix).Append("var ").Append(scalarIdentifier).Append(" = ").Append(collection).AppendLine(";");
-            collection = scalarIdentifier;
-        }
-        var enumerable = loop.ScalarString
-            ? $"({collection} is null ? global::System.Array.Empty<string>() : new[] {{ {collection} }})"
-            : $"({collection} ?? global::System.Array.Empty<{elementTypeName}>())";
+        if (loop.EnumerationKind != PowerShellForEachEnumerationKind.ScalarString)
+            throw new InvalidOperationException("Unsupported lowered foreach enumeration contract.");
+        // Evaluate the collection once. A null scalar has no iterations, while
+        // an empty string is still one scalar value in PowerShell foreach.
+        var scalarIdentifier = getTemporaryIdentifier("foreachScalar");
+        builder.Append(prefix).Append("var ").Append(scalarIdentifier).Append(" = ").Append(collection).AppendLine(";");
+        var enumerable = $"({scalarIdentifier} is null ? global::System.Array.Empty<string>() : new[] {{ {scalarIdentifier} }})";
         var iterationVariable = getTemporaryIdentifier("foreachItem");
         builder.Append(prefix).Append("foreach (").Append(elementTypeName).Append(' ')
             .Append(iterationVariable).Append(" in ").Append(enumerable).AppendLine(")");

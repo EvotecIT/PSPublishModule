@@ -265,7 +265,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
             result.Add("PowerShellLanguageRuntimeError");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(CanThrowClr) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>
-                statement is PowerShellLoweredIndexAssignmentStatement or PowerShellLoweredClrMemberAssignmentStatement ||
+                statement is PowerShellLoweredIndexAssignmentStatement or PowerShellLoweredClrMemberAssignmentStatement or
+                    PowerShellLoweredForEachStatement { EnumerationKind: PowerShellForEachEnumerationKind.PowerShellEnumerable } ||
                 statement is PowerShellLoweredAssignmentStatement { Operation: not PowerShellBoundMutationOperator.Assign } assignment &&
                     !PowerShellLoweredPrimitiveErrorPolicy.IsNonThrowingNumericMutation(assignment.ClrType, assignment.IntegralSemantics)))
             result.Add("ClrException");

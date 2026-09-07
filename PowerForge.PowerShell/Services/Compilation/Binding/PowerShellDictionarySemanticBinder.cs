@@ -38,13 +38,13 @@ internal static class PowerShellDictionarySemanticBinder
 
         var type = ordered
             ? typeof(OrderedDictionary)
-            : objectValues ? typeof(Hashtable) : typeof(Dictionary<string, string>);
+            : typeof(Hashtable);
         var kind = (ordered, objectValues) switch
         {
             (true, true) => PowerShellBoundDictionaryKind.OrderedObjectDictionary,
             (true, false) => PowerShellBoundDictionaryKind.OrderedStringDictionary,
             (false, true) => PowerShellBoundDictionaryKind.ObjectDictionary,
-            _ => PowerShellBoundDictionaryKind.StringDictionary
+            _ => PowerShellBoundDictionaryKind.StringHashtable
         };
         return new PowerShellBoundDictionaryExpression(
             PowerShellSourceParser.GetSpan(document, syntax.Extent),
@@ -182,7 +182,7 @@ internal static class PowerShellDictionarySemanticBinder
         var valueType = kind == PowerShellBoundIndexKind.Array
             ? target.Type.ClrType.GetElementType()!
             : kind == PowerShellBoundIndexKind.List ? typeof(object)
-            : kind is PowerShellBoundIndexKind.StringDictionary or PowerShellBoundIndexKind.OrderedStringDictionary ? typeof(string) : typeof(object);
+            : kind is PowerShellBoundIndexKind.StringDictionary or PowerShellBoundIndexKind.StringHashtable or PowerShellBoundIndexKind.OrderedStringDictionary ? typeof(string) : typeof(object);
         var value = bindExpression(syntax.Right, valueType);
         if (value is null || valueType != typeof(object) && !PowerShellClrTypeSemantics.CanAssign(valueType, value.Type.ClrType))
         {
@@ -218,7 +218,7 @@ internal static class PowerShellDictionarySemanticBinder
         var objectValues = UsesObjectRepresentation(syntax, contextualType);
         var dictionaryType = ordered
             ? typeof(OrderedDictionary)
-            : objectValues ? typeof(Hashtable) : typeof(Dictionary<string, string>);
+            : typeof(Hashtable);
         var properties = new Dictionary<string, PowerShellTypeFact>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in syntax.KeyValuePairs)
         {
@@ -230,7 +230,7 @@ internal static class PowerShellDictionarySemanticBinder
             provenance,
             objectValues
                 ? "A bounded dictionary literal selects a case-insensitive BCL object dictionary representation."
-                : "A homogeneous dictionary literal selects a case-insensitive CLR String dictionary representation.",
+                : "A homogeneous dictionary literal retains Hashtable identity with a bounded String value contract.",
             properties,
             objectValues ? PowerShellDictionaryValueKind.Object : PowerShellDictionaryValueKind.String);
     }
@@ -257,6 +257,10 @@ internal static class PowerShellDictionarySemanticBinder
         if (type == typeof(Dictionary<string, string>))
         {
             kind = PowerShellBoundIndexKind.StringDictionary; indexType = typeof(string); resultType = typeof(string); return true;
+        }
+        if (type == typeof(Hashtable) && typeFact.DictionaryValueKind == PowerShellDictionaryValueKind.String)
+        {
+            kind = PowerShellBoundIndexKind.StringHashtable; indexType = typeof(string); resultType = typeof(string); return true;
         }
         if (type == typeof(OrderedDictionary))
         {
@@ -293,7 +297,7 @@ internal static class PowerShellDictionarySemanticBinder
             PowerShellTypeFactProvenance.Inferred,
             objectValues
                 ? "A bounded dictionary literal selects a case-insensitive BCL object dictionary representation."
-                : "A homogeneous dictionary literal selects a case-insensitive CLR String dictionary representation.",
+                : "A homogeneous dictionary literal retains Hashtable identity with a bounded String value contract.",
             properties,
             objectValues ? PowerShellDictionaryValueKind.Object : PowerShellDictionaryValueKind.String);
     }

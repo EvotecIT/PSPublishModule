@@ -19,8 +19,8 @@ internal static class PowerShellBoundStatementRewriter
             PowerShellBoundForStatement loop => new PowerShellBoundForStatement(
                 loop.Span, loop.Initializer, loop.Condition, loop.Iterator, rewriteBlock(loop.Body)),
             PowerShellBoundForEachStatement loop => new PowerShellBoundForEachStatement(
-                loop.Span, loop.Variable, loop.ElementType, loop.Collection, loop.ScalarString,
-                rewriteBlock(loop.Body), loop.DeclareVariable, loop.NullCollectionElement, loop.SystemArray),
+                loop.Span, loop.Variable, loop.ElementType, loop.Collection, loop.EnumerationKind,
+                rewriteBlock(loop.Body), loop.DeclareVariable, loop.NullCollectionElement),
             PowerShellBoundSwitchStatement selection => new PowerShellBoundSwitchStatement(
                 selection.Span, selection.Value,
                 selection.Clauses.Select(clause => new PowerShellBoundSwitchClause(clause.Value, rewriteBlock(clause.Body))).ToArray(),

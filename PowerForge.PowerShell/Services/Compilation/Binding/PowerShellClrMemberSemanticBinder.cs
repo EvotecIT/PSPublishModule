@@ -272,6 +272,9 @@ internal static partial class PowerShellClrMemberSemanticBinder
             return Reject(diagnostics, "PSB2620", "The bounded $Error collection is a read-only invocation snapshot; method invocation remains on the PowerShell runtime path.", span);
         if (!target.IsStatic && target.Type == typeof(PSObject))
             return Reject(diagnostics, "PSB2612", "PSCustomObject method invocation requires preservation of adapted-object identity and remains on the PowerShell runtime path.", span);
+        if (!target.IsStatic && target.Type == typeof(object) &&
+            target.Receiver!.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble)
+            return Reject(diagnostics, "PSB2624", "Method invocation on an open Object receiver requires runtime receiver unwrapping, member lookup, and overload selection; it remains on the PowerShell runtime path.", span);
 
         var argumentSyntax = syntax.Arguments?.ToArray() ?? Array.Empty<ExpressionAst>();
         if (target.IsStatic && name.Equals("new", StringComparison.OrdinalIgnoreCase))
