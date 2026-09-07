@@ -15,10 +15,7 @@ internal sealed partial class PowerShellTypedLowerer
         var boundParameterBindings = PropagateHostRequirement(program, function =>
             ContainsBoundParameterPresence(function.Body) ||
             function.Parameters.Any(parameter =>
-                parameter.Contract.DefaultValue is not null ||
-                !parameter.Contract.IsMandatory &&
-                parameter.Contract.Validations.Length > 0 &&
-                targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters)));
+                PowerShellParameterValidationPolicy.RequiresBoundParameterSet(parameter.Contract, targetCapabilities)));
         var runtimeStateBindings = PropagateHostRequirement(program, static function => RequiresRuntimeStateHostBinding(function.Body));
         var moduleStateReadBindings = PropagateHostRequirement(program, static function =>
             ContainsPowerShellModuleStateRead(function.Body));

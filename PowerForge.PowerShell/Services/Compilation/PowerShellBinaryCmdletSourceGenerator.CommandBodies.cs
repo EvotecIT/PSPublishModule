@@ -39,6 +39,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             if (parameter.Aliases.Length > 0)
                 builder.AppendLine($"    [Alias({string.Join(", ", parameter.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
             var propertyType = parameter.IsSwitch ? "SwitchParameter" : GetGeneratedTypeName(parameter.TypeName);
+            if (parameter.TypeName == typeof(string).FullName)
+                builder.AppendLine($"    [global::PowerForge.Generated.Runtime.PowerShellStringParameterAttribute({(cmdlet.Method.IsAdvancedFunction ? "true" : "false")})]");
             if (RequiresInvariantParameterConversion(parameter))
                 builder.AppendLine($"    [{InvariantParameterAttributeName}(typeof({propertyType}))]");
             if (parameter.AllowNull)

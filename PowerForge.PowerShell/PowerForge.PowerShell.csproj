@@ -64,6 +64,7 @@
     <EmbeddedResource Include="Templates\Compilation\ProviderProcessIsolation.cs.template" LogicalName="PowerForge.PowerShell.Compilation.ProviderProcessIsolation.cs.template" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\BinaryModule.csproj.template" LogicalName="PowerForge.PowerShell.Compilation.BinaryModule.csproj.template" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellStatementErrorContext*.cs" LogicalName="PowerForge.PowerShell.Compilation.%(Filename)%(Extension)" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellStringParameterAttribute.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellStringParameterAttribute.cs" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Build\PowerShellCommandMetadataNames*.cs" LogicalName="PowerForge.PowerShell.Compilation.%(Filename)%(Extension)" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\CommandMetadata.targets.template" LogicalName="PowerForge.PowerShell.Compilation.CommandMetadata.targets.template" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\CommandMetadataTask.cs.template" LogicalName="PowerForge.PowerShell.Compilation.CommandMetadataTask.cs.template" WithCulture="false" />

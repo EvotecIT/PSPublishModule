@@ -68,6 +68,11 @@ internal sealed class PowerShellParameterPrologueRenderer
             var metadata = parameter.Metadata;
             var parameterType = parameter.ClrType;
             var identifier = PowerShellClrSymbolMapper.MapIdentifier(parameter.Name);
+            // An end-only function still executes for an empty input pipeline.
+            // No argument was bound in that case, even for a mandatory parameter.
+            var skipWhenOmitted = (metadata.IsMandatory || metadata.Validations.Length > 0) &&
+                PowerShellParameterValidationPolicy.ValidateOnlyWhenBound(metadata, _capabilities);
+            if (skipWhenOmitted) BeginBlock($"if (__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(metadata.Name)}))");
             if (metadata.IsMandatory && parameterType == typeof(string) && !metadata.AllowEmptyString)
             {
                 var condition = metadata.AllowNull ? $"{identifier} is not null && {identifier}.Length == 0" : $"global::System.String.IsNullOrEmpty({identifier})";
@@ -84,16 +89,7 @@ internal sealed class PowerShellParameterPrologueRenderer
             {
                 AppendFailure($"{identifier} is null", $"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name);
             }
-            if (metadata.Validations.Length == 0) continue;
-            // PowerShell applies validation attributes only to explicitly bound arguments;
-            // an optional default expression is not itself parameter-binding input.
-            // Defaults themselves require the generated bound-parameter set, while optional
-            // parameters without defaults receive it only on bound-parameter-capable targets.
-            var hasBoundParameterSet = metadata.DefaultValue is not null ||
-                                       _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters);
-            var skipWhenOmitted = !metadata.IsMandatory && hasBoundParameterSet;
-            if (skipWhenOmitted) BeginBlock($"if (__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(metadata.Name)}))");
-            if (IsArrayContract(parameterType))
+            if (metadata.Validations.Length > 0 && IsArrayContract(parameterType))
             {
                 var elementType = parameterType == typeof(Array) ? typeof(object) : parameterType.GetElementType()!;
                 RenderArrayValidationRules(metadata, identifier);
@@ -102,7 +98,7 @@ internal sealed class PowerShellParameterPrologueRenderer
                 RenderValidationRules(metadata, item, elementType, validateCollectionElement: true);
                 EndBlock();
             }
-            else
+            else if (metadata.Validations.Length > 0)
             {
                 RenderValidationRules(metadata, identifier, parameterType);
             }

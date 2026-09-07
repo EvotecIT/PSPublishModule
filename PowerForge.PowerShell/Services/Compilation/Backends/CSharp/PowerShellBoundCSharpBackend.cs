@@ -25,9 +25,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var parameterParts = function.Parameters.Select(parameter =>
             $"{PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType)} {PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name)}").ToList();
         var requiresBoundParameters = function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
-            parameter.Contract.DefaultValue is not null ||
-            !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 &&
-            targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters));
+            PowerShellParameterValidationPolicy.RequiresBoundParameterSet(parameter.Contract, targetCapabilities));
         AddHostParameters(parameterParts, function, requiresBoundParameters);
         var parameters = string.Join(", ", parameterParts);
         var usedIdentifiers = function.Parameters.Select(static parameter => PowerShellClrSymbolMapper.MapIdentifier(parameter.Symbol.Name))
