@@ -180,7 +180,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         return null;
     }
 
-    private static PowerShellBoundFunction? GetConsumedCollectionOrHostedCall(
+    private static PowerShellBoundFunction? GetConsumedCallWithoutClosedOutput(
         PowerShellBoundFunction function,
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
     {
@@ -193,7 +193,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
                     if (ReferenceEquals(root, invocation) && statement is PowerShellBoundReturnStatement or PowerShellBoundExpressionStatement { EmitsOutput: true } or PowerShellBoundStreamWriteStatement { Provider: null })
                         continue;
                     if (functions.TryGetValue(invocation.Target.StableKey, out var target) &&
-                        (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
+                        (target.ReturnType.ClrType == typeof(void) &&
+                         !(ReferenceEquals(root, invocation) && statement is PowerShellBoundExpressionStatement) ||
+                         target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
                          HasSuccessStreamOutput(target, functions)))
                         return target;
                 }

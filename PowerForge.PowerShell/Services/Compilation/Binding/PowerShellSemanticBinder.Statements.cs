@@ -318,6 +318,12 @@ internal sealed partial class PowerShellSemanticBinder
                     : PowerShellOutputBindingKind.NoEnumerate;
             var expectedType = streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
             var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);
+            if (message is not null && outputBinding != PowerShellOutputBindingKind.Default && message.Type.ClrType == typeof(void))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2941",
+                    "Output-free command arguments require qualified side-effect and null-input binding; they retain the PowerShell path.", message.Span));
+                return null;
+            }
             if (message is not null && namedNoEnumerate &&
                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
                 !PowerShellStableScalarTypePolicy.IsSupported(message.Type))

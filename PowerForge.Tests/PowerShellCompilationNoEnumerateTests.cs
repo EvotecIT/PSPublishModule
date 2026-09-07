@@ -6,6 +6,56 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("(Clear-Local $Trace) -NoEnumerate")]
+    [InlineData("-InputObject (Clear-Local $Trace) -NoEnumerate")]
+    [InlineData("([object](Clear-Local $Trace)) -NoEnumerate")]
+    [InlineData("-InputObject ([object](Clear-Local $Trace)) -NoEnumerate")]
+    public void NoEnumerate_RetainsOutputFreeLocalCalls(string arguments)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Clear-Local { [CmdletBinding()] param([Collections.ArrayList]$Trace); $Trace.Clear() }; " +
+            "function Get-Output { [CmdletBinding()] param([Collections.ArrayList]$Trace); Microsoft.PowerShell.Utility\\Write-Output " + arguments + " }", ".psm1");
+        var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "OutputFreeLocalCalls", "net10.0");
+        Assert.DoesNotContain(result.Methods, method => method.SourceName == "Get-Output");
+        Assert.NotEmpty(result.Diagnostics);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("$Result=[object](Clear-Local $Trace)", false)]
+    [InlineData("Clear-Local $Trace", true)]
+    [InlineData("[void](Clear-Local $Trace)", true)]
+    public void NoEnumerate_EmptyCallConsumptionGuardPreservesStatementCalls(string body, bool emitted)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Clear-Local { [CmdletBinding()] param([Collections.ArrayList]$Trace); $Trace.Clear() }; " +
+            "function Invoke-Caller { [CmdletBinding()] param([Collections.ArrayList]$Trace); " + body + "; 'after' }", ".psm1");
+        var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "EmptyCallConsumption", "net10.0");
+        Assert.Equal(emitted, result.Methods.Any(method => method.SourceName == "Invoke-Caller"));
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("([Console]::WriteLine('probe')) -NoEnumerate")]
+    [InlineData("-InputObject ([Console]::WriteLine('probe')) -NoEnumerate")]
+    [InlineData("($Trace.Clear()) -NoEnumerate")]
+    [InlineData("-InputObject ($Trace.Clear()) -NoEnumerate")]
+    [InlineData("([void]$Trace.Add('probe')) -NoEnumerate")]
+    [InlineData("-InputObject ([void]$Trace.Add('probe')) -NoEnumerate")]
+    public void NoEnumerate_RetainsOutputFreeArgumentExpressions(string arguments)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Output { [CmdletBinding()] param([Collections.ArrayList]$Trace); Microsoft.PowerShell.Utility\\Write-Output " + arguments + " }", ".psm1");
+        var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "OutputFreeArguments", "net10.0");
+        Assert.Empty(result.Methods);
+        Assert.NotEmpty(result.Diagnostics);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("Write-Output $Value -NoEnumerate")]
     [InlineData("Microsoft.PowerShell.Utility\\Write-Output $Value -NoEnumerate:$false")]
     [InlineData("Microsoft.PowerShell.Utility\\Write-Output $Value -NoEnumerate:$Flag")]

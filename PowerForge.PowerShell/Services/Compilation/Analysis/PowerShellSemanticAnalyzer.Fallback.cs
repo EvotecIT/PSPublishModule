@@ -133,16 +133,19 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         "call.validation.binding-exception",
                         $"Local function '{validationTarget.Symbol.Name}' performs parameter validation inside a typed try/catch, whose PowerShell binding-exception identity must remain on the PowerShell command path."));
                 }
-                var consumedTarget = GetConsumedCollectionOrHostedCall(function, lookup);
+                var consumedTarget = GetConsumedCallWithoutClosedOutput(function, lookup);
                 if (consumedTarget is not null)
                 {
                     var hosted = consumedTarget.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion);
                     var streamed = HasSuccessStreamOutput(consumedTarget, lookup);
+                    var empty = consumedTarget.ReturnType.ClrType == typeof(void);
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
-                        hosted ? "call.command-region.cardinality" : streamed ? "call.stream.cardinality" : "call.collection.cardinality",
+                        hosted ? "call.command-region.cardinality" : streamed ? "call.stream.cardinality" : empty ? "call.empty.cardinality" : "call.collection.cardinality",
                         hosted
                             ? $"Local function '{consumedTarget.Symbol.Name}' emits PowerShell command-region success output whose pipeline cardinality cannot be preserved when the call result is consumed."
+                            : empty && !streamed
+                            ? $"Local function '{consumedTarget.Symbol.Name}' has no CLR return value; consuming its PowerShell empty-output result requires qualified capture and conversion."
                             : streamed
                             ? $"Local function '{consumedTarget.Symbol.Name}' writes success records through its command host; consuming its CLR return alone would lose or misroute those records."
                             : $"Local function '{consumedTarget.Symbol.Name}' returns an array whose PowerShell pipeline cardinality cannot be preserved when the result is consumed."));
