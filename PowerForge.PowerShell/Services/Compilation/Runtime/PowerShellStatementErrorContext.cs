@@ -36,7 +36,12 @@ namespace PowerForge.Generated.Runtime
             _errorPipe = _contract.GetRequired(_contract.ErrorOutputPipe, _runtime);
             _mergeErrorToOutput = Equals(_contract.ErrorMergeTo.GetValue(_runtime, null), _contract.MergeToOutput);
             _redirectError = (bool)_contract.GetRequired(_contract.IsRedirected, _errorPipe);
-            _preferenceTuple = _contract.CreateTuple("ErrorActionPreference", _contract.ErrorAction.GetValue(_runtime, null));
+            // Preserve the raw inherited preference. In Windows PowerShell 5.1,
+            // an inherited string and a bound ActionPreference can take different native paths.
+            var preference = cmdlet.MyInvocation.BoundParameters.TryGetValue("ErrorAction", out var boundPreference)
+                ? boundPreference
+                : cmdlet.SessionState.PSVariable.GetValue("ErrorActionPreference", ActionPreference.Continue);
+            _preferenceTuple = _contract.CreateTuple("ErrorActionPreference", preference);
 
             // A native cmdlet registers these lists during binding. A script function
             // owns them only while its clause runs, including cleanup during unwinding.

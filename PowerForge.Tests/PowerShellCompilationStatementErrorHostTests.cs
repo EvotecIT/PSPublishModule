@@ -84,10 +84,17 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             $nextFaults = @()
             $null = Get-ParsedRecords -Values 'bad' -ErrorAction Continue -ErrorVariable nextFaults 2>$null
             'stopped:' + ($stopped -join ',') + ':' + $stoppedCount + ':' + $stoppedFaults.Count + ':' + $nextFaults.Count
+            foreach ($inherited in 'Continue','SilentlyContinue','Ignore') {
+                & {
+                    $ErrorActionPreference = $inherited
+                    $inheritedRecords = @(Get-ParsedRecords -Values 'bad','2' 2>$null)
+                    'inherited:' + $inherited + ':' + ($inheritedRecords -join ',') + ':' + $ErrorActionPreference
+                }
+            }
             """;
         var original = RunStatementErrorProbe(host, ". '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe, fixture.RootPath, "original");
         var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(assembly) + "'; " + probe, fixture.RootPath, "compiled");
-        Assert.Equal(0, original.ExitCode);
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         Assert.Contains("\"records\":[\"before\",1,99,2,\"after\"]", original.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("FormatException,Get-ParsedRecords", original.StandardOutput, StringComparison.Ordinal);
@@ -150,6 +157,59 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         Assert.Contains("\"records\":[\"before\",\"format\",\"FormatException:System.FormatException\",\"cleanup\",\"after\"]", original.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("\"records\":[\"before\",\"invalid\",", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void StatementErrorHost_PreservesAuthoredInvocationExceptions(string framework, string host)
+    {
+        var project = FindStatementErrorFixtureProject();
+        var build = RunProcess("dotnet", "build", project, "-c", "Release", "-f", framework, "--nologo");
+        Assert.True(build.ExitCode == 0, build.StandardOutput + build.StandardError);
+        var assembly = Path.Combine(Path.GetDirectoryName(project)!, "bin", "Release", framework, "Generic.Compiler.StatementErrors.dll");
+        using var fixture = ArtifactFixture.Create("""
+            function Get-FailureRecords {
+                [CmdletBinding()] param([string]$Kind)
+                'before'
+                [Generic.Compiler.StatementErrors.InvocationFailureProbe]::Invoke($Kind)
+                'after'
+            }
+            """);
+        const string probe = """
+            function Describe-InvocationFault($record) {
+                $chain = [Collections.Generic.List[string]]::new()
+                $exception = $record.Exception
+                while ($null -ne $exception) {
+                    $chain.Add($exception.GetType().FullName + ':' + $exception.Message)
+                    $exception = $exception.InnerException
+                }
+                [pscustomobject]@{ id=$record.FullyQualifiedErrorId; chain=$chain.ToArray() }
+            }
+            foreach ($kind in 'format','wrapped','double-wrapped','wrapped-method','wrapped-depth','method','invocation','depth') {
+                $records = @(Get-FailureRecords -Kind $kind -ErrorAction Continue 2>&1)
+                [pscustomobject]@{ kind=$kind; records=@($records | ForEach-Object {
+                    if ($_ -is [System.Management.Automation.ErrorRecord]) { Describe-InvocationFault $_ } else { $_ }
+                }) } | ConvertTo-Json -Depth 6 -Compress
+                $caught = $null
+                $records = [Collections.Generic.List[object]]::new()
+                try { Get-FailureRecords -Kind $kind -ErrorAction Continue | ForEach-Object { [void]$records.Add($_) } }
+                catch [FormatException] { $caught = 'format' }
+                catch [System.Management.Automation.MethodException] { $caught = 'method' }
+                catch { $caught = Describe-InvocationFault $_ }
+                [pscustomobject]@{ kind=$kind; records=$records.ToArray(); caught=$caught } | ConvertTo-Json -Depth 6 -Compress
+            }
+            """;
+        var import = "Import-Module '" + EscapeStatementErrorPath(assembly) + "'; ";
+        var original = RunStatementErrorProbe(host, import + ". '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "original-exceptions");
+        var compiled = RunStatementErrorProbe(host, import + probe, fixture.RootPath, "compiled-exceptions");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Contains("authored method failure", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("wrapped-method", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("wrapped-depth", original.StandardOutput, StringComparison.Ordinal);
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
     }
 

@@ -17,15 +17,14 @@ namespace PowerForge.Generated.Runtime
             internal static NativeContract Shared => Cached.Value;
 
             internal readonly Type CommandRuntimeType;
-            internal readonly PropertyInfo CmdletContext, OutputPipe, ErrorOutputPipe, ErrorMergeTo, IsRedirected, ErrorAction;
+            internal readonly PropertyInfo CmdletContext, OutputPipe, ErrorOutputPipe, ErrorMergeTo, IsRedirected;
             internal readonly PropertyInfo EngineSessionState, CurrentScope, ShellErrorPipe, PropagateExceptions, InvocationScriptPosition;
             internal readonly PropertyInfo ScopeLocalsTuple;
             internal readonly MethodInfo NewScope, RemoveScope, CheckActionPreference, SetVariableLists, RemoveVariableLists;
             internal readonly MethodInfo MakeTuple, SetTupleValue, GetTupleValue, FindMatchingHandler, ConvertToRuntimeException, ConvertToThrownException;
             internal readonly ConstructorInfo FunctionContextConstructor, FunctionInfoConstructor, InvocationInfoConstructor, CommandExceptionConstructor;
-            internal readonly ConstructorInfo MethodExceptionConstructor;
+            internal readonly MethodInfo ConvertToMethodInvocationException;
             internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
-            internal readonly PropertyInfo MethodExceptionResource;
             internal readonly object MergeToOutput;
             internal readonly Type ObjectTupleType, CatchAllType;
             internal readonly bool ThrowConversionTakesRethrow;
@@ -54,7 +53,6 @@ namespace PowerForge.Generated.Runtime
                 ErrorMergeTo = Property(CommandRuntimeType, "ErrorMergeTo", null);
                 MergeToOutput = Enum.Parse(ErrorMergeTo.PropertyType, "Output");
                 IsRedirected = Property(pipe, "IsRedirected", typeof(bool));
-                ErrorAction = Property(CommandRuntimeType, "ErrorAction", typeof(ActionPreference));
                 EngineSessionState = Property(context, "EngineSessionState", state);
                 CurrentScope = Property(state, "CurrentScope", scope, writable: true);
                 ScopeLocalsTuple = Property(scope, "LocalsTuple", tuple, writable: true);
@@ -80,8 +78,8 @@ namespace PowerForge.Generated.Runtime
                 FunctionInfoConstructor = Constructor(typeof(FunctionInfo), typeof(string), typeof(ScriptBlock), context);
                 InvocationInfoConstructor = Constructor(typeof(InvocationInfo), typeof(CommandInfo), typeof(IScriptExtent), context);
                 CommandExceptionConstructor = Constructor(typeof(CmdletInvocationException), typeof(Exception), typeof(InvocationInfo));
-                MethodExceptionConstructor = Constructor(typeof(MethodInvocationException), typeof(string), typeof(Exception), typeof(string), typeof(object[]));
-                MethodExceptionResource = Property(RequireType(assembly, "ExtendedTypeSystem"), "MethodInvocationException", typeof(string), isStatic: true);
+                ConvertToMethodInvocationException = Method(errors, "ConvertToMethodInvocationException", true, typeof(void),
+                    typeof(Exception), typeof(Type), typeof(string), typeof(int), typeof(MemberInfo));
                 FunctionExecutionContext = Field(function, "_executionContext", context);
                 FunctionOutputPipe = Field(function, "_outputPipe", pipe);
                 FunctionSequencePoints = Field(function, "_sequencePoints", typeof(IScriptExtent[]));

@@ -6,12 +6,20 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellStatementErrorContext
     {
-        internal RuntimeException WrapInvocation(Exception error, string memberName, int argumentCount)
-            => (RuntimeException)NativeContract.Construct(_contract.MethodExceptionConstructor,
-                error.GetType().Name,
-                error,
-                _contract.GetRequired(_contract.MethodExceptionResource, null),
-                new object[] { memberName, argumentCount, error.Message });
+        internal Exception WrapInvocation(Exception error, string memberName, int argumentCount)
+        {
+            try
+            {
+                NativeContract.Invoke(_contract.ConvertToMethodInvocationException, null,
+                    error, typeof(MethodException), memberName, argumentCount, null);
+            }
+            catch (Exception converted) when (IsOperationFailure(converted))
+            {
+                return converted;
+            }
+            // Native conversion returns when the original exception must be preserved.
+            return error;
+        }
 
         internal int FindCatch(Exception error, Type?[] exceptionTypes, int[] clauseIndices, out ErrorRecord? caughtRecord)
         {
