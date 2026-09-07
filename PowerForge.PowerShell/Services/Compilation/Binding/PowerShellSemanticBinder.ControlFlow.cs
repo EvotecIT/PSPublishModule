@@ -77,7 +77,7 @@ internal sealed partial class PowerShellSemanticBinder
         var baselineSymbols = CloneSymbols(symbols);
         var loopSymbols = CloneSymbols(baselineSymbols);
         PowerShellBoundExpression? condition;
-        ForgetLoopWrittenValueStates(loopSymbols, statement.Condition, statement.Body);
+        PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Condition, statement.Body);
         PowerShellBoundBlock? body;
         if (kind == PowerShellBoundLoopKind.While)
         {
@@ -95,7 +95,7 @@ internal sealed partial class PowerShellSemanticBinder
             if (HasPostTestFlowTransfer(statement.Body))
             {
                 MergeSymbolValueStates(conditionSymbols, baselineSymbols, loopSymbols);
-                ForgetLoopWrittenValueStates(conditionSymbols, statement.Condition, statement.Body);
+                PrepareLoopFlowState(conditionSymbols, functions, capabilities, statement.Condition, statement.Body);
             }
             condition = BindExpression(document, statement.Condition, conditionSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is null) return null;
@@ -107,7 +107,7 @@ internal sealed partial class PowerShellSemanticBinder
             MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
         else
             MergeSymbolValueStates(symbols, loopSymbols);
-        ForgetLoopWrittenValueStates(symbols, statement.Condition, statement.Body);
+        PrepareLoopFlowState(symbols, functions, capabilities, statement.Condition, statement.Body);
         return new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), kind, condition, body);
     }
 
@@ -132,7 +132,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (statement.Initializer is not null && initializer is null) return null;
         var baselineSymbols = CloneSymbols(symbols);
         var loopSymbols = CloneSymbols(baselineSymbols);
-        ForgetLoopWrittenValueStates(loopSymbols, statement.Condition, statement.Body, statement.Iterator);
+        PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
         var condition = statement.Condition is null
             ? null
             : BindExpression(document, statement.Condition, loopSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
@@ -141,12 +141,14 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellInt32RangePolicy.RefineDescendingCounter(statement, initializer, loopSymbols);
         var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
         if (body is null) return null;
+        if (HasPostTestFlowTransfer(statement.Body))
+            PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
         var iterator = statement.Iterator is null
             ? null
             : BindExpression(document, statement.Iterator, loopSymbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities) as PowerShellBoundMutationExpression;
         if (statement.Iterator is not null && iterator is null) return null;
         MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
-        ForgetLoopWrittenValueStates(symbols, statement.Condition, statement.Body, statement.Iterator);
+        PrepareLoopFlowState(symbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
         return new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body);
     }
 
@@ -194,12 +196,12 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var baselineSymbols = CloneSymbols(symbols);
         var loopSymbols = CloneSymbols(baselineSymbols);
-        ForgetLoopWrittenValueStates(loopSymbols, statement.Body);
+        PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Body);
         loopSymbols[statement.Variable.VariablePath.UserPath].ForgetValueState();
         var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
         if (body is null) return null;
         MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
-        ForgetLoopWrittenValueStates(symbols, statement.Body);
+        PrepareLoopFlowState(symbols, functions, capabilities, statement.Body);
         symbols[statement.Variable.VariablePath.UserPath].ForgetValueState();
         return new PowerShellBoundForEachStatement(
             PowerShellSourceParser.GetSpan(document, statement.Extent),

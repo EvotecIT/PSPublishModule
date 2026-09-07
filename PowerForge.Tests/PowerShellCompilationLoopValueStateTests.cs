@@ -6,11 +6,70 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("$Values = [string[]]$script:State")]
+    [InlineData("$Values = $Alias; $Alias = [string[]]$script:State")]
+    [InlineData("$Values = [string[]](Read-State)")]
+    public void Analyze_LoopCarriedModuleOriginCannotEscapeCollectionBoundary(string mutation)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Read-State { return $script:State }; " +
+            "function Get-LoopState { param([string[]]$Seed); [string[]]$Values = $Seed; [string[]]$Alias = $Seed; [int]$Index = 0; " +
+            "while ($Index -lt 3) { foreach ($Item in $Values) { $null = $Item }; " + mutation + "; $Index += 1 }; return 1 }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath, PowerShellCompilationMode.Analyze, targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+        Assert.False(FindFunction(plan, "Get-LoopState").IsCompilable);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Analyze_LoopExitPreservesOriginFromContinuePath()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Get-LoopExitState {
+                param([string[]]$Seed)
+                [string[]]$Values = $Seed
+                for ([int]$Index = 0; $Index -lt 2; $Index++) {
+                    if ($Index -eq 1) { $Values = [string[]]$script:State; continue }
+                    $Values = $Seed
+                }
+                return $Values[0]
+            }
+            """, ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath, PowerShellCompilationMode.Analyze, targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+        Assert.False(FindFunction(plan, "Get-LoopExitState").IsCompilable);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Analyze_LoopOriginPropagationKeepsIndependentCollectionEligible()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Get-IndependentLoop {
+                param([string[]]$Seed)
+                for ([int]$Index = 0; $Index -lt 2; $Index++) {
+                    $Unused = [string]$script:State
+                    foreach ($Item in $Seed) { $null = $Item }
+                }
+                return 1
+            }
+            """, ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath, PowerShellCompilationMode.Analyze, targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+        Assert.True(FindFunction(plan, "Get-IndependentLoop").IsCompilable);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("while ($Index -lt 2) { $Text = $Item.ToString(); $Item = $null; $Index += 1 }")]
     [InlineData("for (; $Index -lt 2; $Index++) { $Text = $Item.ToString(); $Item = $null }")]
     [InlineData("do { $Text = $Item.ToString(); $Item = $null; $Index += 1 } while ($Index -lt 2)")]
     [InlineData("do { $Text = $Item.ToString(); $Item = $null; $Index += 1 } until ($Index -ge 2)")]
     [InlineData("foreach ($Item in $Values) { $Text = $Item.ToString() }")]
+    [InlineData("$Text = ''; for (; $Index -lt 2; $Text = $Item.ToString()) { $Index += 1; if ($Index -eq 2) { $Item = $null; continue }; $Item = [System.Text.StringBuilder]::new() }")]
     public void Transpile_StrictLoopsDoNotAssumeInitialReceiverRemainsNonNull(string loop)
     {
         using var fixture = ArtifactFixture.Create(

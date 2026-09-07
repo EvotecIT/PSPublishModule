@@ -39,8 +39,10 @@ internal sealed partial class PowerShellSemanticBinder
         }
     }
 
-    private static void ForgetLoopWrittenValueStates(
+    private static void PrepareLoopFlowState(
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        PowerShellCompilationCapability capabilities,
         params Ast?[] regions)
     {
         // The body is emitted once and reused for every iteration. Entry facts
@@ -66,5 +68,6 @@ internal sealed partial class PowerShellSemanticBinder
                     binding.ForgetValueState();
             }
         }
+        PowerShellModuleStateOriginPolicy.PropagateLoopCarriedOrigins(symbols, functions, capabilities, regions);
     }
 }

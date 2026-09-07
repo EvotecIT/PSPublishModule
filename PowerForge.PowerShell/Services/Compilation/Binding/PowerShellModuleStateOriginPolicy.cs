@@ -42,6 +42,47 @@ internal static class PowerShellModuleStateOriginPolicy
            type == typeof(PSCustomObject) ||
            typeof(IDictionary).IsAssignableFrom(type);
 
+    internal static void PropagateLoopCarriedOrigins(
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        PowerShellCompilationCapability capabilities,
+        IEnumerable<Ast?> regions)
+    {
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState)) return;
+        var writes = regions.Where(static region => region is not null)
+            .SelectMany(static region => region!.FindAll(
+                static node => node is AssignmentStatementAst or ForEachStatementAst,
+                searchNestedScriptBlocks: false))
+            .ToArray();
+        // A later write can feed an earlier read on the next iteration. Compute
+        // a conservative, monotone origin closure, including reversed alias chains.
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var write in writes)
+            {
+                var target = write switch
+                {
+                    AssignmentStatementAst assignment => PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left),
+                    ForEachStatementAst loop => loop.Variable,
+                    _ => null
+                };
+                if (target is null || !symbols.TryGetValue(target.VariablePath.UserPath, out var binding) || binding.IsModuleStateDerived)
+                    continue;
+                Ast source = write is ForEachStatementAst forEach ? forEach.Condition : write;
+                var readsOrigin = ReferencesDerivedModuleState(new[] { source }, symbols, capabilities) ||
+                                  source.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false)
+                                      .Cast<CommandAst>()
+                                      .Any(command => command.GetCommandName() is { } name &&
+                                                      functions.TryGetValue(name, out var function) && function.ReturnsModuleStateDerived);
+                if (!readsOrigin) continue;
+                binding.SetModuleStateDerived(true);
+                changed = true;
+            }
+        } while (changed);
+    }
+
     internal static bool ReturnsDerivedModuleState(PowerShellBoundFunction function)
         => PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
             .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
