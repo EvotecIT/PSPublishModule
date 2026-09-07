@@ -10,12 +10,12 @@
       },
       "OfficeIMO.MarkdownRenderer.Wpf": {
         "type": "Direct",
-        "requested": "[3.2.6, )",
-        "resolved": "3.2.6",
-        "contentHash": "KmBZhLYiNAlY2FqWq9pJoT7wsafGCMbwG55Usv41VXr8EPpT7C6VwQo1URUpCT+FHekBM+XPppZdY6gBKn1wrQ==",
+        "requested": "[3.2.7, )",
+        "resolved": "3.2.7",
+        "contentHash": "ugAyjfV15Owdbwsul7Pi4lDl1L0C/d6LkxDq1Z+irVRE+s46XgomXCuo1SB4V4EvWX6Jt/SEwKhJE9aygSmMRA==",
         "dependencies": {
           "Microsoft.Web.WebView2": "1.0.3912.50",
-          "OfficeIMO.MarkdownRenderer": "3.2.6"
+          "OfficeIMO.MarkdownRenderer": "3.2.7"
         }
       },
       "AngleSharp": {
@@ -92,43 +92,43 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.2.6",
-        "contentHash": "o5Pfg+2QoB3sGDQUZXxm4oNfbsZcTcGhe4gKM8QPtCL6Q7n1xcT6q+cmEPnU6yHX5hobgo9bhrAKhRx+Sffbnw=="
+        "resolved": "3.2.7",
+        "contentHash": "8JXqoJSlVkIj2Hb6e/HgNSX8jNeZbW083ZOW5MRQvvP7YLLVyRvgiRdK+KE9pJNxAifpKa3xoxAM+066iiDI+w=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
-        "resolved": "3.2.6",
-        "contentHash": "VWAfCoSE3zQJa1wm66x+NMdQIEp5ZolHJ8P9BQSOYgAsR3SIywdGQUDfKtWtrkichFfPsYwe4kA+1iPCLhJ21A==",
+        "resolved": "3.2.7",
+        "contentHash": "KU1iT0RqZbYCPQTweqijtKZhq0Sc90VVt8cf5Z+qNNP3oj7ztssEFRCOEpkNWURsFFyDeTWqVfnFEGsn7CzboA==",
         "dependencies": {
           "AngleSharp": "1.7.1",
           "AngleSharp.Css": "1.0.1",
-          "OfficeIMO.Core": "3.2.6"
+          "OfficeIMO.Core": "3.2.7"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.2.6",
-        "contentHash": "8nWr3g/z6J9fgm/259s/Fp33uyjGs6lRwN08UIV9LFcZkoLuQ5UNwxEItS2xXj5eOR56tXr5TbmT9XtI/A3o1Q==",
+        "resolved": "3.2.7",
+        "contentHash": "iNcLVBp2h636FcCZupxXhqhimRIvE5TiPUfSsomAbU0vSRGolzIc+v7fu4hEj93szD6OFN4WldUQts4c3o/jew==",
         "dependencies": {
-          "OfficeIMO.Core": "3.2.6"
+          "OfficeIMO.Core": "3.2.7"
         }
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "3.2.6",
-        "contentHash": "OntDAoSUzPfLaEUsnhgQ74x1wYcVThT5oDIRkACHp4xAsfFw8l4HvyWZC/geS82BwZbU+D4fSpRdVHb5mq3PQQ==",
+        "resolved": "3.2.7",
+        "contentHash": "YpMhNa9nuVKvmWAsMVj4KY785XQUaq/xR2PFsiRdnz00Cwth8cG5UazG8p6Xi+wLEpymzVEtky62hp+FNJ2kLg==",
         "dependencies": {
-          "OfficeIMO.Html": "3.2.6",
-          "OfficeIMO.Markdown": "3.2.6"
+          "OfficeIMO.Html": "3.2.7",
+          "OfficeIMO.Markdown": "3.2.7"
         }
       },
       "OfficeIMO.MarkdownRenderer": {
         "type": "Transitive",
-        "resolved": "3.2.6",
-        "contentHash": "c334cE+eyqg7sbc/gO9QmVscfGXUEYhwTIQ0PJWkFCrjXJnDTczjuzygrIG54OqQPG9O/kErnJ0b8QrD2N1X2Q==",
+        "resolved": "3.2.7",
+        "contentHash": "PG3pXDS3qdoo70Ccss4nfpdXbPQVqfihAQ9SYGDQI0w7rkxsDd6XFFJwEl3H9Asj7Py8Q/hiiIP++DKyCDRf9w==",
         "dependencies": {
-          "OfficeIMO.Markdown": "3.2.6",
-          "OfficeIMO.Markdown.Html": "3.2.6"
+          "OfficeIMO.Markdown": "3.2.7",
+          "OfficeIMO.Markdown.Html": "3.2.7"
         }
       },
       "SQLite": {

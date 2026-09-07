@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.5" />
+    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
