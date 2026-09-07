@@ -40,6 +40,21 @@ namespace PowerForge.Generated.Runtime
             return error;
         }
 
+        internal T ConvertArgument<T>(object value, string parameterName, string memberName)
+        {
+            ThrowIfDisposed();
+            try
+            {
+                return (T)LanguagePrimitives.ConvertTo(value, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (Exception error) when (IsOperationFailure(error))
+            {
+                NativeContract.Invoke(_contract.ConvertToArgumentConversionException, null,
+                    error, parameterName, value, memberName, typeof(T));
+                throw;
+            }
+        }
+
         internal int FindCatch(Exception error, Type?[] exceptionTypes, int[] clauseIndices, out ErrorRecord? caughtRecord)
         {
             if (exceptionTypes.Length != clauseIndices.Length)

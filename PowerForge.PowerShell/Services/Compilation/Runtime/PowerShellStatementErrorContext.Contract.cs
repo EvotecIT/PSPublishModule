@@ -23,7 +23,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo NewScope, RemoveScope, CheckActionPreference;
             internal readonly MethodInfo MakeTuple, SetTupleValue, GetTupleValue, FindMatchingHandler, ConvertToRuntimeException, ConvertToThrownException;
             internal readonly ConstructorInfo FunctionContextConstructor, FunctionInfoConstructor, InvocationInfoConstructor, CommandExceptionConstructor;
-            internal readonly MethodInfo ConvertToMethodInvocationException;
+            internal readonly MethodInfo ConvertToMethodInvocationException, ConvertToArgumentConversionException;
             internal readonly MethodInfo NewInterpreterException;
             internal readonly MethodInfo AppendErrorToVariables;
             internal readonly PropertyInfo NullInvocationResource;
@@ -82,6 +82,8 @@ namespace PowerForge.Generated.Runtime
                 CommandExceptionConstructor = Constructor(typeof(CmdletInvocationException), typeof(Exception), typeof(InvocationInfo));
                 ConvertToMethodInvocationException = Method(errors, "ConvertToMethodInvocationException", true, typeof(void),
                     typeof(Exception), typeof(Type), typeof(string), typeof(int), typeof(MemberInfo));
+                ConvertToArgumentConversionException = Method(errors, "ConvertToArgumentConversionException", true, typeof(void),
+                    typeof(Exception), typeof(string), typeof(object), typeof(string), typeof(Type));
                 NewInterpreterException = Method(RequireType(assembly, "System.Management.Automation.InterpreterError"),
                     "NewInterpreterException", true, typeof(RuntimeException), typeof(object), typeof(Type), typeof(IScriptExtent),
                     typeof(string), typeof(string), typeof(object[]));

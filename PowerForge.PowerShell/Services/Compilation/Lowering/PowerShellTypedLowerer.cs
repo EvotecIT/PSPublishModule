@@ -716,21 +716,7 @@ internal sealed partial class PowerShellTypedLowerer
                 member.ReceiverBehavior is PowerShellClrReceiverBehavior.DictionaryKeyLookup or PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback
                     ? names.Allocate("pf_value")
                     : string.Empty),
-            PowerShellBoundClrInvocationExpression invocation => new PowerShellLoweredClrInvocationExpression(
-                invocation.Span,
-                invocation.Type.ClrType,
-                invocation.DeclaringType,
-                invocation.MemberName,
-                invocation.InvocationKind,
-                invocation.Receiver is null ? null : LowerExpression(invocation.Receiver, functions, names, targetCapabilities),
-                invocation.ReceiverBehavior,
-                invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
-                invocation.ParameterTypes.ToArray(),
-                invocation.PreserveStatementErrors,
-                invocation.PreserveStatementErrors ? names.Allocate("pf_clr_receiver") : string.Empty,
-                invocation.PreserveStatementErrors ? invocation.Arguments.Select(_ => names.Allocate("pf_clr_argument")).ToArray() : Array.Empty<string>(),
-                invocation.PreserveStatementErrors ? names.Allocate("pf_clr_error") : string.Empty,
-                invocation.ReceiverByReference),
+            PowerShellBoundClrInvocationExpression invocation => LowerClrInvocation(invocation, functions, names, targetCapabilities),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,

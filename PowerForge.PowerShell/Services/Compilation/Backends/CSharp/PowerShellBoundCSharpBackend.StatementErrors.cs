@@ -92,11 +92,36 @@ internal sealed partial class PowerShellBoundCSharpBackend
             if (invocation.ReceiverBehavior == PowerShellClrReceiverBehavior.NormalizeNullString) body.Append(" ?? string.Empty");
             body.Append("; ");
         }
-        for (var index = 0; index < invocation.Arguments.Length; index++)
-            body.Append(PowerShellCSharpSymbolRenderer.TypeName(invocation.ParameterTypes[index])).Append(' ')
-                .Append(invocation.ArgumentTemporaries[index]).Append(" = ").Append(EmitExpression(invocation.Arguments[index])).Append("; ");
-        if (invocation.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellRuntimeException)
-            body.Append("if (").Append(receiver).Append(" is null) throw __statementErrors.NullInvocation(); ");
+        if (invocation.RawArgumentTemporaries.Length != 0)
+        {
+            for (var index = 0; index < invocation.Arguments.Length; index++)
+                body.Append(PowerShellCSharpSymbolRenderer.TypeName(invocation.Arguments[index].ClrType)).Append(' ')
+                    .Append(invocation.RawArgumentTemporaries[index]).Append(" = ").Append(EmitExpression(invocation.Arguments[index])).Append("; ");
+            if (invocation.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellRuntimeException)
+                body.Append("if (").Append(receiver).Append(" is null) throw __statementErrors.NullInvocation(); ");
+            for (var index = 0; index < invocation.Arguments.Length; index++)
+            {
+                var conversion = invocation.ArgumentConversions[index];
+                var value = conversion.Kind switch
+                {
+                    PowerShellClrArgumentConversionKind.None => invocation.RawArgumentTemporaries[index],
+                    PowerShellClrArgumentConversionKind.Int32OrDoubleToInt32 =>
+                        "__statementErrors.ConvertArgument<int>(" + invocation.RawArgumentTemporaries[index] + ", " +
+                        PowerShellCSharpLiteral.QuoteString(conversion.ParameterName) + ", " + PowerShellCSharpLiteral.QuoteString(invocation.MemberName) + ")",
+                    _ => throw new InvalidOperationException("Unsupported lowered CLR argument conversion.")
+                };
+                body.Append(PowerShellCSharpSymbolRenderer.TypeName(invocation.ParameterTypes[index])).Append(' ')
+                    .Append(invocation.ArgumentTemporaries[index]).Append(" = ").Append(value).Append("; ");
+            }
+        }
+        else
+        {
+            for (var index = 0; index < invocation.Arguments.Length; index++)
+                body.Append(PowerShellCSharpSymbolRenderer.TypeName(invocation.ParameterTypes[index])).Append(' ')
+                    .Append(invocation.ArgumentTemporaries[index]).Append(" = ").Append(EmitExpression(invocation.Arguments[index])).Append("; ");
+            if (invocation.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellRuntimeException)
+                body.Append("if (").Append(receiver).Append(" is null) throw __statementErrors.NullInvocation(); ");
+        }
         var arguments = string.Join(", ", invocation.ArgumentTemporaries);
         var operation = invocation.InvocationKind switch
         {

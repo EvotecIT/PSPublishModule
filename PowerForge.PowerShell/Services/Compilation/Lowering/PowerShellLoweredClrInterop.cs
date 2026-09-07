@@ -48,7 +48,9 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
         string receiverTemporary = "",
         string[]? argumentTemporaries = null,
         string exceptionTemporary = "",
-        bool receiverByReference = false)
+        bool receiverByReference = false,
+        PowerShellClrArgumentConversion[]? argumentConversions = null,
+        string[]? rawArgumentTemporaries = null)
         : base(span, clrType)
     {
         DeclaringType = declaringType;
@@ -63,6 +65,8 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
         ArgumentTemporaries = argumentTemporaries ?? Array.Empty<string>();
         ExceptionTemporary = exceptionTemporary;
         ReceiverByReference = receiverByReference;
+        ArgumentConversions = argumentConversions ?? new PowerShellClrArgumentConversion[Arguments.Length];
+        RawArgumentTemporaries = rawArgumentTemporaries ?? Array.Empty<string>();
     }
 
     internal Type DeclaringType { get; }
@@ -77,6 +81,8 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
     internal PowerShellImmutableArray<string> ArgumentTemporaries { get; }
     internal string ExceptionTemporary { get; }
     internal bool ReceiverByReference { get; }
+    internal PowerShellImmutableArray<PowerShellClrArgumentConversion> ArgumentConversions { get; }
+    internal PowerShellImmutableArray<string> RawArgumentTemporaries { get; }
 }
 
 internal sealed class PowerShellLoweredClrMemberAssignmentStatement : PowerShellLoweredStatement

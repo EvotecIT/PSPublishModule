@@ -70,7 +70,8 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
         Type[] parameterTypes,
         PowerShellTypeFact type,
         bool preserveStatementErrors = false,
-        bool receiverByReference = false)
+        bool receiverByReference = false,
+        PowerShellClrArgumentConversion[]? argumentConversions = null)
         : base(
             span,
             type,
@@ -88,6 +89,9 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
         ParameterTypes = parameterTypes ?? Array.Empty<Type>();
         PreserveStatementErrors = preserveStatementErrors;
         ReceiverByReference = receiverByReference;
+        ArgumentConversions = argumentConversions ?? new PowerShellClrArgumentConversion[Arguments.Length];
+        if (ArgumentConversions.Length != Arguments.Length)
+            throw new ArgumentException("Every CLR argument must have one conversion contract.", nameof(argumentConversions));
     }
 
     internal Type DeclaringType { get; }
@@ -100,6 +104,7 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
     internal bool PreserveStatementErrors { get; }
     /// <summary>Preserves mutable value-type variable storage across the protected call.</summary>
     internal bool ReceiverByReference { get; }
+    internal PowerShellImmutableArray<PowerShellClrArgumentConversion> ArgumentConversions { get; }
 
     private static PowerShellSemanticEffect GetDirectEffects(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
         => (receiver?.Effects ?? PowerShellSemanticEffect.None) |
