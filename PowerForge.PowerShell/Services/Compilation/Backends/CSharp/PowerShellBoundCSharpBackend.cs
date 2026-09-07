@@ -654,6 +654,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var left = EmitExpression(expression.Left);
         var right = EmitExpression(expression.Right);
+        if (expression.Operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat)
+            return $"__statementErrors.FormatScalar(({left} ?? string.Empty), (object?)({right}))";
         if (EmitNumericUnionBinary(expression, left, right) is { } numericUnion) return numericUnion;
         if (expression.Operation == PowerShellBoundBinaryOperator.IntegralRemainder)
         {

@@ -25,6 +25,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly ConstructorInfo FunctionContextConstructor, FunctionInfoConstructor, InvocationInfoConstructor, CommandExceptionConstructor;
             internal readonly MethodInfo ConvertToMethodInvocationException, ConvertToArgumentConversionException;
             internal readonly MethodInfo NewInterpreterException;
+            internal readonly MethodInfo FormatOperator;
             internal readonly MethodInfo AppendErrorToVariables;
             internal readonly PropertyInfo NullInvocationResource;
             internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
@@ -46,6 +47,8 @@ namespace PowerForge.Generated.Runtime
                 var state = RequireType(assembly, "System.Management.Automation.SessionStateInternal");
                 var scope = RequireType(assembly, "System.Management.Automation.SessionStateScope");
                 var errors = RequireType(assembly, "System.Management.Automation.ExceptionHandlingOps");
+                FormatOperator = Method(RequireType(assembly, "System.Management.Automation.StringOps"),
+                    "FormatOperator", true, typeof(string), typeof(string), typeof(object));
                 var tuple = RequireType(assembly, "System.Management.Automation.MutableTuple");
                 ObjectTupleType = RequireType(assembly, "System.Management.Automation.MutableTuple`1").MakeGenericType(typeof(object));
                 CatchAllType = RequireType(assembly, "System.Management.Automation.ExceptionHandlingOps+CatchAll");

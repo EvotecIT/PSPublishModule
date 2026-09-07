@@ -7,6 +7,7 @@ internal enum PowerShellBoundBinaryOperator
     Multiply,
     Divide,
     Remainder,
+    PowerShellScalarFormat,
     Equal,
     NotEqual,
     NullEqual,
@@ -68,7 +69,8 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
             span,
             type,
             PowerShellValueState.Unknown,
-            left.Effects | right.Effects,
+            left.Effects | right.Effects | (operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
+                ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
             left.Capabilities | right.Capabilities | GetRequiredCapabilities(operation))
     {
         Operation = operation;
@@ -84,7 +86,9 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
         => GetRequiredCapabilities(operation).HasFlag(PowerShellRequiredCapability.PowerShellLanguageOperators);
 
     private static PowerShellRequiredCapability GetRequiredCapabilities(PowerShellBoundBinaryOperator operation)
-        => operation is PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase or
+        => operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
+            ? PowerShellRequiredCapability.PowerShellStatementErrors
+            : operation is PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase or
             PowerShellBoundBinaryOperator.PowerShellNotEqualIgnoreCase or
             PowerShellBoundBinaryOperator.PowerShellEqualCaseSensitive or
             PowerShellBoundBinaryOperator.PowerShellNotEqualCaseSensitive

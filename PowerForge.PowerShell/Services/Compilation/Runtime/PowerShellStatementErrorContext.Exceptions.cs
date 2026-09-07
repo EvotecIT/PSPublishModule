@@ -8,6 +8,13 @@ namespace PowerForge.Generated.Runtime
     {
         private Exception? _caughtException;
 
+        /// <summary>Formats evaluated operands with the loaded host's culture and native FormatError wrapping.</summary>
+        internal string FormatScalar(string format, object? value)
+        {
+            ThrowIfDisposed();
+            return (string)NativeContract.Invoke(_contract.FormatOperator, null, format, value)!;
+        }
+
         internal IDisposable EnterCatch(Exception error)
         {
             ThrowIfDisposed();

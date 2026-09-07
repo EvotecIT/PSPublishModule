@@ -43,6 +43,8 @@ internal static class PowerShellOperatorSemanticBinder
         if (left is null || right is null) return null;
         var leftType = left.Type.ClrType;
         var rightType = right.Type.ClrType;
+        if (operation == "Format")
+            return PowerShellFormatSemanticBinder.Bind(span, left, right, capabilities, diagnostics);
         if (PowerShellNumericUnionPolicy.BindBinary(span, operation, left, right) is { } numericUnion)
             return numericUnion;
 
