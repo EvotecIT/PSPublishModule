@@ -50,6 +50,10 @@ internal static class PowerShellHostedStatementBinder
                 commandResolver,
                 out var captured))
         {
+            var capturedTarget = PowerShellAssignmentTargetPolicy.FindDirectVariable(captured.Left);
+            if (capturedTarget is null || !symbols.TryGetValue(capturedTarget.VariablePath.UserPath, out var capturedSymbol) ||
+                !PowerShellAssignmentTargetPolicy.PreservesConstraint(captured.Left, capturedSymbol.Type))
+                return false;
             if (PowerShellModuleStateOriginPolicy.ReferencesDerivedModuleState(
                     new Ast[] { captured.Right },
                     available,

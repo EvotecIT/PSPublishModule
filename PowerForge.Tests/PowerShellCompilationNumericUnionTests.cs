@@ -4,6 +4,34 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    [Fact]
+    public void NumericUnion_RejectsHostedCaptureThatAddsAStringConstraint()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Captured { [CmdletBinding()] param(); $Value=1; $Value++; $Copy=$Value; " +
+            "[string]$Copy=Get-Date -Format yyyy; $Copy+=1; return $Copy }", ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.CaptureUnion", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+        Assert.False(result.Succeeded);
+        Assert.Contains("constraint", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("object[]")]
+    [InlineData("array")]
+    public void NumericUnion_RejectsForeachWritesFromOpenElementTypes(string collectionType)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Reused { [CmdletBinding()] param([" + collectionType + "]$Items) " +
+            "$Value=1; $Value++; foreach($Value in $Items) { $Value+=1 }; return $Value }", ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.OpenForeachUnion", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+        Assert.False(result.Succeeded);
+        Assert.Contains("numeric", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]

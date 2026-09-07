@@ -39,6 +39,11 @@ internal static class PowerShellAssignmentTargetPolicy
             _ => null
         };
 
+    /// <summary>Checks that an assignment does not introduce an unrepresented variable-constraint transition.</summary>
+    internal static bool PreservesConstraint(ExpressionAst left, PowerShellTypeFact target)
+        => left is not ConvertExpressionAst constraint ||
+           target.Provenance == PowerShellTypeFactProvenance.Explicit && constraint.StaticType == target.ClrType;
+
     /// <summary>Returns whether the name is a non-shadowable PowerShell read-only or constant automatic variable.</summary>
     internal static bool IsReadOnlyAutomaticVariable(string name)
         => ReadOnlyAutomaticVariables.Contains(name);

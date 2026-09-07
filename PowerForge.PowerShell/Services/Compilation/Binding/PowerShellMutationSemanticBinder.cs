@@ -77,6 +77,13 @@ internal static class PowerShellMutationSemanticBinder
     {
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left);
         if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target)) return null;
+        if (!PowerShellAssignmentTargetPolicy.PreservesConstraint(syntax.Left, target.Type))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2414",
+                "Adding or changing a variable type constraint after its first value requires a separate constraint-transition contract.",
+                PowerShellSourceParser.GetSpan(document, syntax.Left.Extent)));
+            return null;
+        }
         var operation = syntax.Operator.ToString() switch
         {
             "Equals" => PowerShellBoundMutationOperator.Assign,

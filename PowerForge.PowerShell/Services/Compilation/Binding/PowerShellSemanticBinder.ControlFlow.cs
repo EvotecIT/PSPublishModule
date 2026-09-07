@@ -167,6 +167,12 @@ internal sealed partial class PowerShellSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${statement.Variable.VariablePath.UserPath}' has no function-scope semantic symbol.", variableSpan));
             return null;
         }
+        if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2305",
+                "A foreach target cannot overwrite a closed numeric local without preserving its Int32/Double element contract.", variableSpan));
+            return null;
+        }
         var collection = BindExpression(document, statement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
         if (collection is null) return null;
         if (PowerShellModuleStateOriginPolicy.IsDerived(collection))

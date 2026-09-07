@@ -5,6 +5,20 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
+    [InlineData("param([int]$InputValue) $Value=$InputValue; [double]$Value=1; return $Value")]
+    [InlineData("$Value=1; [double]$Value=1; return $Value")]
+    [InlineData("$Value=1; [string]$Value=1; return $Value")]
+    [InlineData("param([int]$Value) [double]$Value=1; return $Value")]
+    public void Transpile_RejectsUnrepresentedVariableConstraintTransitions(string body)
+    {
+        using var fixture = ArtifactFixture.Create("function Get-ChangedConstraint { " + body + " }", ".psm1");
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(
+            new[] { fixture.ScriptPath }, "Generated", "Methods", "net10.0");
+        Assert.Empty(result.Methods);
+        Assert.NotEmpty(result.Diagnostics);
+    }
+
+    [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("$Value = [int]2147483647; $Value += 1; return $Value", true)]
     [InlineData("$Value = [int]2147483647; $Value++; return $Value", true)]
