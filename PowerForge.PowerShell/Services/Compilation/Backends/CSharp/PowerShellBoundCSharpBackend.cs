@@ -294,7 +294,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 foreach (var clause in tryStatement.Catches)
                 {
-                    if (clause.ExceptionTypes.Length == 0)
+                    if (clause.ExceptionTypes.Length == 0 && !clause.ExcludePowerShellControlFlow)
                     {
                         builder.Append(prefix).AppendLine("catch (global::System.Exception)");
                         EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
@@ -306,10 +306,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
                           $"((global::System.Management.Automation.RuntimeException){clause.ExceptionTemporary}).ErrorRecord.FullyQualifiedErrorId == \"System.ArgumentOutOfRangeException\") ? " +
                           $"((global::System.Management.Automation.RuntimeException){clause.ExceptionTemporary}).ErrorRecord.Exception : {clause.ExceptionTemporary})"
                         : clause.ExceptionTemporary;
-                    var filter = string.Join(
+                    var filter = clause.ExceptionTypes.Length == 0 ? "true" : string.Join(
                         " || ",
                         clause.ExceptionTypes.Select(type =>
                             $"{effectiveException} is {PowerShellCSharpSymbolRenderer.TypeName(type)}"));
+                    if (clause.ExcludePowerShellControlFlow)
+                        filter = $"{clause.ExceptionTemporary} is not global::System.Management.Automation.PipelineStoppedException && " +
+                            $"{clause.ExceptionTemporary} is not global::System.Management.Automation.FlowControlException && ({filter})";
                     builder.Append(prefix).Append("catch (global::System.Exception ")
                         .Append(clause.ExceptionTemporary).Append(") when (").Append(filter).AppendLine(")");
                     EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);

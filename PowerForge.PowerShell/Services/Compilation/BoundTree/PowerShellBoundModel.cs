@@ -581,23 +581,27 @@ internal sealed class PowerShellBoundProgram
         PowerShellBoundSourceDocument[] documents,
         PowerShellBoundFunction[] functions,
         PowerShellSemanticDiagnostic[] diagnostics,
-        PowerShellCallGraphEdge[]? callGraph = null)
+        PowerShellCallGraphEdge[]? callGraph = null,
+        PowerShellCompilationCapability targetCapabilities = PowerShellCompilationCapability.None)
     {
         Documents = documents ?? Array.Empty<PowerShellBoundSourceDocument>();
         Functions = functions ?? Array.Empty<PowerShellBoundFunction>();
         Diagnostics = diagnostics ?? Array.Empty<PowerShellSemanticDiagnostic>();
         CallGraph = callGraph ?? Array.Empty<PowerShellCallGraphEdge>();
+        TargetCapabilities = targetCapabilities;
     }
 
     internal PowerShellImmutableArray<PowerShellBoundSourceDocument> Documents { get; }
     internal PowerShellImmutableArray<PowerShellBoundFunction> Functions { get; }
     internal PowerShellImmutableArray<PowerShellSemanticDiagnostic> Diagnostics { get; }
     internal PowerShellImmutableArray<PowerShellCallGraphEdge> CallGraph { get; }
-    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents.ToArray(), functions, Diagnostics.ToArray(), CallGraph.ToArray());
-    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents.ToArray(), Functions.ToArray(), diagnostics, CallGraph.ToArray());
-    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents.ToArray(), Functions.ToArray(), Diagnostics.ToArray(), callGraph);
+    /// <summary>The selected artifact host contract, separate from capabilities required by authored operations.</summary>
+    internal PowerShellCompilationCapability TargetCapabilities { get; }
+    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents.ToArray(), functions, Diagnostics.ToArray(), CallGraph.ToArray(), TargetCapabilities);
+    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents.ToArray(), Functions.ToArray(), diagnostics, CallGraph.ToArray(), TargetCapabilities);
+    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents.ToArray(), Functions.ToArray(), Diagnostics.ToArray(), callGraph, TargetCapabilities);
     internal PowerShellBoundProgram WithAnalysis(PowerShellBoundFunction[] functions, PowerShellSemanticDiagnostic[] diagnostics)
-        => new(Documents.ToArray(), functions, diagnostics, CallGraph.ToArray());
+        => new(Documents.ToArray(), functions, diagnostics, CallGraph.ToArray(), TargetCapabilities);
 }
 
 internal sealed class PowerShellCallGraphEdge

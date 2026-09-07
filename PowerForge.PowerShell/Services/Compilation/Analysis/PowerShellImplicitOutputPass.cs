@@ -9,11 +9,37 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
     public string Id => "08-implicit-success-output";
 
     public PowerShellBoundProgram Run(PowerShellBoundProgram program)
-        => program.WithFunctions(program.Functions.Select(function =>
-            PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
-                statement is PowerShellBoundStreamWriteStatement { Provider: null })
-                ? function.WithBody(RewriteBlock(function.Body))
-                : function).ToArray());
+    {
+        var commandHost = program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+            program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding);
+        var selected = program.Functions.Where(function =>
+                PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
+                    statement is PowerShellBoundStreamWriteStatement { Provider: null }) ||
+                commandHost && function.Body.Effects.HasFlag(PowerShellSemanticEffect.SuccessOutput) &&
+                PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
+                    statement is PowerShellBoundTryStatement { FinallyBlock: not null }))
+            .Select(static function => function.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
+        var calls = program.Functions.ToDictionary(static function => function.Symbol.StableKey,
+            static function => PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
+                .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+                .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+                .OfType<PowerShellBoundInvocationExpression>()
+                .Select(static invocation => invocation.Target.StableKey).Distinct(StringComparer.Ordinal).ToArray(),
+            StringComparer.Ordinal);
+        // A caller must use the same output contract before its own return can unwind.
+        // Compute this from canonical bound calls before CLR return-type propagation.
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var function in program.Functions)
+                if (!selected.Contains(function.Symbol.StableKey) && calls[function.Symbol.StableKey].Any(selected.Contains))
+                    changed |= selected.Add(function.Symbol.StableKey);
+        } while (changed);
+        return program.WithFunctions(program.Functions.Select(function => selected.Contains(function.Symbol.StableKey)
+            ? function.WithBody(RewriteBlock(function.Body))
+            : function).ToArray());
+    }
 
     private static PowerShellBoundBlock RewriteBlock(PowerShellBoundBlock block)
     {

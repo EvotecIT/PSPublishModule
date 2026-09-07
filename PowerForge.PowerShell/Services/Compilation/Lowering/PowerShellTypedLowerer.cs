@@ -432,6 +432,7 @@ internal sealed partial class PowerShellTypedLowerer
                     clause.ExceptionTypes.ToArray(),
                     LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                     names.Allocate("pf_caught_exception"),
+                    targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects),
                     targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))).ToArray(),
                 tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),

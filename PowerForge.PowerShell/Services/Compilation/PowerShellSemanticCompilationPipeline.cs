@@ -82,7 +82,7 @@ internal sealed class PowerShellSemanticCompilationPipeline
         var candidateProgram = new PowerShellBoundProgram(
             documents.ToArray(),
             candidates.Select(static candidate => candidate.RegionFunction).ToArray(),
-            Array.Empty<PowerShellSemanticDiagnostic>());
+            Array.Empty<PowerShellSemanticDiagnostic>(), targetCapabilities: capabilities);
         var optimized = _optimizer.Optimize(candidateProgram);
         var analyzed = _analyzer.Analyze(optimized.Program);
         var lowered = _lowerer.Lower(analyzed, capabilities);

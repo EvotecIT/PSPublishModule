@@ -155,18 +155,22 @@ internal sealed class PowerShellLoweredCatchClause
         Type[] exceptionTypes,
         PowerShellLoweredStatement[] statements,
         string exceptionTemporary,
-        bool unwrapPowerShellRuntimeException)
+        bool unwrapPowerShellRuntimeException,
+        bool excludePowerShellControlFlow = false)
     {
         ExceptionTypes = exceptionTypes;
         Statements = statements;
         ExceptionTemporary = exceptionTemporary;
         UnwrapPowerShellRuntimeException = unwrapPowerShellRuntimeException;
+        ExcludePowerShellControlFlow = excludePowerShellControlFlow;
     }
 
     internal PowerShellImmutableArray<Type> ExceptionTypes { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal string ExceptionTemporary { get; }
     internal bool UnwrapPowerShellRuntimeException { get; }
+    /// <summary>Pipeline stop and PowerShell flow control unwind the command instead of entering an authored catch.</summary>
+    internal bool ExcludePowerShellControlFlow { get; }
 }
 
 internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement

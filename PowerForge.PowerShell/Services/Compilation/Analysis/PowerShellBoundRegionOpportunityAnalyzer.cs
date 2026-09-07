@@ -50,7 +50,7 @@ internal sealed class PowerShellBoundRegionOpportunityAnalyzer
             requiredFunctions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal)
                 .Concat(eligible.Select(static item => item.RegionFunction))
                 .ToArray(),
-            Array.Empty<PowerShellSemanticDiagnostic>());
+            Array.Empty<PowerShellSemanticDiagnostic>(), targetCapabilities: capabilities);
         var optimized = _optimizer.Optimize(discoveryProgram);
         var analyzed = _analyzer.AnalyzeRegionOpportunities(optimized.Program);
         var lowered = _lowerer.Lower(analyzed, capabilities);
