@@ -115,7 +115,8 @@ internal sealed partial class PowerShellSemanticBinder
                     symbol.Symbol,
                     symbol.Type,
                     symbol.ValueState,
-                    symbol.IsModuleStateDerived);
+                    symbol.IsModuleStateDerived,
+                    symbol.IsBraceFreeString);
             case VariableExpressionAst variable:
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     PowerShellCompilationFeatureIds.RuntimeScope,

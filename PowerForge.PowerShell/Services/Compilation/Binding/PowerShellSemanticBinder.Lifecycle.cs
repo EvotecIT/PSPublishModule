@@ -59,6 +59,7 @@ internal sealed partial class PowerShellSemanticBinder
         var begin = BindLifecycleBlock(document, function.Body.BeginBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
         var processBaselineSymbols = CloneSymbols(symbols);
         var processSymbols = CloneSymbols(processBaselineSymbols);
+        PrepareLoopFlowState(processSymbols, functions, capabilities, function.Body.ProcessBlock);
         var process = BindLifecycleBlock(document, function.Body.ProcessBlock!, processSymbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: true, semanticOutputType, targetFramework, capabilities);
         MergeSymbolValueStates(symbols, processBaselineSymbols, processSymbols);
         var end = BindLifecycleBlock(document, function.Body.EndBlock!, symbols, functions, diagnostics, terminalLast: true, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);

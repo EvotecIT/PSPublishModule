@@ -15,10 +15,11 @@ internal sealed class PowerShellSemanticSymbolBinding
     internal PowerShellTypeFact Type { get; private set; }
     internal PowerShellValueState ValueState { get; private set; }
     internal bool IsModuleStateDerived { get; private set; }
+    internal bool IsBraceFreeString { get; private set; }
 
     internal void SetInt32Range(PowerShellInt32Range range) => Type = Type.WithInt32Range(range);
 
-    internal void Refine(PowerShellTypeFact type, PowerShellValueState valueState)
+    internal void Refine(PowerShellTypeFact type, PowerShellValueState valueState, bool isBraceFreeString = false)
     {
         if (Type.Provenance == PowerShellTypeFactProvenance.Unknown) Type = type;
         else if (Type.ClrType == type.ClrType && type.DictionaryValueKind != PowerShellDictionaryValueKind.None)
@@ -29,7 +30,11 @@ internal sealed class PowerShellSemanticSymbolBinding
                 type.KnownProperties,
                 type.DictionaryValueKind);
         ValueState = valueState;
+        SetStringContent(isBraceFreeString);
     }
+
+    internal void SetStringContent(bool isBraceFreeString)
+        => IsBraceFreeString = Type.ClrType == typeof(string) && isBraceFreeString;
 
     internal void AddKnownProperty(string name, PowerShellTypeFact type)
         => Type = Type.WithKnownProperty(name, type);
@@ -39,10 +44,15 @@ internal sealed class PowerShellSemanticSymbolBinding
         var clone = new PowerShellSemanticSymbolBinding(Symbol, Type);
         clone.ValueState = ValueState;
         clone.IsModuleStateDerived = IsModuleStateDerived;
+        clone.IsBraceFreeString = IsBraceFreeString;
         return clone;
     }
 
-    internal void ForgetValueState() => ValueState = PowerShellValueState.Unknown;
+    internal void ForgetValueState()
+    {
+        ValueState = PowerShellValueState.Unknown;
+        IsBraceFreeString = false;
+    }
 
     internal void SetModuleStateDerived(bool value) => IsModuleStateDerived = value;
 
@@ -62,6 +72,7 @@ internal sealed class PowerShellSemanticSymbolBinding
         var states = materialized.Select(static path => path.ValueState).Distinct().Take(2).ToArray();
         ValueState = states.Length == 1 ? states[0] : PowerShellValueState.Unknown;
         IsModuleStateDerived = materialized.Any(static path => path.IsModuleStateDerived);
+        IsBraceFreeString = materialized.Length > 0 && materialized.All(static path => path.IsBraceFreeString);
     }
 }
 
@@ -132,11 +143,17 @@ internal static class PowerShellMutationSemanticBinder
                     $"The first bound assignment to '${target.Symbol.Name}' provides a stable CLR representation.",
                     value.Type.KnownProperties,
                     value.Type.DictionaryValueKind),
-                value.ValueState);
+                value.ValueState,
+                PowerShellStringContentPolicy.IsBraceFree(value));
             targetType = target.Type.ClrType;
             target.SetModuleStateDerived(PowerShellModuleStateOriginPolicy.IsDerived(value));
         }
-        else if (PowerShellModuleStateOriginPolicy.IsDerived(value)) target.SetModuleStateDerived(true);
+        else
+        {
+            target.SetStringContent(operation == PowerShellBoundMutationOperator.Add &&
+                target.IsBraceFreeString && PowerShellStringContentPolicy.IsBraceFree(value));
+            if (PowerShellModuleStateOriginPolicy.IsDerived(value)) target.SetModuleStateDerived(true);
+        }
         if (operation == PowerShellBoundMutationOperator.Assign &&
             target.Type.Provenance == PowerShellTypeFactProvenance.Inferred &&
             targetType != value.Type.ClrType)

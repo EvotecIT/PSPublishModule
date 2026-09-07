@@ -8,6 +8,7 @@ internal enum PowerShellBoundBinaryOperator
     Divide,
     Remainder,
     PowerShellScalarFormat,
+    RuntimeFreeScalarFormat,
     Equal,
     NotEqual,
     NullEqual,

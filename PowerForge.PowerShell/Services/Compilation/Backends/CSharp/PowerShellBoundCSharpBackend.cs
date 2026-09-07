@@ -84,6 +84,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
         foreach (var helper in _numericHelpers.Values)
             builder.AppendLine(helper.Source);
+        EmitFormatHelper(builder);
 
         builder.AppendLine("        }").Append("    }");
         var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function);
@@ -656,6 +657,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var right = EmitExpression(expression.Right);
         if (expression.Operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat)
             return $"__statementErrors.FormatScalar(({left} ?? string.Empty), (object?)({right}))";
+        if (expression.Operation == PowerShellBoundBinaryOperator.RuntimeFreeScalarFormat)
+            return EmitSafeScalarFormat(left, right);
         if (EmitNumericUnionBinary(expression, left, right) is { } numericUnion) return numericUnion;
         if (expression.Operation == PowerShellBoundBinaryOperator.IntegralRemainder)
         {

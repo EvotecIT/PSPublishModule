@@ -257,15 +257,18 @@ internal sealed class PowerShellBoundVariableExpression : PowerShellBoundExpress
         PowerShellSymbolId symbol,
         PowerShellTypeFact type,
         PowerShellValueState valueState = PowerShellValueState.Unknown,
-        bool isModuleStateDerived = false)
+        bool isModuleStateDerived = false,
+        bool isBraceFreeString = false)
         : base(span, type, valueState)
     {
         Symbol = symbol;
         IsModuleStateDerived = isModuleStateDerived;
+        IsBraceFreeString = type.ClrType == typeof(string) && isBraceFreeString;
     }
 
     internal PowerShellSymbolId Symbol { get; }
     internal bool IsModuleStateDerived { get; }
+    internal bool IsBraceFreeString { get; }
 }
 
 internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpression

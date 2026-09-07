@@ -21,6 +21,11 @@ internal static class PowerShellFormatSemanticBinder
                 format, value, new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred,
                     "Scalar formatting uses the loaded PowerShell host's format and error contract."));
 
+        if (PowerShellRuntimeFreeFormatPolicy.IsSafe(format, value.Type))
+            return new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.RuntimeFreeScalarFormat,
+                format, value, new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred,
+                    "The numeric format grammar and every interpolated fragment are statically qualified for CLR formatting."));
+
         diagnostics.Add(new PowerShellSemanticDiagnostic(PowerShellCompilationFeatureIds.ForOperator("format"),
             "Formatting requires a String template, a qualified scalar argument, and the PowerShell statement-error host; runtime-independent formatting requires a separately proven safe template.", span));
         return null;
