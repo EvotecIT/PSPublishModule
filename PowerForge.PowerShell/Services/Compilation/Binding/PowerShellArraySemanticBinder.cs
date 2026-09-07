@@ -18,14 +18,7 @@ internal static class PowerShellArraySemanticBinder
     {
         var arrayType = contextualType is { IsArray: true } && contextualType.GetArrayRank() == 1
             ? contextualType
-            : elementSyntax.Count == 0
-                ? null
-                : typeof(object[]);
-        if (arrayType is null)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2502", "Empty array expressions require an explicit one-dimensional array type on the assignment target.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
-            return null;
-        }
+            : typeof(object[]);
 
         var elementType = arrayType.GetElementType()!;
         var elements = new List<PowerShellBoundExpression>();
@@ -33,7 +26,16 @@ internal static class PowerShellArraySemanticBinder
         {
             var element = bindExpression(item, elementType);
             if (element is null) return null;
-            if (kind == PowerShellBoundArrayKind.CollectedExpression &&
+            if (element.ValueState == PowerShellValueState.Null && elementType != typeof(object))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2504", "Null elements in typed arrays require PowerShell element conversion.", element.Span));
+                return null;
+            }
+            // Ordinary $null is one collected value. A typed destination may convert it
+            // (for example, string[] replaces null with an empty string), so only the
+            // unconstrained Object[] contract can preserve it directly.
+            var preservesNull = element.ValueState == PowerShellValueState.Null && arrayType == typeof(object[]);
+            if (kind == PowerShellBoundArrayKind.CollectedExpression && !preservesNull &&
                 (!PowerShellStableScalarTypePolicy.IsSupported(element.Type.ClrType) || element.ValueState == PowerShellValueState.Null))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2503", "Typed @() expressions require closed scalar output; potentially enumerable, dynamically typed, and null values retain PowerShell collection and error semantics.", element.Span));

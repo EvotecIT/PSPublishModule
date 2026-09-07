@@ -5,7 +5,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitArray(PowerShellLoweredArrayExpression array)
     {
         var elementType = array.ClrType.GetElementType()!;
-        if (array.Elements.Length == 0) return $"global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(elementType)}>()";
+        if (array.Elements.Length == 0) return $"new {PowerShellCSharpSymbolRenderer.TypeName(elementType)}[0]";
         return $"new {PowerShellCSharpSymbolRenderer.TypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
     }
 

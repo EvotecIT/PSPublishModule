@@ -2,6 +2,8 @@
 
 Updated: 2026-09-07.
 
+Execution status: M24 is active; M25 and M26 are the next dependency-ordered implementation goals. This tranche includes remediation of existing and newly exposed compiler defects, with complete-workflow qualification across different source styles.
+
 This is the next execution tranche of the [compiler architecture roadmap](PowerForge.PowerShellCompilation.Roadmap.md). Milestones 24–30 turn its remaining product gaps into large deliverables with observable exit gates. The [readiness assessment](PowerForge.PowerShellCompilation.Assessment.md) owns dated audit results; the [compilation guide](PowerForge.PowerShellCompilation.md) owns current commands and supported behavior.
 
 ## Starting point
@@ -41,6 +43,10 @@ Each milestone spans coherent implementation slices. A slice must carry binding,
 **Exit gate:** three previously blocked complete workflows from at least two unrelated families execute original/generated differential matrices. Include empty, singleton, nested, null, overflow, malformed-input, and injected enumeration-failure cases. Prove values, CLR types, output count/order, errors, continued statements, and disposal on each claimed host. At least one workflow must pass as a Strict runtime-free artifact; Hybrid results must identify the operations that remain hosted. A higher emitted-unit count alone does not close the milestone.
 
 **First slice:** recover one bounded array/foreach transformation with its enumeration-failure continuation contract. Use the previously rejected collection experiment only as evidence of the missing contract, not as code to reinstate before that contract exists.
+
+The discovery packet now pins SamErde/PowerShell, MicrosoftIntune, CleanupMonster, PSSharedGoods, and the algorithm library. The PSSharedGoods snapshot at `2a807a4f11ba458b7bc405ce3674d93838639af1` adds its full 286-unit module closure: the initial scan emits 14 units in Hybrid and zero in Strict. Across the packet each mode assesses 278 of 291 submitted inputs and retains all 13 source-closure failures. This is analysis-only discovery; the existing public/external acceptance baselines and their execution claims remain separate. Use the established public corpus, including its other library styles, for regression qualification as contracts expand.
+
+The first closed-value implementation accepts inferred empty `@()` arrays and ordinary null elements in Object arrays. Generated empty arrays have distinct identities, matching authored allocations. Typed null elements that require PowerShell conversion remain retained/rejected, including comma literals. Focused original/generated module checks cover PowerShell 5.1 and 7. These cases do not close the collection milestone: enumerable failures, nested collection grouping, numeric promotion, and the three complete workflow gates remain open.
 
 ## Milestone 25 — Compile complete pipelines and advanced functions
 

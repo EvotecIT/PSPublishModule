@@ -52,7 +52,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal((0, "12", string.Empty), (process.ExitCode, process.StandardOutput.Trim(), process.StandardError.Trim()));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellScript.cs"));
         Assert.Contains("new int[] { 1, 2, 3 }", generated, StringComparison.Ordinal);
-        Assert.Contains("global::System.Array.Empty<int>()", generated, StringComparison.Ordinal);
+        Assert.Contains("new int[0]", generated, StringComparison.Ordinal);
     }
 
     [Fact]
