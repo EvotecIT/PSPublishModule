@@ -1,6 +1,46 @@
 # PowerShell compiler readiness assessment
 
-Updated: 2026-09-06. The initial audit used `origin/main` at `045d9ccabaf1d02b06e5569c25b66548e6eec5da`. The corrective implementation and results below are local source evidence until its PR lands. They do not establish public-package availability.
+Updated: 2026-09-07. The latest audit starts from `origin/main` at `a901af85bce7343582116a9c996fb1cf7fcc265a`, which contains merged corrective PR #883 and continuation PR #884. The assignment-constraint correction described first is tested working-tree source pending integration. The 2026-09-06 sections below retain their original evidence dates and pre-merge measurements. None of these results establishes current public-package availability.
+
+## Current audit: foundations exist, useful coverage is still narrow
+
+The architecture is substantially ahead of the workload coverage. Source inspection confirms canonical parser/binder/IR/lowering owners, generated C#, profile/oracle contracts, dependency and provider locks, CLR ABI metadata, generated projects, Hybrid state/regions, and target-qualified Strict delivery policies. The next work should expand correct programs through these owners rather than introduce another backend.
+
+| Area | What exists in current source | Remaining product gap |
+| --- | --- | --- |
+| Artifact modes | Package, Hybrid, Strict module/library, managed EXE, and NativeAOT paths with explicit runtime/dependency contracts | Arbitrary dynamic PowerShell remains hosted; an EXE/DLL extension alone proves no semantic compilation |
+| Language semantics | Bounded typed values, calls, control flow, collections, commands, and lifecycle through canonical IR | Dynamic promotion, general collection enumeration/failure continuation, multiple success outputs, and broader pipeline/value contracts |
+| Module-scale compilation | Live Hybrid state, scalar prefixes with continuation, terminal/complete-body helpers, and numeric/range proofs | Multiple regions, wider transfers, local-call/error closure, and Strict persistent state/lifetime |
+| .NET consumption | ABI v4, generated projects, source maps, runtime-free provider adapters, lock/provenance verification | A broader set of ordinary C# consumer libraries and versioned API/lifetime qualification |
+| Development experience | Project init/analyze/explain/recommend/lock/restore/build/test/pack/install/diagnose, verified cache, generated C#/PDB mapping | Coherent run/watch and demonstrated source-debugger workflows; source maps alone do not prove debugger usability |
+| Distribution/platforms | Explicit preview support matrix and selected Windows/Linux Strict profiles | Public-feed install/upgrade/rollback, additional physical profiles, and the remaining disposable management-target qualification |
+
+### Confirmed defect and correction
+
+`ResolveAssignmentType` treated an RHS conversion as `Explicit` local provenance. Mutation binding interprets that provenance as a persistent variable constraint. PowerShell instead distinguishes `$Value = [int]2147483647` from `[int]$Value = 2147483647`.
+
+The audit reproduced these observable failures in generated Hybrid modules on both PowerShell 7 and Windows PowerShell 5.1:
+
+- An untyped local initialized with an Int32 cast and then incremented or updated with `+= 1` produced a conversion error instead of the original `Double` value `2147483648`.
+- An untyped local initialized with a Single cast and updated with a Single operand retained Single precision/type instead of the original Double result.
+
+The canonical local binder now infers the local representation from an RHS cast without inventing a variable constraint. The same distinction applies to an ordered-dictionary initializer. Expression-level casts still carry their authored conversion; LHS variable and parameter constraints retain their existing semantics. Unsupported unconstrained numeric promotion is retained under Hybrid and rejected by Strict. String-to-null reassignment is checked separately from constrained-string normalization, and unchanged casts and genuine constrained numeric updates remain compiled.
+
+Regression coverage is in [PowerShellCompilationAssignmentConstraintTests.cs](../PowerForge.Tests/PowerShellCompilationAssignmentConstraintTests.cs); the owner change is in [PowerShellSemanticBinder.Locals.cs](../PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Locals.cs). The pre-fix packet failed five of its six cases, including both generated-module executions; the extra string type-change case already retained source and was not a new defect.
+
+One conservative coverage consequence remains explicit: scalar-string foreach currently requires `Explicit` or `Literal` provenance. A stable `$s = [string]'abc'` read through its inferred local can therefore lose typed eligibility. Hybrid retains the function and Strict may reject it. Recover that support with a closed scalar/null enumeration contract under M24, rather than labeling the local as constrained again.
+
+### Fresh validation and limits
+
+- The unmodified merged baseline passed 278 Windows compiler-gate tests and all six Strict programs.
+- The corrected candidate passed **285 compiler-gate tests**, **six Strict programs**, and **16 focused assignment/conversion/dictionary/null-seeded/differential tests**. Generated-module regression proof includes `net10.0` on PowerShell 7 and `net472` on Windows PowerShell 5.1.
+- Compiler Release builds passed for **net472, net8.0, and net10.0**, with zero warnings and errors.
+- One independent read-only review found no actionable correctness defect in the binder/test candidate; it recorded the conservative foreach coverage consequence above.
+- The unchanged external acceptance baseline passed **7/7 workloads**, **155 source files**, **6/196 emitted units**, **6/183 emitted functions**, **four promoted typed regions**, **58 analysis-only region opportunities**, and **zero regressions**. Complete-workload execution remains **zero** for this analysis-only packet. Those counts are not a PowerShell-language coverage percentage.
+
+This audit did not rerun the full compiler suite, Linux/NativeAOT target-host qualification, the separate 290-input discovery packet, destructive management tests, or public-package lifecycle tests. Their earlier evidence remains dated; a passing local gate is not CI, publication, or installed-product proof. The new [major milestones 24–30](PowerForge.PowerShellCompilation.NextMilestones.md) prioritize values/collections, complete pipelines, module state/regions, practical libraries, developer tooling, distribution, and later optimization.
+
+## Earlier assessment: 2026-09-06
 
 PowerForge has a semantic compiler with useful bounded DLL and EXE paths. This corrective slice repairs accepted numeric behavior, makes coverage assessment describe the requested artifact, and adds repeatable compiler validation. It also adds a small generic remainder/data-flow slice with complete programs from two unrelated computation families. Broad administration scripts still depend heavily on retained PowerShell and external services.
 

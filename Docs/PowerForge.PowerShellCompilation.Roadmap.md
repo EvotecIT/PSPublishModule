@@ -1,14 +1,16 @@
 # PowerShell Compilation Architecture Roadmap
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 This roadmap is the execution plan for growing PowerForge PowerShell compilation without turning the analyzer, transpiler, command handling, or C# emitter into increasingly coupled catch-all components.
 
-The default branch contains a typed semantic compiler core with immutable bound IR, deterministic analysis and lowering, a lowered-only C# method backend, generated-project publication, help/module-contract flow, consumed dependency locks, typed command-family contracts, runtime-free provider injection, and canonical hosted lifecycle binding. Compiler-selected payloads remain authoritative through delivery, reusable checkpoints authenticate the compiler and normalized release plan, and artifacts carry decision and reproduction evidence. Completed architecture checkpoints do not imply semantic completeness: the 2026-09-06 assessment led to a corrective source implementation for arithmetic semantics, artifact-aware census, and bounded compiler validation; PR settlement and broader workload coverage remain open.
+The default branch contains a typed semantic compiler core with immutable bound IR, deterministic analysis and lowering, a lowered-only C# method backend, generated-project publication, help/module-contract flow, consumed dependency locks, typed command-family contracts, runtime-free provider injection, and canonical hosted lifecycle binding. Compiler-selected payloads remain authoritative through delivery, reusable checkpoints authenticate the compiler and normalized release plan, and artifacts carry decision and reproduction evidence. Completed architecture checkpoints do not imply semantic completeness: the arithmetic/census corrections and bounded continuation work are merged, while the 2026-09-07 audit found a further assignment-constraint defect and confirms that broad workload coverage remains the principal product gap.
 
 The companion [PowerShell Compilation guide](PowerForge.PowerShellCompilation.md) documents current behavior, artifact modes, supported syntax, measured performance, census evidence, and distribution limits. This file records completed architecture gates as well as the remaining implementation plan.
 
 This roadmap does not schedule a package, gallery, NuGet, or GitHub release. Those remain separate decisions after source work is complete.
+
+The [next major milestones, 24–30](PowerForge.PowerShellCompilation.NextMilestones.md), define the next delivery tranche: values/collections, complete pipelines, stateful modules, practical CLR libraries, the development loop, distribution/platform qualification, and finally measured acceleration. Start with Milestone 24 after the current correctness gate; the completed architecture history below remains its foundation.
 
 ## Product north star
 
@@ -47,19 +49,17 @@ The product succeeds when users can predict which of these outcomes they are get
 
 ## Current position
 
-The compiler implementation is present on `origin/main`, assessed at `045d9ccab` on 2026-09-06. It includes the semantic-pipeline migration, exact-closure remediation, Milestone 14–22 implementation waves, and Milestone 23 state, region, and candidate-decision slices. The [current readiness assessment](PowerForge.PowerShellCompilation.Assessment.md) records fresh tests, a baseline-preserving external census, Windows Strict execution, and discovery of three additional source repositories. Earlier multi-target and target-host results below retain their own evidence dates. Merged source is not proof of a published package or released product.
+The current audit starts from `origin/main` at `a901af85b` on 2026-09-07, including merged corrective PR #883 and continuation PR #884. It includes the semantic-pipeline migration, exact-closure remediation, Milestone 14–22 implementation waves, and Milestone 23 live state, scalar continuation, terminal/complete-body region, and numeric slices. The [current readiness assessment](PowerForge.PowerShellCompilation.Assessment.md) separates the audit's tested working-tree correction from this merged baseline. Earlier multi-target and target-host results retain their own evidence dates. Merged source is not proof of a published package or released product.
 
-### Current corrective gate: source and PR checks settled, merge pending
+### Current corrective gate: assignment semantics
 
-The 2026-09-06 corrective implementation keeps semantic decisions in the existing binder, bound IR, lowering, and backend owners. See the [assessment](PowerForge.PowerShellCompilation.Assessment.md) for current execution evidence and limits.
+The merged 2026-09-06 corrections cover Single arithmetic, constrained numeric updates, integral remainder, artifact-aware census, resilient input assessment, and the bounded compiler gate. Their six-program Strict packet remains the acceptance baseline. See the [assessment](PowerForge.PowerShellCompilation.Assessment.md) for the historical execution evidence.
 
-- [x] Correct Single arithmetic operand precision and CLR result types.
-- [x] Preserve constrained numeric promotion, authored CLR catch selection, RHS exceptions, and state after failure across integral widths and loop iterators. Reject forms requiring unsupported PowerShell-specific error wrapping.
-- [x] Add a bounded compiler PR gate with pinned Windows PowerShell 7.6.5 acquisition, .NET 8 artifact references, contract tests, six Strict programs, and uploaded evidence.
-- [x] Make census artifact/mode/profile-aware through canonical final shaping and reject incomparable baselines.
-- [x] Preserve successful inputs alongside dependency-resolution and malformed-path failures, with incomplete results still failing acceptance.
-- [x] Add generic integral remainder and remainder assignment, then qualify authored number-theory and calendar programs on Windows/Linux x64. The Strict packet now has 6/6 complete programs and 24/24 emitted units.
-- [x] Settle corrective PR #883 at `0e0e6d5`: required CI passed and a delayed review check found no open conversations. Merge and public release remain pending.
+- [x] Reproduce RHS casts being misclassified as persistent local constraints through original/generated PowerShell 5.1 and 7 execution.
+- [x] Infer cast-initialized locals without inventing a variable constraint; retain/reject unsupported dynamic numeric promotion and preserve null-string reassignment.
+- [x] Preserve actual LHS constraints, ordinary unchanged casts, and current external census acceptance. Local validation passes 285 compiler gate cases, six Strict programs, 16 focused closure cases, and all three compiler framework builds.
+- [x] Complete one independent read-only semantic review. Record conservative scalar-string foreach eligibility loss as a remaining bounded-coverage gap rather than relaxing the fix.
+- [ ] Integrate the audited correction through normal source review and CI before treating it as a merged fix. Public package qualification remains M21/M29 work.
 
 ### Corpus expansion and pilot order
 
@@ -855,7 +855,14 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 | 20. Establish generic measurement and expand useful coverage | Complete / bounded benefit packet | Public and external baselines are enforced, four emitted commands run with parity across three scenario families, and the realistic Strict application proves dependency, resource, streams, bounded errors, and counterbalanced fresh-process startup on Windows/Linux |
 | 21. Productize project, lock, restore, and package UX | Partial / local workflow complete | Effective-profile restore/build/test/pack/install uses complete target and artifact-set identity; only explicitly authorized public lifecycle proof remains open |
 | 22. Broaden platform and profile-guided performance maturity | Partial / target qualification | The support matrix and measured recommendation/budget policies are implemented; physical macOS/Arm64 and additional profile promotion remain open |
-| 23. Compile module-scale state and regions without a second runtime | Partial / Current | Hybrid binary modules can emit bounded live-state operations and can promote one fail-closed terminal scalar region from an otherwise retained function through the canonical semantic pipeline; general region partitioning, Strict stateful-module closure, and measured multi-family benefit remain open |
+| 23. Compile module-scale state and regions without a second runtime | Partial | Bounded live state, scalar prefixes with continuation, terminal/complete-body regions, and numeric/range proofs are merged; wider transfer, multiple regions, and Strict stateful-module closure continue through M24–26 |
+| [24. Values, collections, and error continuation](PowerForge.PowerShellCompilation.NextMilestones.md#milestone-24--preserve-values-collections-and-error-continuation) | Planned / next semantic tranche | Complete data transformations preserve promotion, enumeration, partial failure, and continuation |
+| [25. Complete pipelines and advanced functions](PowerForge.PowerShellCompilation.NextMilestones.md#milestone-25--compile-complete-pipelines-and-advanced-functions) | Planned / depends on relevant M24 contracts | Whole commands preserve every record, local-call output, binding, stop, and cleanup |
+| [26. Stateful modules and multiple Hybrid regions](PowerForge.PowerShellCompilation.NextMilestones.md#milestone-26--compile-stateful-modules-and-multiple-hybrid-regions) | Planned / closes M23 | Multiple typed regions share the real Hybrid state owner; Strict receives its own runtime-free lifetime contract |
+| [27. Practical CLR library consumption](PowerForge.PowerShellCompilation.NextMilestones.md#milestone-27--make-compiled-clr-libraries-practical-to-consume) | Planned | Two normal C# consumers prove useful typed APIs, package closure, and ABI compatibility |
+| [28. Source-first development loop](PowerForge.PowerShellCompilation.NextMilestones.md#milestone-28--deliver-a-source-first-development-loop) | Planned | Run, incremental rebuild, explain, and observed source-level debugging use the existing project service |
+| [29. Distribution and qualified platforms](PowerForge.PowerShellCompilation.NextMilestones.md#milestone-29--qualify-distribution-providers-and-platforms) | Planned / external gates | M19/M21/M22 close for the declared release set and actual supported targets |
+| [30. Acceleration of proven workflows](PowerForge.PowerShellCompilation.NextMilestones.md#milestone-30--accelerate-proven-workflows) | Planned / later optimization | Useful complete workloads receive measured performance improvements after semantic qualification |
 
 Closure sequence completed on this branch:
 
@@ -1520,17 +1527,18 @@ This is the coverage milestone after the current corrective gate above. Hybrid m
 - [ ] Define Strict module initialization and persistent state as a separate runtime-free contract. It must lower deterministic top-level initialization, module lifetime, concurrency, reset/removal, and state ABI without consulting the Hybrid bridge or retaining authored source.
 - [ ] Execute newly supported commands in their real module or application context and prove authored behavior on supported hosts, including failure and continuation paths. Report whether each operation is compiled, retained in PowerShell, or unsupported.
 
-Exit gate: **Partial / Current.** The candidate implements bounded scalar prefixes with a retained continuation, post-bind opportunity discovery, complete-body/terminal-region promotion, bounded numeric representation, and integer-range proofs through the existing semantic pipeline. Retained functions remain runtime-routed in coverage. Original/generated parity passed for the recorded command and artifact cases. Multiple regions, error envelopes, local-call closure, dynamic state, wider collection/member/index behavior, and Strict stateful-module ownership remain open. Further promotion depends on correct reusable support and complete-workload evidence; the former multi-family speedup requirement is no longer an acceptance gate.
+Exit gate: **Partial.** Merged source implements bounded scalar prefixes with a retained continuation, post-bind opportunity discovery, complete-body/terminal-region promotion, bounded numeric representation, and integer-range proofs through the existing semantic pipeline. Retained functions remain runtime-routed in coverage. Original/generated parity passed for the recorded command and artifact cases. Multiple regions, error envelopes, local-call closure, dynamic state, wider collection/member/index behavior, and Strict stateful-module ownership remain open and are sequenced in M24–26. Further promotion depends on correct reusable support and complete-workload evidence; the former multi-family speedup requirement is no longer an acceptance gate.
 
 ## Next implementation order
 
 The active corrective checklist near the start of this roadmap takes precedence over completed milestone history. Use this order:
 
-1. [ ] Publish and settle CI/reviews for the continuation candidate; the preceding corrective PR is already settled and awaiting an authorized merge.
-2. [ ] Continue Milestone 23 by ranking real-workload blockers and implementing complete reusable contracts for collections, loops, calls, pipelines, scope, and lifecycle behavior. Preserve the authored design and verify DLL/EXE behavior end to end; do not require measured benefit before adding support.
-3. [ ] Extend the qualified detection script beyond its observed enabled-state path on a disposable target, then begin narrow internal pilots for specifically proven workflows.
-4. [ ] Complete provider and platform qualification independently: disposable management-target reboot/reconnect, native-Linux test capability partition beyond the bounded gate, and one selected physical RID/deployment profile at a time.
-5. [ ] Use an explicitly authorized release lane for public compiler/core/CLI/provider publication and install, upgrade, rollback, and clean-consumer proof. No publication is authorized by this roadmap.
+1. [ ] Integrate the assignment-constraint correctness fix after source review and CI; preserve its original/generated regression proof.
+2. [ ] Execute [M24](PowerForge.PowerShellCompilation.NextMilestones.md#milestone-24--preserve-values-collections-and-error-continuation), beginning with a complete collection/enumeration-failure contract. Rank complete-workflow unlocks and co-blockers rather than diagnostic frequency.
+3. [ ] Use M25 and M26 to close complete pipelines and module-scale state/regions. Qualify real DLL/EXE behavior, including failures and continuation; speed is not an admission gate.
+4. [ ] Productize CLR consumption and the source development loop through M27/M28 using the existing ABI, project, diagnostics, and source-map owners.
+5. [ ] Run M29's provider/platform/public-package qualification as an independent authorized lane. Include additional detection-script states on a disposable target; do not mutate an ambient machine to complete a checkbox.
+6. [ ] Optimize already qualified workloads under M30 with fresh measurements and explicit per-workload budgets.
 
 Two semantic boundaries remain explicit. Unqualified `Write-*` calls need preserved streams, ordering, preferences/actions, and record identity before they can enter a generic hosted region. Routing only success output or classifying records by CLR type is insufficient. Basic functions whose parameters collide with generated cmdlet common parameters must retain their authored script command surface until the wrapper/dispatch contract is proved; any body acceleration still counts as runtime-routed.
 

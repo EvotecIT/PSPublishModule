@@ -114,11 +114,13 @@ internal sealed partial class PowerShellSemanticBinder
                 (HashtableAst)ordered.Child,
                 ordered: true,
                 typeof(System.Collections.Specialized.OrderedDictionary),
-                PowerShellTypeFactProvenance.Explicit);
+                PowerShellTypeFactProvenance.Inferred);
         if (expression is ConvertExpressionAst powerShellObject && PowerShellObjectConstructionPolicy.IsLiteral(powerShellObject))
             return PowerShellObjectSemanticBinder.InferLiteralType(powerShellObject);
         if (expression is ConvertExpressionAst conversion && conversion.StaticType != typeof(object))
-            return new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment value has an authored conversion.");
+            // A cast constrains this value only. Later writes to the untyped local can change
+            // its representation; only a type constraint on the assignment target persists.
+            return new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Inferred, "The assignment value has an authored conversion; the local has no type constraint.");
         if (expression is InvokeMemberExpressionAst
             {
                 Static: true,
