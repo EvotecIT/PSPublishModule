@@ -1,7 +1,84 @@
 using PowerForge;
+using Generic.External.Binary.Dependency;
+using Generic.External.Binary.Module;
 
 public partial class ModuleBootstrapperGeneratorTests
 {
+    [Theory]
+    [Trait("Category", "Integration")]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void ScriptArtefact_WithAssemblyLoadContext_ReachesPostMergeWhenExecutedDirectly(ArtefactType artefactType)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-script-alc-direct-" + Guid.NewGuid().ToString("N"));
+        var stagingRoot = Directory.CreateDirectory(Path.Combine(root, "Staging")).FullName;
+        var libRoot = Directory.CreateDirectory(Path.Combine(stagingRoot, "Lib", "Core")).FullName;
+
+        try
+        {
+            const string moduleName = "DemoModule";
+            const string libraryName = "Generic.External.Binary.Module.dll";
+            File.Copy(typeof(GetGenericExternalValueCommand).Assembly.Location, Path.Combine(libRoot, libraryName));
+            File.Copy(typeof(GenericValueSource).Assembly.Location, Path.Combine(libRoot, "Generic.External.Binary.Dependency.dll"));
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                "@{ RootModule = 'DemoModule.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @(); CmdletsToExport = @('Get-GenericExternalValue'); AliasesToExport = @() }");
+
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), new[] { "Get-GenericExternalValue" });
+            ModuleBootstrapperGenerator.Generate(
+                stagingRoot,
+                moduleName,
+                exports,
+                new[] { libraryName },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net10.0" });
+
+            var outputRoot = Path.Combine(root, "Artefacts", artefactType.ToString());
+            var artefact = new ArtefactBuilder(new NullLogger()).Build(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = artefactType,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = outputRoot,
+                        ScriptName = "Invoke-DemoModule.ps1",
+                        ArtefactName = "DemoModule.zip",
+                        PostScriptMerge = "$record = Get-GenericExternalValue -Value 17; 'post:' + $record.DependencyValue"
+                    }
+                },
+                root,
+                stagingRoot,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>());
+
+            var inspectionRoot = artefact.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                inspectionRoot = Directory.CreateDirectory(Path.Combine(root, "Extracted")).FullName;
+                System.IO.Compression.ZipFile.ExtractToDirectory(artefact.OutputPath, inspectionRoot);
+            }
+
+            var scriptPath = Path.Combine(inspectionRoot, "Invoke-DemoModule.ps1");
+            var result = RunGeneratedModulePowerShell(
+                root,
+                "$ErrorActionPreference = 'Stop'; & '" +
+                scriptPath.Replace("'", "''", StringComparison.Ordinal) +
+                "'");
+
+            Assert.True(result.ExitCode == 0, result.StdOut + Environment.NewLine + result.StdErr);
+            Assert.Contains("post:dependency:17", result.StdOut, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     [Trait("Category", "Integration")]
     public void AssemblyLoadContextLoader_ContinuesAfterRecoverableConfiguredAssemblyFailure()

@@ -5,9 +5,13 @@ $AddExportedCmdlet = [System.Management.Automation.PSModuleInfo].GetMethod(
     'AddExportedCmdlet',
     [System.Reflection.BindingFlags]'Instance, NonPublic'
 )
-if ($null -ne $AddExportedCmdlet) {
+$PowerForgeOuterModule = $ExecutionContext.SessionState.Module
+if ($null -eq $PowerForgeOuterModule) {
+    # A Script/ScriptPacked entry point has no outer module export table. The imported inner module's
+    # commands remain available to the rest of the running script, so no private export bridge is needed.
+} elseif ($null -ne $AddExportedCmdlet) {
     foreach ($Cmd in {{InnerModuleExpression}}.ExportedCmdlets.Values) {
-        $AddExportedCmdlet.Invoke($ExecutionContext.SessionState.Module, @(, $Cmd)) | Out-Null
+        $AddExportedCmdlet.Invoke($PowerForgeOuterModule, @(, $Cmd)) | Out-Null
     }
     $AddExportedAlias = [System.Management.Automation.PSModuleInfo].GetMethod(
         'AddExportedAlias',
@@ -21,7 +25,7 @@ if ($null -ne $AddExportedCmdlet) {
                 Set-Alias -Name $Alias.Name -Value $AliasTarget -Scope Local -Force -ErrorAction Stop
                 $ExportedAlias = $ExecutionContext.SessionState.InvokeCommand.GetCommand($Alias.Name, [System.Management.Automation.CommandTypes]::Alias)
                 if ($null -ne $ExportedAlias) {
-                    $AddExportedAlias.Invoke($ExecutionContext.SessionState.Module, @(, $ExportedAlias)) | Out-Null
+                    $AddExportedAlias.Invoke($PowerForgeOuterModule, @(, $ExportedAlias)) | Out-Null
                 } else {
                     Write-Warning -Message "Alias '$($Alias.Name)' from {{LibraryName}} was created but could not be resolved for export."
                 }

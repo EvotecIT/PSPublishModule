@@ -90,6 +90,35 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
     }
 
     [Fact]
+    public void Plan_CaseDistinctDeliveryAndArtefactRoots_DoNotOverlapOnCaseSensitiveFileSystem()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.Ordinal)
+                return;
+
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+
+            var error = Record.Exception(() => runner.Plan(CreateSpec(
+                root.FullName,
+                moduleName,
+                deliveryInternalsPath: "Internals",
+                artefactPath: Path.Combine("internals", "Unpacked"),
+                requiredModulesPath: "Modules")));
+
+            Assert.Null(error);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_DeliveryInternalsPathUnset_UsesDefaultInternalsAndFailsFastOnOverlap()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

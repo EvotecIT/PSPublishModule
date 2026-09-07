@@ -310,21 +310,189 @@ public sealed partial class ArtefactBuilder
             var line = lines[lineIndex] ?? string.Empty;
             if (state == ScriptLexicalState.Normal &&
                 blockCommentDepth == 0 &&
-                IsExportModuleMemberInvocationLine(line))
+                TryGetExportModuleMemberInvocationStart(line, out var commandStart))
             {
-                var removeCount = 1;
-                while (lineIndex + removeCount < lines.Count &&
-                       lines[lineIndex + removeCount - 1].TrimEnd().EndsWith("`", StringComparison.Ordinal))
-                {
-                    removeCount++;
-                }
+                var endLine = FindPowerShellCommandEnd(lines, lineIndex, commandStart, out var suffixStart);
+                var removeCount = endLine - lineIndex + 1;
+                var suffix = suffixStart >= 0
+                    ? lines[endLine].Substring(suffixStart).TrimStart()
+                    : string.Empty;
                 lines.RemoveRange(lineIndex, removeCount);
+                if (!string.IsNullOrWhiteSpace(suffix))
+                    lines.Insert(lineIndex, suffix);
                 lineIndex--;
                 continue;
             }
 
             UpdateScriptLexicalState(line, ref state, ref blockCommentDepth);
         }
+    }
+
+    private static int FindPowerShellCommandEnd(
+        IReadOnlyList<string> lines,
+        int startLine,
+        int commandStart,
+        out int suffixStart)
+    {
+        var state = ScriptLexicalState.Normal;
+        var blockCommentDepth = 0;
+        var parenthesisDepth = 0;
+        var bracketDepth = 0;
+        var braceDepth = 0;
+        suffixStart = -1;
+
+        for (var lineIndex = startLine; lineIndex < lines.Count; lineIndex++)
+        {
+            var line = lines[lineIndex] ?? string.Empty;
+            var characterIndex = lineIndex == startLine ? commandStart : 0;
+            var lineContinues = false;
+            var lastSignificant = '\0';
+
+            if (state is ScriptLexicalState.SingleQuotedHereString or ScriptLexicalState.DoubleQuotedHereString)
+            {
+                var terminator = state == ScriptLexicalState.SingleQuotedHereString ? "'@" : "\"@";
+                var trimmed = line.TrimStart();
+                if (!trimmed.StartsWith(terminator, StringComparison.Ordinal))
+                    continue;
+
+                characterIndex = line.Length - trimmed.Length + terminator.Length;
+                state = ScriptLexicalState.Normal;
+            }
+
+            for (; characterIndex < line.Length; characterIndex++)
+            {
+                var current = line[characterIndex];
+                var next = characterIndex + 1 < line.Length ? line[characterIndex + 1] : '\0';
+
+                if (blockCommentDepth > 0)
+                {
+                    if (current == '<' && next == '#')
+                    {
+                        blockCommentDepth++;
+                        characterIndex++;
+                    }
+                    else if (current == '#' && next == '>')
+                    {
+                        blockCommentDepth--;
+                        characterIndex++;
+                    }
+                    continue;
+                }
+
+                if (state == ScriptLexicalState.SingleQuotedString)
+                {
+                    if (current != '\'')
+                        continue;
+                    if (next == '\'')
+                    {
+                        characterIndex++;
+                        continue;
+                    }
+                    state = ScriptLexicalState.Normal;
+                    lastSignificant = current;
+                    continue;
+                }
+
+                if (state == ScriptLexicalState.DoubleQuotedString)
+                {
+                    if (current == '`')
+                    {
+                        characterIndex++;
+                        continue;
+                    }
+                    if (current == '"')
+                    {
+                        state = ScriptLexicalState.Normal;
+                        lastSignificant = current;
+                    }
+                    continue;
+                }
+
+                if (current == '<' && next == '#')
+                {
+                    blockCommentDepth++;
+                    characterIndex++;
+                    continue;
+                }
+                if (current == '#')
+                    break;
+                if (current == '@' && next is '\'' or '"')
+                {
+                    state = next == '\''
+                        ? ScriptLexicalState.SingleQuotedHereString
+                        : ScriptLexicalState.DoubleQuotedHereString;
+                    break;
+                }
+                if (current == '\'')
+                {
+                    state = ScriptLexicalState.SingleQuotedString;
+                    lastSignificant = current;
+                    continue;
+                }
+                if (current == '"')
+                {
+                    state = ScriptLexicalState.DoubleQuotedString;
+                    lastSignificant = current;
+                    continue;
+                }
+                if (current == '`')
+                {
+                    if (string.IsNullOrWhiteSpace(line.Substring(characterIndex + 1)))
+                    {
+                        lineContinues = true;
+                        break;
+                    }
+                    characterIndex++;
+                    continue;
+                }
+
+                if (char.IsWhiteSpace(current))
+                    continue;
+
+                if (current == ';' && parenthesisDepth == 0 && bracketDepth == 0 && braceDepth == 0)
+                {
+                    suffixStart = characterIndex + 1;
+                    return lineIndex;
+                }
+
+                switch (current)
+                {
+                    case '(':
+                        parenthesisDepth++;
+                        break;
+                    case ')':
+                        if (parenthesisDepth > 0) parenthesisDepth--;
+                        break;
+                    case '[':
+                        bracketDepth++;
+                        break;
+                    case ']':
+                        if (bracketDepth > 0) bracketDepth--;
+                        break;
+                    case '{':
+                        braceDepth++;
+                        break;
+                    case '}':
+                        if (braceDepth > 0) braceDepth--;
+                        break;
+                }
+
+                lastSignificant = current;
+            }
+
+            if (state == ScriptLexicalState.Normal &&
+                blockCommentDepth == 0 &&
+                parenthesisDepth == 0 &&
+                bracketDepth == 0 &&
+                braceDepth == 0 &&
+                !lineContinues &&
+                lastSignificant is not ('|' or ','))
+            {
+                return lineIndex;
+            }
+        }
+
+        return lines.Count - 1;
     }
 
     private static void UpdateScriptLexicalState(
@@ -416,9 +584,11 @@ public sealed partial class ArtefactBuilder
         }
     }
 
-    private static bool IsExportModuleMemberInvocationLine(string line)
+    private static bool TryGetExportModuleMemberInvocationStart(string line, out int commandStart)
     {
-        var trimmed = (line ?? string.Empty).TrimStart();
+        var source = line ?? string.Empty;
+        var trimmed = source.TrimStart();
+        commandStart = source.Length - trimmed.Length;
         return StartsWithCommandName(trimmed, "Export-ModuleMember") ||
                StartsWithCommandName(trimmed, "Microsoft.PowerShell.Core\\Export-ModuleMember");
     }

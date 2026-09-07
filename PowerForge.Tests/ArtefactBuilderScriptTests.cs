@@ -153,6 +153,12 @@ public sealed class ArtefactBuilderScriptTests
             WriteStagingFixture(stagingRoot.FullName, moduleName);
             File.WriteAllText(
                 Path.Combine(stagingRoot.FullName, moduleName + ".psm1"),
+                "<#" + Environment.NewLine +
+                ".SYNOPSIS" + Environment.NewLine +
+                "Leading script help must remain ahead of using directives." + Environment.NewLine +
+                "#>" + Environment.NewLine +
+                "# ordinary leading comment" + Environment.NewLine +
+                Environment.NewLine +
                 "#requires -Version 5.1" + Environment.NewLine +
                 "using namespace System.Text" + Environment.NewLine +
                 "function Invoke-DemoModule { [StringBuilder]::new().Append('ok').ToString() }" + Environment.NewLine +
@@ -189,6 +195,8 @@ public sealed class ArtefactBuilderScriptTests
             }
 
             string script = File.ReadAllText(Path.Combine(inspectionRoot, "Invoke-DemoModule.ps1"));
+            Assert.True(script.IndexOf(".SYNOPSIS", StringComparison.Ordinal) <
+                        script.IndexOf("param([switch] $PassThru)", StringComparison.Ordinal));
             Assert.True(script.IndexOf("#requires -Version 5.1", StringComparison.Ordinal) <
                         script.IndexOf("param([switch] $PassThru)", StringComparison.Ordinal));
             Assert.True(script.IndexOf("using namespace System.Text", StringComparison.Ordinal) <
@@ -228,6 +236,10 @@ public sealed class ArtefactBuilderScriptTests
                 exportCommand + " -Function CommentText" + Environment.NewLine +
                 "#>" + Environment.NewLine +
                 "    " + exportCommand + " -Function Invoke-DemoModule" + Environment.NewLine +
+                "    " + exportCommand + " -Function @(" + Environment.NewLine +
+                "        'Invoke-DemoModule'," + Environment.NewLine +
+                "        'Get-DemoState'" + Environment.NewLine +
+                "    ); $script:SameLineState = 'kept'" + Environment.NewLine +
                 "$script:State = 'ready'" + Environment.NewLine +
                 "function Get-DemoState { $script:State }" + Environment.NewLine);
             string outputRoot = Path.Combine(root.FullName, "Artefacts", artefactType.ToString());
@@ -264,6 +276,7 @@ public sealed class ArtefactBuilderScriptTests
             Assert.Contains(exportCommand + " -Function LiteralText", script, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(exportCommand + " -Function CommentText", script, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("$script:State = 'ready'", script, StringComparison.Ordinal);
+            Assert.Contains("$script:SameLineState = 'kept'", script, StringComparison.Ordinal);
             Assert.Contains("function Get-DemoState", script, StringComparison.Ordinal);
             System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
             Assert.Empty(parseErrors);

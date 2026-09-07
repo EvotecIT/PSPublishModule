@@ -133,36 +133,53 @@ internal static partial class ModuleMergeComposer
         var normalized = body.Replace("\r\n", "\n").Replace('\r', '\n');
         var lines = normalized.Split('\n');
         var preamble = new List<string>();
+        var leadingTrivia = new List<string>();
+        var foundDirective = false;
+        var blockCommentDepth = 0;
         var index = 0;
         for (; index < lines.Length; index++)
         {
             var line = lines[index];
-            var directiveStart = 0;
-            while (directiveStart < line.Length && char.IsWhiteSpace(line[directiveStart]))
-                directiveStart++;
-
-            if (StartsWithDirective(line, directiveStart, "#requires"))
+            var kind = ClassifyPreambleLine(line, ref blockCommentDepth, out var directiveStart);
+            if (kind == PreambleLineKind.Trivia)
             {
+                if (!foundDirective)
+                {
+                    leadingTrivia.Add(line);
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                break;
+            }
+
+            if (kind == PreambleLineKind.Requires)
+            {
+                if (!foundDirective)
+                    preamble.AddRange(leadingTrivia);
                 preamble.Add(line);
+                foundDirective = true;
                 continue;
             }
 
-            if (StartsWithDirective(line, directiveStart, "using"))
+            if (kind == PreambleLineKind.Using)
             {
+                if (!foundDirective)
+                    preamble.AddRange(leadingTrivia);
                 var directiveEnd = FindUsingDirectiveEnd(lines, index, directiveStart);
                 for (; index <= directiveEnd; index++)
                     preamble.Add(lines[index]);
                 index--;
+                foundDirective = true;
                 continue;
             }
-
-            if (string.IsNullOrWhiteSpace(line) && preamble.Count > 0)
-                continue;
 
             break;
         }
 
-        if (preamble.Count == 0)
+        if (!foundDirective)
             return string.Empty;
 
         body = string.Join(System.Environment.NewLine, lines.Skip(index)).TrimStart('\r', '\n');
