@@ -14,7 +14,8 @@ public static partial class WebSeoDoctor
         "*.head.html",
         "**/*.head.html",
         "**/api-fragments/**",
-        "api-fragments/**"
+        "api-fragments/**",
+        "_powerforge/fragments/**"
     };
 
     private static readonly string[] DefaultHtmlExtensions = { ".html", ".htm" };

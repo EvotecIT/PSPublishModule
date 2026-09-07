@@ -5,6 +5,8 @@ public sealed class SearchIndexEntry
 {
     /// <summary>Display title.</summary>
     public string Title { get; set; } = string.Empty;
+    /// <summary>Alternative display names, such as an unqualified API type name.</summary>
+    public string[] Aliases { get; set; } = Array.Empty<string>();
     /// <summary>Destination URL.</summary>
     public string Url { get; set; } = string.Empty;
     /// <summary>Optional description.</summary>

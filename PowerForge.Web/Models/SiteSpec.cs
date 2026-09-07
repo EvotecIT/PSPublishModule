@@ -44,6 +44,10 @@ public sealed class SiteSpec
 
     /// <summary>Output format configuration.</summary>
     public OutputsSpec? Outputs { get; set; }
+    /// <summary>Additional generated reference sources for the site-wide search index.</summary>
+    public SearchSpec? Search { get; set; }
+    /// <summary>Named theme layouts exported as build fragments without creating public content routes.</summary>
+    public TemplateExportSpec[] TemplateExports { get; set; } = Array.Empty<TemplateExportSpec>();
     /// <summary>Pagination defaults for section/taxonomy pages.</summary>
     public PaginationSpec? Pagination { get; set; }
     /// <summary>Feed generation settings for RSS outputs.</summary>

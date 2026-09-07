@@ -8,6 +8,27 @@
     "$schema": { "type": "string" },
     "SchemaVersion": { "type": "integer", "minimum": 1 },
     "Name": { "type": "string" },
+    "Search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ApiRoots": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Output-relative API documentation roots to include in site-wide search. Generate APIs before the final site build." }
+      }
+    },
+    "TemplateExports": {
+      "type": "array",
+      "description": "Render theme layouts to _powerforge/fragments/{Name}.html using existing page contexts, without creating content routes.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["Name", "SourceRoute", "Layout"],
+        "properties": {
+          "Name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "SourceRoute": { "type": "string", "minLength": 1 },
+          "Layout": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "BaseUrl": { "type": "string" },
     "Extends": {
       "oneOf": [
