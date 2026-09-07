@@ -79,8 +79,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         var selectedLocals = locals.Where(local => usedSymbols.Contains(local.Symbol.StableKey)).ToArray();
         if (selectedLocals.Any(local =>
                 local.Type.Provenance == PowerShellTypeFactProvenance.Unknown ||
-                continuationLocals is { Length: > 0 } && local.Type.Provenance == PowerShellTypeFactProvenance.NumericValueProjection ||
-                !PowerShellStableScalarTypePolicy.IsSupported(local.Type.ClrType)))
+                continuationLocals is { Length: > 0 } && local.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble ||
+                !PowerShellStableScalarTypePolicy.IsSupported(local.Type.ClrType) && local.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble))
             return false;
 
         var helperName = CreateHelperName(sourceFunction, span);

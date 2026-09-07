@@ -34,6 +34,15 @@ internal sealed partial class PowerShellSemanticBinder
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
             var type = ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
+            if (type.Provenance == PowerShellTypeFactProvenance.Unknown &&
+                UnwrapExpression(assignment.Right) is VariableExpressionAst copied &&
+                symbols.TryGetValue(copied.VariablePath.UserPath, out var copiedSymbol) &&
+                copiedSymbol.Type.Provenance != PowerShellTypeFactProvenance.Unknown)
+                type = copiedSymbol.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble
+                    ? PowerShellNumericUnionPolicy.Int32OrDouble
+                    : new PowerShellTypeFact(copiedSymbol.Type.ClrType, PowerShellTypeFactProvenance.Inferred,
+                        "A copied value preserves its known representation without inheriting the source variable's constraint.",
+                        copiedSymbol.Type.KnownProperties, copiedSymbol.Type.DictionaryValueKind);
             if (type.Provenance == PowerShellTypeFactProvenance.Inferred &&
                 PowerShellArraySemanticBinder.InferPreservedVectorType(assignment.Right,
                     variableName => symbols.TryGetValue(variableName, out var source) ? source.Type : null,
@@ -41,9 +50,8 @@ internal sealed partial class PowerShellSemanticBinder
                 type = new PowerShellTypeFact(preservedArrayType, PowerShellTypeFactProvenance.Inferred,
                     "The selected Windows PowerShell profile preserves this constrained vector through collection syntax.");
             if (type.ClrType == typeof(int) && type.Provenance == PowerShellTypeFactProvenance.Inferred &&
-                PowerShellNumericValueProjectionPolicy.CanProject(function, name, assignments))
-                type = new PowerShellTypeFact(typeof(double), PowerShellTypeFactProvenance.NumericValueProjection,
-                    "Literal Int32 additive updates have an exact Double value representation when every consumer discards the authored Int32-or-Double identity.");
+                PowerShellNumericUnionPolicy.RequiresPromotion(function, name, assignments))
+                type = PowerShellNumericUnionPolicy.Int32OrDouble;
             if (type.Provenance == PowerShellTypeFactProvenance.Unknown &&
                 TryInferNullSeededReferenceType(name, assignment, assignments, functions, capabilities, commandResolver, out var inferred))
                 type = inferred;

@@ -34,7 +34,18 @@ internal enum PowerShellBoundBinaryOperator
     BitwiseExclusiveOr,
     ShiftLeft,
     ShiftRight,
-    IntegralRemainder
+    IntegralRemainder,
+    PromotingAdd,
+    PromotingSubtract,
+    PromotingMultiply,
+    NumericUnionFloatingDivide,
+    NumericUnionFloatingRemainder,
+    NumericUnionEqual,
+    NumericUnionNotEqual,
+    NumericUnionLessThan,
+    NumericUnionLessThanOrEqual,
+    NumericUnionGreaterThan,
+    NumericUnionGreaterThanOrEqual
 }
 
 internal enum PowerShellBoundUnaryOperator

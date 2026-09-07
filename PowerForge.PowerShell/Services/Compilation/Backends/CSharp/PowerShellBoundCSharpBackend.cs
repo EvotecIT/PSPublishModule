@@ -653,6 +653,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var left = EmitExpression(expression.Left);
         var right = EmitExpression(expression.Right);
+        if (EmitNumericUnionBinary(expression, left, right) is { } numericUnion) return numericUnion;
         if (expression.Operation == PowerShellBoundBinaryOperator.IntegralRemainder)
         {
             var helper = GetIntegralArithmeticHelper(expression.ClrType, expression.ClrType,

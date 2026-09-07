@@ -264,7 +264,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>
                 statement is PowerShellLoweredIndexAssignmentStatement or PowerShellLoweredClrMemberAssignmentStatement ||
                 statement is PowerShellLoweredAssignmentStatement { Operation: not PowerShellBoundMutationOperator.Assign } assignment &&
-                    assignment.ClrType != typeof(double)))
+                    !PowerShellLoweredPrimitiveErrorPolicy.IsNonThrowingNumericMutation(assignment.ClrType, assignment.IntegralSemantics)))
             result.Add("ClrException");
         return result.Distinct(StringComparer.Ordinal).OrderBy(static item => item, StringComparer.Ordinal).ToArray();
     }

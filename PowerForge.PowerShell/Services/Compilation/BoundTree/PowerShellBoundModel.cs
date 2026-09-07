@@ -45,9 +45,8 @@ internal enum PowerShellTypeFactProvenance
     CommandContract,
     Widened,
     Unknown,
-    // Internal numeric value representation. The authored Int32-or-Double identity
-    // must be unobservable, and every consumer is checked before semantic emission.
-    NumericValueProjection
+    // A closed numeric union keeps the authored boxed CLR type through promotion.
+    Int32OrDouble
 }
 
 internal enum PowerShellDictionaryValueKind

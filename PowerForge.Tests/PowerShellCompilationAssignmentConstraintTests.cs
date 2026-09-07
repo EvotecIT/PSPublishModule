@@ -6,23 +6,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("$Value = [int]2147483647; $Value += 1; return $Value")]
-    [InlineData("$Value = [int]2147483647; $Value++; return $Value")]
-    [InlineData("$Value = [single]16777216; $Value += [single]1; return $Value")]
-    [InlineData("for ($Value = [int]2147483647; $Value -gt 0; $Value++) { }; return $Value")]
-    public void Transpile_ValueCastDoesNotConstrainLaterAssignments(string body)
+    [InlineData("$Value = [int]2147483647; $Value += 1; return $Value", true)]
+    [InlineData("$Value = [int]2147483647; $Value++; return $Value", true)]
+    [InlineData("$Value = [single]16777216; $Value += [single]1; return $Value", false)]
+    [InlineData("for ($Value = [int]2147483647; $Value -gt 0; $Value++) { }; return $Value", true)]
+    public void Transpile_ValueCastDoesNotConstrainLaterAssignments(string body, bool represented)
     {
         using var fixture = ArtifactFixture.Create("function Get-CastValue { " + body + " }", ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "CastValueMethods", "net10.0",
             PowerShellCompilationCapabilities.HybridModule);
-        Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Get-CastValue");
-        Assert.Empty(typed.PromotedRegions);
+        Assert.Equal(represented, typed.Methods.Any(method => method.SourceName == "Get-CastValue"));
+        if (!represented) Assert.Empty(typed.PromotedRegions);
     }
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Build_StrictValueCastRejectsUnrepresentedPromotion()
+    public void Build_StrictValueCastPreservesUnconstrainedPromotion()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-CastValue { $Value = [int]2147483647; $Value += 1; return $Value }", ".psm1");
@@ -30,8 +30,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "PowerForge.StrictCastAssignment",
             PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict,
             allowUnreviewedDependencyResolution: true) { TargetFramework = "net10.0" });
-        Assert.False(result.Succeeded);
-        Assert.Contains("promote dynamically", result.Error, StringComparison.Ordinal);
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.False(result.Manifest!.RequiresPowerShellRuntime);
+        var assembly = System.Reflection.Assembly.LoadFrom(result.ArtifactPath!);
+        var method = assembly.GetTypes().SelectMany(type => type.GetMethods()).Single(candidate => candidate.Name == "Get_CastValue");
+        Assert.Equal(2147483648d, Assert.IsType<double>(method.Invoke(null, null)));
     }
 
     [Theory]

@@ -91,6 +91,26 @@ internal static class PowerShellMutationSemanticBinder
         var targetType = target.Type.ClrType;
         var value = bindExpression(syntax.Right, target.Type.Provenance == PowerShellTypeFactProvenance.Unknown ? null : targetType);
         if (value is null) return null;
+        if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
+        {
+            if (syntax.Left is not VariableExpressionAst || !PowerShellNumericUnionPolicy.IsNumeric(value.Type) ||
+                operation is not (PowerShellBoundMutationOperator.Assign or PowerShellBoundMutationOperator.Add or
+                    PowerShellBoundMutationOperator.Subtract or PowerShellBoundMutationOperator.Multiply))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2413",
+                    "This unconstrained numeric local requires Int32/Double assignment or additive/multiplicative mutation; adding an authored variable constraint requires a separate constraint-transition contract.",
+                    PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+                return null;
+            }
+            target.Refine(target.Type, PowerShellValueState.Known);
+            target.SetModuleStateDerived(operation == PowerShellBoundMutationOperator.Assign
+                ? PowerShellModuleStateOriginPolicy.IsDerived(value)
+                : target.IsModuleStateDerived || PowerShellModuleStateOriginPolicy.IsDerived(value));
+            return new PowerShellBoundMutationExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
+                target.Symbol, typeof(object), operation.Value, value, target.Type, false,
+                operation == PowerShellBoundMutationOperator.Assign ? PowerShellIntegralMutationSemantics.None :
+                    PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble);
+        }
         if (value.Type.ClrType == typeof(void))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2406", "A void CLR invocation or output-free mutation cannot be assigned to a PowerShell value.", PowerShellSourceParser.GetSpan(document, syntax.Right.Extent)));
@@ -181,6 +201,15 @@ internal static class PowerShellMutationSemanticBinder
         }
         var operand = UnwrapExpression(syntax.Child) as VariableExpressionAst;
         if (operand is null || !symbols.TryGetValue(operand.VariablePath.UserPath, out var target)) return false;
+        if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
+        {
+            target.Refine(target.Type, PowerShellValueState.Known);
+            mutation = new PowerShellBoundMutationExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
+                target.Symbol, typeof(object), operation.Value, null,
+                new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "A standalone numeric increment changes the value without emitting a record."),
+                false, PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble);
+            return true;
+        }
         var boundedDecrement = PowerShellInt32RangePolicy.CanDecrement(target, operation.Value);
         if (!PowerShellCSharpOperatorPolicy.SupportsIncrement(target.Type.ClrType) ||
             target.Type.Provenance != PowerShellTypeFactProvenance.Explicit && !boundedDecrement)

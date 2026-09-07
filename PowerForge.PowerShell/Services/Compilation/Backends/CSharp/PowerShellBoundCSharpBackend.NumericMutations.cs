@@ -7,6 +7,37 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private Func<string, string> _getTemporaryIdentifier = null!;
     private readonly Dictionary<(Type, Type, PowerShellBoundMutationOperator, PowerShellIntegralMutationSemantics), (string Name, string Source)> _numericHelpers = new();
 
+    private string? EmitNumericUnionBinary(PowerShellLoweredBinaryExpression expression, string left, string right)
+    {
+        if (expression.Operation is PowerShellBoundBinaryOperator.PromotingAdd or
+            PowerShellBoundBinaryOperator.PromotingSubtract or PowerShellBoundBinaryOperator.PromotingMultiply)
+        {
+            var arithmetic = expression.Operation switch
+            {
+                PowerShellBoundBinaryOperator.PromotingAdd => PowerShellBoundMutationOperator.Add,
+                PowerShellBoundBinaryOperator.PromotingSubtract => PowerShellBoundMutationOperator.Subtract,
+                _ => PowerShellBoundMutationOperator.Multiply
+            };
+            var helper = GetIntegralArithmeticHelper(typeof(object), typeof(object), arithmetic,
+                PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble);
+            var invocation = $"{helper}({left}, {right})";
+            return expression.ClrType == typeof(double) ? $"global::System.Convert.ToDouble({invocation})" : invocation;
+        }
+        var symbol = expression.Operation switch
+        {
+            PowerShellBoundBinaryOperator.NumericUnionEqual => "==",
+            PowerShellBoundBinaryOperator.NumericUnionNotEqual => "!=",
+            PowerShellBoundBinaryOperator.NumericUnionLessThan => "<",
+            PowerShellBoundBinaryOperator.NumericUnionLessThanOrEqual => "<=",
+            PowerShellBoundBinaryOperator.NumericUnionGreaterThan => ">",
+            PowerShellBoundBinaryOperator.NumericUnionGreaterThanOrEqual => ">=",
+            PowerShellBoundBinaryOperator.NumericUnionFloatingDivide => "/",
+            PowerShellBoundBinaryOperator.NumericUnionFloatingRemainder => "%",
+            _ => null
+        };
+        return symbol is null ? null : $"(global::System.Convert.ToDouble({left}) {symbol} global::System.Convert.ToDouble({right}))";
+    }
+
     private string EmitIntegralMutation(
         string target,
         Type targetType,
@@ -60,6 +91,27 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellBoundMutationOperator.Remainder => "%",
             _ => throw new InvalidOperationException($"Unsupported typed integral update '{operation}'.")
         };
+        if (semantics == PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble)
+        {
+            return new StringBuilder()
+                .Append("            static object ").Append(name).Append("(object? ").Append(left).Append(", object? ").Append(right).AppendLine(")")
+                .AppendLine("            {")
+                .Append("                ").Append(left).AppendLine(" ??= 0;")
+                .Append("                ").Append(right).AppendLine(" ??= 0;")
+                .Append("                if (").Append(left).Append(" is int && ").Append(right).AppendLine(" is int)")
+                .AppendLine("                {")
+                .Append("                    long ").Append(result).Append(" = (long)(int)").Append(left).Append(' ').Append(symbol).Append(" (long)(int)").Append(right).AppendLine(";")
+                .Append("                    if (").Append(result).Append(" >= int.MinValue && ").Append(result).AppendLine(" <= int.MaxValue)")
+                .Append("                        return (object)(int)").Append(result).AppendLine(";")
+                .Append("                    return (double)").Append(result).AppendLine(";")
+                .AppendLine("                }")
+                .Append("                if ((").Append(left).Append(" is int || ").Append(left).Append(" is double) && (")
+                .Append(right).Append(" is int || ").Append(right).AppendLine(" is double))")
+                .Append("                    return global::System.Convert.ToDouble(").Append(left).Append(") ").Append(symbol)
+                .Append(" global::System.Convert.ToDouble(").Append(right).AppendLine(");")
+                .AppendLine("                throw new global::System.InvalidOperationException(\"The numeric value left its bound Int32/Double contract.\");")
+                .AppendLine("            }").ToString();
+        }
         // Keep ordinary constrained updates on the checked CLR fast path.
         // Decimal represents every integral operand exactly and computes signed
         // minimum remainder -1 without the CLR integral remainder overflow trap.

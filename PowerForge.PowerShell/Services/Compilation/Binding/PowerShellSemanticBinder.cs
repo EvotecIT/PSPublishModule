@@ -173,10 +173,6 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
         locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
-        var numericProjectionIsValid = PowerShellNumericValueProjectionPolicy.Validate(
-                new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent), statements.ToArray()),
-                locals, diagnostics);
-        if (!numericProjectionIsValid) bodyIsValid = false;
         // A fully bound body may still need its authored PowerShell header after cmdlet shaping.
         // Keep the ordinary terminal-region candidate so that final shaping can retain that header
         // while delegating the proven body through the same region ABI.
@@ -198,14 +194,14 @@ internal sealed partial class PowerShellSemanticBinder
                 locals,
                 authoredStatements,
                 statementBindings);
-        if (regionCandidates is not null && numericProjectionIsValid &&
+        if (regionCandidates is not null &&
             PowerShellBoundRegionCandidateSelector.TryCreateContinuation(
                 document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
                 out var continuationCandidate))
             regionCandidates[continuationCandidate.RegionId] = continuationCandidate;
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
-            if (regionCandidates is not null && numericProjectionIsValid && lastFailedStatementIndex >= 0 &&
+            if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&
                 PowerShellBoundRegionCandidateSelector.TryCreate(
                     document,
                     function,

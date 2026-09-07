@@ -363,7 +363,7 @@ internal sealed partial class PowerShellSemanticBinder
                 capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
                 expression is PowerShellBoundLiteralExpression or PowerShellBoundVariableExpression or
                     PowerShellBoundClrInvocationExpression { PreserveStatementErrors: true } &&
-                PowerShellStableScalarTypePolicy.IsSupported(expression.Type.ClrType))
+                PowerShellStableScalarTypePolicy.IsSupported(expression.Type))
                 return new PowerShellBoundStreamWriteStatement(
                     PowerShellSourceParser.GetSpan(document, statement.Extent),
                     PowerShellStreamCommandKind.Success, provider: null, expression);

@@ -5,7 +5,8 @@ internal enum PowerShellIntegralMutationSemantics
 {
     None,
     CheckedConversion,
-    PromotedBigIntegerProduct
+    PromotedBigIntegerProduct,
+    UnconstrainedInt32OrDouble
 }
 
 internal enum PowerShellBoundMutationOperator

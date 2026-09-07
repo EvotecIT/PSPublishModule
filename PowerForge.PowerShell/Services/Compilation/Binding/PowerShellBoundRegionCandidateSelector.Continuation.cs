@@ -38,7 +38,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 !locals.Any(local => local.Symbol.StableKey == assignment.Target.StableKey))
             {
                 if (functionLocals.Any(local => local.Symbol.StableKey == assignment.Target.StableKey &&
-                        local.Type.Provenance == PowerShellTypeFactProvenance.NumericValueProjection))
+                        local.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble))
                     break;
                 if (!TryCreateContinuationLocal(assignment, authoredStatements[binding.AuthoredStatementIndex], out newTransfer))
                     break;

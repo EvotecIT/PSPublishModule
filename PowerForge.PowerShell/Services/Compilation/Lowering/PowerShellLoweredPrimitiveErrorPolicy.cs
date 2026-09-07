@@ -9,8 +9,8 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
             PowerShellLoweredConversionExpression conversion => conversion.NormalizeNullString || !conversion.UsePowerShellLanguageRuntime &&
                 !conversion.UsePowerShellTruthiness && conversion.ClrType == typeof(double) &&
                 (conversion.Operand.ClrType == typeof(double) || conversion.Operand.ClrType == typeof(int)),
-            PowerShellLoweredMutationExpression mutation => mutation.TargetClrType == typeof(double) &&
-                mutation.IntegralSemantics == PowerShellIntegralMutationSemantics.None,
+            PowerShellLoweredMutationExpression mutation => mutation.Operation == PowerShellBoundMutationOperator.Assign ||
+                IsNonThrowingNumericMutation(mutation.TargetClrType, mutation.IntegralSemantics),
             PowerShellLoweredBinaryExpression binary => IsNonThrowingBinary(binary),
             PowerShellLoweredUnaryExpression unary => unary.Operand.ClrType == typeof(double) &&
                 unary.Operation is PowerShellBoundUnaryOperator.Identity or PowerShellBoundUnaryOperator.Negate ||
@@ -20,8 +20,18 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
             _ => false
         };
 
+    internal static bool IsNonThrowingNumericMutation(Type type, PowerShellIntegralMutationSemantics semantics)
+        => type == typeof(double) && semantics == PowerShellIntegralMutationSemantics.None ||
+           semantics == PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble;
+
     private static bool IsNonThrowingBinary(PowerShellLoweredBinaryExpression binary)
     {
+        if (binary.Operation is PowerShellBoundBinaryOperator.PromotingAdd or PowerShellBoundBinaryOperator.PromotingSubtract or
+            PowerShellBoundBinaryOperator.PromotingMultiply or PowerShellBoundBinaryOperator.NumericUnionFloatingDivide or
+            PowerShellBoundBinaryOperator.NumericUnionFloatingRemainder or PowerShellBoundBinaryOperator.NumericUnionEqual or
+            PowerShellBoundBinaryOperator.NumericUnionNotEqual or PowerShellBoundBinaryOperator.NumericUnionLessThan or
+            PowerShellBoundBinaryOperator.NumericUnionLessThanOrEqual or PowerShellBoundBinaryOperator.NumericUnionGreaterThan or
+            PowerShellBoundBinaryOperator.NumericUnionGreaterThanOrEqual) return true;
         if (binary.Left.ClrType == typeof(double) && binary.Right.ClrType == typeof(double))
             return binary.Operation is PowerShellBoundBinaryOperator.Add or PowerShellBoundBinaryOperator.Subtract or
                 PowerShellBoundBinaryOperator.Multiply or PowerShellBoundBinaryOperator.Divide or PowerShellBoundBinaryOperator.Remainder or

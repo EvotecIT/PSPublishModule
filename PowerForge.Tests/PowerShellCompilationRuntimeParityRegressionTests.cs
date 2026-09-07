@@ -43,10 +43,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.CheckedCompoundAssignments",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
-        {
-            EmitSource = true
-        });
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = System.Reflection.Assembly.LoadFrom(result.ArtifactPath!);
@@ -60,10 +57,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         {
             var method = assembly.GetTypes().SelectMany(static type => type.GetMethods()).Single(candidate => candidate.Name == item.Name);
             var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() => method.Invoke(null, item.Arguments));
-            Assert.IsType<OverflowException>(exception.InnerException);
+            var conversion = Assert.IsType<InvalidCastException>(exception.InnerException);
+            Assert.IsType<OverflowException>(conversion.InnerException);
         }
-        var source = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Equal(3, source.Split(new[] { "checked(" }, StringSplitOptions.None).Length - 1);
 
         var engines = new List<string> { "pwsh" };
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
@@ -75,8 +71,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
-                "$ErrorActionPreference = 'Stop'; [byte] $value = 255; [byte] $operand = 1; $value += $operand");
-            Assert.NotEqual(0, native.ExitCode);
+                "$ErrorActionPreference = 'Stop'; [byte] $value = 255; [byte] $operand = 1; try { $value += $operand; 'unexpected-success' } catch [InvalidCastException] { 'invalid-cast'; $value }");
+            Assert.Equal(0, native.ExitCode);
+            Assert.Equal("invalid-cast" + Environment.NewLine + "255", native.StandardOutput.Trim());
         }
     }
 

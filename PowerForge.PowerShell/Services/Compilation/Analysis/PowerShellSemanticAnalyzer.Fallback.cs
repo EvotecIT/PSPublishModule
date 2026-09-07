@@ -34,7 +34,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 if (EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
                         statement.Provider is null &&
                         ResolveType(statement.Message, lookup).ClrType != typeof(void) &&
-                        !PowerShellStableScalarTypePolicy.IsSupported(ResolveType(statement.Message, lookup).ClrType)))
+                        !PowerShellStableScalarTypePolicy.IsSupported(ResolveType(statement.Message, lookup))))
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
                         "control.output.enumeration",

@@ -50,7 +50,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var generated = File.ReadAllText(result.ArtifactPath!);
         Assert.Contains("function divisorCheck([double]$Number)", generated, StringComparison.Ordinal);
-        Assert.Contains("::__PowerForgeRegion_", generated, StringComparison.Ordinal);
+        if (!generated.Contains("::__PowerForgeRegion_", StringComparison.Ordinal))
+        {
+            var diagnosticPlan = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+                new[] { fixture.ScriptPath }, "PowerForge.Compiled", "NumericMethods", framework,
+                PowerShellCompilationCapabilities.HybridModule);
+            Assert.Fail(System.Text.Json.JsonSerializer.Serialize(diagnosticPlan.RegionCandidates));
+        }
         Assert.DoesNotContain("for ($divider", generated, StringComparison.Ordinal);
         const string probe = """
             foreach ($number in @(9.0,25.0,97.0,1009.0,1001.0,[double]::NaN,-1.0)) {
@@ -136,26 +142,31 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("return $counter")]
-    [InlineData("return $counter.GetType().Name")]
-    [InlineData("return [object]$counter")]
-    [InlineData("$copy = $counter; return $copy")]
-    [InlineData("return \"counter=$counter\"")]
-    [InlineData("return $counter -eq 2")]
-    [InlineData("return [Math]::Abs($counter)")]
-    [InlineData("[Console]::WriteLine('observe'); return 0.0 + $counter")]
-    [InlineData("& { $counter }; return 0.0 + $counter")]
-    [InlineData("$counter++; return 0.0 + $counter")]
-    [InlineData("$counter *= 2; return 0.0 + $counter")]
-    [InlineData("$copy = ($counter += 2); return 0.0 + $copy")]
-    public void Transpile_NumericValueProjectionRejectsIdentityAndWiderMutation(string continuation)
+    [InlineData("return $counter", true)]
+    [InlineData("return $counter.GetType().Name", true)]
+    [InlineData("return [object]$counter", true)]
+    [InlineData("$copy = $counter; return $copy", true)]
+    [InlineData("return \"counter=$counter\"", false)]
+    [InlineData("return $counter -eq 2", true)]
+    [InlineData("return [Math]::Abs($counter)", false)]
+    [InlineData("[Console]::WriteLine('observe'); return 0.0 + $counter", true)]
+    [InlineData("& { $counter }; return 0.0 + $counter", false)]
+    [InlineData("$counter++; return 0.0 + $counter", true)]
+    [InlineData("$counter *= 2; return 0.0 + $counter", true)]
+    [InlineData("$copy = ($counter += 2); return 0.0 + $copy", false)]
+    [InlineData("[int]$counter = 1; $counter += 2; return $counter", false)]
+    [InlineData("$copy=$counter; [int]$copy=1; $copy+=2; return $copy", false)]
+    public void Transpile_NumericUnionKeepsUnsupportedConsumersAtAnExplicitBoundary(string continuation, bool represented)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-Observed { $counter = 2147483646; $counter += 2; " + continuation + " }", ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().Transpile(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "NumericMethods", "net10.0");
-        Assert.Empty(typed.Methods);
-        Assert.NotEmpty(typed.Diagnostics);
-        Assert.Empty(typed.PromotedRegions);
+        Assert.Equal(represented, typed.Methods.Any());
+        if (!represented)
+        {
+            Assert.NotEmpty(typed.Diagnostics);
+            Assert.Empty(typed.PromotedRegions);
+        }
     }
 }

@@ -48,7 +48,7 @@ internal static class PowerShellRuntimeExceptionCatchPolicy
     internal static bool RequiresNumericErrorWrapping(PowerShellBoundFunction function)
         => PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
             .OfType<PowerShellBoundAssignmentStatement>()
-            .Any(static assignment => assignment.IntegralSemantics != PowerShellIntegralMutationSemantics.None ||
+            .Any(static assignment => assignment.IntegralSemantics is PowerShellIntegralMutationSemantics.CheckedConversion or PowerShellIntegralMutationSemantics.PromotedBigIntegerProduct ||
                 assignment.Operation != PowerShellBoundMutationOperator.Assign && assignment.Value.Type.ClrType == typeof(decimal)) ||
             PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
@@ -56,7 +56,7 @@ internal static class PowerShellRuntimeExceptionCatchPolicy
             .Any(static expression => expression switch
             {
                 PowerShellBoundMutationExpression mutation => mutation.Operation != PowerShellBoundMutationOperator.Assign &&
-                    (mutation.IntegralSemantics != PowerShellIntegralMutationSemantics.None || mutation.TargetClrType == typeof(decimal)),
+                    (mutation.IntegralSemantics is PowerShellIntegralMutationSemantics.CheckedConversion or PowerShellIntegralMutationSemantics.PromotedBigIntegerProduct || mutation.TargetClrType == typeof(decimal)),
                 PowerShellBoundBinaryExpression binary => binary.Operation == PowerShellBoundBinaryOperator.IntegralRemainder ||
                     binary.Type.ClrType == typeof(decimal) && binary.Operation is PowerShellBoundBinaryOperator.Add or
                         PowerShellBoundBinaryOperator.Subtract or PowerShellBoundBinaryOperator.Multiply or
