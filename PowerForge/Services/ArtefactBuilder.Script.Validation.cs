@@ -48,6 +48,29 @@ public sealed partial class ArtefactBuilder
                 "Binary-only compiled modules cannot be converted to a standalone script.");
         }
 
+        var packageSourceFiles = ResolveModulePackageSourceFiles(
+            stagingPath,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
+        if (finalizedPayloadFiles is { Count: > 0 })
+        {
+            var selectedPayload = new HashSet<string>(
+                packageSourceFiles.Select(Path.GetFullPath),
+                CreateCurrentFileSystemPathComparer());
+            if (!selectedPayload.Contains(Path.GetFullPath(manifestPath)))
+            {
+                throw new InvalidOperationException(
+                    $"The finalized module payload must include the script artefact manifest '{moduleName}.psd1'.");
+            }
+            if (!selectedPayload.Contains(Path.GetFullPath(modulePath)))
+            {
+                throw new InvalidOperationException(
+                    $"The finalized module payload must include the script root module '{expectedRootModule}'.");
+            }
+        }
+
         var manifestLoadedKeys = new List<string>();
         AddManifestLoadedKey(manifestLoadedKeys, manifestPath, "NestedModules", moduleReferences: true);
         AddManifestLoadedKey(manifestLoadedKeys, manifestPath, "RequiredAssemblies");
@@ -72,13 +95,7 @@ public sealed partial class ArtefactBuilder
         }
 
         var scriptSourcePath = Path.GetFullPath(Path.Combine(stagingPath, scriptName));
-        if (ResolveModulePackageSourceFiles(
-                stagingPath,
-                information,
-                delivery,
-                includeScriptFolders,
-                finalizedPayloadFiles)
-            .Any(sourcePath => string.Equals(
+        if (packageSourceFiles.Any(sourcePath => string.Equals(
                 Path.GetFullPath(sourcePath),
                 scriptSourcePath,
                 GetPathComparison(sourcePath, scriptSourcePath))))
@@ -283,5 +300,68 @@ public sealed partial class ArtefactBuilder
             if (File.Exists(path))
                 File.Delete(path);
         }
+    }
+
+    private static string RemoveTrailingAuthenticodeSignatureBlock(string content)
+    {
+        const string begin = "# SIG # Begin signature block";
+        const string end = "# SIG # End signature block";
+        int markerIndex = content.LastIndexOf(begin, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0 || !TryGetExactMarkerLine(content, markerIndex, begin, out var beginLineStart, out var beginLineEnd))
+            return content;
+
+        int endMarkerIndex = content.LastIndexOf(end, StringComparison.OrdinalIgnoreCase);
+        if (endMarkerIndex <= markerIndex ||
+            !TryGetExactMarkerLine(content, endMarkerIndex, end, out _, out var endLineEnd) ||
+            !string.IsNullOrWhiteSpace(content.Substring(endLineEnd)) ||
+            !ContainsOnlySignatureCommentLines(content, beginLineEnd, endMarkerIndex))
+        {
+            return content;
+        }
+
+        return content.Substring(0, beginLineStart).TrimEnd() + Environment.NewLine;
+    }
+
+    private static bool TryGetExactMarkerLine(
+        string content,
+        int markerIndex,
+        string marker,
+        out int lineStart,
+        out int lineEnd)
+    {
+        lineStart = markerIndex;
+        while (lineStart > 0 && content[lineStart - 1] != '\r' && content[lineStart - 1] != '\n')
+            lineStart--;
+
+        lineEnd = markerIndex + marker.Length;
+        while (lineEnd < content.Length && content[lineEnd] != '\r' && content[lineEnd] != '\n')
+            lineEnd++;
+
+        return string.Equals(
+            content.Substring(lineStart, lineEnd - lineStart).Trim(),
+            marker,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsOnlySignatureCommentLines(string content, int start, int end)
+    {
+        var lineStart = start;
+        while (lineStart < end)
+        {
+            while (lineStart < end && (content[lineStart] == '\r' || content[lineStart] == '\n'))
+                lineStart++;
+            if (lineStart >= end)
+                break;
+
+            var lineEnd = lineStart;
+            while (lineEnd < end && content[lineEnd] != '\r' && content[lineEnd] != '\n')
+                lineEnd++;
+            var line = content.Substring(lineStart, lineEnd - lineStart).TrimStart();
+            if (line.Length > 0 && line[0] != '#')
+                return false;
+            lineStart = lineEnd;
+        }
+
+        return true;
     }
 }

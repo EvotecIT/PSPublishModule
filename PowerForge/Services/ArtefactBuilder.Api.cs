@@ -305,7 +305,10 @@ public sealed partial class ArtefactBuilder
         if (string.IsNullOrWhiteSpace(rootModule))
             return manifestPath;
 
-        var entryPointPath = Path.GetFullPath(Path.Combine(mainModulePath, rootModule!));
+        var normalizedRootModule = rootModule!
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        var entryPointPath = Path.GetFullPath(Path.Combine(mainModulePath, normalizedRootModule));
         if (!IsSameOrBelowPath(entryPointPath, mainModulePath))
         {
             throw new InvalidOperationException(

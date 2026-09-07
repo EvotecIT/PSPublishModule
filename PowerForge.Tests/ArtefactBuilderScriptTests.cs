@@ -273,6 +273,66 @@ public sealed class ArtefactBuilderScriptTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_ScriptPreservesIncompleteSignatureMarkerInsideHereString(ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            File.WriteAllText(
+                Path.Combine(stagingRoot.FullName, moduleName + ".psm1"),
+                "$documentation = @'" + Environment.NewLine +
+                "# SIG # Begin signature block" + Environment.NewLine +
+                "This is documentation, not a signature." + Environment.NewLine +
+                "'@" + Environment.NewLine +
+                "function Invoke-DemoModule { 'preserved-after-marker' }" + Environment.NewLine +
+                "Export-ModuleMember -Function Invoke-DemoModule" + Environment.NewLine);
+
+            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).Build(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = artefactType,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = Path.Combine(root.FullName, "Artefacts", artefactType.ToString()),
+                        ScriptName = "Invoke-DemoModule.ps1",
+                        ArtefactName = "DemoModule.zip"
+                    }
+                },
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>());
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-incomplete-signature");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, "Invoke-DemoModule.ps1"));
+            Assert.Contains("# SIG # Begin signature block", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("preserved-after-marker", script, StringComparison.Ordinal);
+            System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Build_FinalizerPreservesCaseDistinctEvidencePathsOnCaseSensitiveFileSystem()
     {

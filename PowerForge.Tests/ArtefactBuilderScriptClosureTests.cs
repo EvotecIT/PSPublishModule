@@ -169,6 +169,62 @@ public sealed class ArtefactBuilderScriptClosureTests
     }
 
     [Theory]
+    [InlineData(ArtefactType.Script, true)]
+    [InlineData(ArtefactType.Script, false)]
+    [InlineData(ArtefactType.ScriptPacked, true)]
+    [InlineData(ArtefactType.ScriptPacked, false)]
+    public void Build_AuthoritativePayloadMustContainScriptInputsBeforeOutputChanges(
+        ArtefactType artefactType,
+        bool omitManifest)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "SelectedPayloadModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            string manifest = Path.Combine(stagingRoot, moduleName + ".psd1");
+            string scriptModule = Path.Combine(stagingRoot, moduleName + ".psm1");
+            File.WriteAllText(manifest, "@{ RootModule = 'SelectedPayloadModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(scriptModule, "function Invoke-SelectedPayloadModule { 'ok' }");
+
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string marker = Path.Combine(outputRoot, "existing.txt");
+            string staleRootModule = Path.Combine(outputRoot, moduleName + ".psm1");
+            File.WriteAllText(marker, "preserve");
+            File.WriteAllText(staleRootModule, "stale-output-must-not-be-used");
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, artefactType);
+            segment.Configuration.DoNotClear = true;
+            string[] selectedPayload = omitManifest ? new[] { scriptModule } : new[] { manifest };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).BuildWithFinalizer(
+                    segment,
+                    root.FullName,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    Array.Empty<RequiredModuleReference>(),
+                    finalizePackedArtefact: null,
+                    information: null,
+                    delivery: null,
+                    includeScriptFolders: true,
+                    finalizedPayloadFiles: selectedPayload));
+
+            Assert.Contains("finalized module payload", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(omitManifest ? ".psd1" : ".psm1", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(marker));
+            Assert.Equal("preserve", File.ReadAllText(marker));
+            Assert.Equal("stale-output-must-not-be-used", File.ReadAllText(staleRootModule));
+            Assert.False(File.Exists(Path.Combine(outputRoot, moduleName + ".ps1")));
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]
     public void Build_ExistingModuleParamBlockRejectsPreScriptInjectionBeforeOutputChanges(ArtefactType artefactType)

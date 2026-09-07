@@ -147,6 +147,57 @@ public sealed class ArtefactBuilderLayoutTests
         }
     }
 
+    [Fact]
+    public void Build_PackedFinalizerResolvesWindowsStyleNestedRootModuleOnEveryPlatform()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PortableModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            var nestedRoot = Directory.CreateDirectory(Path.Combine(stagingRoot.FullName, "bin"));
+            File.WriteAllText(
+                Path.Combine(stagingRoot.FullName, moduleName + ".psd1"),
+                "@{ RootModule = '.\\bin\\PortableModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(nestedRoot.FullName, moduleName + ".psm1"), "function Get-Test { 'ok' }");
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", "Packed");
+            string? observedEntryPoint = null;
+
+            _ = new ArtefactBuilder(new NullLogger()).BuildWithFinalizer(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Packed,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = outputRoot,
+                        ArtefactName = "PortableModule.zip"
+                    }
+                },
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>(),
+                finalizePackedArtefact: context =>
+                {
+                    observedEntryPoint = context.EntryPointPath;
+                    Assert.True(File.Exists(context.EntryPointPath));
+                    return Array.Empty<string>();
+                },
+                information: new InformationConfiguration { IncludeAll = new[] { "bin" } });
+
+            Assert.NotNull(observedEntryPoint);
+            Assert.Equal("bin", new DirectoryInfo(Path.GetDirectoryName(observedEntryPoint)!).Name);
+            Assert.Equal(moduleName + ".psm1", Path.GetFileName(observedEntryPoint));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData(ArtefactType.Unpacked)]
     [InlineData(ArtefactType.Packed)]
