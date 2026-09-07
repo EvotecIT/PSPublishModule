@@ -57,6 +57,7 @@ internal sealed partial class PowerShellSemanticBinder
                     PowerShellBoundArrayKind.Literal,
                     contextualType,
                     (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType, targetFramework, capabilities),
+                    _semanticProfile,
                     diagnostics);
             case ArrayExpressionAst array:
             {
@@ -78,6 +79,7 @@ internal sealed partial class PowerShellSemanticBinder
                     PowerShellBoundArrayKind.CollectedExpression,
                     contextualType,
                     (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType, targetFramework, capabilities),
+                    _semanticProfile,
                     diagnostics);
             }
             case HashtableAst hashtable:

@@ -3,7 +3,8 @@ namespace PowerForge;
 internal enum PowerShellBoundArrayKind
 {
     Literal,
-    CollectedExpression
+    CollectedExpression,
+    SharedEmptyCollection
 }
 
 internal sealed class PowerShellBoundArrayExpression : PowerShellBoundExpression
@@ -20,6 +21,9 @@ internal sealed class PowerShellBoundArrayExpression : PowerShellBoundExpression
             elements?.Aggregate(PowerShellSemanticEffect.None, static (effects, element) => effects | element.Effects) ?? PowerShellSemanticEffect.None,
             elements?.Aggregate(PowerShellRequiredCapability.None, static (capabilities, element) => capabilities | element.Capabilities) ?? PowerShellRequiredCapability.None)
     {
+        if (kind == PowerShellBoundArrayKind.SharedEmptyCollection &&
+            (arrayType != typeof(object[]) || elements is not { Length: 0 }))
+            throw new ArgumentException("Shared empty collection storage requires an empty Object array.");
         Kind = kind;
         Elements = elements;
     }

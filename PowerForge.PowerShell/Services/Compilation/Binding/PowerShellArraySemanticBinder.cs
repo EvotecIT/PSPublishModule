@@ -14,6 +14,7 @@ internal static class PowerShellArraySemanticBinder
         PowerShellBoundArrayKind kind,
         Type? contextualType,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationSemanticOracleProfile semanticProfile,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var arrayType = contextualType is { IsArray: true } && contextualType.GetArrayRank() == 1
@@ -52,7 +53,15 @@ internal static class PowerShellArraySemanticBinder
             }
             elements.Add(element);
         }
-        return new PowerShellBoundArrayExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent), arrayType, kind, elements.ToArray());
+        // An empty authored @() allocates, but collecting an expression with no
+        // records uses the PowerShell 7 shared Object[] result. Typed destinations
+        // still allocate their converted array; Windows PowerShell always allocates.
+        var resultKind = kind == PowerShellBoundArrayKind.CollectedExpression &&
+                         elementSyntax.Count != 0 && elements.Count == 0 && arrayType == typeof(object[]) &&
+                         semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7
+            ? PowerShellBoundArrayKind.SharedEmptyCollection
+            : kind;
+        return new PowerShellBoundArrayExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent), arrayType, resultKind, elements.ToArray());
 
         PowerShellBoundExpression? BindElement(PowerShellBoundExpression element)
         {

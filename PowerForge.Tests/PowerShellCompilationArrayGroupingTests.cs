@@ -67,13 +67,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Get-WrappedNull { $Values = @(,$null); return ,$Values }
             function Get-Wrapped { [CmdletBinding()] param([object]$Value) $Values = @(,$Value); return ,$Values }
             function Get-Pair { [CmdletBinding()] param([object]$Value) $Values = @($Value,$Value); return ,$Values }
+            function Test-EmptyCollectedIdentity { $First = @(@()); $Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyDeepIdentity { $First = @(@(@())); $Second = @(@(@())); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyObjectIdentity { [object[]]$First = @(@()); [object[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyIntIdentity { [int[]]$First = @(@()); [int[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyStringIdentity { [string[]]$First = @(@()); [string[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyLiteralIdentity { $First = @(); $Second = @(); return [object]::ReferenceEquals($First,$Second) }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "PowerForge.ArrayGrouping",
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(10, result.Manifest!.CompiledMethods);
+        Assert.Equal(16, result.Manifest!.CompiledMethods);
         const string probe = """
             Add-Type -TypeDefinition 'using System;using System.Collections;public class ForbiddenEnumeration:IEnumerable { public IEnumerator GetEnumerator(){throw new InvalidOperationException("must-not-enumerate");} }'
             function Describe($Value) {
@@ -90,6 +96,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 $pair = Get-Pair $value
                 'wrapped:{0}:{1}:pair:{2}:{3}:{4}' -f $wrapped.Length,[object]::ReferenceEquals($wrapped[0],$value),$pair.Length,[object]::ReferenceEquals($pair[0],$value),[object]::ReferenceEquals($pair[1],$value)
             }
+            foreach ($command in 'Test-EmptyCollectedIdentity','Test-EmptyDeepIdentity','Test-EmptyObjectIdentity','Test-EmptyIntIdentity','Test-EmptyStringIdentity','Test-EmptyLiteralIdentity') {
+                'identity:{0}:{1}' -f $command,(& $command)
+            }
             """;
         var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
@@ -102,6 +111,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("Get-Typed:1:Int32[][Int32:1;Int32:2;Int32:3]", original.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("Get-WrappedNull:1:Object[][null]", original.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("wrapped:1:True:pair:2:True:True", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("identity:Test-EmptyCollectedIdentity:" + (framework == "net472" ? "False" : "True"), original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("identity:Test-EmptyIntIdentity:False", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("identity:Test-EmptyStringIdentity:False", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("identity:Test-EmptyLiteralIdentity:False", original.StandardOutput, StringComparison.Ordinal);
         Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
             (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
     }
