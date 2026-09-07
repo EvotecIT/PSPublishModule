@@ -208,15 +208,15 @@ public sealed partial class ModulePipelineRunner
             if (artefact.ArtefactType is not (ArtefactType.Unpacked or ArtefactType.Script))
                 continue;
 
+            var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
+                cfg,
+                outputRoot,
+                moduleName,
+                moduleVersion,
+                preRelease);
+
             if (cfg.RequiredModules.Enabled == true)
             {
-                var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
-                    cfg,
-                    outputRoot,
-                    moduleName,
-                    moduleVersion,
-                    preRelease);
-
                 AddPathOverlapConflict(
                     conflicts,
                     warnedScopes,
@@ -229,14 +229,7 @@ public sealed partial class ModulePipelineRunner
             var modulesRoot = ArtefactLayoutPathResolver.ResolveModulesRootForUnpacked(
                 cfg,
                 outputRoot,
-                cfg.RequiredModules.Enabled == true
-                    ? ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
-                        cfg,
-                        outputRoot,
-                        moduleName,
-                        moduleVersion,
-                        preRelease)
-                    : outputRoot,
+                requiredModulesRoot,
                 moduleName,
                 moduleVersion,
                 preRelease);

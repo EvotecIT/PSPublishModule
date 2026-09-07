@@ -237,6 +237,39 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Unpacked)]
+    [InlineData(ArtefactType.Script)]
+    public void Plan_DisabledRequiredModulesAbsolutePathUsedAsMainModuleRootOverlappingDelivery_FailsFast(
+        ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string deliveryRoot = Path.Combine(root.FullName, "Internals");
+            var runner = new ModulePipelineRunner(new NullLogger());
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Plan(CreateSpec(
+                root.FullName,
+                moduleName,
+                deliveryInternalsPath: "Internals",
+                artefactPath: Path.Combine("Artefacts", artefactType.ToString()),
+                requiredModulesPath: deliveryRoot,
+                requiredModulesEnabled: false,
+                artefactType: artefactType)));
+
+            Assert.Contains("Delivery configuration is unsafe", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"module copy root for '{artefactType}'", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(deliveryRoot, ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec CreateSpec(
         string root,
         string moduleName,
