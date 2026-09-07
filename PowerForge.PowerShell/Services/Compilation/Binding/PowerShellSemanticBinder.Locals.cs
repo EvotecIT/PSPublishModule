@@ -4,7 +4,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
-    private static PowerShellBoundLocal[] DeclareLocals(
+    private PowerShellBoundLocal[] DeclareLocals(
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
         IDictionary<string, PowerShellSemanticSymbolBinding> symbols,
@@ -34,6 +34,12 @@ internal sealed partial class PowerShellSemanticBinder
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
             var type = ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
+            if (type.Provenance == PowerShellTypeFactProvenance.Inferred &&
+                PowerShellArraySemanticBinder.InferPreservedVectorType(assignment.Right,
+                    variableName => symbols.TryGetValue(variableName, out var source) ? source.Type : null,
+                    _semanticProfile) is { } preservedArrayType)
+                type = new PowerShellTypeFact(preservedArrayType, PowerShellTypeFactProvenance.Inferred,
+                    "The selected Windows PowerShell profile preserves this constrained vector through collection syntax.");
             if (type.ClrType == typeof(int) && type.Provenance == PowerShellTypeFactProvenance.Inferred &&
                 PowerShellNumericValueProjectionPolicy.CanProject(function, name, assignments))
                 type = new PowerShellTypeFact(typeof(double), PowerShellTypeFactProvenance.NumericValueProjection,

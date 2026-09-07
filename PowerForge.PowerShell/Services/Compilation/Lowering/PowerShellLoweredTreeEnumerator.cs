@@ -176,6 +176,9 @@ internal static class PowerShellLoweredTreeEnumerator
             case PowerShellLoweredArrayExpression array:
                 foreach (var element in array.Elements) yield return element;
                 break;
+            case PowerShellLoweredArrayCopyExpression copy:
+                yield return copy.Source;
+                break;
             case PowerShellLoweredArrayConcatenationExpression concatenation:
                 yield return concatenation.Left;
                 yield return concatenation.Right;

@@ -633,6 +633,9 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(concatenation.Left, functions, names, targetCapabilities),
                 LowerExpression(concatenation.Right, functions, names, targetCapabilities),
                 concatenation.EnumerateRight),
+            PowerShellBoundArrayCopyExpression copy => new PowerShellLoweredArrayCopyExpression(copy.Span,
+                LowerExpression(copy.Source, functions, names, targetCapabilities), copy.ShareEmptyResult,
+                names.Allocate("pf_copy_source"), names.Allocate("pf_copy_result"), names.Allocate("pf_copy_index")),
             PowerShellBoundDictionaryExpression dictionary => new PowerShellLoweredDictionaryExpression(
                 dictionary.Span,
                 dictionary.Type.ClrType,

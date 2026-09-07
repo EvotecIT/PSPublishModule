@@ -59,11 +59,6 @@ internal sealed class PowerShellParameterPrologueRenderer
             var identifier = PowerShellClrSymbolMapper.MapIdentifier(parameter.Name);
             AppendLine($"{identifier} = {identifier} ?? string.Empty;");
         }
-        foreach (var parameter in parameters.Where(static parameter => parameter.ClrType == typeof(string[])))
-        {
-            var identifier = PowerShellClrSymbolMapper.MapIdentifier(parameter.Name);
-            AppendLine($"{identifier} = {identifier} is null ? null! : global::System.Linq.Enumerable.Select({identifier}, static value => value ?? string.Empty).ToArray();");
-        }
     }
 
     private void RenderValidations(IReadOnlyList<PowerShellParameterEmissionContract> parameters)

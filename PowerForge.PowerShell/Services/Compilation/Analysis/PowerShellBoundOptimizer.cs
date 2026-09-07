@@ -183,6 +183,8 @@ internal sealed class PowerShellBoundOptimizer
                 mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString, mutation.IntegralSemantics);
         if (expression is PowerShellBoundArrayExpression array)
             return new PowerShellBoundArrayExpression(array.Span, array.Type.ClrType, array.Kind, array.Elements.Select(OptimizeExpression).ToArray());
+        if (expression is PowerShellBoundArrayCopyExpression copy)
+            return new PowerShellBoundArrayCopyExpression(copy.Span, OptimizeExpression(copy.Source), copy.ShareEmptyResult);
         return expression;
     }
 

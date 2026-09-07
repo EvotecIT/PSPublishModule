@@ -27,6 +27,18 @@ internal static class PowerShellArraySemanticBinder
         {
             var element = bindExpression(item, elementType);
             if (element is null) return null;
+            if (kind == PowerShellBoundArrayKind.CollectedExpression &&
+                elementSyntax.Count == 1 && element is PowerShellBoundVariableExpression or PowerShellBoundArrayCopyExpression &&
+                element.Type.ClrType.IsArray && element.Type.ClrType.GetArrayRank() == 1 &&
+                element.Type.ClrType == element.Type.ClrType.GetElementType()!.MakeArrayType())
+            {
+                if (semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
+                    element is PowerShellBoundVariableExpression && element.Type.Provenance == PowerShellTypeFactProvenance.Explicit)
+                    return element;
+                if (arrayType == typeof(object[]))
+                    return new PowerShellBoundArrayCopyExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent), element,
+                        semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7);
+            }
             if (kind == PowerShellBoundArrayKind.CollectedExpression && element is PowerShellBoundArrayExpression array)
             {
                 // A command expression enumerates its result exactly once. The values
@@ -79,6 +91,32 @@ internal static class PowerShellArraySemanticBinder
                 return null;
             }
             return element;
+        }
+    }
+
+    /// <summary>Infers Windows PowerShell's typed-vector pass-through before local storage is declared.</summary>
+    internal static Type? InferPreservedVectorType(Ast syntax, Func<string, PowerShellTypeFact?> findType,
+        PowerShellCompilationSemanticOracleProfile semanticProfile)
+    {
+        if (semanticProfile.Family != PowerShellCompilationSemanticHostFamily.WindowsPowerShell51) return null;
+        var collected = false;
+        while (true)
+        {
+            switch (syntax)
+            {
+                case StatementBlockAst { Statements.Count: 1 } block: syntax = block.Statements[0]; continue;
+                case PipelineAst { PipelineElements.Count: 1 } pipeline: syntax = pipeline.PipelineElements[0]; continue;
+                case CommandExpressionAst command: syntax = command.Expression; continue;
+                case ParenExpressionAst parentheses: syntax = parentheses.Pipeline; continue;
+                case ArrayExpressionAst { SubExpression.Statements.Count: 1 } array:
+                    collected = true; syntax = array.SubExpression.Statements[0]; continue;
+                case VariableExpressionAst variable when collected:
+                    var type = findType(variable.VariablePath.UserPath);
+                    return type is { Provenance: PowerShellTypeFactProvenance.Explicit } && type.ClrType.IsArray &&
+                           type.ClrType.GetArrayRank() == 1 && type.ClrType == type.ClrType.GetElementType()!.MakeArrayType()
+                        ? type.ClrType : null;
+                default: return null;
+            }
         }
     }
 }

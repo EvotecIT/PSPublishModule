@@ -359,6 +359,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.NormalizeNullString,
                 mutation.IntegralSemantics),
             PowerShellLoweredArrayExpression array => EmitArray(array),
+            PowerShellLoweredArrayCopyExpression copy => EmitArrayCopy(copy),
             PowerShellLoweredArrayConcatenationExpression concatenation => EmitArrayConcatenation(concatenation),
             PowerShellLoweredDictionaryExpression dictionary => EmitDictionary(dictionary),
             PowerShellLoweredPowerShellObjectExpression powerShellObject => EmitPowerShellObject(powerShellObject),
