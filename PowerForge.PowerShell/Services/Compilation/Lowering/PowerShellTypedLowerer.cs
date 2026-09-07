@@ -249,6 +249,11 @@ internal sealed partial class PowerShellTypedLowerer
     {
         foreach (var statement in block.Statements)
         {
+            if (statement is PowerShellBoundOutputCaptureStatement capture)
+            {
+                yield return (capture.Target.StableKey, capture.Span.StartOffset);
+                foreach (var assignment in EnumerateAssignments(capture.Body)) yield return assignment;
+            }
             if (statement is PowerShellBoundStatementErrorBoundary boundary)
             {
                 foreach (var assignment in EnumerateAssignments(boundary.Body)) yield return assignment;
@@ -305,6 +310,11 @@ internal sealed partial class PowerShellTypedLowerer
     {
         foreach (var statement in block.Statements)
         {
+            if (statement is PowerShellBoundOutputCaptureStatement capture)
+            {
+                yield return (capture.Target.StableKey, capture.Span.StartOffset);
+                foreach (var nested in EnumerateAssignments(capture.Body)) yield return nested;
+            }
             if (statement is PowerShellBoundAssignmentStatement assignment) yield return (assignment.Target.StableKey, assignment.Span.StartOffset);
             if (statement is PowerShellBoundStatementErrorBoundary boundary)
             {
@@ -366,6 +376,10 @@ internal sealed partial class PowerShellTypedLowerer
         PowerShellCompilationCapability targetCapabilities)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement capture => new PowerShellLoweredOutputCaptureStatement(
+                capture.Span, capture.Target,
+                LowerStatements(capture.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
+                names.Allocate("pf_captured_records"), names.Allocate("pf_previous_output")),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellLoweredStatementErrorBoundary(
                 boundary.Span, LowerStatements(boundary.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error")),
@@ -412,7 +426,8 @@ internal sealed partial class PowerShellTypedLowerer
                 stream.Span,
                 stream.Kind,
                 stream.Provider,
-                LowerExpression(stream.Message, functions, names, targetCapabilities)),
+                LowerExpression(stream.Message, functions, names, targetCapabilities),
+                stream.Provider is null && stream.Message is PowerShellBoundArrayExpression),
             PowerShellBoundCommandRegionStatement region => new PowerShellLoweredCommandRegionStatement(
                 region.Span,
                 region.HostedFallbackSource,

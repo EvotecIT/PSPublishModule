@@ -6,7 +6,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("return 1,2")]
     [InlineData("return Get-Array")]
     public void Transpile_RetainsUnqualifiedEnumerationAfterImplicitOutput(string ending)
     {

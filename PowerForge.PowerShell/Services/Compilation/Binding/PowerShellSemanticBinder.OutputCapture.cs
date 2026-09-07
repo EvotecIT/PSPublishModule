@@ -1,0 +1,53 @@
+using System.Management.Automation.Language;
+
+namespace PowerForge;
+
+internal sealed partial class PowerShellSemanticBinder
+{
+    private PowerShellBoundStatement? BindOutputCapture(ParsedSourceDocument document, AssignmentStatementAst assignment,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics, string? targetFramework, PowerShellCompilationCapability capabilities)
+    {
+        var span = PowerShellSourceParser.GetSpan(document, assignment.Extent);
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
+            !capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) ||
+            assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst variable ||
+            IsRuntimeOwnedScope(variable.VariablePath.UserPath) ||
+            !symbols.TryGetValue(variable.VariablePath.UserPath, out var target) ||
+            target.Type.Provenance != PowerShellTypeFactProvenance.Unknown && target.Type.ClrType != typeof(object) ||
+            target.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Int32OrDouble)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2930",
+                "Captured statement output requires an unconstrained local and a qualified command success-stream host.", span));
+            return null;
+        }
+        if (assignment.Right.FindAll(static node => node is ReturnStatementAst, false).Any())
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2931",
+                "A return inside captured statement output requires an explicit enclosing-function transfer contract.", span));
+            return null;
+        }
+        var body = BindStatement(document, assignment.Right, symbols, functions, diagnostics, false, targetFramework, capabilities);
+        if (body is null) return null;
+        if (body.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2932",
+                "Captured statement output cannot yet redirect hosted command-region records into its collector.", span));
+            return null;
+        }
+        if (body.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2934",
+                "Captured statement failures require qualification of partial output and assignment continuation.", span));
+            return null;
+        }
+        target.Refine(new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred,
+            "Captured success output collapses to null, a single record, or an Object array."), PowerShellValueState.Unknown);
+        target.SetModuleStateDerived(target.IsModuleStateDerived ||
+            PowerShellSemanticAnalyzer.EnumerateStatements(new PowerShellBoundBlock(body.Span, new[] { body }))
+                .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+                .Any(PowerShellModuleStateOriginPolicy.IsDerived));
+        return new PowerShellBoundOutputCaptureStatement(span, target.Symbol, new PowerShellBoundBlock(body.Span, new[] { body }));
+    }
+}

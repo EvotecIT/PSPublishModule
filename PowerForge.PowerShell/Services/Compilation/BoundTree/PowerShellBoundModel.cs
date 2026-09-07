@@ -584,13 +584,15 @@ internal sealed class PowerShellBoundProgram
         PowerShellBoundFunction[] functions,
         PowerShellSemanticDiagnostic[] diagnostics,
         PowerShellCallGraphEdge[]? callGraph = null,
-        PowerShellCompilationCapability targetCapabilities = PowerShellCompilationCapability.None)
+        PowerShellCompilationCapability targetCapabilities = PowerShellCompilationCapability.None,
+        PowerShellCompilationSemanticHostFamily semanticHostFamily = PowerShellCompilationSemanticHostFamily.PowerShell7)
     {
         Documents = documents ?? Array.Empty<PowerShellBoundSourceDocument>();
         Functions = functions ?? Array.Empty<PowerShellBoundFunction>();
         Diagnostics = diagnostics ?? Array.Empty<PowerShellSemanticDiagnostic>();
         CallGraph = callGraph ?? Array.Empty<PowerShellCallGraphEdge>();
         TargetCapabilities = targetCapabilities;
+        SemanticHostFamily = semanticHostFamily;
     }
 
     internal PowerShellImmutableArray<PowerShellBoundSourceDocument> Documents { get; }
@@ -599,11 +601,12 @@ internal sealed class PowerShellBoundProgram
     internal PowerShellImmutableArray<PowerShellCallGraphEdge> CallGraph { get; }
     /// <summary>The selected artifact host contract, separate from capabilities required by authored operations.</summary>
     internal PowerShellCompilationCapability TargetCapabilities { get; }
-    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents.ToArray(), functions, Diagnostics.ToArray(), CallGraph.ToArray(), TargetCapabilities);
-    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents.ToArray(), Functions.ToArray(), diagnostics, CallGraph.ToArray(), TargetCapabilities);
-    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents.ToArray(), Functions.ToArray(), Diagnostics.ToArray(), callGraph, TargetCapabilities);
+    internal PowerShellCompilationSemanticHostFamily SemanticHostFamily { get; }
+    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents.ToArray(), functions, Diagnostics.ToArray(), CallGraph.ToArray(), TargetCapabilities, SemanticHostFamily);
+    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents.ToArray(), Functions.ToArray(), diagnostics, CallGraph.ToArray(), TargetCapabilities, SemanticHostFamily);
+    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents.ToArray(), Functions.ToArray(), Diagnostics.ToArray(), callGraph, TargetCapabilities, SemanticHostFamily);
     internal PowerShellBoundProgram WithAnalysis(PowerShellBoundFunction[] functions, PowerShellSemanticDiagnostic[] diagnostics)
-        => new(Documents.ToArray(), functions, diagnostics, CallGraph.ToArray(), TargetCapabilities);
+        => new(Documents.ToArray(), functions, diagnostics, CallGraph.ToArray(), TargetCapabilities, SemanticHostFamily);
 }
 
 internal sealed class PowerShellCallGraphEdge

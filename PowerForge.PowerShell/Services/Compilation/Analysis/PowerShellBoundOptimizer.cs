@@ -92,6 +92,8 @@ internal sealed class PowerShellBoundOptimizer
     private PowerShellBoundStatement OptimizeStatement(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
+                capture.Span, capture.Target, OptimizeBlock(capture.Body)),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
                 OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText),
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(

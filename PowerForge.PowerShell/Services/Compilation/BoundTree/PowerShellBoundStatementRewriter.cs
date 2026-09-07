@@ -6,6 +6,8 @@ internal static class PowerShellBoundStatementRewriter
     internal static PowerShellBoundStatement RewriteNestedBlocks(PowerShellBoundStatement statement, Func<PowerShellBoundBlock, PowerShellBoundBlock> rewriteBlock)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
+                capture.Span, capture.Target, rewriteBlock(capture.Body)),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
                 rewriteBlock(boundary.Body), boundary.SourcePath, boundary.SourceText),
             PowerShellBoundIfStatement conditional => new PowerShellBoundIfStatement(

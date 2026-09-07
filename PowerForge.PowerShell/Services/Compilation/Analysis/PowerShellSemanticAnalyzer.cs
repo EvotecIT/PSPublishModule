@@ -329,6 +329,10 @@ internal sealed partial class PowerShellSemanticAnalyzer
         foreach (var statement in block.Statements)
         {
             yield return statement;
+            if (statement is PowerShellBoundOutputCaptureStatement capture)
+            {
+                foreach (var nested in EnumerateStatements(capture.Body)) yield return nested;
+            }
             if (statement is PowerShellBoundStatementErrorBoundary boundary)
             {
                 foreach (var nested in EnumerateStatements(boundary.Body)) yield return nested;

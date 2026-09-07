@@ -191,7 +191,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.RequiresPowerShellStreams)
             arguments = arguments.Concat(new[]
             {
-                "value => WriteObject(value, enumerateCollection: true)",
+                "value => WriteObject(value, enumerateCollection: false)",
                 "WriteVerbose",
                 "WriteDebug",
                 "WriteWarning",

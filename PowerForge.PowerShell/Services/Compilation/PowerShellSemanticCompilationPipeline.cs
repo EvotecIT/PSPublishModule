@@ -56,7 +56,7 @@ internal sealed class PowerShellSemanticCompilationPipeline
         var analyzed = _analyzer.Analyze(optimized.Program);
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
-        var regions = CompileRegions(binding.RegionCandidates, bound.Documents, capabilities);
+        var regions = CompileRegions(binding.RegionCandidates, bound.Documents, capabilities, bound.SemanticHostFamily);
         var regionOpportunities = new PowerShellBoundRegionOpportunityAnalyzer(_optimizer, _analyzer, _lowerer).Analyze(
             binding.RegionOpportunities,
             bound,
@@ -76,13 +76,14 @@ internal sealed class PowerShellSemanticCompilationPipeline
     private PowerShellRegionCompilationResult CompileRegions(
         IReadOnlyList<PowerShellBoundRegionCandidate> candidates,
         IReadOnlyList<PowerShellBoundSourceDocument> documents,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        PowerShellCompilationSemanticHostFamily semanticHostFamily)
     {
         if (candidates.Count == 0) return PowerShellRegionCompilationResult.Empty;
         var candidateProgram = new PowerShellBoundProgram(
             documents.ToArray(),
             candidates.Select(static candidate => candidate.RegionFunction).ToArray(),
-            Array.Empty<PowerShellSemanticDiagnostic>(), targetCapabilities: capabilities);
+            Array.Empty<PowerShellSemanticDiagnostic>(), targetCapabilities: capabilities, semanticHostFamily: semanticHostFamily);
         var optimized = _optimizer.Optimize(candidateProgram);
         var analyzed = _analyzer.Analyze(optimized.Program);
         var lowered = _lowerer.Lower(analyzed, capabilities);

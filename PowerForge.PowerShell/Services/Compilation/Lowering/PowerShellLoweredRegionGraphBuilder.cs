@@ -176,6 +176,9 @@ internal static class PowerShellLoweredRegionGraphBuilder
                     foreach (var argument in capture.Arguments)
                         RecordFirst(readOffsets, Symbol(argument.Symbol), statement.Span.StartOffset);
                     break;
+                case PowerShellLoweredOutputCaptureStatement capture:
+                    RecordFirst(writeOffsets, Symbol(capture.Target), statement.Span.EndOffset);
+                    break;
                 case PowerShellLoweredCommandRegionStatement region:
                     foreach (var argument in region.Arguments)
                         RecordFirst(readOffsets, Symbol(argument.Symbol), statement.Span.StartOffset);

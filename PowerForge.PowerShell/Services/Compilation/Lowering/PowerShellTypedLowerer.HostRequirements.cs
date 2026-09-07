@@ -92,6 +92,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool StatementContainsCooperativeProvider(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement capture => ContainsCooperativeProvider(capture.Body),
             PowerShellBoundStatementErrorBoundary boundary => ContainsCooperativeProvider(boundary.Body),
             PowerShellBoundStreamWriteStatement stream =>
                 stream.Provider?.Adapter.Cancellation is
@@ -114,6 +115,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool StatementContainsPowerShellStreamWrite(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement => true,
             PowerShellBoundStatementErrorBoundary boundary => ContainsPowerShellStreamWrite(boundary.Body),
             PowerShellBoundStreamWriteStatement => true,
             PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ContainsPowerShellStreamWrite(clause.Body)) ||

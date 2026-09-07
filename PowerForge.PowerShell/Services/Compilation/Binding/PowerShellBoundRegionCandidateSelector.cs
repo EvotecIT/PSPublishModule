@@ -166,6 +166,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         {
             if (statement is PowerShellBoundAssignmentStatement assignment) keys.Add(assignment.Target.StableKey);
             if (statement is PowerShellBoundCommandCaptureStatement capture) keys.Add(capture.Target.StableKey);
+            if (statement is PowerShellBoundOutputCaptureStatement outputCapture) keys.Add(outputCapture.Target.StableKey);
             if (statement is PowerShellBoundForEachStatement forEach) keys.Add(forEach.Variable.StableKey);
             if (statement is PowerShellBoundForStatement { Initializer: not null } forLoop) keys.Add(forLoop.Initializer.Target.StableKey);
         }

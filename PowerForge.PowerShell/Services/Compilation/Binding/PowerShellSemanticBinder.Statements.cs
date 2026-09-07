@@ -52,6 +52,8 @@ internal sealed partial class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
+            if (assignment.Right is ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
+                return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
                     assignment,
                     capabilities,
@@ -371,9 +373,10 @@ internal sealed partial class PowerShellSemanticBinder
             if (!isTerminal && !allowNonTerminalSuccessOutput && emitsOutput &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
-                expression is PowerShellBoundLiteralExpression or PowerShellBoundVariableExpression or
+                (expression is PowerShellBoundArrayExpression ||
+                 expression is PowerShellBoundLiteralExpression or PowerShellBoundVariableExpression or
                     PowerShellBoundClrInvocationExpression { PreserveStatementErrors: true } &&
-                PowerShellStableScalarTypePolicy.IsSupported(expression.Type))
+                 PowerShellStableScalarTypePolicy.IsSupported(expression.Type)))
                 return new PowerShellBoundStreamWriteStatement(
                     PowerShellSourceParser.GetSpan(document, statement.Extent),
                     PowerShellStreamCommandKind.Success, provider: null, expression);

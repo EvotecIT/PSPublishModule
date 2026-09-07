@@ -130,7 +130,7 @@ internal sealed partial class PowerShellSemanticBinder
         var program = new PowerShellBoundProgram(
             boundDocuments,
             functions.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
-            OrderDiagnostics(diagnostics), targetCapabilities: capabilities);
+            OrderDiagnostics(diagnostics), targetCapabilities: capabilities, semanticHostFamily: _semanticProfile.Family);
         return new PowerShellSemanticBindingResult(
             program,
             regionCandidates.Values

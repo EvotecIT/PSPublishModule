@@ -180,6 +180,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var prefix = new string(' ', indent * 4);
         switch (statement)
         {
+            case PowerShellLoweredOutputCaptureStatement capture:
+                EmitOutputCapture(builder, capture, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                return;
             case PowerShellLoweredLocalDeclarationStatement declaration:
                 builder.Append(prefix).Append(PowerShellCSharpSymbolRenderer.TypeName(declaration.ClrType)).Append(' ')
                     .Append(PowerShellCSharpSymbolRenderer.Identifier(declaration.Symbol.Name)).AppendLine(" = default!;");

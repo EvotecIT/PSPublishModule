@@ -33,12 +33,31 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 }
                 if (EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
                         statement.Provider is null &&
+                        statement.Message is not PowerShellBoundArrayExpression &&
                         ResolveType(statement.Message, lookup).ClrType != typeof(void) &&
                         !PowerShellStableScalarTypePolicy.IsSupported(ResolveType(statement.Message, lookup))))
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
                         "control.output.enumeration",
                         "Implicit streamed output currently requires stable scalar records; wider enumeration and failure continuation remain on the PowerShell path."));
+                if (program.SemanticHostFamily == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
+                    EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
+                        statement.Provider is null && statement.Message is PowerShellBoundArrayExpression array &&
+                        array.Elements.Any(element => element is not PowerShellBoundLiteralExpression { Value: null } &&
+                            !PowerShellStableScalarTypePolicy.IsSupported(element.Type))))
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.output.ps51-record-wrapper",
+                        "Windows PowerShell collection-valued command records require the original wrapper identity to preserve serialization."));
+                if (EnumerateStatements(function.Body).OfType<PowerShellBoundOutputCaptureStatement>().Any(capture =>
+                    EnumerateStatements(capture.Body).SelectMany(EnumerateDirectExpressions).SelectMany(EnumerateInvocations)
+                        .Any(invocation => lookup.TryGetValue(invocation.Target.StableKey, out var target) &&
+                            (target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
+                             target.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors)))))
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.capture.hosted-call",
+                        "A captured local call requires qualified hosted-region routing and statement-error continuation."));
                 if (EnumerateStatements(function.Body).OfType<PowerShellBoundTryStatement>().Any(statement =>
                         statement.FinallyBlock is not null &&
                         BlockHasEffect(statement.FinallyBlock, PowerShellSemanticEffect.NonSuccessStream, lookup) &&

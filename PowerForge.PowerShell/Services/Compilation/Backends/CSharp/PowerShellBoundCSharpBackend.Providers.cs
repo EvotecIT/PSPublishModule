@@ -19,6 +19,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append(EmitExpression(stream.Message)).AppendLine(";");
                 return;
             }
+            if (stream.EnumerateAuthoredArray)
+            {
+                var record = getTemporaryIdentifier("outputRecord");
+                builder.Append(prefix).Append("foreach (var ").Append(record).Append(" in ")
+                    .Append(EmitExpression(stream.Message)).AppendLine(")")
+                    .Append(prefix).Append("    __writeOutput((object?)").Append(record).AppendLine(");");
+                return;
+            }
             builder.Append(prefix).Append("__writeOutput((object?)").Append(EmitExpression(stream.Message)).AppendLine(");");
             return;
         }
