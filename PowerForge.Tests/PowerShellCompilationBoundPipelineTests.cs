@@ -74,7 +74,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     [Theory]
     [InlineData("[int[]] $values = 1, 2, 3", "new int[] { 1, 2, 3 }")]
     [InlineData("[string[]] $values = @('one'; 'two')", "new string[] { \"one\", \"two\" }")]
-    [InlineData("[string[]] $values = @()", "System.Array.Empty<string>()")]
+    [InlineData("[string[]] $values = @()", "new string[] { }")]
     public void ArraysCarryContextualElementContractsThroughLowering(string assignment, string expectedSource)
     {
         var document = PowerShellSourceParser.Parse(
@@ -118,7 +118,8 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         else
         {
             Assert.Contains("foreach (string __foreachItem_", source, StringComparison.Ordinal);
-            Assert.Contains("new[] { Values }", source, StringComparison.Ordinal);
+            Assert.Contains("var __foreachScalar_", source, StringComparison.Ordinal);
+            Assert.Contains("is null ? global::System.Array.Empty<string>() : new[] { __foreachScalar_", source, StringComparison.Ordinal);
         }
     }
 

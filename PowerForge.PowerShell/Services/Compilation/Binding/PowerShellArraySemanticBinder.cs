@@ -34,7 +34,7 @@ internal static class PowerShellArraySemanticBinder
             // Ordinary $null is one collected value. A typed destination may convert it
             // (for example, string[] replaces null with an empty string), so only the
             // unconstrained Object[] contract can preserve it directly.
-            var preservesNull = element.ValueState == PowerShellValueState.Null && arrayType == typeof(object[]);
+            var preservesNull = element is PowerShellBoundLiteralExpression { Value: null } && arrayType == typeof(object[]);
             if (kind == PowerShellBoundArrayKind.CollectedExpression && !preservesNull &&
                 (!PowerShellStableScalarTypePolicy.IsSupported(element.Type.ClrType) || element.ValueState == PowerShellValueState.Null))
             {
