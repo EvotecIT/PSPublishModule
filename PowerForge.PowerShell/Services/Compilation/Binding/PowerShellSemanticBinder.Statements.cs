@@ -16,10 +16,20 @@ internal sealed partial class PowerShellSemanticBinder
         bool allowNonTerminalSuccessOutput = false,
         Type? nonTerminalSuccessOutputType = null)
     {
+        PowerShellSemanticSymbolBinding? assignedSymbol = null;
+        if (statement is AssignmentStatementAst authoredAssignment &&
+            PowerShellAssignmentTargetPolicy.FindDirectVariable(authoredAssignment.Left) is { } assignedVariable)
+            symbols.TryGetValue(assignedVariable.VariablePath.UserPath, out assignedSymbol);
+        var priorValueState = assignedSymbol?.ValueState;
         var bound = BindStatementCore(document, statement, symbols, functions, diagnostics, isTerminal,
             targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
         if (bound is null || !bound.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) &&
             !(bound is PowerShellBoundThrowStatement && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))) return bound;
+        // A failed RHS leaves the previous slot intact. A successful constructor's
+        // non-null fact cannot override a possible null value on the error edge.
+        if (bound is PowerShellBoundAssignmentStatement && assignedSymbol is not null &&
+            !assignedSymbol.Type.ClrType.IsValueType && assignedSymbol.ValueState != priorValueState)
+            assignedSymbol.ForgetValueState();
         var sourceLines = document.Text.Replace("\r\n", "\n").Split('\n');
         var sourceText = string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
             .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));

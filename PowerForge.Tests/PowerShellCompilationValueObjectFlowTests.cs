@@ -43,7 +43,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_StrictBinaryModulePreservesArrayListIndexingAndMutation()
+    public void Build_HybridPreservesArrayListIndexingAndMutationAcrossUnqualifiedInitialization()
     {
         using var fixture = ArtifactFixture.Create(
             "function Invoke-ListFlow { $list = [System.Collections.ArrayList]::new(); " +
@@ -55,11 +55,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedListFlow",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict,
+            PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(new[] { "Ada", "Linus", "2" }, RunModuleProof(result.ArtifactPath!, "Invoke-ListFlow").Split(Environment.NewLine));
+        Assert.Equal(RunModuleProof(fixture.ScriptPath, "Invoke-ListFlow"), RunModuleProof(result.ArtifactPath!, "Invoke-ListFlow"));
     }
 
     [Fact]
@@ -107,7 +110,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_StrictBinaryModuleEnumeratesSupportedListOnArrayConcatenationRightHandSide()
+    public void Build_HybridPreservesListConcatenationAcrossUnqualifiedInitialization()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-ListConcatenation { $right = [System.Collections.ArrayList]::new(); " +
@@ -118,11 +121,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedListConcatenation",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict,
+            PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(new[] { "Ada", "Grace", "Linus" }, RunModuleProof(result.ArtifactPath!, "Get-ListConcatenation").Split(Environment.NewLine));
+        Assert.Equal(RunModuleProof(fixture.ScriptPath, "Get-ListConcatenation"), RunModuleProof(result.ArtifactPath!, "Get-ListConcatenation"));
     }
 
     [Fact]
