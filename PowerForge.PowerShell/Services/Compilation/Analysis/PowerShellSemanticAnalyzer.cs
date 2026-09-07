@@ -37,7 +37,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
         var current = program ?? throw new ArgumentNullException(nameof(program));
         foreach (var pass in _passes.Where(static pass => pass is not FallbackPass))
             current = pass.Run(current);
-        return current;
+        // Whole-function eligibility is deliberately excluded here, but a region
+        // still needs every directly or transitively invoked function to survive.
+        return PropagateFallbackCalls(current);
     }
 
     private static IEnumerable<IPowerShellSemanticPass> CreateDefaultPasses()

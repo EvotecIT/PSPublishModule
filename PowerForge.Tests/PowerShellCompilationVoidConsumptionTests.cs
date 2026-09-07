@@ -8,6 +8,29 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("return [string]([Console]::WriteLine('probe'))", false)]
     [InlineData("return 'value'", true)]
+    public void ValueConsumption_ProtectsTransitiveRegionCallClosure(string body, bool emitted)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Leaf { [CmdletBinding()] param(); " + body + " }; " +
+            "function Get-Middle { [CmdletBinding()] param(); Get-Leaf }; " +
+            "function Get-Caller { [CmdletBinding()] param(); Get-Middle }; " +
+            "function Get-Independent { [CmdletBinding()] param(); return 'safe' }", "void-call-closure.psm1");
+        var capabilities = PowerShellCompilationCapabilities.HybridModule;
+        var bound = new PowerShellSemanticBinder().BindWithRegionCandidates(new[] { document }, "net10.0", capabilities).Program;
+        var optimized = new PowerShellBoundOptimizer().Optimize(bound).Program;
+        var analyzed = new PowerShellSemanticAnalyzer().AnalyzeRegionOpportunities(optimized);
+        var lowered = new PowerShellTypedLowerer().Lower(analyzed, capabilities);
+        Assert.Equal(emitted ? 4 : 1, lowered.Functions.Length);
+        Assert.Contains(lowered.Functions, function => function.Symbol.Name == "Get-Independent");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0", capabilities);
+        foreach (var caller in new[] { "Get-Middle", "Get-Caller" })
+            Assert.Equal(emitted, result.RegionOpportunities.Any(opportunity => opportunity.SourceName == caller));
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("return [string]([Console]::WriteLine('probe'))", false)]
+    [InlineData("return 'value'", true)]
     public void ValueConsumption_AlsoProtectsRegionOpportunityLowering(string body, bool emitted)
     {
         var document = PowerShellSourceParser.Parse(

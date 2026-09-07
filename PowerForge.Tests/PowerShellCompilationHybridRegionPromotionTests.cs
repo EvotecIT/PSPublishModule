@@ -159,7 +159,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.Empty(typed.PromotedRegions);
         Assert.Contains(typed.Methods, method => method.GeneratedName == helperName);
-        var candidate = Assert.Single(typed.RegionCandidates);
+        var candidate = Assert.Single(typed.RegionCandidates, item => item.SourceName == "Get-RegionalValue");
         Assert.False(candidate.Promoted);
         Assert.Equal("region.generated-name-collision", candidate.DecisionCode);
         Assert.Empty(candidate.GeneratedName);
@@ -358,7 +358,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.HybridModule);
 
         Assert.Empty(typed.RegionOpportunities);
-        Assert.Empty(typed.RegionCandidates);
+        Assert.DoesNotContain(typed.RegionCandidates, static candidate => candidate.SourceName == "Get-StateAccess");
         Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Get-StateAccess");
     }
 
