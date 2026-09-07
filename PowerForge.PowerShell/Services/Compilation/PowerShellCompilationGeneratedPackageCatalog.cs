@@ -15,6 +15,11 @@ internal static class PowerShellCompilationGeneratedPackageCatalog
     {
         var framework = targetFramework ?? string.Empty;
         var selected = new List<PackageIdentity>();
+        if (PowerShellCommandMetadataBuildSupport.RequiresBuildTool(kind, mode))
+        {
+            foreach (var id in PowerShellCommandMetadataBuildSupport.PackageIds)
+                selected.Add(Find(id, PowerShellCommandMetadataBuildSupport.PackageVersion));
+        }
         if (framework.Equals("net472", StringComparison.OrdinalIgnoreCase) &&
             kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
         {

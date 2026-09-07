@@ -21,6 +21,7 @@ namespace PowerForge.Generated.Runtime
         private readonly bool _redirectError;
         private readonly string _sourceName;
         private readonly bool _ownsVariableLists;
+        private readonly PowerShellCommandVariableScope? _variableScope;
         private IScriptExtent? _lastErrorExtent;
         private int _handlerDepth;
         private bool _disposed;
@@ -48,8 +49,7 @@ namespace PowerForge.Generated.Runtime
 
             // A native cmdlet registers these lists during binding. A script function
             // owns them only while its clause runs, including cleanup during unwinding.
-            NativeContract.Invoke(_contract.RemoveVariableLists, _runtime);
-            NativeContract.Invoke(_contract.SetVariableLists, _runtime);
+            _variableScope = PowerShellCommandVariableScope.EnterClause(cmdlet);
         }
 
         internal IDisposable EnterHandler()
@@ -135,7 +135,7 @@ namespace PowerForge.Generated.Runtime
         {
             if (_disposed) return;
             _disposed = true;
-            if (_ownsVariableLists) NativeContract.Invoke(_contract.RemoveVariableLists, _runtime);
+            _variableScope?.Dispose();
         }
 
         private void ThrowIfDisposed()

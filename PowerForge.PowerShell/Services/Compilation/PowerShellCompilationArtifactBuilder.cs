@@ -240,8 +240,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
-                    if (typed.Methods.Any(static method => method.RequiresPowerShellStatementErrors))
-                        File.WriteAllText(Path.Combine(workspace, "StatementErrors.g.cs"), PowerShellStatementErrorRuntimeSource.Render(), new UTF8Encoding(false));
+                    WriteBinaryHostRuntime(workspace, typed);
                     File.WriteAllText(
                         Path.Combine(workspace, "CompiledCmdlets.cs"),
                         PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions, spec.TargetFramework),
@@ -261,6 +260,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         .Replace("{{ASSEMBLY_VERSION}}", EscapeXml(GetBinaryModuleAssemblyVersion(spec))),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule;
+                if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
+                    PowerShellCommandMetadataBuildSupport.Write(workspace, projectPath, typed, exportedFunctions);
                 usesPowerShellRuntimeFallback = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                     spec.Mode == PowerShellCompilationMode.Hybrid &&
                     (typed.Methods.Count(static method => method.Lifecycle is null) != plan.TotalUnits || runtimeManifestHooks.Length > 0);

@@ -20,7 +20,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly PropertyInfo CmdletContext, OutputPipe, ErrorOutputPipe, ErrorMergeTo, IsRedirected;
             internal readonly PropertyInfo EngineSessionState, CurrentScope, ShellErrorPipe, PropagateExceptions, InvocationScriptPosition;
             internal readonly PropertyInfo ScopeLocalsTuple;
-            internal readonly MethodInfo NewScope, RemoveScope, CheckActionPreference, SetVariableLists, RemoveVariableLists;
+            internal readonly MethodInfo NewScope, RemoveScope, CheckActionPreference;
             internal readonly MethodInfo MakeTuple, SetTupleValue, GetTupleValue, FindMatchingHandler, ConvertToRuntimeException, ConvertToThrownException;
             internal readonly ConstructorInfo FunctionContextConstructor, FunctionInfoConstructor, InvocationInfoConstructor, CommandExceptionConstructor;
             internal readonly MethodInfo ConvertToMethodInvocationException;
@@ -64,8 +64,6 @@ namespace PowerForge.Generated.Runtime
                 InvocationScriptPosition = Property(typeof(InvocationInfo), "ScriptPosition", typeof(IScriptExtent));
                 NewScope = Method(state, "NewScope", false, scope, typeof(bool));
                 RemoveScope = Method(state, "RemoveScope", false, typeof(void), scope);
-                SetVariableLists = Method(CommandRuntimeType, "SetVariableListsInPipe", false, typeof(void));
-                RemoveVariableLists = Method(CommandRuntimeType, "RemoveVariableListsInPipe", false, typeof(void));
                 AppendErrorToVariables = Method(CommandRuntimeType, "AppendErrorToVariables", false, typeof(void), typeof(object));
                 CheckActionPreference = Method(errors, "CheckActionPreference", true, typeof(void), function, typeof(Exception));
                 ConvertToRuntimeException = Method(errors, "ConvertToRuntimeException", true, typeof(RuntimeException), typeof(Exception), typeof(IScriptExtent));

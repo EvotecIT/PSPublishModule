@@ -7,8 +7,8 @@ internal static class PowerShellStatementErrorRuntimeSource
 {
     internal static string Render()
     {
-        var source = new StringBuilder();
-        foreach (var suffix in new[] { ".cs", ".Contract.cs", ".Exceptions.cs", ".Functions.cs" })
+        var source = new StringBuilder("#nullable enable\n");
+        foreach (var suffix in new[] { ".cs", ".Contract.cs", ".Exceptions.cs", ".Functions.cs", ".Variables.cs" })
         {
             var resource = "PowerForge.PowerShell.Compilation.PowerShellStatementErrorContext" + suffix;
             using var stream = typeof(PowerShellStatementErrorRuntimeSource).Assembly.GetManifestResourceStream(resource)
@@ -17,5 +17,14 @@ internal static class PowerShellStatementErrorRuntimeSource
             source.AppendLine(reader.ReadToEnd());
         }
         return source.ToString();
+    }
+
+    internal static string RenderVariableScope()
+    {
+        using var stream = typeof(PowerShellStatementErrorRuntimeSource).Assembly.GetManifestResourceStream(
+            "PowerForge.PowerShell.Compilation.PowerShellStatementErrorContext.Variables.cs")
+            ?? throw new InvalidOperationException("Missing command variable-scope runtime source.");
+        using var reader = new StreamReader(stream);
+        return "#nullable enable\n" + reader.ReadToEnd();
     }
 }

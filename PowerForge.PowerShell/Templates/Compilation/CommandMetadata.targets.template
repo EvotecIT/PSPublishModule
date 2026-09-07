@@ -1,0 +1,31 @@
+<Project>
+  <PropertyGroup>
+    <!-- The implementation assembly is the reference surface after command-name finalization. -->
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)CommandMetadataTask.cs" />
+    {{COMMAND_IDENTITIES}}
+  </ItemGroup>
+  <UsingTask TaskName="PowerForge.Compilation.Build.FinalizeCommandNames"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Reference Include="$(PkgSystem_Reflection_Metadata)/lib/netstandard2.0/System.Reflection.Metadata.dll" />
+      <Reference Include="$(PkgSystem_Collections_Immutable)/lib/netstandard2.0/System.Collections.Immutable.dll" />
+      <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)CommandMetadataTask.cs" />
+    </Task>
+  </UsingTask>
+  <Target Name="_PowerForgeFinalizeCommandNames"
+          AfterTargets="CoreCompile"
+          BeforeTargets="GenerateBuildDependencyFile;CopyFilesToOutputDirectory"
+          Condition="'$(DesignTimeBuild)' != 'true' and '@(PowerForgeCommandIdentity)' != ''"
+          Inputs="$(MSBuildAllProjects);@(IntermediateAssembly);$(MSBuildThisFileDirectory)CommandMetadataTask.cs"
+          Outputs="$(IntermediateOutputPath)PowerForge.CommandIdentities.stamp">
+    <PowerForge.Compilation.Build.FinalizeCommandNames AssemblyPath="@(IntermediateAssembly)" Commands="@(PowerForgeCommandIdentity)" />
+    <Touch Files="$(IntermediateOutputPath)PowerForge.CommandIdentities.stamp" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)PowerForge.CommandIdentities.stamp" />
+    </ItemGroup>
+  </Target>
+</Project>

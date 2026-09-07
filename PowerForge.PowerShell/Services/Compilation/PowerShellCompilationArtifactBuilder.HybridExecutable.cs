@@ -22,8 +22,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId);
         typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework: spec.TargetFramework, semanticProfileId: spec.SemanticProfileId);
         File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(false));
-        if (typed.Methods.Any(static method => method.RequiresPowerShellStatementErrors))
-            File.WriteAllText(Path.Combine(workspace, "StatementErrors.g.cs"), PowerShellStatementErrorRuntimeSource.Render(), new UTF8Encoding(false));
+        WriteBinaryHostRuntime(workspace, typed);
         File.WriteAllText(
             Path.Combine(workspace, "CompiledCmdlets.cs"),
             PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions: null, targetFramework: spec.TargetFramework),
@@ -60,6 +59,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .Replace("{{DEPENDENCY_RESOURCES}}", packagedSources.ProjectResources),
             new UTF8Encoding(false));
         var compiledMethods = typed.Methods.Where(static method => method.Lifecycle is null).ToArray();
+        PowerShellCommandMetadataBuildSupport.Write(workspace, projectPath, typed, exportedFunctions: null);
         return new HybridExecutableBuildPlan(projectPath, typed, compiledMethods, plan.TotalUnits);
     }
 

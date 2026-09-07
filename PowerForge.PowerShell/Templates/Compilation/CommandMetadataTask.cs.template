@@ -1,0 +1,43 @@
+namespace PowerForge.Compilation.Build
+{
+    public sealed class FinalizeCommandNames : global::Microsoft.Build.Utilities.Task
+    {
+        [global::Microsoft.Build.Framework.Required]
+        public string AssemblyPath { get; set; }
+
+        [global::Microsoft.Build.Framework.Required]
+        public global::Microsoft.Build.Framework.ITaskItem[] Commands { get; set; }
+
+        public override bool Execute()
+        {
+            string temporary = null;
+            try
+            {
+                var path = global::System.IO.Path.GetFullPath(AssemblyPath);
+                var identities = new global::System.Collections.Generic.List<PowerShellCommandMetadataNames.Identity>();
+                foreach (var item in Commands)
+                    identities.Add(new PowerShellCommandMetadataNames.Identity(item.ItemSpec,
+                        item.GetMetadata("CommandName"), item.GetMetadata("StorageField")));
+                var original = global::System.IO.File.ReadAllBytes(path);
+                var finalized = PowerShellCommandMetadataNames.Apply(original, identities);
+                if (!global::System.Object.ReferenceEquals(original, finalized))
+                {
+                    temporary = path + "." + global::System.Guid.NewGuid().ToString("N") + ".command-names.tmp";
+                    global::System.IO.File.WriteAllBytes(temporary, finalized);
+                    global::System.IO.File.Replace(temporary, path, null);
+                    temporary = null;
+                }
+                return true;
+            }
+            catch (global::System.Exception error)
+            {
+                Log.LogErrorFromException(error, true);
+                return false;
+            }
+            finally
+            {
+                if (temporary != null) global::System.IO.File.Delete(temporary);
+            }
+        }
+    }
+}
