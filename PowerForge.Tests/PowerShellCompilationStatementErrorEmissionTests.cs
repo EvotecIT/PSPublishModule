@@ -286,7 +286,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Directory.CreateDirectory(fixture.OutputPath);
         File.WriteAllText(Path.Combine(fixture.OutputPath, "Compiled.cs"), typed.SourceCode);
         File.WriteAllText(Path.Combine(fixture.OutputPath, "Cmdlets.cs"), PowerShellBinaryCmdletSourceGenerator.Generate(typed, null, framework));
-        File.WriteAllText(Path.Combine(fixture.OutputPath, "StatementErrors.cs"), PowerShellStatementErrorRuntimeSource.Render());
+        foreach (var source in PowerShellCommandHostRuntimeSource.Render(typed))
+            File.WriteAllText(Path.Combine(fixture.OutputPath, source.Key), source.Value);
         var references = framework == "net472"
             ? "<PackageReference Include=\"Microsoft.NETFramework.ReferenceAssemblies\" Version=\"1.0.3\" /><PackageReference Include=\"Microsoft.PowerShell.5.ReferenceAssemblies\" Version=\"1.1.0\" />"
             : "<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"" + (framework == "net8.0" ? "7.4.18" : "7.6.5") + "\" ExcludeAssets=\"runtime\" />";
