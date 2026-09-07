@@ -28,7 +28,8 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
     {
         if (binary.Operation is PowerShellBoundBinaryOperator.PromotingAdd or PowerShellBoundBinaryOperator.PromotingSubtract or
             PowerShellBoundBinaryOperator.PromotingMultiply or PowerShellBoundBinaryOperator.NumericUnionFloatingDivide or
-            PowerShellBoundBinaryOperator.NumericUnionFloatingRemainder or PowerShellBoundBinaryOperator.NumericUnionEqual or
+            PowerShellBoundBinaryOperator.NumericUnionFloatingRemainder or PowerShellBoundBinaryOperator.NumericUnionNonzeroDivide or
+            PowerShellBoundBinaryOperator.NumericUnionNonzeroRemainder or PowerShellBoundBinaryOperator.NumericUnionEqual or
             PowerShellBoundBinaryOperator.NumericUnionNotEqual or PowerShellBoundBinaryOperator.NumericUnionLessThan or
             PowerShellBoundBinaryOperator.NumericUnionLessThanOrEqual or PowerShellBoundBinaryOperator.NumericUnionGreaterThan or
             PowerShellBoundBinaryOperator.NumericUnionGreaterThanOrEqual) return true;

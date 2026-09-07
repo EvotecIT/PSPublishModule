@@ -111,12 +111,14 @@ internal static class PowerShellMutationSemanticBinder
         if (value is null) return null;
         if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
         {
+            var nonzeroDivision = operation is PowerShellBoundMutationOperator.Divide or PowerShellBoundMutationOperator.Remainder &&
+                PowerShellNumericUnionPolicy.IsNonzeroInteger(value);
             if (syntax.Left is not VariableExpressionAst || !PowerShellNumericUnionPolicy.IsNumeric(value.Type) ||
-                operation is not (PowerShellBoundMutationOperator.Assign or PowerShellBoundMutationOperator.Add or
-                    PowerShellBoundMutationOperator.Subtract or PowerShellBoundMutationOperator.Multiply))
+                (!nonzeroDivision && operation is not (PowerShellBoundMutationOperator.Assign or PowerShellBoundMutationOperator.Add or
+                    PowerShellBoundMutationOperator.Subtract or PowerShellBoundMutationOperator.Multiply)))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2413",
-                    "This unconstrained numeric local requires Int32/Double assignment or additive/multiplicative mutation; adding an authored variable constraint requires a separate constraint-transition contract.",
+                    "This unconstrained numeric local requires Int32/Double assignment, additive/multiplicative mutation, or division/remainder by a proven nonzero Int32; adding an authored variable constraint requires a separate constraint-transition contract.",
                     PowerShellSourceParser.GetSpan(document, syntax.Extent)));
                 return null;
             }

@@ -17,7 +17,8 @@ internal static class PowerShellNumericUnionPolicy
         // A later declaration can add a persistent constraint. It cannot share the
         // unconstrained union representation without a separate constraint transition.
         if (writes.Any(assignment => assignment.Left is not VariableExpressionAst)) return false;
-        return writes.Any(assignment => assignment.Operator is TokenKind.PlusEquals or TokenKind.MinusEquals or TokenKind.MultiplyEquals) ||
+        return writes.Any(assignment => assignment.Operator is TokenKind.PlusEquals or TokenKind.MinusEquals or TokenKind.MultiplyEquals or
+                TokenKind.DivideEquals or TokenKind.RemainderEquals) ||
             function.Body.FindAll(node => node is UnaryExpressionAst
                 { TokenKind: TokenKind.PlusPlus or TokenKind.MinusMinus or TokenKind.PostfixPlusPlus or TokenKind.PostfixMinusMinus,
                   Child: VariableExpressionAst variable } && variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase), false).Any();
@@ -26,12 +27,16 @@ internal static class PowerShellNumericUnionPolicy
     internal static bool IsNumeric(PowerShellTypeFact type)
         => type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble || type.ClrType == typeof(int) || type.ClrType == typeof(double);
 
+    internal static bool IsNonzeroInteger(PowerShellBoundExpression expression)
+        => PowerShellInt32RangePolicy.GetRange(expression) is { } range && (range.Minimum > 0 || range.Maximum < 0);
+
     internal static PowerShellBoundExpression? BindBinary(SourceSpan span, string operation,
         PowerShellBoundExpression left, PowerShellBoundExpression right)
     {
         if (left.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble &&
             right.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble || !IsNumeric(left.Type) || !IsNumeric(right.Type)) return null;
         var floating = left.Type.ClrType == typeof(double) || right.Type.ClrType == typeof(double);
+        var nonzeroIntegerDivisor = IsNonzeroInteger(right);
         var bound = operation switch
         {
             "Plus" => PowerShellBoundBinaryOperator.PromotingAdd,
@@ -39,6 +44,8 @@ internal static class PowerShellNumericUnionPolicy
             "Multiply" => PowerShellBoundBinaryOperator.PromotingMultiply,
             "Divide" when floating => PowerShellBoundBinaryOperator.NumericUnionFloatingDivide,
             "Rem" when floating => PowerShellBoundBinaryOperator.NumericUnionFloatingRemainder,
+            "Divide" when nonzeroIntegerDivisor => PowerShellBoundBinaryOperator.NumericUnionNonzeroDivide,
+            "Rem" when nonzeroIntegerDivisor => PowerShellBoundBinaryOperator.NumericUnionNonzeroRemainder,
             "Ieq" or "Ceq" => PowerShellBoundBinaryOperator.NumericUnionEqual,
             "Ine" or "Cne" => PowerShellBoundBinaryOperator.NumericUnionNotEqual,
             "Ilt" or "Clt" => PowerShellBoundBinaryOperator.NumericUnionLessThan,

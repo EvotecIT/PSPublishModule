@@ -42,6 +42,8 @@ internal enum PowerShellBoundBinaryOperator
     PromotingMultiply,
     NumericUnionFloatingDivide,
     NumericUnionFloatingRemainder,
+    NumericUnionNonzeroDivide,
+    NumericUnionNonzeroRemainder,
     NumericUnionEqual,
     NumericUnionNotEqual,
     NumericUnionLessThan,

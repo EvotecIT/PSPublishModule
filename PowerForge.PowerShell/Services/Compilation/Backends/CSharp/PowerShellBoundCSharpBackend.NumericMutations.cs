@@ -10,12 +10,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string? EmitNumericUnionBinary(PowerShellLoweredBinaryExpression expression, string left, string right)
     {
         if (expression.Operation is PowerShellBoundBinaryOperator.PromotingAdd or
-            PowerShellBoundBinaryOperator.PromotingSubtract or PowerShellBoundBinaryOperator.PromotingMultiply)
+            PowerShellBoundBinaryOperator.PromotingSubtract or PowerShellBoundBinaryOperator.PromotingMultiply or
+            PowerShellBoundBinaryOperator.NumericUnionNonzeroDivide or PowerShellBoundBinaryOperator.NumericUnionNonzeroRemainder)
         {
             var arithmetic = expression.Operation switch
             {
                 PowerShellBoundBinaryOperator.PromotingAdd => PowerShellBoundMutationOperator.Add,
                 PowerShellBoundBinaryOperator.PromotingSubtract => PowerShellBoundMutationOperator.Subtract,
+                PowerShellBoundBinaryOperator.NumericUnionNonzeroDivide => PowerShellBoundMutationOperator.Divide,
+                PowerShellBoundBinaryOperator.NumericUnionNonzeroRemainder => PowerShellBoundMutationOperator.Remainder,
                 _ => PowerShellBoundMutationOperator.Multiply
             };
             var helper = GetIntegralArithmeticHelper(typeof(object), typeof(object), arithmetic,
@@ -88,18 +91,25 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellBoundMutationOperator.Add => "+",
             PowerShellBoundMutationOperator.Subtract => "-",
             PowerShellBoundMutationOperator.Multiply => "*",
+            PowerShellBoundMutationOperator.Divide => "/",
             PowerShellBoundMutationOperator.Remainder => "%",
             _ => throw new InvalidOperationException($"Unsupported typed integral update '{operation}'.")
         };
         if (semantics == PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble)
         {
-            return new StringBuilder()
+            var builder = new StringBuilder()
                 .Append("            static object ").Append(name).Append("(object? ").Append(left).Append(", object? ").Append(right).AppendLine(")")
                 .AppendLine("            {")
                 .Append("                ").Append(left).AppendLine(" ??= 0;")
                 .Append("                ").Append(right).AppendLine(" ??= 0;")
                 .Append("                if (").Append(left).Append(" is int && ").Append(right).AppendLine(" is int)")
-                .AppendLine("                {")
+                .AppendLine("                {");
+            // A fractional integer quotient becomes Double. Use Int64 for the
+            // exact branch so Int32.MinValue / -1 and % -1 cannot overflow.
+            if (operation == PowerShellBoundMutationOperator.Divide)
+                builder.Append("                    if ((long)(int)").Append(left).Append(" % (long)(int)").Append(right).AppendLine(" != 0)")
+                    .Append("                        return (double)(int)").Append(left).Append(" / (double)(int)").Append(right).AppendLine(";");
+            return builder
                 .Append("                    long ").Append(result).Append(" = (long)(int)").Append(left).Append(' ').Append(symbol).Append(" (long)(int)").Append(right).AppendLine(";")
                 .Append("                    if (").Append(result).Append(" >= int.MinValue && ").Append(result).AppendLine(" <= int.MaxValue)")
                 .Append("                        return (object)(int)").Append(result).AppendLine(";")
