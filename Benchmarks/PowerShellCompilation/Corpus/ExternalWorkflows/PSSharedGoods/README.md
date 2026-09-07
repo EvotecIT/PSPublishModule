@@ -9,3 +9,5 @@ The source file SHA-256 is `8d237e02921013b114a7d0af851e8369e2693bbfad5a8d5a17b8
 Additional probes compare traced input enumerators that fail during `MoveNext`, `Current`, or disposal. This covers parameter-binding enumeration; it does not qualify arbitrary enumeration inside compiled bodies.
 
 Qualification of this function does not imply qualification of the rest of PSSharedGoods or of a runtime-free library target.
+
+`Convert-HexToBinary.ps1` is the unchanged function from the same commit, with SHA-256 `4ede6b109b121813150cdce0b515964127183c2feedd7e30d8d9c86737194a85`. It is the next qualification input: captured loop output, zero/one/many result shape, numeric indexing, parsing failures, and `Write-Output -NoEnumerate` must preserve their authored behavior together. Inclusion here does not mean the function compiles; its complete command-artifact gate remains open.

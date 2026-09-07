@@ -52,15 +52,40 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }
                 return 'after'
             }
+            function Get-StaticReference {
+                [CmdletBinding()] param([int]$Capacity)
+                $Encoding=[Text.Encoding]::GetEncoding($Capacity)
+                [void]$Encoding.GetPreamble()
+                'after'
+                return [object]::ReferenceEquals($Encoding,$null)
+            }
+            function Get-InstanceReference {
+                [CmdletBinding()] param([int]$Capacity)
+                $Text='abc'
+                $Characters=$Text.ToCharArray($Capacity,1)
+                [void]$Characters.Clone()
+                'after'
+                return [object]::ReferenceEquals($Characters,$null)
+            }
+            function Get-BranchedReference {
+                [CmdletBinding()] param([int]$Capacity)
+                $List=$null
+                if ($Capacity -eq 0) { $List=[Collections.ArrayList]::new() }
+                else { $List=[Collections.ArrayList]::new($Capacity) }
+                [void]$List.Add('item')
+                'after'
+                return [object]::ReferenceEquals($List,$null)
+            }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.FallibleAssignment", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(5, result.Manifest!.CompiledMethods);
+        Assert.Equal(8, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         const string probe = """
-            foreach ($command in 'Get-FirstList','Get-NullSeededList','Get-ReassignedList','Get-CaughtList','Get-LoopList') {
+            foreach ($command in 'Get-FirstList','Get-NullSeededList','Get-ReassignedList','Get-CaughtList','Get-LoopList',
+                'Get-StaticReference','Get-InstanceReference','Get-BranchedReference') {
                 foreach ($capacity in -1,0,2) {
                     foreach ($action in 'Continue','SilentlyContinue','Stop') {
                         $records=[Collections.Generic.List[string]]::new()
