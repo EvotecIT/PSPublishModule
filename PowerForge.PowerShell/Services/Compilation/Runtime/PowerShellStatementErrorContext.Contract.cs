@@ -1,0 +1,156 @@
+namespace PowerForge.Generated.Runtime
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Reflection;
+    using System.Management.Automation;
+    using System.Management.Automation.Language;
+    using System.Runtime.ExceptionServices;
+
+    public sealed partial class PowerShellStatementErrorContext
+    {
+        private sealed class NativeContract
+        {
+            private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            private const BindingFlags Static = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+            private static readonly Lazy<NativeContract> Cached = new(() => new NativeContract());
+            internal static NativeContract Shared => Cached.Value;
+
+            internal readonly Type CommandRuntimeType;
+            internal readonly PropertyInfo CmdletContext, OutputPipe, ErrorOutputPipe, ErrorMergeTo, IsRedirected, ErrorAction;
+            internal readonly PropertyInfo EngineSessionState, CurrentScope, ShellErrorPipe, PropagateExceptions, InvocationScriptPosition;
+            internal readonly PropertyInfo ScopeLocalsTuple;
+            internal readonly MethodInfo NewScope, RemoveScope, CheckActionPreference, SetVariableLists, RemoveVariableLists;
+            internal readonly MethodInfo MakeTuple, SetTupleValue, GetTupleValue, FindMatchingHandler, ConvertToRuntimeException, ConvertToThrownException;
+            internal readonly ConstructorInfo FunctionContextConstructor, FunctionInfoConstructor, InvocationInfoConstructor, CommandExceptionConstructor;
+            internal readonly ConstructorInfo MethodExceptionConstructor;
+            internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
+            internal readonly PropertyInfo MethodExceptionResource;
+            internal readonly object MergeToOutput;
+            internal readonly Type ObjectTupleType, CatchAllType;
+            internal readonly bool ThrowConversionTakesRethrow;
+
+            private NativeContract()
+            {
+                var assembly = typeof(PSObject).Assembly;
+                var version = Property(RequireType(assembly, "System.Management.Automation.PSVersionInfo"), "PSVersion", null, isStatic: true).GetValue(null, null)!;
+                var major = (int)version.GetType().GetProperty("Major")!.GetValue(version, null)!;
+                var minor = (int)version.GetType().GetProperty("Minor")!.GetValue(version, null)!;
+                if (!(major == 5 && minor == 1 || major == 7 && (minor == 4 || minor == 6)))
+                    throw new NotSupportedException("The loaded PowerShell version is outside the statement-error host profiles.");
+                var context = RequireType(assembly, "System.Management.Automation.ExecutionContext");
+                var function = RequireType(assembly, "System.Management.Automation.Language.FunctionContext");
+                var pipe = RequireType(assembly, "System.Management.Automation.Internal.Pipe");
+                var state = RequireType(assembly, "System.Management.Automation.SessionStateInternal");
+                var scope = RequireType(assembly, "System.Management.Automation.SessionStateScope");
+                var errors = RequireType(assembly, "System.Management.Automation.ExceptionHandlingOps");
+                var tuple = RequireType(assembly, "System.Management.Automation.MutableTuple");
+                ObjectTupleType = RequireType(assembly, "System.Management.Automation.MutableTuple`1").MakeGenericType(typeof(object));
+                CatchAllType = RequireType(assembly, "System.Management.Automation.ExceptionHandlingOps+CatchAll");
+                CommandRuntimeType = RequireType(assembly, "System.Management.Automation.MshCommandRuntime");
+                CmdletContext = Property(typeof(Cmdlet), "Context", context);
+                OutputPipe = Property(CommandRuntimeType, "OutputPipe", pipe);
+                ErrorOutputPipe = Property(CommandRuntimeType, "ErrorOutputPipe", pipe);
+                ErrorMergeTo = Property(CommandRuntimeType, "ErrorMergeTo", null);
+                MergeToOutput = Enum.Parse(ErrorMergeTo.PropertyType, "Output");
+                IsRedirected = Property(pipe, "IsRedirected", typeof(bool));
+                ErrorAction = Property(CommandRuntimeType, "ErrorAction", typeof(ActionPreference));
+                EngineSessionState = Property(context, "EngineSessionState", state);
+                CurrentScope = Property(state, "CurrentScope", scope, writable: true);
+                ScopeLocalsTuple = Property(scope, "LocalsTuple", tuple, writable: true);
+                ShellErrorPipe = Property(context, "ShellFunctionErrorOutputPipe", pipe, writable: true);
+                PropagateExceptions = Property(context, "PropagateExceptionsToEnclosingStatementBlock", typeof(bool), writable: true);
+                InvocationScriptPosition = Property(typeof(InvocationInfo), "ScriptPosition", typeof(IScriptExtent));
+                NewScope = Method(state, "NewScope", false, scope, typeof(bool));
+                RemoveScope = Method(state, "RemoveScope", false, typeof(void), scope);
+                SetVariableLists = Method(CommandRuntimeType, "SetVariableListsInPipe", false, typeof(void));
+                RemoveVariableLists = Method(CommandRuntimeType, "RemoveVariableListsInPipe", false, typeof(void));
+                CheckActionPreference = Method(errors, "CheckActionPreference", true, typeof(void), function, typeof(Exception));
+                ConvertToRuntimeException = Method(errors, "ConvertToRuntimeException", true, typeof(RuntimeException), typeof(Exception), typeof(IScriptExtent));
+                ThrowConversionTakesRethrow = major == 7;
+                ConvertToThrownException = ThrowConversionTakesRethrow
+                    ? Method(errors, "ConvertToException", true, typeof(RuntimeException), typeof(object), typeof(IScriptExtent), typeof(bool))
+                    : Method(errors, "ConvertToException", true, typeof(RuntimeException), typeof(object), typeof(IScriptExtent));
+                FindMatchingHandler = Method(errors, "FindMatchingHandler", true, typeof(int), tuple, typeof(RuntimeException), typeof(Type[]), context);
+                SetTupleValue = Method(tuple, "SetValue", false, typeof(void), typeof(int), typeof(object));
+                GetTupleValue = Method(tuple, "GetValue", false, typeof(object), typeof(int));
+                MakeTuple = Method(tuple, "MakeTuple", true, tuple,
+                    typeof(Type), typeof(Dictionary<string, int>), typeof(Func<>).MakeGenericType(tuple));
+                FunctionContextConstructor = Constructor(function);
+                FunctionInfoConstructor = Constructor(typeof(FunctionInfo), typeof(string), typeof(ScriptBlock), context);
+                InvocationInfoConstructor = Constructor(typeof(InvocationInfo), typeof(CommandInfo), typeof(IScriptExtent), context);
+                CommandExceptionConstructor = Constructor(typeof(CmdletInvocationException), typeof(Exception), typeof(InvocationInfo));
+                MethodExceptionConstructor = Constructor(typeof(MethodInvocationException), typeof(string), typeof(Exception), typeof(string), typeof(object[]));
+                MethodExceptionResource = Property(RequireType(assembly, "ExtendedTypeSystem"), "MethodInvocationException", typeof(string), isStatic: true);
+                FunctionExecutionContext = Field(function, "_executionContext", context);
+                FunctionOutputPipe = Field(function, "_outputPipe", pipe);
+                FunctionSequencePoints = Field(function, "_sequencePoints", typeof(IScriptExtent[]));
+            }
+
+            internal object GetRequired(PropertyInfo property, object? instance)
+                => property.GetValue(instance, null) ?? throw Unavailable(property.DeclaringType!, property.Name);
+
+            internal object CreateTuple(string variableName, object? value)
+            {
+                var names = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [variableName] = 0 };
+                var tuple = Invoke(MakeTuple, null, ObjectTupleType, names, null)!;
+                Invoke(SetTupleValue, tuple, 0, value);
+                return tuple;
+            }
+
+            private static Type RequireType(Assembly assembly, string name)
+                => assembly.GetType(name, throwOnError: false) ?? throw new NotSupportedException(
+                    "The PowerShell host does not provide the statement-error contract type '" + name + "'.");
+
+            private static PropertyInfo Property(Type owner, string name, Type? valueType, bool writable = false, bool isStatic = false)
+            {
+                var property = owner.GetProperty(name, isStatic ? Static : Instance);
+                if (property is null || property.GetMethod is null ||
+                    valueType is not null && property.PropertyType != valueType || writable && property.SetMethod is null)
+                    throw Unavailable(owner, name);
+                return property;
+            }
+
+            private static FieldInfo Field(Type owner, string name, Type valueType)
+            {
+                var field = owner.GetField(name, Instance);
+                if (field is null || field.FieldType != valueType) throw Unavailable(owner, name);
+                return field;
+            }
+
+            private static MethodInfo Method(Type owner, string name, bool isStatic, Type result, params Type[] arguments)
+            {
+                var method = owner.GetMethod(name, isStatic ? Static : Instance, null, arguments, null);
+                if (method is null || method.ReturnType != result) throw Unavailable(owner, name);
+                return method;
+            }
+
+            private static ConstructorInfo Constructor(Type owner, params Type[] arguments)
+                => owner.GetConstructor(Instance, null, arguments, null) ?? throw Unavailable(owner, ".ctor");
+
+            private static NotSupportedException Unavailable(Type owner, string member)
+                => new("The PowerShell host does not provide the qualified statement-error contract '" +
+                    owner.FullName + "." + member + "'.");
+
+            internal static object Construct(ConstructorInfo constructor, params object?[] arguments)
+            {
+                try { return constructor.Invoke(arguments); }
+                catch (TargetInvocationException error) when (error.InnerException is not null)
+                {
+                    ExceptionDispatchInfo.Capture(error.InnerException).Throw();
+                    throw;
+                }
+            }
+
+            internal static object? Invoke(MethodInfo method, object? instance, params object?[] arguments)
+            {
+                try { return method.Invoke(instance, arguments); }
+                catch (TargetInvocationException error) when (error.InnerException is not null)
+                {
+                    ExceptionDispatchInfo.Capture(error.InnerException).Throw();
+                    throw;
+                }
+            }
+        }
+    }
+}
