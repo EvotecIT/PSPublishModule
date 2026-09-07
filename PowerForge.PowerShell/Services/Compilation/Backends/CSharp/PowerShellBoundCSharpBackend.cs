@@ -394,6 +394,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var type = PowerShellCSharpSymbolRenderer.TypeName(conversion.ClrType);
         if (conversion.UsePowerShellTruthiness)
             return $"global::System.Management.Automation.LanguagePrimitives.IsTrue((object?)({EmitExpression(conversion.Operand)}))";
+        if (conversion.NormalizeNullString)
+            return $"({EmitExpression(conversion.Operand)} ?? string.Empty)";
         return conversion.UsePowerShellLanguageRuntime
             ? $"__powerForgeConvertInvariant<{type}>((object?)({EmitExpression(conversion.Operand)}))"
             : $"({type})({EmitExpression(conversion.Operand)})";

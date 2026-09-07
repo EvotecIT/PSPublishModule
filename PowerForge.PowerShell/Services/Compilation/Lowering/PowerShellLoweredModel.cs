@@ -36,15 +36,18 @@ internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredE
         Type clrType,
         PowerShellLoweredExpression operand,
         bool usePowerShellLanguageRuntime,
-        bool usePowerShellTruthiness) : base(span, clrType)
+        bool usePowerShellTruthiness,
+        bool normalizeNullString = false) : base(span, clrType)
     {
         Operand = operand;
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
         UsePowerShellTruthiness = usePowerShellTruthiness;
+        NormalizeNullString = normalizeNullString;
     }
     internal PowerShellLoweredExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
     internal bool UsePowerShellTruthiness { get; }
+    internal bool NormalizeNullString { get; }
 }
 
 internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredExpression

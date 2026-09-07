@@ -165,14 +165,14 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundConversionExpression conversion)
         {
             var operand = OptimizeExpression(conversion.Operand);
-            if (!conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness &&
+            if (!conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness && !conversion.NormalizeNullString &&
                 operand.Type.ClrType == conversion.Type.ClrType)
             {
                 _identityConversionsRemoved++;
                 return operand;
             }
             if (conversion.UsePowerShellLanguageRuntime) _runtimeConversionSitesSpecialized++;
-            return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime, conversion.UsePowerShellTruthiness);
+            return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime, conversion.UsePowerShellTruthiness, conversion.NormalizeNullString);
         }
         if (expression is PowerShellBoundInvocationExpression invocation)
             return new PowerShellBoundInvocationExpression(invocation.Span, invocation.Target,

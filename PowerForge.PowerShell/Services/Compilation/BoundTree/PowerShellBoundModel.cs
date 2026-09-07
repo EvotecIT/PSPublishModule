@@ -275,24 +275,30 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         PowerShellTypeFact targetType,
         PowerShellBoundExpression operand,
         bool usePowerShellLanguageRuntime = false,
-        bool usePowerShellTruthiness = false)
+        bool usePowerShellTruthiness = false,
+        bool normalizeNullString = false)
         : base(
             span,
             targetType,
-            operand.ValueState,
+            normalizeNullString ? PowerShellValueState.Known : operand.ValueState,
             operand.Effects,
             operand.Capabilities | (usePowerShellLanguageRuntime || usePowerShellTruthiness ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None))
     {
         if (usePowerShellLanguageRuntime && usePowerShellTruthiness)
             throw new ArgumentException("A bound conversion cannot select two PowerShell language conversion operations.");
+        if (normalizeNullString && (usePowerShellLanguageRuntime || usePowerShellTruthiness ||
+            targetType.ClrType != typeof(string) || operand.Type.ClrType != typeof(string)))
+            throw new ArgumentException("Null-string normalization requires one CLR string operand and destination.");
         Operand = operand;
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
         UsePowerShellTruthiness = usePowerShellTruthiness;
+        NormalizeNullString = normalizeNullString;
     }
 
     internal PowerShellBoundExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
     internal bool UsePowerShellTruthiness { get; }
+    internal bool NormalizeNullString { get; }
 }
 
 internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpression

@@ -6,7 +6,7 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
     internal static bool IsNonThrowing(PowerShellLoweredExpression expression)
         => expression switch
         {
-            PowerShellLoweredConversionExpression conversion => !conversion.UsePowerShellLanguageRuntime &&
+            PowerShellLoweredConversionExpression conversion => conversion.NormalizeNullString || !conversion.UsePowerShellLanguageRuntime &&
                 !conversion.UsePowerShellTruthiness && conversion.ClrType == typeof(double) &&
                 (conversion.Operand.ClrType == typeof(double) || conversion.Operand.ClrType == typeof(int)),
             PowerShellLoweredMutationExpression mutation => mutation.TargetClrType == typeof(double) &&

@@ -41,9 +41,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("string", "@($null)")]
     [InlineData("int", "@($null)")]
-    [InlineData("string", ",$null")]
     [InlineData("int", ",$null")]
     public void Transpile_TypedNullCollectionRetainsPowerShellConversion(string elementType, string expression)
     {

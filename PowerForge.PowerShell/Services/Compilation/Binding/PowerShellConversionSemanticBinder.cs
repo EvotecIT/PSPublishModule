@@ -28,6 +28,8 @@ internal static class PowerShellConversionSemanticBinder
 
         var operand = bindExpression(syntax.Child, targetType);
         if (operand is null) return null;
+        if (targetType == typeof(string) && BindClosedStringConversion(operand) is { } stringValue)
+            return stringValue;
         var usePowerShellLanguageRuntime = !PowerShellClrTypeSemantics.CanAssign(targetType, operand.Type.ClrType);
         if (usePowerShellLanguageRuntime && !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
         {
@@ -43,6 +45,18 @@ internal static class PowerShellConversionSemanticBinder
             new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Explicit, "An authored conversion selects a CLR-compatible representation."),
             operand,
             usePowerShellLanguageRuntime);
+    }
+
+    /// <summary>Preserves PowerShell's null-to-empty conversion for a closed string value.</summary>
+    internal static PowerShellBoundExpression? BindClosedStringConversion(PowerShellBoundExpression operand)
+    {
+        var type = new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Explicit,
+            "PowerShell string conversion normalizes null to an empty string.");
+        if (operand is PowerShellBoundLiteralExpression { Value: null })
+            return new PowerShellBoundLiteralExpression(operand.Span, string.Empty, type, PowerShellValueState.Known);
+        if (operand.Type.ClrType != typeof(string)) return null;
+        if (operand.ValueState == PowerShellValueState.Known) return operand;
+        return new PowerShellBoundConversionExpression(operand.Span, type, operand, normalizeNullString: true);
     }
 
     private static PowerShellBoundExpression BindResolvedLiteral(SourceSpan span, Type targetType, object? value)

@@ -33,12 +33,14 @@ internal static class PowerShellArraySemanticBinder
                 // and dynamic objects; enumerating those records again changes grouping.
                 foreach (var record in array.Elements)
                 {
-                    if (!CanStore(record)) return null;
-                    elements.Add(record);
+                    var stored = BindElement(record);
+                    if (stored is null) return null;
+                    elements.Add(stored);
                 }
                 continue;
             }
-            if (!CanStore(element)) return null;
+            element = BindElement(element);
+            if (element is null) return null;
             // Ordinary $null is one collected value. Dynamic objects still require
             // runtime enumeration unless an authored array has wrapped them above.
             var preservesNull = element is PowerShellBoundLiteralExpression { Value: null } && arrayType == typeof(object[]);
@@ -52,19 +54,22 @@ internal static class PowerShellArraySemanticBinder
         }
         return new PowerShellBoundArrayExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent), arrayType, kind, elements.ToArray());
 
-        bool CanStore(PowerShellBoundExpression element)
+        PowerShellBoundExpression? BindElement(PowerShellBoundExpression element)
         {
+            if (elementType == typeof(string) &&
+                PowerShellConversionSemanticBinder.BindClosedStringConversion(element) is { } stringValue)
+                return stringValue;
             if (element.ValueState == PowerShellValueState.Null && elementType != typeof(object))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2504", "Null elements in typed arrays require PowerShell element conversion.", element.Span));
-                return false;
+                return null;
             }
             if (arrayType != typeof(object[]) && !PowerShellClrTypeSemantics.CanAssign(elementType, element.Type.ClrType))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2504", $"Array element type '{element.Type.ClrType.FullName}' cannot be assigned to explicit element type '{elementType.FullName}' without PowerShell runtime conversion.", element.Span));
-                return false;
+                return null;
             }
-            return true;
+            return element;
         }
     }
 }

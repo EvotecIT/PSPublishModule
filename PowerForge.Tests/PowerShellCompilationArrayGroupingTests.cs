@@ -8,6 +8,51 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
+    public void Build_NullableStringRecordsPreserveElementConversion(string framework, string host)
+    {
+        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
+        using var fixture = ArtifactFixture.Create("""
+            function Get-LiteralNull { [CmdletBinding()] param([Collections.Generic.Dictionary[string,string]]$Map) [string[]]$Values = ,$Map['missing']; return ,$Values }
+            function Get-CollectedNull { [CmdletBinding()] param([Collections.Generic.Dictionary[string,string]]$Map) [string[]]$Values = @($Map['missing']); return ,$Values }
+            function Get-GroupedNull { [CmdletBinding()] param([Collections.Generic.Dictionary[string,string]]$Map) [string[]]$Values = @((,$Map['missing'])); return ,$Values }
+            function Get-TypedLiteralNull { [CmdletBinding()] param([Collections.Generic.Dictionary[string,string]]$Map) [string[]]$Values = ,$null; return ,$Values }
+            function Get-TypedCollectedNull { [CmdletBinding()] param([Collections.Generic.Dictionary[string,string]]$Map) [string[]]$Values = @($null); return ,$Values }
+            function Get-ScalarCast { [CmdletBinding()] param([Collections.Generic.Dictionary[string,string]]$Map) $Text = $Map['missing']; return [string]$Text }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.NullableRecords",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(6, result.Manifest!.CompiledMethods);
+        const string probe = """
+            $map = [Collections.Generic.Dictionary[string,string]]::new()
+            for ($case = 0; $case -lt 5; $case++) {
+                if ($case -gt 0) { $map['missing'] = @($null, '', 'text', '123')[$case - 1] }
+                foreach ($command in 'Get-LiteralNull','Get-CollectedNull','Get-GroupedNull','Get-TypedLiteralNull','Get-TypedCollectedNull') {
+                    $values = & $command $map
+                    '{0}:{1}:{2}:{3}:{4}' -f $command,$values.Length,($null -eq $values[0]),($values[0] -ceq ''),$values[0]
+                }
+                $text = Get-ScalarCast $map
+                'cast:{0}:{1}:{2}' -f ($null -eq $text),$text.Length,$text
+            }
+            """;
+        var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
+            "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
+        var compiled = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
+            "Import-Module '" + result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
+        Assert.Equal(0, original.ExitCode);
+        Assert.Empty(original.StandardError);
+        Assert.Contains("Get-GroupedNull:1:False:True", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("cast:False:0", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
+            (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("net10.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
     public void Build_AuthoredArrayCollectionPreservesOneLevelGrouping(string framework, string host)
     {
         if (framework == "net472" && !OperatingSystem.IsWindows()) return;
@@ -64,7 +109,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("[int[]]$Values = @((1,2),3)")]
-    [InlineData("[string[]]$Values = @(,$null)")]
     [InlineData("[int[]]$Values = @(@($null))")]
     public void Transpile_CollectedRecordsRetainRequiredElementConversions(string assignment)
     {

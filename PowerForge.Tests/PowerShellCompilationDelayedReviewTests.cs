@@ -8,7 +8,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [InlineData("param([int[]] $Values); [int[]] $copy = @($Values); return $copy.Length")]
-    [InlineData("[string[]] $copy = @($null); return $copy.Length")]
+    [InlineData("[int[]] $copy = @($null); return $copy.Length")]
     public void Analyze_RoutesArraySubexpressionPipelineSemanticsToFallback(string body)
     {
         using var fixture = ArtifactFixture.Create("function Get-Copy { " + body + " }");

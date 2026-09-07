@@ -551,7 +551,8 @@ internal sealed partial class PowerShellTypedLowerer
                 conversion.Type.ClrType,
                 LowerExpression(conversion.Operand, functions, names, targetCapabilities),
                 conversion.UsePowerShellLanguageRuntime,
-                conversion.UsePowerShellTruthiness),
+                conversion.UsePowerShellTruthiness,
+                conversion.NormalizeNullString),
             PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
                 binary.Span,
                 binary.Type.ClrType,
