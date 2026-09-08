@@ -22,6 +22,7 @@ public sealed partial class ModulePipelineRunner
         if (checkpoint is null)
             return buildResult;
 
+        ValidateSynchronizedReleaseArtefactPayloadContainment(state);
         var sourceComponents = CreateSynchronizedReleaseSourceComponents(plan, state);
         var sourceFingerprint = CreateSynchronizedReleaseFingerprint(sourceComponents);
         var cachePath = ResolveSynchronizedReleasePayloadCachePath(state);
@@ -67,6 +68,26 @@ public sealed partial class ModulePipelineRunner
         RestoreCachedSynchronizedReleasePayloadPaths(cachePath, buildResult, state);
         _logger.Info($"Using exact cached payload for the resumed coordinated release from '{cachePath}'.");
         return buildResult;
+    }
+
+    private static void ValidateSynchronizedReleaseArtefactPayloadContainment(
+        ModulePipelineRunState state)
+    {
+        foreach (ArtefactBuildResult artefact in state.ArtefactResults.Where(static result =>
+                     result.Type is ArtefactType.Unpacked or ArtefactType.Script))
+        {
+            string outputRoot = Path.GetFullPath(artefact.OutputPath);
+            ArtefactModuleEntry? externalModule = artefact.Modules.FirstOrDefault(module =>
+                module is not null &&
+                !string.IsNullOrWhiteSpace(module.Path) &&
+                !IsSameOrChildPath(outputRoot, module.Path));
+            if (externalModule is null)
+                continue;
+
+            throw new InvalidOperationException(
+                $"Coordinated release artefact '{artefact.Type}' uses a split layout whose module root '{Path.GetFullPath(externalModule.Path)}' is outside its cached output root '{outputRoot}'. " +
+                "Keep ModulesPath and RequiredModules.Path within the artefact Path, or use a packed artefact, so resume can bind the complete release payload.");
+        }
     }
 
     private static string ResolveSynchronizedReleasePayloadCachePath(ModulePipelineRunState state)

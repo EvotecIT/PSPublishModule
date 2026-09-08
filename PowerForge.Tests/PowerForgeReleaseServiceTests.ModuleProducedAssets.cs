@@ -70,8 +70,11 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_LegacyModuleHostRecomputesTokenizedArtefactFallbackAfterAutoVersionResolution()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_ModuleHostRefreshesTokenizedArtefactMetadataAfterAutoVersionResolution(
+        bool reportsArtefactOutputs)
     {
         string root = CreateSandbox();
         try
@@ -124,7 +127,26 @@ public sealed partial class PowerForgeReleaseServiceTests
                 planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not plan."),
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
-                executeModuleBuild: (_, _) => new ModuleBuildHostExecutionResult { ExitCode = 0 });
+                executeModuleBuild: (_, _) => new ModuleBuildHostExecutionResult
+                {
+                    ExitCode = 0,
+                    ArtefactOutputs = reportsArtefactOutputs
+                        ?
+                        [
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.ScriptPacked,
+                                OutputRoot = Path.Combine(moduleDirectory, "Artifacts", "Scripts", "4.2.3"),
+                                OutputPath = Path.Combine(
+                                    moduleDirectory,
+                                    "Artifacts",
+                                    "Scripts",
+                                    "4.2.3",
+                                    "Company.Tools.4.2.3.zip")
+                            }
+                        ]
+                        : Array.Empty<PowerForgeModuleArtefactOutputSummary>()
+                });
 
             PowerForgeReleaseResult result = service.Execute(
                 new PowerForgeReleaseSpec

@@ -581,13 +581,16 @@ internal sealed partial class PowerForgeReleaseService
                     result.ModulePlan.ArtefactOutputs = moduleResult.ArtefactOutputs;
 
                 UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
-                if (result.ModulePlan is not null && moduleResult.ArtefactOutputs.Length == 0)
+                if (result.ModulePlan is not null)
                 {
-                    result.ModulePlan.ArtefactOutputs = ResolveModuleArtefactOutputs(
-                        module.ConfigurationContext,
-                        result.ModulePlan.ModuleName,
-                        result.ModulePlan.ModuleVersion,
-                        result.ModulePlan.PreReleaseTag);
+                    if (moduleResult.ArtefactOutputs.Length == 0)
+                    {
+                        result.ModulePlan.ArtefactOutputs = ResolveModuleArtefactOutputs(
+                            module.ConfigurationContext,
+                            result.ModulePlan.ModuleName,
+                            result.ModulePlan.ModuleVersion,
+                            result.ModulePlan.PreReleaseTag);
+                    }
                     result.ModulePlan.PackedModuleRoots = ResolvePackedModuleRoots(
                         module.ConfigurationContext,
                         result.ModulePlan.ModuleName,

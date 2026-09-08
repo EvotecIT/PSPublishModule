@@ -15,33 +15,35 @@ public sealed partial class ModulePipelineRunner
         if (plan.Artefacts is not { Length: > 0 })
             return;
 
-        var protectedPaths = CollectReleaseProtectedPaths(plan, state);
-        if (protectedPaths.Count == 0)
-            return;
-
         var conflicts = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddPackedArtefactOutputPathConflicts(plan, conflicts);
 
-        foreach (var artefact in plan.Artefacts.Where(static item => item is not null))
+        var protectedPaths = CollectReleaseProtectedPaths(plan, state);
+
+        if (protectedPaths.Count > 0)
         {
-            var cfg = artefact.Configuration ?? new ArtefactConfiguration();
-            if (cfg.Enabled != true)
-                continue;
-
-            foreach (var destructivePath in CollectArtefactDestructivePaths(plan, artefact, cfg))
+            foreach (var artefact in plan.Artefacts.Where(static item => item is not null))
             {
-                foreach (var protectedPath in protectedPaths)
+                var cfg = artefact.Configuration ?? new ArtefactConfiguration();
+                if (cfg.Enabled != true)
+                    continue;
+
+                foreach (var destructivePath in CollectArtefactDestructivePaths(plan, artefact, cfg))
                 {
-                    if (!DoesDestructivePathAffectProtectedPath(destructivePath, protectedPath))
-                        continue;
+                    foreach (var protectedPath in protectedPaths)
+                    {
+                        if (!DoesDestructivePathAffectProtectedPath(destructivePath, protectedPath))
+                            continue;
 
-                    var key = $"{artefact.ArtefactType}|{destructivePath.Kind}|{destructivePath.Path}|{protectedPath.Path}";
-                    if (!seen.Add(key))
-                        continue;
+                        var key = $"{artefact.ArtefactType}|{destructivePath.Kind}|{destructivePath.Path}|{protectedPath.Path}";
+                        if (!seen.Add(key))
+                            continue;
 
-                    conflicts.Add(
-                        $"Artefact '{artefact.ArtefactType}' {destructivePath.Label} '{Path.GetFullPath(destructivePath.Path)}' would affect {protectedPath.Label} '{Path.GetFullPath(protectedPath.Path)}'. " +
-                        $"Use a dedicated artefact path such as '{GetDedicatedArtefactPathHint(artefact.ArtefactType)}' and keep release staging/project build outputs in separate subdirectories.");
+                        conflicts.Add(
+                            $"Artefact '{artefact.ArtefactType}' {destructivePath.Label} '{Path.GetFullPath(destructivePath.Path)}' would affect {protectedPath.Label} '{Path.GetFullPath(protectedPath.Path)}'. " +
+                            $"Use a dedicated artefact path such as '{GetDedicatedArtefactPathHint(artefact.ArtefactType)}' and keep release staging/project build outputs in separate subdirectories.");
+                    }
                 }
             }
         }
@@ -52,6 +54,46 @@ public sealed partial class ModulePipelineRunner
         throw new InvalidOperationException(
             "Release artefact configuration is unsafe:" + Environment.NewLine +
             string.Join(Environment.NewLine, conflicts.Select(static message => "- " + message)));
+    }
+
+    private static void AddPackedArtefactOutputPathConflicts(
+        ModulePipelinePlan plan,
+        ICollection<string> conflicts)
+    {
+        var resolved = new List<(ConfigurationArtefactSegment Artefact, string Path)>();
+        foreach (var artefact in plan.Artefacts
+                     .Where(static item =>
+                         item is not null &&
+                         item.Configuration?.Enabled == true &&
+                         item.ArtefactType is ArtefactType.Packed or ArtefactType.ScriptPacked))
+        {
+            ArtefactConfiguration cfg = artefact.Configuration!;
+            string outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
+                cfg.Path,
+                plan.ProjectRoot,
+                plan.ModuleName,
+                plan.ResolvedVersion,
+                plan.PreRelease,
+                artefact.ArtefactType);
+            string outputPath = Path.GetFullPath(Path.Combine(
+                outputRoot,
+                ArtefactLayoutPathResolver.ResolveArtefactFileName(
+                    cfg,
+                    plan.ModuleName,
+                    plan.ResolvedVersion,
+                    plan.PreRelease)));
+            var previous = resolved.FirstOrDefault(candidate =>
+                string.Equals(candidate.Path, outputPath, GetPathComparison(candidate.Path, outputPath)));
+            if (previous.Artefact is not null)
+            {
+                conflicts.Add(
+                    $"Artefacts '{previous.Artefact.ArtefactType}' and '{artefact.ArtefactType}' resolve to the same zip output file '{outputPath}'. Configure a unique Path or ArtefactName for each enabled packed artefact.");
+            }
+            else
+            {
+                resolved.Add((artefact, outputPath));
+            }
+        }
     }
 
     private static List<ArtefactDestructivePath> CollectArtefactDestructivePaths(
