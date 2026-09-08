@@ -64,6 +64,8 @@ public sealed partial class ArtefactBuilder
             cfg,
             requiredRoot,
             scriptRoot,
+            outputRoot,
+            projectRoot,
             filteredRequiredModules);
         ValidateScriptCopyMappings(
             cfg,
@@ -189,6 +191,8 @@ public sealed partial class ArtefactBuilder
             cfg,
             requiredRoot,
             scriptRoot,
+            tempRoot,
+            projectRoot,
             filteredRequiredModules);
         ValidateScriptCopyMappings(
             cfg,

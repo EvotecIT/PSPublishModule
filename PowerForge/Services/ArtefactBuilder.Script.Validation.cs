@@ -616,6 +616,8 @@ public sealed partial class ArtefactBuilder
         ArtefactConfiguration cfg,
         string requiredRoot,
         string scriptRoot,
+        string artefactRoot,
+        string projectRoot,
         IReadOnlyList<RequiredModuleReference> requiredModules)
     {
         if (cfg.RequiredModules.Enabled != true)
@@ -631,6 +633,12 @@ public sealed partial class ArtefactBuilder
             {
                 throw new InvalidOperationException(
                     $"Required module destination '{destination}' resolves outside required modules root '{Path.GetFullPath(requiredRoot)}'.");
+            }
+            if (ScriptPathsOverlap(destination, projectRoot) &&
+                !IsSameOrBelowPath(destination, artefactRoot))
+            {
+                throw new InvalidOperationException(
+                    $"Required module destination '{destination}' overlaps project root '{Path.GetFullPath(projectRoot)}' and would erase or modify project sources.");
             }
             if (!IsSameOrBelowPath(scriptRoot, destination))
                 continue;

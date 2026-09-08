@@ -287,6 +287,56 @@ public sealed class ArtefactBuilderScriptOutputSafetyTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_RejectsRequiredModuleDestinationOverlappingProjectBeforeMutation(
+        bool destinationContainsProject)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "ProjectRequiredModule";
+            string projectParent = Directory.CreateDirectory(Path.Combine(root.FullName, "protected-parent")).FullName;
+            string projectContainer = Directory.CreateDirectory(Path.Combine(projectParent, "project-container")).FullName;
+            string projectRoot = Directory.CreateDirectory(Path.Combine(projectContainer, "project")).FullName;
+            string buildRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "build")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(buildRoot, "staging")).FullName;
+            WriteModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(buildRoot, "output")).FullName;
+            string outputMarker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(outputMarker, "preserve-output");
+            string dependencyName = destinationContainsProject ? "project-container" : "Dependency.Tools";
+            string requiredRoot = destinationContainsProject ? projectParent : projectRoot;
+            if (!destinationContainsProject)
+                Directory.CreateDirectory(Path.Combine(projectRoot, dependencyName));
+            string projectMarker = Path.Combine(projectRoot, "preserve.txt");
+            File.WriteAllText(projectMarker, "preserve-project");
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, ArtefactType.Script);
+            segment.Configuration.RequiredModules.Enabled = true;
+            segment.Configuration.RequiredModules.Path = requiredRoot;
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    projectRoot,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    [new RequiredModuleReference(dependencyName)]));
+
+            Assert.Contains("required module destination", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("overlaps project root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve-project", File.ReadAllText(projectMarker));
+            Assert.Equal("preserve-output", File.ReadAllText(outputMarker));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static ConfigurationArtefactSegment CreateSegment(string outputRoot, ArtefactType artefactType) =>
         new()
         {

@@ -163,6 +163,64 @@ public sealed class PssaFormatterIsolationTests
 
     }
 
+    [Fact]
+    public void EmbeddedFormatter_RanksDirectInstallByManifestVersion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string moduleRoot = Path.Combine(root, "modules", "PSScriptAnalyzer");
+            string versionedRoot = Path.Combine(moduleRoot, "999.0.0");
+            Directory.CreateDirectory(moduleRoot);
+            Directory.CreateDirectory(versionedRoot);
+
+            WriteTestModule(
+                moduleRoot,
+                "1000.0.0",
+                """
+                [System.IO.File]::AppendAllText($env:PSSA_IMPORT_LOG, "direct`n")
+                function Invoke-Formatter {
+                    param([string] $ScriptDefinition, [hashtable] $Settings)
+                    return $ScriptDefinition
+                }
+                Export-ModuleMember -Function Invoke-Formatter
+                """);
+            WriteTestModule(
+                versionedRoot,
+                "999.0.0",
+                """
+                [System.IO.File]::AppendAllText($env:PSSA_IMPORT_LOG, "versioned`n")
+                function Invoke-Formatter {
+                    param([string] $ScriptDefinition, [hashtable] $Settings)
+                    return $ScriptDefinition
+                }
+                Export-ModuleMember -Function Invoke-Formatter
+                """);
+
+            string importLogPath = Path.Combine(root, "imports.log");
+            string inputPath = Path.Combine(root, "module.ps1");
+            File.WriteAllText(inputPath, "Get-Date");
+            var formatter = new PssaFormatter(
+                new EnvironmentPowerShellRunner(new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = Path.Combine(root, "modules"),
+                    ["PSSA_IMPORT_LOG"] = importLogPath
+                }),
+                new CollectingLogger());
+
+            FormatterResult result = Assert.Single(formatter.FormatFiles(new[] { inputPath }));
+
+            Assert.Equal(new[] { "direct" }, File.ReadAllLines(importLogPath));
+            Assert.False(result.Changed);
+            Assert.Equal("Unchanged", result.Message);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteTestModule(string versionRoot, string version, string moduleScript)
     {
         File.WriteAllText(

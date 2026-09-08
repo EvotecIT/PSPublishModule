@@ -9,7 +9,19 @@ try {
             $PssaRoot = [System.IO.Path]::Combine($ModuleRoot, 'PSScriptAnalyzer')
             $DirectManifest = [System.IO.Path]::Combine($PssaRoot, 'PSScriptAnalyzer.psd1')
             if ([System.IO.File]::Exists($DirectManifest)) {
-                [pscustomobject]@{ Path = $DirectManifest; Version = [version]'0.0' }
+                $DirectVersion = [version]'0.0'
+                try {
+                    $DirectManifestData = Import-PowerShellDataFile -LiteralPath $DirectManifest -ErrorAction Stop
+                    $ParsedDirectVersion = $null
+                    if ($null -ne $DirectManifestData.ModuleVersion -and
+                        [version]::TryParse([string]$DirectManifestData.ModuleVersion, [ref]$ParsedDirectVersion)) {
+                        $DirectVersion = $ParsedDirectVersion
+                    }
+                } catch {
+                    # Keep malformed direct manifests as last-resort import candidates while
+                    # retaining usable version-directory installations from the same root.
+                }
+                [pscustomobject]@{ Path = $DirectManifest; Version = $DirectVersion }
             }
             if ([System.IO.Directory]::Exists($PssaRoot)) {
                 foreach ($VersionDirectory in [System.IO.Directory]::EnumerateDirectories($PssaRoot)) {
