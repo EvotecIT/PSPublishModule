@@ -142,6 +142,13 @@ internal static class MarkdownRenderer
         if (string.IsNullOrWhiteSpace(html))
             return string.Empty;
 
+        // Reserve authored IDs throughout the document, including headings that
+        // appear later, so generated anchors cannot take an existing target.
+        var document = HtmlTinkerX.HtmlParser.ParseWithAngleSharp(html);
+        var usedIds = document.QuerySelectorAll("[id]")
+            .Select(element => element.GetAttribute("id") ?? string.Empty)
+            .ToHashSet(StringComparer.Ordinal);
+
         return System.Text.RegularExpressions.Regex.Replace(html,
             "<h(?<level>[1-6])(?<attrs>[^>]*)>(?<text>.*?)</h\\1>",
             match =>
@@ -150,11 +157,30 @@ internal static class MarkdownRenderer
                 var attrs = match.Groups["attrs"].Value;
                 var headingHtml = NormalizeInlineCodeInHeading(match.Groups["text"].Value);
                 var text = System.Text.RegularExpressions.Regex.Replace(headingHtml, "<.*?>", string.Empty);
-                var id = Slugify(text);
                 var hasId = System.Text.RegularExpressions.Regex.IsMatch(
                     attrs,
                     "\\sid\\s*=",
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+                var id = string.Empty;
+                if (!hasId)
+                {
+                    text = System.Net.WebUtility.HtmlDecode(text);
+                    var baseId = Slugify(text);
+                    if (string.IsNullOrEmpty(baseId))
+                    {
+                        // Retain the established ASCII anchors where possible;
+                        // all-non-Latin headings still need a usable anchor.
+                        baseId = System.Text.RegularExpressions.Regex.Replace(
+                            text.Trim().ToLowerInvariant(), @"[^\p{L}\p{N}\p{M}\s-]", string.Empty);
+                        baseId = System.Text.RegularExpressions.Regex.Replace(baseId, @"\s+", "-").Trim('-');
+                    }
+                    if (string.IsNullOrEmpty(baseId))
+                        baseId = "heading";
+                    id = baseId;
+                    var suffix = 2;
+                    while (!usedIds.Add(id))
+                        id = $"{baseId}-{suffix++}";
+                }
                 var attrsWithId = hasId
                     ? attrs
                     : (string.IsNullOrWhiteSpace(attrs) ? $" id=\"{id}\"" : $"{attrs} id=\"{id}\"");
