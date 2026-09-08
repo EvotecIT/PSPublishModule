@@ -1106,6 +1106,16 @@ locales alongside the existing single `MetadataSpec`. `MetadataResults` returns 
 prepare metadata only; submission and public release remain separate, explicitly authorized
 actions.
 
+### Screenshot locales
+
+`AppleApps.ScreenshotConfigPaths` accepts one mapping per app, platform, and locale. A release can therefore select English and Polish screenshots for the same iOS version. Duplicate locale mappings for the same target are rejected. Screenshot folders and approval manifests remain relative to their own JSON file.
+
+Release preparation validates and snapshots every selected locale before the first remote mutation. For approved replacements, it compares the combined remote inventory before changing metadata or selecting a build, then rechecks each locale before replacing its screenshots. Each locale still needs its reviewed approval manifest and exact capture provenance.
+
+Direct .NET callers can supply `AppStoreConnectReleasePreparationRequest.ScreenshotMappings`, with a `Spec` and `BaseDirectory` for each locale. `ScreenshotSpec` and the request-level `BaseDirectory` remain supported for one locale. `ScreenshotResults` reports every synchronized locale; `Screenshots` retains the first result for existing callers.
+
+Readiness requests accept `ScreenshotSpecs` to check each locale's required display types. Combined readiness passes only when every configured locale passes, and screenshot set results identify their `Locale`. Missing localizations must be created by the version metadata synchronization before their screenshots can be uploaded.
+
 ## Screenshot Upload Flow
 
 Screenshot upload uses App Store Connect's asset reservation flow:

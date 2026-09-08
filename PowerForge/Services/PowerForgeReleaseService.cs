@@ -2309,7 +2309,7 @@ internal sealed partial class PowerForgeReleaseService
         var valuesByApp = new Dictionary<PowerForgeAppleAppReleaseTargetPlan, (string MarketingVersion, string BuildNumber)>();
         var screenshotsByApp = new Dictionary<
             PowerForgeAppleAppReleaseTargetPlan,
-            (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)?>();
+            (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[]>();
         var metadataByApp = new Dictionary<
             PowerForgeAppleAppReleaseTargetPlan,
             (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[]>();
@@ -2396,29 +2396,18 @@ internal sealed partial class PowerForgeReleaseService
                         valuesByApp[app] = (app.MarketingVersion!, app.BuildNumber!);
                 }
 
-                var matchingScreenshotSpec = app.DistributionRoute == AppleDistributionRoute.AppStore &&
+                var matchingScreenshotSpecs = app.DistributionRoute == AppleDistributionRoute.AppStore &&
                                              ShouldRunAppleShipAppStoreStep(plan, app) &&
-                                             (plan.SyncScreenshots ||
-                                              plan.CheckReleaseReadiness ||
+                                             (plan.SyncScreenshots || plan.CheckReleaseReadiness ||
                                               (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
-                    ? ResolveMatchingScreenshotSpec(
-                        screenshotSpecs,
-                        app,
-                        valuesByApp[app].MarketingVersion,
+                    ? ResolveMatchingScreenshotSpecs(screenshotSpecs, app, valuesByApp[app].MarketingVersion,
                         required: plan.SyncScreenshots || screenshotSpecs.Length > 0)
-                    : null;
-                if (matchingScreenshotSpec is not null)
-                {
-                    matchingScreenshotSpec = (
-                        BindScreenshotSpec(
-                            matchingScreenshotSpec.Value.Spec,
-                            app,
-                            valuesByApp[app].MarketingVersion),
-                        matchingScreenshotSpec.Value.ConfigPath);
-                }
-                screenshotsByApp[app] = matchingScreenshotSpec;
-                if (plan.SyncScreenshots && matchingScreenshotSpec is not null)
-                    ValidateAppleScreenshotPreflight(matchingScreenshotSpec.Value, plan.SourceCommit);
+                        .Select(value => (Spec: BindScreenshotSpec(value.Spec, app, valuesByApp[app].MarketingVersion), value.ConfigPath)).ToArray()
+                    : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
+                screenshotsByApp[app] = matchingScreenshotSpecs;
+                if (plan.SyncScreenshots)
+                    foreach (var configured in matchingScreenshotSpecs)
+                        ValidateAppleScreenshotPreflight(configured, plan.SourceCommit);
 
                 var matchingMetadataSpecs = plan.SyncMetadata &&
                                            ShouldRunAppleShipAppStoreStep(plan, app) &&
@@ -2749,7 +2738,7 @@ internal sealed partial class PowerForgeReleaseService
                 var distributionValues = needsVersionDistribution
                     ? valuesByApp[app]
                     : (MarketingVersion: string.Empty, BuildNumber: string.Empty);
-                var matchingScreenshotSpec = screenshotsByApp[app];
+                var matchingScreenshotSpecs = screenshotsByApp[app];
                 var matchingMetadataSpecs = metadataByApp[app];
                 result.Distribution = _prepareAppleDistribution(new AppStoreConnectReleasePreparationRequest
                 {
@@ -2761,7 +2750,14 @@ internal sealed partial class PowerForgeReleaseService
                     CreateVersion = plan.PrepareDistribution,
                     SelectBuild = plan.PrepareDistribution && plan.SelectBuildForDistribution,
                     RequireValidBuild = !plan.AllowUnprocessedDistributionBuild,
-                    ScreenshotSpec = plan.SyncScreenshots ? matchingScreenshotSpec?.Spec : null,
+                    ScreenshotSpec = plan.SyncScreenshots && matchingScreenshotSpecs.Length == 1 ? matchingScreenshotSpecs[0].Spec : null,
+                    ScreenshotMappings = plan.SyncScreenshots && matchingScreenshotSpecs.Length > 1
+                        ? matchingScreenshotSpecs.Select(value => new AppStoreConnectReleaseScreenshotMapping
+                        {
+                            Spec = value.Spec,
+                            BaseDirectory = Path.GetDirectoryName(value.ConfigPath) ?? plan.ProjectRoot
+                        }).ToArray()
+                        : Array.Empty<AppStoreConnectReleaseScreenshotMapping>(),
                     MetadataSpecs = matchingMetadataSpecs.Select(static value => value.Spec).ToArray(),
                     AppInfoMetadataSpecs = appInfoMetadataSpecs,
                     ReplaceScreenshots = plan.ReplaceScreenshots,
@@ -2776,15 +2772,15 @@ internal sealed partial class PowerForgeReleaseService
                                 : StringComparer.Ordinal),
                     ExpectedScreenshotInventorySha256 = app.ExpectedScreenshotInventorySha256,
                     CheckReadiness = plan.CheckReleaseReadiness,
-                    ReadinessRequest = plan.CheckReleaseReadiness && matchingScreenshotSpec is not null
+                    ReadinessRequest = plan.CheckReleaseReadiness && matchingScreenshotSpecs.Length > 0
                         ? new AppStoreConnectReleaseReadinessRequest
                         {
-                            ScreenshotSpec = matchingScreenshotSpec.Value.Spec
+                            Locale = matchingScreenshotSpecs[0].Spec.Locale,
+                            ScreenshotSpec = matchingScreenshotSpecs.Length == 1 ? matchingScreenshotSpecs[0].Spec : null,
+                            ScreenshotSpecs = matchingScreenshotSpecs.Length > 1 ? matchingScreenshotSpecs.Select(static value => value.Spec).ToArray() : Array.Empty<AppStoreConnectScreenshotSyncSpec>()
                         }
                         : null,
-                    BaseDirectory = matchingScreenshotSpec is null
-                        ? plan.ProjectRoot
-                        : Path.GetDirectoryName(matchingScreenshotSpec.Value.ConfigPath) ?? plan.ProjectRoot
+                    BaseDirectory = matchingScreenshotSpecs.Length == 1 ? Path.GetDirectoryName(matchingScreenshotSpecs[0].ConfigPath) ?? plan.ProjectRoot : plan.ProjectRoot
                 });
                 if (appInfoMetadataSpecs.Length > 0)
                     ValidateAppleAppInfoMutationResults(appInfoMetadataSpecs, result.Distribution.AppInfoMetadataResults);
@@ -2834,9 +2830,9 @@ internal sealed partial class PowerForgeReleaseService
                 app.DistributionRoute == AppleDistributionRoute.AppStore)
             {
                 var reviewValues = valuesByApp[app];
-                var matchingScreenshotSpec = !plan.SkipReviewReadinessCheck
+                var matchingScreenshotSpecs = !plan.SkipReviewReadinessCheck
                     ? screenshotsByApp[app]
-                    : null;
+                    : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
                 result.ReviewSubmission = _submitAppleReview(new AppStoreConnectReviewSubmissionRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -2848,11 +2844,13 @@ internal sealed partial class PowerForgeReleaseService
                     RequireValidBuild = !plan.AllowUnprocessedReviewBuild,
                     CheckReadiness = !plan.SkipReviewReadinessCheck,
                     RequireReady = !plan.AllowReviewSubmissionWhenNotReady,
-                    ReadinessRequest = matchingScreenshotSpec is null
+                    ReadinessRequest = matchingScreenshotSpecs.Length == 0
                         ? null
                         : new AppStoreConnectReleaseReadinessRequest
                         {
-                            ScreenshotSpec = matchingScreenshotSpec.Value.Spec
+                            Locale = matchingScreenshotSpecs[0].Spec.Locale,
+                            ScreenshotSpec = matchingScreenshotSpecs.Length == 1 ? matchingScreenshotSpecs[0].Spec : null,
+                            ScreenshotSpecs = matchingScreenshotSpecs.Length > 1 ? matchingScreenshotSpecs.Select(static value => value.Spec).ToArray() : Array.Empty<AppStoreConnectScreenshotSyncSpec>()
                         }
                 });
             }
@@ -3104,27 +3102,6 @@ internal sealed partial class PowerForgeReleaseService
         return (marketingVersion!.Trim(), buildNumber!.Trim());
     }
 
-    private static (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] LoadAppleScreenshotSpecs(PowerForgeAppleReleasePlan plan)
-    {
-        var paths = new List<string>();
-        if (!string.IsNullOrWhiteSpace(plan.ScreenshotConfigPath))
-            paths.Add(plan.ScreenshotConfigPath!);
-        paths.AddRange(plan.ScreenshotConfigPaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
-
-        return paths
-            .Distinct(FrameworkCompatibility.GetPathStringComparisonForPath(plan.ProjectRoot) == StringComparison.OrdinalIgnoreCase
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal)
-            .Select(path =>
-            {
-                var json = ReadApprovedMutationInputText(plan, path);
-                var spec = JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(json, CreateJsonOptions())
-                    ?? throw new InvalidOperationException($"Unable to deserialize screenshot sync config: {path}");
-                return (spec, path);
-            })
-            .ToArray();
-    }
-
     private static Dictionary<string, AppStoreConnectGovernanceSpec> LoadAppleGovernanceSpecs(PowerForgeAppleReleasePlan plan)
     {
         var paths = new List<string>();
@@ -3145,74 +3122,6 @@ internal sealed partial class PowerForgeReleaseService
         }
         return result;
     }
-
-    private static void ValidateAppleScreenshotPreflight(
-        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath) configured,
-        string? expectedSourceCommit)
-    {
-        var baseDirectory = Path.GetDirectoryName(configured.ConfigPath) ?? Directory.GetCurrentDirectory();
-        var validation = new AppStoreConnectScreenshotSyncConfigValidator()
-            .Validate(configured.Spec, baseDirectory, expectedSourceCommit: expectedSourceCommit);
-        if (validation.IsValid)
-            return;
-
-        var messages = validation.Messages
-            .Concat(validation.ScreenshotSets.SelectMany(static set => set.Messages))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-        throw new InvalidOperationException(
-            $"Screenshot preflight failed for '{configured.ConfigPath}': {string.Join(" ", messages)}");
-    }
-
-    private static (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)? ResolveMatchingScreenshotSpec(
-        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] specs,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion,
-        bool required = false)
-    {
-        var matches = specs
-            .Where(candidate =>
-                ScreenshotSpecMatches(candidate.Spec, app, marketingVersion))
-            .ToArray();
-        if (matches.Length > 1)
-            throw new InvalidOperationException($"Multiple screenshot sync configs match Apple app '{app.Name}' version '{marketingVersion}' platform '{app.Platform}'.");
-        if (matches.Length == 0 && required)
-        {
-            throw new InvalidOperationException(
-                $"No screenshot sync config matches Apple app '{app.Name}' " +
-                $"(AppStoreConnectAppId '{app.AppStoreConnectAppId}', platform '{app.Platform}', version '{marketingVersion}').");
-        }
-
-        return matches.Length == 0 ? null : matches[0];
-    }
-
-    private static bool ScreenshotSpecMatches(
-        AppStoreConnectScreenshotSyncSpec spec,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion)
-    {
-        var appIdMatches = string.IsNullOrWhiteSpace(spec.AppId) ||
-                           string.Equals(spec.AppId.Trim(), app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase);
-        var specVersionString = string.IsNullOrWhiteSpace(spec.VersionString) ? null : spec.VersionString!.Trim();
-        var versionMatches = (spec.UseReleaseVersion && specVersionString is null) ||
-                             string.Equals(specVersionString, marketingVersion, StringComparison.OrdinalIgnoreCase);
-        return appIdMatches && versionMatches && spec.Platform == app.Platform;
-    }
-
-    private static AppStoreConnectScreenshotSyncSpec BindScreenshotSpec(
-        AppStoreConnectScreenshotSyncSpec source,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion)
-        => new()
-        {
-            AppId = app.AppStoreConnectAppId!,
-            VersionString = marketingVersion,
-            VersionId = null,
-            UseReleaseVersion = false,
-            Platform = app.Platform,
-            Locale = source.Locale,
-            ScreenshotSets = source.ScreenshotSets,
-            Quality = source.Quality
-        };
 
     private static string NormalizeAppleArchiveProjectPath(string projectPath, string appName)
     {
@@ -5649,7 +5558,10 @@ internal sealed partial class PowerForgeReleaseService
                     result.Distribution.CreatedVersion,
                     result.Distribution.SelectedBuild,
                     result.Distribution.PreviousBuildId,
-                    ScreenshotSetCount = result.Distribution.Screenshots?.ScreenshotSets.Length ?? 0,
+                    ScreenshotSetCount = result.Distribution.ScreenshotResults.Length > 0
+                        ? result.Distribution.ScreenshotResults.Sum(static value => value.ScreenshotSets.Length)
+                        : result.Distribution.Screenshots?.ScreenshotSets.Length ?? 0,
+                    ScreenshotLocales = result.Distribution.ScreenshotResults.Select(static value => value.Localization.Locale).ToArray(),
                     MetadataUpdatedFields = result.Distribution.MetadataResults.SelectMany(static value => value.UpdatedFields).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
                     AppInfoMetadataUpdatedFields = result.Distribution.AppInfoMetadataResults
                         .SelectMany(metadata => metadata.UpdatedFields)

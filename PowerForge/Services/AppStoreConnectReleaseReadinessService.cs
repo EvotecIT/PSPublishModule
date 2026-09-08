@@ -31,6 +31,27 @@ public sealed class AppStoreConnectReleaseReadinessService
         if (string.IsNullOrWhiteSpace(request.Locale))
             throw new ArgumentException("Locale is required.", nameof(request));
 
+        if ((request.ScreenshotSpecs?.Length ?? 0) > 0)
+        {
+            var specs = (request.ScreenshotSpec is null
+                ? Array.Empty<AppStoreConnectScreenshotSyncSpec>()
+                : new[] { request.ScreenshotSpec }).Concat(request.ScreenshotSpecs!).ToArray();
+            AppStoreConnectReleasePreparationService.ValidateScreenshotLocales(specs);
+            var results = new List<AppStoreConnectReleaseReadinessResult>();
+            foreach (var spec in specs)
+                results.Add(await CheckAsync(request.ForScreenshotLocale(spec), cancellationToken).ConfigureAwait(false));
+            var aggregate = results[0];
+            aggregate.Localizations = results.Where(static result => result.Localization is not null)
+                .Select(static result => result.Localization!).ToArray();
+            aggregate.IsReady = results.All(static result => result.IsReady);
+            aggregate.ScreenshotSets = results.SelectMany(static result => result.ScreenshotSets).ToArray();
+            aggregate.Checks = results.SelectMany((result, index) => result.Checks.Select(check => new AppStoreConnectReleaseReadinessCheck
+            {
+                Name = $"{specs[index].Locale}.{check.Name}", Passed = check.Passed, Message = check.Message
+            })).ToArray();
+            return aggregate;
+        }
+
         var checks = new List<AppStoreConnectReleaseReadinessCheck>();
         var version = (await _client.GetVersionsAsync(
             request.AppId,
@@ -89,6 +110,9 @@ public sealed class AppStoreConnectReleaseReadinessService
                 ? $"Localization '{request.Locale}' was not found for App Store version '{version.Id}'."
                 : $"Localization '{request.Locale}' exists.");
 
+            if (localization is null && request.RequireScreenshots)
+                screenshotReadiness = ResolveRequiredScreenshotTypes(request).Select(displayType =>
+                    new AppStoreConnectReleaseScreenshotSetReadiness { Locale = request.Locale, ScreenshotDisplayType = displayType }).ToArray();
             if (localization is not null)
             {
                 CheckLocalizedMetadata(checks, localization, request);
@@ -148,7 +172,7 @@ public sealed class AppStoreConnectReleaseReadinessService
             if (set is null)
             {
                 AddCheck(checks, $"screenshots.{displayType}", false, $"Screenshot set '{displayType}' was not found.");
-                result.Add(new AppStoreConnectReleaseScreenshotSetReadiness { ScreenshotDisplayType = displayType });
+                result.Add(new AppStoreConnectReleaseScreenshotSetReadiness { Locale = request.Locale, ScreenshotDisplayType = displayType });
                 continue;
             }
 
@@ -169,6 +193,7 @@ public sealed class AppStoreConnectReleaseReadinessService
 
             result.Add(new AppStoreConnectReleaseScreenshotSetReadiness
             {
+                Locale = request.Locale,
                 ScreenshotDisplayType = displayType,
                 ScreenshotSetId = set.Id,
                 Count = screenshots.Length,

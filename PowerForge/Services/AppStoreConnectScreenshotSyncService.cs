@@ -31,6 +31,18 @@ public sealed partial class AppStoreConnectScreenshotSyncService
         if (string.IsNullOrWhiteSpace(expectedInventorySha256))
             throw new ArgumentException("Expected screenshot inventory SHA-256 is required.", nameof(expectedInventorySha256));
 
+        var remoteInventory = await ReadRemoteInventoryAsync(spec, cancellationToken).ConfigureAwait(false);
+        var actualInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(remoteInventory);
+        if (!actualInventorySha256.Equals(expectedInventorySha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "App Store Connect screenshots changed after Apple plan approval. Review a new exact screenshot replacement plan before any remote release mutation.");
+        }
+    }
+
+    internal async Task<AppStoreConnectReleaseScreenshotSetReadiness[]> ReadRemoteInventoryAsync(
+        AppStoreConnectScreenshotSyncSpec spec, CancellationToken cancellationToken)
+    {
         var version = !string.IsNullOrWhiteSpace(spec.VersionId)
             ? new AppStoreConnectVersionInfo
             {
@@ -49,12 +61,10 @@ public sealed partial class AppStoreConnectScreenshotSyncService
             version.Id,
             spec.Locale,
             limit: 10,
-            cancellationToken).ConfigureAwait(false)).FirstOrDefault()
-            ?? throw new InvalidOperationException($"Localization '{spec.Locale}' was not found before screenshot inventory validation.");
-        var existingSets = await _client.GetScreenshotSetsAsync(
-            localization.Id,
-            limit: 200,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+        var existingSets = localization is null
+            ? Array.Empty<AppStoreConnectScreenshotSetInfo>()
+            : await _client.GetScreenshotSetsAsync(localization.Id, limit: 200, cancellationToken).ConfigureAwait(false);
         var remoteInventory = new List<AppStoreConnectReleaseScreenshotSetReadiness>();
         foreach (var sourceSet in spec.ScreenshotSets)
         {
@@ -64,15 +74,12 @@ public sealed partial class AppStoreConnectScreenshotSyncService
             var screenshots = set is null
                 ? Array.Empty<AppStoreConnectScreenshotInfo>()
                 : await _client.GetScreenshotsAsync(set.Id, limit: 200, cancellationToken).ConfigureAwait(false);
-            remoteInventory.Add(CreateRemoteInventorySet(displayType, set?.Id, screenshots));
+            var inventorySet = CreateRemoteInventorySet(displayType, set?.Id, screenshots);
+            inventorySet.Locale = spec.Locale;
+            remoteInventory.Add(inventorySet);
         }
 
-        var actualInventorySha256 = AppStoreConnectScreenshotInventory.ComputeSha256(remoteInventory);
-        if (!actualInventorySha256.Equals(expectedInventorySha256, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "App Store Connect screenshots changed after Apple plan approval. Review a new exact screenshot replacement plan before any remote release mutation.");
-        }
+        return remoteInventory.ToArray();
     }
 
     /// <summary>

@@ -252,14 +252,10 @@ internal sealed partial class PowerForgeReleaseService
         if (bindScreenshotInventory || checkReadiness)
         {
             var values = ResolveAppleDistributionValues(app, versionUpdate: null);
-            var matchingScreenshotSpec = ResolveMatchingScreenshotSpec(
-                screenshotSpecs,
-                app,
-                values.MarketingVersion,
-                required: screenshotSpecs.Length > 0);
-            var boundScreenshotSpec = matchingScreenshotSpec is null
-                ? null
-                : BindScreenshotSpec(matchingScreenshotSpec.Value.Spec, app, values.MarketingVersion);
+            var matchingScreenshotSpecs = ResolveMatchingScreenshotSpecs(screenshotSpecs, app,
+                values.MarketingVersion, required: screenshotSpecs.Length > 0);
+            var boundScreenshotSpecs = matchingScreenshotSpecs
+                .Select(value => BindScreenshotSpec(value.Spec, app, values.MarketingVersion)).ToArray();
             var readiness = _checkAppleReleaseReadiness(
                 CreateAppStoreConnectCredential(plan),
                 new AppStoreConnectReleaseReadinessRequest
@@ -268,7 +264,9 @@ internal sealed partial class PowerForgeReleaseService
                     VersionString = values.MarketingVersion,
                     BuildNumber = checkReadiness ? values.BuildNumber : null,
                     Platform = app.Platform,
-                    ScreenshotSpec = boundScreenshotSpec,
+                    Locale = boundScreenshotSpecs.FirstOrDefault()?.Locale ?? "en-US",
+                    ScreenshotSpec = boundScreenshotSpecs.Length == 1 ? boundScreenshotSpecs[0] : null,
+                    ScreenshotSpecs = boundScreenshotSpecs.Length > 1 ? boundScreenshotSpecs : Array.Empty<AppStoreConnectScreenshotSyncSpec>(),
                     RequireSelectedBuild = checkReadiness,
                     RequireValidBuild = checkReadiness,
                     RequireDescription = checkReadiness,
@@ -563,10 +561,13 @@ internal sealed partial class PowerForgeReleaseService
             readiness.Build,
             readiness.SelectedBuildId,
             readiness.Localization,
+            Localizations = readiness.Localizations.OrderBy(static localization => localization.Locale, StringComparer.Ordinal).ToArray(),
             ScreenshotSets = readiness.ScreenshotSets
-                .OrderBy(static set => set.ScreenshotDisplayType, StringComparer.Ordinal)
+                .OrderBy(static set => set.Locale, StringComparer.Ordinal)
+                .ThenBy(static set => set.ScreenshotDisplayType, StringComparer.Ordinal)
                 .Select(static set => new
                 {
+                    set.Locale,
                     set.ScreenshotDisplayType,
                     set.ScreenshotSetId,
                     set.Count,

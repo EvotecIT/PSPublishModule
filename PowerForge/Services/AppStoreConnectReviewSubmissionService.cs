@@ -201,7 +201,8 @@ public sealed class AppStoreConnectReviewSubmissionService
             RequireCompleteScreenshots = source.RequireCompleteScreenshots,
             MinimumScreenshotsPerSet = source.MinimumScreenshotsPerSet,
             RequiredScreenshotDisplayTypes = source.RequiredScreenshotDisplayTypes,
-            ScreenshotSpec = source.ScreenshotSpec
+            ScreenshotSpec = source.ScreenshotSpec,
+            ScreenshotSpecs = source.ScreenshotSpecs
         };
     }
 
