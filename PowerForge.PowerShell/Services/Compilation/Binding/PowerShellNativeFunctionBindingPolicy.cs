@@ -2,7 +2,7 @@ using System.Management.Automation.Language;
 
 namespace PowerForge;
 
-/// <summary>Selects native invocation storage when parameter callbacks can invalidate CLR storage facts.</summary>
+/// <summary>Selects native invocation storage for observable binding and pipeline contracts.</summary>
 internal static class PowerShellNativeFunctionBindingPolicy
 {
     internal static PowerShellBoundNativeVariableExpression BindVariable(ParsedSourceDocument document, VariableExpressionAst variable)
@@ -60,8 +60,15 @@ internal static class PowerShellNativeFunctionBindingPolicy
         return new PowerShellNativeFunctionBinding(declaration, PowerShellNativeVariableAnalysis.Analyze(function));
     }
 
+    internal static Ast? FindNativePipelineOperator(FunctionDefinitionAst function, bool includeCommandRedirections = true)
+        => function.Body.Find(node =>
+            node is PipelineAst pipeline && PowerShellCommandRegionSemanticBinder.IsBackground(pipeline) ||
+            node is CommandBaseAst { Redirections.Count: > 0 } command &&
+                (includeCommandRedirections || command is CommandExpressionAst), searchNestedScriptBlocks: true);
+
     private static bool RequiresNativeBinding(FunctionDefinitionAst function)
-        => PowerShellParameterSyntax.GetParameters(function.Body).Any(parameter => parameter.DefaultValue is not null and not ConstantExpressionAst and not StringConstantExpressionAst ||
+        => FindNativePipelineOperator(function) is not null ||
+           PowerShellParameterSyntax.GetParameters(function.Body).Any(parameter => parameter.DefaultValue is not null and not ConstantExpressionAst and not StringConstantExpressionAst ||
             parameter.Attributes.OfType<AttributeAst>().Any(attribute =>
                 typeof(System.Management.Automation.ValidateArgumentsAttribute).IsAssignableFrom(attribute.TypeName.GetReflectionType() ?? typeof(object)) ||
                 parameter.StaticType == typeof(string) && attribute.TypeName.Name.Equals("Parameter", StringComparison.OrdinalIgnoreCase) &&

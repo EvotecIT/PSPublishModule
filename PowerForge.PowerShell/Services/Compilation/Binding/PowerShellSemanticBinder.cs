@@ -54,6 +54,15 @@ internal sealed partial class PowerShellSemanticBinder
             regionOpportunities,
             document.Path,
             functionSymbol.Name);
+        // Command redirections already have target-specific binding diagnostics. Background
+        // pipelines and expression redirections must be stopped before ordinary unwrapping.
+        if (nativeFunctionBinding is null && PowerShellNativeFunctionBindingPolicy.FindNativePipelineOperator(function, includeCommandRedirections: false) is { } nativeOperator)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2945",
+                "Background pipelines and stream redirection require native invocation binding; this target or function lifecycle does not provide that contract.",
+                PowerShellSourceParser.GetSpan(document, nativeOperator.Extent)));
+            return null;
+        }
         if (!PowerShellOutputTypeSemanticPolicy.TryResolve(
                 function.Body,
                 targetFramework,

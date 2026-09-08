@@ -4,9 +4,12 @@ namespace PowerForge;
 
 internal static class PowerShellCommandRegionSemanticBinder
 {
+    internal static bool IsBackground(PipelineAst pipeline)
+        => pipeline.GetType().GetProperty("Background")?.GetValue(pipeline) is true;
+
     internal static bool HasPipelineOperators(PipelineAst pipeline)
-        => pipeline.PipelineElements.OfType<CommandExpressionAst>().Any(command => command.Redirections.Count > 0) ||
-           pipeline.GetType().GetProperty("Background")?.GetValue(pipeline) is true;
+        => pipeline.PipelineElements.Any(command => command.Redirections.Count > 0) ||
+           IsBackground(pipeline);
 
     internal static bool RequiresPipelineSyntax(PipelineAst pipeline)
         => pipeline.PipelineElements.Count != 1 || pipeline.PipelineElements[0] is CommandAst || HasPipelineOperators(pipeline);
