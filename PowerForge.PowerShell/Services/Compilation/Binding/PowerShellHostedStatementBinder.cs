@@ -19,6 +19,13 @@ internal static class PowerShellHostedStatementBinder
     {
         bound = null;
         var statement = authoredStatements[index];
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+        {
+            var selected = PowerShellCommandRegionSemanticBinder.TryBindNativePipeline(document, statement,
+                commandResolver, localFunctionNames, capabilities, out var native);
+            bound = native;
+            return selected;
+        }
         // Keep cleanup visible to typed control-flow analysis. Hiding it inside a
         // hosted region bypasses the downstream-stop preference/capture contract.
         if (ContainsFinally(statement)) return false;

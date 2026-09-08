@@ -60,17 +60,21 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
         SourceSpan span,
         string source,
         PowerShellLoweredCommandRegionArgument[] arguments,
-        PowerShellLoweredCommandStage[]? stages = null)
+        PowerShellLoweredCommandStage[]? stages = null, string? nativeSourcePath = null, string? nativeSourceDocument = null)
         : base(span)
     {
         HostedFallbackSource = source;
         Arguments = arguments;
         Stages = stages ?? Array.Empty<PowerShellLoweredCommandStage>();
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceDocument = nativeSourceDocument;
     }
 
     internal string HostedFallbackSource { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCommandStage> Stages { get; }
+    internal string? NativeSourcePath { get; }
+    internal string? NativeSourceDocument { get; }
 }
 
 internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLoweredStatement

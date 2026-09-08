@@ -39,6 +39,9 @@ internal static class PowerShellLoweredCommandProviderCollector
     {
         switch (expression)
         {
+            case PowerShellLoweredNativeCommandExpression nativeCommand:
+                foreach (var stage in nativeCommand.Stages) yield return stage.Provider;
+                break;
             case PowerShellLoweredRuntimeStateExpression { Provider: not null } runtime:
                 yield return runtime.Provider;
                 break;

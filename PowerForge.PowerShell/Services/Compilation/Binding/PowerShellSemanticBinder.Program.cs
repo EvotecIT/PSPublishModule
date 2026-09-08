@@ -21,6 +21,8 @@ internal sealed partial class PowerShellSemanticBinder
         var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
         var regionOpportunities = new Dictionary<string, PowerShellBoundRegionOpportunity>(StringComparer.Ordinal);
         var declarations = DeclareFunctions(orderedDocuments, diagnostics);
+        var nativeInvocationClosure = PowerShellNativeFunctionBindingPolicy.FindInvocationClosure(
+            declarations.Select(static declaration => declaration.Syntax), capabilities);
         var numericErrorObservedCallees = PowerShellRuntimeExceptionCatchPolicy.FindNumericErrorObservedCallees(orderedDocuments);
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
@@ -77,7 +79,8 @@ internal sealed partial class PowerShellSemanticBinder
                         : null,
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
                         ? regionOpportunities
-                        : null);
+                        : null,
+                    nativeInvocationClosure.Contains(declaration.Syntax.Name));
                 if (bound is not null && numericErrorObservedCallees.Contains(declaration.Syntax.Name) &&
                     PowerShellRuntimeExceptionCatchPolicy.RequiresNumericErrorWrapping(bound))
                 {

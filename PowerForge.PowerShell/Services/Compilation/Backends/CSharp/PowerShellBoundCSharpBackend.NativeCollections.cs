@@ -4,6 +4,15 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
+    private string? _nativeRegionPartialOutputSink;
+
+    private string EmitNativeCollectedValue(PowerShellLoweredExpression value, string sink)
+    {
+        var previous = _nativeRegionPartialOutputSink;
+        try { _nativeRegionPartialOutputSink = sink; return EmitExpression(value); }
+        finally { _nativeRegionPartialOutputSink = previous; }
+    }
+
     private string EmitNativeCollection(PowerShellLoweredNativeCollectionExpression collection)
     {
         if (collection.SingleExpression)
@@ -27,10 +36,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
             // Evaluate the entire expression before emitting records. An authored comma array
             // produces no records when a later member fails during its construction.
             if (item.Value.ClrType == typeof(void))
-                body.Append(EmitExpression(item.Value)).Append("; ");
+                body.Append(EmitNativeCollectedValue(item.Value, result + ".Add")).Append("; ");
             else
                 body.Append(PowerShellCSharpSymbolRenderer.TypeName(item.Value.ClrType)).Append(' ')
-                    .Append(item.ValueTemporary).Append(" = ").Append(EmitExpression(item.Value)).Append("; ")
+                    .Append(item.ValueTemporary).Append(" = ").Append(EmitNativeCollectedValue(item.Value, result + ".Add")).Append("; ")
                     .Append("__nativeFunction.WriteOutput(").Append(item.ValueTemporary).Append(", ")
                     .Append(result).Append(".Add); ");
             if (item.SetSuccess) body.Append("__nativeFunction.SetExecutionStatus(true); ");

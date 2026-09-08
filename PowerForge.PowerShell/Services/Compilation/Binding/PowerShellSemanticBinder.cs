@@ -43,10 +43,11 @@ internal sealed partial class PowerShellSemanticBinder
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         IDictionary<string, PowerShellBoundRegionCandidate>? regionCandidates = null,
-        IDictionary<string, PowerShellBoundRegionOpportunity>? regionOpportunities = null)
+        IDictionary<string, PowerShellBoundRegionOpportunity>? regionOpportunities = null,
+        bool requiresNativeInvocation = false)
     {
         var functionDiagnosticStart = diagnostics.Count;
-        var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(function, capabilities);
+        var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(function, capabilities, requiresNativeInvocation);
         if (nativeFunctionBinding is null) capabilities &= ~PowerShellCompilationCapability.NativeFunctionBinding;
         ClearFunctionRegionEvidence(
             regionCandidates,
@@ -403,12 +404,16 @@ internal sealed partial class PowerShellSemanticBinder
             nativePostTestCondition: nativePostTestCondition);
     }
 
-    private static Ast UnwrapExpression(Ast syntax)
+    private static Ast UnwrapExpression(Ast syntax, bool preservePipeline = false)
     {
         while (true)
         {
             switch (syntax)
             {
+                case PipelineAst pipeline when preservePipeline && PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline):
+                    return pipeline;
+                case CommandExpressionAst command when preservePipeline && command.Redirections.Count > 0:
+                    return command;
                 case PipelineAst pipeline when pipeline.PipelineElements.Count == 1 && pipeline.PipelineElements[0] is CommandExpressionAst command:
                     syntax = command.Expression;
                     continue;

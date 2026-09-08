@@ -37,6 +37,7 @@ namespace PowerForge.Generated.Runtime
             internal static readonly Lazy<NativeOutputContract> Shared = new(() => new NativeOutputContract());
             internal readonly Func<object> CreatePipe;
             internal readonly PropertyInfo ExternalWriter;
+            internal readonly MethodInfo SetTemporaryVariableLists;
             internal readonly Action<object?, object, object> Write;
             internal readonly Func<object?, object?[]> Collect;
 
@@ -50,6 +51,9 @@ namespace PowerForge.Generated.Runtime
                 CreatePipe = Expression.Lambda<Func<object>>(Expression.Convert(Expression.New(constructor), typeof(object))).Compile();
                 ExternalWriter = pipeType.GetProperty("ExternalWriter", flags | BindingFlags.Instance)
                     ?? throw new NotSupportedException("PowerShell's output-pipe writer is unavailable.");
+                SetTemporaryVariableLists = pipeType.GetMethod("SetVariableListForTemporaryPipe", flags | BindingFlags.Instance,
+                    null, new[] { pipeType }, null)
+                    ?? throw new NotSupportedException("PowerShell's temporary-pipe variable-list operation is unavailable.");
                 var binderType = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.PSPipeWriterBinder", true)!;
                 var get = binderType.GetMethod("Get", flags | BindingFlags.Static, null, Type.EmptyTypes, null)
                     ?? throw new NotSupportedException("PowerShell's implicit-output binder is unavailable.");

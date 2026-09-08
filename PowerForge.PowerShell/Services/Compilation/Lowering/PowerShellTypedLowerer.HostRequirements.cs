@@ -139,7 +139,7 @@ internal sealed partial class PowerShellTypedLowerer
            PowerShellSemanticAnalyzer.EnumerateStatements(block)
                .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
-               .Any(static expression => expression is PowerShellBoundCommandAvailabilityExpression or PowerShellBoundHostedBooleanCommandExpression);
+               .Any(static expression => expression is PowerShellBoundCommandAvailabilityExpression or PowerShellBoundHostedBooleanCommandExpression or PowerShellBoundNativeCommandExpression);
 
     private static bool ContainsPowerShellModuleStateRead(PowerShellBoundBlock block)
         => PowerShellSemanticAnalyzer.EnumerateStatements(block)

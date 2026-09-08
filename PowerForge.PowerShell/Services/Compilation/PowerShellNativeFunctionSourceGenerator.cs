@@ -13,7 +13,7 @@ internal static class PowerShellNativeFunctionSourceGenerator
 
     internal static void Validate(PowerShellCompiledMethod method)
     {
-        if (method.RequiresPowerShellCommandRegions || method.RequiresPowerShellRuntimeState ||
+        if (method.RequiresPowerShellRuntimeState ||
             method.RequiresPowerShellModuleStateRead || method.RequiresPowerShellModuleStateWrite ||
             method.RequiresProviderCancellation ||
             method.RequiresPowerShellBoundParameters)

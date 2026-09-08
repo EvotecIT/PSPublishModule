@@ -35,6 +35,9 @@ namespace PowerForge.Generated.Runtime
         public object? ConvertValue(Type type, object? value)
         {
             EnsureActive();
+            // A CLR Object cast is identity, including the native no-output sentinel.
+            // Sending that sentinel through PSConvertBinder would create a null record.
+            if (type == typeof(object)) return value;
             return ConversionSites.GetOrAdd(type, CreateConversionSite)(value);
         }
 

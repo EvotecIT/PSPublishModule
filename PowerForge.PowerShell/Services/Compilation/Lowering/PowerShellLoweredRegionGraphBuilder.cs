@@ -118,7 +118,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
         => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Count(static statement =>
                statement is PowerShellLoweredCommandRegionStatement or PowerShellLoweredCommandCaptureStatement) +
            PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Count(static expression =>
-               expression is PowerShellLoweredCommandAvailabilityExpression or PowerShellLoweredHostedBooleanCommandExpression ||
+               expression is PowerShellLoweredCommandAvailabilityExpression or PowerShellLoweredHostedBooleanCommandExpression or PowerShellLoweredNativeCommandExpression ||
                expression is PowerShellLoweredInvocationExpression { RequiresPowerShellCommandRegions: true });
 
     private static PowerShellCompilationRegionExecution Classify(PowerShellLoweredStatement statement)
@@ -137,6 +137,11 @@ internal static class PowerShellLoweredRegionGraphBuilder
         var writeOffsets = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var expression in PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements))
         {
+            if (expression is PowerShellLoweredNativeCommandExpression)
+            {
+                RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
+                RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+            }
             if (expression is PowerShellLoweredVariableExpression variable)
                 RecordFirst(readOffsets, Symbol(variable.Symbol), expression.Span.StartOffset);
             if (expression is PowerShellLoweredMutationExpression mutation)
@@ -180,6 +185,11 @@ internal static class PowerShellLoweredRegionGraphBuilder
                     RecordFirst(writeOffsets, Symbol(capture.Target), statement.Span.EndOffset);
                     break;
                 case PowerShellLoweredCommandRegionStatement region:
+                    if (region.NativeSourcePath is not null)
+                    {
+                        RecordFirst(readOffsets, "PowerShellSessionState:*", statement.Span.StartOffset);
+                        RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
+                    }
                     foreach (var argument in region.Arguments)
                         RecordFirst(readOffsets, Symbol(argument.Symbol), statement.Span.StartOffset);
                     break;

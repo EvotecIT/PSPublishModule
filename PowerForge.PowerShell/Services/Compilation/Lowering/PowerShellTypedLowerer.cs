@@ -461,7 +461,7 @@ internal sealed partial class PowerShellTypedLowerer
                 region.Span,
                 region.HostedFallbackSource,
                 region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol, argument.IsSwitch)).ToArray(),
-                LowerCommandStages(region.Stages)),
+                LowerCommandStages(region.Stages), region.NativeSourcePath, region.NativeSourceDocument),
             PowerShellBoundCommandCaptureStatement capture => LowerCommandCapture(capture, localTypes, declared),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
                 conditional.Span,

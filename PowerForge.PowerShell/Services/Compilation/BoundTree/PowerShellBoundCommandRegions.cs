@@ -67,19 +67,26 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
         string source,
         PowerShellBoundCommandRegionArgument[] arguments,
         PowerShellBoundCommandStage[]? stages = null,
-        int statementCount = 1)
-        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput | PowerShellSemanticEffect.NonSuccessStream, PowerShellRequiredCapability.CommandRegion)
+        int statementCount = 1, string? nativeSourcePath = null, string? nativeSourceDocument = null)
+        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput | PowerShellSemanticEffect.NonSuccessStream |
+            (nativeSourcePath is null ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError),
+            PowerShellRequiredCapability.CommandRegion | (nativeSourcePath is null ? PowerShellRequiredCapability.None :
+                PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost))
     {
         HostedFallbackSource = source;
         Arguments = arguments ?? Array.Empty<PowerShellBoundCommandRegionArgument>();
         Stages = stages ?? Array.Empty<PowerShellBoundCommandStage>();
         StatementCount = Math.Max(1, statementCount);
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceDocument = nativeSourceDocument;
     }
 
     internal string HostedFallbackSource { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandStage> Stages { get; }
     internal int StatementCount { get; }
+    internal string? NativeSourcePath { get; }
+    internal string? NativeSourceDocument { get; }
 }
 
 internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundStatement

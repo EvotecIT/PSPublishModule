@@ -23,7 +23,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
         if (function.RequiresProviderCancellation)
             parameters.Add("global::System.Threading.CancellationToken __providerCancellationToken");
-        if (function.RequiresPowerShellCommandRegions)
+        if (function.RequiresPowerShellCommandRegions && function.NativeFunctionBinding is null)
         {
             parameters.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
             parameters.Add("global::System.Func<string, object?[], object?> __invokePowerShellCapture");

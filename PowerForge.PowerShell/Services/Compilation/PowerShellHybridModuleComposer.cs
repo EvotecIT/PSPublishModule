@@ -123,7 +123,7 @@ internal static class PowerShellHybridModuleComposer
                 .Append(PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed))
                 .Append("]::SetModuleSessionState($_, $ExecutionContext.SessionState) }");
         import.AppendLine();
-        var requiresDispatcher = typed.Methods.Any(static method => method.RequiresPowerShellCommandRegions);
+        var requiresDispatcher = typed.Methods.Any(static method => method.NativeFunctionBinding is null && method.RequiresPowerShellCommandRegions);
         var requiresModuleStateRead = readModuleStateVariables.Length > 0;
         var requiresModuleStateWrite = writtenModuleStateVariables.Length > 0;
         var requiresModuleState = requiresModuleStateRead || requiresModuleStateWrite;

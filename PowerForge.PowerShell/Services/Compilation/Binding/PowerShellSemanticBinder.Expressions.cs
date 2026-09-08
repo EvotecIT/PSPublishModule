@@ -14,9 +14,15 @@ internal sealed partial class PowerShellSemanticBinder
         string? targetFramework = null,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
-        syntax = UnwrapExpression(syntax);
+        var authoredSyntax = syntax;
+        syntax = UnwrapExpression(syntax, preservePipeline: capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         var functionBody = FindOwningFunctionBody(syntax);
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+            (syntax is CommandAst or PipelineAst or CommandExpressionAst { Redirections.Count: > 0 }))
+            return PowerShellCommandRegionSemanticBinder.BindNativeCapture(document, syntax, authoredSyntax,
+                _commandResolver, functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), capabilities);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is IndexExpressionAst nativeIndex)
             return PowerShellNativeAccessSemanticBinder.BindIndex(document, nativeIndex,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), diagnostics);

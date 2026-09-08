@@ -4,6 +4,50 @@ namespace PowerForge;
 
 internal static class PowerShellCommandRegionSemanticBinder
 {
+    internal static bool HasPipelineOperators(PipelineAst pipeline)
+        => pipeline.PipelineElements.OfType<CommandExpressionAst>().Any(command => command.Redirections.Count > 0) ||
+           pipeline.GetType().GetProperty("Background")?.GetValue(pipeline) is true;
+
+    internal static bool RequiresPipelineSyntax(PipelineAst pipeline)
+        => pipeline.PipelineElements.Count != 1 || pipeline.PipelineElements[0] is CommandAst || HasPipelineOperators(pipeline);
+
+    internal static PowerShellBoundNativeCommandExpression BindNativeCapture(ParsedSourceDocument document, Ast syntax,
+        Ast authoredSyntax, PowerShellCommandSemanticResolver commandResolver, ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
+    {
+        ParenExpressionAst? wrapper = null;
+        for (var node = syntax; node is not null; node = node.Parent)
+        {
+            if (node is ParenExpressionAst parenthesized) { wrapper = parenthesized; break; }
+            if (ReferenceEquals(node, authoredSyntax)) break;
+        }
+        var preserve = wrapper is not null && (bool)(typeof(ExpressionAst).GetMethod(
+            "ShouldPreserveOutputInCaseOfException", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(wrapper, null)!);
+        return new PowerShellBoundNativeCommandExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
+            syntax.Extent.Text, document.Path, document.Text, preserve,
+            BindStages(document, new[] { syntax }, commandResolver, localFunctionNames, capabilities));
+    }
+
+    internal static bool TryBindNativePipeline(ParsedSourceDocument document, StatementAst statement,
+        PowerShellCommandSemanticResolver commandResolver, ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities, out PowerShellBoundCommandRegionStatement? region)
+    {
+        region = null;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
+            !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) ||
+            statement is not PipelineAst pipeline) return false;
+        var commands = pipeline.PipelineElements.OfType<CommandAst>().ToArray();
+        var hasPipelineOperator = HasPipelineOperators(pipeline);
+        if (!hasPipelineOperator && (commands.Length == 0 || commands.All(command =>
+                commandResolver.IsRuntimeFreeCompilerIntrinsic(command, localFunctionNames, capabilities)))) return false;
+        region = new PowerShellBoundCommandRegionStatement(PowerShellSourceParser.GetSpan(document, pipeline.Extent),
+            pipeline.Extent.Text, Array.Empty<PowerShellBoundCommandRegionArgument>(),
+            BindStages(document, new[] { pipeline }, commandResolver, localFunctionNames, capabilities),
+            nativeSourcePath: document.Path, nativeSourceDocument: document.Text);
+        return true;
+    }
+
     internal static PowerShellBoundCommandRegionStatement BindRegion(
         ParsedSourceDocument document,
         IReadOnlyList<StatementAst> statements,

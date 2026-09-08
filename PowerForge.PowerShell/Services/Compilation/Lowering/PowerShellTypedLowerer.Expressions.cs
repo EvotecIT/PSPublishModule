@@ -131,6 +131,8 @@ internal sealed partial class PowerShellTypedLowerer
                 array.Elements.Select(element => LowerExpression(element, functions, names, targetCapabilities)).ToArray()),
             PowerShellBoundNativeMemberExpression memberRead => new PowerShellLoweredNativeMemberExpression(
                 memberRead.Span, LowerExpression(memberRead.Receiver, functions, names, targetCapabilities), memberRead.Name),
+            PowerShellBoundNativeCommandExpression nativeCommand => new PowerShellLoweredNativeCommandExpression(nativeCommand.Span,
+                nativeCommand.Source, nativeCommand.SourcePath, nativeCommand.SourceDocument, nativeCommand.PreservePartialOutput, LowerCommandStages(nativeCommand.Stages)),
             PowerShellBoundNativeInvocationExpression nativeInvocation => new PowerShellLoweredNativeInvocationExpression(nativeInvocation.Span,
                 nativeInvocation.Receiver is null ? null : LowerExpression(nativeInvocation.Receiver, functions, names, targetCapabilities),
                 nativeInvocation.LiteralTargetType, nativeInvocation.Name, nativeInvocation.IsStatic,

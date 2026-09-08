@@ -245,9 +245,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 EmitProviderStreamWrite(builder, stream, prefix, getTemporaryIdentifier);
                 return;
             case PowerShellLoweredCommandRegionStatement region:
-                builder.Append(prefix).Append("__invokePowerShellRegion(")
-                    .Append(PowerShellCSharpLiteral.QuoteString(region.HostedFallbackSource))
-                    .Append(", ").Append(EmitCommandRegionArguments(region.Arguments)).AppendLine(");");
+                EmitCommandRegion(builder, region, prefix);
                 return;
             case PowerShellLoweredCommandCaptureStatement capture:
                 EmitCommandCapture(builder, capture, prefix);
@@ -398,6 +396,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.Span, mutation.NativeSourceText, mutation.NativeSetSequencePoint),
             PowerShellLoweredArrayExpression array => EmitArray(array),
             PowerShellLoweredNativeMemberExpression memberRead => EmitNativeMember(memberRead),
+            PowerShellLoweredNativeCommandExpression nativeCommand => EmitNativeCommandCapture(nativeCommand),
             PowerShellLoweredNativeInvocationExpression nativeInvocation => EmitNativeInvocation(nativeInvocation),
             PowerShellLoweredNativeIndexExpression nativeIndex => EmitNativeIndex(nativeIndex),
             PowerShellLoweredNativeCollectionExpression collection => EmitNativeCollection(collection),

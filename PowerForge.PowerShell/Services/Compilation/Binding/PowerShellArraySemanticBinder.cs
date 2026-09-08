@@ -20,23 +20,26 @@ internal static class PowerShellArraySemanticBinder
         var windowsPowerShell = semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51;
         var sourceLines = document.Text.Replace("\r\n", "\n").Split('\n');
         var items = new List<PowerShellBoundNativeCollectionItem>();
+        var singlePureExpression = false;
         foreach (var statement in syntax.SubExpression.Statements)
         {
-            if (statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
-                pipeline.PipelineElements[0] is not CommandExpressionAst { Redirections.Count: 0 } command)
+            if (statement is not PipelineAst pipeline)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501",
-                    "Native collected arrays currently accept expression statements without redirection.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
+                    "Native collected arrays require expression or command-pipeline statements.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
                 return null;
             }
-            var value = bindExpression(command.Expression, typeof(object));
+            var command = !PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline)
+                ? pipeline.PipelineElements[0] as CommandExpressionAst : null;
+            var value = bindExpression(command is null ? pipeline : command.Expression, typeof(object));
             if (value is null) return null;
+            singlePureExpression = syntax.SubExpression.Statements.Count == 1 && command is not null;
             // A single pure expression bypasses the statement-output suppression
             // used by a multi-statement collector, including bare ++/-- results.
             if (syntax.SubExpression.Statements.Count == 1 && value is PowerShellBoundMutationExpression { UsesNativeInvocation: true } mutation)
                 value = mutation.WithResultType(PowerShellTypeFact.Unknown,
                     nativeSetSequencePoint: mutation.Value is not null && mutation.NativeSetSequencePoint);
-            if (syntax.SubExpression.Statements.Count == 1 && command.Expression is ArrayLiteralAst)
+            if (syntax.SubExpression.Statements.Count == 1 && command?.Expression is ArrayLiteralAst)
                 return value;
             var sourceText = string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
                 .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
@@ -44,7 +47,7 @@ internal static class PowerShellArraySemanticBinder
                 sourceText, value, PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(statement, windowsPowerShell)));
         }
         return new PowerShellBoundNativeCollectionExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
-            document.Path, items.ToArray(), !windowsPowerShell, syntax.SubExpression.Statements.Count == 1);
+            document.Path, items.ToArray(), !windowsPowerShell, singlePureExpression);
     }
 
     internal static PowerShellBoundExpression? Bind(
