@@ -83,6 +83,10 @@ namespace PowerForge.Generated.Runtime
                 extent = expressionExtent;
                 _nativeExpressionExtents.Remove(error);
             }
+            else if (_hasNativeSequencePoint)
+            {
+                extent = _nativeExpressionPosition.ToExtent();
+            }
             var previousPoints = _contract.FunctionSequencePoints.GetValue(_nativeFunction);
             var previousIndex = _contract.FunctionCurrentSequencePointIndex.GetValue(_nativeFunction);
             var previousPropagation = _contract.GetRequired(_contract.PropagateExceptions, _context);

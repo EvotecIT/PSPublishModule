@@ -405,7 +405,7 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundOutputCaptureStatement capture => new PowerShellLoweredOutputCaptureStatement(
                 capture.Span, capture.Target,
                 LowerStatements(capture.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-                names.Allocate("pf_captured_records"), names.Allocate("pf_previous_output")),
+                names.Allocate("pf_captured_records"), names.Allocate("pf_previous_output"), capture.UsesNativeInvocation),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellLoweredStatementErrorBoundary(
                 boundary.Span, LowerStatements(boundary.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error"), boundary.NativeSuccessStatus, boundary.NativeSequencePoint),

@@ -22,9 +22,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("{");
         foreach (var statement in capture.Statements)
             EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
-        builder.Append(prefix).Append("    ").Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target.Name)).Append(" = ")
+        builder.Append(prefix).Append("    ");
+        if (capture.UsesNativeInvocation)
+            builder.Append("__nativeFunction.SetVariable(").Append(PowerShellCSharpLiteral.QuoteString(capture.Target.Name)).Append(", ");
+        else
+            builder.Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target.Name)).Append(" = ");
+        builder
             .Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
-            .Append(records).Append("[0] : ").Append(records).AppendLine(".ToArray();");
+            .Append(records).Append("[0] : ").Append(records).Append(".ToArray()")
+            .AppendLine(capture.UsesNativeInvocation ? ");" : ";");
         builder.Append(prefix).Append("    ").Append(records).AppendLine(".Clear();");
         builder.Append(prefix).AppendLine("}");
         // PowerShell discards assignment output for RuntimeException, but flushes

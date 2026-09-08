@@ -61,6 +61,8 @@ internal sealed partial class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
+            if (assignment.Right is ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
+                return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                 PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } nativeVariable)
             {
@@ -86,8 +88,6 @@ internal sealed partial class PowerShellSemanticBinder
                 return nativeValue is null ? null : new PowerShellBoundNativeVariableAssignmentStatement(
                     PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeVariable.VariablePath.UserPath, nativeValue);
             }
-            if (assignment.Right is ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
-                return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
                     assignment,
                     capabilities,

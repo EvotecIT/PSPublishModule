@@ -6,7 +6,7 @@ internal sealed partial class PowerShellTypedLowerer
     {
         var statements = PowerShellSemanticAnalyzer.EnumerateStatements(body).ToArray();
         return statements.Any(static statement => statement is PowerShellBoundAssignmentStatement or PowerShellBoundForEachStatement or
-                   PowerShellBoundOutputCaptureStatement or PowerShellBoundCommandCaptureStatement) ||
+                   PowerShellBoundOutputCaptureStatement { UsesNativeInvocation: false } or PowerShellBoundCommandCaptureStatement) ||
                statements.SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                    .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
                    .Any(static expression => expression is PowerShellBoundMutationExpression { UsesNativeInvocation: false } or PowerShellBoundVariableExpression);
