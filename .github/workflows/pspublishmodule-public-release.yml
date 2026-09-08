@@ -49,6 +49,25 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Resolve GitHub CLI
+        shell: pwsh
+        run: |
+          $command = Get-Command gh -ErrorAction SilentlyContinue
+          if ($null -ne $command) {
+              $ghPath = [string] $command.Source
+          } else {
+              $ghPath = Join-Path $env:ProgramFiles 'GitHub CLI\gh.exe'
+          }
+          if (-not (Test-Path -LiteralPath $ghPath -PathType Leaf)) {
+              throw "GitHub CLI was not found in PATH or at '$ghPath'."
+          }
+          $ghDirectory = Split-Path -Parent ([IO.Path]::GetFullPath($ghPath))
+          $ghDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $ghPath --version
+          if ($LASTEXITCODE -ne 0) {
+              throw "GitHub CLI failed to start from '$ghPath'."
+          }
+
       - name: Verify actor and immutable main commit
         shell: pwsh
         env:
