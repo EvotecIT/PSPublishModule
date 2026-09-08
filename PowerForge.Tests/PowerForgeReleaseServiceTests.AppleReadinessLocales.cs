@@ -91,8 +91,10 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
 
-    [Fact]
-    public void Execute_AppleSubmissionCarriesEveryMetadataLocaleWithOnlyEnglishScreenshots()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_AppleSubmissionCarriesEveryMetadataLocaleWithOnlyEnglishScreenshots(bool changeMetadataDuringApproval)
     {
         var root = CreateSandbox();
         try
@@ -115,6 +117,13 @@ public sealed partial class PowerForgeReleaseServiceTests
                 checkAppleReleaseReadiness: (_, request) =>
                 {
                     readinessRequests.Add(request);
+                    if (changeMetadataDuringApproval && readinessRequests.Count == 2)
+                    {
+                        var path = Path.Combine(root, "metadata-pl.json");
+                        var metadata = JsonSerializer.Deserialize<AppStoreConnectVersionMetadataSpec>(File.ReadAllText(path))!;
+                        metadata.Locale = "ro";
+                        File.WriteAllText(path, JsonSerializer.Serialize(metadata));
+                    }
                     return CreateReadyReleaseReadiness(request);
                 },
                 submitAppleReview: request =>
@@ -133,6 +142,13 @@ public sealed partial class PowerForgeReleaseServiceTests
             request.AppleActionConfirmed = true;
             request.AppleExpectedPlanSha256 = plan.AppleReceipt!.PlanSha256;
             var result = service.Execute(spec, request);
+            if (changeMetadataDuringApproval)
+            {
+                Assert.False(result.Success);
+                Assert.Contains("changed after plan approval", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+                Assert.Null(submission);
+                return;
+            }
             Assert.True(result.Success, result.ErrorMessage);
             Assert.NotEmpty(readinessRequests);
             Assert.NotNull(submission?.ReadinessRequest);

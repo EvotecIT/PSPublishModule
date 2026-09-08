@@ -57,7 +57,7 @@ internal sealed partial class PowerForgeReleaseService
             if (!string.IsNullOrWhiteSpace(plan.ScreenshotConfigPath)) paths.Add(plan.ScreenshotConfigPath!);
             paths.AddRange(plan.ScreenshotConfigPaths);
         }
-        if (plan.SyncMetadata)
+        if (RequiresAppleMetadataSpecs(plan))
         {
             if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath)) paths.Add(plan.MetadataConfigPath!);
             paths.AddRange(plan.MetadataConfigPaths);
@@ -361,7 +361,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             configuredInputs.AddRange(screenshotSpecs.Select(static configured => configured.ConfigPath));
         }
-        if (plan.SyncMetadata)
+        if (RequiresAppleMetadataSpecs(plan))
         {
             if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath))
                 configuredInputs.Add(plan.MetadataConfigPath!);
