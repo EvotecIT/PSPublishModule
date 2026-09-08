@@ -42,6 +42,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly object MergeToOutput;
             internal readonly Type ObjectTupleType, CatchAllType;
             internal readonly bool ThrowConversionTakesRethrow;
+            internal readonly bool AdvancesPostTestConditionSequencePoint;
 
             private NativeContract()
             {
@@ -51,6 +52,7 @@ namespace PowerForge.Generated.Runtime
                 var minor = (int)version.GetType().GetProperty("Minor")!.GetValue(version, null)!;
                 if (!(major == 5 && minor == 1 || major == 7 && (minor == 4 || minor == 6)))
                     throw new NotSupportedException("The loaded PowerShell version is outside the statement-error host profiles.");
+                AdvancesPostTestConditionSequencePoint = major >= 7;
                 var context = RequireType(assembly, "System.Management.Automation.ExecutionContext");
                 CheckEnumerationInterrupts = Method(RequireType(assembly, "System.Management.Automation.PipelineOps"),
                     "CheckForInterrupts", true, typeof(void), context);

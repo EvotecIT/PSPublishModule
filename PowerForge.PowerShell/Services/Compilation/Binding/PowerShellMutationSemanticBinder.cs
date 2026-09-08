@@ -87,7 +87,7 @@ internal sealed class PowerShellSemanticSymbolBinding
 }
 
 /// <summary>Owns local and parameter mutation semantics.</summary>
-internal static class PowerShellMutationSemanticBinder
+internal static partial class PowerShellMutationSemanticBinder
 {
     internal static PowerShellBoundMutationExpression? BindAssignment(
         ParsedSourceDocument document,
@@ -99,6 +99,8 @@ internal static class PowerShellMutationSemanticBinder
     {
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left);
         if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target)) return null;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return BindNativeAssignment(document, syntax, variable, target, bindExpression, diagnostics);
         if (!PowerShellAssignmentTargetPolicy.PreservesConstraint(syntax.Left, target.Type))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2414",
@@ -246,6 +248,17 @@ internal static class PowerShellMutationSemanticBinder
         }
         var operand = UnwrapExpression(syntax.Child) as VariableExpressionAst;
         if (operand is null || !symbols.TryGetValue(operand.VariablePath.UserPath, out var target)) return false;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+        {
+            mutation = new PowerShellBoundMutationExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
+                target.Symbol, typeof(object), operation.Value, null,
+                new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred,
+                    "Standalone native mutation writes its invocation variable without emitting output."),
+                false, PowerShellIntegralMutationSemantics.None,
+                nativeTargetRead: PowerShellNativeFunctionBindingPolicy.BindVariable(document, operand),
+                nativeSourceText: PowerShellNativeFunctionBindingPolicy.SourceLines(document, PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return true;
+        }
         if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
         {
             target.Refine(target.Type, PowerShellValueState.Known);

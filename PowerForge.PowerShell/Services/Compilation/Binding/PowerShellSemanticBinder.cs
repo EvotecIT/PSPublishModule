@@ -378,10 +378,13 @@ internal sealed partial class PowerShellSemanticBinder
     private static PowerShellBoundExpression? BindConditionTruthiness(
         PowerShellBoundExpression condition,
         PowerShellCompilationCapability capabilities,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        ParsedSourceDocument document,
+        Ast syntax, bool nativePostTestCondition = false)
     {
-        if (condition.Type.ClrType == typeof(bool)) return condition;
-        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
+        var nativePosition = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
+        if (condition.Type.ClrType == typeof(bool) && !nativePosition) return condition;
+        if (condition.Type.ClrType != typeof(bool) && !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
         {
             var message = condition is PowerShellBoundMutationExpression { Operation: PowerShellBoundMutationOperator.Assign } mutation
                 ? $"Local variable '${mutation.Target.Name}' may remain unassigned because its assignment occurs only while evaluating a dynamic-truthiness condition."
@@ -389,11 +392,15 @@ internal sealed partial class PowerShellSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", message, condition.Span));
             return null;
         }
+        var span = nativePosition ? PowerShellSourceParser.GetSpan(document, syntax.Extent) : condition.Span;
         return new PowerShellBoundConversionExpression(
-            condition.Span,
+            span,
             new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "PowerShell-hosted condition truthiness selects one Boolean result."),
             condition,
-            usePowerShellTruthiness: true);
+            usePowerShellTruthiness: condition.Type.ClrType != typeof(bool),
+            nativeSourcePath: nativePosition ? document.Path : null,
+            nativeSourceText: nativePosition ? PowerShellNativeFunctionBindingPolicy.SourceLines(document, span) : string.Empty,
+            nativePostTestCondition: nativePostTestCondition);
     }
 
     private static Ast UnwrapExpression(Ast syntax)

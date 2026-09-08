@@ -12,6 +12,36 @@ namespace PowerForge.Generated.Runtime
         // Sites cache language rules, never invocation values or a session. The native binder
         // owns type-table and language-mode invalidation across the sessions using each site.
         private static readonly ConcurrentDictionary<Tuple<ExpressionType, bool>, Func<object?, object?, object?>> BinarySites = new();
+        private static readonly ConcurrentDictionary<ExpressionType, Func<object?, object?>> MutationSites = new();
+
+        /// <summary>Writes a mutation result through existing native constraints and returns its expression value.</summary>
+        public object? AssignVariable(string name, object? value, bool directLocal)
+        {
+            SetVariable(name, value);
+            return directLocal && TryReadLocalValue(name, out var stored) ? stored : value;
+        }
+
+        /// <summary>Applies native increment or decrement to an already evaluated variable value.</summary>
+        public object? MutateVariable(string name, object? before, bool decrement, bool postfix)
+        {
+            EnsureActive();
+            var operation = decrement ? ExpressionType.Decrement : ExpressionType.Increment;
+            var after = MutationSites.GetOrAdd(operation, CreateMutationSite)(before);
+            SetVariable(name, after);
+            return postfix ? before ?? (object)0 : after;
+        }
+
+        private static Func<object?, object?> CreateMutationSite(ExpressionType operation)
+        {
+            var type = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.PSUnaryOperationBinder", true)!;
+            var get = type.GetMethod("Get", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public, null,
+                new[] { typeof(ExpressionType) }, null)
+                ?? throw new NotSupportedException("PowerShell's native unary-operation binder is unavailable.");
+            var binder = (CallSiteBinder)PowerShellNativeFunctionHost.Invoke(get, null, new object[] { operation })!;
+            var value = Expression.Parameter(typeof(object), "value");
+            return Expression.Lambda<Func<object?, object?>>(
+                Expression.Dynamic(binder, typeof(object), value), value).Compile();
+        }
 
         /// <summary>Evaluates one language operation while the native invocation owns scope and error handling.</summary>
         public object? EvaluateBinary(ExpressionType operation, bool ignoreCase, object? left, object? right)

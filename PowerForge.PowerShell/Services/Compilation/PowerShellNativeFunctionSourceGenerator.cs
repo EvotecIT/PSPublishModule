@@ -15,7 +15,7 @@ internal static class PowerShellNativeFunctionSourceGenerator
     {
         if (method.RequiresPowerShellCommandRegions || method.RequiresPowerShellRuntimeState ||
             method.RequiresPowerShellModuleStateRead || method.RequiresPowerShellModuleStateWrite ||
-            method.RequiresPowerShellStopping || method.RequiresProviderCancellation ||
+            method.RequiresProviderCancellation ||
             method.RequiresPowerShellBoundParameters)
             throw new InvalidOperationException($"Native function '{method.SourceName}' requires a host operation that has not been connected to the native invocation ABI.");
     }
@@ -37,11 +37,12 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 .Append(string.Join(", ", method.NativeFunctionBinding.LocalNames.Select(PowerShellCSharpLiteral.QuoteString)))
                 .AppendLine(" }, null, null, context =>")
                 .AppendLine("            {");
-            if (method.RequiresPowerShellStatementErrors)
+            if (method.RequiresPowerShellStatementErrors || method.RequiresPowerShellStopping)
                 builder.Append("                using var statementErrors = global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.CreateNativeFunction(context.FunctionContext, ")
                     .Append(PowerShellCSharpLiteral.QuoteString(method.SourceName)).AppendLine(");");
             var arguments = new List<string> { "context" };
             if (method.RequiresPowerShellStatementErrors) arguments.Add("statementErrors");
+            if (method.RequiresPowerShellStopping) arguments.Add("statementErrors.CheckLoopInterrupts");
             if (method.RequiresPowerShellStreams)
                 arguments.AddRange(new[] { "context.WriteValue", "context.WriteVerbose", "context.WriteDebug", "context.WriteWarning",
                     "context.WriteInformation", "context.WriteHost", "context.WriteError" });

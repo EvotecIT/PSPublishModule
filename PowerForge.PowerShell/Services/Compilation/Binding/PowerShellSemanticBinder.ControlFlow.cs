@@ -23,7 +23,7 @@ internal sealed partial class PowerShellSemanticBinder
             var clauseSymbols = CloneSymbols(baselineSymbols);
             var condition = BindExpression(document, clause.Item1, clauseSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is null) return null;
-            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, clause.Item1);
             if (condition is null) return null;
             var body = BindBlock(
                 document,
@@ -83,7 +83,7 @@ internal sealed partial class PowerShellSemanticBinder
         {
             condition = BindExpression(document, statement.Condition, loopSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is null) return null;
-            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, statement.Condition);
             if (condition is null) return null;
             body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
         }
@@ -99,7 +99,7 @@ internal sealed partial class PowerShellSemanticBinder
             }
             condition = BindExpression(document, statement.Condition, conditionSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is null) return null;
-            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, statement.Condition, nativePostTestCondition: true);
         }
         if (condition is null) return null;
         if (body is null) return null;
@@ -137,7 +137,7 @@ internal sealed partial class PowerShellSemanticBinder
         var condition = statement.Condition is null
             ? null
             : BindExpression(document, statement.Condition, loopSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
-        if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+        if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, statement.Condition!);
         if (statement.Condition is not null && condition is null) return null;
         PowerShellInt32RangePolicy.RefineDescendingCounter(statement, initializer, loopSymbols);
         var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);

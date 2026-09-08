@@ -121,11 +121,7 @@ internal sealed partial class PowerShellSemanticBinder
                             : "$null is represented by the exact contextual reference type."),
                     PowerShellValueState.Null);
             case VariableExpressionAst variable when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
-                return new PowerShellBoundNativeVariableExpression(span, variable.VariablePath.UserPath,
-                    PowerShellNativeFunctionBindingPolicy.IsInsideExpandableString(variable), document.Path,
-                    string.Join("\n", document.Text.Replace("\r\n", "\n").Split('\n')
-                        .Skip(span.StartLine - 1).Take(span.EndLine - span.StartLine + 1)),
-                    PowerShellNativeVariableAnalysis.IsDirectLocal(variable));
+                return PowerShellNativeFunctionBindingPolicy.BindVariable(document, variable);
             case VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var symbol):
                 return new PowerShellBoundVariableExpression(
                     span,

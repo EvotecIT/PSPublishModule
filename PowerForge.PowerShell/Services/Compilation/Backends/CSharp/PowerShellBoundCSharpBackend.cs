@@ -81,6 +81,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append("            ").AppendLine(line);
         }
 
+        if (function.NativeFunctionBinding is not null && function.RequiresPowerShellStatementErrors)
+            EmitNativeEntrySequencePoint(builder, function);
         foreach (var statement in function.Statements)
             EmitStatement(builder, statement, 3, GetTemporaryIdentifier, discardHelper, sourceMap);
 
@@ -393,7 +395,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.Operation,
                 mutation.Value,
                 mutation.NormalizeNullString,
-                mutation.IntegralSemantics, mutation.PreserveStatementErrors),
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.Span, mutation.NativeSourceText),
             PowerShellLoweredArrayExpression array => EmitArray(array),
             PowerShellLoweredNativeCollectionExpression collection => EmitNativeCollection(collection),
             PowerShellLoweredArrayCopyExpression copy => EmitArrayCopy(copy),
@@ -425,18 +427,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(" +
                PowerShellCSharpLiteral.QuoteString(script) + ", new object?[] { " +
                EmitExpression(discovery.Name) + ", " + PowerShellCSharpLiteral.QuoteString(errorAction) + " }))";
-    }
-
-    private string EmitConversion(PowerShellLoweredConversionExpression conversion)
-    {
-        var type = PowerShellCSharpSymbolRenderer.TypeName(conversion.ClrType);
-        if (conversion.UsePowerShellTruthiness)
-            return $"global::System.Management.Automation.LanguagePrimitives.IsTrue((object?)({EmitExpression(conversion.Operand)}))";
-        if (conversion.NormalizeNullString)
-            return $"({EmitExpression(conversion.Operand)} ?? string.Empty)";
-        return conversion.UsePowerShellLanguageRuntime
-            ? $"__powerForgeConvertInvariant<{type}>((object?)({EmitExpression(conversion.Operand)}))"
-            : $"({type})({EmitExpression(conversion.Operand)})";
     }
 
     private string EmitTypeTest(PowerShellLoweredTypeTestExpression expression)
@@ -617,8 +607,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredExpression? value,
         bool normalizeNullString,
         PowerShellIntegralMutationSemantics integralSemantics,
-        bool preserveStatementErrors)
+        bool preserveStatementErrors,
+        PowerShellLoweredNativeVariableExpression? nativeTargetRead = null,
+        SourceSpan? nativeSpan = null,
+        string nativeSourceText = "")
     {
+        if (nativeTargetRead is not null)
+            return EmitNativeMutation(nativeTargetRead, operation, value,
+                nativeSpan ?? throw new InvalidOperationException("Native mutation source span is required."), nativeSourceText);
         var identifier = PowerShellCSharpSymbolRenderer.Identifier(target.Name);
         if (integralSemantics != PowerShellIntegralMutationSemantics.None || preserveStatementErrors)
             return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics, preserveStatementErrors);

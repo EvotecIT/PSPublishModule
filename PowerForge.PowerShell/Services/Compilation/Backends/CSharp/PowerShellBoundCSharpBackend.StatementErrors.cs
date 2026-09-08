@@ -73,6 +73,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("try");
         builder.Append(prefix).AppendLine("{");
+        if (boundary.NativeSequencePoint)
+            builder.Append(prefix).Append("    __statementErrors.SetNativeSequencePoint(")
+                .Append(PowerShellCSharpLiteral.QuoteString(boundary.SourcePath)).Append(", ")
+                .Append(boundary.Span.StartLine).Append(", ").Append(boundary.Span.StartColumn).Append(", ")
+                .Append(boundary.Span.EndLine).Append(", ").Append(boundary.Span.EndColumn).Append(", ")
+                .Append(PowerShellCSharpLiteral.QuoteString(boundary.SourceText)).AppendLine(");");
         foreach (var statement in boundary.Statements)
             EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
         if (boundary.NativeSuccessStatus is { } success)

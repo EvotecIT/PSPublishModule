@@ -9,7 +9,7 @@ internal sealed partial class PowerShellTypedLowerer
                    PowerShellBoundOutputCaptureStatement or PowerShellBoundCommandCaptureStatement) ||
                statements.SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                    .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
-                   .Any(static expression => expression is PowerShellBoundMutationExpression or PowerShellBoundVariableExpression);
+                   .Any(static expression => expression is PowerShellBoundMutationExpression { UsesNativeInvocation: false } or PowerShellBoundVariableExpression);
     }
 
     private static bool RequiresHostExceptionHandling(PowerShellBoundTryStatement statement,

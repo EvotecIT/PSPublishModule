@@ -6,11 +6,12 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
     internal static bool IsNonThrowing(PowerShellLoweredExpression expression)
         => expression switch
         {
-            PowerShellLoweredConversionExpression conversion => conversion.NormalizeNullString || !conversion.UsePowerShellLanguageRuntime &&
+            PowerShellLoweredConversionExpression conversion => conversion.NativeSourcePath is null && (conversion.NormalizeNullString || !conversion.UsePowerShellLanguageRuntime &&
                 !conversion.UsePowerShellTruthiness && conversion.ClrType == typeof(double) &&
-                (conversion.Operand.ClrType == typeof(double) || conversion.Operand.ClrType == typeof(int)),
-            PowerShellLoweredMutationExpression mutation => mutation.Operation == PowerShellBoundMutationOperator.Assign ||
-                IsNonThrowingNumericMutation(mutation.TargetClrType, mutation.IntegralSemantics),
+                (conversion.Operand.ClrType == typeof(double) || conversion.Operand.ClrType == typeof(int))),
+            PowerShellLoweredMutationExpression mutation => mutation.NativeTargetRead is null &&
+                (mutation.Operation == PowerShellBoundMutationOperator.Assign ||
+                IsNonThrowingNumericMutation(mutation.TargetClrType, mutation.IntegralSemantics)),
             PowerShellLoweredBinaryExpression binary => IsNonThrowingBinary(binary),
             PowerShellLoweredUnaryExpression unary => unary.Operand.ClrType == typeof(double) &&
                 unary.Operation is PowerShellBoundUnaryOperator.Identity or PowerShellBoundUnaryOperator.Negate ||

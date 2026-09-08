@@ -37,17 +37,25 @@ internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredE
         PowerShellLoweredExpression operand,
         bool usePowerShellLanguageRuntime,
         bool usePowerShellTruthiness,
-        bool normalizeNullString = false) : base(span, clrType)
+        bool normalizeNullString = false,
+        string? nativeSourcePath = null,
+        string nativeSourceText = "", bool nativePostTestCondition = false) : base(span, clrType)
     {
         Operand = operand;
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
         UsePowerShellTruthiness = usePowerShellTruthiness;
         NormalizeNullString = normalizeNullString;
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceText = nativeSourceText;
+        NativePostTestCondition = nativePostTestCondition;
     }
     internal PowerShellLoweredExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
     internal bool UsePowerShellTruthiness { get; }
     internal bool NormalizeNullString { get; }
+    internal string? NativeSourcePath { get; }
+    internal string NativeSourceText { get; }
+    internal bool NativePostTestCondition { get; }
 }
 
 internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredExpression
@@ -226,7 +234,8 @@ internal sealed class PowerShellLoweredFunction
         SourceSpan span,
         bool requiresPowerShellStatementErrors = false,
         bool requiresPowerShellStopping = false,
-        PowerShellNativeFunctionBinding? nativeFunctionBinding = null)
+        PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
+        string sourcePath = "", string sourceText = "")
     {
         Symbol = symbol;
         GeneratedName = generatedName;
@@ -255,6 +264,8 @@ internal sealed class PowerShellLoweredFunction
         RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
         RequiresPowerShellStopping = requiresPowerShellStopping;
         NativeFunctionBinding = nativeFunctionBinding;
+        SourcePath = sourcePath;
+        SourceText = sourceText;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -274,6 +285,8 @@ internal sealed class PowerShellLoweredFunction
     internal bool RequiresPowerShellStatementErrors { get; }
     internal bool RequiresPowerShellStopping { get; }
     internal PowerShellNativeFunctionBinding? NativeFunctionBinding { get; }
+    internal string SourcePath { get; }
+    internal string SourceText { get; }
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }

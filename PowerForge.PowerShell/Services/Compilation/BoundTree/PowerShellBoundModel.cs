@@ -281,13 +281,17 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         PowerShellBoundExpression operand,
         bool usePowerShellLanguageRuntime = false,
         bool usePowerShellTruthiness = false,
-        bool normalizeNullString = false)
+        bool normalizeNullString = false,
+        string? nativeSourcePath = null,
+        string nativeSourceText = "", bool nativePostTestCondition = false)
         : base(
             span,
             targetType,
             normalizeNullString ? PowerShellValueState.Known : operand.ValueState,
-            operand.Effects,
-            operand.Capabilities | (usePowerShellLanguageRuntime || usePowerShellTruthiness ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None))
+            operand.Effects | (nativeSourcePath is null ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError),
+            operand.Capabilities | (usePowerShellLanguageRuntime || usePowerShellTruthiness ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None) |
+                (nativeSourcePath is null ? PowerShellRequiredCapability.None : PowerShellRequiredCapability.NativeFunctionBinding |
+                    PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors))
     {
         if (usePowerShellLanguageRuntime && usePowerShellTruthiness)
             throw new ArgumentException("A bound conversion cannot select two PowerShell language conversion operations.");
@@ -298,12 +302,18 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
         UsePowerShellTruthiness = usePowerShellTruthiness;
         NormalizeNullString = normalizeNullString;
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceText = nativeSourceText;
+        NativePostTestCondition = nativePostTestCondition;
     }
 
     internal PowerShellBoundExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
     internal bool UsePowerShellTruthiness { get; }
     internal bool NormalizeNullString { get; }
+    internal string? NativeSourcePath { get; }
+    internal string NativeSourceText { get; }
+    internal bool NativePostTestCondition { get; }
 }
 
 internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpression

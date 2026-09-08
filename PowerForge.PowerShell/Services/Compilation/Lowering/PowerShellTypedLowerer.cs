@@ -183,6 +183,7 @@ internal sealed partial class PowerShellTypedLowerer
             var statements = new List<PowerShellLoweredStatement>();
             var declared = new HashSet<string>(StringComparer.Ordinal);
             var localTypes = function.Locals.ToDictionary(static local => local.Symbol.StableKey, static local => local.Type.ClrType, StringComparer.Ordinal);
+            if (function.NativeFunctionBinding is not null) localTypes.Clear();
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;
             var names = new LoweredNameAllocator(function.Parameters.Select(static parameter => parameter.Symbol.Name)
@@ -206,6 +207,7 @@ internal sealed partial class PowerShellTypedLowerer
             foreach (var statement in function.Body.Statements)
                 statements.Add(LowerStatement(statement, bySymbol, symbolTypes, localTypes, declared, names, targetCapabilities));
 
+            var functionDocument = program.Documents.FirstOrDefault(document => document.DocumentId == function.Symbol.DocumentId);
             functions.Add(new PowerShellLoweredFunction(
                 function.Symbol,
                 PowerShellCSharpSymbolRenderer.Identifier(function.Symbol.Name),
@@ -239,7 +241,10 @@ internal sealed partial class PowerShellTypedLowerer
                 function.Body.Span,
                 statementErrorBindings.Contains(function.Symbol.StableKey),
                 loopInterruptBindings.Contains(function.Symbol.StableKey),
-                function.NativeFunctionBinding));
+                function.NativeFunctionBinding,
+                functionDocument?.Path ?? string.Empty,
+                string.Join("\n", (functionDocument?.SourceText ?? string.Empty).Replace("\r\n", "\n").Split('\n')
+                    .Skip(function.Body.Span.StartLine - 1).Take(function.Body.Span.EndLine - function.Body.Span.StartLine + 1))));
         }
 
         return new PowerShellLoweredProgram(
@@ -403,7 +408,7 @@ internal sealed partial class PowerShellTypedLowerer
                 names.Allocate("pf_captured_records"), names.Allocate("pf_previous_output")),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellLoweredStatementErrorBoundary(
                 boundary.Span, LowerStatements(boundary.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-                boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error"), boundary.NativeSuccessStatus),
+                boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error"), boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
             PowerShellBoundAssignmentStatement assignment => new PowerShellLoweredAssignmentStatement(
                 assignment.Span,
                 assignment.Target,

@@ -38,7 +38,7 @@ internal sealed class PowerShellStatementErrorCallPass : IPowerShellSemanticPass
             {
                 if (statement is PowerShellBoundStatementErrorBoundary boundary)
                     return (PowerShellBoundStatement)new PowerShellBoundStatementErrorBoundary(
-                        RewriteBlock(boundary.Body, true), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus);
+                        RewriteBlock(boundary.Body, true), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint);
                 // A capture's top-level RHS is part of its assignment, not a
                 // separately resumable statement. Preserve inner body boundaries
                 // without inserting an error handler that would complete the RHS.

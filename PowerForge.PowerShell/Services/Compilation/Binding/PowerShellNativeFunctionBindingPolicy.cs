@@ -5,6 +5,19 @@ namespace PowerForge;
 /// <summary>Selects native invocation storage when parameter callbacks can invalidate CLR storage facts.</summary>
 internal static class PowerShellNativeFunctionBindingPolicy
 {
+    internal static PowerShellBoundNativeVariableExpression BindVariable(ParsedSourceDocument document, VariableExpressionAst variable)
+    {
+        var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
+        return new PowerShellBoundNativeVariableExpression(span, variable.VariablePath.UserPath,
+            IsInsideExpandableString(variable), document.Path,
+            SourceLines(document, span),
+            PowerShellNativeVariableAnalysis.IsDirectLocal(variable));
+    }
+
+    internal static string SourceLines(ParsedSourceDocument document, SourceSpan span)
+        => string.Join("\n", document.Text.Replace("\r\n", "\n").Split('\n')
+            .Skip(span.StartLine - 1).Take(span.EndLine - span.StartLine + 1));
+
     internal static bool IsInsideExpandableString(Ast syntax)
     {
         for (var parent = syntax.Parent; parent is not null; parent = parent.Parent)

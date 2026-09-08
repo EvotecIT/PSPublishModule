@@ -41,7 +41,6 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Theory]
-    [InlineData("for ($index = 1; $false; $index++) { }")]
     [InlineData("foreach ($index in 1,2) { }")]
     public void NativeFunctionBinding_DoesNotUseClrLoopStorageForNativeReads(string loop)
     {

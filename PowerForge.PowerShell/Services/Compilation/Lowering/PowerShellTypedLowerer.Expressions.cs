@@ -47,7 +47,7 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(conversion.Operand, functions, names, targetCapabilities),
                 conversion.UsePowerShellLanguageRuntime,
                 conversion.UsePowerShellTruthiness,
-                conversion.NormalizeNullString),
+                conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition),
             PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
                 binary.Span,
                 binary.Type.ClrType,
@@ -121,7 +121,9 @@ internal sealed partial class PowerShellTypedLowerer
                 mutation.Operation,
                 mutation.Value is null ? null : LowerExpression(mutation.Value, functions, names, targetCapabilities),
                 mutation.NormalizeNullString,
-                mutation.IntegralSemantics, mutation.PreserveStatementErrors),
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors,
+                mutation.NativeTargetRead is null ? null : (PowerShellLoweredNativeVariableExpression)
+                    LowerExpression(mutation.NativeTargetRead, functions, names, targetCapabilities), mutation.NativeSourceText),
             PowerShellBoundArrayExpression array => new PowerShellLoweredArrayExpression(
                 array.Span,
                 array.Type.ClrType,

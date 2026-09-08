@@ -35,15 +35,19 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         PowerShellTypeFact type,
         bool normalizeNullString,
         PowerShellIntegralMutationSemantics integralSemantics,
-        bool preserveStatementErrors = false)
+        bool preserveStatementErrors = false,
+        PowerShellBoundNativeVariableExpression? nativeTargetRead = null,
+        string nativeSourceText = "")
         : base(
             span,
             type,
             PowerShellValueState.Unknown,
             PowerShellSemanticEffect.Mutation | (value?.Effects ?? PowerShellSemanticEffect.None) |
-                (preserveStatementErrors ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
+                (preserveStatementErrors ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None) |
+                (nativeTargetRead?.Effects ?? PowerShellSemanticEffect.None),
             (value?.Capabilities ?? PowerShellRequiredCapability.None) |
-                (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
+                (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
+                (nativeTargetRead?.Capabilities ?? PowerShellRequiredCapability.None))
     {
         Target = target;
         TargetClrType = targetClrType;
@@ -52,6 +56,8 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         NormalizeNullString = normalizeNullString;
         IntegralSemantics = integralSemantics;
         PreserveStatementErrors = preserveStatementErrors;
+        NativeTargetRead = nativeTargetRead;
+        NativeSourceText = nativeSourceText;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -61,4 +67,7 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
     internal bool NormalizeNullString { get; }
     internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
     internal bool PreserveStatementErrors { get; }
+    internal PowerShellBoundNativeVariableExpression? NativeTargetRead { get; }
+    internal bool UsesNativeInvocation => NativeTargetRead is not null;
+    internal string NativeSourceText { get; }
 }

@@ -46,16 +46,7 @@ namespace PowerForge.Generated.Runtime
             int endLine, int endColumn, string sourceText, bool directLocal)
         {
             EnsureActive();
-            if (directLocal && _optimized)
-            {
-                var localName = name.StartsWith("local:", StringComparison.OrdinalIgnoreCase) ? name.Substring(6) : name;
-                var tuple = _contract.LocalsTuple.GetValue(FunctionContext);
-                var arguments = new object[] { localName, true, null! };
-                if ((bool)PowerShellNativeFunctionHost.Invoke(_contract.TryGetLocalVariable, tuple, arguments)!)
-                    return ((PSVariable)arguments[2]).Value;
-                // The target host can force dynamic storage, for example for an existing AllScope variable.
-                // Its native tuple layout takes precedence over the build host's optimized-read annotation.
-            }
+            if (directLocal && TryReadLocalValue(name, out var localValue)) return localValue;
             var lines = sourceText.Replace("\r\n", "\n").Split('\n');
             var extent = new ScriptExtent(new ScriptPosition(file, line, column, lines[0]),
                 new ScriptPosition(file, endLine, endColumn, lines[lines.Length - 1]));
@@ -66,6 +57,19 @@ namespace PowerForge.Generated.Runtime
                     new ExpressionAst[] { variable } });
             return PowerShellNativeFunctionHost.Invoke(_contract.GetVariableValue, null,
                 new object[] { variable.VariablePath, _executionContext, variable });
+        }
+
+        private bool TryReadLocalValue(string name, out object? value)
+        {
+            value = null;
+            if (!_optimized) return false;
+            var localName = name.StartsWith("local:", StringComparison.OrdinalIgnoreCase) ? name.Substring(6) : name;
+            var tuple = _contract.LocalsTuple.GetValue(FunctionContext);
+            var arguments = new object[] { localName, true, null! };
+            if (!(bool)PowerShellNativeFunctionHost.Invoke(_contract.TryGetLocalVariable, tuple, arguments)!) return false;
+            // The target tuple, including AllScope exceptions, takes precedence over build-host annotations.
+            value = ((PSVariable)arguments[2]).Value;
+            return true;
         }
 
         /// <summary>Writes through the native variable owner and its current constraints.</summary>

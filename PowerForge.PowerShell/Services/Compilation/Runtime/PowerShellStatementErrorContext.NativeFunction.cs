@@ -3,9 +3,55 @@ namespace PowerForge.Generated.Runtime
     using System;
     using System.Management.Automation;
     using System.Management.Automation.Language;
+    using System.Runtime.CompilerServices;
 
     public sealed partial class PowerShellStatementErrorContext
     {
+        private ConditionalWeakTable<Exception, IScriptExtent>? _nativeExpressionExtents;
+        private NativeExpressionPosition _nativeExpressionPosition;
+        private bool _hasNativeSequencePoint;
+
+        internal void SetNativeSequencePoint(string file, int line, int column, int endLine, int endColumn, string sourceText)
+        {
+            ThrowIfDisposed();
+            _nativeExpressionPosition = new NativeExpressionPosition(file, line, column, endLine, endColumn, sourceText);
+            _hasNativeSequencePoint = true;
+        }
+
+        /// <summary>Tracks native expression sequence points without handling or reclassifying an error.</summary>
+        internal T EvaluateNativeExpression<T>(Func<T> expression, string file, int line, int column,
+            int endLine, int endColumn, string sourceText, bool postTestCondition = false)
+        {
+            ThrowIfDisposed();
+            if (!postTestCondition || _contract.AdvancesPostTestConditionSequencePoint || !_hasNativeSequencePoint)
+                SetNativeSequencePoint(file, line, column, endLine, endColumn, sourceText);
+            try { return expression(); }
+            catch (Exception error)
+            {
+                var position = _nativeExpressionPosition;
+                (_nativeExpressionExtents ??= new ConditionalWeakTable<Exception, IScriptExtent>())
+                    .GetValue(error, _ => position.ToExtent());
+                throw;
+            }
+        }
+
+        // A successful nested assignment also advances the native sequence point.
+        // Keep the latest coordinates for later condition checks; allocate
+        // PowerShell source objects only when an exception actually escapes.
+        private readonly struct NativeExpressionPosition
+        {
+            private readonly string _file, _sourceText;
+            private readonly int _line, _column, _endLine, _endColumn;
+
+            internal NativeExpressionPosition(string file, int line, int column, int endLine, int endColumn, string sourceText)
+            {
+                _file = file; _line = line; _column = column;
+                _endLine = endLine; _endColumn = endColumn; _sourceText = sourceText;
+            }
+
+            internal IScriptExtent ToExtent() => CreateExtent(_file, _line, _column, _endLine, _endColumn, _sourceText);
+        }
+
         /// <summary>Uses the native function's scope, preferences, and stream registrations for compiled statements.</summary>
         internal static PowerShellStatementErrorContext CreateNativeFunction(object functionContext, string sourceName)
             => new PowerShellStatementErrorContext(functionContext, sourceName);
@@ -32,6 +78,11 @@ namespace PowerForge.Generated.Runtime
 
         private void HandleNativeFunction(Exception error, IScriptExtent extent)
         {
+            if (_nativeExpressionExtents?.TryGetValue(error, out var expressionExtent) == true)
+            {
+                extent = expressionExtent;
+                _nativeExpressionExtents.Remove(error);
+            }
             var previousPoints = _contract.FunctionSequencePoints.GetValue(_nativeFunction);
             var previousIndex = _contract.FunctionCurrentSequencePointIndex.GetValue(_nativeFunction);
             var previousPropagation = _contract.GetRequired(_contract.PropagateExceptions, _context);

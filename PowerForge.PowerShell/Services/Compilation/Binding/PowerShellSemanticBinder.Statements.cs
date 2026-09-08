@@ -29,7 +29,9 @@ internal sealed partial class PowerShellSemanticBinder
             ? PowerShellNativeStatementStatusPolicy.OnCompletion(statement, bound,
                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51)
             : null;
-        if (!nativeSuccessStatus.HasValue && !bound.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) &&
+        var nativeSequencePoint = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+            statement is AssignmentStatementAst or PipelineAst or BreakStatementAst or ContinueStatementAst or ReturnStatementAst or ThrowStatementAst;
+        if (!nativeSequencePoint && !nativeSuccessStatus.HasValue && !bound.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) &&
             !(bound is PowerShellBoundThrowStatement && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))) return bound;
         // A failed RHS leaves the previous slot intact. A successful constructor's
         // non-null fact cannot override a possible null value on the error edge.
@@ -42,7 +44,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (bound is PowerShellBoundThrowStatement thrown)
             bound = new PowerShellBoundThrowStatement(thrown.Span, thrown.Expression, true, document.Path, sourceText);
         return new PowerShellBoundStatementErrorBoundary(new PowerShellBoundBlock(bound.Span, new[] { bound }), document.Path, sourceText,
-            nativeSuccessStatus);
+            nativeSuccessStatus, nativeSequencePoint);
     }
 
     private PowerShellBoundStatement? BindStatementCore(
@@ -62,12 +64,19 @@ internal sealed partial class PowerShellSemanticBinder
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                 PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } nativeVariable)
             {
-                if (assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst)
+                if (assignment.Left is not VariableExpressionAst)
                 {
                     diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2417",
                         "Native variable constraints and compound writes require their native assignment operation contract.",
                         PowerShellSourceParser.GetSpan(document, assignment.Extent)));
                     return null;
+                }
+                if (assignment.Operator != TokenKind.Equals)
+                {
+                    var nativeMutation = BindExpression(document, assignment, symbols, functions, diagnostics,
+                        targetFramework: targetFramework, capabilities: capabilities);
+                    return nativeMutation is null ? null : new PowerShellBoundExpressionStatement(
+                        PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeMutation, emitsOutput: false);
                 }
                 var nativeValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
                     targetFramework: targetFramework, capabilities: capabilities);

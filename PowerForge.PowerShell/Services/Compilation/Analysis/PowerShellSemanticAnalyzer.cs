@@ -277,7 +277,10 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundStringSplitExpression split => new[] { split.Input, split.Pattern },
             PowerShellBoundStringJoinExpression join => new[] { join.Values, join.Separator },
             PowerShellBoundInterpolatedStringExpression interpolated => interpolated.Parts.Where(static part => part.Expression is not null).Select(static part => part.Expression!),
-            PowerShellBoundMutationExpression mutation when mutation.Value is not null => new[] { mutation.Value },
+            PowerShellBoundMutationExpression mutation =>
+                (mutation.Value is null ? Array.Empty<PowerShellBoundExpression>() : new[] { mutation.Value })
+                .Concat(mutation.NativeTargetRead is null || mutation.Operation == PowerShellBoundMutationOperator.Assign
+                    ? Array.Empty<PowerShellBoundExpression>() : new PowerShellBoundExpression[] { mutation.NativeTargetRead }),
             PowerShellBoundArrayExpression array => array.Elements,
             PowerShellBoundNativeCollectionExpression collection => collection.Items.Select(static item => item.Value),
             PowerShellBoundArrayCopyExpression copy => new[] { copy.Source },
@@ -511,7 +514,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         }
         if (expression is PowerShellBoundMutationExpression mutation)
         {
-            if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
+            if (!mutation.UsesNativeInvocation && mutation.Operation != PowerShellBoundMutationOperator.Assign)
                 yield return new PowerShellBoundVariableExpression(mutation.Span, mutation.Target, mutation.Type);
             if (mutation.Value is not null)
             foreach (var read in EnumerateVariableReads(mutation.Value))

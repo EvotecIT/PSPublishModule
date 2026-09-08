@@ -95,7 +95,7 @@ internal sealed class PowerShellBoundOptimizer
             PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
                 capture.Span, capture.Target, OptimizeBlock(capture.Body)),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
-                OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus),
+                OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(
                 assignment.Span, assignment.Target, OptimizeExpression(assignment.Value), assignment.Operation,
                 assignment.NormalizeNullString, assignment.IntegralSemantics, assignment.PreserveStatementErrors),
@@ -172,7 +172,7 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundConversionExpression conversion)
         {
             var operand = OptimizeExpression(conversion.Operand);
-            if (!conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness && !conversion.NormalizeNullString &&
+            if (conversion.NativeSourcePath is null && !conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness && !conversion.NormalizeNullString &&
                 operand.Type.Provenance != PowerShellTypeFactProvenance.Unknown &&
                 operand is not PowerShellBoundInvocationExpression &&
                 operand.Type.ClrType == conversion.Type.ClrType)
@@ -182,7 +182,8 @@ internal sealed class PowerShellBoundOptimizer
                 return operand;
             }
             if (conversion.UsePowerShellLanguageRuntime) _runtimeConversionSitesSpecialized++;
-            return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime, conversion.UsePowerShellTruthiness, conversion.NormalizeNullString);
+            return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime,
+                conversion.UsePowerShellTruthiness, conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition);
         }
         if (expression is PowerShellBoundInvocationExpression invocation)
             return new PowerShellBoundInvocationExpression(invocation.Span, invocation.Target,
@@ -191,7 +192,7 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundMutationExpression mutation)
             return new PowerShellBoundMutationExpression(mutation.Span, mutation.Target, mutation.TargetClrType, mutation.Operation,
                 mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString,
-                mutation.IntegralSemantics, mutation.PreserveStatementErrors);
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.NativeSourceText);
         if (expression is PowerShellBoundArrayExpression array)
             return new PowerShellBoundArrayExpression(array.Span, array.Type.ClrType, array.Kind, array.Elements.Select(OptimizeExpression).ToArray());
         if (expression is PowerShellBoundNativeCollectionExpression collection)
