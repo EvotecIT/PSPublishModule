@@ -69,29 +69,37 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
         PowerShellBoundExpression left,
         PowerShellBoundExpression right,
         PowerShellTypeFact type,
-        bool preserveStatementErrors = false)
+        bool preserveStatementErrors = false,
+        bool usesNativeInvocation = false,
+        bool nativeIgnoreCase = true)
         : base(
             span,
             type,
             operation == PowerShellBoundBinaryOperator.NativeStringConcatenate ? PowerShellValueState.Known : PowerShellValueState.Unknown,
             left.Effects | right.Effects | (preserveStatementErrors || operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
                 ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None) |
-                (operation == PowerShellBoundBinaryOperator.NativeStringConcatenate
+                (usesNativeInvocation || operation == PowerShellBoundBinaryOperator.NativeStringConcatenate
                     ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError
                     : PowerShellSemanticEffect.None),
             left.Capabilities | right.Capabilities | GetRequiredCapabilities(operation) |
+                (usesNativeInvocation ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost |
+                    PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
                 (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Operation = operation;
         Left = left;
         Right = right;
         PreserveStatementErrors = preserveStatementErrors;
+        UsesNativeInvocation = usesNativeInvocation;
+        NativeIgnoreCase = nativeIgnoreCase;
     }
 
     internal PowerShellBoundBinaryOperator Operation { get; }
     internal PowerShellBoundExpression Left { get; }
     internal PowerShellBoundExpression Right { get; }
     internal bool PreserveStatementErrors { get; }
+    internal bool UsesNativeInvocation { get; }
+    internal bool NativeIgnoreCase { get; }
 
     internal static bool RequiresPowerShellLanguageRuntime(PowerShellBoundBinaryOperator operation)
         => GetRequiredCapabilities(operation).HasFlag(PowerShellRequiredCapability.PowerShellLanguageOperators);

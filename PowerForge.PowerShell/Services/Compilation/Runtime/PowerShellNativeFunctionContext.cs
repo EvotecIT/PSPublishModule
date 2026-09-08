@@ -5,7 +5,7 @@ namespace PowerForge.Generated.Runtime
     using System.Management.Automation.Language;
 
     /// <summary>Provides compiled clauses with the active native invocation's variable and output owners.</summary>
-    public sealed class PowerShellNativeFunctionContext : IDisposable
+    public sealed partial class PowerShellNativeFunctionContext : IDisposable
     {
         private readonly SessionState _session;
         private readonly object _executionContext;

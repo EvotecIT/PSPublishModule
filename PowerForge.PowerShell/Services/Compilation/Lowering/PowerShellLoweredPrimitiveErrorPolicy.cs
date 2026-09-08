@@ -26,6 +26,7 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
 
     private static bool IsNonThrowingBinary(PowerShellLoweredBinaryExpression binary)
     {
+        if (binary.UsesNativeInvocation) return false;
         if (binary.Operation is PowerShellBoundBinaryOperator.PromotingAdd or PowerShellBoundBinaryOperator.PromotingSubtract or
             PowerShellBoundBinaryOperator.PromotingMultiply or PowerShellBoundBinaryOperator.NumericUnionFloatingDivide or
             PowerShellBoundBinaryOperator.NumericUnionFloatingRemainder or PowerShellBoundBinaryOperator.NumericUnionNonzeroDivide or

@@ -8,7 +8,7 @@ internal static class PowerShellCommandHostRuntimeSource
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
         if (typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
         {
-            foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionContext" })
+            foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionContext", "PowerShellNativeFunctionContext.Operations" })
             {
                 using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
                     "PowerForge.PowerShell.Compilation." + name + ".cs")

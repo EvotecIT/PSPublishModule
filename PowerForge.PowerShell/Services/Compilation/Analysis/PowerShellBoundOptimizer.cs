@@ -150,13 +150,14 @@ internal sealed class PowerShellBoundOptimizer
         {
             var left = OptimizeExpression(binary.Left);
             var right = OptimizeExpression(binary.Right);
-            if (left is PowerShellBoundLiteralExpression leftLiteral && right is PowerShellBoundLiteralExpression rightLiteral &&
+            if (!binary.UsesNativeInvocation && left is PowerShellBoundLiteralExpression leftLiteral && right is PowerShellBoundLiteralExpression rightLiteral &&
                 TryFold(binary.Operation, leftLiteral.Value, rightLiteral.Value, binary.Type.ClrType, out var value))
             {
                 _constantExpressionsFolded++;
                 return new PowerShellBoundLiteralExpression(binary.Span, value, binary.Type, PowerShellValueState.Known);
             }
-            return new PowerShellBoundBinaryExpression(binary.Span, binary.Operation, left, right, binary.Type, binary.PreserveStatementErrors);
+            return new PowerShellBoundBinaryExpression(binary.Span, binary.Operation, left, right, binary.Type,
+                binary.PreserveStatementErrors, binary.UsesNativeInvocation, binary.NativeIgnoreCase);
         }
         if (expression is PowerShellBoundUnaryExpression unary)
         {

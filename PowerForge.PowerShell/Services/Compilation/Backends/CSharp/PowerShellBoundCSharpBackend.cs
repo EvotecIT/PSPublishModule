@@ -661,6 +661,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitBinaryOperation(PowerShellLoweredBinaryExpression expression, string left, string right)
     {
+        if (expression.UsesNativeInvocation) return EmitNativeBinary(expression, left, right);
         if (expression.Operation == PowerShellBoundBinaryOperator.NativeStringConcatenate)
             return $"global::System.String.Concat({left}, __nativeFunction.Stringify({right}))";
         if (expression.Operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat)

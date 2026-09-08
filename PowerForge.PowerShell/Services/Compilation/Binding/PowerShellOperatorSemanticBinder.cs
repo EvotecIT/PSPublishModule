@@ -3,7 +3,7 @@ using System.Management.Automation.Language;
 namespace PowerForge;
 
 /// <summary>Binds the conservative direct-CLR operator subset once, before lowering.</summary>
-internal static class PowerShellOperatorSemanticBinder
+internal static partial class PowerShellOperatorSemanticBinder
 {
     internal static PowerShellBoundExpression? BindBinary(
         BinaryExpressionAst syntax,
@@ -43,6 +43,10 @@ internal static class PowerShellOperatorSemanticBinder
         if (left is null || right is null) return null;
         var leftType = left.Type.ClrType;
         var rightType = right.Type.ClrType;
+        if (operation == "Plus" && leftType == typeof(string) && left.ValueState == PowerShellValueState.Known &&
+            rightType != typeof(void) && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return Binary(span, PowerShellBoundBinaryOperator.NativeStringConcatenate, left, right, typeof(string));
+        if (BindNativeBinary(span, operation, left, right, capabilities) is { } nativeBinary) return nativeBinary;
         if (operation == "Format")
             return PowerShellFormatSemanticBinder.Bind(span, left, right, capabilities, diagnostics);
         if (PowerShellNumericUnionPolicy.BindBinary(span, operation, left, right) is { } numericUnion)
@@ -89,9 +93,6 @@ internal static class PowerShellOperatorSemanticBinder
 
         if (operation is "Plus" or "Minus" or "Multiply" or "Divide" or "Rem")
         {
-            if (operation == "Plus" && leftType == typeof(string) && left.ValueState == PowerShellValueState.Known &&
-                rightType != typeof(void) && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
-                return Binary(span, PowerShellBoundBinaryOperator.NativeStringConcatenate, left, right, typeof(string));
             if (operation == "Plus" && leftType == typeof(string) && rightType == typeof(string))
                 return Binary(span, PowerShellBoundBinaryOperator.Add, left, right, typeof(string));
             if (!PowerShellClrTypeSemantics.IsNumeric(leftType) || !PowerShellClrTypeSemantics.IsNumeric(rightType))
