@@ -365,7 +365,11 @@ public sealed partial class ArtefactBuilder
             sections.Add(NormalizeNewlines(postScriptMerge!.Trim(), newline));
 
         var rewritten = string.Join(newline, sections) + newline;
-        File.WriteAllText(scriptPath, rewritten, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        bool startsWithShebang = rewritten.StartsWith("#!", StringComparison.Ordinal);
+        File.WriteAllText(
+            scriptPath,
+            rewritten,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: !startsWithShebang));
     }
 
     private static string NormalizeNewlines(string value, string newline)

@@ -495,40 +495,58 @@ public sealed partial class ModulePipelineRunner
 
     private static string[] CollectModuleReleaseAssets(IEnumerable<ArtefactBuildResult> artefacts, string? publishId)
     {
-        var packed = (artefacts ?? Array.Empty<ArtefactBuildResult>())
-            .Where(static artefact => artefact is not null && (artefact.Type == ArtefactType.Packed || artefact.Type == ArtefactType.ScriptPacked))
+        var releaseArtefacts = (artefacts ?? Array.Empty<ArtefactBuildResult>())
+            .Where(static artefact => artefact is not null &&
+                                      artefact.Type is ArtefactType.Packed or ArtefactType.Script or ArtefactType.ScriptPacked)
             .ToArray();
 
-        if (packed.Length == 0)
+        if (releaseArtefacts.Length == 0)
             return Array.Empty<string>();
 
         ArtefactBuildResult[] selected;
         if (string.IsNullOrWhiteSpace(publishId))
         {
-            selected = new[] { packed[0] };
+            selected = new[] { releaseArtefacts[0] };
         }
         else
         {
             var idValue = publishId!.Trim();
-            selected = packed.Where(artefact => string.Equals(artefact.Id, idValue, StringComparison.OrdinalIgnoreCase)).ToArray();
+            selected = releaseArtefacts.Where(artefact => string.Equals(artefact.Id, idValue, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (selected.Length == 0)
             {
-                var available = packed
+                var available = releaseArtefacts
                     .Select(static artefact => artefact.Id)
                     .Where(static id => !string.IsNullOrWhiteSpace(id))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 var availableText = available.Length == 0 ? "(none)" : string.Join(", ", available);
-                throw new InvalidOperationException($"No packed artefacts matched ID '{publishId}'. Available IDs: {availableText}");
+                throw new InvalidOperationException($"No release artefacts matched ID '{publishId}'. Available IDs: {availableText}");
             }
         }
 
         return selected
-            .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
+            .SelectMany(static artefact => ResolveModuleReleaseArtefactPaths(artefact).Concat(artefact.EvidencePaths))
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => Path.GetFullPath(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IEnumerable<string> ResolveModuleReleaseArtefactPaths(ArtefactBuildResult artefact)
+    {
+        if (artefact.Type != ArtefactType.Script)
+            return new[] { artefact.OutputPath };
+
+        if (!ArtefactLayoutPathResolver.TryResolveScriptOutputEntryPointPath(
+                artefact.OutputPath,
+                artefact.EntryPointRelativePath,
+                out string? entryPointPath))
+        {
+            throw new InvalidOperationException(
+                $"Script release artefact '{artefact.Id}' did not report an entry point contained by its output root.");
+        }
+
+        return new[] { entryPointPath! };
     }
 
     private static string[] CollectPackageReleaseAssets(IEnumerable<ProjectBuildHostExecutionResult> projectBuildResults)

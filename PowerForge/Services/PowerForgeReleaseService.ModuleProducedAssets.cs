@@ -258,21 +258,18 @@ internal sealed partial class PowerForgeReleaseService
             return false;
         }
 
-        string relativeEntryPoint = output.EntryPointRelativePath!
-            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar)
-            .Replace('\\', Path.DirectorySeparatorChar);
-        if (Path.IsPathRooted(relativeEntryPoint) ||
-            relativeEntryPoint.Split(Path.DirectorySeparatorChar).Any(static segment => segment is "." or ".."))
+        if (!ArtefactLayoutPathResolver.TryResolveScriptOutputEntryPointPath(
+                fullRecordedOutputPath,
+                output.EntryPointRelativePath,
+                out string? fullEntryPoint))
         {
             return false;
         }
 
-        string fullEntryPoint = Path.GetFullPath(Path.Combine(fullRecordedOutputPath, relativeEntryPoint));
         return string.Equals(
-            fullEntryPoint,
+            fullEntryPoint!,
             fullCandidatePath,
-            ResolvePathComparison(fullEntryPoint, fullCandidatePath));
+            ResolvePathComparison(fullEntryPoint!, fullCandidatePath));
     }
 
     private static StringComparison ResolvePathComparison(string firstPath, string secondPath)

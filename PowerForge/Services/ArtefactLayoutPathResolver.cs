@@ -255,6 +255,41 @@ internal static class ArtefactLayoutPathResolver
             .TrimStart('/');
     }
 
+    internal static bool TryResolveScriptOutputEntryPointPath(
+        string outputRoot,
+        string? entryPointRelativePath,
+        out string? entryPointPath)
+    {
+        entryPointPath = null;
+        if (string.IsNullOrWhiteSpace(outputRoot) ||
+            string.IsNullOrWhiteSpace(entryPointRelativePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            string relativePath = entryPointRelativePath!
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar)
+                .Replace('\\', Path.DirectorySeparatorChar);
+            if (Path.IsPathRooted(relativePath))
+                return false;
+
+            string fullOutputRoot = Path.GetFullPath(outputRoot);
+            string fullEntryPoint = Path.GetFullPath(Path.Combine(fullOutputRoot, relativePath));
+            if (!IsSameOrChildPath(fullOutputRoot, fullEntryPoint))
+                return false;
+
+            entryPointPath = fullEntryPoint;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static string ResolvePackedLayoutRoot(
         string? configuredPath,
         string outputRoot,

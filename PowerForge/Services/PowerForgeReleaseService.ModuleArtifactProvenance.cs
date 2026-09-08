@@ -3,8 +3,9 @@ namespace PowerForge;
 internal sealed partial class PowerForgeReleaseService
 {
     internal static IReadOnlyDictionary<string, ModuleArtifactSnapshot> CaptureModuleArtifactBaseline(
-        IEnumerable<string>? configuredPaths)
-        => EnumerateModuleArtifactFiles(configuredPaths)
+        IEnumerable<string>? configuredPaths,
+        PowerForgeModuleReleasePlanSummary? plan = null)
+        => EnumerateModuleArtifactFiles(configuredPaths, plan)
             .ToDictionary(
                 static path => path,
                 CaptureModuleArtifactSnapshot,
@@ -12,10 +13,11 @@ internal sealed partial class PowerForgeReleaseService
 
     internal static string[] ResolveProducedModuleArtifacts(
         IEnumerable<string>? configuredPaths,
-        IReadOnlyDictionary<string, ModuleArtifactSnapshot>? baseline)
+        IReadOnlyDictionary<string, ModuleArtifactSnapshot>? baseline,
+        PowerForgeModuleReleasePlanSummary? plan = null)
     {
         var prior = baseline ?? new Dictionary<string, ModuleArtifactSnapshot>(StringComparer.OrdinalIgnoreCase);
-        return EnumerateModuleArtifactFiles(configuredPaths)
+        return EnumerateModuleArtifactFiles(configuredPaths, plan)
             .Select(static path => (Path: path, Snapshot: CaptureModuleArtifactSnapshot(path)))
             .Where(item => !prior.TryGetValue(item.Path, out var previous) || !previous.Equals(item.Snapshot))
             .Select(static item => item.Path)
@@ -23,7 +25,9 @@ internal sealed partial class PowerForgeReleaseService
             .ToArray();
     }
 
-    private static IEnumerable<string> EnumerateModuleArtifactFiles(IEnumerable<string>? configuredPaths)
+    private static IEnumerable<string> EnumerateModuleArtifactFiles(
+        IEnumerable<string>? configuredPaths,
+        PowerForgeModuleReleasePlanSummary? plan)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var configuredPath in (configuredPaths ?? Array.Empty<string>())
@@ -49,6 +53,29 @@ internal sealed partial class PowerForgeReleaseService
                         yield return fullPath;
                 }
             }
+        }
+
+        foreach (PowerForgeModuleArtefactOutputSummary output in
+                 plan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>())
+        {
+            if (output is null || output.Type != ArtefactType.Script)
+                continue;
+
+            string outputRoot = string.IsNullOrWhiteSpace(output.OutputPath)
+                ? output.OutputRoot
+                : output.OutputPath!;
+            if (!ArtefactLayoutPathResolver.TryResolveScriptOutputEntryPointPath(
+                    outputRoot,
+                    output.EntryPointRelativePath,
+                    out string? entryPointPath) ||
+                !File.Exists(entryPointPath))
+            {
+                continue;
+            }
+
+            string fullPath = Path.GetFullPath(entryPointPath!);
+            if (seen.Add(fullPath))
+                yield return fullPath;
         }
     }
 

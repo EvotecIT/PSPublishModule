@@ -74,6 +74,70 @@ public sealed class ArtefactBuilderScriptTests
     }
 
     [Theory]
+    [InlineData(ArtefactType.Script, false)]
+    [InlineData(ArtefactType.Script, true)]
+    [InlineData(ArtefactType.ScriptPacked, false)]
+    [InlineData(ArtefactType.ScriptPacked, true)]
+    public void Build_ScriptUsesBomlessUtf8OnlyForLeadingShebang(
+        ArtefactType artefactType,
+        bool leadingShebang)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "DemoModule";
+            var stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            WriteStagingFixture(stagingRoot.FullName, moduleName);
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", artefactType.ToString());
+
+            ArtefactBuildResult result = new ArtefactBuilder(new NullLogger()).Build(
+                new ConfigurationArtefactSegment
+                {
+                    ArtefactType = artefactType,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = outputRoot,
+                        ArtefactName = "DemoModule.zip",
+                        PreScriptMerge = leadingShebang ? "#!/usr/bin/env pwsh" : "param()"
+                    }
+                },
+                root.FullName,
+                stagingRoot.FullName,
+                moduleName,
+                "1.0.0",
+                null,
+                Array.Empty<RequiredModuleReference>());
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-encoding");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            byte[] bytes = File.ReadAllBytes(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            bool hasUtf8Bom = bytes.Length >= 3 &&
+                              bytes[0] == 0xEF &&
+                              bytes[1] == 0xBB &&
+                              bytes[2] == 0xBF;
+            Assert.Equal(!leadingShebang, hasUtf8Bom);
+            if (leadingShebang)
+            {
+                Assert.True(bytes.Length >= 2);
+                Assert.Equal((byte)'#', bytes[0]);
+                Assert.Equal((byte)'!', bytes[1]);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]
     public void Build_RestoresScriptArtefactContract(ArtefactType artefactType)

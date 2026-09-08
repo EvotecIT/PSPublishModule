@@ -47,6 +47,50 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void CreateModuleAssetEntries_DirectoryIncludesNestedProducedScriptEntryPoint()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPath = Path.Combine(root, "app", "Company.Tools.ps1");
+            var plan = new PowerForgeModuleReleasePlanSummary
+            {
+                ManifestPath = Path.Combine(root, "Company.Tools.psd1"),
+                ModuleName = "Company.Tools",
+                ModuleVersion = "4.0.0",
+                ArtefactOutputs =
+                [
+                    new PowerForgeModuleArtefactOutputSummary
+                    {
+                        Type = ArtefactType.Script,
+                        OutputPath = root,
+                        EntryPointRelativePath = "app/Company.Tools.ps1"
+                    }
+                ]
+            };
+            IReadOnlyDictionary<string, PowerForgeReleaseService.ModuleArtifactSnapshot> baseline =
+                PowerForgeReleaseService.CaptureModuleArtifactBaseline(new[] { root }, plan);
+            Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+            File.WriteAllText(scriptPath, "Get-Date");
+
+            string[] produced = PowerForgeReleaseService.ResolveProducedModuleArtifacts(
+                new[] { root },
+                baseline,
+                plan);
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(root, plan, produced));
+
+            Assert.Equal(new[] { scriptPath }, produced);
+            Assert.Equal(scriptPath, entry.Path);
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ResolveModuleArtefactOutputs_CarriesDefaultScriptEntryPoint()
     {
         string root = CreateSandbox();
