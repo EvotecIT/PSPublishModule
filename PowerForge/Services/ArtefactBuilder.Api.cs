@@ -382,7 +382,7 @@ public sealed partial class ArtefactBuilder
                 if (installed is not null)
                 {
                     var dest = Path.Combine(destinationRoot, name);
-                    CopyDirectory(installed.ModuleBasePath, dest);
+                    CopyDirectory(installed.ModuleBasePath, dest, excludeBuildHostMetadata: true);
                     return new ArtefactModuleEntry(name, isMainModule: false, version: installed.Version, path: dest);
                 }
 
@@ -514,7 +514,7 @@ public sealed partial class ArtefactBuilder
                 throw new InvalidOperationException($"Unable to locate saved version folder under '{moduleRoot}'.");
 
             var dest = Path.Combine(destinationRoot, name);
-            CopyDirectory(versionFolder, dest);
+            CopyDirectory(versionFolder, dest, excludeBuildHostMetadata: true);
             return new ArtefactModuleEntry(name, isMainModule: false, version: resolvedVersion, path: dest);
         }
         finally
