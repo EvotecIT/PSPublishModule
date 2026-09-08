@@ -10,6 +10,9 @@ namespace PowerForge;
 
 public sealed partial class ArtefactBuilder
 {
+    private static readonly DateTimeOffset DeterministicZipEntryTimestamp =
+        new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     private static void CopyDirectory(string sourceDir, string destDir)
     {
         if (!Directory.Exists(sourceDir))
@@ -34,22 +37,55 @@ public sealed partial class ArtefactBuilder
         }
     }
 
-    private static void CreateZipFromDirectoryContents(string sourceDir, string zipPath)
+    internal static void CreateZipFromDirectoryContents(
+        string sourceDir,
+        string zipPath,
+        IReadOnlyCollection<string>? executableEntryNames = null)
+        => CreateZipFromDirectoryContents(sourceDir, zipPath, executableEntryNames, entryTimestamp: null);
+
+    internal static void CreateDeterministicZipFromDirectoryContents(
+        string sourceDir,
+        string zipPath,
+        IReadOnlyCollection<string>? executableEntryNames = null)
+        => CreateZipFromDirectoryContents(
+            sourceDir,
+            zipPath,
+            executableEntryNames,
+            DeterministicZipEntryTimestamp);
+
+    private static void CreateZipFromDirectoryContents(
+        string sourceDir,
+        string zipPath,
+        IReadOnlyCollection<string>? executableEntryNames,
+        DateTimeOffset? entryTimestamp)
     {
         if (File.Exists(zipPath)) File.Delete(zipPath);
         Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
 
-        using var fs = File.Create(zipPath);
-        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
-
-        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+        using (var fs = File.Create(zipPath))
+        using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
         {
-            var rel = ComputeRelativePath(sourceDir, file).Replace('\\', '/');
-            var entry = zip.CreateEntry(rel, CompressionLevel.Optimal);
-            using var entryStream = entry.Open();
-            using var fileStream = File.OpenRead(file);
-            fileStream.CopyTo(entryStream);
+            foreach (var file in Directory
+                         .EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories)
+                         .OrderBy(file => ComputeRelativePath(sourceDir, file), StringComparer.Ordinal))
+            {
+                var rel = ComputeRelativePath(sourceDir, file).Replace('\\', '/');
+                var entry = zip.CreateEntry(rel, CompressionLevel.Optimal);
+                if (entryTimestamp.HasValue)
+                    entry.LastWriteTime = entryTimestamp.Value;
+                using var entryStream = entry.Open();
+                using var fileStream = File.OpenRead(file);
+                fileStream.CopyTo(entryStream);
+            }
         }
+
+        var executableEntries = (executableEntryNames ?? Array.Empty<string>())
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry))
+            .Select(static entry => entry.Replace('\\', '/').TrimStart('/'))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (executableEntries.Length > 0)
+            ZipArchiveUnixPermissionPatcher.ApplyExecutablePermissions(zipPath, executableEntries);
     }
 
     private static void ClearDirectorySafe(string path)

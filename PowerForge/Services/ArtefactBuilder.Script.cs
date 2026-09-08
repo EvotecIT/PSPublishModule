@@ -53,8 +53,10 @@ public sealed partial class ArtefactBuilder
         ValidateScriptBuildRootsDoNotOverlapStaging(
             stagingPath,
             outputRoot,
+            projectRoot,
             scriptRoot,
-            cfg.RequiredModules.Enabled == true ? requiredRoot : null);
+            cfg.RequiredModules.Enabled == true ? requiredRoot : null,
+            rejectOutputRootContainingProject: true);
         var filteredRequiredModules = FilterRequiredModulesForArtefact(
             requiredModules,
             cfg.RequiredModules.ExcludeModuleName);
@@ -175,8 +177,10 @@ public sealed partial class ArtefactBuilder
         ValidateScriptBuildRootsDoNotOverlapStaging(
             stagingPath,
             outputRoot,
+            projectRoot,
             scriptRoot,
-            cfg.RequiredModules.Enabled == true ? requiredRoot : null);
+            cfg.RequiredModules.Enabled == true ? requiredRoot : null,
+            rejectOutputRootContainingProject: cfg.DoNotClear != true);
         var filteredRequiredModules = FilterRequiredModulesForArtefact(
             requiredModules,
             cfg.RequiredModules.ExcludeModuleName);
@@ -253,7 +257,12 @@ public sealed partial class ArtefactBuilder
                 evidencePaths = FinalizeArtefactLayout(finalizeArtefact, context);
             }
 
-            CreateZipFromDirectoryContents(tempRoot, zipPath);
+            CreateZipFromDirectoryContents(
+                tempRoot,
+                zipPath,
+                ScriptStartsWithShebang(scriptPath)
+                    ? new[] { entryPointRelativePath }
+                    : Array.Empty<string>());
         }
         finally
         {
@@ -370,6 +379,22 @@ public sealed partial class ArtefactBuilder
             scriptPath,
             rewritten,
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: !startsWithShebang));
+#if NET8_0_OR_GREATER
+        if (startsWithShebang && !OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(
+                scriptPath,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        }
+#endif
+    }
+
+    internal static bool ScriptStartsWithShebang(string scriptPath)
+    {
+        using var stream = File.OpenRead(scriptPath);
+        return stream.ReadByte() == '#' && stream.ReadByte() == '!';
     }
 
     private static string NormalizeNewlines(string value, string newline)

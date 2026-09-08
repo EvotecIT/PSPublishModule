@@ -376,9 +376,20 @@ public sealed partial class ArtefactBuilder
     private static void ValidateScriptBuildRootsDoNotOverlapStaging(
         string stagingPath,
         string outputRoot,
+        string projectRoot,
         string scriptRoot,
-        string? requiredModulesRoot)
+        string? requiredModulesRoot,
+        bool rejectOutputRootContainingProject)
     {
+        string fullOutputRoot = Path.GetFullPath(outputRoot);
+        string fullProjectRoot = Path.GetFullPath(projectRoot);
+        if (rejectOutputRootContainingProject && IsSameOrBelowPath(fullProjectRoot, fullOutputRoot))
+        {
+            throw new InvalidOperationException(
+                $"Script artefact output root '{fullOutputRoot}' contains project root '{fullProjectRoot}'. " +
+                "Use a dedicated artefact directory inside the project so output cleanup cannot modify project sources.");
+        }
+
         string fullStagingPath = Path.GetFullPath(stagingPath);
         foreach ((string Label, string Path) candidate in new[]
                  {

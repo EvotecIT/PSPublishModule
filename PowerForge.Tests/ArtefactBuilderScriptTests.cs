@@ -129,6 +129,26 @@ public sealed class ArtefactBuilderScriptTests
                 Assert.True(bytes.Length >= 2);
                 Assert.Equal((byte)'#', bytes[0]);
                 Assert.Equal((byte)'!', bytes[1]);
+
+                if (artefactType == ArtefactType.ScriptPacked)
+                {
+                    using var archive = ZipFile.OpenRead(result.OutputPath);
+                    ZipArchiveEntry entry = Assert.Single(
+                        archive.Entries,
+                        item => item.FullName == moduleName + ".ps1");
+                    Assert.Equal(0x1ED, (entry.ExternalAttributes >> 16) & 0x1FF);
+                }
+#if NET8_0_OR_GREATER
+                else if (!OperatingSystem.IsWindows())
+                {
+                    UnixFileMode mode = File.GetUnixFileMode(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+                    Assert.Equal(
+                        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                        UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                        UnixFileMode.OtherRead | UnixFileMode.OtherExecute,
+                        mode);
+                }
+#endif
             }
         }
         finally
