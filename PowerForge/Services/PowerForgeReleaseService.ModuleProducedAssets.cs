@@ -139,15 +139,35 @@ internal sealed partial class PowerForgeReleaseService
             if (archive.Entries.Count == 0 || archive.Entries.Count > 50000)
                 return false;
 
-            var entries = archive.Entries
-                .Select(static entry => entry.FullName.Replace('\\', '/'))
+            var archiveEntries = archive.Entries
+                .Select(static entry => new
+                {
+                    Path = entry.FullName.Replace('\\', '/'),
+                    IsDirectory = string.IsNullOrWhiteSpace(entry.Name)
+                })
                 .ToArray();
-            var files = archive.Entries
-                .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name))
-                .Select(static entry => entry.FullName.Replace('\\', '/'))
+            var entries = archiveEntries
+                .Select(static entry => entry.Path)
+                .ToArray();
+            var namespaceEntries = archiveEntries
+                .Select(static entry => new
+                {
+                    Path = entry.Path.TrimEnd('/'),
+                    entry.IsDirectory
+                })
+                .ToArray();
+            var files = namespaceEntries
+                .Where(static entry => !entry.IsDirectory)
+                .Select(static entry => entry.Path)
                 .ToArray();
             if (files.Length == 0 ||
                 files.Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Length ||
+                archive.Entries.Any(static entry => HasUnsupportedArchiveEntryType(entry.ExternalAttributes)) ||
+                namespaceEntries
+                    .GroupBy(static entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+                    .Any(static group => group.Count() > 1) ||
+                files.Any(file => namespaceEntries.Any(entry =>
+                    entry.Path.StartsWith(file + "/", StringComparison.OrdinalIgnoreCase))) ||
                 entries.Any(static name => !IsPortableArchiveEntryPath(name)) ||
                 files.Any(static name =>
                     name.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
@@ -241,6 +261,12 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         return segmentCount == segments.Length || string.IsNullOrEmpty(segments[segments.Length - 1]);
+    }
+
+    private static bool HasUnsupportedArchiveEntryType(int externalAttributes)
+    {
+        int unixFileType = (externalAttributes >> 16) & 0xF000;
+        return unixFileType is not 0 and not 0x4000 and not 0x8000;
     }
 
     private static PowerForgeModuleArtefactOutputSummary[] ResolveMatchingModuleArtefactOutputs(

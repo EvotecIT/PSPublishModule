@@ -133,6 +133,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        var externalScriptRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.SplitApp", Guid.NewGuid().ToString("N"));
         try
         {
             const string moduleName = "TestModule";
@@ -155,7 +156,6 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     includePackage: false));
             ModulePipelineSpec spec = CreateGalleryReleaseSpec(root.FullName, stagingPath, moduleName);
             string scriptOutputRoot = Path.Combine(root.FullName, "Artifacts", "Script");
-            string externalScriptRoot = Path.Combine(root.FullName, "SplitApp");
             spec.Segments = spec.Segments.Take(1)
                 .Concat(
                 [
@@ -187,6 +187,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         {
             try { root.Delete(recursive: true); } catch { }
             try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+            try { if (Directory.Exists(externalScriptRoot)) Directory.Delete(externalScriptRoot, recursive: true); } catch { }
         }
     }
 }

@@ -57,6 +57,13 @@ public sealed partial class ArtefactBuilder
             scriptRoot,
             cfg.RequiredModules.Enabled == true ? requiredRoot : null,
             rejectOutputRootContainingProject: true);
+        ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
+            scriptRoot,
+            stagingPath,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
         var filteredRequiredModules = FilterRequiredModulesForArtefact(
             requiredModules,
             cfg.RequiredModules.ExcludeModuleName);
@@ -184,6 +191,13 @@ public sealed partial class ArtefactBuilder
             scriptRoot,
             cfg.RequiredModules.Enabled == true ? requiredRoot : null,
             rejectOutputRootContainingProject: cfg.DoNotClear != true);
+        ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
+            scriptRoot,
+            stagingPath,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
         var filteredRequiredModules = FilterRequiredModulesForArtefact(
             requiredModules,
             cfg.RequiredModules.ExcludeModuleName);

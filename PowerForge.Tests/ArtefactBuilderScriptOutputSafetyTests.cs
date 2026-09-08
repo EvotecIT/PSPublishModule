@@ -315,6 +315,7 @@ public sealed class ArtefactBuilderScriptOutputSafetyTests
             ConfigurationArtefactSegment segment = CreateSegment(outputRoot, ArtefactType.Script);
             segment.Configuration.RequiredModules.Enabled = true;
             segment.Configuration.RequiredModules.Path = requiredRoot;
+            segment.Configuration.RequiredModules.ModulesPath = "app";
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 new ArtefactBuilder(new NullLogger()).Build(
@@ -333,6 +334,176 @@ public sealed class ArtefactBuilderScriptOutputSafetyTests
         }
         finally
         {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_RejectsGeneratedScriptRootOverlappingProjectBeforeMutation(
+        bool scriptRootContainsProject)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "ProjectScriptRoot";
+            string projectParent = Directory.CreateDirectory(Path.Combine(root.FullName, "protected-parent")).FullName;
+            string projectRoot = Directory.CreateDirectory(Path.Combine(projectParent, "project")).FullName;
+            string buildRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "build")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(buildRoot, "staging")).FullName;
+            WriteModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(buildRoot, "output")).FullName;
+            string outputMarker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(outputMarker, "preserve-output");
+            string projectMarker = Path.Combine(projectRoot, "preserve.txt");
+            File.WriteAllText(projectMarker, "preserve-project");
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, ArtefactType.Script);
+            segment.Configuration.RequiredModules.ModulesPath = scriptRootContainsProject
+                ? projectParent
+                : Path.Combine(projectRoot, "generated");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                Build(segment, projectRoot, stagingRoot, moduleName));
+
+            Assert.Contains("generated script root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("overlaps project root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve-project", File.ReadAllText(projectMarker));
+            Assert.Equal("preserve-output", File.ReadAllText(outputMarker));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_RejectsMappingDestinationThroughOutputSymlinkBeforeMutation(
+        bool directoryMapping)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? linkPath = null;
+        try
+        {
+            const string moduleName = "LinkedMappingModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
+            string projectAssets = Directory.CreateDirectory(Path.Combine(projectRoot, "assets")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string outputMarker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(outputMarker, "preserve-output");
+            string projectMarker = Path.Combine(projectAssets, "preserve.txt");
+            File.WriteAllText(projectMarker, "preserve-project");
+            linkPath = Path.Combine(outputRoot, "assets");
+            try
+            {
+                Directory.CreateSymbolicLink(linkPath, projectAssets);
+            }
+            catch (Exception linkException) when (linkException is UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, ArtefactType.Script);
+            segment.Configuration.DoNotClear = true;
+            if (directoryMapping)
+            {
+                string source = Directory.CreateDirectory(Path.Combine(root.FullName, "directory-source")).FullName;
+                File.WriteAllText(Path.Combine(source, "replacement.txt"), "replacement");
+                segment.Configuration.DirectoryOutput =
+                    [new ArtefactCopyMapping { Source = source, Destination = "assets/content" }];
+            }
+            else
+            {
+                string source = Path.Combine(root.FullName, "file-source.txt");
+                File.WriteAllText(source, "replacement");
+                segment.Configuration.FilesOutput =
+                    [new ArtefactCopyMapping { Source = source, Destination = "assets/config.json" }];
+            }
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                Build(segment, projectRoot, stagingRoot, moduleName));
+
+            Assert.Contains("copy destination", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("symbolic link or reparse point", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve-project", File.ReadAllText(projectMarker));
+            Assert.Equal("preserve-output", File.ReadAllText(outputMarker));
+        }
+        finally
+        {
+            if (linkPath is not null)
+            {
+                try
+                {
+                    if (Directory.Exists(linkPath) &&
+                        (File.GetAttributes(linkPath) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        Directory.Delete(linkPath);
+                    }
+                }
+                catch { }
+            }
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Build_RejectsModulePackageDestinationThroughOutputSymlinkBeforeMutation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? linkPath = null;
+        try
+        {
+            const string moduleName = "LinkedPackageModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
+            string projectResources = Directory.CreateDirectory(Path.Combine(projectRoot, "resources")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteModule(stagingRoot, moduleName);
+            string stagedResources = Directory.CreateDirectory(Path.Combine(stagingRoot, "Resources")).FullName;
+            File.WriteAllText(Path.Combine(stagedResources, "config.json"), "replacement");
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string outputMarker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(outputMarker, "preserve-output");
+            string projectMarker = Path.Combine(projectResources, "config.json");
+            File.WriteAllText(projectMarker, "preserve-project");
+            linkPath = Path.Combine(outputRoot, "Resources");
+            try
+            {
+                Directory.CreateSymbolicLink(linkPath, projectResources);
+            }
+            catch (Exception linkException) when (linkException is UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, ArtefactType.Script);
+            segment.Configuration.DoNotClear = true;
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                Build(segment, projectRoot, stagingRoot, moduleName));
+
+            Assert.Contains("module package destination", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("symbolic link or reparse point", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve-project", File.ReadAllText(projectMarker));
+            Assert.Equal("preserve-output", File.ReadAllText(outputMarker));
+        }
+        finally
+        {
+            if (linkPath is not null)
+            {
+                try
+                {
+                    if (Directory.Exists(linkPath) &&
+                        (File.GetAttributes(linkPath) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        Directory.Delete(linkPath);
+                    }
+                }
+                catch { }
+            }
             try { root.Delete(recursive: true); } catch { }
         }
     }

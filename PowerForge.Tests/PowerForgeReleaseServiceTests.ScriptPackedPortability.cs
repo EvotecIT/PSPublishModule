@@ -80,6 +80,76 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
+    [InlineData("assets", false, "assets/data.json", false)]
+    [InlineData("Assets", false, "assets/data.json", false)]
+    [InlineData("assets", false, "assets/", true)]
+    [InlineData("assets/", true, "Assets/", true)]
+    public void CreateModuleAssetEntries_RejectsScriptPackedNamespaceCollisions(
+        string firstPath,
+        bool firstDirectory,
+        string secondPath,
+        bool secondDirectory)
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                using (var writer = new StreamWriter(archive.CreateEntry("Company.Tools.ps1").Open()))
+                    writer.Write("Get-Date");
+
+                WriteArchiveEntry(archive, firstPath, firstDirectory);
+                WriteArchiveEntry(archive, secondPath, secondDirectory);
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    CreateScriptPackedPlan(root, scriptPackedPath, "Company.Tools.ps1"),
+                    new[] { scriptPackedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void CreateModuleAssetEntries_RejectsScriptPackedSymbolicLinkEntry()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                using (var writer = new StreamWriter(archive.CreateEntry("Company.Tools.ps1").Open()))
+                    writer.Write("Get-Date");
+
+                ZipArchiveEntry link = archive.CreateEntry("linked-content");
+                link.ExternalAttributes = unchecked((int)0xA1FF0000);
+                using var linkWriter = new StreamWriter(link.Open());
+                linkWriter.Write("../outside");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    CreateScriptPackedPlan(root, scriptPackedPath, "Company.Tools.ps1"),
+                    new[] { scriptPackedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
     [InlineData("scripts/Invoke:Tools.ps1")]
     [InlineData("CON/Company.Tools.ps1")]
     [InlineData("scripts./Company.Tools.ps1")]
@@ -129,4 +199,14 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
             ]
         };
+
+    private static void WriteArchiveEntry(ZipArchive archive, string path, bool directory)
+    {
+        ZipArchiveEntry entry = archive.CreateEntry(path);
+        if (directory)
+            return;
+
+        using var writer = new StreamWriter(entry.Open());
+        writer.Write("payload");
+    }
 }
