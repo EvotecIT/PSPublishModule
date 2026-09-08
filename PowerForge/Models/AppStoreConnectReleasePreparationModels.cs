@@ -32,6 +32,9 @@ public sealed class AppStoreConnectReleasePreparationRequest
     /// <summary>Optional screenshot sync configuration to run after the version exists.</summary>
     public AppStoreConnectScreenshotSyncSpec? ScreenshotSpec { get; set; }
 
+    /// <summary>Additional localized screenshot mappings, with their own path resolution roots.</summary>
+    public AppStoreConnectReleaseScreenshotMapping[] ScreenshotMappings { get; set; } = Array.Empty<AppStoreConnectReleaseScreenshotMapping>();
+
     /// <summary>Optional localized metadata sync configuration to run after the version exists.</summary>
     public AppStoreConnectVersionMetadataSpec? MetadataSpec { get; set; }
 
@@ -98,6 +101,9 @@ public sealed class AppStoreConnectReleasePreparationResult
     /// <summary>Screenshot sync result when screenshots were configured.</summary>
     public AppStoreConnectScreenshotSyncResult? Screenshots { get; set; }
 
+    /// <summary>Screenshot sync results for every configured locale, in configuration order.</summary>
+    public AppStoreConnectScreenshotSyncResult[] ScreenshotResults { get; set; } = Array.Empty<AppStoreConnectScreenshotSyncResult>();
+
     /// <summary>First metadata sync result, retained for single-localization callers. MetadataResults contains every locale.</summary>
     public AppStoreConnectVersionMetadataSyncResult? Metadata { get; set; }
 
@@ -112,4 +118,14 @@ public sealed class AppStoreConnectReleasePreparationResult
 
     /// <summary>Preparation messages useful for release logs.</summary>
     public string[] Messages { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>A localized screenshot mapping and the directory owning its relative paths.</summary>
+public sealed class AppStoreConnectReleaseScreenshotMapping
+{
+    /// <summary>Localized screenshot configuration.</summary>
+    public AppStoreConnectScreenshotSyncSpec Spec { get; set; } = new();
+
+    /// <summary>Directory used to resolve screenshot and approval manifest paths.</summary>
+    public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
 }

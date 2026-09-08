@@ -140,6 +140,18 @@ public sealed class AppStoreConnectReleaseReadinessRequest
 
     /// <summary>Optional screenshot spec used to derive required display types.</summary>
     public AppStoreConnectScreenshotSyncSpec? ScreenshotSpec { get; set; }
+
+    /// <summary>Additional screenshot locales to check, each with its own required display types.</summary>
+    public AppStoreConnectScreenshotSyncSpec[] ScreenshotSpecs { get; set; } = Array.Empty<AppStoreConnectScreenshotSyncSpec>();
+
+    internal AppStoreConnectReleaseReadinessRequest ForScreenshotLocale(AppStoreConnectScreenshotSyncSpec spec)
+    {
+        var result = (AppStoreConnectReleaseReadinessRequest)MemberwiseClone();
+        result.Locale = spec.Locale.Trim();
+        result.ScreenshotSpec = spec;
+        result.ScreenshotSpecs = Array.Empty<AppStoreConnectScreenshotSyncSpec>();
+        return result;
+    }
 }
 
 /// <summary>
@@ -201,6 +213,9 @@ public sealed class AppStoreConnectReleaseReadinessCheck
 /// </summary>
 public sealed class AppStoreConnectReleaseScreenshotSetReadiness
 {
+    /// <summary>Locale owning this screenshot set.</summary>
+    public string Locale { get; set; } = string.Empty;
+
     /// <summary>Screenshot display type.</summary>
     public string ScreenshotDisplayType { get; set; } = string.Empty;
 
