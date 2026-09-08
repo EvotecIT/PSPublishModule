@@ -4,7 +4,7 @@ namespace PowerForge;
 internal sealed class PowerShellBoundNativeCollectionExpression : PowerShellBoundExpression
 {
     internal PowerShellBoundNativeCollectionExpression(SourceSpan span, string sourcePath,
-        PowerShellBoundNativeCollectionItem[] items, bool shareEmptyResult)
+        PowerShellBoundNativeCollectionItem[] items, bool shareEmptyResult, bool singleExpression = false)
         : base(span, new PowerShellTypeFact(typeof(object[]), PowerShellTypeFactProvenance.Inferred,
                 "Native expression statements contribute records to one collected Object array."), PowerShellValueState.Known,
             items.Aggregate(PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError,
@@ -15,11 +15,14 @@ internal sealed class PowerShellBoundNativeCollectionExpression : PowerShellBoun
         SourcePath = sourcePath;
         Items = items;
         ShareEmptyResult = shareEmptyResult;
+        SingleExpression = singleExpression;
     }
 
     internal string SourcePath { get; }
     internal PowerShellImmutableArray<PowerShellBoundNativeCollectionItem> Items { get; }
     internal bool ShareEmptyResult { get; }
+    /// <summary>Uses the native array operator without an inner statement error boundary.</summary>
+    internal bool SingleExpression { get; }
 }
 
 internal sealed class PowerShellBoundNativeCollectionItem

@@ -10,6 +10,13 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
+        /// <summary>Applies the native single-expression array operator without a statement-output collector.</summary>
+        public object?[] CollectValue(object? value)
+        {
+            EnsureActive();
+            return NativeOutputContract.Shared.Value.Collect(value);
+        }
+
         /// <summary>Applies native implicit-output enumeration and copying to the current compiled success sink.</summary>
         public void WriteOutput(object? value, Action<object?> sink)
         {
@@ -31,6 +38,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly Func<object> CreatePipe;
             internal readonly PropertyInfo ExternalWriter;
             internal readonly Action<object?, object, object> Write;
+            internal readonly Func<object?, object?[]> Collect;
 
             private NativeOutputContract()
             {
@@ -52,6 +60,11 @@ namespace PowerForge.Generated.Runtime
                 Write = Expression.Lambda<Action<object?, object, object>>(
                     Expression.Dynamic(binder, typeof(void), value, Expression.Convert(pipe, pipeType),
                         Expression.Convert(context, native.ExecutionContext.FieldType)), value, pipe, context).Compile();
+                var arrayBinderType = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.PSToObjectArrayBinder", true)!;
+                var getArrayBinder = arrayBinderType.GetMethod("Get", flags | BindingFlags.Static, null, Type.EmptyTypes, null)
+                    ?? throw new NotSupportedException("PowerShell's array-expression binder is unavailable.");
+                var arrayBinder = (CallSiteBinder)PowerShellNativeFunctionHost.Invoke(getArrayBinder, null, Array.Empty<object>())!;
+                Collect = Expression.Lambda<Func<object?, object?[]>>(Expression.Dynamic(arrayBinder, typeof(object[]), value), value).Compile();
             }
         }
 

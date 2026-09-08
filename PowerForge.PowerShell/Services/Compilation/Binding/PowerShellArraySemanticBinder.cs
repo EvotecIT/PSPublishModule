@@ -31,13 +31,19 @@ internal static class PowerShellArraySemanticBinder
             }
             var value = bindExpression(command.Expression, typeof(object));
             if (value is null) return null;
+            // A single pure expression bypasses the statement-output suppression
+            // used by a multi-statement collector, including bare ++/-- results.
+            if (syntax.SubExpression.Statements.Count == 1 && value is PowerShellBoundMutationExpression { UsesNativeInvocation: true } mutation)
+                value = mutation.WithResultType(PowerShellTypeFact.Unknown);
+            if (syntax.SubExpression.Statements.Count == 1 && command.Expression is ArrayLiteralAst)
+                return value;
             var sourceText = string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
                 .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
             items.Add(new PowerShellBoundNativeCollectionItem(PowerShellSourceParser.GetSpan(document, statement.Extent),
                 sourceText, value, PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(statement, windowsPowerShell)));
         }
         return new PowerShellBoundNativeCollectionExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
-            document.Path, items.ToArray(), !windowsPowerShell);
+            document.Path, items.ToArray(), !windowsPowerShell, syntax.SubExpression.Statements.Count == 1);
     }
 
     internal static PowerShellBoundExpression? Bind(

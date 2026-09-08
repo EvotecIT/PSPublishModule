@@ -70,4 +70,9 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
     internal PowerShellBoundNativeVariableExpression? NativeTargetRead { get; }
     internal bool UsesNativeInvocation => NativeTargetRead is not null;
     internal string NativeSourceText { get; }
+
+    /// <summary>Preserves the operation while selecting its expression-result representation.</summary>
+    internal PowerShellBoundMutationExpression WithResultType(PowerShellTypeFact type)
+        => new(Span, Target, TargetClrType, Operation, Value, type, NormalizeNullString,
+            IntegralSemantics, PreserveStatementErrors, NativeTargetRead, NativeSourceText);
 }

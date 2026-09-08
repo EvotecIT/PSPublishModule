@@ -6,6 +6,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private string EmitNativeCollection(PowerShellLoweredNativeCollectionExpression collection)
     {
+        if (collection.SingleExpression)
+        {
+            var value = collection.Items[0].Value;
+            return value.ClrType == typeof(void)
+                ? "new global::System.Func<object?[]>(() => { " + EmitExpression(value) +
+                    "; return __nativeFunction.CollectValue(global::System.Management.Automation.Internal.AutomationNull.Value); })()"
+                : "__nativeFunction.CollectValue((object?)" + EmitExpression(value) + ")";
+        }
         var body = new StringBuilder("new global::System.Func<object?[]>(() => { ");
         var result = collection.ResultTemporary;
         body.Append("var ").Append(result).Append(" = new global::System.Collections.Generic.List<object?>(); ");
