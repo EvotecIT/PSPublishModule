@@ -22,12 +22,12 @@ public sealed partial class ModulePipelineRunner
             return Array.Empty<string>();
 
         ArtefactBuildResult[] selected = SelectModuleReleaseArtefacts(releaseArtefacts, publishId);
-        var scriptSourcesByArchive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var scriptSourcesByArchive = new Dictionary<string, string>(PowerShellCompilationPathSafety.PathComparer);
         string[] selectedOutputPaths = selected
             .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => Path.GetFullPath(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
         return selected
             .SelectMany(artefact => ResolveModuleReleaseArtefactPaths(
@@ -37,7 +37,7 @@ public sealed partial class ModulePipelineRunner
                 selectedOutputPaths).Concat(artefact.EvidencePaths))
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => Path.GetFullPath(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
     }
 
@@ -128,7 +128,7 @@ public sealed partial class ModulePipelineRunner
     private static string[] CollectPackageReleaseAssets(
         IEnumerable<ProjectBuildHostExecutionResult> projectBuildResults)
     {
-        var assets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var assets = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         foreach (var result in projectBuildResults ?? Array.Empty<ProjectBuildHostExecutionResult>())
         {
             foreach (var package in result.Result?.Release?.Projects.SelectMany(static project =>
@@ -231,14 +231,14 @@ public sealed partial class ModulePipelineRunner
         string releaseVersion)
     {
         var staged = new List<string>();
-        var stagedSourcesByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var stagedSourcesByPath = new Dictionary<string, string>(PowerShellCompilationPathSafety.PathComparer);
         foreach (var asset in moduleAssets)
             staged.Add(StageReleaseAsset(stageRoot, "modules", asset, stagedSourcesByPath));
         foreach (var asset in packageAssets)
             staged.Add(StageReleaseAsset(stageRoot, "nuget", asset, stagedSourcesByPath));
 
         staged.AddRange(WriteReleaseMetadata(plan, stageRoot, staged, releaseVersion));
-        return staged.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return staged.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
     }
 
     private static string StageReleaseAsset(
@@ -272,13 +272,13 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static bool PathsEqual(string left, string right)
-        => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+        => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), GetPathComparison(left, right));
 
     private static bool IsPathBelow(string path, string root)
     {
         var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+        return fullPath.StartsWith(fullRoot, GetPathComparison(fullPath, fullRoot));
     }
 
     private static string[] WriteReleaseMetadata(

@@ -125,6 +125,99 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
     }
 
+    [Fact]
+    public void Run_RejectsCaseDistinctGitHubAssetsInsteadOfSilentlyDroppingOne()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparisonForPath(root.FullName) != StringComparison.Ordinal)
+                return;
+
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string outputRoot = Path.Combine(root.FullName, "Artifacts", "Shared");
+            bool publishAttempted = false;
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: null,
+                gitHubReleasePublisher: _ =>
+                {
+                    publishAttempted = true;
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            ID = "module",
+                            Enabled = true,
+                            Path = outputRoot,
+                            ArtefactName = "testmodule.zip"
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            ID = "module",
+                            Enabled = true,
+                            Path = outputRoot,
+                            ArtefactName = "TESTMODULE.zip"
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration()
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            ID = "module",
+                            Enabled = true,
+                            Destination = PublishDestination.GitHub,
+                            UserName = "EvotecIT",
+                            RepositoryName = moduleName,
+                            ApiKey = "token"
+                        }
+                    }
+                ]
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("multiple files named", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("unique file names", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(publishAttempted);
+            Assert.True(File.Exists(Path.Combine(outputRoot, "testmodule.zip")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "TESTMODULE.zip")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.Unpacked)]

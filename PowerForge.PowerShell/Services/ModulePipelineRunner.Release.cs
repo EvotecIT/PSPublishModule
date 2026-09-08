@@ -353,13 +353,13 @@ public sealed partial class ModulePipelineRunner
             publishId,
             scriptArchiveRoot);
         var packageAssets = CollectPackageReleaseAssets(state.ProjectBuildResults);
-        var allAssets = moduleAssets.Concat(packageAssets).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var allAssets = moduleAssets.Concat(packageAssets).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
         string[] finalAssets;
         if (string.IsNullOrWhiteSpace(stageRoot))
         {
             finalAssets = allAssets
                 .Concat(WriteReleaseMetadata(plan, releaseRoot, allAssets, releaseVersion))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
         }
         else

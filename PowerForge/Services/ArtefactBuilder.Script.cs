@@ -59,6 +59,7 @@ public sealed partial class ArtefactBuilder
             rejectOutputRootContainingProject: true);
         ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
             scriptRoot,
+            projectRoot,
             stagingPath,
             information,
             delivery,
@@ -73,6 +74,7 @@ public sealed partial class ArtefactBuilder
             scriptRoot,
             outputRoot,
             projectRoot,
+            stagingPath,
             filteredRequiredModules);
         ValidateScriptCopyMappings(
             cfg,
@@ -193,6 +195,7 @@ public sealed partial class ArtefactBuilder
             rejectOutputRootContainingProject: cfg.DoNotClear != true);
         ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
             scriptRoot,
+            projectRoot,
             stagingPath,
             information,
             delivery,
@@ -207,6 +210,7 @@ public sealed partial class ArtefactBuilder
             scriptRoot,
             tempRoot,
             projectRoot,
+            stagingPath,
             filteredRequiredModules);
         ValidateScriptCopyMappings(
             cfg,

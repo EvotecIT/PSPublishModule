@@ -386,7 +386,9 @@ public sealed partial class ArtefactBuilder
         ValidateScriptDestinationDoesNotTraverseReparsePoint(
             fullDestination,
             outputRoot,
-            "directory copy destination");
+            "directory copy destination",
+            projectRoot,
+            stagingPath);
         if (IsSameOrBelowPath(fullProjectRoot, fullDestination))
         {
             throw new InvalidOperationException(
@@ -418,7 +420,9 @@ public sealed partial class ArtefactBuilder
         ValidateScriptDestinationDoesNotTraverseReparsePoint(
             fullDestination,
             outputRoot,
-            "file copy destination");
+            "file copy destination",
+            projectRoot,
+            stagingPath);
         if (IsSameOrBelowPath(fullDestination, fullProjectRoot) &&
             !IsSameOrBelowPath(fullDestination, outputRoot))
         {
@@ -540,11 +544,15 @@ public sealed partial class ArtefactBuilder
         ValidateScriptDestinationDoesNotTraverseReparsePoint(
             fullOutputRoot,
             fullOutputRoot,
-            "output root");
+            "output root",
+            projectRoot,
+            stagingPath);
         ValidateScriptDestinationDoesNotTraverseReparsePoint(
             fullScriptRoot,
             fullOutputRoot,
-            "generated script root");
+            "generated script root",
+            projectRoot,
+            stagingPath);
     }
 
     private static void ValidateScriptCopyMappingSource(
@@ -643,6 +651,7 @@ public sealed partial class ArtefactBuilder
         string scriptRoot,
         string artefactRoot,
         string projectRoot,
+        string stagingPath,
         IReadOnlyList<RequiredModuleReference> requiredModules)
     {
         if (cfg.RequiredModules.Enabled != true)
@@ -668,7 +677,9 @@ public sealed partial class ArtefactBuilder
             ValidateScriptDestinationDoesNotTraverseReparsePoint(
                 destination,
                 requiredRoot,
-                "required module destination");
+                "required module destination",
+                projectRoot,
+                stagingPath);
             if (!IsSameOrBelowPath(scriptRoot, destination))
                 continue;
 

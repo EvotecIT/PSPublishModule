@@ -8,6 +8,7 @@ public sealed partial class ArtefactBuilder
 {
     private static void ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
         string scriptRoot,
+        string projectRoot,
         string stagingPath,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
@@ -27,14 +28,18 @@ public sealed partial class ArtefactBuilder
             ValidateScriptDestinationDoesNotTraverseReparsePoint(
                 destination,
                 fullScriptRoot,
-                "module package destination");
+                "module package destination",
+                projectRoot,
+                stagingPath);
         }
     }
 
     private static void ValidateScriptDestinationDoesNotTraverseReparsePoint(
         string destination,
         string boundary,
-        string description)
+        string description,
+        string projectRoot,
+        string stagingPath)
     {
         string fullDestination = Path.GetFullPath(destination)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -50,8 +55,18 @@ public sealed partial class ArtefactBuilder
             {
                 if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                 {
-                    throw new InvalidOperationException(
-                        $"Script artefact {description} '{fullDestination}' traverses a symbolic link or reparse point at '{current}'.");
+                    // A shared outer alias (for example macOS /var) keeps every protected path in
+                    // the same lexical namespace. An unshared ancestor can redirect only the output
+                    // boundary and bypass the project/staging overlap checks.
+                    bool isSharedAncestorOutsideBoundary =
+                        !IsSameOrBelowPath(current, fullBoundary) &&
+                        IsSameOrBelowPath(projectRoot, current) &&
+                        IsSameOrBelowPath(stagingPath, current);
+                    if (!isSharedAncestorOutsideBoundary)
+                    {
+                        throw new InvalidOperationException(
+                            $"Script artefact {description} '{fullDestination}' traverses a symbolic link or reparse point at '{current}'.");
+                    }
                 }
             }
             catch (FileNotFoundException)
@@ -62,13 +77,14 @@ public sealed partial class ArtefactBuilder
             {
                 // Non-existing path components are created only after this preflight succeeds.
             }
-
-            if (string.Equals(current, fullBoundary, GetPathComparison(current, fullBoundary)))
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) ||
+                string.Equals(parent, current, GetPathComparison(parent, current)))
+            {
                 return;
+            }
 
-            current = Path.GetDirectoryName(current)
-                ?? throw new InvalidOperationException(
-                    $"Script artefact {description} '{fullDestination}' escapes validation boundary '{fullBoundary}'.");
+            current = parent;
         }
     }
 }

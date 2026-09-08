@@ -508,6 +508,59 @@ public sealed class ArtefactBuilderScriptOutputSafetyTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_RejectsOutputRootBelowSymlinkAncestorBeforeCleanup(ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? linkPath = null;
+        try
+        {
+            const string moduleName = "LinkedOutputModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteModule(stagingRoot, moduleName);
+            string physicalRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "physical-output-parent")).FullName;
+            string physicalOutput = Directory.CreateDirectory(Path.Combine(physicalRoot, "workspace", "output")).FullName;
+            string marker = Path.Combine(physicalOutput, "preserve.txt");
+            File.WriteAllText(marker, "preserve");
+            linkPath = Path.Combine(root.FullName, "linked-output-parent");
+            try
+            {
+                Directory.CreateSymbolicLink(linkPath, physicalRoot);
+            }
+            catch (Exception linkException) when (linkException is UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            string outputRoot = Path.Combine(linkPath, "workspace", "output");
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                Build(CreateSegment(outputRoot, artefactType), projectRoot, stagingRoot, moduleName));
+
+            Assert.Contains("output root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("symbolic link or reparse point", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve", File.ReadAllText(marker));
+        }
+        finally
+        {
+            if (linkPath is not null)
+            {
+                try
+                {
+                    if (Directory.Exists(linkPath) &&
+                        (File.GetAttributes(linkPath) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        Directory.Delete(linkPath);
+                    }
+                }
+                catch { }
+            }
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static ConfigurationArtefactSegment CreateSegment(string outputRoot, ArtefactType artefactType) =>
         new()
         {
