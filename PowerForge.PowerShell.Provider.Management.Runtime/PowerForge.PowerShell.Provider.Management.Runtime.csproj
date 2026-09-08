@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <VersionPrefix>3.0.136</VersionPrefix>
+    <VersionPrefix>3.0.137</VersionPrefix>
     <PackageId>PowerForge.PowerShell.Provider.Management.Runtime</PackageId>
     <Description>Executable win-x64 CIM and MI provider package for runtime-free PowerForge artifacts.</Description>
     <PackageTags>powershell;compiler;provider;cim;mi;powerforge</PackageTags>
