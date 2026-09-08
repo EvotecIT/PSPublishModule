@@ -73,8 +73,7 @@ public sealed partial class ArtefactBuilder
         AddManifestLoadedKey(manifestLoadedKeys, manifestPath, "ScriptsToProcess");
         AddManifestLoadedKey(manifestLoadedKeys, manifestPath, "TypesToProcess");
         AddManifestLoadedKey(manifestLoadedKeys, manifestPath, "FormatsToProcess");
-        if (ModuleManifestValueReader.ReadRequiredModules(manifestPath).Any())
-            manifestLoadedKeys.Add("RequiredModules");
+        AddManifestLoadedKey(manifestLoadedKeys, manifestPath, "RequiredModules", moduleReferences: true);
         if (manifestLoadedKeys.Count > 0)
         {
             throw new InvalidOperationException(
@@ -109,7 +108,10 @@ public sealed partial class ArtefactBuilder
     {
         var values = moduleReferences
             ? ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, key)
-            : ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key);
+            : ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(
+                manifestPath,
+                key,
+                "Script and ScriptPacked conversion") ?? Array.Empty<string>();
         if (values.Length > 0)
             keys.Add(key);
     }

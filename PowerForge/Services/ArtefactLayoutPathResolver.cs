@@ -23,7 +23,7 @@ internal static class ArtefactLayoutPathResolver
         if (!scriptName.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
             scriptName += ".ps1";
 
-        if (Path.IsPathRooted(scriptName) || scriptName.IndexOf('/') >= 0 || scriptName.IndexOf('\\') >= 0)
+        if (!IsPortableFileName(scriptName))
             throw new InvalidOperationException($"ScriptName must be a file name, but got '{scriptName}'.");
 
         return scriptName;
@@ -61,13 +61,47 @@ internal static class ArtefactLayoutPathResolver
             Path.IsPathRooted(fileName) ||
             fileName.IndexOf('/') >= 0 ||
             fileName.IndexOf('\\') >= 0 ||
-            !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+            !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal) ||
+            !IsPortableFileName(fileName))
         {
             throw new InvalidOperationException(
                 $"ArtefactName must be a file name that stays inside the artefact output root, but got '{fileName}'.");
         }
 
         return fileName;
+    }
+
+    private static bool IsPortableFileName(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName) ||
+            Path.IsPathRooted(fileName) ||
+            fileName.IndexOf('/') >= 0 ||
+            fileName.IndexOf('\\') >= 0 ||
+            fileName.EndsWith(".", StringComparison.Ordinal) ||
+            fileName.EndsWith(" ", StringComparison.Ordinal) ||
+            fileName.Any(character =>
+                character < 32 ||
+                character is '<' or '>' or ':' or '"' or '|' or '?' or '*' ||
+                Path.GetInvalidFileNameChars().Contains(character)))
+        {
+            return false;
+        }
+
+        string stem = fileName.Split('.')[0].TrimEnd(' ', '.');
+        if (stem.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("CONIN$", StringComparison.OrdinalIgnoreCase) ||
+            stem.Equals("CONOUT$", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !(stem.Length == 4 &&
+                 (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
+                  stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
+                 stem[3] is >= '1' and <= '9');
     }
 
     internal static string ResolveOutputRoot(

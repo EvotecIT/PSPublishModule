@@ -4,7 +4,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed class ArtefactBuilderScriptClosureTests
+public sealed partial class ArtefactBuilderScriptClosureTests
 {
     [Theory]
     [InlineData(ArtefactType.Script)]

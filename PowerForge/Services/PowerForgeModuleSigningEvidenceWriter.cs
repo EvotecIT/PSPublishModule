@@ -65,7 +65,13 @@ public static class PowerForgeModuleSigningEvidenceWriter
         string manifestDirectory = Path.GetDirectoryName(manifest) ?? root;
         foreach (string relativePath in ModuleManifestLoadedContent.ReadRelativePaths(manifest))
         {
-            string loadedPath = ResolveFileUnderRoot(root, Path.Combine(manifestDirectory, relativePath), "manifest-loaded content");
+            string normalizedRelativePath = relativePath
+                .Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
+            string loadedPath = ResolveFileUnderRoot(
+                root,
+                Path.Combine(manifestDirectory, normalizedRelativePath),
+                "manifest-loaded content");
             if (!verifiedFiles.Contains(loadedPath, pathComparer))
                 throw new InvalidOperationException($"Module signing evidence must include manifest-loaded content '{relativePath}'.");
             if (preservedThirdPartySignatures.Any(signature =>
@@ -296,8 +302,11 @@ public static class PowerForgeModuleSigningEvidenceWriter
         if (Path.IsPathRooted(moduleEntryPoint) || moduleEntryPoint.StartsWith("\\", StringComparison.Ordinal) ||
             moduleEntryPoint.StartsWith("/", StringComparison.Ordinal))
             throw new InvalidOperationException($"{entryPointProperty} entrypoint must be relative to the primary module manifest.");
+        string normalizedEntryPoint = moduleEntryPoint
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
         string manifestDirectory = Path.GetDirectoryName(manifestPath) ?? root;
-        string candidate = Path.GetFullPath(Path.Combine(manifestDirectory, moduleEntryPoint));
+        string candidate = Path.GetFullPath(Path.Combine(manifestDirectory, normalizedEntryPoint));
         string relativeToManifest = FrameworkCompatibility.GetRelativePath(manifestDirectory, candidate);
         if (Path.IsPathRooted(relativeToManifest) || relativeToManifest == ".." ||
             relativeToManifest.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))

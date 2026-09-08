@@ -213,14 +213,13 @@ public sealed partial class ArtefactBuilder
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact,
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
+        var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
+        var zipPath = Path.Combine(outputRoot, artefactName);
         Directory.CreateDirectory(outputRoot);
         if (cfg.DoNotClear != true)
             ClearDirectoryContentsSafe(outputRoot, excludePatterns: new[] { "*.zip" }, includeDirectories: false);
 
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
-
-        var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
-        var zipPath = Path.Combine(outputRoot, artefactName);
 
         var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", $"{moduleName}_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);

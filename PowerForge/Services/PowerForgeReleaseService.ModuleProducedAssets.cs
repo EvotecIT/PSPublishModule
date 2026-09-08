@@ -109,6 +109,7 @@ internal sealed partial class PowerForgeReleaseService
                 .Select(static entry => entry.FullName.Replace('\\', '/'))
                 .ToArray();
             if (files.Length == 0 ||
+                files.Distinct(StringComparer.Ordinal).Count() != files.Length ||
                 files.Any(static name =>
                     name.StartsWith("/", StringComparison.Ordinal) ||
                     Path.IsPathRooted(name) ||
@@ -128,7 +129,10 @@ internal sealed partial class PowerForgeReleaseService
                 return false;
             }
 
-            return files.Contains(expectedEntryPoint!, StringComparer.Ordinal);
+            return files.Count(name => string.Equals(
+                name,
+                expectedEntryPoint,
+                StringComparison.Ordinal)) == 1;
         }
         catch
         {

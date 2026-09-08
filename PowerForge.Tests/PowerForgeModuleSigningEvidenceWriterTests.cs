@@ -345,6 +345,39 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         Assert.Contains("ModuleToProcess entrypoint", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(".\\bin\\Sample.psm1")]
+    [InlineData("./bin/Sample.psm1")]
+    public void Create_LegacyModuleToProcessNormalizesPortableSeparators(string entryPoint)
+    {
+        using var fixture = new SigningFixture();
+        string nestedModule = Path.Combine(Path.GetDirectoryName(fixture.ModulePath)!, "bin", "Sample.psm1");
+        Directory.CreateDirectory(Path.GetDirectoryName(nestedModule)!);
+        File.Move(fixture.ModulePath, nestedModule);
+        File.WriteAllText(
+            fixture.ManifestPath,
+            $"@{{ ModuleVersion = '2.3.4'; ModuleToProcess = '{entryPoint}' }}");
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 3,
+            TotalAfterExclude = 3,
+            SignedNew = 3,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, nestedModule, fixture.SourceAttestationPath }
+        };
+        fixture.BindSigningInventory(signingResult);
+
+        PowerForgeModuleSigningEvidence evidence = PowerForgeModuleSigningEvidenceWriter.Create(
+            fixture.Root,
+            "Sample",
+            "2.3.4",
+            SourceRevision,
+            sourceDirty: false,
+            fixture.ManifestPath,
+            signingResult);
+
+        Assert.Contains("Sample/bin/Sample.psm1", evidence.SignableFiles);
+    }
+
     private sealed class SigningFixture : IDisposable
     {
         public SigningFixture(bool includeVendorDependency = false)
