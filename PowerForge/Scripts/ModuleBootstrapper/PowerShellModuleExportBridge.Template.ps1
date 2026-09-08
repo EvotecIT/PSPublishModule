@@ -6,9 +6,28 @@ $AddExportedCmdlet = [System.Management.Automation.PSModuleInfo].GetMethod(
     [System.Reflection.BindingFlags]'Instance, NonPublic'
 )
 $PowerForgeOuterModule = $ExecutionContext.SessionState.Module
-if ($null -eq $PowerForgeOuterModule) {
-    # A Script/ScriptPacked entry point has no outer module export table. The imported inner module's
-    # commands remain available to the rest of the running script, so no private export bridge is needed.
+$PowerForgeIsModuleWrapper = $false
+if ($null -ne $PowerForgeOuterModule -and
+    -not [string]::IsNullOrWhiteSpace($PowerForgeOuterModule.Path) -and
+    -not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
+    try {
+        $PowerForgePathComparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+            [StringComparison]::OrdinalIgnoreCase
+        } else {
+            [StringComparison]::Ordinal
+        }
+        $PowerForgeIsModuleWrapper = [string]::Equals(
+            [IO.Path]::GetFullPath($PowerForgeOuterModule.Path),
+            [IO.Path]::GetFullPath($PSCommandPath),
+            $PowerForgePathComparison
+        )
+    } catch {
+        $PowerForgeIsModuleWrapper = $false
+    }
+}
+if (-not $PowerForgeIsModuleWrapper) {
+    # A Script/ScriptPacked entry point, including one dot-sourced by another module, must not mutate
+    # that caller's export table. The imported inner module's commands remain available to this script.
 } elseif ($null -ne $AddExportedCmdlet) {
     foreach ($Cmd in {{InnerModuleExpression}}.ExportedCmdlets.Values) {
         $AddExportedCmdlet.Invoke($PowerForgeOuterModule, @(, $Cmd)) | Out-Null

@@ -676,6 +676,48 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void CreateModuleAssetEntries_RejectsCaseCollidingScriptPackedEntries()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                using (var writer = new StreamWriter(archive.CreateEntry("Company.Tools.ps1").Open()))
+                    writer.Write("Get-Date");
+                using (var writer = new StreamWriter(archive.CreateEntry("company.tools.ps1").Open()))
+                    writer.Write("Get-ChildItem");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    new PowerForgeModuleReleasePlanSummary
+                    {
+                        ModuleName = "Company.Tools",
+                        ModuleVersion = "4.0.0",
+                        ArtefactOutputs =
+                        [
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.ScriptPacked,
+                                OutputPath = scriptPackedPath,
+                                EntryPointRelativePath = "Company.Tools.ps1"
+                            }
+                        ]
+                    },
+                    new[] { scriptPackedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

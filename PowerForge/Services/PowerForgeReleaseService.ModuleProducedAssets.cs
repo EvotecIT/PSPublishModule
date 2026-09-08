@@ -144,7 +144,7 @@ internal sealed partial class PowerForgeReleaseService
                 .Select(static entry => entry.FullName.Replace('\\', '/'))
                 .ToArray();
             if (files.Length == 0 ||
-                files.Distinct(StringComparer.Ordinal).Count() != files.Length ||
+                files.Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Length ||
                 files.Any(static name =>
                     IsPortableArchivePathRooted(name) ||
                     name.Split('/').Any(static segment => segment is "." or "..") ||
