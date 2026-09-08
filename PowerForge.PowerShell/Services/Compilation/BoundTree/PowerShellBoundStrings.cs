@@ -14,18 +14,24 @@ internal sealed class PowerShellBoundInterpolatedStringPart
 
 internal sealed class PowerShellBoundInterpolatedStringExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundInterpolatedStringExpression(SourceSpan span, PowerShellBoundInterpolatedStringPart[] parts)
+    internal PowerShellBoundInterpolatedStringExpression(SourceSpan span, PowerShellBoundInterpolatedStringPart[] parts, bool usePowerShellRuntime)
         : base(
             span,
             new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred, "Every interpolation is statically represented as a String."),
             PowerShellValueState.Known,
             parts.Where(static part => part.Expression is not null)
-                .Aggregate(PowerShellSemanticEffect.None, static (effects, part) => effects | part.Expression!.Effects),
+                .Aggregate(usePowerShellRuntime
+                        ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError
+                        : PowerShellSemanticEffect.None,
+                    static (effects, part) => effects | part.Expression!.Effects),
             parts.Where(static part => part.Expression is not null)
-                .Aggregate(PowerShellRequiredCapability.None, static (capabilities, part) => capabilities | part.Expression!.Capabilities))
+                .Aggregate(usePowerShellRuntime ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None,
+                    static (capabilities, part) => capabilities | part.Expression!.Capabilities))
     {
         Parts = parts;
+        UsePowerShellRuntime = usePowerShellRuntime;
     }
 
     internal PowerShellImmutableArray<PowerShellBoundInterpolatedStringPart> Parts { get; }
+    internal bool UsePowerShellRuntime { get; }
 }

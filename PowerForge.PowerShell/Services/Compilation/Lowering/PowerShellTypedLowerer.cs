@@ -657,7 +657,8 @@ internal sealed partial class PowerShellTypedLowerer
                 interpolated.Span,
                 interpolated.Parts.Select(part => new PowerShellLoweredInterpolatedStringPart(
                     part.Text,
-                    part.Expression is null ? null : LowerExpression(part.Expression, functions, names, targetCapabilities))).ToArray()),
+                    part.Expression is null ? null : LowerExpression(part.Expression, functions, names, targetCapabilities))).ToArray(),
+                interpolated.UsePowerShellRuntime),
             PowerShellBoundMutationExpression mutation => new PowerShellLoweredMutationExpression(
                 mutation.Span,
                 mutation.Type.ClrType,

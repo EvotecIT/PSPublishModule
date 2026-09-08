@@ -508,21 +508,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitStringJoin(PowerShellLoweredStringJoinExpression join)
         => $"new global::System.Func<string>(() => {{ var {join.ValuesTemporary} = {EmitExpression(join.Values)}; var {join.SeparatorTemporary} = {EmitExpression(join.Separator)}; return global::System.String.Join(({join.SeparatorTemporary} ?? string.Empty), ({join.ValuesTemporary} ?? global::System.Array.Empty<string>())); }})()";
 
-    private string EmitInterpolatedString(PowerShellLoweredInterpolatedStringExpression interpolated)
-    {
-        var parts = interpolated.Parts.Select(part => part.Expression is null
-            ? PowerShellCSharpLiteral.QuoteString(part.Text ?? string.Empty)
-            : part.Expression.ClrType == typeof(string)
-                ? $"({EmitExpression(part.Expression)} ?? string.Empty)"
-                : $"(global::System.Convert.ToString((object?)({EmitExpression(part.Expression)}), global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty)").ToArray();
-        return parts.Length switch
-        {
-            0 => "string.Empty",
-            1 => parts[0],
-            _ => $"global::System.String.Concat(new string[] {{ {string.Join(", ", parts)} }})"
-        };
-    }
-
     private string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
     {
         if (assignment.Receiver is null)

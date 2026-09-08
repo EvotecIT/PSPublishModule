@@ -14,8 +14,13 @@ internal sealed class PowerShellLoweredInterpolatedStringPart
 
 internal sealed class PowerShellLoweredInterpolatedStringExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredInterpolatedStringExpression(SourceSpan span, PowerShellLoweredInterpolatedStringPart[] parts)
-        : base(span, typeof(string)) => Parts = parts;
+    internal PowerShellLoweredInterpolatedStringExpression(SourceSpan span, PowerShellLoweredInterpolatedStringPart[] parts, bool usePowerShellRuntime)
+        : base(span, typeof(string))
+    {
+        Parts = parts;
+        UsePowerShellRuntime = usePowerShellRuntime;
+    }
 
     internal PowerShellImmutableArray<PowerShellLoweredInterpolatedStringPart> Parts { get; }
+    internal bool UsePowerShellRuntime { get; }
 }

@@ -8,46 +8,44 @@ internal static class PowerShellStringSemanticBinder
         ParsedSourceDocument document,
         ExpandableStringExpressionAst syntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
-        if (syntax.Extent.Text.Contains("`$", StringComparison.Ordinal))
+        if (!PowerShellExpandableStringSyntax.TryRead(syntax, out var fragments))
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2801", "Expandable strings that mix escaped dollar signs with interpolation require PowerShell token-preserving semantics.", span));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2804", "The parser's expandable-string format could not be mapped losslessly to its interpolation slots.", span));
             return null;
         }
 
         var parts = new List<PowerShellBoundInterpolatedStringPart>();
-        var cursor = 0;
-        foreach (var nested in syntax.NestedExpressions)
+        var usePowerShellRuntime = false;
+        foreach (var fragment in fragments)
         {
+            if (fragment.ExpressionIndex is not int expressionIndex)
+            {
+                parts.Add(new PowerShellBoundInterpolatedStringPart(fragment.Text, null));
+                continue;
+            }
+            var nested = syntax.NestedExpressions[expressionIndex];
             if (nested is not VariableExpressionAst)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", "Expandable-string subexpressions are not yet represented by the bound pipeline.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
                 return null;
             }
             var expression = bindExpression(nested, null);
-            if (expression is null || !PowerShellStableScalarTypePolicy.IsSupported(expression.Type.ClrType))
+            if (expression is null) return null;
+            if (!PowerShellStableScalarTypePolicy.IsSupported(expression.Type.ClrType))
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2803", "Typed expandable-string variables must have a stable scalar representation.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
-                return null;
+                if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2803", "Expandable-string values require a stable scalar representation or the PowerShell statement-error host's stringification contract.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
+                    return null;
+                }
+                usePowerShellRuntime = true;
             }
-            var token = nested.Extent.Text;
-            var tokenIndex = syntax.Value.IndexOf(token, cursor, StringComparison.Ordinal);
-            if (tokenIndex < 0)
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2804", "Expandable string source could not be mapped losslessly to its parsed interpolation token.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
-                return null;
-            }
-            if (tokenIndex > cursor)
-                parts.Add(new PowerShellBoundInterpolatedStringPart(syntax.Value.Substring(cursor, tokenIndex - cursor), null));
             parts.Add(new PowerShellBoundInterpolatedStringPart(null, expression));
-            cursor = tokenIndex + token.Length;
         }
-        if (cursor < syntax.Value.Length)
-            parts.Add(new PowerShellBoundInterpolatedStringPart(syntax.Value.Substring(cursor), null));
-        if (parts.Count == 0)
-            parts.Add(new PowerShellBoundInterpolatedStringPart(syntax.Value, null));
-        return new PowerShellBoundInterpolatedStringExpression(span, parts.ToArray());
+        return new PowerShellBoundInterpolatedStringExpression(span, parts.ToArray(), usePowerShellRuntime);
     }
 }

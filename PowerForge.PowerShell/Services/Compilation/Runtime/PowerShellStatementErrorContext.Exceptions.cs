@@ -15,6 +15,14 @@ namespace PowerForge.Generated.Runtime
             return (string)NativeContract.Invoke(_contract.FormatOperator, null, format, value)!;
         }
 
+        /// <summary>Preserves native interpolation, including scalar precision, OFS, and stringification errors.</summary>
+        internal string InterpolateValue(object? value)
+        {
+            ThrowIfDisposed();
+            var unwrapped = NativeContract.Invoke(_contract.UnwrapObjectArgument, null, value);
+            return (string)NativeContract.Invoke(_contract.StringifyValue, null, _context, unwrapped)!;
+        }
+
         /// <summary>Converts a stored PowerShell value to the base object seen by a CLR Object parameter.</summary>
         internal object? UnwrapObjectArgument(object? value)
         {

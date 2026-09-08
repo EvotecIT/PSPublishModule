@@ -44,6 +44,7 @@ internal sealed partial class PowerShellSemanticBinder
                     document,
                     expandable,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
                     diagnostics);
             case StringConstantExpressionAst text:
                 return new PowerShellBoundLiteralExpression(span, text.Value, LiteralType(typeof(string), "String literal syntax determines the CLR representation."), PowerShellValueState.Known);

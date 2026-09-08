@@ -26,6 +26,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo ConvertToMethodInvocationException, ConvertToArgumentConversionException;
             internal readonly MethodInfo NewInterpreterException;
             internal readonly MethodInfo FormatOperator;
+            internal readonly MethodInfo StringifyValue;
             internal readonly MethodInfo UnwrapObjectArgument;
             internal readonly MethodInfo CheckEnumerationInterrupts;
             internal readonly MethodInfo SuspendStoppingPipeline, RestoreStoppingPipeline;
@@ -59,6 +60,7 @@ namespace PowerForge.Generated.Runtime
                 RestoreStoppingPipeline = Method(errors, "RestoreStoppingPipeline", true, typeof(void), context, typeof(bool));
                 FormatOperator = Method(RequireType(assembly, "System.Management.Automation.StringOps"),
                     "FormatOperator", true, typeof(string), typeof(string), typeof(object));
+                StringifyValue = Method(typeof(PSObject), "ToStringParser", true, typeof(string), context, typeof(object));
                 UnwrapObjectArgument = Method(typeof(PSObject), "Base", true, typeof(object), typeof(object));
                 var tuple = RequireType(assembly, "System.Management.Automation.MutableTuple");
                 ObjectTupleType = RequireType(assembly, "System.Management.Automation.MutableTuple`1").MakeGenericType(typeof(object));
