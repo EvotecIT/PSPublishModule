@@ -58,6 +58,7 @@ internal static class ArtefactLayoutPathResolver
 
         fileName = fileName.Trim();
         if (string.IsNullOrWhiteSpace(fileName) ||
+            !fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
             Path.IsPathRooted(fileName) ||
             fileName.IndexOf('/') >= 0 ||
             fileName.IndexOf('\\') >= 0 ||
@@ -65,7 +66,7 @@ internal static class ArtefactLayoutPathResolver
             !IsPortableFileName(fileName))
         {
             throw new InvalidOperationException(
-                $"ArtefactName must be a file name that stays inside the artefact output root, but got '{fileName}'.");
+                $"ArtefactName must be a file name ending in .zip that stays inside the artefact output root, but got '{fileName}'.");
         }
 
         return fileName;

@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -98,9 +99,11 @@ public sealed partial class ArtefactBuilderScriptClosureTests
     [InlineData(ArtefactType.Packed, "CON.zip")]
     [InlineData(ArtefactType.Packed, "bad:name.zip")]
     [InlineData(ArtefactType.Packed, "COM².zip")]
+    [InlineData(ArtefactType.Packed, "archive.bin")]
     [InlineData(ArtefactType.ScriptPacked, "LPT1.zip")]
     [InlineData(ArtefactType.ScriptPacked, "bad?name.zip")]
     [InlineData(ArtefactType.ScriptPacked, "LPT¹.zip")]
+    [InlineData(ArtefactType.ScriptPacked, "archive.bin")]
     public void Build_InvalidArchiveNameIsRejectedBeforeExistingOutputIsChanged(
         ArtefactType artefactType,
         string artefactName)
@@ -128,6 +131,138 @@ public sealed partial class ArtefactBuilderScriptClosureTests
                     Array.Empty<RequiredModuleReference>()));
 
             Assert.Contains("ArtefactName must be a file name", exception.Message, StringComparison.Ordinal);
+            Assert.Equal("preserve", File.ReadAllText(marker));
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Build_ScriptDestinationRootCannotOverlapStagingBeforeAnyMutation(
+        bool configureRequiredModulesRoot,
+        bool useStagingAncestor)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "OverlappingStagingModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteScriptModule(stagingRoot, moduleName);
+            string stagingMarker = Path.Combine(stagingRoot, "preserve.txt");
+            File.WriteAllText(stagingMarker, "preserve");
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, ArtefactType.Script);
+            string overlappingPath = useStagingAncestor ? root.FullName : stagingRoot;
+            if (configureRequiredModulesRoot)
+            {
+                segment.Configuration.RequiredModules.Enabled = true;
+                segment.Configuration.RequiredModules.Path = overlappingPath;
+                segment.Configuration.RequiredModules.ModulesPath = "app";
+            }
+            else
+            {
+                segment.Configuration.RequiredModules.ModulesPath = overlappingPath;
+            }
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    root.FullName,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    Array.Empty<RequiredModuleReference>()));
+
+            Assert.Contains(
+                configureRequiredModulesRoot ? "required modules root" : "script root",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("overlaps staging", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve", File.ReadAllText(stagingMarker));
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_OrdinaryConversionOmitsStaleReleaseProvenance(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        string? extractionRoot = null;
+        try
+        {
+            const string moduleName = "StaleProvenanceModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteScriptModule(stagingRoot, moduleName);
+            File.WriteAllText(
+                Path.Combine(stagingRoot, PowerForgeModuleSourceAttestationWriter.FileName),
+                "@{ SchemaVersion = '1' }");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName),
+                "{\"schemaVersion\":1}");
+
+            ArtefactBuildResult result = Build(
+                root.FullName,
+                stagingRoot,
+                Path.Combine(root.FullName, "output"),
+                moduleName,
+                artefactType);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractionRoot = Path.Combine(root.FullName, "extracted-provenance");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractionRoot);
+                inspectionRoot = extractionRoot;
+            }
+
+            Assert.False(File.Exists(Path.Combine(inspectionRoot, PowerForgeModuleSourceAttestationWriter.FileName)));
+            Assert.False(File.Exists(Path.Combine(inspectionRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName)));
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_OutputRootCannotOverlapStagingBeforeAnyMutation(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "OverlappingOutputModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteScriptModule(stagingRoot, moduleName);
+            string marker = Path.Combine(stagingRoot, "preserve.txt");
+            File.WriteAllText(marker, "preserve");
+            ConfigurationArtefactSegment segment = CreateSegment(stagingRoot, artefactType);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    root.FullName,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    Array.Empty<RequiredModuleReference>()));
+
+            Assert.Contains("output root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("overlaps staging", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("preserve", File.ReadAllText(marker));
         }
         finally

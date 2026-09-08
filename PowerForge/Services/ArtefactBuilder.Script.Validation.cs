@@ -353,6 +353,36 @@ public sealed partial class ArtefactBuilder
             fileDestinations);
     }
 
+    private static void ValidateScriptBuildRootsDoNotOverlapStaging(
+        string stagingPath,
+        string outputRoot,
+        string scriptRoot,
+        string? requiredModulesRoot)
+    {
+        string fullStagingPath = Path.GetFullPath(stagingPath);
+        foreach ((string Label, string Path) candidate in new[]
+                 {
+                     ("output root", outputRoot),
+                     ("generated script root", scriptRoot),
+                     ("required modules root", requiredModulesRoot ?? string.Empty)
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(candidate.Path))
+                continue;
+
+            string fullCandidate = Path.GetFullPath(candidate.Path);
+            if (!IsSameOrBelowPath(fullStagingPath, fullCandidate) &&
+                !IsSameOrBelowPath(fullCandidate, fullStagingPath))
+            {
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"Script artefact {candidate.Label} '{fullCandidate}' overlaps staging source '{fullStagingPath}'. " +
+                "Keep staging and artefact destination trees separate.");
+        }
+    }
+
     private static void ValidateScriptCopyMappingSource(
         string source,
         bool sourceIsDirectory,
@@ -469,11 +499,22 @@ public sealed partial class ArtefactBuilder
         }
     }
 
-    private static void RemoveCompilationEvidenceFromTransformedScript(string scriptRoot, string moduleName)
+    private static void RemoveUnsupportedEvidenceFromTransformedScript(string scriptRoot, string moduleName)
     {
         foreach (var suffix in new[] { ".powerforge-compilation.json", ".powerforge-compilation.p7s" })
         {
             var path = Path.Combine(scriptRoot, moduleName + suffix);
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+
+        foreach (string fileName in new[]
+                 {
+                     PowerForgeModuleSourceAttestationWriter.FileName,
+                     PublishedRegistryProvenanceValidator.ModuleProvenanceFileName
+                 })
+        {
+            string path = Path.Combine(scriptRoot, fileName);
             if (File.Exists(path))
                 File.Delete(path);
         }

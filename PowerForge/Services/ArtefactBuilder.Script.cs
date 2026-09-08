@@ -50,6 +50,11 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        ValidateScriptBuildRootsDoNotOverlapStaging(
+            stagingPath,
+            outputRoot,
+            scriptRoot,
+            cfg.RequiredModules.Enabled == true ? requiredRoot : null);
         var filteredRequiredModules = FilterRequiredModulesForArtefact(
             requiredModules,
             cfg.RequiredModules.ExcludeModuleName);
@@ -167,6 +172,11 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        ValidateScriptBuildRootsDoNotOverlapStaging(
+            stagingPath,
+            outputRoot,
+            scriptRoot,
+            cfg.RequiredModules.Enabled == true ? requiredRoot : null);
         var filteredRequiredModules = FilterRequiredModulesForArtefact(
             requiredModules,
             cfg.RequiredModules.ExcludeModuleName);
@@ -276,7 +286,7 @@ public sealed partial class ArtefactBuilder
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
         CopyModulePackage(stagingPath, scriptRoot, include, finalizedPayloadFiles, clearDestination);
 
-        RemoveCompilationEvidenceFromTransformedScript(scriptRoot, moduleName);
+        RemoveUnsupportedEvidenceFromTransformedScript(scriptRoot, moduleName);
 
         var manifestPath = Path.Combine(scriptRoot, moduleName + ".psd1");
         if (!File.Exists(manifestPath))

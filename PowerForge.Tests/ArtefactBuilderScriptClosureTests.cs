@@ -122,7 +122,7 @@ public sealed partial class ArtefactBuilderScriptClosureTests
     [Theory]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]
-    public void Build_TransformedScriptOmitsStaleCompilationEvidence(ArtefactType artefactType)
+    public void Build_TransformedScriptOmitsStaleUnsupportedEvidence(ArtefactType artefactType)
     {
         var root = CreateRoot();
         string? extractionRoot = null;
@@ -135,11 +135,15 @@ public sealed partial class ArtefactBuilderScriptClosureTests
             string assembly = Path.Combine(stagingRoot, moduleName + ".dll");
             string compilationEvidence = Path.Combine(stagingRoot, moduleName + ".powerforge-compilation.json");
             string authenticatedEvidence = Path.Combine(stagingRoot, moduleName + ".powerforge-compilation.p7s");
+            string sourceProvenance = Path.Combine(stagingRoot, PowerForgeModuleSourceAttestationWriter.FileName);
+            string registryProvenance = Path.Combine(stagingRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName);
             File.WriteAllText(manifest, "@{ RootModule = 'HybridModule.psm1'; ModuleVersion = '1.0.0' }");
             File.WriteAllText(scriptModule, "function Invoke-HybridModule { 'ok' }");
             File.WriteAllBytes(assembly, new byte[] { 1, 2, 3 });
             File.WriteAllText(compilationEvidence, "{\"files\":[\"HybridModule.psm1\"]}");
             File.WriteAllBytes(authenticatedEvidence, new byte[] { 4, 5, 6 });
+            File.WriteAllText(sourceProvenance, "@{ SchemaVersion = '1' }");
+            File.WriteAllText(registryProvenance, "{\"schemaVersion\":1}");
 
             ArtefactBuildResult result = Build(
                 root.FullName,
@@ -147,7 +151,16 @@ public sealed partial class ArtefactBuilderScriptClosureTests
                 Path.Combine(root.FullName, "output"),
                 moduleName,
                 artefactType,
-                finalizedPayloadFiles: new[] { manifest, scriptModule, assembly, compilationEvidence, authenticatedEvidence });
+                finalizedPayloadFiles: new[]
+                {
+                    manifest,
+                    scriptModule,
+                    assembly,
+                    compilationEvidence,
+                    authenticatedEvidence,
+                    sourceProvenance,
+                    registryProvenance
+                });
 
             string inspectionRoot = result.OutputPath;
             if (artefactType == ArtefactType.ScriptPacked)
@@ -161,6 +174,8 @@ public sealed partial class ArtefactBuilderScriptClosureTests
             Assert.True(File.Exists(Path.Combine(inspectionRoot, moduleName + ".dll")));
             Assert.False(File.Exists(Path.Combine(inspectionRoot, moduleName + ".powerforge-compilation.json")));
             Assert.False(File.Exists(Path.Combine(inspectionRoot, moduleName + ".powerforge-compilation.p7s")));
+            Assert.False(File.Exists(Path.Combine(inspectionRoot, PowerForgeModuleSourceAttestationWriter.FileName)));
+            Assert.False(File.Exists(Path.Combine(inspectionRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName)));
         }
         finally
         {

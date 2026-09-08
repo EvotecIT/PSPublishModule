@@ -62,10 +62,25 @@ internal sealed partial class PowerForgeReleaseService
 
         return producerTypes[0] switch
         {
-            ArtefactType.Packed => IsFinalPowerShellModulePackage(path, plan),
+            ArtefactType.Packed => IsModuleArtifactForResolvedVersion(path, plan) &&
+                                   IsFinalPowerShellModulePackage(path, plan),
             ArtefactType.ScriptPacked => IsFinalPowerShellScriptPackage(path, plan),
             _ => false
         };
+    }
+
+    private static bool IsProducedModuleArtifactForResolvedVersion(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan)
+    {
+        ArtefactType[] producerTypes = ResolveMatchingModuleArtefactOutputs(path, plan)
+            .Select(static output => output.Type)
+            .Distinct()
+            .ToArray();
+        if (producerTypes.Length == 1 && producerTypes[0] == ArtefactType.ScriptPacked)
+            return true;
+
+        return IsModuleArtifactForResolvedVersion(path, plan);
     }
 
     private static bool ContainsProducedModuleArtifact(

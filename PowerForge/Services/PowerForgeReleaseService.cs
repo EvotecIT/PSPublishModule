@@ -5251,7 +5251,8 @@ internal sealed partial class PowerForgeReleaseService
         foreach (var file in Directory
             .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly)
             .Where(file => produced is not null
-                ? ContainsProducedModuleArtifact(produced, file)
+                ? ContainsProducedModuleArtifact(produced, file) &&
+                  IsProducedModuleArtifactForResolvedVersion(file, plan)
                 : IsModuleArtifactForResolvedVersion(file, plan))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
         {
