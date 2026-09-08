@@ -117,6 +117,44 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Contains(result.Checks, check => check.Name == "pl.screenshots.APP_IPHONE_65.complete");
     }
 
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("pl")]
+    public async Task ReleasePreparation_LegacyScreenshotPreservesReadinessLocaleAndCheckNames(string readinessLocale)
+    {
+        var root = Directory.CreateTempSubdirectory("PowerForge.ScreenshotLocales.");
+        try
+        {
+            var mapping = CreateLocaleMapping(root.FullName, "en-US");
+            var responses = new List<SequenceResponse>(ExistingLocaleScreenshotResponses("en-US"))
+            {
+                new(HttpStatusCode.OK, """{"data":[{"id":"version-1","type":"appStoreVersions","attributes":{"versionString":"1.0.0","platform":"IOS"}}]}"""),
+                new(HttpStatusCode.OK, """{"data":[]}""")
+            };
+            responses.AddRange(ExistingLocaleScreenshotResponses(readinessLocale));
+            var handler = new SequenceHandler(responses.ToArray());
+            using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+            using var client = new AppStoreConnectClient(CreateCredential(), http);
+            var result = await new AppStoreConnectReleasePreparationService(client).PrepareAsync(new()
+            {
+                AppId = "app-1", VersionString = "1.0.0", BuildNumber = "5", CreateVersion = false, SelectBuild = false,
+                ScreenshotSpec = mapping.Spec, BaseDirectory = mapping.BaseDirectory, CheckReadiness = true,
+                ReadinessRequest = new()
+                {
+                    Locale = readinessLocale, RequireSelectedBuild = false,
+                    RequireDescription = false, RequireKeywords = false, RequireSupportUrl = false
+                }
+            });
+            Assert.NotNull(result.Readiness);
+            Assert.Equal(readinessLocale, result.Readiness.Localization?.Locale);
+            Assert.Contains(result.Readiness.Checks, check => check.Name == "version");
+            Assert.Contains(result.Readiness.Checks, check => check.Name == "screenshots.APP_IPHONE_65.complete");
+            Assert.DoesNotContain(result.Readiness.Checks, check => check.Name.StartsWith("en-US.") || check.Name.StartsWith("pl."));
+            Assert.Equal("en-US", result.Screenshots?.Localization.Locale);
+        }
+        finally { root.Delete(true); }
+    }
+
     private static AppStoreConnectReleaseScreenshotMapping CreateLocaleMapping(string root, string locale)
     {
         var baseDirectory = Directory.CreateDirectory(Path.Combine(root, locale)).FullName;

@@ -187,7 +187,8 @@ public sealed partial class AppStoreConnectReleasePreparationService
                 versionString,
                 buildNumber,
                 request.Platform,
-                screenshotMappings.Select(static mapping => mapping.Spec).ToArray());
+                screenshotMappings.Select(static mapping => mapping.Spec).ToArray(),
+                request.ScreenshotSpec is not null && screenshotMappings.Length == 1);
             readiness = await new AppStoreConnectReleaseReadinessService(_client)
                 .CheckAsync(readinessRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -298,7 +299,8 @@ public sealed partial class AppStoreConnectReleasePreparationService
         string versionString,
         string buildNumber,
         ApplePlatform platform,
-        AppStoreConnectScreenshotSyncSpec[] screenshotSpecs)
+        AppStoreConnectScreenshotSyncSpec[] screenshotSpecs,
+        bool legacySingleScreenshot)
     {
         source ??= new AppStoreConnectReleaseReadinessRequest();
         return new AppStoreConnectReleaseReadinessRequest
@@ -320,8 +322,8 @@ public sealed partial class AppStoreConnectReleasePreparationService
             RequireCompleteScreenshots = source.RequireCompleteScreenshots,
             MinimumScreenshotsPerSet = source.MinimumScreenshotsPerSet,
             RequiredScreenshotDisplayTypes = source.RequiredScreenshotDisplayTypes,
-            ScreenshotSpec = screenshotSpecs.Length == 0 ? source.ScreenshotSpec : null,
-            ScreenshotSpecs = screenshotSpecs.Length == 0 ? source.ScreenshotSpecs : screenshotSpecs
+            ScreenshotSpec = legacySingleScreenshot ? screenshotSpecs[0] : screenshotSpecs.Length == 0 ? source.ScreenshotSpec : null,
+            ScreenshotSpecs = legacySingleScreenshot || screenshotSpecs.Length == 0 ? source.ScreenshotSpecs : screenshotSpecs
         };
     }
 }
