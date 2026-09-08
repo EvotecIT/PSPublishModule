@@ -96,8 +96,14 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
-    [Fact]
-    public void Run_SignedScriptPackedArtefactRejectsPostFinalizationMutation()
+    [Theory]
+    [InlineData(ModulePipelineActionStage.AfterArtefacts)]
+    [InlineData(ModulePipelineActionStage.BeforePublish)]
+    [InlineData(ModulePipelineActionStage.AfterPublish)]
+    [InlineData(ModulePipelineActionStage.BeforeInstall)]
+    [InlineData(ModulePipelineActionStage.AfterInstall)]
+    public void Run_SignedScriptPackedArtefactRejectsPostFinalizationMutation(
+        ModulePipelineActionStage stage)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -125,7 +131,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                     Configuration = new ModulePipelineActionConfiguration
                     {
                         Name = "mutate finalized script archive",
-                        At = ModulePipelineActionStage.AfterArtefacts,
+                        At = stage,
                         InlineScript = "# executed through the test host"
                     }
                 }
@@ -145,6 +151,9 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     [Theory]
     [InlineData(ModulePipelineActionStage.AfterArtefacts)]
     [InlineData(ModulePipelineActionStage.BeforePublish)]
+    [InlineData(ModulePipelineActionStage.AfterPublish)]
+    [InlineData(ModulePipelineActionStage.BeforeInstall)]
+    [InlineData(ModulePipelineActionStage.AfterInstall)]
     public void Run_SignedScriptArtefactRejectsFileAddedAfterFinalization(ModulePipelineActionStage stage)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -299,6 +308,9 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     [Theory]
     [InlineData(ModulePipelineActionStage.AfterArtefacts)]
     [InlineData(ModulePipelineActionStage.BeforePublish)]
+    [InlineData(ModulePipelineActionStage.AfterPublish)]
+    [InlineData(ModulePipelineActionStage.BeforeInstall)]
+    [InlineData(ModulePipelineActionStage.AfterInstall)]
     public void Run_SignedPackedArtifactRejectsPostFinalizationActionMutation(ModulePipelineActionStage stage)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

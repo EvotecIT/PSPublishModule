@@ -585,4 +585,50 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CreateModuleAssetEntries_ScriptPackedProducerCannotFallBackToModuleArchiveVerification(
+        bool legacyOutputRootOnly)
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry copiedManifest = archive.CreateEntry("Company.Tools/Company.Tools.psd1");
+                using var writer = new StreamWriter(copiedManifest.Open());
+                writer.Write("@{ ModuleVersion = '4.0.0' }");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    new PowerForgeModuleReleasePlanSummary
+                    {
+                        ManifestPath = Path.Combine(root, "Company.Tools.psd1"),
+                        ModuleName = "Company.Tools",
+                        ModuleVersion = "4.0.0",
+                        ArtefactOutputs = new[]
+                        {
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.ScriptPacked,
+                                OutputRoot = root,
+                                OutputPath = legacyOutputRootOnly ? null : scriptPackedPath,
+                                EntryPointRelativePath = "Company.Tools.ps1"
+                            }
+                        }
+                    },
+                    new[] { scriptPackedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 }

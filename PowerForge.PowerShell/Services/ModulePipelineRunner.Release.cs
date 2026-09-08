@@ -17,7 +17,7 @@ public sealed partial class ModulePipelineRunner
 
         var conflicts = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AddPackedArtefactOutputPathConflicts(plan, conflicts);
+        AddArtefactOutputPathConflicts(plan, conflicts);
 
         var protectedPaths = CollectReleaseProtectedPaths(plan, state);
 
@@ -54,46 +54,6 @@ public sealed partial class ModulePipelineRunner
         throw new InvalidOperationException(
             "Release artefact configuration is unsafe:" + Environment.NewLine +
             string.Join(Environment.NewLine, conflicts.Select(static message => "- " + message)));
-    }
-
-    private static void AddPackedArtefactOutputPathConflicts(
-        ModulePipelinePlan plan,
-        ICollection<string> conflicts)
-    {
-        var resolved = new List<(ConfigurationArtefactSegment Artefact, string Path)>();
-        foreach (var artefact in plan.Artefacts
-                     .Where(static item =>
-                         item is not null &&
-                         item.Configuration?.Enabled == true &&
-                         item.ArtefactType is ArtefactType.Packed or ArtefactType.ScriptPacked))
-        {
-            ArtefactConfiguration cfg = artefact.Configuration!;
-            string outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
-                cfg.Path,
-                plan.ProjectRoot,
-                plan.ModuleName,
-                plan.ResolvedVersion,
-                plan.PreRelease,
-                artefact.ArtefactType);
-            string outputPath = Path.GetFullPath(Path.Combine(
-                outputRoot,
-                ArtefactLayoutPathResolver.ResolveArtefactFileName(
-                    cfg,
-                    plan.ModuleName,
-                    plan.ResolvedVersion,
-                    plan.PreRelease)));
-            var previous = resolved.FirstOrDefault(candidate =>
-                string.Equals(candidate.Path, outputPath, GetPathComparison(candidate.Path, outputPath)));
-            if (previous.Artefact is not null)
-            {
-                conflicts.Add(
-                    $"Artefacts '{previous.Artefact.ArtefactType}' and '{artefact.ArtefactType}' resolve to the same zip output file '{outputPath}'. Configure a unique Path or ArtefactName for each enabled packed artefact.");
-            }
-            else
-            {
-                resolved.Add((artefact, outputPath));
-            }
-        }
     }
 
     private static List<ArtefactDestructivePath> CollectArtefactDestructivePaths(
@@ -312,7 +272,8 @@ public sealed partial class ModulePipelineRunner
         var candidateParent = Path.GetDirectoryName(Path.GetFullPath(candidatePath))
             ?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        return string.Equals(parent, candidateParent, StringComparison.OrdinalIgnoreCase);
+        return candidateParent is not null &&
+               string.Equals(parent, candidateParent, GetPathComparison(parent, candidateParent));
     }
 
     private static bool IsZipFilePath(string path)

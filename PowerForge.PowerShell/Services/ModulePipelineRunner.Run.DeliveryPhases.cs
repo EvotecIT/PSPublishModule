@@ -81,6 +81,8 @@ public sealed partial class ModulePipelineRunner
             ValidateFinalizedPackedArtefactIntegrity(state);
             ExecutePublishOperations(plan, session, buildResult, state);
             ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
+            ValidateFinalizedModulePayloadIntegrity(state);
+            ValidateFinalizedPackedArtefactIntegrity(state);
         }
         else
         {
@@ -90,6 +92,7 @@ public sealed partial class ModulePipelineRunner
 
         ExecuteActions(ModulePipelineActionStage.BeforeInstall, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
+        ValidateFinalizedPackedArtefactIntegrity(state);
         if (plan.InstallEnabled)
         {
             session.Start(session.InstallStep);
@@ -148,5 +151,7 @@ public sealed partial class ModulePipelineRunner
             }
         }
         ExecuteActions(ModulePipelineActionStage.AfterInstall, plan, session, state);
+        ValidateFinalizedModulePayloadIntegrity(state);
+        ValidateFinalizedPackedArtefactIntegrity(state);
     }
 }

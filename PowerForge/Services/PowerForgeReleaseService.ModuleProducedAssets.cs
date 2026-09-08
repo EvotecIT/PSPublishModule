@@ -40,8 +40,31 @@ internal sealed partial class PowerForgeReleaseService
             Source = "Module",
             Version = ResolveModuleReleaseVersion(plan),
             IsFinalPackageOutput = ContainsProducedModuleArtifact(producedArtifactPaths, fullPath) &&
-                                    (IsFinalPowerShellModulePackage(fullPath, plan) ||
-                                     IsFinalPowerShellScriptPackage(fullPath, plan))
+                                   IsFinalPowerShellProducedAsset(fullPath, plan)
+        };
+    }
+
+    private static bool IsFinalPowerShellProducedAsset(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan)
+    {
+        PowerForgeModuleArtefactOutputSummary[] matchingOutputs =
+            ResolveMatchingModuleArtefactOutputs(path, plan);
+        if (matchingOutputs.Length == 0)
+            return IsFinalPowerShellModulePackage(path, plan);
+
+        ArtefactType[] producerTypes = matchingOutputs
+            .Select(static output => output.Type)
+            .Distinct()
+            .ToArray();
+        if (producerTypes.Length != 1)
+            return false;
+
+        return producerTypes[0] switch
+        {
+            ArtefactType.Packed => IsFinalPowerShellModulePackage(path, plan),
+            ArtefactType.ScriptPacked => IsFinalPowerShellScriptPackage(path, plan),
+            _ => false
         };
     }
 
@@ -119,33 +142,10 @@ internal sealed partial class PowerForgeReleaseService
         out string? entryPointRelativePath)
     {
         entryPointRelativePath = null;
-        string fullPath = Path.GetFullPath(path);
-        PowerForgeModuleArtefactOutputSummary[] outputs =
-            plan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>();
-        PowerForgeModuleArtefactOutputSummary[] matchingOutputs = outputs
-            .Where(output => output is not null &&
-                             !string.IsNullOrWhiteSpace(output.OutputPath) &&
-                             string.Equals(
-                                 Path.GetFullPath(output.OutputPath!),
-                                 fullPath,
-                                 FrameworkCompatibility.GetPathStringComparison(output.OutputPath!)))
-            .ToArray();
-        if (matchingOutputs.Length == 0)
-        {
-            string directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
-            matchingOutputs = outputs
-                .Where(output => output is not null &&
-                                 string.IsNullOrWhiteSpace(output.OutputPath) &&
-                                 !string.IsNullOrWhiteSpace(output.OutputRoot) &&
-                                 string.Equals(
-                                     Path.GetFullPath(output.OutputRoot),
-                                     directory,
-                                     FrameworkCompatibility.GetPathStringComparison(output.OutputRoot)))
-                .ToArray();
-        }
-
+        PowerForgeModuleArtefactOutputSummary[] matchingOutputs =
+            ResolveMatchingModuleArtefactOutputs(path, plan);
         if (matchingOutputs.Length == 0 ||
-            matchingOutputs.Select(static output => output.Type).Distinct().Any(static type => type != ArtefactType.ScriptPacked))
+            matchingOutputs.Any(static output => output.Type != ArtefactType.ScriptPacked))
         {
             return false;
         }
@@ -167,6 +167,44 @@ internal sealed partial class PowerForgeReleaseService
         entryPointRelativePath = entryPoints[0];
         return true;
     }
+
+    private static PowerForgeModuleArtefactOutputSummary[] ResolveMatchingModuleArtefactOutputs(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan)
+    {
+        string fullPath = Path.GetFullPath(path);
+        PowerForgeModuleArtefactOutputSummary[] outputs =
+            plan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>();
+        PowerForgeModuleArtefactOutputSummary[] matchingOutputs = outputs
+            .Where(output => output is not null &&
+                             !string.IsNullOrWhiteSpace(output.OutputPath) &&
+                             string.Equals(
+                                 Path.GetFullPath(output.OutputPath!),
+                                 fullPath,
+                                 ResolvePathComparison(output.OutputPath!, fullPath)))
+            .ToArray();
+        if (matchingOutputs.Length == 0)
+        {
+            string directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
+            matchingOutputs = outputs
+                .Where(output => output is not null &&
+                                 string.IsNullOrWhiteSpace(output.OutputPath) &&
+                                 !string.IsNullOrWhiteSpace(output.OutputRoot) &&
+                                 string.Equals(
+                                     Path.GetFullPath(output.OutputRoot),
+                                     directory,
+                                     ResolvePathComparison(output.OutputRoot, directory)))
+                .ToArray();
+        }
+
+        return matchingOutputs;
+    }
+
+    private static StringComparison ResolvePathComparison(string firstPath, string secondPath)
+        => FrameworkCompatibility.GetPathStringComparisonForPath(firstPath) == StringComparison.OrdinalIgnoreCase ||
+           FrameworkCompatibility.GetPathStringComparisonForPath(secondPath) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 
     private static bool IsNuGetPackagePath(string path)
         => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) ||
