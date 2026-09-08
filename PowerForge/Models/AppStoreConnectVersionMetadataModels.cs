@@ -69,8 +69,11 @@ public sealed class AppStoreConnectVersionMetadataSyncResult
     /// <summary>Matched App Store version.</summary>
     public AppStoreConnectVersionInfo Version { get; set; } = new();
 
-    /// <summary>Localization before the metadata update.</summary>
-    public AppStoreConnectVersionLocalizationInfo Before { get; set; } = new();
+    /// <summary>Localization before the metadata update; null when this sync created it.</summary>
+    public AppStoreConnectVersionLocalizationInfo? Before { get; set; }
+
+    /// <summary>Whether this sync created a previously missing localization.</summary>
+    public bool CreatedLocalization { get; set; }
 
     /// <summary>Localization after the metadata update.</summary>
     public AppStoreConnectVersionLocalizationInfo After { get; set; } = new();
@@ -98,6 +101,12 @@ public sealed class AppStoreConnectReleaseReadinessRequest
 
     /// <summary>Localization locale to check.</summary>
     public string Locale { get; set; } = "en-US";
+
+    /// <summary>
+    /// Explicit metadata locales checked alongside the screenshot mapping locales. Empty preserves
+    /// the existing locale selection. Without screenshot mappings, screenshot requirements apply only to <see cref="Locale"/>.
+    /// </summary>
+    public string[] MetadataLocales { get; set; } = Array.Empty<string>();
 
     /// <summary>Require the Distribution version to have the expected selected build.</summary>
     public bool RequireSelectedBuild { get; set; } = true;
@@ -137,6 +146,21 @@ public sealed class AppStoreConnectReleaseReadinessRequest
 
     /// <summary>Optional screenshot spec used to derive required display types.</summary>
     public AppStoreConnectScreenshotSyncSpec? ScreenshotSpec { get; set; }
+
+    /// <summary>Additional screenshot locales to check, each with its own required display types.</summary>
+    public AppStoreConnectScreenshotSyncSpec[] ScreenshotSpecs { get; set; } = Array.Empty<AppStoreConnectScreenshotSyncSpec>();
+
+    internal AppStoreConnectReleaseReadinessRequest ForLocale(
+        string locale, AppStoreConnectScreenshotSyncSpec? spec, bool requireScreenshots)
+    {
+        var result = (AppStoreConnectReleaseReadinessRequest)MemberwiseClone();
+        result.Locale = locale;
+        result.MetadataLocales = Array.Empty<string>();
+        result.ScreenshotSpec = spec;
+        result.ScreenshotSpecs = Array.Empty<AppStoreConnectScreenshotSyncSpec>();
+        result.RequireScreenshots = requireScreenshots;
+        return result;
+    }
 }
 
 /// <summary>
@@ -171,6 +195,9 @@ public sealed class AppStoreConnectReleaseReadinessResult
     /// <summary>Matched localization when found.</summary>
     public AppStoreConnectVersionLocalizationInfo? Localization { get; set; }
 
+    /// <summary>All matched localizations checked for a multi-locale release.</summary>
+    public AppStoreConnectVersionLocalizationInfo[] Localizations { get; set; } = Array.Empty<AppStoreConnectVersionLocalizationInfo>();
+
     /// <summary>Screenshot set readiness details.</summary>
     public AppStoreConnectReleaseScreenshotSetReadiness[] ScreenshotSets { get; set; } = Array.Empty<AppStoreConnectReleaseScreenshotSetReadiness>();
 
@@ -198,6 +225,9 @@ public sealed class AppStoreConnectReleaseReadinessCheck
 /// </summary>
 public sealed class AppStoreConnectReleaseScreenshotSetReadiness
 {
+    /// <summary>Locale owning this screenshot set.</summary>
+    public string Locale { get; set; } = string.Empty;
+
     /// <summary>Screenshot display type.</summary>
     public string ScreenshotDisplayType { get; set; } = string.Empty;
 

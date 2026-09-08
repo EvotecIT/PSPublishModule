@@ -189,6 +189,7 @@ public sealed class AppStoreConnectReviewSubmissionService
             BuildNumber = buildNumber,
             Platform = request.Platform,
             Locale = string.IsNullOrWhiteSpace(source.Locale) ? "en-US" : source.Locale.Trim(),
+            MetadataLocales = source.MetadataLocales,
             RequireSelectedBuild = source.RequireSelectedBuild,
             RequireValidBuild = source.RequireValidBuild,
             RequireDescription = source.RequireDescription,
@@ -201,7 +202,8 @@ public sealed class AppStoreConnectReviewSubmissionService
             RequireCompleteScreenshots = source.RequireCompleteScreenshots,
             MinimumScreenshotsPerSet = source.MinimumScreenshotsPerSet,
             RequiredScreenshotDisplayTypes = source.RequiredScreenshotDisplayTypes,
-            ScreenshotSpec = source.ScreenshotSpec
+            ScreenshotSpec = source.ScreenshotSpec,
+            ScreenshotSpecs = source.ScreenshotSpecs
         };
     }
 

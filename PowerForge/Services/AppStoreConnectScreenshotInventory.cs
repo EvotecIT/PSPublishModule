@@ -10,7 +10,8 @@ internal static class AppStoreConnectScreenshotInventory
         IEnumerable<AppStoreConnectReleaseScreenshotSetReadiness> screenshotSets)
     {
         var canonical = screenshotSets
-            .OrderBy(static set => set.ScreenshotDisplayType, StringComparer.Ordinal)
+            .OrderBy(static set => set.Locale, StringComparer.Ordinal)
+            .ThenBy(static set => set.ScreenshotDisplayType, StringComparer.Ordinal)
             .Select(static set => new
             {
                 set.ScreenshotDisplayType,

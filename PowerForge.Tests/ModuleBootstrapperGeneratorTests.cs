@@ -1,3 +1,4 @@
+using System.Reflection.PortableExecutable;
 using PowerForge;
 
 public partial class ModuleBootstrapperGeneratorTests
@@ -275,7 +276,7 @@ public partial class ModuleBootstrapperGeneratorTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public void Generate_WithNetStandard21_WritesPowerShell70CompatibleAssemblyLoadContextLoader()
+    public void Generate_WithNetStandard21_WritesPowerShell70CompatibleAssemblyLoadContextLoaderWithPortableDebugPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-ps70-alc-" + Guid.NewGuid().ToString("N"));
         var coreRoot = Path.Combine(root, "Lib", "Core");
@@ -300,6 +301,15 @@ public partial class ModuleBootstrapperGeneratorTests
                 ".NETCoreApp,Version=v3.1",
                 System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(loaderPath)),
                 StringComparison.Ordinal);
+
+            using var stream = File.OpenRead(loaderPath);
+            using var reader = new PEReader(stream);
+            var codeView = reader.ReadDebugDirectory().Single(entry => entry.Type == DebugDirectoryEntryType.CodeView);
+            var pdbPath = reader.ReadCodeViewDebugDirectoryData(codeView).Path.Replace('\\', '/');
+            var physicalTempPath = Path.GetTempPath().Replace('\\', '/');
+
+            Assert.True(pdbPath.StartsWith("/_/", StringComparison.Ordinal), $"Expected a mapped debug path, but found '{pdbPath}'.");
+            Assert.False(pdbPath.Contains(physicalTempPath, StringComparison.OrdinalIgnoreCase), $"Debug path leaked the temporary build root: '{pdbPath}'.");
         }
         finally
         {
