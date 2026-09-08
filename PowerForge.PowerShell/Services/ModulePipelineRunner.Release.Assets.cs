@@ -21,30 +21,7 @@ public sealed partial class ModulePipelineRunner
         if (releaseArtefacts.Length == 0)
             return Array.Empty<string>();
 
-        ArtefactBuildResult[] selected;
-        if (string.IsNullOrWhiteSpace(publishId))
-        {
-            selected = new[] { releaseArtefacts[0] };
-        }
-        else
-        {
-            var idValue = publishId!.Trim();
-            selected = releaseArtefacts
-                .Where(artefact => string.Equals(artefact.Id, idValue, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            if (selected.Length == 0)
-            {
-                var available = releaseArtefacts
-                    .Select(static artefact => artefact.Id)
-                    .Where(static id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                var availableText = available.Length == 0 ? "(none)" : string.Join(", ", available);
-                throw new InvalidOperationException(
-                    $"No release artefacts matched ID '{publishId}'. Available IDs: {availableText}");
-            }
-        }
-
+        ArtefactBuildResult[] selected = SelectModuleReleaseArtefacts(releaseArtefacts, publishId);
         var scriptSourcesByArchive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         string[] selectedOutputPaths = selected
             .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
@@ -62,6 +39,34 @@ public sealed partial class ModulePipelineRunner
             .Select(static path => Path.GetFullPath(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static ArtefactBuildResult[] SelectModuleReleaseArtefacts(
+        IReadOnlyList<ArtefactBuildResult> releaseArtefacts,
+        string? publishId)
+    {
+        if (string.IsNullOrWhiteSpace(publishId))
+        {
+            return new[] { releaseArtefacts[0] };
+        }
+
+        var idValue = publishId!.Trim();
+        ArtefactBuildResult[] selected = releaseArtefacts
+            .Where(artefact => string.Equals(artefact.Id, idValue, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (selected.Length == 0)
+        {
+            var available = releaseArtefacts
+                .Select(static artefact => artefact.Id)
+                .Where(static id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var availableText = available.Length == 0 ? "(none)" : string.Join(", ", available);
+            throw new InvalidOperationException(
+                $"No release artefacts matched ID '{publishId}'. Available IDs: {availableText}");
+        }
+
+        return selected;
     }
 
     private static IEnumerable<string> ResolveModuleReleaseArtefactPaths(
@@ -166,13 +171,35 @@ public sealed partial class ModulePipelineRunner
         return PathValueResolver.Resolve(plan.ProjectRoot, formatted);
     }
 
-    private static string ResolveDefaultReleaseRoot(ModulePipelinePlan plan)
-        => Path.Combine(
+    private static string ResolveDefaultReleaseRoot(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state,
+        string? publishId)
+    {
+        string candidate = Path.Combine(
             plan.ProjectRoot,
             "Artefacts",
             "ReleaseMetadata",
             plan.ModuleName,
             ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease));
+        ArtefactBuildResult[] releaseArtefacts = state.ArtefactResults
+            .Where(static artefact => artefact is not null &&
+                                      artefact.Type is ArtefactType.Packed or ArtefactType.Script or ArtefactType.ScriptPacked)
+            .ToArray();
+        if (releaseArtefacts.Length == 0 ||
+            !SelectModuleReleaseArtefacts(releaseArtefacts, publishId).Any(artefact =>
+                artefact.Type == ArtefactType.Script &&
+                IsSameOrChildPath(artefact.OutputPath, candidate)))
+        {
+            return candidate;
+        }
+
+        return Path.Combine(
+            ResolveSynchronizedReleaseStateRoot(plan.ProjectRoot),
+            "release-assets",
+            plan.ModuleName,
+            ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease));
+    }
 
     private static string ResolveScriptReleaseArchiveRoot(
         ModulePipelinePlan plan,

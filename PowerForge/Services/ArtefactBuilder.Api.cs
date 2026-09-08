@@ -114,6 +114,16 @@ public sealed partial class ArtefactBuilder
         if (cfg.Enabled != true)
             throw new InvalidOperationException($"Artefact '{segment.ArtefactType}' is not enabled.");
 
+        // Resolve and validate configured package inputs before any artefact builder can clear
+        // an existing destination. Individual builders resolve the same selection again when
+        // constructing their copy plan.
+        _ = ResolveModulePackageSourceFiles(
+            stagingPath,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
+
         var root = ResolveOutputRoot(cfg.Path, projectRoot, moduleName, moduleVersion, preRelease, segment.ArtefactType);
 
         return segment.ArtefactType switch

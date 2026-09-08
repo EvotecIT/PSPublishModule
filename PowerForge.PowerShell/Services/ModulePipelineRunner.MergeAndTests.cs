@@ -84,7 +84,7 @@ public sealed partial class ModulePipelineRunner
             mergedScriptFiles: mergeOutcome.MergedModule ? mergeInfo.ScriptFiles : Array.Empty<string>());
     }
 
-    private static string[] ExcludeManifestScriptsToProcess(
+    private string[] ExcludeManifestScriptsToProcess(
         string manifestPath,
         string stagingPath,
         IReadOnlyList<string> scriptFiles)
@@ -99,9 +99,12 @@ public sealed partial class ModulePipelineRunner
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
             .ToArray();
+        string[] normalizedManifestScripts = manifestScripts.ToArray();
+        bool manifestChanged = false;
         var runtimeHooks = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var script in manifestScripts)
+        for (int index = 0; index < manifestScripts.Length; index++)
         {
+            string script = manifestScripts[index];
             var resolved = ResolveManifestScriptPath(stagingPath, script);
             if (resolved is null)
                 continue;
@@ -123,7 +126,23 @@ public sealed partial class ModulePipelineRunner
                 .Where(path => string.Equals(path, resolved, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             if (portableMatches.Length == 1)
+            {
                 runtimeHooks.Add(portableMatches[0]);
+                normalizedManifestScripts[index] = FrameworkCompatibility
+                    .GetRelativePath(stagingPath, portableMatches[0])
+                    .Replace('\\', '/');
+                manifestChanged = true;
+            }
+        }
+
+        if (manifestChanged &&
+            !_manifestMutator.TrySetTopLevelStringArray(
+                manifestPath,
+                "ScriptsToProcess",
+                normalizedManifestScripts))
+        {
+            throw new InvalidOperationException(
+                $"Failed to normalize ScriptsToProcess paths in manifest '{manifestPath}'.");
         }
 
         return resolvedScripts

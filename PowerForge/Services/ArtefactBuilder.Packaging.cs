@@ -110,23 +110,54 @@ public sealed partial class ArtefactBuilder
         bool clearDestination = true)
     {
         var src = Path.GetFullPath(stagingRoot);
-
-        if (clearDestination && Directory.Exists(destinationModuleRoot))
-            Directory.Delete(destinationModuleRoot, recursive: true);
-        Directory.CreateDirectory(destinationModuleRoot);
+        var destinationRoot = Path.GetFullPath(destinationModuleRoot);
         var sourceFiles = finalizedPayloadFiles is { Count: > 0 }
             ? ValidateFinalizedPayloadFiles(src, finalizedPayloadFiles)
             : EnumerateModulePackageFiles(src, include);
+        var copyPlan = CreateModulePackageCopyPlan(src, destinationRoot, sourceFiles);
         if (finalizedPayloadFiles is not { Count: > 0 })
-            CreatePackageDirectoryStructure(src, destinationModuleRoot, include);
+            ValidatePackageDirectoryStructure(src, destinationRoot, include);
 
-        foreach (var file in sourceFiles)
+        if (clearDestination && Directory.Exists(destinationRoot))
+            Directory.Delete(destinationRoot, recursive: true);
+        Directory.CreateDirectory(destinationRoot);
+        if (finalizedPayloadFiles is not { Count: > 0 })
+            CreatePackageDirectoryStructure(src, destinationRoot, include);
+
+        foreach (var entry in copyPlan)
         {
-            var relativePath = ComputeRelativePath(src, file);
-            var destinationPath = Path.Combine(destinationModuleRoot, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            File.Copy(file, destinationPath, overwrite: true);
+            Directory.CreateDirectory(Path.GetDirectoryName(entry.DestinationPath)!);
+            File.Copy(entry.SourcePath, entry.DestinationPath, overwrite: true);
         }
+    }
+
+    private static IReadOnlyList<ModulePackageCopyEntry> CreateModulePackageCopyPlan(
+        string stagingRoot,
+        string destinationRoot,
+        IEnumerable<string> sourceFiles)
+    {
+        var plan = new List<ModulePackageCopyEntry>();
+        foreach (string file in sourceFiles)
+        {
+            string sourcePath = Path.GetFullPath(file);
+            if (!IsSameOrBelowPath(sourcePath, stagingRoot))
+            {
+                throw new InvalidOperationException(
+                    $"Module package source '{sourcePath}' resolves outside staging root '{stagingRoot}'.");
+            }
+
+            string relativePath = ComputeRelativePath(stagingRoot, sourcePath);
+            string destinationPath = Path.GetFullPath(Path.Combine(destinationRoot, relativePath));
+            if (!IsSameOrBelowPath(destinationPath, destinationRoot))
+            {
+                throw new InvalidOperationException(
+                    $"Module package destination '{destinationPath}' resolves outside destination root '{destinationRoot}'.");
+            }
+
+            plan.Add(new ModulePackageCopyEntry(sourcePath, destinationPath));
+        }
+
+        return plan;
     }
 
     private static string[] ValidateFinalizedPayloadFiles(
@@ -185,21 +216,66 @@ public sealed partial class ArtefactBuilder
         foreach (var dirName in include.IncludeAll)
         {
             if (string.IsNullOrWhiteSpace(dirName)) continue;
-            var sourceDir = Path.Combine(stagingRoot, dirName);
+            var sourceDir = ResolveContainedPackageDirectory(stagingRoot, dirName);
             if (!Directory.Exists(sourceDir)) continue;
-            CreateDirectoryTree(sourceDir, Path.Combine(destinationModuleRoot, dirName), Array.Empty<string>());
+            string relativePath = ComputeRelativePath(stagingRoot, sourceDir);
+            CreateDirectoryTree(
+                sourceDir,
+                ResolveContainedPackageDestination(destinationModuleRoot, relativePath),
+                Array.Empty<string>());
         }
 
         foreach (var dirName in include.IncludePS1)
         {
             if (string.IsNullOrWhiteSpace(dirName)) continue;
-            var sourceDir = Path.Combine(stagingRoot, dirName);
+            var sourceDir = ResolveContainedPackageDirectory(stagingRoot, dirName);
             if (!Directory.Exists(sourceDir)) continue;
+            string relativePath = ComputeRelativePath(stagingRoot, sourceDir);
             CreateDirectoryTree(
                 sourceDir,
-                Path.Combine(destinationModuleRoot, dirName),
+                ResolveContainedPackageDestination(destinationModuleRoot, relativePath),
                 include.ExcludeFromPackage ?? Array.Empty<string>());
         }
+    }
+
+    private static void ValidatePackageDirectoryStructure(
+        string stagingRoot,
+        string destinationRoot,
+        PackagingInformation include)
+    {
+        foreach (string dirName in include.IncludeAll.Concat(include.IncludePS1))
+        {
+            if (string.IsNullOrWhiteSpace(dirName))
+                continue;
+
+            string sourceDirectory = ResolveContainedPackageDirectory(stagingRoot, dirName);
+            string relativePath = ComputeRelativePath(stagingRoot, sourceDirectory);
+            _ = ResolveContainedPackageDestination(destinationRoot, relativePath);
+        }
+    }
+
+    private static string ResolveContainedPackageDirectory(string stagingRoot, string configuredPath)
+    {
+        string sourceDirectory = Path.GetFullPath(Path.Combine(stagingRoot, configuredPath));
+        if (!IsSameOrBelowPath(sourceDirectory, stagingRoot))
+        {
+            throw new InvalidOperationException(
+                $"Module package include directory '{configuredPath}' resolves outside staging root '{stagingRoot}'.");
+        }
+
+        return sourceDirectory;
+    }
+
+    private static string ResolveContainedPackageDestination(string destinationRoot, string relativePath)
+    {
+        string destination = Path.GetFullPath(Path.Combine(destinationRoot, relativePath));
+        if (!IsSameOrBelowPath(destination, destinationRoot))
+        {
+            throw new InvalidOperationException(
+                $"Module package directory destination '{destination}' resolves outside destination root '{destinationRoot}'.");
+        }
+
+        return destination;
     }
 
     private static void CreateDirectoryTree(
@@ -253,7 +329,7 @@ public sealed partial class ArtefactBuilder
         foreach (var dirName in include.IncludeAll)
         {
             if (string.IsNullOrWhiteSpace(dirName)) continue;
-            var dir = Path.Combine(src, dirName);
+            var dir = ResolveContainedPackageDirectory(src, dirName);
             if (!Directory.Exists(dir)) continue;
 
             AddDirectoryFiles(
@@ -267,7 +343,7 @@ public sealed partial class ArtefactBuilder
         foreach (var dirName in include.IncludePS1)
         {
             if (string.IsNullOrWhiteSpace(dirName)) continue;
-            var dir = Path.Combine(src, dirName);
+            var dir = ResolveContainedPackageDirectory(src, dirName);
             if (!Directory.Exists(dir)) continue;
 
             AddDirectoryFiles(
@@ -285,6 +361,18 @@ public sealed partial class ArtefactBuilder
         => Path.DirectorySeparatorChar == '\\'
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
+
+    private readonly struct ModulePackageCopyEntry
+    {
+        internal ModulePackageCopyEntry(string sourcePath, string destinationPath)
+        {
+            SourcePath = sourcePath;
+            DestinationPath = destinationPath;
+        }
+
+        internal string SourcePath { get; }
+        internal string DestinationPath { get; }
+    }
 
     private static void AddDirectoryFiles(
         string sourceDir,

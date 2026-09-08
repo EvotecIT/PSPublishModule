@@ -91,6 +91,61 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void ModuleArtifactProvenance_PreservesCaseDistinctScriptOutputsOnCaseSensitiveFileSystems()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparisonForPath(root) != StringComparison.Ordinal)
+                return;
+
+            string lowerPath = Path.Combine(root, "app", "Tool.ps1");
+            string upperPath = Path.Combine(root, "App", "Tool.ps1");
+            Directory.CreateDirectory(Path.GetDirectoryName(lowerPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(upperPath)!);
+            File.WriteAllText(lowerPath, "'lower-before'");
+            File.WriteAllText(upperPath, "'upper-before'");
+            var plan = new PowerForgeModuleReleasePlanSummary
+            {
+                ArtefactOutputs =
+                [
+                    new PowerForgeModuleArtefactOutputSummary
+                    {
+                        Type = ArtefactType.Script,
+                        OutputPath = Path.GetDirectoryName(lowerPath)!,
+                        EntryPointRelativePath = Path.GetFileName(lowerPath)
+                    },
+                    new PowerForgeModuleArtefactOutputSummary
+                    {
+                        Type = ArtefactType.Script,
+                        OutputPath = Path.GetDirectoryName(upperPath)!,
+                        EntryPointRelativePath = Path.GetFileName(upperPath)
+                    }
+                ]
+            };
+
+            IReadOnlyDictionary<string, PowerForgeReleaseService.ModuleArtifactSnapshot> baseline =
+                PowerForgeReleaseService.CaptureModuleArtifactBaseline(Array.Empty<string>(), plan);
+            Assert.Equal(2, baseline.Count);
+
+            File.WriteAllText(lowerPath, "'lower-after'");
+            File.WriteAllText(upperPath, "'upper-after'");
+            string[] produced = PowerForgeReleaseService.ResolveProducedModuleArtifacts(
+                Array.Empty<string>(),
+                baseline,
+                plan);
+
+            Assert.Equal(2, produced.Length);
+            Assert.Contains(lowerPath, produced, StringComparer.Ordinal);
+            Assert.Contains(upperPath, produced, StringComparer.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ResolveModuleArtefactOutputs_CarriesDefaultScriptEntryPoint()
     {
         string root = CreateSandbox();

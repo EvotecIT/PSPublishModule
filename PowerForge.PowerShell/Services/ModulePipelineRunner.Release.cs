@@ -346,7 +346,7 @@ public sealed partial class ModulePipelineRunner
         var moduleVersion = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var releaseVersion = ResolveRequestedPackageReleaseVersion(plan, state) ?? moduleVersion;
         var stageRoot = ResolveReleaseStageRoot(plan, plan.Release.Configuration);
-        var releaseRoot = stageRoot ?? ResolveDefaultReleaseRoot(plan);
+        var releaseRoot = stageRoot ?? ResolveDefaultReleaseRoot(plan, state, publishId);
         var scriptArchiveRoot = ResolveScriptReleaseArchiveRoot(plan, state, releaseRoot, stageRoot is not null);
         var moduleAssets = CollectModuleReleaseAssets(
             state.ArtefactResults,

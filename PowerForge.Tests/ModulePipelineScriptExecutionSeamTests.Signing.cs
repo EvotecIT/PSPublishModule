@@ -1535,7 +1535,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         Assert.NotNull(method);
         string[] assets = Assert.IsType<string[]>(method!.Invoke(
             null,
-            new object?[] { new[] { artefact }, "release" }));
+            new object?[] { new[] { artefact }, "release", Path.Combine(root, "modules") }));
 
         Assert.Equal(new[] { Path.GetFullPath(archive), Path.GetFullPath(missingEvidence) }, assets);
         Assert.False(File.Exists(missingEvidence));
