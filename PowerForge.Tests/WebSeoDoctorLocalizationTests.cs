@@ -14,6 +14,11 @@ public sealed class WebSeoDoctorLocalizationTests : IDisposable
     [InlineData("en", "en", true)]
     [InlineData("", "", true)]
     [InlineData("invalid language", "", true)]
+    [InlineData("ja-JP-u-ca-japanese", "", false)]
+    [InlineData("ja-JP-u-ca-japanese", "JA-jp-U-ca-JAPANESE", true)]
+    [InlineData("zh-Hant-x-site", "ja-JP-x-site", false)]
+    [InlineData("x-site-ja", "x-site-zh", false)]
+    [InlineData("i-klingon", "", false)]
     public void DuplicateIntentRespectsDeclaredLanguage(string firstLanguage, string secondLanguage, bool duplicate)
     {
         WritePage("first", firstLanguage, "Shared translated product guide", new string('a', 80));
@@ -29,6 +34,9 @@ public sealed class WebSeoDoctorLocalizationTests : IDisposable
     [InlineData("ko-KR")]
     [InlineData("zh-Hans")]
     [InlineData("ZH-hant-TW")]
+    [InlineData("ja-JP-u-ca-japanese")]
+    [InlineData("zh-Hant-x-site")]
+    [InlineData("ko-KR-x-a")]
     public void DenseLanguageDescriptionsUseTheSameMinimumInMetricsAndIssues(string language)
     {
         WritePage("guide", language, new string('家', 18), new string('家', 40));
@@ -79,6 +87,30 @@ public sealed class WebSeoDoctorLocalizationTests : IDisposable
 
         Assert.Contains(result.Issues, issue => issue.Hint == "title-short");
         Assert.Contains(result.Issues, issue => issue.Hint == "description-short");
+    }
+
+    [Fact]
+    public void DuplicateIntentBaselineKeysDistinguishLanguageAndUnicodeTitle()
+    {
+        WritePage("first-en", "en", "Shared translated product guide", new string('a', 80));
+        WritePage("second-en", "en", "Shared translated product guide", new string('a', 80));
+        var baselineKey = Assert.Single(WebSeoDoctor.Analyze(Options()).Issues,
+            issue => issue.Hint == "duplicate-title-intent").Key;
+
+        WritePage("first-nl", "nl", "Shared translated product guide", new string('a', 80));
+        WritePage("second-nl", "nl", "Shared translated product guide", new string('a', 80));
+        WritePage("first-ja", "ja", "プライバシー", new string('家', 80));
+        WritePage("second-ja", "ja", "プライバシー", new string('家', 80));
+        WritePage("third-ja", "ja", "サポート", new string('家', 80));
+        WritePage("fourth-ja", "ja", "サポート", new string('家', 80));
+
+        var keys = WebSeoDoctor.Analyze(Options()).Issues
+            .Where(issue => issue.Hint == "duplicate-title-intent")
+            .Select(issue => issue.Key).ToArray();
+
+        Assert.Equal(4, keys.Length);
+        Assert.Equal(4, keys.Distinct(StringComparer.Ordinal).Count());
+        Assert.Single(keys, key => key == baselineKey);
     }
 
     private void WritePage(string route, string language, string title, string description)

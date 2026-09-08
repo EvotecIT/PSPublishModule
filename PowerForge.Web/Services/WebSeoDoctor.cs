@@ -430,7 +430,7 @@ public static partial class WebSeoDoctor
                 AddIssue("warning", "duplicate-intent", null,
                     $"duplicate title intent detected for '{title}' across {group.Count()} pages. Sample routes: {string.Join(", ", sampleRoutes)}.",
                     "duplicate-title-intent",
-                    title);
+                    DuplicateTitleKey(group.Key.Language, group.Key.Title));
             }
         }
 

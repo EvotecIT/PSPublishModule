@@ -137,7 +137,7 @@ internal static class MarkdownRenderer
         });
     }
 
-    private static string InjectHeadingIds(string html)
+    internal static string InjectHeadingIds(string html)
     {
         if (string.IsNullOrWhiteSpace(html))
             return string.Empty;
@@ -185,7 +185,7 @@ internal static class MarkdownRenderer
                     : (string.IsNullOrWhiteSpace(attrs) ? $" id=\"{id}\"" : $"{attrs} id=\"{id}\"");
                 return $"<h{level}{attrsWithId}>{headingHtml}</h{level}>";
             },
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.Singleline);
     }
 
     private static string InjectDefaultImageHints(string html, MarkdownSpec? markdown, string? sourcePath, string? siteRoot)

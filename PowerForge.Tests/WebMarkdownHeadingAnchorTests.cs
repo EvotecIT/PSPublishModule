@@ -53,4 +53,16 @@ public sealed class WebMarkdownHeadingAnchorTests
 
         Assert.Equal(new[] { "privacy", "privacy-2" }, ids);
     }
+
+    [Fact]
+    public void MultilineRawHeadingsReceiveUsableAnchors()
+    {
+        var html = MarkdownRenderer.RenderToHtml("""
+            <h2>
+            <strong>プライバシー</strong>
+            </h2>
+            """);
+        var heading = Assert.Single(HtmlParser.ParseWithAngleSharp(html).QuerySelectorAll("h2"));
+        Assert.Equal("プライバシー", heading.Id);
+    }
 }
