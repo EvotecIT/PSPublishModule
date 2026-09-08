@@ -8,7 +8,8 @@ internal sealed class PowerShellLoweredStreamWriteStatement : PowerShellLoweredS
         PowerShellCompilationCommandProviderContract? provider,
         PowerShellLoweredExpression message,
         bool enumerateAuthoredArray = false,
-        PowerShellOutputBindingKind outputBinding = PowerShellOutputBindingKind.Default)
+        PowerShellOutputBindingKind outputBinding = PowerShellOutputBindingKind.Default,
+        bool usesNativeInvocation = false)
         : base(span)
     {
         Kind = kind;
@@ -16,6 +17,7 @@ internal sealed class PowerShellLoweredStreamWriteStatement : PowerShellLoweredS
         Message = message;
         EnumerateAuthoredArray = enumerateAuthoredArray;
         OutputBinding = outputBinding;
+        UsesNativeInvocation = usesNativeInvocation;
     }
 
     internal PowerShellStreamCommandKind Kind { get; }
@@ -23,4 +25,5 @@ internal sealed class PowerShellLoweredStreamWriteStatement : PowerShellLoweredS
     internal PowerShellLoweredExpression Message { get; }
     internal bool EnumerateAuthoredArray { get; }
     internal PowerShellOutputBindingKind OutputBinding { get; }
+    internal bool UsesNativeInvocation { get; }
 }

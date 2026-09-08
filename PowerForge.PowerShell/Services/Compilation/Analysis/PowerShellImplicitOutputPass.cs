@@ -38,33 +38,37 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
                     changed |= selected.Add(function.Symbol.StableKey);
         } while (changed);
         return program.WithFunctions(program.Functions.Select(function => selected.Contains(function.Symbol.StableKey)
-            ? function.WithBody(RewriteBlock(function.Body))
+            ? function.WithBody(RewriteBlock(function.Body, function.NativeFunctionBinding is not null))
             : function).ToArray());
     }
 
-    private static PowerShellBoundBlock RewriteBlock(PowerShellBoundBlock block)
+    private static PowerShellBoundBlock RewriteBlock(PowerShellBoundBlock block, bool usesNativeInvocation)
     {
         var statements = new List<PowerShellBoundStatement>();
         foreach (var statement in block.Statements)
         {
             if (statement is PowerShellBoundReturnStatement { EmitsValue: true, Expression: not null } returned)
             {
-                statements.Add(Output(returned.Span, returned.Expression));
+                statements.Add(Output(returned.Span, returned.Expression, usesNativeInvocation));
                 statements.Add(new PowerShellBoundReturnStatement(returned.Span, null));
             }
             else if (statement is PowerShellBoundExpressionStatement { EmitsOutput: true } expression)
             {
-                statements.Add(Output(expression.Span, expression.Expression));
+                statements.Add(Output(expression.Span, expression.Expression, usesNativeInvocation));
+            }
+            else if (usesNativeInvocation && statement is PowerShellBoundStreamWriteStatement { Provider: null } stream)
+            {
+                statements.Add(Output(stream.Span, stream.Message, usesNativeInvocation));
             }
             else
             {
-                statements.Add(PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement, RewriteBlock));
+                statements.Add(PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement, nested => RewriteBlock(nested, usesNativeInvocation)));
             }
         }
         return new PowerShellBoundBlock(block.Span, statements.ToArray());
     }
 
-    private static PowerShellBoundStreamWriteStatement Output(SourceSpan span, PowerShellBoundExpression expression)
-        => new(span, PowerShellStreamCommandKind.Success, provider: null, expression);
+    private static PowerShellBoundStreamWriteStatement Output(SourceSpan span, PowerShellBoundExpression expression, bool usesNativeInvocation)
+        => new(span, PowerShellStreamCommandKind.Success, provider: null, expression, usesNativeInvocation: usesNativeInvocation);
 
 }

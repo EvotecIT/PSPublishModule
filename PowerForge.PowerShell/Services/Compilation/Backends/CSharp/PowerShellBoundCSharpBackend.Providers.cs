@@ -37,6 +37,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append(EmitExpression(stream.Message)).AppendLine(";");
                 return;
             }
+            if (stream.UsesNativeInvocation)
+            {
+                builder.Append(prefix).Append("__nativeFunction.WriteOutput((object?)")
+                    .Append(EmitExpression(stream.Message)).AppendLine(", __writeOutput);");
+                return;
+            }
             if (stream.EnumerateAuthoredArray)
             {
                 var record = getTemporaryIdentifier("outputRecord");

@@ -31,18 +31,10 @@ internal static class PowerShellArraySemanticBinder
             }
             var value = bindExpression(command.Expression, typeof(object));
             if (value is null) return null;
-            var enumerate = value is PowerShellBoundArrayExpression or PowerShellBoundNativeCollectionExpression or PowerShellBoundArrayCopyExpression;
-            if (!enumerate && value is not PowerShellBoundLiteralExpression { Value: null } &&
-                (!PowerShellStableScalarTypePolicy.IsSupported(value.Type.ClrType) || value.ValueState == PowerShellValueState.Null))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2503",
-                    "Native collected expressions require closed scalar output or authored array records; other values retain PowerShell enumeration semantics.", value.Span));
-                return null;
-            }
             var sourceText = string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
                 .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
             items.Add(new PowerShellBoundNativeCollectionItem(PowerShellSourceParser.GetSpan(document, statement.Extent),
-                sourceText, value, enumerate, PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(statement, windowsPowerShell)));
+                sourceText, value, PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(statement, windowsPowerShell)));
         }
         return new PowerShellBoundNativeCollectionExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
             document.Path, items.ToArray(), !windowsPowerShell);

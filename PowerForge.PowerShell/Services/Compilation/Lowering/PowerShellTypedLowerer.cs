@@ -456,7 +456,7 @@ internal sealed partial class PowerShellTypedLowerer
                 stream.Provider,
                 LowerExpression(stream.Message, functions, names, targetCapabilities),
                 stream.Provider is null && stream.Message is PowerShellBoundArrayExpression,
-                stream.OutputBinding),
+                stream.OutputBinding, stream.UsesNativeInvocation),
             PowerShellBoundCommandRegionStatement region => new PowerShellLoweredCommandRegionStatement(
                 region.Span,
                 region.HostedFallbackSource,

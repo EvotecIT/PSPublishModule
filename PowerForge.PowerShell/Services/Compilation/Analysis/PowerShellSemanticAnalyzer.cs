@@ -259,7 +259,13 @@ internal sealed partial class PowerShellSemanticAnalyzer
     internal static IEnumerable<PowerShellBoundExpression> EnumerateExpressions(PowerShellBoundExpression expression)
     {
         yield return expression;
-        IEnumerable<PowerShellBoundExpression> children = expression switch
+        foreach (var child in EnumerateExpressionChildren(expression))
+        foreach (var nested in EnumerateExpressions(child))
+            yield return nested;
+    }
+
+    internal static IEnumerable<PowerShellBoundExpression> EnumerateExpressionChildren(PowerShellBoundExpression expression)
+        => expression switch
         {
             PowerShellBoundRuntimeStateExpression runtime => runtime.Arguments,
             PowerShellBoundConversionExpression conversion => new[] { conversion.Operand },
@@ -292,10 +298,6 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundClrInvocationExpression invocation => (invocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { invocation.Receiver }).Concat(invocation.Arguments),
             _ => Array.Empty<PowerShellBoundExpression>()
         };
-        foreach (var child in children)
-        foreach (var nested in EnumerateExpressions(child))
-            yield return nested;
-    }
 
     private static PowerShellTypeFact ResolveType(
         PowerShellBoundExpression expression,

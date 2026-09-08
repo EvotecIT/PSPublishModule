@@ -131,7 +131,7 @@ internal sealed class PowerShellBoundOptimizer
                 attempted.Catches.Select(clause => new PowerShellBoundCatchClause(clause.ExceptionTypes.ToArray(), OptimizeBlock(clause.Body))).ToArray(),
                 attempted.FinallyBlock is null ? null : OptimizeBlock(attempted.FinallyBlock), attempted.SuspendHostStopping),
             PowerShellBoundStreamWriteStatement stream => new PowerShellBoundStreamWriteStatement(
-                stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message), stream.OutputBinding),
+                stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message), stream.OutputBinding, stream.UsesNativeInvocation),
             PowerShellBoundIndexAssignmentStatement index => new PowerShellBoundIndexAssignmentStatement(
                 index.Span, OptimizeExpression(index.Target), OptimizeExpression(index.Index), OptimizeExpression(index.Value), index.Kind, index.UsePowerShellRuntimeErrors),
             PowerShellBoundClrMemberAssignmentStatement member => new PowerShellBoundClrMemberAssignmentStatement(
@@ -198,7 +198,7 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundNativeCollectionExpression collection)
             return new PowerShellBoundNativeCollectionExpression(collection.Span, collection.SourcePath,
                 collection.Items.Select(item => new PowerShellBoundNativeCollectionItem(item.Span, item.SourceText,
-                    OptimizeExpression(item.Value), item.Enumerate, item.SetSuccess)).ToArray(), collection.ShareEmptyResult);
+                    OptimizeExpression(item.Value), item.SetSuccess)).ToArray(), collection.ShareEmptyResult);
         if (expression is PowerShellBoundArrayCopyExpression copy)
             return new PowerShellBoundArrayCopyExpression(copy.Span, OptimizeExpression(copy.Source), copy.ShareEmptyResult);
         return expression;

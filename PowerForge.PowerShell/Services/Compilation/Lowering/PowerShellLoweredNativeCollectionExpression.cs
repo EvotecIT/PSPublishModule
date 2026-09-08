@@ -21,24 +21,20 @@ internal sealed class PowerShellLoweredNativeCollectionExpression : PowerShellLo
 internal sealed class PowerShellLoweredNativeCollectionItem
 {
     internal PowerShellLoweredNativeCollectionItem(SourceSpan span, string sourceText, PowerShellLoweredExpression value,
-        bool enumerate, bool setSuccess, string valueTemporary, string recordTemporary, string exceptionTemporary)
+        bool setSuccess, string valueTemporary, string exceptionTemporary)
     {
         Span = span;
         SourceText = sourceText;
         Value = value;
-        Enumerate = enumerate;
         SetSuccess = setSuccess;
         ValueTemporary = valueTemporary;
-        RecordTemporary = recordTemporary;
         ExceptionTemporary = exceptionTemporary;
     }
 
     internal SourceSpan Span { get; }
     internal string SourceText { get; }
     internal PowerShellLoweredExpression Value { get; }
-    internal bool Enumerate { get; }
     internal bool SetSuccess { get; }
     internal string ValueTemporary { get; }
-    internal string RecordTemporary { get; }
     internal string ExceptionTemporary { get; }
 }

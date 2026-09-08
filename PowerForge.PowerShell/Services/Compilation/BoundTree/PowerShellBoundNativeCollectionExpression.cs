@@ -7,8 +7,9 @@ internal sealed class PowerShellBoundNativeCollectionExpression : PowerShellBoun
         PowerShellBoundNativeCollectionItem[] items, bool shareEmptyResult)
         : base(span, new PowerShellTypeFact(typeof(object[]), PowerShellTypeFactProvenance.Inferred,
                 "Native expression statements contribute records to one collected Object array."), PowerShellValueState.Known,
-            items.Aggregate(PowerShellSemanticEffect.Mutation, static (effects, item) => effects | item.Value.Effects),
-            items.Aggregate(PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellStatementErrors,
+            items.Aggregate(PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError,
+                static (effects, item) => effects | item.Value.Effects),
+            items.Aggregate(PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHost,
                 static (capabilities, item) => capabilities | item.Value.Capabilities))
     {
         SourcePath = sourcePath;
@@ -24,18 +25,16 @@ internal sealed class PowerShellBoundNativeCollectionExpression : PowerShellBoun
 internal sealed class PowerShellBoundNativeCollectionItem
 {
     internal PowerShellBoundNativeCollectionItem(SourceSpan span, string sourceText, PowerShellBoundExpression value,
-        bool enumerate, bool setSuccess)
+        bool setSuccess)
     {
         Span = span;
         SourceText = sourceText;
         Value = value;
-        Enumerate = enumerate;
         SetSuccess = setSuccess;
     }
 
     internal SourceSpan Span { get; }
     internal string SourceText { get; }
     internal PowerShellBoundExpression Value { get; }
-    internal bool Enumerate { get; }
     internal bool SetSuccess { get; }
 }

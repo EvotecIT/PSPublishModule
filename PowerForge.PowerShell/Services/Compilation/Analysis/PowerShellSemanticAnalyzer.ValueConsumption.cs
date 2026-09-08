@@ -33,12 +33,21 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var statement in EnumerateStatements(function.Body))
             foreach (var root in EnumerateDirectExpressions(statement))
             {
-                if (ResolveType(root, functions).ClrType == typeof(void) && !AllowsOutputFreeRoot(statement, root))
-                    return root;
-                // Every nested expression supplies an operand, receiver, argument,
-                // element, or other value. A void operation has no such CLR value.
-                var invalid = EnumerateExpressions(root).Skip(1)
-                    .FirstOrDefault(expression => ResolveType(expression, functions).ClrType == typeof(void));
+                var invalid = FindVoidValueUse(root, functions, !AllowsOutputFreeRoot(statement, root));
+                if (invalid is not null) return invalid;
+            }
+            return null;
+        }
+
+        private static PowerShellBoundExpression? FindVoidValueUse(PowerShellBoundExpression expression,
+            IReadOnlyDictionary<string, PowerShellBoundFunction> functions, bool consumesValue)
+        {
+            if (consumesValue && ResolveType(expression, functions).ClrType == typeof(void)) return expression;
+            // Native collected items are authored statements. Their roots may execute
+            // without output; operands and arguments within those roots still need values.
+            foreach (var child in EnumerateExpressionChildren(expression))
+            {
+                var invalid = FindVoidValueUse(child, functions, expression is not PowerShellBoundNativeCollectionExpression);
                 if (invalid is not null) return invalid;
             }
             return null;
