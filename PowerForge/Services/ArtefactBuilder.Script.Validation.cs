@@ -250,6 +250,7 @@ public sealed partial class ArtefactBuilder
         string requiredRoot,
         IReadOnlyList<RequiredModuleReference> requiredModules,
         string projectRoot,
+        string stagingPath,
         string moduleName,
         string moduleVersion,
         string? preRelease,
@@ -292,6 +293,7 @@ public sealed partial class ArtefactBuilder
                 moduleVersion,
                 preRelease);
             directoryDestinations.Add(destination);
+            ValidateScriptDirectoryCopyDestinationSafety(destination, projectRoot, stagingPath);
             if (IsSameOrBelowPath(scriptRoot, destination))
             {
                 throw new InvalidOperationException(
@@ -333,17 +335,24 @@ public sealed partial class ArtefactBuilder
                 moduleVersion,
                 preRelease);
             fileDestinations.Add(destination);
-            if (string.Equals(Path.GetFullPath(destination), Path.GetFullPath(scriptPath), GetPathComparison(destination, scriptPath)))
+            if (ScriptPathsOverlap(destination, scriptPath))
             {
                 throw new InvalidOperationException(
-                    $"Script artefact file copy destination '{destination}' would overwrite the generated entry point '{Path.GetFullPath(scriptPath)}'.");
+                    $"Script artefact file copy destination '{destination}' overlaps the generated entry point '{Path.GetFullPath(scriptPath)}'.");
             }
             string? requiredModuleDestination = requiredModuleDestinations.FirstOrDefault(requiredDestination =>
-                IsSameOrBelowPath(destination, requiredDestination));
+                ScriptPathsOverlap(destination, requiredDestination));
             if (requiredModuleDestination is not null)
             {
                 throw new InvalidOperationException(
-                    $"Script artefact file copy destination '{destination}' is inside required module destination '{requiredModuleDestination}' and would overwrite bundled dependency content.");
+                    $"Script artefact file copy destination '{destination}' overlaps required module destination '{requiredModuleDestination}' and would overwrite or conflict with bundled dependency content.");
+            }
+
+            if (ScriptPathsOverlap(destination, stagingPath))
+            {
+                throw new InvalidOperationException(
+                    $"Script artefact file copy destination '{Path.GetFullPath(destination)}' overlaps staging source '{Path.GetFullPath(stagingPath)}'. " +
+                    "Keep staging and artefact destination paths separate.");
             }
         }
 
@@ -352,6 +361,28 @@ public sealed partial class ArtefactBuilder
             directoryDestinations,
             fileDestinations);
         ValidateScriptDirectoryCopyDestinationsDoNotOverlap(directoryDestinations);
+        ValidateScriptFileCopyDestinationsDoNotConflict(directoryDestinations, fileDestinations);
+    }
+
+    private static void ValidateScriptDirectoryCopyDestinationSafety(
+        string destination,
+        string projectRoot,
+        string stagingPath)
+    {
+        string fullDestination = Path.GetFullPath(destination);
+        string fullProjectRoot = Path.GetFullPath(projectRoot);
+        if (IsSameOrBelowPath(fullProjectRoot, fullDestination))
+        {
+            throw new InvalidOperationException(
+                $"Script artefact directory copy destination '{fullDestination}' contains project root '{fullProjectRoot}' and would erase project sources.");
+        }
+
+        string fullStagingPath = Path.GetFullPath(stagingPath);
+        if (!ScriptPathsOverlap(fullDestination, fullStagingPath))
+            return;
+
+        throw new InvalidOperationException(
+            $"Script artefact directory copy destination '{fullDestination}' overlaps staging source '{fullStagingPath}' and would erase or modify build inputs.");
     }
 
     private static void ValidateScriptDirectoryCopyDestinationsDoNotOverlap(
@@ -372,6 +403,41 @@ public sealed partial class ArtefactBuilder
             }
         }
     }
+
+    private static void ValidateScriptFileCopyDestinationsDoNotConflict(
+        IReadOnlyList<string> directoryDestinations,
+        IReadOnlyList<string> fileDestinations)
+    {
+        foreach (string fileDestination in fileDestinations)
+        {
+            string? conflictingDirectory = directoryDestinations.FirstOrDefault(directoryDestination =>
+                IsSameOrBelowPath(directoryDestination, fileDestination));
+            if (conflictingDirectory is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Script artefact file copy destination '{Path.GetFullPath(fileDestination)}' is equal to or contains directory copy destination '{Path.GetFullPath(conflictingDirectory)}'. " +
+                    "Use separate destination paths so a file mapping cannot collide with a directory mapping.");
+            }
+        }
+
+        for (int firstIndex = 0; firstIndex < fileDestinations.Count; firstIndex++)
+        {
+            string first = fileDestinations[firstIndex];
+            for (int secondIndex = firstIndex + 1; secondIndex < fileDestinations.Count; secondIndex++)
+            {
+                string second = fileDestinations[secondIndex];
+                if (!ScriptPathsOverlap(first, second))
+                    continue;
+
+                throw new InvalidOperationException(
+                    $"Script artefact file copy destinations '{Path.GetFullPath(first)}' and '{Path.GetFullPath(second)}' overlap. " +
+                    "Use separate file paths so one mapping cannot block or overwrite another mapping.");
+            }
+        }
+    }
+
+    private static bool ScriptPathsOverlap(string first, string second) =>
+        IsSameOrBelowPath(first, second) || IsSameOrBelowPath(second, first);
 
     private static void ValidateScriptBuildRootsDoNotOverlapStaging(
         string stagingPath,
@@ -489,15 +555,17 @@ public sealed partial class ArtefactBuilder
         {
             foreach ((string source, bool sourceIsDirectory) in sources)
             {
-                if (sourceIsDirectory ||
-                    !string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), GetPathComparison(source, destination)))
+                bool overlaps = sourceIsDirectory
+                    ? ScriptPathsOverlap(source, destination)
+                    : string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), GetPathComparison(source, destination));
+                if (!overlaps)
                 {
                     continue;
                 }
 
                 throw new InvalidOperationException(
-                    $"Script artefact file copy destination '{Path.GetFullPath(destination)}' overlaps configured file copy source '{Path.GetFullPath(source)}'. " +
-                    "Use separate source and destination files.");
+                    $"Script artefact file copy destination '{Path.GetFullPath(destination)}' overlaps configured copy source '{Path.GetFullPath(source)}'. " +
+                    "Use separate source and destination paths.");
             }
         }
     }
