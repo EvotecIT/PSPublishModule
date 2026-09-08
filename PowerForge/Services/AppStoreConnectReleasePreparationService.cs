@@ -28,6 +28,8 @@ public sealed partial class AppStoreConnectReleasePreparationService
         if (string.IsNullOrWhiteSpace(request.AppId))
             throw new ArgumentException("AppId is required.", nameof(request));
         var metadataSpecs = ResolveMetadataSpecs(request);
+        if (request.CheckReadiness)
+            _ = AppStoreConnectReleaseReadinessService.NormalizeMetadataLocales(request.ReadinessRequest?.MetadataLocales);
         var screenshotMappings = ResolveScreenshotMappings(request);
         var requiresVersion = request.CreateVersion ||
                               request.SelectBuild ||
@@ -188,7 +190,8 @@ public sealed partial class AppStoreConnectReleasePreparationService
                 buildNumber,
                 request.Platform,
                 screenshotMappings.Select(static mapping => mapping.Spec).ToArray(),
-                request.ScreenshotSpec is not null && screenshotMappings.Length == 1);
+                request.ScreenshotSpec is not null && screenshotMappings.Length == 1,
+                metadataSpecs.Select(static spec => spec.Locale));
             readiness = await new AppStoreConnectReleaseReadinessService(_client)
                 .CheckAsync(readinessRequest, cancellationToken)
                 .ConfigureAwait(false);
@@ -300,9 +303,16 @@ public sealed partial class AppStoreConnectReleasePreparationService
         string buildNumber,
         ApplePlatform platform,
         AppStoreConnectScreenshotSyncSpec[] screenshotSpecs,
-        bool legacySingleScreenshot)
+        bool legacySingleScreenshot,
+        IEnumerable<string> metadataLocales)
     {
         source ??= new AppStoreConnectReleaseReadinessRequest();
+        var selectedMetadataLocales = source.MetadataLocales ?? Array.Empty<string>();
+        var appliedMetadataLocales = metadataLocales.ToArray();
+        // Preserve the legacy primary metadata check when preparation adds locale selection.
+        if (selectedMetadataLocales.Length == 0 && appliedMetadataLocales.Length > 0 &&
+            screenshotSpecs.Length == 0 && source.ScreenshotSpec is null && (source.ScreenshotSpecs?.Length ?? 0) == 0)
+            selectedMetadataLocales = new[] { string.IsNullOrWhiteSpace(source.Locale) ? "en-US" : source.Locale.Trim() };
         return new AppStoreConnectReleaseReadinessRequest
         {
             AppId = appId,
@@ -310,6 +320,8 @@ public sealed partial class AppStoreConnectReleasePreparationService
             BuildNumber = buildNumber,
             Platform = platform,
             Locale = string.IsNullOrWhiteSpace(source.Locale) ? "en-US" : source.Locale.Trim(),
+            MetadataLocales = AppStoreConnectReleaseReadinessService.NormalizeMetadataLocales(
+                selectedMetadataLocales.Concat(appliedMetadataLocales)),
             RequireSelectedBuild = source.RequireSelectedBuild,
             RequireValidBuild = source.RequireValidBuild,
             RequireDescription = source.RequireDescription,
@@ -323,7 +335,7 @@ public sealed partial class AppStoreConnectReleasePreparationService
             MinimumScreenshotsPerSet = source.MinimumScreenshotsPerSet,
             RequiredScreenshotDisplayTypes = source.RequiredScreenshotDisplayTypes,
             ScreenshotSpec = legacySingleScreenshot ? screenshotSpecs[0] : screenshotSpecs.Length == 0 ? source.ScreenshotSpec : null,
-            ScreenshotSpecs = legacySingleScreenshot || screenshotSpecs.Length == 0 ? source.ScreenshotSpecs : screenshotSpecs
+            ScreenshotSpecs = legacySingleScreenshot || screenshotSpecs.Length == 0 ? source.ScreenshotSpecs ?? Array.Empty<AppStoreConnectScreenshotSyncSpec>() : screenshotSpecs
         };
     }
 }

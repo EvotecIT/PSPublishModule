@@ -102,6 +102,12 @@ public sealed class AppStoreConnectReleaseReadinessRequest
     /// <summary>Localization locale to check.</summary>
     public string Locale { get; set; } = "en-US";
 
+    /// <summary>
+    /// Explicit metadata locales checked alongside the screenshot mapping locales. Empty preserves
+    /// the existing locale selection. Without screenshot mappings, screenshot requirements apply only to <see cref="Locale"/>.
+    /// </summary>
+    public string[] MetadataLocales { get; set; } = Array.Empty<string>();
+
     /// <summary>Require the Distribution version to have the expected selected build.</summary>
     public bool RequireSelectedBuild { get; set; } = true;
 
@@ -144,12 +150,15 @@ public sealed class AppStoreConnectReleaseReadinessRequest
     /// <summary>Additional screenshot locales to check, each with its own required display types.</summary>
     public AppStoreConnectScreenshotSyncSpec[] ScreenshotSpecs { get; set; } = Array.Empty<AppStoreConnectScreenshotSyncSpec>();
 
-    internal AppStoreConnectReleaseReadinessRequest ForScreenshotLocale(AppStoreConnectScreenshotSyncSpec spec)
+    internal AppStoreConnectReleaseReadinessRequest ForLocale(
+        string locale, AppStoreConnectScreenshotSyncSpec? spec, bool requireScreenshots)
     {
         var result = (AppStoreConnectReleaseReadinessRequest)MemberwiseClone();
-        result.Locale = spec.Locale.Trim();
+        result.Locale = locale;
+        result.MetadataLocales = Array.Empty<string>();
         result.ScreenshotSpec = spec;
         result.ScreenshotSpecs = Array.Empty<AppStoreConnectScreenshotSyncSpec>();
+        result.RequireScreenshots = requireScreenshots;
         return result;
     }
 }

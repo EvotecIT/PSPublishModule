@@ -1116,6 +1116,22 @@ Direct .NET callers can supply `AppStoreConnectReleasePreparationRequest.Screens
 
 Readiness requests accept `ScreenshotSpecs` to check each locale's required display types. Combined readiness passes only when every configured locale passes, and screenshot set results identify their `Locale`. Missing localizations must be created by the version metadata synchronization before their screenshots can be uploaded.
 
+Metadata and screenshot coverage are independent. If `MetadataConfigPaths` lists 19 languages
+and `ScreenshotConfigPaths` maps only English screenshots, planning, preparation, and App Review
+submission check the metadata for all 19 languages. Screenshots are required only for the mapped
+English locale. No duplicate or relabeled screenshot mappings are needed for fallback languages.
+Readiness-only operations load the metadata locale configuration without synchronizing its text.
+The approved plan hashes every checked remote localization, so changing a secondary language's
+metadata invalidates that approval even when its screenshots fall back to English.
+
+Direct .NET callers can set `AppStoreConnectReleaseReadinessRequest.MetadataLocales` independently
+of `ScreenshotSpec` or `ScreenshotSpecs`. Metadata locales and screenshot mapping locales are
+checked together, with whitespace trimmed and duplicate locale identifiers checked once.
+Preparation also includes every locale from its applied `MetadataSpec` and `MetadataSpecs`.
+`Localizations` contains all found metadata records; a missing requested locale fails readiness.
+Without screenshot mappings, existing `RequiredScreenshotDisplayTypes` requirements still apply
+to `Locale` only. Set `RequireScreenshots = false` for a metadata-only check.
+
 ## Screenshot Upload Flow
 
 Screenshot upload uses App Store Connect's asset reservation flow:

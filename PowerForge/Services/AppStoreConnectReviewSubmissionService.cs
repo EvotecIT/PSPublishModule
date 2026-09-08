@@ -189,6 +189,7 @@ public sealed class AppStoreConnectReviewSubmissionService
             BuildNumber = buildNumber,
             Platform = request.Platform,
             Locale = string.IsNullOrWhiteSpace(source.Locale) ? "en-US" : source.Locale.Trim(),
+            MetadataLocales = source.MetadataLocales,
             RequireSelectedBuild = source.RequireSelectedBuild,
             RequireValidBuild = source.RequireValidBuild,
             RequireDescription = source.RequireDescription,

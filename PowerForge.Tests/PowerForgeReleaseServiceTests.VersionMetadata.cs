@@ -16,7 +16,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             CreateXcodeProject(root, "Sample.xcodeproj", "1.2.0", "9");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
-            var locales = new[] { "en-US", "pl", "de-DE", "es-ES", "fr-FR", "it", "nl-NL", "sv", "da", "no", "cs", "pt-BR" };
+            var locales = new[] { "en-US", "pl", "de-DE", "es-ES", "fr-FR", "it", "nl-NL", "sv", "da", "no", "cs", "pt-BR", "fi", "pt-PT", "uk", "ja", "ko", "zh-Hans", "zh-Hant" };
             var paths = new List<string>();
             foreach (var platform in new[] { ApplePlatform.iOS, ApplePlatform.macOS })
             {
