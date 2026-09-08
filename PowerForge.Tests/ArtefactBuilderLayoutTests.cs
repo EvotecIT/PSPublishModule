@@ -162,7 +162,11 @@ public sealed class ArtefactBuilderLayoutTests
             WriteStagingFixture(stagingRoot.FullName, moduleName);
 
             var localModulesRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "psmodules"));
-            WriteInstalledModuleFixture(localModulesRoot.FullName, dependencyName, dependencyVersion);
+            var dependencyRoot = WriteInstalledModuleFixture(localModulesRoot.FullName, dependencyName, dependencyVersion);
+            var receiptDirectory = Directory.CreateDirectory(Path.Combine(dependencyRoot, ".powerforge"));
+            File.WriteAllText(Path.Combine(receiptDirectory.FullName, "managed-module-receipt.json"), "{\"ModuleRoot\":\"C:\\\\Users\\\\Builder\"}");
+            File.WriteAllText(Path.Combine(dependencyRoot, "PSGetModuleInfo.xml"), "<Obj><S N=\"InstalledLocation\">C:\\Users\\Builder</S></Obj>");
+            File.WriteAllText(Path.Combine(dependencyRoot, "runtime.powerforge.json"), "{}");
 
             var updatedPsModulePath = string.Join(
                 Path.PathSeparator,
@@ -209,7 +213,11 @@ public sealed class ArtefactBuilderLayoutTests
                 ZipFile.ExtractToDirectory(result.OutputPath, inspectionRoot);
 
             Assert.True(File.Exists(Path.Combine(inspectionRoot, "Payload", "MainModules", moduleName, moduleName + ".psd1")));
-            Assert.True(File.Exists(Path.Combine(inspectionRoot, "Payload", "Dependencies", dependencyName, dependencyName + ".psd1")));
+            var packagedDependencyRoot = Path.Combine(inspectionRoot, "Payload", "Dependencies", dependencyName);
+            Assert.True(File.Exists(Path.Combine(packagedDependencyRoot, dependencyName + ".psd1")));
+            Assert.False(Directory.Exists(Path.Combine(packagedDependencyRoot, ".powerforge")));
+            Assert.False(File.Exists(Path.Combine(packagedDependencyRoot, "PSGetModuleInfo.xml")));
+            Assert.True(File.Exists(Path.Combine(packagedDependencyRoot, "runtime.powerforge.json")));
 
             Assert.False(Directory.Exists(Path.Combine(inspectionRoot, moduleName)));
             Assert.False(Directory.Exists(Path.Combine(inspectionRoot, dependencyName)));
@@ -308,12 +316,13 @@ public sealed class ArtefactBuilderLayoutTests
         File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psm1"), "function Get-Test { 'ok' }");
     }
 
-    private static void WriteInstalledModuleFixture(string modulesRoot, string moduleName, string moduleVersion)
+    private static string WriteInstalledModuleFixture(string modulesRoot, string moduleName, string moduleVersion)
     {
         var versionRoot = Directory.CreateDirectory(Path.Combine(modulesRoot, moduleName, moduleVersion));
         File.WriteAllText(
             Path.Combine(versionRoot.FullName, moduleName + ".psd1"),
             "@{ RootModule = '" + moduleName + ".psm1'; ModuleVersion = '" + moduleVersion + "'; GUID = '" + Guid.NewGuid().ToString() + "' }");
         File.WriteAllText(Path.Combine(versionRoot.FullName, moduleName + ".psm1"), "function Get-Dependency { 'ok' }");
+        return versionRoot.FullName;
     }
 }

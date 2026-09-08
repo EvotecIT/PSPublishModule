@@ -10,7 +10,7 @@ namespace PowerForge;
 
 public sealed partial class ArtefactBuilder
 {
-    private static void CopyDirectory(string sourceDir, string destDir)
+    private static void CopyDirectory(string sourceDir, string destDir, bool excludeBuildHostMetadata = false)
     {
         if (!Directory.Exists(sourceDir))
             throw new DirectoryNotFoundException($"Directory not found: {sourceDir}");
@@ -23,11 +23,17 @@ public sealed partial class ArtefactBuilder
         foreach (var dir in Directory.EnumerateDirectories(sourceDir, "*", SearchOption.AllDirectories))
         {
             var rel = ComputeRelativePath(sourceDir, dir);
+            if (excludeBuildHostMetadata && ModuleDependencyPackageFilter.IsBuildHostMetadataPath(rel))
+                continue;
+
             Directory.CreateDirectory(Path.Combine(destDir, rel));
         }
         foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
         {
             var rel = ComputeRelativePath(sourceDir, file);
+            if (excludeBuildHostMetadata && ModuleDependencyPackageFilter.IsBuildHostMetadataPath(rel))
+                continue;
+
             var outPath = Path.Combine(destDir, rel);
             Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
             File.Copy(file, outPath, overwrite: true);
