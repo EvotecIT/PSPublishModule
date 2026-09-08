@@ -37,6 +37,8 @@ internal static class PowerShellHostedLifecycleSourceGenerator
         }
         builder.AppendLine("    protected override void BeginProcessing()");
         builder.AppendLine("    {");
+        builder.AppendLine("        using (global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.EnterModuleBinding(this))");
+        builder.AppendLine("        {");
         if (lifecycle.HasClean)
         {
             builder.AppendLine("        var versionTable = SessionState.PSVariable.GetValue(\"PSVersionTable\") as global::System.Collections.IDictionary;");
@@ -70,6 +72,7 @@ internal static class PowerShellHostedLifecycleSourceGenerator
         builder.Append("            var script = ScriptBlock.Create(")
             .Append(PowerShellCSharpLiteral.QuoteString(hostedSource))
             .AppendLine(");");
+        builder.AppendLine("            global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.BindModule(this, script);");
         builder.AppendLine("            var pipeline = script.GetSteppablePipeline(CommandOrigin.Internal, new object[] { bound });");
         builder.AppendLine("            lock (__powerForgeLifecycleGate)");
         builder.AppendLine("            {");
@@ -86,6 +89,7 @@ internal static class PowerShellHostedLifecycleSourceGenerator
         builder.AppendLine("        {");
         builder.AppendLine("            CleanLifecycle();");
         builder.AppendLine("            throw;");
+        builder.AppendLine("        }");
         builder.AppendLine("        }");
         builder.AppendLine("    }");
         builder.AppendLine();

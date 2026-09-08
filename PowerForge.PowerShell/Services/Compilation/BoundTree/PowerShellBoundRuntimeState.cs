@@ -15,7 +15,7 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
                 PowerShellRuntimeStateIntrinsicPolicy.GetType(kind),
                 PowerShellTypeFactProvenance.Inferred,
                 "The bounded runtime-state intrinsic defines its CLR result type."),
-            kind is PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or PowerShellRuntimeStateIntrinsicKind.ModuleVariable
+            kind is PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or PowerShellRuntimeStateIntrinsicKind.ModuleVariable or PowerShellRuntimeStateIntrinsicKind.WhatIfPreference
                 ? PowerShellValueState.Unknown
                 : PowerShellValueState.Known,
             arguments.Aggregate(

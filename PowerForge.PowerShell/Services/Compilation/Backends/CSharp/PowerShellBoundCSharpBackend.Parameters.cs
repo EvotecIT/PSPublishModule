@@ -31,7 +31,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             parameters.Add("global::System.Func<string, bool> __shouldProcessTarget");
             parameters.Add("global::System.Func<string, string, bool> __shouldProcessAction");
             parameters.Add("object __psVersion");
-            parameters.Add("bool __whatIfPreference");
+            parameters.Add("object? __whatIfPreference");
             parameters.Add("global::System.Collections.Generic.IReadOnlyDictionary<string, object?> __runtimeState");
         }
         if (function.RequiresPowerShellModuleStateRead)

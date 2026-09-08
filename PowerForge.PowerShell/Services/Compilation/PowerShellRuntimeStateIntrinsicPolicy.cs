@@ -196,12 +196,12 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference => typeof(System.Management.Automation.ConfirmImpact),
             PowerShellRuntimeStateIntrinsicKind.ErrorCollection => typeof(System.Collections.ArrayList),
             PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable => typeof(string),
-            PowerShellRuntimeStateIntrinsicKind.ModuleVariable => typeof(object),
+            PowerShellRuntimeStateIntrinsicKind.ModuleVariable or
+            PowerShellRuntimeStateIntrinsicKind.WhatIfPreference => typeof(object),
             PowerShellRuntimeStateIntrinsicKind.IsCoreClr or
             PowerShellRuntimeStateIntrinsicKind.IsWindows or
             PowerShellRuntimeStateIntrinsicKind.IsLinux or
             PowerShellRuntimeStateIntrinsicKind.IsMacOS or
-            PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or
             PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
             PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction => typeof(bool),
             _ => typeof(object)

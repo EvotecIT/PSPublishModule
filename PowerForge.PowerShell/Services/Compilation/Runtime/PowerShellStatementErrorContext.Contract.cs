@@ -21,7 +21,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly PropertyInfo EngineSessionState, CurrentScope, ShellErrorPipe, PropagateExceptions, InvocationScriptPosition;
             internal readonly PropertyInfo ScopeLocalsTuple;
             internal readonly MethodInfo NewScope, RemoveScope, CheckActionPreference;
-            internal readonly MethodInfo MakeTuple, SetTupleValue, GetTupleValue, FindMatchingHandler, ConvertToRuntimeException, ConvertToThrownException;
+            internal readonly MethodInfo MakeTuple, MakeTupleType, SetTupleValue, GetTupleValue, FindMatchingHandler, ConvertToRuntimeException, ConvertToThrownException;
             internal readonly ConstructorInfo FunctionContextConstructor, FunctionInfoConstructor, InvocationInfoConstructor, CommandExceptionConstructor;
             internal readonly MethodInfo ConvertToMethodInvocationException, ConvertToArgumentConversionException;
             internal readonly MethodInfo NewInterpreterException;
@@ -32,6 +32,9 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo AppendErrorToVariables;
             internal readonly PropertyInfo NullInvocationResource;
             internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
+            internal readonly FieldInfo CmdletSessionState;
+            internal readonly PropertyInfo NativeSessionState;
+            internal readonly PropertyInfo ScriptBlockSessionState;
             internal readonly object MergeToOutput;
             internal readonly Type ObjectTupleType, CatchAllType;
             internal readonly bool ThrowConversionTakesRethrow;
@@ -67,7 +70,11 @@ namespace PowerForge.Generated.Runtime
                 ErrorMergeTo = Property(CommandRuntimeType, "ErrorMergeTo", null);
                 MergeToOutput = Enum.Parse(ErrorMergeTo.PropertyType, "Output");
                 IsRedirected = Property(pipe, "IsRedirected", typeof(bool));
-                EngineSessionState = Property(context, "EngineSessionState", state);
+                EngineSessionState = Property(context, "EngineSessionState", state, writable: true);
+                NativeSessionState = Property(typeof(SessionState), "Internal", state);
+                ScriptBlockSessionState = Property(typeof(ScriptBlock), "SessionStateInternal", state, writable: true);
+                CmdletSessionState = Field(RequireType(assembly, "System.Management.Automation.Internal.InternalCommand"),
+                    major == 5 ? "state" : "_state", typeof(SessionState));
                 CurrentScope = Property(state, "CurrentScope", scope, writable: true);
                 ScopeLocalsTuple = Property(scope, "LocalsTuple", tuple, writable: true);
                 ShellErrorPipe = Property(context, "ShellFunctionErrorOutputPipe", pipe, writable: true);
@@ -87,6 +94,7 @@ namespace PowerForge.Generated.Runtime
                 GetTupleValue = Method(tuple, "GetValue", false, typeof(object), typeof(int));
                 MakeTuple = Method(tuple, "MakeTuple", true, tuple,
                     typeof(Type), typeof(Dictionary<string, int>), typeof(Func<>).MakeGenericType(tuple));
+                MakeTupleType = Method(tuple, "MakeTupleType", true, typeof(Type), typeof(Type[]));
                 FunctionContextConstructor = Constructor(function);
                 FunctionInfoConstructor = Constructor(typeof(FunctionInfo), typeof(string), typeof(ScriptBlock), context);
                 InvocationInfoConstructor = Constructor(typeof(InvocationInfo), typeof(CommandInfo), typeof(IScriptExtent), context);
@@ -112,6 +120,22 @@ namespace PowerForge.Generated.Runtime
                 var names = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [variableName] = 0 };
                 var tuple = Invoke(MakeTuple, null, ObjectTupleType, names, null)!;
                 Invoke(SetTupleValue, tuple, 0, value);
+                return tuple;
+            }
+
+            internal object CreateTuple(IReadOnlyDictionary<string, object?> values)
+            {
+                var names = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var types = new Type[values.Count];
+                var index = 0;
+                foreach (var name in values.Keys)
+                {
+                    names.Add(name, index);
+                    types[index++] = typeof(object);
+                }
+                var type = Invoke(MakeTupleType, null, (object)types)!;
+                var tuple = Invoke(MakeTuple, null, type, names, null)!;
+                foreach (var value in values) Invoke(SetTupleValue, tuple, names[value.Key], value.Value);
                 return tuple;
             }
 

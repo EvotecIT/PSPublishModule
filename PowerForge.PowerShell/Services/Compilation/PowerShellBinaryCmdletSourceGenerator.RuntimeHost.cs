@@ -13,10 +13,16 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         var requiresModuleStateReadHost = typed.Methods.Any(static method => method.RequiresPowerShellModuleStateRead);
         var requiresModuleStateWriteHost = typed.Methods.Any(static method => method.RequiresPowerShellModuleStateWrite);
         var requiresModuleStateHost = requiresModuleStateReadHost || requiresModuleStateWriteHost;
-        if (!requiresCommandRegionHost && !requiresModuleStateHost) return;
+        var requiresRuntimeState = typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState);
+        if (!requiresCommandRegionHost && !requiresModuleStateHost && !requiresRuntimeState) return;
 
         builder.AppendLine($"public static class {GetRuntimeRegionHostTypeName(typed)}");
         builder.AppendLine("{");
+        if (requiresRuntimeState)
+        {
+            builder.AppendLine("    public static void SetModuleSessionState(global::System.Management.Automation.PSModuleInfo module, global::System.Management.Automation.SessionState parent)");
+            builder.AppendLine("        => global::PowerForge.Generated.Runtime.PowerShellModuleSessionState.Register(module, parent);");
+        }
         if (requiresModuleStateHost)
         {
             builder.AppendLine("    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<global::System.Exception, ModuleStateError> ModuleStateErrors = new();");

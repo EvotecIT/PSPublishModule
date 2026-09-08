@@ -221,7 +221,7 @@ internal static class PowerShellCompilationAbiBuilder
             AddCompilerParameter(parameters, "__shouldProcessTarget", "System.Func<System.String,System.Boolean>", "ShouldProcessTarget");
             AddCompilerParameter(parameters, "__shouldProcessAction", "System.Func<System.String,System.String,System.Boolean>", "ShouldProcessAction");
             AddCompilerParameter(parameters, "__psVersion", "System.Object", "PowerShellVersionState");
-            AddCompilerParameter(parameters, "__whatIfPreference", "System.Boolean", "WhatIfPreference");
+            AddCompilerParameter(parameters, "__whatIfPreference", "System.Object", "WhatIfPreference", nullable: true);
             AddCompilerParameter(parameters, "__runtimeState", "System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object>", "PowerShellRuntimeState");
         }
         if (method.RequiresPowerShellModuleStateRead)
@@ -236,13 +236,15 @@ internal static class PowerShellCompilationAbiBuilder
         ICollection<PowerShellCompilationAbiParameter> parameters,
         string name,
         string typeName,
-        string purpose)
+        string purpose,
+        bool nullable = false)
         => parameters.Add(new PowerShellCompilationAbiParameter
         {
             ClrName = name,
             TypeName = typeName,
             CompilerAdded = true,
             CompilerPurpose = purpose,
+            Nullable = nullable,
             Required = true
         });
 

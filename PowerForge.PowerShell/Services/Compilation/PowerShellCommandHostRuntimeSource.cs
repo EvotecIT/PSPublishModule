@@ -6,6 +6,15 @@ internal static class PowerShellCommandHostRuntimeSource
     internal static IReadOnlyDictionary<string, string> Render(PowerShellTypedCompilationResult typed)
     {
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
+        var requiresModuleState = typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState);
+        if (requiresModuleState)
+        {
+            using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
+                "PowerForge.PowerShell.Compilation.PowerShellModuleSessionState.cs")
+                ?? throw new InvalidOperationException("Missing module session-state runtime source.");
+            using var reader = new StreamReader(stream);
+            sources.Add("ModuleSessionState.g.cs", "#nullable enable\n" + reader.ReadToEnd());
+        }
         if (typed.Methods.Any(static method => method.Parameters.Any(static parameter => parameter.TypeName == typeof(string).FullName)))
         {
             using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
@@ -14,7 +23,7 @@ internal static class PowerShellCommandHostRuntimeSource
             using var reader = new StreamReader(stream);
             sources.Add("StringParameters.g.cs", "#nullable enable\n" + reader.ReadToEnd());
         }
-        if (typed.Methods.Any(static method => method.RequiresPowerShellStatementErrors))
+        if (requiresModuleState)
             sources.Add("StatementErrors.g.cs", PowerShellStatementErrorRuntimeSource.Render());
         else if (typed.Methods.Any(static method => method.Lifecycle is null && method.Parameters.Any(static parameter => parameter.AcceptsPipelineInput)))
             sources.Add("CommandVariables.g.cs", PowerShellStatementErrorRuntimeSource.RenderVariableScope());
