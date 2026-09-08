@@ -316,6 +316,35 @@ public sealed class PowerForgeModuleSigningEvidenceWriterTests
         Assert.Contains("must stay under", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Create_LegacyModuleToProcessMissingFromSigningResultFailsClosed()
+    {
+        using var fixture = new SigningFixture();
+        File.WriteAllText(
+            fixture.ManifestPath,
+            "@{ ModuleVersion = '2.3.4'; ModuleToProcess = 'Sample.psm1' }");
+        var signingResult = new ModuleSigningResult
+        {
+            TotalMatched = 2,
+            TotalAfterExclude = 2,
+            SignedNew = 2,
+            VerifiedFilePaths = new[] { fixture.ManifestPath, fixture.SourceAttestationPath }
+        };
+        fixture.BindSigningInventory(signingResult);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeModuleSigningEvidenceWriter.Create(
+                fixture.Root,
+                "Sample",
+                "2.3.4",
+                SourceRevision,
+                sourceDirty: false,
+                fixture.ManifestPath,
+                signingResult));
+
+        Assert.Contains("ModuleToProcess entrypoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class SigningFixture : IDisposable
     {
         public SigningFixture(bool includeVendorDependency = false)

@@ -22,11 +22,7 @@ public sealed partial class ArtefactBuilder
             throw new FileNotFoundException("The staged module manifest required for a script artefact was not found.", manifestPath);
 
         var expectedRootModule = moduleName + ".psm1";
-        var configuredRootModule = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule");
-        var legacyRootModule = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ModuleToProcess");
-        var effectiveRootModule = string.IsNullOrWhiteSpace(configuredRootModule)
-            ? legacyRootModule
-            : configuredRootModule;
+        var effectiveRootModule = ModuleManifestValueReader.ReadModuleEntryPoint(manifestPath, out _);
         var modulePath = Path.Combine(stagingPath, expectedRootModule);
         if (string.IsNullOrWhiteSpace(effectiveRootModule) ||
             !string.Equals(

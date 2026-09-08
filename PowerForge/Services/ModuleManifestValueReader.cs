@@ -6,6 +6,17 @@ namespace PowerForge;
 
 internal static class ModuleManifestValueReader
 {
+    internal static string? ReadModuleEntryPoint(string manifestPath, out string propertyName)
+    {
+        propertyName = "RootModule";
+        var entryPoint = ReadTopLevelString(manifestPath, propertyName);
+        if (!string.IsNullOrWhiteSpace(entryPoint))
+            return entryPoint;
+
+        propertyName = "ModuleToProcess";
+        return ReadTopLevelString(manifestPath, propertyName);
+    }
+
     internal static string? ReadTopLevelString(string manifestPath, string key)
     {
         if (!TryReadManifestText(manifestPath, out var manifestText))

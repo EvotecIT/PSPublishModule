@@ -301,21 +301,21 @@ public sealed partial class ArtefactBuilder
 
     private static string ResolvePackedEntryPointPath(string mainModulePath, string manifestPath)
     {
-        var rootModule = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule");
-        if (string.IsNullOrWhiteSpace(rootModule))
+        var entryPoint = ModuleManifestValueReader.ReadModuleEntryPoint(manifestPath, out var propertyName);
+        if (string.IsNullOrWhiteSpace(entryPoint))
             return manifestPath;
 
-        var normalizedRootModule = rootModule!
+        var normalizedEntryPoint = entryPoint!
             .Replace('\\', Path.DirectorySeparatorChar)
             .Replace('/', Path.DirectorySeparatorChar);
-        var entryPointPath = Path.GetFullPath(Path.Combine(mainModulePath, normalizedRootModule));
+        var entryPointPath = Path.GetFullPath(Path.Combine(mainModulePath, normalizedEntryPoint));
         if (!IsSameOrBelowPath(entryPointPath, mainModulePath))
         {
             throw new InvalidOperationException(
-                $"Packed artefact RootModule '{rootModule}' resolves outside the primary module directory '{Path.GetFullPath(mainModulePath)}'.");
+                $"Packed artefact {propertyName} '{entryPoint}' resolves outside the primary module directory '{Path.GetFullPath(mainModulePath)}'.");
         }
         if (!File.Exists(entryPointPath))
-            throw new FileNotFoundException("The packed artefact RootModule entry point was not found.", entryPointPath);
+            throw new FileNotFoundException($"The packed artefact {propertyName} entry point was not found.", entryPointPath);
 
         return entryPointPath;
     }

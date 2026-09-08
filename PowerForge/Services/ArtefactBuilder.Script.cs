@@ -392,7 +392,7 @@ public sealed partial class ArtefactBuilder
             var line = lines[lineIndex] ?? string.Empty;
             if (state == ScriptLexicalState.Normal &&
                 blockCommentDepth == 0 &&
-                TryGetExportModuleMemberInvocationStart(line, out var commandStart))
+                TryGetExportModuleMemberInvocationStart(line, out var commandStart, out var preserveExpression))
             {
                 var endLine = FindPowerShellCommandEnd(lines, lineIndex, commandStart, out var suffixStart);
                 var removeCount = endLine - lineIndex + 1;
@@ -400,8 +400,16 @@ public sealed partial class ArtefactBuilder
                 var suffix = suffixStart >= 0
                     ? lines[endLine].Substring(suffixStart).TrimStart()
                     : string.Empty;
+                var statementSeparator = preserveExpression &&
+                                         suffixStart > 0 &&
+                                         lines[endLine][suffixStart - 1] == ';'
+                    ? "; "
+                    : string.Empty;
                 lines.RemoveRange(lineIndex, removeCount);
-                var replacement = prefix + suffix;
+                var replacement = prefix +
+                                  (preserveExpression ? "$null" : string.Empty) +
+                                  statementSeparator +
+                                  suffix;
                 if (!string.IsNullOrWhiteSpace(replacement))
                     lines.Insert(lineIndex, replacement);
                 lineIndex--;
@@ -545,6 +553,12 @@ public sealed partial class ArtefactBuilder
                     return lineIndex;
                 }
 
+                if (current is ')' or ']' && parenthesisDepth == 0 && bracketDepth == 0 && braceDepth == 0)
+                {
+                    suffixStart = characterIndex;
+                    return lineIndex;
+                }
+
                 switch (current)
                 {
                     case '(':
@@ -672,115 +686,6 @@ public sealed partial class ArtefactBuilder
             if (current == '`')
                 characterIndex++;
         }
-    }
-
-    private static bool TryGetExportModuleMemberInvocationStart(string line, out int commandStart)
-    {
-        var source = line ?? string.Empty;
-        var state = ScriptLexicalState.Normal;
-        var blockCommentDepth = 0;
-        var previousSignificant = '\0';
-        var previousSignificantIndex = -1;
-        for (var index = 0; index < source.Length; index++)
-        {
-            var current = source[index];
-            var next = index + 1 < source.Length ? source[index + 1] : '\0';
-            if (blockCommentDepth > 0)
-            {
-                if (current == '<' && next == '#')
-                {
-                    blockCommentDepth++;
-                    index++;
-                }
-                else if (current == '#' && next == '>')
-                {
-                    blockCommentDepth--;
-                    index++;
-                }
-                continue;
-            }
-
-            if (state == ScriptLexicalState.SingleQuotedString)
-            {
-                if (current != '\'')
-                    continue;
-                if (next == '\'')
-                {
-                    index++;
-                    continue;
-                }
-                state = ScriptLexicalState.Normal;
-                continue;
-            }
-
-            if (state == ScriptLexicalState.DoubleQuotedString)
-            {
-                if (current == '`')
-                {
-                    index++;
-                    continue;
-                }
-                if (current == '"')
-                    state = ScriptLexicalState.Normal;
-                continue;
-            }
-
-            if (current == '<' && next == '#')
-            {
-                blockCommentDepth++;
-                index++;
-                continue;
-            }
-            if (current == '#')
-                break;
-            if (current == '@' && next is '\'' or '"')
-                break;
-            if (current == '\'')
-            {
-                state = ScriptLexicalState.SingleQuotedString;
-                continue;
-            }
-            if (current == '"')
-            {
-                state = ScriptLexicalState.DoubleQuotedString;
-                continue;
-            }
-            if (current == '`')
-            {
-                index++;
-                continue;
-            }
-            if (char.IsWhiteSpace(current))
-                continue;
-
-            var callOperator = previousSignificant is '&' or '.' &&
-                               previousSignificantIndex >= 0 &&
-                               source.Substring(previousSignificantIndex + 1, index - previousSignificantIndex - 1)
-                                   .All(char.IsWhiteSpace);
-            if ((previousSignificant == '\0' || previousSignificant is ';' or '{' || callOperator) &&
-                (StartsWithCommandName(source.Substring(index), "Export-ModuleMember") ||
-                 StartsWithCommandName(source.Substring(index), "Microsoft.PowerShell.Core\\Export-ModuleMember")))
-            {
-                commandStart = callOperator ? previousSignificantIndex : index;
-                return true;
-            }
-
-            previousSignificant = current;
-            previousSignificantIndex = index;
-        }
-
-        commandStart = -1;
-        return false;
-    }
-
-    private static bool StartsWithCommandName(string line, string commandName)
-    {
-        if (!line.StartsWith(commandName, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return line.Length == commandName.Length ||
-               char.IsWhiteSpace(line[commandName.Length]) ||
-               line[commandName.Length] is '`' or ';' or '|';
     }
 
     private enum ScriptLexicalState
