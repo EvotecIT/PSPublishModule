@@ -62,16 +62,31 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         string scriptPath = Path.Combine(root, "app", "Invoke-Sample.ps1");
         string resourcePath = Path.Combine(root, "app", "Resources", "data.json");
+        string helperPath = Path.Combine(root, "app", "bin", "helper");
         string evidencePath = Path.Combine(root, "PowerForge.ScriptEvidence.json");
         string archiveRoot = Path.Combine(Path.GetDirectoryName(root)!, Guid.NewGuid().ToString("N"), "modules");
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
             Directory.CreateDirectory(Path.GetDirectoryName(resourcePath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(helperPath)!);
             File.WriteAllText(
                 scriptPath,
                 (leadingShebang ? "#!/usr/bin/env pwsh\n" : string.Empty) + "'complete layout'\n");
             File.WriteAllText(resourcePath, "{}");
+            File.WriteAllText(helperPath, "#!/bin/sh\nexit 0\n");
+            int? expectedHelperMode = null;
+            if (!OperatingSystem.IsWindows())
+            {
+                const UnixFileMode helperMode =
+                    UnixFileMode.UserRead |
+                    UnixFileMode.UserWrite |
+                    UnixFileMode.UserExecute |
+                    UnixFileMode.GroupRead |
+                    UnixFileMode.GroupExecute;
+                File.SetUnixFileMode(helperPath, helperMode);
+                expectedHelperMode = (int)helperMode;
+            }
             File.WriteAllText(evidencePath, "{}");
             var artefact = new ArtefactBuildResult(
                 ArtefactType.Script,
@@ -101,8 +116,11 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             using var archive = ZipFile.OpenRead(archivePath);
             ZipArchiveEntry scriptEntry = Assert.Single(archive.Entries, entry => entry.FullName == "app/Invoke-Sample.ps1");
             Assert.Contains(archive.Entries, entry => entry.FullName == "app/Resources/data.json");
+            ZipArchiveEntry helperEntry = Assert.Single(archive.Entries, entry => entry.FullName == "app/bin/helper");
             int mode = (scriptEntry.ExternalAttributes >> 16) & 0x1FF;
             Assert.Equal(leadingShebang ? 0x49 : 0, mode & 0x49);
+            if (expectedHelperMode.HasValue)
+                Assert.Equal(expectedHelperMode.Value, (helperEntry.ExternalAttributes >> 16) & 0xFFF);
         }
         finally
         {

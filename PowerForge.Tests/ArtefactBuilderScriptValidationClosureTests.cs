@@ -379,6 +379,7 @@ public sealed partial class ArtefactBuilderScriptClosureTests
         try
         {
             const string moduleName = "OverlappingMappingModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
             string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
             WriteScriptModule(stagingRoot, moduleName);
             string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
@@ -394,7 +395,7 @@ public sealed partial class ArtefactBuilderScriptClosureTests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 new ArtefactBuilder(new NullLogger()).Build(
                     segment,
-                    root.FullName,
+                    projectRoot,
                     stagingRoot,
                     moduleName,
                     "1.0.0",
@@ -417,6 +418,7 @@ public sealed partial class ArtefactBuilderScriptClosureTests
         try
         {
             const string moduleName = "CrossMappingOverlapModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
             string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
             WriteScriptModule(stagingRoot, moduleName);
             string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
@@ -436,7 +438,7 @@ public sealed partial class ArtefactBuilderScriptClosureTests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 new ArtefactBuilder(new NullLogger()).Build(
                     segment,
-                    root.FullName,
+                    projectRoot,
                     stagingRoot,
                     moduleName,
                     "1.0.0",

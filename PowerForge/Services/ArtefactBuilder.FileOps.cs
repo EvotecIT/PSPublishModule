@@ -65,6 +65,7 @@ public sealed partial class ArtefactBuilder
         IReadOnlyCollection<string>? executableEntryNames,
         DateTimeOffset? entryTimestamp)
     {
+        var unixFileModes = new Dictionary<string, int>(StringComparer.Ordinal);
         if (File.Exists(zipPath)) File.Delete(zipPath);
         Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
 
@@ -76,6 +77,18 @@ public sealed partial class ArtefactBuilder
                          .OrderBy(file => ComputeRelativePath(sourceDir, file), StringComparer.Ordinal))
             {
                 var rel = ComputeRelativePath(sourceDir, file).Replace('\\', '/');
+#if NET8_0_OR_GREATER
+                if (!OperatingSystem.IsWindows())
+                {
+                    UnixFileMode mode = File.GetUnixFileMode(file);
+                    const UnixFileMode executeBits =
+                        UnixFileMode.UserExecute |
+                        UnixFileMode.GroupExecute |
+                        UnixFileMode.OtherExecute;
+                    if ((mode & executeBits) != 0)
+                        unixFileModes[rel] = (int)mode;
+                }
+#endif
                 var entry = zip.CreateEntry(rel, CompressionLevel.Optimal);
                 if (entryTimestamp.HasValue)
                     entry.LastWriteTime = entryTimestamp.Value;
@@ -90,8 +103,10 @@ public sealed partial class ArtefactBuilder
             .Select(static entry => entry.Replace('\\', '/').TrimStart('/'))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        if (executableEntries.Length > 0)
-            ZipArchiveUnixPermissionPatcher.ApplyExecutablePermissions(zipPath, executableEntries);
+        foreach (string executableEntry in executableEntries)
+            unixFileModes[executableEntry] = 0x1ED;
+        if (unixFileModes.Count > 0)
+            ZipArchiveUnixPermissionPatcher.ApplyUnixFilePermissions(zipPath, unixFileModes);
     }
 
     private static void ClearDirectorySafe(string path)

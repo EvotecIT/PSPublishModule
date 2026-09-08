@@ -231,6 +231,62 @@ public sealed class ArtefactBuilderScriptOutputSafetyTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Script, false)]
+    [InlineData(ArtefactType.Script, true)]
+    public void Build_RejectsCopyDestinationInsideProjectBeforeMutation(
+        ArtefactType artefactType,
+        bool directoryMapping)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "ProjectDestinationModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string outputMarker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(outputMarker, "preserve-output");
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, artefactType);
+
+            string projectMarker;
+            if (directoryMapping)
+            {
+                string source = Directory.CreateDirectory(Path.Combine(root.FullName, "directory-source")).FullName;
+                File.WriteAllText(Path.Combine(source, "replacement.txt"), "replacement");
+                string destination = Directory.CreateDirectory(Path.Combine(projectRoot, "assets")).FullName;
+                projectMarker = Path.Combine(destination, "preserve.txt");
+                File.WriteAllText(projectMarker, "preserve-project");
+                segment.Configuration.DestinationDirectoriesRelative = false;
+                segment.Configuration.DirectoryOutput =
+                    [new ArtefactCopyMapping { Source = source, Destination = destination }];
+            }
+            else
+            {
+                string source = Path.Combine(root.FullName, "file-source.txt");
+                File.WriteAllText(source, "replacement");
+                projectMarker = Path.Combine(projectRoot, "preserve.txt");
+                File.WriteAllText(projectMarker, "preserve-project");
+                segment.Configuration.DestinationFilesRelative = false;
+                segment.Configuration.FilesOutput =
+                    [new ArtefactCopyMapping { Source = source, Destination = projectMarker }];
+            }
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                Build(segment, projectRoot, stagingRoot, moduleName));
+
+            Assert.Contains("copy destination", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("inside project root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve-project", File.ReadAllText(projectMarker));
+            Assert.Equal("preserve-output", File.ReadAllText(outputMarker));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     private static ConfigurationArtefactSegment CreateSegment(string outputRoot, ArtefactType artefactType) =>
         new()
         {

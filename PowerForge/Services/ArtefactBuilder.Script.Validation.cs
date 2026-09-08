@@ -302,7 +302,11 @@ public sealed partial class ArtefactBuilder
                 moduleVersion,
                 preRelease);
             directoryDestinations.Add(destination);
-            ValidateScriptDirectoryCopyDestinationSafety(destination, projectRoot, stagingPath);
+            ValidateScriptDirectoryCopyDestinationSafety(
+                destination,
+                outputRootToClear,
+                projectRoot,
+                stagingPath);
             if (IsSameOrBelowPath(scriptRoot, destination))
             {
                 throw new InvalidOperationException(
@@ -344,6 +348,11 @@ public sealed partial class ArtefactBuilder
                 moduleVersion,
                 preRelease);
             fileDestinations.Add(destination);
+            ValidateScriptFileCopyDestinationSafety(
+                destination,
+                outputRootToClear,
+                projectRoot,
+                stagingPath);
             if (ScriptPathsOverlap(destination, scriptPath))
             {
                 throw new InvalidOperationException(
@@ -355,13 +364,6 @@ public sealed partial class ArtefactBuilder
             {
                 throw new InvalidOperationException(
                     $"Script artefact file copy destination '{destination}' overlaps required module destination '{requiredModuleDestination}' and would overwrite or conflict with bundled dependency content.");
-            }
-
-            if (ScriptPathsOverlap(destination, stagingPath))
-            {
-                throw new InvalidOperationException(
-                    $"Script artefact file copy destination '{Path.GetFullPath(destination)}' overlaps staging source '{Path.GetFullPath(stagingPath)}'. " +
-                    "Keep staging and artefact destination paths separate.");
             }
         }
 
@@ -375,6 +377,7 @@ public sealed partial class ArtefactBuilder
 
     private static void ValidateScriptDirectoryCopyDestinationSafety(
         string destination,
+        string outputRoot,
         string projectRoot,
         string stagingPath)
     {
@@ -385,6 +388,12 @@ public sealed partial class ArtefactBuilder
             throw new InvalidOperationException(
                 $"Script artefact directory copy destination '{fullDestination}' contains project root '{fullProjectRoot}' and would erase project sources.");
         }
+        if (IsSameOrBelowPath(fullDestination, fullProjectRoot) &&
+            !IsSameOrBelowPath(fullDestination, outputRoot))
+        {
+            throw new InvalidOperationException(
+                $"Script artefact directory copy destination '{fullDestination}' is inside project root '{fullProjectRoot}' and would erase or modify project sources.");
+        }
 
         string fullStagingPath = Path.GetFullPath(stagingPath);
         if (!ScriptPathsOverlap(fullDestination, fullStagingPath))
@@ -392,6 +401,30 @@ public sealed partial class ArtefactBuilder
 
         throw new InvalidOperationException(
             $"Script artefact directory copy destination '{fullDestination}' overlaps staging source '{fullStagingPath}' and would erase or modify build inputs.");
+    }
+
+    private static void ValidateScriptFileCopyDestinationSafety(
+        string destination,
+        string outputRoot,
+        string projectRoot,
+        string stagingPath)
+    {
+        string fullDestination = Path.GetFullPath(destination);
+        string fullProjectRoot = Path.GetFullPath(projectRoot);
+        if (IsSameOrBelowPath(fullDestination, fullProjectRoot) &&
+            !IsSameOrBelowPath(fullDestination, outputRoot))
+        {
+            throw new InvalidOperationException(
+                $"Script artefact file copy destination '{fullDestination}' is inside project root '{fullProjectRoot}' and would overwrite project content.");
+        }
+
+        string fullStagingPath = Path.GetFullPath(stagingPath);
+        if (!ScriptPathsOverlap(fullDestination, fullStagingPath))
+            return;
+
+        throw new InvalidOperationException(
+            $"Script artefact file copy destination '{fullDestination}' overlaps staging source '{fullStagingPath}'. " +
+            "Keep staging and artefact destination paths separate.");
     }
 
     private static void ValidateScriptDirectoryCopyDestinationsDoNotOverlap(
