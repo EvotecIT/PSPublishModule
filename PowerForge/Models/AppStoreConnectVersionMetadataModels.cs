@@ -69,8 +69,11 @@ public sealed class AppStoreConnectVersionMetadataSyncResult
     /// <summary>Matched App Store version.</summary>
     public AppStoreConnectVersionInfo Version { get; set; } = new();
 
-    /// <summary>Localization before the metadata update.</summary>
-    public AppStoreConnectVersionLocalizationInfo Before { get; set; } = new();
+    /// <summary>Localization before the metadata update; null when this sync created it.</summary>
+    public AppStoreConnectVersionLocalizationInfo? Before { get; set; }
+
+    /// <summary>Whether this sync created a previously missing localization.</summary>
+    public bool CreatedLocalization { get; set; }
 
     /// <summary>Localization after the metadata update.</summary>
     public AppStoreConnectVersionLocalizationInfo After { get; set; } = new();

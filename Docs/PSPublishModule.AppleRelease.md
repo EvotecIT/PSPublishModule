@@ -1063,6 +1063,49 @@ to the app-level resource rather than an App Store version. Use one config per a
 the unified release applies every matching locale once per unique app id even when iOS and macOS
 targets share that app, and fails when a selected app has no matching config.
 
+## Multiple Listing Languages
+
+Use one version metadata file per app, platform, and locale. `AppleApps.MetadataConfigPaths`
+can include several languages for the same platform; preparation applies every matching
+file and rejects duplicate locales before remote release work. `UseReleaseVersion: true`
+binds each file to the selected marketing version. Explicit version IDs must agree across
+all metadata and screenshot mappings for a target.
+
+```json
+{
+  "AppleApps": {
+    "MetadataConfigPaths": [
+      "store/en-US/ios.json",
+      "store/pl/ios.json",
+      "store/en-US/macos.json",
+      "store/pl/macos.json"
+    ],
+    "AppInfoConfigPaths": [
+      "store/en-US/app-info.json",
+      "store/pl/app-info.json"
+    ]
+  }
+}
+```
+
+This fragment belongs alongside the app targets and credentials in the release config.
+App Information is shared across platform versions, so list each app/locale only once.
+Both sync services create a localization when it is missing. App Information creation
+requires a localized `name`; other supplied fields are sent with the create request.
+An existing localization is updated using its existing resource ID.
+
+An editable App Information resource can receive a new title or language while the previous
+live resource retains its released metadata. Locked resources still in review must already
+match, and a locked-only app cannot receive new or changed metadata. Create the next editable
+version before preparing those changes.
+
+For .NET callers, `AppStoreConnectReleasePreparationRequest.MetadataSpecs` accepts multiple
+locales alongside the existing single `MetadataSpec`. `MetadataResults` returns all results;
+`Metadata` retains the first result for single-locale callers. Each sync result reports
+`CreatedLocalization`; `Before` is null when there was no prior localization. These operations
+prepare metadata only; submission and public release remain separate, explicitly authorized
+actions.
+
 ## Screenshot Upload Flow
 
 Screenshot upload uses App Store Connect's asset reservation flow:

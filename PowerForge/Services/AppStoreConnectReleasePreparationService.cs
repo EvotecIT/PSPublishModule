@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Prepares App Store Connect Distribution metadata for an uploaded Apple app build.
 /// </summary>
-public sealed class AppStoreConnectReleasePreparationService
+public sealed partial class AppStoreConnectReleasePreparationService
 {
     private readonly AppStoreConnectClient _client;
 
@@ -27,9 +27,10 @@ public sealed class AppStoreConnectReleasePreparationService
             throw new ArgumentNullException(nameof(request));
         if (string.IsNullOrWhiteSpace(request.AppId))
             throw new ArgumentException("AppId is required.", nameof(request));
+        var metadataSpecs = ResolveMetadataSpecs(request);
         var requiresVersion = request.CreateVersion ||
                               request.SelectBuild ||
-                              request.MetadataSpec is not null ||
+                              metadataSpecs.Length > 0 ||
                               request.ScreenshotSpec is not null ||
                               request.CheckReadiness;
         if (requiresVersion && string.IsNullOrWhiteSpace(request.VersionString))
@@ -166,15 +167,15 @@ public sealed class AppStoreConnectReleasePreparationService
             }
         }
 
-        AppStoreConnectVersionMetadataSyncResult? metadata = null;
-        if (request.MetadataSpec is not null)
+        var metadataResults = new List<AppStoreConnectVersionMetadataSyncResult>();
+        foreach (var sourceSpec in metadataSpecs)
         {
             await AuthorizeFirstRemoteMutationAsync().ConfigureAwait(false);
-            var metadataSpec = CreateMetadataSpecForVersion(request.MetadataSpec, appId, versionString, request.Platform, version!.Id);
-            metadata = await new AppStoreConnectVersionMetadataSyncService(_client).SyncAsync(
+            var metadataSpec = CreateMetadataSpecForVersion(sourceSpec, appId, versionString, request.Platform, version!.Id);
+            metadataResults.Add(await new AppStoreConnectVersionMetadataSyncService(_client).SyncAsync(
                 new AppStoreConnectVersionMetadataSyncRequest { Spec = metadataSpec },
-                cancellationToken).ConfigureAwait(false);
-            messages.Add("Synchronized App Store version metadata.");
+                cancellationToken).ConfigureAwait(false));
+            messages.Add($"Synchronized App Store version metadata for locale '{metadataSpec.Locale}'.");
         }
 
         var appInfoMetadataResults = new List<AppStoreConnectAppInfoMetadataSyncResult>();
@@ -239,7 +240,8 @@ public sealed class AppStoreConnectReleasePreparationService
             SelectedBuild = selectedBuild,
             PreviousBuildId = previousBuildId,
             Screenshots = screenshots,
-            Metadata = metadata,
+            Metadata = metadataResults.FirstOrDefault(),
+            MetadataResults = metadataResults.ToArray(),
             AppInfoMetadataResults = appInfoMetadataResults.ToArray(),
             Readiness = readiness,
             Messages = messages.ToArray()
@@ -253,6 +255,7 @@ public sealed class AppStoreConnectReleasePreparationService
                 request.ScreenshotSpec?.VersionId,
                 request.MetadataSpec?.VersionId
             }
+            .Concat((request.MetadataSpecs ?? Array.Empty<AppStoreConnectVersionMetadataSpec>()).Select(static spec => spec.VersionId))
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(static value => value!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -302,35 +305,6 @@ public sealed class AppStoreConnectReleasePreparationService
         };
     }
 
-    private static AppStoreConnectVersionMetadataSpec CreateMetadataSpecForVersion(
-        AppStoreConnectVersionMetadataSpec source,
-        string appId,
-        string versionString,
-        ApplePlatform platform,
-        string versionId)
-    {
-        if (!string.IsNullOrWhiteSpace(source.AppId) &&
-            !string.Equals(source.AppId.Trim(), appId, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Metadata config AppId '{source.AppId}' does not match release app id '{appId}'.");
-        var sourceVersionString = string.IsNullOrWhiteSpace(source.VersionString) ? null : source.VersionString!.Trim();
-        if (sourceVersionString is not null &&
-            !string.Equals(sourceVersionString, versionString, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Metadata config VersionString '{source.VersionString}' does not match release version '{versionString}'.");
-        if (source.Platform != platform)
-            throw new InvalidOperationException($"Metadata config Platform '{source.Platform}' does not match release platform '{platform}'.");
-
-        return new AppStoreConnectVersionMetadataSpec
-        {
-            AppId = appId,
-            VersionString = versionString,
-            VersionId = versionId,
-            UseReleaseVersion = false,
-            Platform = platform,
-            Locale = source.Locale,
-            Metadata = source.Metadata
-        };
-    }
-
     private static AppStoreConnectAppInfoMetadataSpec CreateAppInfoMetadataSpec(
         AppStoreConnectAppInfoMetadataSpec source,
         string appId)
@@ -343,7 +317,7 @@ public sealed class AppStoreConnectReleasePreparationService
         {
             AppId = appId,
             AppInfoId = source.AppInfoId,
-            Locale = source.Locale,
+            Locale = source.Locale.Trim(),
             Metadata = source.Metadata
         };
     }

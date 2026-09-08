@@ -123,7 +123,7 @@ public sealed partial class AppStoreConnectClientTests
                       "type": "appInfoLocalizations",
                       "attributes": {
                         "locale": "en-US",
-                        "privacyPolicyUrl": "https://tactra.dev/privacy/"
+                        "privacyPolicyUrl": "https://previous.example/privacy/"
                       }
                     }
                   ]
@@ -175,7 +175,7 @@ public sealed partial class AppStoreConnectClientTests
         });
 
         Assert.Equal("info-editable", result.AppInfo.Id);
-        Assert.Equal("https://old.example/privacy/", result.Before.PrivacyPolicyUrl);
+        Assert.Equal("https://old.example/privacy/", result.Before!.PrivacyPolicyUrl);
         Assert.Equal("https://tactra.dev/privacy/", result.After.PrivacyPolicyUrl);
         Assert.Equal(new[] { "privacyPolicyUrl" }, result.UpdatedFields);
         Assert.Contains("appInfos/info-editable/appInfoLocalizations", handler.RequestUris[2].ToString(), StringComparison.Ordinal);
@@ -263,7 +263,7 @@ public sealed partial class AppStoreConnectClientTests
             });
 
         Assert.Empty(result.UpdatedFields);
-        Assert.Equal(result.Before.Id, result.After.Id);
+        Assert.Equal(result.Before!.Id, result.After.Id);
         Assert.Equal(3, handler.RequestUris.Count);
         Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
     }

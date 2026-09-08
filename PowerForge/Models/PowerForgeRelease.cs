@@ -474,6 +474,7 @@ internal sealed class PowerForgeAppleReleaseOptions
 
     public string? MetadataConfigPath { get; set; }
 
+    /// <summary>Version metadata files, with one file per app, platform, and locale.</summary>
     public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
 
     public string? AppInfoConfigPath { get; set; }
@@ -631,6 +632,7 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string? MetadataConfigPath { get; set; }
 
+    /// <summary>Version metadata files, with one file per app, platform, and locale.</summary>
     public string[] MetadataConfigPaths { get; set; } = Array.Empty<string>();
 
     public string? AppInfoConfigPath { get; set; }

@@ -35,6 +35,9 @@ public sealed class AppStoreConnectReleasePreparationRequest
     /// <summary>Optional localized metadata sync configuration to run after the version exists.</summary>
     public AppStoreConnectVersionMetadataSpec? MetadataSpec { get; set; }
 
+    /// <summary>Additional localized version metadata configurations. Locale values must be unique across this array and MetadataSpec.</summary>
+    public AppStoreConnectVersionMetadataSpec[] MetadataSpecs { get; set; } = Array.Empty<AppStoreConnectVersionMetadataSpec>();
+
     /// <summary>App-level metadata sync configurations to apply once per app.</summary>
     public AppStoreConnectAppInfoMetadataSpec[] AppInfoMetadataSpecs { get; set; } = Array.Empty<AppStoreConnectAppInfoMetadataSpec>();
 
@@ -95,8 +98,11 @@ public sealed class AppStoreConnectReleasePreparationResult
     /// <summary>Screenshot sync result when screenshots were configured.</summary>
     public AppStoreConnectScreenshotSyncResult? Screenshots { get; set; }
 
-    /// <summary>Metadata sync result when metadata was configured.</summary>
+    /// <summary>First metadata sync result, retained for single-localization callers. MetadataResults contains every locale.</summary>
     public AppStoreConnectVersionMetadataSyncResult? Metadata { get; set; }
+
+    /// <summary>Version metadata sync results for every configured locale, in configuration order.</summary>
+    public AppStoreConnectVersionMetadataSyncResult[] MetadataResults { get; set; } = Array.Empty<AppStoreConnectVersionMetadataSyncResult>();
 
     /// <summary>App-level metadata sync results when App Information metadata was configured.</summary>
     public AppStoreConnectAppInfoMetadataSyncResult[] AppInfoMetadataResults { get; set; } = Array.Empty<AppStoreConnectAppInfoMetadataSyncResult>();

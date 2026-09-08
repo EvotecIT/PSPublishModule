@@ -2312,7 +2312,7 @@ internal sealed partial class PowerForgeReleaseService
             (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)?>();
         var metadataByApp = new Dictionary<
             PowerForgeAppleAppReleaseTargetPlan,
-            (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)?>();
+            (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[]>();
         var resumedByApp = new Dictionary<PowerForgeAppleAppReleaseTargetPlan, bool>();
         var governancePlansByAppId = new Dictionary<string, AppStoreConnectGovernancePlan>(StringComparer.OrdinalIgnoreCase);
         var preflightAttempted = new HashSet<PowerForgeAppleAppReleaseTargetPlan>();
@@ -2420,18 +2420,18 @@ internal sealed partial class PowerForgeReleaseService
                 if (plan.SyncScreenshots && matchingScreenshotSpec is not null)
                     ValidateAppleScreenshotPreflight(matchingScreenshotSpec.Value, plan.SourceCommit);
 
-                var matchingMetadataSpec = plan.SyncMetadata &&
+                var matchingMetadataSpecs = plan.SyncMetadata &&
                                            ShouldRunAppleShipAppStoreStep(plan, app) &&
                                            app.DistributionRoute == AppleDistributionRoute.AppStore
-                    ? ResolveMatchingMetadataSpec(
+                    ? ResolveMatchingMetadataSpecs(
                         metadataSpecs,
                         app,
                         valuesByApp[app].MarketingVersion,
                         required: true)
-                    : null;
-                metadataByApp[app] = matchingMetadataSpec;
-                if (matchingMetadataSpec is not null)
-                    ValidateAppleMetadataPreflight(matchingMetadataSpec.Value);
+                    : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
+                metadataByApp[app] = matchingMetadataSpecs;
+                foreach (var matchingMetadataSpec in matchingMetadataSpecs)
+                    ValidateAppleMetadataPreflight(matchingMetadataSpec);
 
                 if (plan.CheckGovernance &&
                     UsesAppStoreConnect(app) &&
@@ -2750,7 +2750,7 @@ internal sealed partial class PowerForgeReleaseService
                     ? valuesByApp[app]
                     : (MarketingVersion: string.Empty, BuildNumber: string.Empty);
                 var matchingScreenshotSpec = screenshotsByApp[app];
-                var matchingMetadataSpec = metadataByApp[app];
+                var matchingMetadataSpecs = metadataByApp[app];
                 result.Distribution = _prepareAppleDistribution(new AppStoreConnectReleasePreparationRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -2762,7 +2762,7 @@ internal sealed partial class PowerForgeReleaseService
                     SelectBuild = plan.PrepareDistribution && plan.SelectBuildForDistribution,
                     RequireValidBuild = !plan.AllowUnprocessedDistributionBuild,
                     ScreenshotSpec = plan.SyncScreenshots ? matchingScreenshotSpec?.Spec : null,
-                    MetadataSpec = matchingMetadataSpec?.Spec,
+                    MetadataSpecs = matchingMetadataSpecs.Select(static value => value.Spec).ToArray(),
                     AppInfoMetadataSpecs = appInfoMetadataSpecs,
                     ReplaceScreenshots = plan.ReplaceScreenshots,
                     ExpectedSourceCommit = plan.SourceCommit,
@@ -2783,9 +2783,7 @@ internal sealed partial class PowerForgeReleaseService
                         }
                         : null,
                     BaseDirectory = matchingScreenshotSpec is null
-                        ? matchingMetadataSpec is null
-                            ? plan.ProjectRoot
-                            : Path.GetDirectoryName(matchingMetadataSpec.Value.ConfigPath) ?? plan.ProjectRoot
+                        ? plan.ProjectRoot
                         : Path.GetDirectoryName(matchingScreenshotSpec.Value.ConfigPath) ?? plan.ProjectRoot
                 });
                 if (appInfoMetadataSpecs.Length > 0)
@@ -3127,25 +3125,6 @@ internal sealed partial class PowerForgeReleaseService
             .ToArray();
     }
 
-    private static (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[] LoadAppleMetadataSpecs(PowerForgeAppleReleasePlan plan)
-    {
-        var paths = new List<string>();
-        if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath))
-            paths.Add(plan.MetadataConfigPath!);
-        paths.AddRange(plan.MetadataConfigPaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
-
-        return paths
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(path =>
-            {
-                var json = ReadApprovedMutationInputText(plan, path);
-                var spec = JsonSerializer.Deserialize<AppStoreConnectVersionMetadataSpec>(json, CreateJsonOptions())
-                    ?? throw new InvalidOperationException($"Unable to deserialize App Store version metadata config: {path}");
-                return (spec, path);
-            })
-            .ToArray();
-    }
-
     private static Dictionary<string, AppStoreConnectGovernanceSpec> LoadAppleGovernanceSpecs(PowerForgeAppleReleasePlan plan)
     {
         var paths = new List<string>();
@@ -3182,21 +3161,6 @@ internal sealed partial class PowerForgeReleaseService
             .Distinct(StringComparer.OrdinalIgnoreCase);
         throw new InvalidOperationException(
             $"Screenshot preflight failed for '{configured.ConfigPath}': {string.Join(" ", messages)}");
-    }
-
-    private static void ValidateAppleMetadataPreflight(
-        (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath) configured)
-    {
-        if (string.IsNullOrWhiteSpace(configured.Spec.Locale))
-        {
-            throw new InvalidOperationException(
-                $"App Store version metadata config must declare Locale: {configured.ConfigPath}");
-        }
-        if (configured.Spec.Metadata is null)
-        {
-            throw new InvalidOperationException(
-                $"App Store version metadata config must declare a Metadata object: {configured.ConfigPath}");
-        }
     }
 
     private static (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)? ResolveMatchingScreenshotSpec(
@@ -3249,40 +3213,6 @@ internal sealed partial class PowerForgeReleaseService
             ScreenshotSets = source.ScreenshotSets,
             Quality = source.Quality
         };
-
-    private static (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)? ResolveMatchingMetadataSpec(
-        (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[] specs,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion,
-        bool required = false)
-    {
-        var matches = specs
-            .Where(candidate => MetadataSpecMatches(candidate.Spec, app, marketingVersion))
-            .ToArray();
-        if (matches.Length > 1)
-            throw new InvalidOperationException($"Multiple App Store metadata configs match Apple app '{app.Name}' version '{marketingVersion}' platform '{app.Platform}'.");
-        if (matches.Length == 0 && required)
-        {
-            throw new InvalidOperationException(
-                $"No App Store metadata config matches Apple app '{app.Name}' " +
-                $"(AppStoreConnectAppId '{app.AppStoreConnectAppId}', platform '{app.Platform}', version '{marketingVersion}').");
-        }
-
-        return matches.Length == 0 ? null : matches[0];
-    }
-
-    private static bool MetadataSpecMatches(
-        AppStoreConnectVersionMetadataSpec spec,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion)
-    {
-        var appIdMatches = string.IsNullOrWhiteSpace(spec.AppId) ||
-                           string.Equals(spec.AppId.Trim(), app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase);
-        var specVersionString = string.IsNullOrWhiteSpace(spec.VersionString) ? null : spec.VersionString!.Trim();
-        var versionMatches = (spec.UseReleaseVersion && specVersionString is null) ||
-                             string.Equals(specVersionString, marketingVersion, StringComparison.OrdinalIgnoreCase);
-        return appIdMatches && versionMatches && spec.Platform == app.Platform;
-    }
 
     private static string NormalizeAppleArchiveProjectPath(string projectPath, string appName)
     {
@@ -5720,7 +5650,7 @@ internal sealed partial class PowerForgeReleaseService
                     result.Distribution.SelectedBuild,
                     result.Distribution.PreviousBuildId,
                     ScreenshotSetCount = result.Distribution.Screenshots?.ScreenshotSets.Length ?? 0,
-                    MetadataUpdatedFields = result.Distribution.Metadata?.UpdatedFields ?? Array.Empty<string>(),
+                    MetadataUpdatedFields = result.Distribution.MetadataResults.SelectMany(static value => value.UpdatedFields).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
                     AppInfoMetadataUpdatedFields = result.Distribution.AppInfoMetadataResults
                         .SelectMany(metadata => metadata.UpdatedFields)
                         .Distinct(StringComparer.OrdinalIgnoreCase)

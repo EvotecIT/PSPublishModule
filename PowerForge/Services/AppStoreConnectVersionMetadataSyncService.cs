@@ -36,23 +36,25 @@ public sealed class AppStoreConnectVersionMetadataSyncService
         if (string.IsNullOrWhiteSpace(spec.Locale))
             throw new ArgumentException("Spec.Locale is required.", nameof(request));
 
+        if (spec.Metadata is null || AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata).Length == 0)
+            throw new ArgumentException("Spec.Metadata must supply at least one metadata field.", nameof(request));
+
         var version = await ResolveVersionAsync(spec, cancellationToken).ConfigureAwait(false);
         var localization = (await _client.GetVersionLocalizationsAsync(
             version.Id,
             spec.Locale,
             limit: 10,
-            cancellationToken).ConfigureAwait(false)).FirstOrDefault()
-            ?? throw new InvalidOperationException($"Localization '{spec.Locale}' was not found for App Store version '{version.Id}'.");
+            cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
-        var updated = await _client.UpdateVersionLocalizationAsync(
-            localization.Id,
-            spec.Metadata,
-            cancellationToken).ConfigureAwait(false);
+        var updated = localization is null
+            ? await _client.CreateVersionLocalizationAsync(version.Id, spec.Locale, spec.Metadata, cancellationToken).ConfigureAwait(false)
+            : await _client.UpdateVersionLocalizationAsync(localization.Id, spec.Metadata, cancellationToken).ConfigureAwait(false);
 
         return new AppStoreConnectVersionMetadataSyncResult
         {
             Version = version,
             Before = localization,
+            CreatedLocalization = localization is null,
             After = updated,
             UpdatedFields = AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata)
         };
