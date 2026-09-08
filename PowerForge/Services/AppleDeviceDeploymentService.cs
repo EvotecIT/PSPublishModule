@@ -401,6 +401,9 @@ public sealed partial class AppleDeviceDeploymentService
                 "CONFIGURATION_BUILD_DIR=$(SYMROOT)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)");
         }
 
+        if (request.OptimizeSwift)
+            args.Add("SWIFT_OPTIMIZATION_LEVEL=-O");
+
         args.Add("build");
         args.AddRange(AppleBuildProvenance.AppendXcodeBuildSetting(
             request.AdditionalArguments,

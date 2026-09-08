@@ -16,6 +16,8 @@ internal sealed class AppleLocalDeploymentCliResult
 
     public string Configuration { get; set; } = "Debug";
 
+    public bool OptimizeSwift { get; set; }
+
     public string? Profile { get; set; }
 
     public string ProjectPath { get; set; } = string.Empty;

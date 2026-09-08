@@ -150,6 +150,12 @@ Start-AppleApp `
     -Device 'EvoPhone'
 ```
 
+Set `AppleApps.LocalDeployment.OptimizeSwift` to `true` to build local device apps with
+Swift `-O` optimization while retaining the selected configuration, including
+Debug compilation conditions. The option defaults to `false` and is recorded in
+the deployment plan and result. It applies to Swift package targets as well as
+the app through an explicit Xcode build setting.
+
 ## Binary Upload Flow
 
 ```powershell

@@ -150,6 +150,7 @@ internal static partial class Program
                 Platform = requestedPlatform,
                 ArchiveVariant = selectedTarget.ArchiveVariant,
                 Configuration = configuration,
+                OptimizeSwift = local.OptimizeSwift,
                 Profile = profile?.Name,
                 ProjectPath = projectPath,
                 Scheme = scheme,
@@ -221,6 +222,7 @@ internal static partial class Program
                 Scheme = cliResult.Scheme,
                 ProductName = selectedTarget.ProductName,
                 Configuration = cliResult.Configuration,
+                OptimizeSwift = cliResult.OptimizeSwift,
                 Platform = ApplePlatform.macOS,
                 ArchiveVariant = selectedTarget.ArchiveVariant,
                 DerivedDataPath = cliResult.DerivedDataPath,
@@ -261,6 +263,7 @@ internal static partial class Program
             Scheme = cliResult.Scheme,
             ProductName = selectedTarget.ProductName,
             Configuration = cliResult.Configuration,
+            OptimizeSwift = cliResult.OptimizeSwift,
             Platform = selectedTarget.Platform,
             ArchiveVariant = selectedTarget.ArchiveVariant,
             Device = device,
@@ -484,6 +487,8 @@ internal static partial class Program
         }
 
         logger.Info($"Target: {result.Target} ({result.Platform}, {result.Configuration})");
+        if (result.OptimizeSwift)
+            logger.Info("Swift optimization: -O (configuration retained)");
         if (!string.IsNullOrWhiteSpace(result.Profile))
             logger.Info($"Profile: {result.Profile}");
         if (!string.IsNullOrWhiteSpace(result.SourceRevision))

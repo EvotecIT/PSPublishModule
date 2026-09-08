@@ -66,6 +66,9 @@ public class AppleAppBuildRequest
     /// <summary>Build configuration, typically Debug for local device deployment.</summary>
     public string Configuration { get; set; } = "Debug";
 
+    /// <summary>Applies Swift optimization to every target without changing configuration or conditional compilation.</summary>
+    public bool OptimizeSwift { get; set; }
+
     /// <summary>Apple platform used to resolve the product directory.</summary>
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
