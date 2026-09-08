@@ -57,7 +57,7 @@ internal sealed partial class PowerForgeReleaseService
             if (!string.IsNullOrWhiteSpace(plan.ScreenshotConfigPath)) paths.Add(plan.ScreenshotConfigPath!);
             paths.AddRange(plan.ScreenshotConfigPaths);
         }
-        if (plan.SyncMetadata)
+        if (RequiresAppleMetadataSpecs(plan))
         {
             if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath)) paths.Add(plan.MetadataConfigPath!);
             paths.AddRange(plan.MetadataConfigPaths);
@@ -138,8 +138,11 @@ internal sealed partial class PowerForgeReleaseService
                                (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
             ? LoadAppleScreenshotSpecs(plan)
             : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
+        var metadataSpecs = RequiresAppleMetadataSpecs(plan)
+            ? LoadAppleMetadataSpecs(plan)
+            : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
         var targets = plan.Apps
-            .Select(app => CreateApplePlanTarget(plan, app, versioning, screenshotSpecs))
+            .Select(app => CreateApplePlanTarget(plan, app, versioning, screenshotSpecs, metadataSpecs))
             .ToArray();
         var selectedScreenshotSpecs = ResolveSelectedAppleScreenshotSpecs(plan, screenshotSpecs);
         var mutationInputs = CreateAppleMutationInputEvidence(plan, selectedScreenshotSpecs);
@@ -175,7 +178,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
         PowerForgeAppleVersionReceipt? versioning,
-        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] screenshotSpecs)
+        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] screenshotSpecs,
+        (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[] metadataSpecs)
     {
         var target = new PowerForgeAppleReleaseTargetReceipt
         {
@@ -255,24 +259,23 @@ internal sealed partial class PowerForgeReleaseService
             var matchingScreenshotSpecs = ResolveMatchingScreenshotSpecs(screenshotSpecs, app,
                 values.MarketingVersion, required: screenshotSpecs.Length > 0);
             var boundScreenshotSpecs = matchingScreenshotSpecs
-                .Select(value => BindScreenshotSpec(value.Spec, app, values.MarketingVersion)).ToArray();
-            var readiness = _checkAppleReleaseReadiness(
-                CreateAppStoreConnectCredential(plan),
-                new AppStoreConnectReleaseReadinessRequest
-                {
-                    AppId = app.AppStoreConnectAppId!,
-                    VersionString = values.MarketingVersion,
-                    BuildNumber = checkReadiness ? values.BuildNumber : null,
-                    Platform = app.Platform,
-                    Locale = boundScreenshotSpecs.FirstOrDefault()?.Locale ?? "en-US",
-                    ScreenshotSpec = boundScreenshotSpecs.Length == 1 ? boundScreenshotSpecs[0] : null,
-                    ScreenshotSpecs = boundScreenshotSpecs.Length > 1 ? boundScreenshotSpecs : Array.Empty<AppStoreConnectScreenshotSyncSpec>(),
-                    RequireSelectedBuild = checkReadiness,
-                    RequireValidBuild = checkReadiness,
-                    RequireDescription = checkReadiness,
-                    RequireKeywords = checkReadiness,
-                    RequireSupportUrl = checkReadiness
-                });
+                .Select(value => (Spec: BindScreenshotSpec(value.Spec, app, values.MarketingVersion), value.ConfigPath)).ToArray();
+            var matchingMetadataSpecs = checkReadiness
+                ? ResolveMatchingMetadataSpecs(metadataSpecs, app, values.MarketingVersion, required: metadataSpecs.Length > 0)
+                : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
+            foreach (var configured in matchingMetadataSpecs)
+                ValidateAppleMetadataPreflight(configured);
+            var readinessRequest = CreateAppleReadinessRequest(matchingMetadataSpecs, boundScreenshotSpecs);
+            readinessRequest.AppId = app.AppStoreConnectAppId!;
+            readinessRequest.VersionString = values.MarketingVersion;
+            readinessRequest.BuildNumber = checkReadiness ? values.BuildNumber : null;
+            readinessRequest.Platform = app.Platform;
+            readinessRequest.RequireSelectedBuild = checkReadiness;
+            readinessRequest.RequireValidBuild = checkReadiness;
+            readinessRequest.RequireDescription = checkReadiness;
+            readinessRequest.RequireKeywords = checkReadiness;
+            readinessRequest.RequireSupportUrl = checkReadiness;
+            var readiness = _checkAppleReleaseReadiness(CreateAppStoreConnectCredential(plan), readinessRequest);
             target.ScreenshotCount = readiness.ScreenshotSets.Sum(static set => set.Count);
             target.ScreenshotDeliveryStates = readiness.ScreenshotSets
                 .SelectMany(static set => set.AssetDeliveryStates)
@@ -358,7 +361,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             configuredInputs.AddRange(screenshotSpecs.Select(static configured => configured.ConfigPath));
         }
-        if (plan.SyncMetadata)
+        if (RequiresAppleMetadataSpecs(plan))
         {
             if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath))
                 configuredInputs.Add(plan.MetadataConfigPath!);

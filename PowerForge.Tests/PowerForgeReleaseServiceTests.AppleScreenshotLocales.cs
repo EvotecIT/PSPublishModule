@@ -32,6 +32,8 @@ public partial class PowerForgeReleaseServiceTests
                 """);
             var polishConfigPath = Path.Combine(root, "screenshots-pl.json");
             File.WriteAllText(polishConfigPath, File.ReadAllText(screenshotConfigPath).Replace("en-US", "pl"));
+            var metadataPath = Path.Combine(root, "metadata-fi.json");
+            File.WriteAllText(metadataPath, """{"appId":"app-1","platform":"iOS","useReleaseVersion":true,"locale":"fi","metadata":{"description":"Suomi"}}""");
             var requests = new List<AppStoreConnectReleasePreparationRequest>();
 
             var service = new PowerForgeReleaseService(
@@ -67,6 +69,8 @@ public partial class PowerForgeReleaseServiceTests
                         Archive = false,
                         CheckReleaseReadiness = true,
                         SyncScreenshots = false,
+                        SyncMetadata = false,
+                        MetadataConfigPaths = [metadataPath],
                         ScreenshotConfigPaths = localeCount == 1 ? new[] { screenshotConfigPath } : new[] { screenshotConfigPath, polishConfigPath },
                         AppStoreConnectApiKeyPath = keyPath,
                         AppStoreConnectApiKeyId = "ABC123DEFG",
@@ -94,7 +98,10 @@ public partial class PowerForgeReleaseServiceTests
             Assert.True(request.CheckReadiness);
             Assert.Null(request.ScreenshotSpec);
             Assert.Empty(request.ScreenshotMappings);
+            Assert.Empty(request.MetadataSpecs);
+            Assert.Null(request.MetadataSpec);
             Assert.NotNull(request.ReadinessRequest);
+            Assert.Equal(new[] { "fi" }, request.ReadinessRequest.MetadataLocales);
             var specs = localeCount == 1 ? new[] { request.ReadinessRequest.ScreenshotSpec! } : request.ReadinessRequest.ScreenshotSpecs;
             Assert.Equal(localeCount, specs.Length);
             Assert.Equal(localeCount == 1 ? new[] { "en-US" } : new[] { "en-US", "pl" }, specs.Select(spec => spec.Locale));
