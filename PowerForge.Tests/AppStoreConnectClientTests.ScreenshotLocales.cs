@@ -95,12 +95,9 @@ public sealed partial class AppStoreConnectClientTests
     [Fact]
     public async Task ReleaseReadiness_ChecksEveryConfiguredScreenshotLocale()
     {
-        var responses = new List<SequenceResponse>();
+        var responses = new List<SequenceResponse> { MetadataReadinessVersion() };
         foreach (var locale in new[] { "en-US", "pl" })
-        {
-            responses.Add(new(HttpStatusCode.OK, """{"data":[{"id":"version-1","type":"appStoreVersions","attributes":{"versionString":"1.0.0","platform":"IOS"}}]}"""));
             responses.AddRange(ExistingLocaleScreenshotResponses(locale));
-        }
         var handler = new SequenceHandler(responses.ToArray());
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);

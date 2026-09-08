@@ -23,13 +23,14 @@ public sealed partial class AppStoreConnectReleaseReadinessService
         if (specs.Length == 0 && (request.RequireScreenshots || locales.Count == 0))
             locales.Insert(0, request.Locale.Trim());
         var selected = locales.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var common = await ReadCommonStateAsync(request, cancellationToken).ConfigureAwait(false);
         var results = new List<AppStoreConnectReleaseReadinessResult>();
         foreach (var locale in selected)
         {
             var spec = specs.FirstOrDefault(value => string.Equals(value.Locale.Trim(), locale, StringComparison.OrdinalIgnoreCase));
             var requireScreenshots = request.RequireScreenshots && (spec is not null ||
                 (specs.Length == 0 && string.Equals(locale, request.Locale.Trim(), StringComparison.OrdinalIgnoreCase)));
-            results.Add(await CheckAsync(request.ForLocale(locale, spec, requireScreenshots), cancellationToken).ConfigureAwait(false));
+            results.Add(await CheckLocaleAsync(request.ForLocale(locale, spec, requireScreenshots), common, cancellationToken).ConfigureAwait(false));
         }
 
         var aggregate = results[0];

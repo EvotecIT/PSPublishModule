@@ -34,6 +34,13 @@ public sealed partial class AppStoreConnectReleaseReadinessService
         if ((request.MetadataLocales?.Length ?? 0) > 0 || (request.ScreenshotSpecs?.Length ?? 0) > 0)
             return await CheckLocalesAsync(request, cancellationToken).ConfigureAwait(false);
 
+        var common = await ReadCommonStateAsync(request, cancellationToken).ConfigureAwait(false);
+        return await CheckLocaleAsync(request, common, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AppStoreConnectReleaseReadinessResult> ReadCommonStateAsync(
+        AppStoreConnectReleaseReadinessRequest request, CancellationToken cancellationToken)
+    {
         var checks = new List<AppStoreConnectReleaseReadinessCheck>();
         var version = (await _client.GetVersionsAsync(
             request.AppId,
@@ -47,8 +54,6 @@ public sealed partial class AppStoreConnectReleaseReadinessService
 
         AppStoreConnectBuildInfo? build = null;
         string? selectedBuildId = null;
-        AppStoreConnectVersionLocalizationInfo? localization = null;
-        var screenshotReadiness = Array.Empty<AppStoreConnectReleaseScreenshotSetReadiness>();
 
         if (version is not null)
         {
@@ -82,7 +87,26 @@ public sealed partial class AppStoreConnectReleaseReadinessService
                         : $"Build '{request.BuildNumber}' is not selected for Distribution.");
                 }
             }
+        }
+        return new AppStoreConnectReleaseReadinessResult
+        {
+            Version = version, Build = build, SelectedBuildId = selectedBuildId, Checks = checks.ToArray()
+        };
+    }
 
+    private async Task<AppStoreConnectReleaseReadinessResult> CheckLocaleAsync(
+        AppStoreConnectReleaseReadinessRequest request,
+        AppStoreConnectReleaseReadinessResult common,
+        CancellationToken cancellationToken)
+    {
+        var checks = common.Checks.ToList();
+        var version = common.Version;
+        var build = common.Build;
+        var selectedBuildId = common.SelectedBuildId;
+        AppStoreConnectVersionLocalizationInfo? localization = null;
+        var screenshotReadiness = Array.Empty<AppStoreConnectReleaseScreenshotSetReadiness>();
+        if (version is not null)
+        {
             localization = (await _client.GetVersionLocalizationsAsync(
                 version.Id,
                 request.Locale,

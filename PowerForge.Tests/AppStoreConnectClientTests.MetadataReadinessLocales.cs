@@ -13,7 +13,7 @@ public sealed partial class AppStoreConnectClientTests
     {
         var responses = MetadataLocaleReadinessResponses("en-US", "English", screenshots: true)
             .Concat(MetadataLocaleReadinessResponses("pl", state == "missing-description" ? null : "Polski",
-                missing: state == "missing-locale")).ToArray();
+                missing: state == "missing-locale").Skip(1)).ToArray();
         var handler = new SequenceHandler(responses);
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -33,7 +33,7 @@ public sealed partial class AppStoreConnectClientTests
             Assert.Equal(new[] { "en-US", "pl" }, result.Localizations.Select(value => value.Locale));
             Assert.Contains(result.Checks, check => check.Name == "pl.metadata.description" && check.Passed == (state == "ready"));
         }
-        Assert.Equal(6, handler.Methods.Count);
+        Assert.Equal(5, handler.Methods.Count);
         Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
     }
 
@@ -66,13 +66,10 @@ public sealed partial class AppStoreConnectClientTests
             MetadataReadinessLocalization("pl", "Polski"), MetadataReadinessLocalization("pl", "Polski", single: true)
         };
         var expectedLocales = new[] { primaryLocale, "en-US", "pl" }.Distinct().ToArray();
+        responses.Add(MetadataReadinessVersion());
+        responses.Add(new(HttpStatusCode.OK, """{"data":[{"id":"build-1","type":"builds","attributes":{"version":"5","processingState":"VALID"},"relationships":{"preReleaseVersion":{"data":{"id":"train-1","type":"preReleaseVersions"}}}}],"included":[{"id":"train-1","type":"preReleaseVersions","attributes":{"version":"1.0.0","platform":"IOS"}}]}"""));
         foreach (var locale in expectedLocales)
-        {
-            // Preparation fills BuildNumber even though this check does not require a valid/selected build.
-            responses.Add(MetadataReadinessVersion());
-            responses.Add(new(HttpStatusCode.OK, """{"data":[{"id":"build-1","type":"builds","attributes":{"version":"5","processingState":"VALID"},"relationships":{"preReleaseVersion":{"data":{"id":"train-1","type":"preReleaseVersions"}}}}],"included":[{"id":"train-1","type":"preReleaseVersions","attributes":{"version":"1.0.0","platform":"IOS"}}]}"""));
             responses.Add(MetadataReadinessLocalization(locale, locale == "en-US" ? "English" : "Polski"));
-        }
         var handler = new SequenceHandler(responses.ToArray());
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -94,10 +91,10 @@ public sealed partial class AppStoreConnectClientTests
     {
         var build = new SequenceResponse(HttpStatusCode.OK, """{"data":[{"id":"build-1","type":"builds","attributes":{"version":"5","processingState":"VALID"},"relationships":{"preReleaseVersion":{"data":{"id":"train-1","type":"preReleaseVersions"}}}}],"included":[{"id":"train-1","type":"preReleaseVersions","attributes":{"version":"1.0.0","platform":"IOS"}}]}""");
         var responses = new List<SequenceResponse> { MetadataReadinessVersion(), build };
+        responses.Add(MetadataReadinessVersion());
+        responses.Add(build);
         foreach (var locale in new[] { "en-US", "pl" })
         {
-            responses.Add(MetadataReadinessVersion());
-            responses.Add(build);
             responses.AddRange(MetadataLocaleReadinessResponses(locale, locale == "en-US" ? "English" : null,
                 screenshots: locale == "en-US").Skip(1));
         }
