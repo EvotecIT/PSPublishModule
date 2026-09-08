@@ -28,6 +28,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo FormatOperator;
             internal readonly MethodInfo UnwrapObjectArgument;
             internal readonly MethodInfo CheckEnumerationInterrupts;
+            internal readonly MethodInfo SuspendStoppingPipeline, RestoreStoppingPipeline;
             internal readonly MethodInfo AppendErrorToVariables;
             internal readonly PropertyInfo NullInvocationResource;
             internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
@@ -51,6 +52,8 @@ namespace PowerForge.Generated.Runtime
                 var state = RequireType(assembly, "System.Management.Automation.SessionStateInternal");
                 var scope = RequireType(assembly, "System.Management.Automation.SessionStateScope");
                 var errors = RequireType(assembly, "System.Management.Automation.ExceptionHandlingOps");
+                SuspendStoppingPipeline = Method(errors, "SuspendStoppingPipeline", true, typeof(bool), context);
+                RestoreStoppingPipeline = Method(errors, "RestoreStoppingPipeline", true, typeof(void), context, typeof(bool));
                 FormatOperator = Method(RequireType(assembly, "System.Management.Automation.StringOps"),
                     "FormatOperator", true, typeof(string), typeof(string), typeof(object));
                 UnwrapObjectArgument = Method(typeof(PSObject), "Base", true, typeof(object), typeof(object));

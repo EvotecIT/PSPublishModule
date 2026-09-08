@@ -2,6 +2,19 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellTypedLowerer
 {
+    private static bool RequiresHostExceptionHandling(PowerShellBoundTryStatement statement,
+        IReadOnlyDictionary<string, LoweringFunctionContext> functions)
+    {
+        if (PowerShellLoopInterruptContract.RequiresContext(statement.Capabilities)) return true;
+        var blocks = new[] { statement.Body }.Concat(statement.Catches.Select(static clause => clause.Body));
+        if (statement.FinallyBlock is not null) blocks = blocks.Append(statement.FinallyBlock);
+        return blocks.SelectMany(PowerShellSemanticAnalyzer.EnumerateStatements)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundInvocationExpression>()
+            .Any(call => functions.TryGetValue(call.Target.StableKey, out var target) && target.RequiresPowerShellStatementErrors);
+    }
+
     private sealed class LoweredNameAllocator
     {
         private readonly HashSet<string> _used;

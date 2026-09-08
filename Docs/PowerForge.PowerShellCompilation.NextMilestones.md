@@ -1,6 +1,6 @@
 # PowerShell compiler: next major milestones
 
-Updated: 2026-09-07.
+Updated: 2026-09-08.
 
 Execution status: M24 is active; M25 and M26 are the next dependency-ordered implementation goals. This tranche includes remediation of existing and newly exposed compiler defects, with complete-workflow qualification across different source styles.
 
@@ -92,6 +92,10 @@ Direct CLR errors inside captured loops preserve partial-output collection when 
 PowerShell-hosted commands can pass a closed Int32/Double value to an Int32 CLR parameter when one overload shape accepts the authored argument count. Bound conversion metadata preserves evaluation of all arguments before conversion, null-receiver precedence, numeric rounding, and native argument-conversion errors. Constructor, static, and instance calls match the selected hosts, including range errors and non-finite values. Competing overloads, wider numeric conversions, and runtime-independent argument conversion remain unqualified. The complete hexadecimal workflow now emits its loop but still retains the NoEnumerate command boundary.
 
 Qualified command hosts now compile `foreach` over statically known IEnumerable and IEnumerator sources. The loop preserves raw element storage, scalar fallback, the final loop-variable value, failure continuation, and authored cleanup. It follows native PowerShell by leaving enumerator disposal to authored code and checks the active host for stopping even when the body emits no output. Captured-loop qualification includes both raw CLR and PowerShell RuntimeException failures during enumerator acquisition, advancement, and value access. This contract requires the PowerShell statement-error host and is not admitted to runtime-free libraries or executables.
+
+Hosted `for`, `while`, `do`, and array/string `foreach` loops also observe stopping before the authored loop body. Conditions and enumerator advancement run first, so empty or completed enumeration skips the body check and a failing MoveNext retains its exception precedence. Original/generated comparisons cover stopping before and during iteration, continue paths, null and empty inputs, current-item reads, captured output, and finally cleanup on the three qualified hosts. Interrupt requirements travel through binding, optimization, and lowering. Supported library and executable loops retain their independent runtime-free contract.
+
+Hosted `finally` blocks suspend pipeline stopping while cleanup runs and restore it afterward, including nested cleanup and inner-loop break/continue. This stopping dependency is distinct from ordinary statement-error writes. Module-local error-state reads remain under qualification after exposing a difference between native script-module and binary-cmdlet session state.
 
 CLR Object arguments now use the loaded host's wrapper conversion after all arguments have been evaluated. Homogeneous hashtable literals retain Hashtable identity through loop input, aliases, and interface conversions. Calls on an open Object receiver remain hosted because their method lookup, wrapper handling, and overload selection are not closed by a static Object signature; statically typed receivers and the existing closed numeric value contract retain their separate support.
 

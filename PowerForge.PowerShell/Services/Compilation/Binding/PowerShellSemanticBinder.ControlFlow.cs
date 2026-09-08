@@ -108,7 +108,8 @@ internal sealed partial class PowerShellSemanticBinder
         else
             MergeSymbolValueStates(symbols, loopSymbols);
         PrepareLoopFlowState(symbols, functions, capabilities, statement.Condition, statement.Body);
-        return new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), kind, condition, body);
+        return new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), kind, condition, body,
+            PowerShellLoopInterruptContract.IsAvailable(capabilities));
     }
 
     private static bool HasPostTestFlowTransfer(StatementBlockAst body)
@@ -149,7 +150,8 @@ internal sealed partial class PowerShellSemanticBinder
         if (statement.Iterator is not null && iterator is null) return null;
         MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
         PrepareLoopFlowState(symbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
-        return new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body);
+        return new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body,
+            PowerShellLoopInterruptContract.IsAvailable(capabilities));
     }
 
     private PowerShellBoundStatement? BindForEachStatement(
@@ -208,6 +210,7 @@ internal sealed partial class PowerShellSemanticBinder
             elementType,
             collection,
             enumerationKind,
-            body);
+            body,
+            checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities));
     }
 }

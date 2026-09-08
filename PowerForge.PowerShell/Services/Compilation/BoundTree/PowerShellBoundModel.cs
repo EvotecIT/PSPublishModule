@@ -158,7 +158,8 @@ internal enum PowerShellRequiredCapability
     PowerShellModuleState = 8192,
     PowerShellModuleStateRead = 16384,
     PowerShellModuleStateWrite = 32768,
-    PowerShellStatementErrors = 65536
+    PowerShellStatementErrors = 65536,
+    PowerShellStopping = 131072
 }
 
 internal enum PowerShellExecutionDispositionKind

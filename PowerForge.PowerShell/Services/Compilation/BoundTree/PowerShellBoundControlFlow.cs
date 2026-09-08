@@ -37,17 +37,21 @@ internal enum PowerShellBoundLoopKind
 
 internal sealed class PowerShellBoundWhileStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundWhileStatement(SourceSpan span, PowerShellBoundLoopKind kind, PowerShellBoundExpression condition, PowerShellBoundBlock body)
-        : base(span, condition.Effects | body.Effects, condition.Capabilities | body.Capabilities)
+    internal PowerShellBoundWhileStatement(SourceSpan span, PowerShellBoundLoopKind kind, PowerShellBoundExpression condition, PowerShellBoundBlock body,
+        bool checkHostInterrupts = false)
+        : base(span, condition.Effects | body.Effects | PowerShellLoopInterruptContract.Effects(checkHostInterrupts),
+            condition.Capabilities | body.Capabilities | PowerShellLoopInterruptContract.Capabilities(checkHostInterrupts))
     {
         Kind = kind;
         Condition = condition;
         Body = body;
+        CheckHostInterrupts = checkHostInterrupts;
     }
 
     internal PowerShellBoundLoopKind Kind { get; }
     internal PowerShellBoundExpression Condition { get; }
     internal PowerShellBoundBlock Body { get; }
+    internal bool CheckHostInterrupts { get; }
 }
 
 internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
@@ -57,29 +61,32 @@ internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
         PowerShellBoundMutationExpression? initializer,
         PowerShellBoundExpression? condition,
         PowerShellBoundMutationExpression? iterator,
-        PowerShellBoundBlock body)
+        PowerShellBoundBlock body,
+        bool checkHostInterrupts = false)
         : base(
             span,
             PowerShellSemanticEffect.Mutation |
             (initializer?.Effects ?? PowerShellSemanticEffect.None) |
             (condition?.Effects ?? PowerShellSemanticEffect.None) |
             (iterator?.Effects ?? PowerShellSemanticEffect.None) |
-            body.Effects,
+            body.Effects | PowerShellLoopInterruptContract.Effects(checkHostInterrupts),
             (initializer?.Capabilities ?? PowerShellRequiredCapability.None) |
             (condition?.Capabilities ?? PowerShellRequiredCapability.None) |
             (iterator?.Capabilities ?? PowerShellRequiredCapability.None) |
-            body.Capabilities)
+            body.Capabilities | PowerShellLoopInterruptContract.Capabilities(checkHostInterrupts))
     {
         Initializer = initializer;
         Condition = condition;
         Iterator = iterator;
         Body = body;
+        CheckHostInterrupts = checkHostInterrupts;
     }
 
     internal PowerShellBoundMutationExpression? Initializer { get; }
     internal PowerShellBoundExpression? Condition { get; }
     internal PowerShellBoundMutationExpression? Iterator { get; }
     internal PowerShellBoundBlock Body { get; }
+    internal bool CheckHostInterrupts { get; }
 }
 
 internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
@@ -92,14 +99,16 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         PowerShellForEachEnumerationKind enumerationKind,
         PowerShellBoundBlock body,
         bool declareVariable = false,
-        PowerShellBoundExpression? nullCollectionElement = null)
+        PowerShellBoundExpression? nullCollectionElement = null,
+        bool checkHostInterrupts = false)
         : base(
             span,
             PowerShellSemanticEffect.Mutation | collection.Effects | body.Effects | (nullCollectionElement?.Effects ?? PowerShellSemanticEffect.None) |
-                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.NonSuccessStream : PowerShellSemanticEffect.None),
+                PowerShellLoopInterruptContract.Effects(checkHostInterrupts || enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable) |
+                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable ? PowerShellSemanticEffect.NonSuccessStream : PowerShellSemanticEffect.None),
             collection.Capabilities | body.Capabilities | (nullCollectionElement?.Capabilities ?? PowerShellRequiredCapability.None) |
-                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable
-                    ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes : PowerShellRequiredCapability.None))
+                PowerShellLoopInterruptContract.Capabilities(checkHostInterrupts || enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable) |
+                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Variable = variable;
         ElementType = elementType;
@@ -108,6 +117,7 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         Body = body;
         DeclareVariable = declareVariable;
         NullCollectionElement = nullCollectionElement;
+        CheckHostInterrupts = checkHostInterrupts || enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable;
     }
 
     internal PowerShellSymbolId Variable { get; }
@@ -117,6 +127,7 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
     internal PowerShellBoundBlock Body { get; }
     internal bool DeclareVariable { get; }
     internal PowerShellBoundExpression? NullCollectionElement { get; }
+    internal bool CheckHostInterrupts { get; }
 }
 
 internal sealed class PowerShellBoundSwitchClause
@@ -204,20 +215,24 @@ internal sealed class PowerShellBoundTryStatement : PowerShellBoundStatement
         SourceSpan span,
         PowerShellBoundBlock body,
         PowerShellBoundCatchClause[] catches,
-        PowerShellBoundBlock? finallyBlock)
+        PowerShellBoundBlock? finallyBlock,
+        bool suspendHostStopping = false)
         : base(
             span,
             catches.Aggregate(body.Effects | (finallyBlock?.Effects ?? PowerShellSemanticEffect.None), static (effects, clause) => effects | clause.Body.Effects),
-            catches.Aggregate(body.Capabilities | (finallyBlock?.Capabilities ?? PowerShellRequiredCapability.None), static (capabilities, clause) => capabilities | clause.Body.Capabilities))
+            catches.Aggregate(body.Capabilities | (finallyBlock?.Capabilities ?? PowerShellRequiredCapability.None) |
+                PowerShellLoopInterruptContract.Capabilities(suspendHostStopping), static (capabilities, clause) => capabilities | clause.Body.Capabilities))
     {
         Body = body;
         Catches = catches;
         FinallyBlock = finallyBlock;
+        SuspendHostStopping = suspendHostStopping;
     }
 
     internal PowerShellBoundBlock Body { get; }
     internal PowerShellImmutableArray<PowerShellBoundCatchClause> Catches { get; }
     internal PowerShellBoundBlock? FinallyBlock { get; }
+    internal bool SuspendHostStopping { get; }
 }
 
 internal sealed class PowerShellBoundBreakStatement : PowerShellBoundStatement

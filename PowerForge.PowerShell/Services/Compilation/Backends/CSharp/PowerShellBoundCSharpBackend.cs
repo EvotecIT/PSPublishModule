@@ -258,12 +258,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 if (loop.Kind == PowerShellLoweredLoopKind.While)
                 {
                     builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
-                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap, loop.CheckHostInterrupts);
                 }
                 else
                 {
                     builder.Append(prefix).AppendLine("do");
-                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap, loop.CheckHostInterrupts);
                     builder.Append(prefix).Append("while (");
                     if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append("!(");
                     builder.Append(EmitExpression(loop.Condition));
@@ -278,7 +278,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 var condition = loop.Condition is null ? "true" : EmitExpression(loop.Condition);
                 var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap, loop.CheckHostInterrupts);
                 return;
             case PowerShellLoweredForEachStatement loop:
                 EmitForEach(builder, loop, indent, getTemporaryIdentifier, discardHelper, sourceMap);

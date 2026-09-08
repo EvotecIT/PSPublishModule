@@ -15,12 +15,12 @@ internal static class PowerShellBoundStatementRewriter
                 conditional.Clauses.Select(clause => new PowerShellBoundConditionalClause(clause.Condition, rewriteBlock(clause.Body))).ToArray(),
                 conditional.ElseBlock is null ? null : rewriteBlock(conditional.ElseBlock)),
             PowerShellBoundWhileStatement loop => new PowerShellBoundWhileStatement(
-                loop.Span, loop.Kind, loop.Condition, rewriteBlock(loop.Body)),
+                loop.Span, loop.Kind, loop.Condition, rewriteBlock(loop.Body), loop.CheckHostInterrupts),
             PowerShellBoundForStatement loop => new PowerShellBoundForStatement(
-                loop.Span, loop.Initializer, loop.Condition, loop.Iterator, rewriteBlock(loop.Body)),
+                loop.Span, loop.Initializer, loop.Condition, loop.Iterator, rewriteBlock(loop.Body), loop.CheckHostInterrupts),
             PowerShellBoundForEachStatement loop => new PowerShellBoundForEachStatement(
                 loop.Span, loop.Variable, loop.ElementType, loop.Collection, loop.EnumerationKind,
-                rewriteBlock(loop.Body), loop.DeclareVariable, loop.NullCollectionElement),
+                rewriteBlock(loop.Body), loop.DeclareVariable, loop.NullCollectionElement, loop.CheckHostInterrupts),
             PowerShellBoundSwitchStatement selection => new PowerShellBoundSwitchStatement(
                 selection.Span, selection.Value,
                 selection.Clauses.Select(clause => new PowerShellBoundSwitchClause(clause.Value, rewriteBlock(clause.Body))).ToArray(),
@@ -29,7 +29,7 @@ internal static class PowerShellBoundStatementRewriter
             PowerShellBoundTryStatement attempted => new PowerShellBoundTryStatement(
                 attempted.Span, rewriteBlock(attempted.Body),
                 attempted.Catches.Select(clause => new PowerShellBoundCatchClause(clause.ExceptionTypes.ToArray(), rewriteBlock(clause.Body))).ToArray(),
-                attempted.FinallyBlock is null ? null : rewriteBlock(attempted.FinallyBlock)),
+                attempted.FinallyBlock is null ? null : rewriteBlock(attempted.FinallyBlock), attempted.SuspendHostStopping),
             _ => statement
         };
 }

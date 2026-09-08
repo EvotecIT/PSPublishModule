@@ -198,7 +198,7 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is TryStatementAst tryStatement)
         {
-            if (tryStatement.Finally?.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst, searchNestedScriptBlocks: true).Any() == true)
+            if (tryStatement.Finally is not null && PowerShellControlFlowBindingPolicy.HasTransferLeavingFinally(tryStatement.Finally))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2309", "Typed finally blocks cannot alter enclosing return, break, or continue control flow.", PowerShellSourceParser.GetSpan(document, tryStatement.Finally.Extent)));
                 return null;
@@ -259,7 +259,8 @@ internal sealed partial class PowerShellSemanticBinder
                 if (finallyBlock is null) return null;
             }
             MergeSymbolValueStates(symbols, joinedSymbols);
-            return new PowerShellBoundTryStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), body, catches.ToArray(), finallyBlock);
+            return new PowerShellBoundTryStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), body, catches.ToArray(), finallyBlock,
+                finallyBlock is not null && PowerShellLoopInterruptContract.IsAvailable(capabilities));
         }
         if (statement is BreakStatementAst { Label: null } breakStatement && PowerShellControlFlowBindingPolicy.HasBreakableAncestor(breakStatement))
             return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));

@@ -58,7 +58,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (attempted.FinallyStatements is not null)
         {
             builder.Append(prefix).AppendLine("finally");
-            EmitBlock(builder, attempted.FinallyStatements.Value, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            builder.Append(prefix).AppendLine("{");
+            builder.Append(prefix).AppendLine("    using (__statementErrors.EnterFinally())");
+            EmitBlock(builder, attempted.FinallyStatements.Value, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+            builder.Append(prefix).AppendLine("}");
         }
     }
 

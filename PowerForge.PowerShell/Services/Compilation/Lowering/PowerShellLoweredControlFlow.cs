@@ -34,17 +34,20 @@ internal enum PowerShellLoweredLoopKind
 
 internal sealed class PowerShellLoweredWhileStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredWhileStatement(SourceSpan span, PowerShellLoweredLoopKind kind, PowerShellLoweredExpression condition, PowerShellLoweredStatement[] statements)
+    internal PowerShellLoweredWhileStatement(SourceSpan span, PowerShellLoweredLoopKind kind, PowerShellLoweredExpression condition, PowerShellLoweredStatement[] statements,
+        bool checkHostInterrupts)
         : base(span)
     {
         Kind = kind;
         Condition = condition;
         Statements = statements;
+        CheckHostInterrupts = checkHostInterrupts;
     }
 
     internal PowerShellLoweredLoopKind Kind { get; }
     internal PowerShellLoweredExpression Condition { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
+    internal bool CheckHostInterrupts { get; }
 }
 
 internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
@@ -55,7 +58,8 @@ internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
         PowerShellLoweredExpression? condition,
         PowerShellLoweredMutationExpression? iterator,
         PowerShellLoweredStatement[] statements,
-        bool declareInitializer)
+        bool declareInitializer,
+        bool checkHostInterrupts)
         : base(span)
     {
         Initializer = initializer;
@@ -63,6 +67,7 @@ internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
         Iterator = iterator;
         Statements = statements;
         DeclareInitializer = declareInitializer;
+        CheckHostInterrupts = checkHostInterrupts;
     }
 
     internal PowerShellLoweredMutationExpression? Initializer { get; }
@@ -70,6 +75,7 @@ internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
     internal PowerShellLoweredMutationExpression? Iterator { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal bool DeclareInitializer { get; }
+    internal bool CheckHostInterrupts { get; }
 }
 
 internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredStatement
@@ -82,7 +88,8 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
         PowerShellForEachEnumerationKind enumerationKind,
         PowerShellLoweredStatement[] statements,
         bool declareVariable,
-        PowerShellLoweredExpression? nullCollectionElement)
+        PowerShellLoweredExpression? nullCollectionElement,
+        bool checkHostInterrupts)
         : base(span)
     {
         Variable = variable;
@@ -92,6 +99,7 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
         Statements = statements;
         DeclareVariable = declareVariable;
         NullCollectionElement = nullCollectionElement;
+        CheckHostInterrupts = checkHostInterrupts;
     }
 
     internal PowerShellSymbolId Variable { get; }
@@ -101,6 +109,7 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal bool DeclareVariable { get; }
     internal PowerShellLoweredExpression? NullCollectionElement { get; }
+    internal bool CheckHostInterrupts { get; }
 }
 
 internal sealed class PowerShellLoweredSwitchClause

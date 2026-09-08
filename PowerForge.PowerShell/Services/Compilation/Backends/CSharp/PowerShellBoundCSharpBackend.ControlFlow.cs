@@ -33,10 +33,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        bool checkHostInterrupts = false)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("{");
+        if (checkHostInterrupts)
+            builder.Append(prefix).AppendLine("    __statementErrors.CheckLoopInterrupts();");
         foreach (var statement in statements)
             EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
         builder.Append(prefix).AppendLine("}");
@@ -154,6 +157,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var prefix = new string(' ', (indent + 1) * 4);
         var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
+        // Native foreach checks after successful advancement and before assigning
+        // the authored loop variable. General enumerators do this in MoveEnumerator.
+        if (loop.CheckHostInterrupts && loop.EnumerationKind != PowerShellForEachEnumerationKind.PowerShellEnumerable)
+            builder.Append(prefix).AppendLine("__statementErrors.CheckLoopInterrupts();");
         builder.Append(prefix)
             .Append(loop.DeclareVariable ? elementTypeName + " " : string.Empty)
             .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")

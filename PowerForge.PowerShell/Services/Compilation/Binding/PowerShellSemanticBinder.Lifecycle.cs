@@ -129,7 +129,8 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellForEachEnumerationKind.TypedArray,
             process,
             declareVariable: true,
-            nullCollectionElement);
+            nullCollectionElement,
+            checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities));
         PowerShellBoundBlock body;
         if (returnsCollection)
         {
@@ -173,7 +174,8 @@ internal sealed partial class PowerShellSemanticBinder
                 lifecycleLoop.EnumerationKind,
                 collectedProcess,
                 lifecycleLoop.DeclareVariable,
-                lifecycleLoop.NullCollectionElement);
+                lifecycleLoop.NullCollectionElement,
+                lifecycleLoop.CheckHostInterrupts);
             var collectedEnd = RewriteLifecycleOutputs(end, outputVariable, outputListType, outputType);
             var outputArrayFact = new PowerShellTypeFact(
                 outputArrayType,

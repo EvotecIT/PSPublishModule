@@ -81,7 +81,7 @@ internal sealed class PowerShellBoundOptimizer
                     _deadBranchesRemoved++;
                     continue;
                 }
-                statements.Add(new PowerShellBoundWhileStatement(loop.Span, loop.Kind, condition, body));
+                statements.Add(new PowerShellBoundWhileStatement(loop.Span, loop.Kind, condition, body, loop.CheckHostInterrupts));
                 continue;
             }
             statements.Add(OptimizeStatement(statement));
@@ -110,7 +110,7 @@ internal sealed class PowerShellBoundOptimizer
                 loop.Initializer is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Initializer),
                 loop.Condition is null ? null : OptimizeExpression(loop.Condition),
                 loop.Iterator is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Iterator),
-                OptimizeBlock(loop.Body)),
+                OptimizeBlock(loop.Body), loop.CheckHostInterrupts),
             PowerShellBoundForEachStatement loop => new PowerShellBoundForEachStatement(
                 loop.Span,
                 loop.Variable,
@@ -119,7 +119,7 @@ internal sealed class PowerShellBoundOptimizer
                 loop.EnumerationKind,
                 OptimizeBlock(loop.Body),
                 loop.DeclareVariable,
-                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement)),
+                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement), loop.CheckHostInterrupts),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
                 thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression),
                 thrown.PreserveStatementErrors, thrown.SourcePath, thrown.SourceText),
@@ -127,7 +127,7 @@ internal sealed class PowerShellBoundOptimizer
                 attempted.Span,
                 OptimizeBlock(attempted.Body),
                 attempted.Catches.Select(clause => new PowerShellBoundCatchClause(clause.ExceptionTypes.ToArray(), OptimizeBlock(clause.Body))).ToArray(),
-                attempted.FinallyBlock is null ? null : OptimizeBlock(attempted.FinallyBlock)),
+                attempted.FinallyBlock is null ? null : OptimizeBlock(attempted.FinallyBlock), attempted.SuspendHostStopping),
             PowerShellBoundStreamWriteStatement stream => new PowerShellBoundStreamWriteStatement(
                 stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message), stream.OutputBinding),
             PowerShellBoundIndexAssignmentStatement index => new PowerShellBoundIndexAssignmentStatement(

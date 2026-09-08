@@ -218,7 +218,8 @@ internal sealed class PowerShellLoweredFunction
         Type? collectionElementType,
         PowerShellLoweredStatement[] statements,
         SourceSpan span,
-        bool requiresPowerShellStatementErrors = false)
+        bool requiresPowerShellStatementErrors = false,
+        bool requiresPowerShellStopping = false)
     {
         Symbol = symbol;
         GeneratedName = generatedName;
@@ -245,6 +246,7 @@ internal sealed class PowerShellLoweredFunction
         Statements = statements;
         Span = span;
         RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
+        RequiresPowerShellStopping = requiresPowerShellStopping;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -262,6 +264,7 @@ internal sealed class PowerShellLoweredFunction
     internal bool RequiresRuntimeFreeProviderOperations { get; }
     internal bool RequiresPowerShellHostStreams { get; }
     internal bool RequiresPowerShellStatementErrors { get; }
+    internal bool RequiresPowerShellStopping { get; }
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }

@@ -25,7 +25,7 @@ internal sealed partial class PowerShellTypedLowerer
         var providerCancellationBindings = PropagateHostRequirement(program, static function => ContainsCooperativeProvider(function.Body));
         var commandRegionBindings = PropagateHostRequirement(program, static function => ContainsPowerShellCommandRegion(function.Body));
         var statementErrorBindings = PropagateHostRequirement(program, static function =>
-            function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors));
+            PowerShellLoopInterruptContract.RequiresContext(function.Capabilities));
         var bySymbol = program.Functions.ToDictionary(
             static function => function.Symbol.StableKey,
             function => new LoweringFunctionContext(
@@ -54,7 +54,7 @@ internal sealed partial class PowerShellTypedLowerer
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSL1012",
-                    "Statement-error continuation requires the qualified PowerShell statement-error target capability.",
+                    "Statement-error continuation and loop interruption require the qualified PowerShell statement-error target capability.",
                     function.Symbol.Declaration));
                 continue;
             }
@@ -215,7 +215,8 @@ internal sealed partial class PowerShellTypedLowerer
                 ResolveCollectionElementType(function),
                 statements.ToArray(),
                 function.Body.Span,
-                statementErrorBindings.Contains(function.Symbol.StableKey)));
+                statementErrorBindings.Contains(function.Symbol.StableKey),
+                function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStopping)));
         }
 
         return new PowerShellLoweredProgram(
@@ -448,7 +449,7 @@ internal sealed partial class PowerShellTypedLowerer
                     _ => throw new InvalidOperationException($"Unsupported bound loop kind '{loop.Kind}'.")
                 },
                 LowerExpression(loop.Condition, functions, names, targetCapabilities),
-                LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
+                LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities), loop.CheckHostInterrupts),
             PowerShellBoundForStatement loop => LowerFor(loop, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
             PowerShellBoundForEachStatement loop => LowerForEach(loop, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
             PowerShellBoundSwitchStatement switchStatement => new PowerShellLoweredSwitchStatement(
@@ -474,7 +475,7 @@ internal sealed partial class PowerShellTypedLowerer
                     targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects),
                     targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))).ToArray(),
                 tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-                tryStatement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors),
+                RequiresHostExceptionHandling(tryStatement, functions),
                 names.Allocate("pf_handler_exception"), names.Allocate("pf_handler_clause"), names.Allocate("pf_handler_record")),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
             PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
@@ -514,7 +515,8 @@ internal sealed partial class PowerShellTypedLowerer
             loop.Condition is null ? null : LowerExpression(loop.Condition, functions, names, targetCapabilities),
             loop.Iterator is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Iterator, functions, names, targetCapabilities),
             LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-            declareInitializer);
+            declareInitializer,
+            loop.CheckHostInterrupts);
     }
 
     private static PowerShellLoweredForEachStatement LowerForEach(
@@ -537,7 +539,8 @@ internal sealed partial class PowerShellTypedLowerer
             loop.DeclareVariable,
             loop.NullCollectionElement is null
                 ? null
-                : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities));
+                : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities),
+            loop.CheckHostInterrupts);
     }
 
     private static PowerShellLoweredStatement[] LowerStatements(

@@ -16,8 +16,18 @@ namespace PowerForge.Generated.Runtime
         internal bool MoveEnumerator(IEnumerator cursor)
         {
             ThrowIfDisposed();
+            // Native foreach advances before the loop-body interrupt check. An
+            // empty or completed enumerator never enters that body boundary.
+            var hasCurrent = cursor.MoveNext();
+            if (hasCurrent) CheckLoopInterrupts();
+            return hasCurrent;
+        }
+
+        /// <summary>Observes the loaded host's stop request at an authored loop boundary.</summary>
+        internal void CheckLoopInterrupts()
+        {
+            ThrowIfDisposed();
             NativeContract.Invoke(_contract.CheckEnumerationInterrupts, null, _context);
-            return cursor.MoveNext();
         }
 
         /// <summary>Reads the stored record without performing CLR argument or output conversion.</summary>
