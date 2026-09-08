@@ -50,16 +50,21 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        var filteredRequiredModules = FilterRequiredModulesForArtefact(
+            requiredModules,
+            cfg.RequiredModules.ExcludeModuleName);
         ValidateRequiredModuleDestinations(
             cfg,
             requiredRoot,
             scriptRoot,
-            FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName));
+            filteredRequiredModules);
         ValidateScriptCopyMappings(
             cfg,
             outputRoot,
             scriptRoot,
             Path.Combine(scriptRoot, scriptName),
+            requiredRoot,
+            filteredRequiredModules,
             moduleName,
             moduleVersion,
             preRelease,
@@ -159,16 +164,21 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        var filteredRequiredModules = FilterRequiredModulesForArtefact(
+            requiredModules,
+            cfg.RequiredModules.ExcludeModuleName);
         ValidateRequiredModuleDestinations(
             cfg,
             requiredRoot,
             scriptRoot,
-            FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName));
+            filteredRequiredModules);
         ValidateScriptCopyMappings(
             cfg,
             tempRoot,
             scriptRoot,
             Path.Combine(scriptRoot, scriptName),
+            requiredRoot,
+            filteredRequiredModules,
             moduleName,
             moduleVersion,
             preRelease,

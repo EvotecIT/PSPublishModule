@@ -581,6 +581,19 @@ internal sealed partial class PowerForgeReleaseService
                     result.ModulePlan.ArtefactOutputs = moduleResult.ArtefactOutputs;
 
                 UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
+                if (result.ModulePlan is not null && moduleResult.ArtefactOutputs.Length == 0)
+                {
+                    result.ModulePlan.ArtefactOutputs = ResolveModuleArtefactOutputs(
+                        module.ConfigurationContext,
+                        result.ModulePlan.ModuleName,
+                        result.ModulePlan.ModuleVersion,
+                        result.ModulePlan.PreReleaseTag);
+                    result.ModulePlan.PackedModuleRoots = ResolvePackedModuleRoots(
+                        module.ConfigurationContext,
+                        result.ModulePlan.ModuleName,
+                        result.ModulePlan.ModuleVersion,
+                        result.ModulePlan.PreReleaseTag);
+                }
                 result.ModuleAssets = ExpandModuleArtifactPaths(
                     result.ModuleAssets,
                     result.ModulePlan?.ModuleName,
@@ -1481,7 +1494,11 @@ internal sealed partial class PowerForgeReleaseService
         return (service, spec, workspaceConfigPath, workspaceRequest, plan);
     }
 
-    private static (ModuleBuildHostBuildRequest Request, PowerForgeModuleReleasePlanSummary Plan, string[] ArtifactPaths) PrepareModuleRelease(
+    private static (
+        ModuleBuildHostBuildRequest Request,
+        PowerForgeModuleReleasePlanSummary Plan,
+        string[] ArtifactPaths,
+        ModulePipelineConfigurationContext? ConfigurationContext) PrepareModuleRelease(
         PowerForgeModuleReleaseOptions options,
         string releaseConfigPath,
         PowerForgeReleaseRequest request,
@@ -1645,7 +1662,7 @@ internal sealed partial class PowerForgeReleaseService
             ArtifactPaths = artifactPaths
         };
 
-        return (buildRequest, plan, artifactPaths);
+        return (buildRequest, plan, artifactPaths, moduleConfig);
     }
 
     private static string ExpandModulePath(string? path, string configuration, string framework)

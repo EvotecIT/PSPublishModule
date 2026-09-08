@@ -18,6 +18,15 @@ public sealed class ArtefactBuilderLayoutTests
             typeof(ArtefactModuleEntry[]),
             typeof(ArtefactCopyEntry[])
         ]));
+        Assert.NotNull(typeof(ArtefactBuildResult).GetConstructor(
+        [
+            typeof(ArtefactType),
+            typeof(string),
+            typeof(string),
+            typeof(ArtefactModuleEntry[]),
+            typeof(ArtefactCopyEntry[]),
+            typeof(string[])
+        ]));
     }
 
     [Fact]

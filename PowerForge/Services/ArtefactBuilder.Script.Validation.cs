@@ -248,11 +248,20 @@ public sealed partial class ArtefactBuilder
         string destinationRoot,
         string scriptRoot,
         string scriptPath,
+        string requiredRoot,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
         string moduleName,
         string moduleVersion,
         string? preRelease,
         bool enforceRelativeDestination)
     {
+        string[] requiredModuleDestinations = cfg.RequiredModules.Enabled == true
+            ? requiredModules
+                .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+                .Select(module => Path.GetFullPath(Path.Combine(requiredRoot, module.ModuleName.Trim())))
+                .ToArray()
+            : Array.Empty<string>();
+
         foreach (var mapping in cfg.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
         {
             if (mapping is null)
@@ -269,6 +278,14 @@ public sealed partial class ArtefactBuilder
             {
                 throw new InvalidOperationException(
                     $"Script artefact directory copy destination '{destination}' contains the generated script root '{Path.GetFullPath(scriptRoot)}' and would erase it.");
+            }
+            string? requiredModuleDestination = requiredModuleDestinations.FirstOrDefault(requiredDestination =>
+                IsSameOrBelowPath(destination, requiredDestination) ||
+                IsSameOrBelowPath(requiredDestination, destination));
+            if (requiredModuleDestination is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Script artefact directory copy destination '{destination}' overlaps required module destination '{requiredModuleDestination}' and could erase or corrupt the bundled dependency.");
             }
         }
 
@@ -288,6 +305,13 @@ public sealed partial class ArtefactBuilder
             {
                 throw new InvalidOperationException(
                     $"Script artefact file copy destination '{destination}' would overwrite the generated entry point '{Path.GetFullPath(scriptPath)}'.");
+            }
+            string? requiredModuleDestination = requiredModuleDestinations.FirstOrDefault(requiredDestination =>
+                IsSameOrBelowPath(destination, requiredDestination));
+            if (requiredModuleDestination is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Script artefact file copy destination '{destination}' is inside required module destination '{requiredModuleDestination}' and would overwrite bundled dependency content.");
             }
         }
     }

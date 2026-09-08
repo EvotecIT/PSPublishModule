@@ -71,6 +71,100 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_LegacyModuleHostRecomputesTokenizedArtefactFallbackAfterAutoVersionResolution()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string moduleDirectory = Directory.CreateDirectory(Path.Combine(root, "Module")).FullName;
+            string manifestPath = Path.Combine(moduleDirectory, "Company.Tools.psd1");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '4.2.3' }");
+            string moduleConfigPath = Path.Combine(root, "powerforge.json");
+            File.WriteAllText(moduleConfigPath, """
+                {
+                  "SchemaVersion": 1,
+                  "Build": {
+                    "Name": "Company.Tools",
+                    "SourcePath": "Module",
+                    "Version": "4.2.X"
+                  },
+                  "Segments": [
+                    {
+                      "ArtefactType": "ScriptPacked",
+                      "Type": "ScriptPacked",
+                      "Configuration": {
+                        "Enabled": true,
+                        "Path": "Artifacts/Scripts/<ModuleVersionWithPreRelease>",
+                        "ArtefactName": "Company.Tools.<ModuleVersionWithPreRelease>.zip",
+                        "ScriptName": "Invoke-Company.Tools.ps1"
+                      }
+                    },
+                    {
+                      "ArtefactType": "Packed",
+                      "Type": "Packed",
+                      "Configuration": {
+                        "Enabled": true,
+                        "Path": "Artifacts/Packed",
+                        "RequiredModules": {
+                          "Enabled": true,
+                          "ModulesPath": "dependencies/<ModuleVersionWithPreRelease>"
+                        }
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not plan."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not load."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not plan."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                executeModuleBuild: (_, _) => new ModuleBuildHostExecutionResult { ExitCode = 0 });
+
+            PowerForgeReleaseResult result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = root,
+                        ConfigPath = "powerforge.json",
+                        ManifestPath = "Module/Company.Tools.psd1",
+                        ModuleVersion = "4.2.X"
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ModuleOnly = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("4.2.3", result.ModulePlan!.ModuleVersion);
+            PowerForgeModuleArtefactOutputSummary scriptOutput = Assert.Single(
+                result.ModulePlan.ArtefactOutputs,
+                static output => output.Type == ArtefactType.ScriptPacked);
+            Assert.Equal(
+                Path.Combine(moduleDirectory, "Artifacts", "Scripts", "4.2.3"),
+                scriptOutput.OutputRoot);
+            Assert.Equal(
+                Path.Combine(moduleDirectory, "Artifacts", "Scripts", "4.2.3", "Company.Tools.4.2.3.zip"),
+                scriptOutput.OutputPath);
+            Assert.Equal(
+                "dependencies/4.2.3",
+                Assert.Single(result.ModulePlan.PackedModuleRoots));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void CreateModuleAssetEntries_ClassifiesProjectBuildNuGetPackage()
     {
         string root = CreateSandbox();

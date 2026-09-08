@@ -343,6 +343,76 @@ public sealed class ArtefactBuilderScriptClosureTests
     }
 
     [Theory]
+    [InlineData(ArtefactType.Script, false, "deps")]
+    [InlineData(ArtefactType.Script, false, "deps/Dependency")]
+    [InlineData(ArtefactType.Script, false, "deps/Dependency/content")]
+    [InlineData(ArtefactType.Script, true, "deps/Dependency/replacement.psm1")]
+    [InlineData(ArtefactType.ScriptPacked, false, "deps")]
+    [InlineData(ArtefactType.ScriptPacked, false, "deps/Dependency")]
+    [InlineData(ArtefactType.ScriptPacked, false, "deps/Dependency/content")]
+    [InlineData(ArtefactType.ScriptPacked, true, "deps/Dependency/replacement.psm1")]
+    public void Build_CopyMappingCannotOverlapBundledRequiredModule(
+        ArtefactType artefactType,
+        bool fileMapping,
+        string mappingDestination)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "MappedRequiredModule";
+            const string dependencyName = "Dependency";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteScriptModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string marker = Path.Combine(outputRoot, "preserve.txt");
+            File.WriteAllText(marker, "preserve");
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, artefactType);
+            segment.Configuration.RequiredModules = new ArtefactRequiredModulesConfiguration
+            {
+                Enabled = true,
+                Path = "deps",
+                ModulesPath = "app"
+            };
+
+            if (fileMapping)
+            {
+                string source = Path.Combine(root.FullName, "replacement.psm1");
+                File.WriteAllText(source, "'replacement'");
+                segment.Configuration.FilesOutput =
+                [
+                    new ArtefactCopyMapping { Source = source, Destination = mappingDestination }
+                ];
+            }
+            else
+            {
+                string source = Directory.CreateDirectory(Path.Combine(root.FullName, "mapping-source")).FullName;
+                File.WriteAllText(Path.Combine(source, "replacement.psm1"), "'replacement'");
+                segment.Configuration.DirectoryOutput =
+                [
+                    new ArtefactCopyMapping { Source = source, Destination = mappingDestination }
+                ];
+            }
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    root.FullName,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    [new RequiredModuleReference(dependencyName)]));
+
+            Assert.Contains("required module destination", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve", File.ReadAllText(marker));
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]
     public void Build_RemovesExportCommandsEmbeddedInCompoundStatements(ArtefactType artefactType)
