@@ -164,14 +164,13 @@ internal static class MarkdownRenderer
                 var id = string.Empty;
                 if (!hasId)
                 {
-                    text = System.Net.WebUtility.HtmlDecode(text);
                     var baseId = Slugify(text);
                     if (string.IsNullOrEmpty(baseId))
                     {
                         // Retain the established ASCII anchors where possible;
                         // all-non-Latin headings still need a usable anchor.
                         baseId = System.Text.RegularExpressions.Regex.Replace(
-                            text.Trim().ToLowerInvariant(), @"[^\p{L}\p{N}\p{M}\s-]", string.Empty);
+                            System.Net.WebUtility.HtmlDecode(text).Trim().ToLowerInvariant(), @"[^\p{L}\p{N}\p{M}\s-]", string.Empty);
                         baseId = System.Text.RegularExpressions.Regex.Replace(baseId, @"\s+", "-").Trim('-');
                     }
                     if (string.IsNullOrEmpty(baseId))

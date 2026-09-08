@@ -36,7 +36,21 @@ public sealed class WebMarkdownHeadingAnchorTests
         var document = HtmlParser.ParseWithAngleSharp(html);
         var ids = document.QuerySelectorAll("h2").Select(heading => heading.GetAttribute("id")).ToArray();
 
-        Assert.Equal(new[] { "privacy-3", "privacy", "privacy-4", "terms-conditions" }, ids);
+        Assert.Equal(new[] { "privacy-3", "privacy", "privacy-4", "terms-amp-conditions" }, ids);
         Assert.NotNull(document.QuerySelector("div#privacy-2"));
+    }
+
+    [Fact]
+    public void RawHeadingsDoNotCollideWithMarkdownGeneratedAnchors()
+    {
+        var html = MarkdownRenderer.RenderToHtml("""
+            ## Privacy
+
+            <h2>Privacy</h2>
+            """);
+        var ids = HtmlParser.ParseWithAngleSharp(html).QuerySelectorAll("h2")
+            .Select(heading => heading.GetAttribute("id")).ToArray();
+
+        Assert.Equal(new[] { "privacy", "privacy-2" }, ids);
     }
 }
