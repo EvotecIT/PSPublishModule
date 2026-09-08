@@ -5,6 +5,93 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void CreateModuleAssetEntries_DirectoryIncludesProducedDefaultScriptEntryPointOnly()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPath = Path.Combine(root, "Company.Tools.ps1");
+            string unrelatedPath = Path.Combine(root, "Other.Tools.ps1");
+            File.WriteAllText(scriptPath, "Get-Date");
+            File.WriteAllText(unrelatedPath, "Get-ChildItem");
+            var plan = new PowerForgeModuleReleasePlanSummary
+            {
+                ManifestPath = Path.Combine(root, "Company.Tools.psd1"),
+                ModuleName = "Company.Tools",
+                ModuleVersion = "4.0.0",
+                ArtefactOutputs =
+                [
+                    new PowerForgeModuleArtefactOutputSummary
+                    {
+                        Type = ArtefactType.Script,
+                        OutputPath = root,
+                        EntryPointRelativePath = "Company.Tools.ps1"
+                    }
+                ]
+            };
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    root,
+                    plan,
+                    new[] { scriptPath, unrelatedPath }));
+
+            Assert.Equal(scriptPath, entry.Path);
+            Assert.Equal(PowerForgeReleaseAssetCategory.Module, entry.Category);
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveModuleArtefactOutputs_CarriesDefaultScriptEntryPoint()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            var context = new ModulePipelineConfigurationContext
+            {
+                ProjectRoot = root,
+                Spec = new ModulePipelineSpec
+                {
+                    Build = new ModuleBuildSpec
+                    {
+                        Name = "Company.Tools",
+                        SourcePath = root,
+                        Version = "4.0.0"
+                    },
+                    Segments =
+                    [
+                        new ConfigurationArtefactSegment
+                        {
+                            ArtefactType = ArtefactType.Script,
+                            Configuration = new ArtefactConfiguration
+                            {
+                                Enabled = true,
+                                Path = "scripts"
+                            }
+                        }
+                    ]
+                }
+            };
+
+            PowerForgeModuleArtefactOutputSummary output = Assert.Single(
+                PowerForgeReleaseService.ResolveModuleArtefactOutputs(context));
+
+            Assert.Equal(ArtefactType.Script, output.Type);
+            Assert.Equal(Path.Combine(root, "scripts"), output.OutputPath);
+            Assert.Equal("Company.Tools.ps1", output.EntryPointRelativePath);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void CreateModuleAssetEntries_DirectoryRejectsProducedPackedArchiveWithDifferentManifestVersion()
     {
         string root = CreateSandbox();

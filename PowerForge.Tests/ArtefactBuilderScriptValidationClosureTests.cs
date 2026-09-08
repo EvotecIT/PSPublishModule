@@ -451,4 +451,60 @@ public sealed partial class ArtefactBuilderScriptClosureTests
             Delete(root);
         }
     }
+
+    [Theory]
+    [InlineData(ArtefactType.Script, false, false)]
+    [InlineData(ArtefactType.Script, true, false)]
+    [InlineData(ArtefactType.ScriptPacked, false, false)]
+    [InlineData(ArtefactType.ScriptPacked, true, false)]
+    [InlineData(ArtefactType.Script, false, true)]
+    [InlineData(ArtefactType.ScriptPacked, false, true)]
+    public void Build_OverlappingDirectoryCopyDestinationsAreRejectedBeforeMutation(
+        ArtefactType artefactType,
+        bool ancestorFirst,
+        bool sameDestination)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "OverlappingDestinationModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteScriptModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string outputMarker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(outputMarker, "preserve");
+            string firstSource = Directory.CreateDirectory(Path.Combine(root.FullName, "first-source")).FullName;
+            string secondSource = Directory.CreateDirectory(Path.Combine(root.FullName, "second-source")).FullName;
+            File.WriteAllText(Path.Combine(firstSource, "first.txt"), "first");
+            File.WriteAllText(Path.Combine(secondSource, "second.txt"), "second");
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, artefactType);
+            ArtefactCopyMapping ancestor = new() { Source = firstSource, Destination = "assets" };
+            ArtefactCopyMapping descendant = new()
+            {
+                Source = secondSource,
+                Destination = sameDestination ? "assets" : "assets/icons"
+            };
+            segment.Configuration.DirectoryOutput = ancestorFirst
+                ? [ancestor, descendant]
+                : [descendant, ancestor];
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    root.FullName,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    Array.Empty<RequiredModuleReference>()));
+
+            Assert.Contains("directory copy destinations", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("overlap", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve", File.ReadAllText(outputMarker));
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
 }

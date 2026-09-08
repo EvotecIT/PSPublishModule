@@ -351,6 +351,26 @@ public sealed partial class ArtefactBuilder
             mappingSources,
             directoryDestinations,
             fileDestinations);
+        ValidateScriptDirectoryCopyDestinationsDoNotOverlap(directoryDestinations);
+    }
+
+    private static void ValidateScriptDirectoryCopyDestinationsDoNotOverlap(
+        IReadOnlyList<string> directoryDestinations)
+    {
+        for (int firstIndex = 0; firstIndex < directoryDestinations.Count; firstIndex++)
+        {
+            string first = directoryDestinations[firstIndex];
+            for (int secondIndex = firstIndex + 1; secondIndex < directoryDestinations.Count; secondIndex++)
+            {
+                string second = directoryDestinations[secondIndex];
+                if (!IsSameOrBelowPath(first, second) && !IsSameOrBelowPath(second, first))
+                    continue;
+
+                throw new InvalidOperationException(
+                    $"Script artefact directory copy destinations '{Path.GetFullPath(first)}' and '{Path.GetFullPath(second)}' overlap. " +
+                    "Use separate destination trees so one mapping cannot erase another mapping's payload.");
+            }
+        }
     }
 
     private static void ValidateScriptBuildRootsDoNotOverlapStaging(

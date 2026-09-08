@@ -227,6 +227,34 @@ internal static class ArtefactLayoutPathResolver
             .TrimStart('/');
     }
 
+    internal static string ResolveScriptEntryPointRelativePath(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        string requiredRoot = ResolveRequiredModulesRootForUnpacked(
+            cfg,
+            outputRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        string modulesRoot = ResolveModulesRootForUnpacked(
+            cfg,
+            outputRoot,
+            requiredRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        string scriptPath = Path.Combine(
+            modulesRoot,
+            ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease));
+        return FrameworkCompatibility.GetRelativePath(outputRoot, scriptPath)
+            .Replace('\\', '/')
+            .TrimStart('/');
+    }
+
     private static string ResolvePackedLayoutRoot(
         string? configuredPath,
         string outputRoot,

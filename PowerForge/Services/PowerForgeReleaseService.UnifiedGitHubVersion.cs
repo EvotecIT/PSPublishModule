@@ -240,14 +240,22 @@ internal sealed partial class PowerForgeReleaseService
                                 moduleVersion!,
                                 preRelease))
                         : outputRoot,
-                    EntryPointRelativePath = segment.ArtefactType == ArtefactType.ScriptPacked
-                        ? ArtefactLayoutPathResolver.ResolveScriptPackedEntryPointRelativePath(
+                    EntryPointRelativePath = segment.ArtefactType switch
+                    {
+                        ArtefactType.Script => ArtefactLayoutPathResolver.ResolveScriptEntryPointRelativePath(
                             segment.Configuration,
                             outputRoot,
                             moduleName!,
                             moduleVersion!,
-                            preRelease)
-                        : null
+                            preRelease),
+                        ArtefactType.ScriptPacked => ArtefactLayoutPathResolver.ResolveScriptPackedEntryPointRelativePath(
+                            segment.Configuration,
+                            outputRoot,
+                            moduleName!,
+                            moduleVersion!,
+                            preRelease),
+                        _ => null
+                    }
                 };
             })
             .ToArray();
