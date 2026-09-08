@@ -124,7 +124,7 @@ public sealed class AppStoreConnectAppInfoMetadataSyncService
 
         var mismatched = appInfos
             .Where(appInfo => !IsEditable(appInfo))
-            // A previous live version is not the target of an editable version's new metadata.
+            // A previous released version is not the target of an editable version's new metadata.
             // Locked in-flight reviews still have to converge before shared changes proceed.
             .Where(appInfo => selected is null || !IsEditable(selected) || !IsReleased(appInfo))
             .Where(appInfo => localizations[appInfo.Id] is not { } current || GetChangedFields(current, spec.Metadata).Length > 0)
@@ -188,7 +188,10 @@ public sealed class AppStoreConnectAppInfoMetadataSyncService
     private static bool IsReleased(AppStoreConnectAppInformationInfo appInfo)
         => GetState(appInfo) is { } state &&
            (string.Equals(state, "READY_FOR_SALE", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(state, "READY_FOR_DISTRIBUTION", StringComparison.OrdinalIgnoreCase));
+            string.Equals(state, "READY_FOR_DISTRIBUTION", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "REMOVED_FROM_SALE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "DEVELOPER_REMOVED_FROM_SALE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "REPLACED_WITH_NEW_VERSION", StringComparison.OrdinalIgnoreCase));
 
     private static string? GetState(AppStoreConnectAppInformationInfo appInfo)
         => string.IsNullOrWhiteSpace(appInfo.State) ? appInfo.AppStoreState : appInfo.State;

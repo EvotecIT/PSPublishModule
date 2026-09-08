@@ -77,10 +77,15 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Empty(handler.Methods);
     }
 
-    [Fact]
-    public async Task AppInfoSync_CreatesMissingEditableLocaleBesideReleasedRecord_ThenConverges()
+    [Theory]
+    [InlineData("READY_FOR_SALE")]
+    [InlineData("READY_FOR_DISTRIBUTION")]
+    [InlineData("REMOVED_FROM_SALE")]
+    [InlineData("DEVELOPER_REMOVED_FROM_SALE")]
+    [InlineData("REPLACED_WITH_NEW_VERSION")]
+    public async Task AppInfoSync_CreatesMissingEditableLocaleBesideReleasedRecord_ThenConverges(string state)
     {
-        const string infos = """{"data":[{"type":"appInfos","id":"live","attributes":{"state":"READY_FOR_DISTRIBUTION"}},{"type":"appInfos","id":"editable","attributes":{"state":"PREPARE_FOR_SUBMISSION"}}]}""";
+        var infos = """{"data":[{"type":"appInfos","id":"live","attributes":{"state":"STATE"}},{"type":"appInfos","id":"editable","attributes":{"state":"PREPARE_FOR_SUBMISSION"}}]}""".Replace("STATE", state);
         const string localization = """{"type":"appInfoLocalizations","id":"info-pl","attributes":{"locale":"pl","name":"Smart Home","subtitle":"Sterowanie"}}""";
         var handler = new SequenceHandler(
             new SequenceResponse(HttpStatusCode.OK, infos),
@@ -121,6 +126,9 @@ public sealed partial class AppStoreConnectClientTests
 
     [Theory]
     [InlineData("READY_FOR_DISTRIBUTION")]
+    [InlineData("REMOVED_FROM_SALE")]
+    [InlineData("DEVELOPER_REMOVED_FROM_SALE")]
+    [InlineData("REPLACED_WITH_NEW_VERSION")]
     [InlineData("IN_REVIEW")]
     public async Task AppInfoSync_DoesNotCreateLocaleInLockedResource(string state)
     {
