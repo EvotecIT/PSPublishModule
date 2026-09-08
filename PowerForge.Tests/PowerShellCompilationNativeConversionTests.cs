@@ -9,7 +9,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [MemberData(nameof(StatementErrorHosts))]
     public void NativeConversions_PreserveCastsCallbacksAndFailedAssignment(string framework, string host)
     {
-        var casts = new[] { "int", "string", "object", "bool", "double", "int[]", "datetime", "Nullable[int]" };
+        var casts = new[] { "int", "string", "object", "bool", "double", "int[]", "datetime", "Nullable[int]", "pscustomobject", "psobject", "System.Management.Automation.PSObject" };
         var functions = string.Join(Environment.NewLine, casts.Select((type, index) =>
             "function Read-NativeCast" + index + " { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); " +
             "$seen='before'; $OFS=':'; $copy='prior'; $copy=[" + type + "]$Value; \"state=$seen;ofs=$OFS;status=$?\"; return ,$copy }"));
@@ -35,15 +35,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         const string probe = """
             Add-Type -TypeDefinition 'public sealed class NativeCastFailure { public override string ToString() { throw new System.InvalidOperationException("cast failed"); } }'
             $values=@(@{value=$null},@{value=''},@{value='12'},@{value='bad'},@{value=12.5},@{value=[psobject]12.5},
-                @{value=@()},@{value=@(1,2)},@{value=@('1','bad')},@{value=(New-NativeCastToken)},@{value=(New-Object NativeCastFailure)})
+                @{value=@()},@{value=@(1,2)},@{value=@('1','bad')},@{value=(New-NativeCastToken)},@{value=(New-Object NativeCastFailure)},
+                @{value=@{Name='item'}},@{value=[ordered]@{Name='item';Count=2}})
             foreach ($preference in 'Continue','SilentlyContinue','Stop','Ignore') {
-                for ($cast=0;$cast -lt 8;$cast++) {
+                for ($cast=0;$cast -lt 11;$cast++) {
                     for ($index=0;$index -lt $values.Count;$index++) {
                         $name='Read-NativeCast'+$cast
                         $Error.Clear(); $caught=$null; $records=@(); $emitted=@()
                         try { $records=@(& $name -Value $values[$index].value -ErrorAction $preference -OutVariable emitted 2>$null) }
                         catch { $caught=$_.FullyQualifiedErrorId }
-                        [pscustomobject]@{cast=$cast;value=$index;preference=$preference;records=$records;emitted=@($emitted);caught=$caught;
+                        $shapes=@($records | ForEach-Object { if ($null -eq $_) { 'null' } else {
+                            [pscustomobject]@{type=$_.GetType().FullName;properties=@($_.PSObject.Properties | ForEach-Object { $_.Name+':'+$_.MemberType })}
+                        } })
+                        [pscustomobject]@{cast=$cast;value=$index;preference=$preference;records=$records;shapes=$shapes;emitted=@($emitted);caught=$caught;
                             errors=@($Error | ForEach-Object { [pscustomobject]@{id=$_.FullyQualifiedErrorId;category=[string]$_.CategoryInfo.Category;message=$_.Exception.Message;line=$_.InvocationInfo.ScriptLineNumber;column=$_.InvocationInfo.OffsetInLine} })} | ConvertTo-Json -Compress -Depth 12
                     }
                 }
@@ -57,7 +61,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         var expected = original.StandardOutput.Split('\n');
         var actual = compiled.StandardOutput.Split('\n');
-        Assert.Equal(352, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
+        Assert.Equal(572, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
         Assert.Contains("state=changed;ofs=/", original.StandardOutput);
         Assert.Equal(expected.Length, actual.Length);
         Assert.True(expected.SequenceEqual(actual), string.Join(Environment.NewLine, expected.Zip(actual)

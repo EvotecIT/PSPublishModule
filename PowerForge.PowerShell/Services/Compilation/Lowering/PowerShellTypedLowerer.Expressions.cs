@@ -47,7 +47,7 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(conversion.Operand, functions, names, targetCapabilities),
                 conversion.UsePowerShellLanguageRuntime,
                 conversion.UsePowerShellTruthiness,
-                conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition, conversion.UseNativeConversion),
+                conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition, conversion.UseNativeConversion, conversion.UseNativeCustomObjectConversion),
             PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
                 binary.Span,
                 binary.Type.ClrType,

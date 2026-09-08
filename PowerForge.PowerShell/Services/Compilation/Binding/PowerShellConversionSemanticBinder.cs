@@ -15,6 +15,20 @@ internal static class PowerShellConversionSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        if (syntax.Type.TypeName.FullName.Equals("PSCustomObject", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2202",
+                    "An authored PSCustomObject cast requires the native custom-object conversion contract.", span));
+                return null;
+            }
+            var customObjectOperand = bindExpression(syntax.Child, typeof(object));
+            return customObjectOperand is null ? null : new PowerShellBoundConversionExpression(span,
+                new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Explicit,
+                    "The authored PSCustomObject alias selects custom-object conversion rather than a PSObject wrapper."),
+                customObjectOperand, useNativeConversion: true, useNativeCustomObjectConversion: true);
+        }
         var targetType = syntax.Type.TypeName.GetReflectionType();
         if (targetType is null)
         {
