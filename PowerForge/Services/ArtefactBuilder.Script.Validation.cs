@@ -50,21 +50,21 @@ public sealed partial class ArtefactBuilder
             delivery,
             includeScriptFolders,
             finalizedPayloadFiles);
-        if (finalizedPayloadFiles is { Count: > 0 })
+        var selectedPayload = new HashSet<string>(
+            packageSourceFiles.Select(Path.GetFullPath),
+            CreateCurrentFileSystemPathComparer());
+        var payloadDescription = finalizedPayloadFiles is { Count: > 0 }
+            ? "finalized module payload"
+            : "module package selection";
+        if (!selectedPayload.Contains(Path.GetFullPath(manifestPath)))
         {
-            var selectedPayload = new HashSet<string>(
-                packageSourceFiles.Select(Path.GetFullPath),
-                CreateCurrentFileSystemPathComparer());
-            if (!selectedPayload.Contains(Path.GetFullPath(manifestPath)))
-            {
-                throw new InvalidOperationException(
-                    $"The finalized module payload must include the script artefact manifest '{moduleName}.psd1'.");
-            }
-            if (!selectedPayload.Contains(Path.GetFullPath(modulePath)))
-            {
-                throw new InvalidOperationException(
-                    $"The finalized module payload must include the script root module '{expectedRootModule}'.");
-            }
+            throw new InvalidOperationException(
+                $"The {payloadDescription} must include the script artefact manifest '{moduleName}.psd1'.");
+        }
+        if (!selectedPayload.Contains(Path.GetFullPath(modulePath)))
+        {
+            throw new InvalidOperationException(
+                $"The {payloadDescription} must include the script root module '{expectedRootModule}'.");
         }
 
         var manifestLoadedKeys = new List<string>();
