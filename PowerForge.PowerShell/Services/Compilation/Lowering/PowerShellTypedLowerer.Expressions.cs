@@ -47,7 +47,7 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(conversion.Operand, functions, names, targetCapabilities),
                 conversion.UsePowerShellLanguageRuntime,
                 conversion.UsePowerShellTruthiness,
-                conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition),
+                conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition, conversion.UseNativeConversion),
             PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
                 binary.Span,
                 binary.Type.ClrType,
@@ -123,12 +123,23 @@ internal sealed partial class PowerShellTypedLowerer
                 mutation.NormalizeNullString,
                 mutation.IntegralSemantics, mutation.PreserveStatementErrors,
                 mutation.NativeTargetRead is null ? null : (PowerShellLoweredNativeVariableExpression)
-                    LowerExpression(mutation.NativeTargetRead, functions, names, targetCapabilities), mutation.NativeSourceText),
+                    LowerExpression(mutation.NativeTargetRead, functions, names, targetCapabilities), mutation.NativeSourceText, mutation.NativeSetSequencePoint),
             PowerShellBoundArrayExpression array => new PowerShellLoweredArrayExpression(
                 array.Span,
                 array.Type.ClrType,
                 array.Kind,
                 array.Elements.Select(element => LowerExpression(element, functions, names, targetCapabilities)).ToArray()),
+            PowerShellBoundNativeMemberExpression memberRead => new PowerShellLoweredNativeMemberExpression(
+                memberRead.Span, LowerExpression(memberRead.Receiver, functions, names, targetCapabilities), memberRead.Name),
+            PowerShellBoundNativeInvocationExpression nativeInvocation => new PowerShellLoweredNativeInvocationExpression(nativeInvocation.Span,
+                nativeInvocation.Receiver is null ? null : LowerExpression(nativeInvocation.Receiver, functions, names, targetCapabilities),
+                nativeInvocation.LiteralTargetType, nativeInvocation.Name, nativeInvocation.IsStatic,
+                nativeInvocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
+                nativeInvocation.TargetConstraint, nativeInvocation.ArgumentConstraints.ToArray()),
+            PowerShellBoundNativeIndexExpression nativeIndex => new PowerShellLoweredNativeIndexExpression(nativeIndex.Span,
+                LowerExpression(nativeIndex.Receiver, functions, names, targetCapabilities),
+                nativeIndex.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
+                nativeIndex.TargetConstraint, nativeIndex.IndexConstraint),
             PowerShellBoundNativeCollectionExpression collection => new PowerShellLoweredNativeCollectionExpression(
                 collection.Span, collection.SourcePath,
                 collection.Items.Select(item => new PowerShellLoweredNativeCollectionItem(item.Span, item.SourceText,

@@ -37,7 +37,7 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         PowerShellIntegralMutationSemantics integralSemantics,
         bool preserveStatementErrors = false,
         PowerShellBoundNativeVariableExpression? nativeTargetRead = null,
-        string nativeSourceText = "")
+        string nativeSourceText = "", bool nativeSetSequencePoint = true)
         : base(
             span,
             type,
@@ -58,6 +58,7 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         PreserveStatementErrors = preserveStatementErrors;
         NativeTargetRead = nativeTargetRead;
         NativeSourceText = nativeSourceText;
+        NativeSetSequencePoint = nativeSetSequencePoint;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -70,9 +71,11 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
     internal PowerShellBoundNativeVariableExpression? NativeTargetRead { get; }
     internal bool UsesNativeInvocation => NativeTargetRead is not null;
     internal string NativeSourceText { get; }
+    /// <summary>Distinguishes statement mutations from value operands that inherit the surrounding sequence point.</summary>
+    internal bool NativeSetSequencePoint { get; }
 
     /// <summary>Preserves the operation while selecting its expression-result representation.</summary>
-    internal PowerShellBoundMutationExpression WithResultType(PowerShellTypeFact type)
+    internal PowerShellBoundMutationExpression WithResultType(PowerShellTypeFact type, bool? nativeSetSequencePoint = null)
         => new(Span, Target, TargetClrType, Operation, Value, type, NormalizeNullString,
-            IntegralSemantics, PreserveStatementErrors, NativeTargetRead, NativeSourceText);
+            IntegralSemantics, PreserveStatementErrors, NativeTargetRead, NativeSourceText, nativeSetSequencePoint ?? NativeSetSequencePoint);
 }

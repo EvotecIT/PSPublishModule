@@ -4,6 +4,10 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
+    private static bool EmitsExpressionValue(PowerShellBoundExpression? expression)
+        => expression is not null && expression.Type.ClrType != typeof(void) &&
+           (expression is not PowerShellBoundMutationExpression mutation || mutation.UsesNativeInvocation);
+
     private PowerShellBoundStatement? BindStatement(
         ParsedSourceDocument document,
         StatementAst statement,
@@ -192,7 +196,7 @@ internal sealed partial class PowerShellSemanticBinder
                 ? new PowerShellBoundReturnStatement(
                     PowerShellSourceParser.GetSpan(document, returnStatement.Extent),
                     expression,
-                    expression is not PowerShellBoundMutationExpression && expression?.Type.ClrType != typeof(void))
+                    EmitsExpressionValue(expression))
                 : null;
         }
         if (statement is IfStatementAst ifStatement)
@@ -419,7 +423,7 @@ internal sealed partial class PowerShellSemanticBinder
                 targetFramework,
                 capabilities);
             if (expression is null) return null;
-            var emitsOutput = expression is not PowerShellBoundMutationExpression && expression.Type.ClrType != typeof(void);
+            var emitsOutput = EmitsExpressionValue(expression);
             if (!isTerminal && !allowNonTerminalSuccessOutput && emitsOutput &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&

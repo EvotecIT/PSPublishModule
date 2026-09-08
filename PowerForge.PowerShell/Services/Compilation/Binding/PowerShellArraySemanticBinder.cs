@@ -34,7 +34,8 @@ internal static class PowerShellArraySemanticBinder
             // A single pure expression bypasses the statement-output suppression
             // used by a multi-statement collector, including bare ++/-- results.
             if (syntax.SubExpression.Statements.Count == 1 && value is PowerShellBoundMutationExpression { UsesNativeInvocation: true } mutation)
-                value = mutation.WithResultType(PowerShellTypeFact.Unknown);
+                value = mutation.WithResultType(PowerShellTypeFact.Unknown,
+                    nativeSetSequencePoint: mutation.Value is not null && mutation.NativeSetSequencePoint);
             if (syntax.SubExpression.Statements.Count == 1 && command.Expression is ArrayLiteralAst)
                 return value;
             var sourceText = string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)

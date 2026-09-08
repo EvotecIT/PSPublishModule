@@ -15,7 +15,13 @@ internal static class PowerShellConversionSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
-        var targetType = syntax.StaticType;
+        var targetType = syntax.Type.TypeName.GetReflectionType();
+        if (targetType is null)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2201",
+                $"Conversion target '{syntax.Type.TypeName.FullName}' requires runtime type resolution.", span));
+            return null;
+        }
         if (targetType == typeof(void) || !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2201", $"Conversion target '{targetType.FullName}' is not available in the generated target contract.", span));
@@ -28,6 +34,10 @@ internal static class PowerShellConversionSemanticBinder
 
         var operand = bindExpression(syntax.Child, targetType);
         if (operand is null) return null;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return new PowerShellBoundConversionExpression(span,
+                new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Explicit,
+                    "An authored cast uses the native conversion binder in the active invocation."), operand, useNativeConversion: true);
         if (targetType == typeof(string) && BindClosedStringConversion(operand) is { } stringValue)
             return stringValue;
         var usePowerShellLanguageRuntime = !PowerShellClrTypeSemantics.CanAssign(targetType, operand.Type.ClrType);

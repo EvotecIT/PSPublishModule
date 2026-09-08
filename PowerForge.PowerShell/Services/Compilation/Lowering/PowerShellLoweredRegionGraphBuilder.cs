@@ -261,7 +261,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
             result.Add("TypedThrow");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements)
             .OfType<PowerShellLoweredConversionExpression>()
-            .Any(static conversion => conversion.UsePowerShellLanguageRuntime))
+            .Any(static conversion => conversion.UsePowerShellLanguageRuntime || conversion.UseNativeConversion))
             result.Add("PowerShellLanguageRuntimeError");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(CanThrowClr) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>
@@ -286,6 +286,9 @@ internal static class PowerShellLoweredRegionGraphBuilder
             or PowerShellLoweredArrayConcatenationExpression
             or PowerShellLoweredDictionaryExpression
             or PowerShellLoweredIndexExpression
+            or PowerShellLoweredNativeMemberExpression
+            or PowerShellLoweredNativeIndexExpression
+            or PowerShellLoweredNativeInvocationExpression
             or PowerShellLoweredClrMemberExpression
             or PowerShellLoweredClrInvocationExpression;
 

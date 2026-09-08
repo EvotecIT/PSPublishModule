@@ -16,15 +16,32 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Read-NativeSingleVoidCall { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); $left=@([GC]::KeepAlive($Value)); $right=@([GC]::KeepAlive($Value)); [object]::ReferenceEquals($left,$right); return ,$left }
             function Read-NativeSingleVoidMutation { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); $i=1; $result=@($i++); "$i"; return ,$result }
             function Read-NativeSingleVoidFailure { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); $result='prior'; $result=@([Threading.Monitor]::Exit($Value)); return ,$result }
+            function Read-NativeMutationValue { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); $i=1; ($i++); (++$i); ($i--); return (--$i) }
+            function Read-NativeSingleMutationConstraint {
+                [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=9,[object]$Value)
+                $result='prior'
+                $result=@(
+                    $Seed++
+                )
+                return ,$result
+            }
+            function Read-NativeSingleAssignmentConstraint {
+                [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=9,[object]$Value)
+                $result='prior'
+                $result=@((
+                    $Seed=10
+                ))
+                return ,$result
+            }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeVoidOutput", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.CompiledMethods == 6, string.Join(Environment.NewLine,
+        Assert.True(result.Manifest!.CompiledMethods == 9, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
         const string probe = """
-            foreach ($name in 'Read-NativeVoidCall','Read-NativeVoidMutation','Read-NativeVoidFailure','Read-NativeSingleVoidCall','Read-NativeSingleVoidMutation','Read-NativeSingleVoidFailure') {
+            foreach ($name in 'Read-NativeVoidCall','Read-NativeVoidMutation','Read-NativeVoidFailure','Read-NativeSingleVoidCall','Read-NativeSingleVoidMutation','Read-NativeSingleVoidFailure','Read-NativeMutationValue','Read-NativeSingleMutationConstraint','Read-NativeSingleAssignmentConstraint') {
                 foreach ($action in 'Continue','SilentlyContinue','Ignore','Stop') {
                     $Error.Clear(); $faults=@(); $emitted=@(); $records=@(); $caught=$null
                     try { $records=@(& $name -Value ([object]::new()) -ErrorAction $action -ErrorVariable faults -OutVariable emitted 2>$null) }
@@ -41,7 +58,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.RootPath, "compiled-native-void");
         Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
-        Assert.Equal(24, original.StandardOutput.Split('\n').Count(line => !string.IsNullOrWhiteSpace(line)));
+        Assert.Equal(36, original.StandardOutput.Split('\n').Count(line => !string.IsNullOrWhiteSpace(line)));
         var expected = original.StandardOutput.Split('\n');
         var actual = compiled.StandardOutput.Split('\n');
         Assert.Equal(expected.Length, actual.Length);

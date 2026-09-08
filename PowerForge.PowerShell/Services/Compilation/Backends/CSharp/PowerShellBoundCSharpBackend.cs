@@ -395,8 +395,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.Operation,
                 mutation.Value,
                 mutation.NormalizeNullString,
-                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.Span, mutation.NativeSourceText),
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.Span, mutation.NativeSourceText, mutation.NativeSetSequencePoint),
             PowerShellLoweredArrayExpression array => EmitArray(array),
+            PowerShellLoweredNativeMemberExpression memberRead => EmitNativeMember(memberRead),
+            PowerShellLoweredNativeInvocationExpression nativeInvocation => EmitNativeInvocation(nativeInvocation),
+            PowerShellLoweredNativeIndexExpression nativeIndex => EmitNativeIndex(nativeIndex),
             PowerShellLoweredNativeCollectionExpression collection => EmitNativeCollection(collection),
             PowerShellLoweredArrayCopyExpression copy => EmitArrayCopy(copy),
             PowerShellLoweredArrayConcatenationExpression concatenation => EmitArrayConcatenation(concatenation),
@@ -610,11 +613,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
         bool preserveStatementErrors,
         PowerShellLoweredNativeVariableExpression? nativeTargetRead = null,
         SourceSpan? nativeSpan = null,
-        string nativeSourceText = "")
+        string nativeSourceText = "", bool nativeSetSequencePoint = true)
     {
         if (nativeTargetRead is not null)
-            return EmitNativeMutation(nativeTargetRead, operation, value,
-                nativeSpan ?? throw new InvalidOperationException("Native mutation source span is required."), nativeSourceText);
+            return nativeSetSequencePoint ? EmitNativeMutation(nativeTargetRead, operation, value,
+                nativeSpan ?? throw new InvalidOperationException("Native mutation source span is required."), nativeSourceText) :
+                EmitNativeMutationValue(nativeTargetRead, operation, value);
         var identifier = PowerShellCSharpSymbolRenderer.Identifier(target.Name);
         if (integralSemantics != PowerShellIntegralMutationSemantics.None || preserveStatementErrors)
             return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics, preserveStatementErrors);

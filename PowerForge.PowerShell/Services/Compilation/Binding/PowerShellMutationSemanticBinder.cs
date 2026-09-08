@@ -241,7 +241,8 @@ internal static partial class PowerShellMutationSemanticBinder
             _ => (PowerShellBoundMutationOperator?)null
         };
         if (operation is null) return false;
-        if (!IsStandaloneStatement(syntax))
+        var standalone = IsStandaloneStatement(syntax);
+        if (!standalone && !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2407", "Value-producing increment and decrement contexts require PowerShell expression-result semantics.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return true;
@@ -252,11 +253,12 @@ internal static partial class PowerShellMutationSemanticBinder
         {
             mutation = new PowerShellBoundMutationExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
                 target.Symbol, typeof(object), operation.Value, null,
-                new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred,
-                    "Standalone native mutation writes its invocation variable without emitting output."),
+                standalone ? new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred,
+                    "Standalone native mutation writes its invocation variable without emitting output.") : PowerShellTypeFact.Unknown,
                 false, PowerShellIntegralMutationSemantics.None,
                 nativeTargetRead: PowerShellNativeFunctionBindingPolicy.BindVariable(document, operand),
-                nativeSourceText: PowerShellNativeFunctionBindingPolicy.SourceLines(document, PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+                nativeSourceText: PowerShellNativeFunctionBindingPolicy.SourceLines(document, PowerShellSourceParser.GetSpan(document, syntax.Extent)),
+                nativeSetSequencePoint: standalone);
             return true;
         }
         if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)

@@ -19,7 +19,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             " { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1," +
             (constrained ? "[ValidateRange(1,9)][int]" : "[object]") + "$value,[object]$Right,[object]$Reporter); " +
             mutation.Item2 + "; return \"status=$?;$Reporter\" }")));
-        functions += Environment.NewLine + string.Join(Environment.NewLine, mutations.Take(6).SelectMany(mutation =>
+        functions += Environment.NewLine + string.Join(Environment.NewLine, mutations.SelectMany(mutation =>
             new[] { false, true }.Select(constrained =>
                 "function Read-NativeMutation" + mutation.Item1 + (constrained ? "Result" : "TypedResult") +
                 " { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1," +
@@ -49,8 +49,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeMutations", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(mutations.Length * 2 + 12, result.Manifest!.CompiledMethods);
-        Assert.Equal(mutations.Length * 2 + 12, result.Manifest.UnitDispositionLedger!.Entries.Count(unit => unit.UsesNativeFunctionBinding));
+        Assert.Equal(mutations.Length * 4, result.Manifest!.CompiledMethods);
+        Assert.Equal(mutations.Length * 4, result.Manifest.UnitDispositionLedger!.Entries.Count(unit => unit.UsesNativeFunctionBinding));
         const string probe = """
             $cases=@(
                 @{left=1;right=2},@{left=9;right=1},@{left=[int]::MaxValue;right=1},@{left=[long]::MaxValue;right=1},
@@ -84,7 +84,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         var expected = original.StandardOutput.Split('\n');
         var actual = compiled.StandardOutput.Split('\n');
-        Assert.Equal((mutations.Length * 2 + 12) * 17 * 4, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
+        Assert.Equal(mutations.Length * 4 * 17 * 4, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
         Assert.Equal(expected.Length, actual.Length);
         Assert.True(expected.SequenceEqual(actual), string.Join(Environment.NewLine, expected.Zip(actual)
             .Where(pair => pair.First != pair.Second).Take(8).Select(pair => "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second)));

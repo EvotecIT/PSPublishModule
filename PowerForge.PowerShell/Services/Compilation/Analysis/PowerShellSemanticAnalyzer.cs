@@ -288,6 +288,10 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 .Concat(mutation.NativeTargetRead is null || mutation.Operation == PowerShellBoundMutationOperator.Assign
                     ? Array.Empty<PowerShellBoundExpression>() : new PowerShellBoundExpression[] { mutation.NativeTargetRead }),
             PowerShellBoundArrayExpression array => array.Elements,
+            PowerShellBoundNativeMemberExpression memberRead => new[] { memberRead.Receiver },
+            PowerShellBoundNativeInvocationExpression nativeInvocation =>
+                (nativeInvocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { nativeInvocation.Receiver }).Concat(nativeInvocation.Arguments),
+            PowerShellBoundNativeIndexExpression nativeIndex => new[] { nativeIndex.Receiver }.Concat(nativeIndex.Arguments),
             PowerShellBoundNativeCollectionExpression collection => collection.Items.Select(static item => item.Value),
             PowerShellBoundArrayCopyExpression copy => new[] { copy.Source },
             PowerShellBoundArrayConcatenationExpression concatenation => new[] { concatenation.Left, concatenation.Right },
@@ -528,6 +532,15 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(element))
                 yield return read;
         }
+        if (expression is PowerShellBoundNativeMemberExpression memberRead)
+        {
+            foreach (var read in EnumerateVariableReads(memberRead.Receiver)) yield return read;
+        }
+        if (expression is PowerShellBoundNativeIndexExpression or PowerShellBoundNativeInvocationExpression)
+        {
+            foreach (var child in EnumerateExpressionChildren(expression))
+            foreach (var read in EnumerateVariableReads(child)) yield return read;
+        }
         if (expression is PowerShellBoundNativeCollectionExpression collection)
         {
             foreach (var item in collection.Items)
@@ -665,6 +678,15 @@ internal sealed partial class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundArrayCopyExpression copy)
         {
             foreach (var nested in EnumerateInvocations(copy.Source)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeMemberExpression memberRead)
+        {
+            foreach (var nested in EnumerateInvocations(memberRead.Receiver)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeIndexExpression or PowerShellBoundNativeInvocationExpression)
+        {
+            foreach (var child in EnumerateExpressionChildren(expression))
+            foreach (var nested in EnumerateInvocations(child)) yield return nested;
         }
         if (expression is PowerShellBoundNativeCollectionExpression collection)
         {

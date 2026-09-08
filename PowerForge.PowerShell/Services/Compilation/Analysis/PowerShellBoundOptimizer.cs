@@ -172,7 +172,7 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundConversionExpression conversion)
         {
             var operand = OptimizeExpression(conversion.Operand);
-            if (conversion.NativeSourcePath is null && !conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness && !conversion.NormalizeNullString &&
+            if (conversion.NativeSourcePath is null && !conversion.UseNativeConversion && !conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness && !conversion.NormalizeNullString &&
                 operand.Type.Provenance != PowerShellTypeFactProvenance.Unknown &&
                 operand is not PowerShellBoundInvocationExpression &&
                 operand.Type.ClrType == conversion.Type.ClrType)
@@ -183,7 +183,7 @@ internal sealed class PowerShellBoundOptimizer
             }
             if (conversion.UsePowerShellLanguageRuntime) _runtimeConversionSitesSpecialized++;
             return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime,
-                conversion.UsePowerShellTruthiness, conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition);
+                conversion.UsePowerShellTruthiness, conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition, conversion.UseNativeConversion);
         }
         if (expression is PowerShellBoundInvocationExpression invocation)
             return new PowerShellBoundInvocationExpression(invocation.Span, invocation.Target,
@@ -192,9 +192,20 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundMutationExpression mutation)
             return new PowerShellBoundMutationExpression(mutation.Span, mutation.Target, mutation.TargetClrType, mutation.Operation,
                 mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString,
-                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.NativeSourceText);
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.NativeSourceText, mutation.NativeSetSequencePoint);
         if (expression is PowerShellBoundArrayExpression array)
             return new PowerShellBoundArrayExpression(array.Span, array.Type.ClrType, array.Kind, array.Elements.Select(OptimizeExpression).ToArray());
+        if (expression is PowerShellBoundNativeMemberExpression memberRead)
+            return new PowerShellBoundNativeMemberExpression(memberRead.Span, OptimizeExpression(memberRead.Receiver), memberRead.Name);
+        if (expression is PowerShellBoundNativeInvocationExpression nativeInvocation)
+            return new PowerShellBoundNativeInvocationExpression(nativeInvocation.Span,
+                nativeInvocation.Receiver is null ? null : OptimizeExpression(nativeInvocation.Receiver),
+                nativeInvocation.LiteralTargetType, nativeInvocation.Name, nativeInvocation.IsStatic,
+                nativeInvocation.Arguments.Select(OptimizeExpression).ToArray(), nativeInvocation.TargetConstraint,
+                nativeInvocation.ArgumentConstraints.ToArray());
+        if (expression is PowerShellBoundNativeIndexExpression nativeIndex)
+            return new PowerShellBoundNativeIndexExpression(nativeIndex.Span, OptimizeExpression(nativeIndex.Receiver),
+                nativeIndex.Arguments.Select(OptimizeExpression).ToArray(), nativeIndex.TargetConstraint, nativeIndex.IndexConstraint);
         if (expression is PowerShellBoundNativeCollectionExpression collection)
             return new PowerShellBoundNativeCollectionExpression(collection.Span, collection.SourcePath,
                 collection.Items.Select(item => new PowerShellBoundNativeCollectionItem(item.Span, item.SourceText,

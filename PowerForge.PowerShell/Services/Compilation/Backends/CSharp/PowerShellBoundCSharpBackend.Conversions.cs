@@ -12,6 +12,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitConversionValue(PowerShellLoweredConversionExpression conversion)
     {
         var type = PowerShellCSharpSymbolRenderer.TypeName(conversion.ClrType);
+        if (conversion.UseNativeConversion)
+            return $"({type})__nativeFunction.ConvertValue(typeof({type}), {EmitExpression(conversion.Operand)})!";
         if (conversion.UsePowerShellTruthiness)
             return $"global::System.Management.Automation.LanguagePrimitives.IsTrue((object?)({EmitExpression(conversion.Operand)}))";
         if (conversion.NormalizeNullString)

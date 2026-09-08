@@ -283,14 +283,14 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         bool usePowerShellTruthiness = false,
         bool normalizeNullString = false,
         string? nativeSourcePath = null,
-        string nativeSourceText = "", bool nativePostTestCondition = false)
+        string nativeSourceText = "", bool nativePostTestCondition = false, bool useNativeConversion = false)
         : base(
             span,
             targetType,
             normalizeNullString ? PowerShellValueState.Known : operand.ValueState,
-            operand.Effects | (nativeSourcePath is null ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError),
+            operand.Effects | (nativeSourcePath is null && !useNativeConversion ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError),
             operand.Capabilities | (usePowerShellLanguageRuntime || usePowerShellTruthiness ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None) |
-                (nativeSourcePath is null ? PowerShellRequiredCapability.None : PowerShellRequiredCapability.NativeFunctionBinding |
+                (nativeSourcePath is null && !useNativeConversion ? PowerShellRequiredCapability.None : PowerShellRequiredCapability.NativeFunctionBinding |
                     PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors))
     {
         if (usePowerShellLanguageRuntime && usePowerShellTruthiness)
@@ -305,6 +305,7 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         NativeSourcePath = nativeSourcePath;
         NativeSourceText = nativeSourceText;
         NativePostTestCondition = nativePostTestCondition;
+        UseNativeConversion = useNativeConversion;
     }
 
     internal PowerShellBoundExpression Operand { get; }
@@ -314,6 +315,7 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
     internal string? NativeSourcePath { get; }
     internal string NativeSourceText { get; }
     internal bool NativePostTestCondition { get; }
+    internal bool UseNativeConversion { get; }
 }
 
 internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpression

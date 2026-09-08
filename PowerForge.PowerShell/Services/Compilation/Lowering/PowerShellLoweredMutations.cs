@@ -13,7 +13,7 @@ internal sealed class PowerShellLoweredMutationExpression : PowerShellLoweredExp
         PowerShellIntegralMutationSemantics integralSemantics,
         bool preserveStatementErrors = false,
         PowerShellLoweredNativeVariableExpression? nativeTargetRead = null,
-        string nativeSourceText = "")
+        string nativeSourceText = "", bool nativeSetSequencePoint = true)
         : base(span, clrType)
     {
         Target = target;
@@ -25,6 +25,7 @@ internal sealed class PowerShellLoweredMutationExpression : PowerShellLoweredExp
         PreserveStatementErrors = preserveStatementErrors;
         NativeTargetRead = nativeTargetRead;
         NativeSourceText = nativeSourceText;
+        NativeSetSequencePoint = nativeSetSequencePoint;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -36,4 +37,5 @@ internal sealed class PowerShellLoweredMutationExpression : PowerShellLoweredExp
     internal bool PreserveStatementErrors { get; }
     internal PowerShellLoweredNativeVariableExpression? NativeTargetRead { get; }
     internal string NativeSourceText { get; }
+    internal bool NativeSetSequencePoint { get; }
 }

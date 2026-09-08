@@ -39,7 +39,7 @@ internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredE
         bool usePowerShellTruthiness,
         bool normalizeNullString = false,
         string? nativeSourcePath = null,
-        string nativeSourceText = "", bool nativePostTestCondition = false) : base(span, clrType)
+        string nativeSourceText = "", bool nativePostTestCondition = false, bool useNativeConversion = false) : base(span, clrType)
     {
         Operand = operand;
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
@@ -48,6 +48,7 @@ internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredE
         NativeSourcePath = nativeSourcePath;
         NativeSourceText = nativeSourceText;
         NativePostTestCondition = nativePostTestCondition;
+        UseNativeConversion = useNativeConversion;
     }
     internal PowerShellLoweredExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
@@ -56,6 +57,7 @@ internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredE
     internal string? NativeSourcePath { get; }
     internal string NativeSourceText { get; }
     internal bool NativePostTestCondition { get; }
+    internal bool UseNativeConversion { get; }
 }
 
 internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredExpression
