@@ -178,6 +178,9 @@ public static partial class WebSeoDoctor
             var route = ToRoute(relativePath);
             var title = NormalizeWhitespace(doc.Title);
             var description = GetMetaNameValue(doc, "description");
+            var language = NormalizeDocumentLanguage(doc.DocumentElement?.GetAttribute("lang"));
+            var pageTitleMin = LocalizedMinimumLength(titleMin, language);
+            var pageDescriptionMin = LocalizedMinimumLength(descriptionMin, language);
             var bodyText = GetVisibleBodyText(doc.Body);
             var isGeneratedApiReferencePage = options.ApplyGeneratedApiReferenceSeoProfile &&
                 IsGeneratedApiReferencePage(relativePath, doc);
@@ -213,6 +216,7 @@ public static partial class WebSeoDoctor
                 RelativePath = relativePath,
                 Route = route,
                 Title = title,
+                Language = language,
                 Description = description,
                 BodyText = bodyText,
                 CanonicalHref = canonicalLinks.FirstOrDefault() ?? string.Empty
@@ -229,7 +233,7 @@ public static partial class WebSeoDoctor
                 TitleTagCount = titleTagCount,
                 DescriptionLength = description.Length,
                 MissingDescription = string.IsNullOrWhiteSpace(description),
-                ShortDescription = !string.IsNullOrWhiteSpace(description) && description.Length < descriptionMin,
+                ShortDescription = !string.IsNullOrWhiteSpace(description) && description.Length < pageDescriptionMin,
                 LongDescription = description.Length > descriptionMax,
                 H1Count = visibleH1Count,
                 MissingH1 = visibleH1Count == 0,
@@ -250,17 +254,17 @@ public static partial class WebSeoDoctor
                 }
                 else if (!isGeneratedApiReferencePage)
                 {
-                    if (title.Length < titleMin)
+                    if (title.Length < pageTitleMin)
                     {
                         AddIssue("warning", "title", relativePath,
-                            $"title is short ({title.Length} chars). Recommended {titleMin}-{titleMax}.",
+                            $"title is short ({title.Length} chars). Recommended {pageTitleMin}-{titleMax}.",
                             "title-short");
                     }
 
                     if (title.Length > titleMax)
                     {
                         AddIssue("warning", "title", relativePath,
-                            $"title is long ({title.Length} chars). Recommended {titleMin}-{titleMax}.",
+                            $"title is long ({title.Length} chars). Recommended {pageTitleMin}-{titleMax}.",
                             "title-long");
                     }
                 }
@@ -274,17 +278,17 @@ public static partial class WebSeoDoctor
                 }
                 else if (!isGeneratedApiReferencePage)
                 {
-                    if (description.Length < descriptionMin)
+                    if (description.Length < pageDescriptionMin)
                     {
                         AddIssue("warning", "description", relativePath,
-                            $"meta description is short ({description.Length} chars). Recommended {descriptionMin}-{descriptionMax}.",
+                            $"meta description is short ({description.Length} chars). Recommended {pageDescriptionMin}-{descriptionMax}.",
                             "description-short");
                     }
 
                     if (description.Length > descriptionMax)
                     {
                         AddIssue("warning", "description", relativePath,
-                            $"meta description is long ({description.Length} chars). Recommended {descriptionMin}-{descriptionMax}.",
+                            $"meta description is long ({description.Length} chars). Recommended {pageDescriptionMin}-{descriptionMax}.",
                             "description-long");
                     }
                 }
@@ -408,9 +412,10 @@ public static partial class WebSeoDoctor
         {
             var duplicateTitleGroups = pages
                 .Where(page => !string.IsNullOrWhiteSpace(page.Title))
-                .GroupBy(page => page.Title, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(page => (page.Language, Title: page.Title.ToUpperInvariant()))
                 .Where(group => group.Count() > 1)
-                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key.Language, StringComparer.Ordinal)
+                .ThenBy(group => group.Key.Title, StringComparer.Ordinal)
                 .ToArray();
 
             foreach (var group in duplicateTitleGroups)
@@ -421,11 +426,11 @@ public static partial class WebSeoDoctor
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .Take(4)
                     .ToArray();
-                var title = group.Key;
+                var title = group.First().Title;
                 AddIssue("warning", "duplicate-intent", null,
                     $"duplicate title intent detected for '{title}' across {group.Count()} pages. Sample routes: {string.Join(", ", sampleRoutes)}.",
                     "duplicate-title-intent",
-                    title);
+                    DuplicateTitleKey(group.Key.Language, group.Key.Title));
             }
         }
 
@@ -624,6 +629,7 @@ public static partial class WebSeoDoctor
         public string RelativePath { get; init; } = string.Empty;
         public string Route { get; init; } = "/";
         public string Title { get; init; } = string.Empty;
+        public string Language { get; init; } = string.Empty;
         public string Description { get; init; } = string.Empty;
         public string BodyText { get; init; } = string.Empty;
         public string FocusKeyphrase { get; set; } = string.Empty;
