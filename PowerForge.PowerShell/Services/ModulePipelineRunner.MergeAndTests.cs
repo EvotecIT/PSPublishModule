@@ -95,19 +95,39 @@ public sealed partial class ModulePipelineRunner
         if (manifestScripts.Length == 0 || scriptFiles.Count == 0)
             return scriptFiles.ToArray();
 
-        // Manifest paths are a portable module contract and are commonly authored on Windows.
-        // Match them case-insensitively so a Linux build does not merge a hook merely because
-        // the manifest's casing differs from the staged file-system entry.
-        var runtimeHooks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string[] resolvedScripts = scriptFiles
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .ToArray();
+        var runtimeHooks = new HashSet<string>(StringComparer.Ordinal);
         foreach (var script in manifestScripts)
         {
             var resolved = ResolveManifestScriptPath(stagingPath, script);
-            if (resolved is not null)
-                runtimeHooks.Add(resolved);
+            if (resolved is null)
+                continue;
+
+            string[] exactMatches = resolvedScripts
+                .Where(path => string.Equals(path, resolved, StringComparison.Ordinal))
+                .ToArray();
+            if (exactMatches.Length > 0)
+            {
+                foreach (string match in exactMatches)
+                    runtimeHooks.Add(match);
+                continue;
+            }
+
+            // Manifests are commonly authored on Windows and then packaged on Linux. Honor a
+            // casing-only mismatch when it identifies exactly one staged source, but do not
+            // collapse genuinely case-distinct files on a case-sensitive filesystem.
+            string[] portableMatches = resolvedScripts
+                .Where(path => string.Equals(path, resolved, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (portableMatches.Length == 1)
+                runtimeHooks.Add(portableMatches[0]);
         }
 
-        return scriptFiles
-            .Where(path => !runtimeHooks.Contains(Path.GetFullPath(path)))
+        return resolvedScripts
+            .Where(path => !runtimeHooks.Contains(path))
             .ToArray();
     }
 

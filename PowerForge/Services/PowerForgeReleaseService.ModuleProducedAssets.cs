@@ -70,7 +70,7 @@ internal sealed partial class PowerForgeReleaseService
     {
         if (!File.Exists(path) ||
             !string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase) ||
-            !IsProducedByScriptPackedArtefact(path, plan))
+            !TryResolveScriptPackedEntryPoint(path, plan, out string? expectedEntryPoint))
         {
             return false;
         }
@@ -105,8 +105,7 @@ internal sealed partial class PowerForgeReleaseService
                 return false;
             }
 
-            return files.Any(static name =>
-                string.Equals(Path.GetExtension(name), ".ps1", StringComparison.OrdinalIgnoreCase));
+            return files.Contains(expectedEntryPoint!, StringComparer.Ordinal);
         }
         catch
         {
@@ -114,39 +113,59 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private static bool IsProducedByScriptPackedArtefact(
+    private static bool TryResolveScriptPackedEntryPoint(
         string path,
-        PowerForgeModuleReleasePlanSummary? plan)
+        PowerForgeModuleReleasePlanSummary? plan,
+        out string? entryPointRelativePath)
     {
+        entryPointRelativePath = null;
         string fullPath = Path.GetFullPath(path);
         PowerForgeModuleArtefactOutputSummary[] outputs =
             plan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>();
-        ArtefactType[] exactTypes = outputs
+        PowerForgeModuleArtefactOutputSummary[] matchingOutputs = outputs
             .Where(output => output is not null &&
                              !string.IsNullOrWhiteSpace(output.OutputPath) &&
                              string.Equals(
                                  Path.GetFullPath(output.OutputPath!),
                                  fullPath,
                                  FrameworkCompatibility.GetPathStringComparison(output.OutputPath!)))
-            .Select(static output => output.Type)
-            .Distinct()
             .ToArray();
-        if (exactTypes.Length > 0)
-            return exactTypes.Length == 1 && exactTypes[0] == ArtefactType.ScriptPacked;
+        if (matchingOutputs.Length == 0)
+        {
+            string directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
+            matchingOutputs = outputs
+                .Where(output => output is not null &&
+                                 string.IsNullOrWhiteSpace(output.OutputPath) &&
+                                 !string.IsNullOrWhiteSpace(output.OutputRoot) &&
+                                 string.Equals(
+                                     Path.GetFullPath(output.OutputRoot),
+                                     directory,
+                                     FrameworkCompatibility.GetPathStringComparison(output.OutputRoot)))
+                .ToArray();
+        }
 
-        string directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
-        ArtefactType[] matchingTypes = outputs
-            .Where(output => output is not null &&
-                             string.IsNullOrWhiteSpace(output.OutputPath) &&
-                             !string.IsNullOrWhiteSpace(output.OutputRoot) &&
-                             string.Equals(
-                                 Path.GetFullPath(output.OutputRoot),
-                                 directory,
-                                 FrameworkCompatibility.GetPathStringComparison(output.OutputRoot)))
-            .Select(static output => output.Type)
-            .Distinct()
+        if (matchingOutputs.Length == 0 ||
+            matchingOutputs.Select(static output => output.Type).Distinct().Any(static type => type != ArtefactType.ScriptPacked))
+        {
+            return false;
+        }
+
+        string[] entryPoints = matchingOutputs
+            .Select(static output => output.EntryPointRelativePath)
+            .Where(static entryPoint => !string.IsNullOrWhiteSpace(entryPoint))
+            .Select(static entryPoint => entryPoint!.Replace('\\', '/').TrimStart('/'))
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
-        return matchingTypes.Length == 1 && matchingTypes[0] == ArtefactType.ScriptPacked;
+        if (entryPoints.Length != 1 ||
+            Path.IsPathRooted(entryPoints[0]) ||
+            entryPoints[0].Split('/').Any(static segment => segment is "." or "..") ||
+            !string.Equals(Path.GetExtension(entryPoints[0]), ".ps1", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        entryPointRelativePath = entryPoints[0];
+        return true;
     }
 
     private static bool IsNuGetPackagePath(string path)

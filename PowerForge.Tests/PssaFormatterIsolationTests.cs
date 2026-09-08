@@ -30,8 +30,57 @@ public sealed class PssaFormatterIsolationTests
         Assert.Contains("*PowerShellCustomFunctionAttribute*", script, StringComparison.Ordinal);
         Assert.Contains("*FunctionMemberAst*", script, StringComparison.Ordinal);
         Assert.Contains("*FunctionDefinitionAst*", script, StringComparison.Ordinal);
+        Assert.Contains("*PowerShellCustomFunctionAttribute*' -and", script, StringComparison.Ordinal);
+        Assert.Contains("*FunctionMemberAst*' -and", script, StringComparison.Ordinal);
         Assert.Contains("$unexpectedErrors.Count -gt 0 -or $null -eq $formatted", script, StringComparison.Ordinal);
         Assert.Contains("WARNING::", script, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("PowerShellCustomFunctionAttribute metadata is unavailable")]
+    [InlineData("FunctionMemberAst metadata is unavailable")]
+    [InlineData("FunctionDefinitionAst metadata is unavailable")]
+    public void EmbeddedFormatter_ToleratesEachKnownClassMemberMetadataFailure(string errorMessage)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string moduleRoot = Path.Combine(root, "modules", "PSScriptAnalyzer", "999.0.0");
+            Directory.CreateDirectory(moduleRoot);
+            WriteTestModule(
+                moduleRoot,
+                "999.0.0",
+                $$"""
+                function Invoke-Formatter {
+                    [CmdletBinding()]
+                    param([string] $ScriptDefinition, [hashtable] $Settings)
+                    Write-Error '{{errorMessage}}'
+                    return $ScriptDefinition
+                }
+                Export-ModuleMember -Function Invoke-Formatter
+                """);
+
+            string inputPath = Path.Combine(root, "module.ps1");
+            File.WriteAllText(inputPath, "Get-Date");
+            var logger = new CollectingLogger();
+            var formatter = new PssaFormatter(
+                new EnvironmentPowerShellRunner(new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = Path.Combine(root, "modules")
+                }),
+                logger);
+
+            FormatterResult result = Assert.Single(formatter.FormatFiles(new[] { inputPath }));
+
+            Assert.False(result.Changed);
+            Assert.Equal("Unchanged", result.Message);
+            Assert.Single(logger.Warnings);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
     }
 
     [Fact]
@@ -112,19 +161,20 @@ public sealed class PssaFormatterIsolationTests
             }
         }
 
-        static void WriteTestModule(string versionRoot, string version, string moduleScript)
-        {
-            File.WriteAllText(
-                Path.Combine(versionRoot, "PSScriptAnalyzer.psd1"),
-                $$"""
-                @{
-                    RootModule = 'PSScriptAnalyzer.psm1'
-                    ModuleVersion = '{{version}}'
-                    FunctionsToExport = @('Invoke-Formatter')
-                }
-                """);
-            File.WriteAllText(Path.Combine(versionRoot, "PSScriptAnalyzer.psm1"), moduleScript);
-        }
+    }
+
+    private static void WriteTestModule(string versionRoot, string version, string moduleScript)
+    {
+        File.WriteAllText(
+            Path.Combine(versionRoot, "PSScriptAnalyzer.psd1"),
+            $$"""
+            @{
+                RootModule = 'PSScriptAnalyzer.psm1'
+                ModuleVersion = '{{version}}'
+                FunctionsToExport = @('Invoke-Formatter')
+            }
+            """);
+        File.WriteAllText(Path.Combine(versionRoot, "PSScriptAnalyzer.psm1"), moduleScript);
     }
 
     private sealed class StubRunner : IPowerShellRunner

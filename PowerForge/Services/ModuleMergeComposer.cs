@@ -78,13 +78,13 @@ internal static partial class ModuleMergeComposer
             return;
 
         var generatedScripts = (scriptPaths ?? System.Array.Empty<string>())
-            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path));
+        var generatedScriptContents = DistinctFileSystemPaths(generatedScripts)
             .Select(File.ReadAllText)
             .Where(static content => !string.IsNullOrWhiteSpace(content))
             .ToArray();
 
-        if (generatedScripts.Length == 0)
+        if (generatedScriptContents.Length == 0)
             return;
 
         var existing = File.ReadAllText(psm1Path);
@@ -92,7 +92,7 @@ internal static partial class ModuleMergeComposer
         withoutExportBlock = withoutExportBlock.TrimEnd();
 
         var builder = new StringBuilder(withoutExportBlock);
-        foreach (var script in generatedScripts)
+        foreach (var script in generatedScriptContents)
         {
             if (builder.Length > 0)
                 builder.AppendLine().AppendLine();
@@ -249,13 +249,31 @@ internal static partial class ModuleMergeComposer
     }
 
     private static string[] NormalizeScriptFiles(IEnumerable<string> files)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return files
+        => DistinctFileSystemPaths(files
             .Where(static file => !string.IsNullOrWhiteSpace(file))
-            .Select(Path.GetFullPath)
-            .Where(seen.Add)
-            .ToArray();
+            .Select(Path.GetFullPath));
+
+    private static string[] DistinctFileSystemPaths(IEnumerable<string> paths)
+    {
+        var distinct = new List<(string Path, StringComparison Comparison)>();
+        foreach (string path in paths)
+        {
+            string fullPath = Path.GetFullPath(path);
+            StringComparison pathComparison = FrameworkCompatibility.GetPathStringComparisonForPath(fullPath);
+            bool seen = distinct.Any(existing =>
+            {
+                StringComparison comparison =
+                    existing.Comparison == StringComparison.OrdinalIgnoreCase ||
+                    pathComparison == StringComparison.OrdinalIgnoreCase
+                        ? StringComparison.OrdinalIgnoreCase
+                        : StringComparison.Ordinal;
+                return string.Equals(existing.Path, fullPath, comparison);
+            });
+            if (!seen)
+                distinct.Add((fullPath, pathComparison));
+        }
+
+        return distinct.Select(static entry => entry.Path).ToArray();
     }
 
     internal static string[] ResolveMergeDirectories(InformationConfiguration? information)

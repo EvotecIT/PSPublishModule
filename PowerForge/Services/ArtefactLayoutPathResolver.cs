@@ -8,6 +8,27 @@ namespace PowerForge;
 /// </summary>
 internal static class ArtefactLayoutPathResolver
 {
+    internal static string ResolveScriptName(
+        string? configuredName,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        var replaced = ModulePathTokenFormatter.ReplacePathTokens(
+            configuredName,
+            moduleName,
+            moduleVersion,
+            preRelease).Trim();
+        var scriptName = string.IsNullOrWhiteSpace(replaced) ? moduleName + ".ps1" : replaced;
+        if (!scriptName.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+            scriptName += ".ps1";
+
+        if (Path.IsPathRooted(scriptName) || scriptName.IndexOf('/') >= 0 || scriptName.IndexOf('\\') >= 0)
+            throw new InvalidOperationException($"ScriptName must be a file name, but got '{scriptName}'.");
+
+        return scriptName;
+    }
+
     internal static string ResolveArtefactFileName(
         ArtefactConfiguration cfg,
         string moduleName,
@@ -136,6 +157,37 @@ internal static class ArtefactLayoutPathResolver
             moduleName,
             moduleVersion,
             preRelease);
+
+    internal static string ResolveScriptPackedEntryPointRelativePath(
+        ArtefactConfiguration cfg,
+        string outputRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease)
+    {
+        string packedRoot = Path.Combine(outputRoot, ".powerforge-packed-layout");
+        string requiredRoot = ResolveRequiredModulesRootForPacked(
+            cfg,
+            outputRoot,
+            packedRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        string modulesRoot = ResolveModulesRootForPacked(
+            cfg,
+            outputRoot,
+            packedRoot,
+            requiredRoot,
+            moduleName,
+            moduleVersion,
+            preRelease);
+        string scriptPath = Path.Combine(
+            modulesRoot,
+            ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease));
+        return FrameworkCompatibility.GetRelativePath(packedRoot, scriptPath)
+            .Replace('\\', '/')
+            .TrimStart('/');
+    }
 
     private static string ResolvePackedLayoutRoot(
         string? configuredPath,

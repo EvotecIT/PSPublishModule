@@ -63,4 +63,6 @@ internal sealed class PowerForgeModuleArtefactOutputSummary
     public string OutputRoot { get; set; } = string.Empty;
 
     public string? OutputPath { get; set; }
+
+    public string? EntryPointRelativePath { get; set; }
 }

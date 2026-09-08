@@ -101,8 +101,8 @@ foreach ($f in $Files) {
     if ($formatterErrors.Count -gt 0) {
         $unexpectedErrors = @($formatterErrors | Where-Object {
             $message = $_.Exception.Message
-            $message -notlike '*PowerShellCustomFunctionAttribute*' -or
-            $message -notlike '*FunctionMemberAst*' -or
+            $message -notlike '*PowerShellCustomFunctionAttribute*' -and
+            $message -notlike '*FunctionMemberAst*' -and
             $message -notlike '*FunctionDefinitionAst*'
         })
         if ($unexpectedErrors.Count -gt 0 -or $null -eq $formatted) {

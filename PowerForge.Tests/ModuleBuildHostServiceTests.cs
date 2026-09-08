@@ -736,7 +736,8 @@ public sealed class ModuleBuildHostServiceTests
                 new PowerForgeModuleArtefactOutputSummary
                 {
                     Type = ArtefactType.ScriptPacked,
-                    OutputPath = outputPath
+                    OutputPath = outputPath,
+                    EntryPointRelativePath = "app/Company.Tools.ps1"
                 }
             }
         });
@@ -760,6 +761,7 @@ public sealed class ModuleBuildHostServiceTests
         PowerForgeModuleArtefactOutputSummary output = Assert.Single(result.ArtefactOutputs);
         Assert.Equal(ArtefactType.ScriptPacked, output.Type);
         Assert.Equal(outputPath, output.OutputPath);
+        Assert.Equal("app/Company.Tools.ps1", output.EntryPointRelativePath);
         Assert.DoesNotContain("##powerforge-module-progress", result.StandardOutput, StringComparison.Ordinal);
         Assert.Equal("ok", result.StandardOutput);
         Assert.NotNull(captured);

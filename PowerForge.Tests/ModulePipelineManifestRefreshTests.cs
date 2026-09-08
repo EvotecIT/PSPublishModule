@@ -391,6 +391,69 @@ public sealed class ModulePipelineManifestRefreshTests
     }
 
     [Fact]
+    public void Run_MergedModulePreservesCaseDistinctNonHookOnCaseSensitiveFileSystem()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.Ordinal)
+                return;
+
+            const string moduleName = "TestModule";
+            string hookDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes")).FullName;
+            File.WriteAllText(Path.Combine(hookDirectory, "Initialize.ps1"), "class RuntimeHookClass { }");
+            File.WriteAllText(Path.Combine(hookDirectory, "initialize.ps1"), "function Get-CaseDistinctMerged { 'ok' }");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
+            File.WriteAllText(
+                Path.Combine(root.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    ScriptsToProcess = @('Classes/Initialize.ps1')" + Environment.NewLine +
+                "}");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { Enable = true, Merge = true }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
+            string stagedHookDirectory = Path.Combine(result.BuildResult.StagingPath, "Classes");
+            Assert.True(result.Plan.MergeModule);
+            Assert.True(File.Exists(Path.Combine(stagedHookDirectory, "Initialize.ps1")));
+            Assert.True(File.Exists(Path.Combine(stagedHookDirectory, "initialize.ps1")));
+            string mergedModule = File.ReadAllText(Path.Combine(result.BuildResult.StagingPath, moduleName + ".psm1"));
+
+            Assert.Contains("Get-CaseDistinctMerged", mergedModule, StringComparison.Ordinal);
+            Assert.DoesNotContain("RuntimeHookClass", mergedModule, StringComparison.Ordinal);
+            Assert.True(ManifestEditor.TryGetTopLevelStringArray(
+                result.BuildResult.ManifestPath,
+                "ScriptsToProcess",
+                out string[]? scripts));
+            Assert.Equal(new[] { "Classes/Initialize.ps1" }, scripts);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_WritesPrereleaseToPsDataAndRemovesTopLevelPrerelease()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -69,7 +69,8 @@ internal static class ModulePipelineProgressProtocol
                 .Select(static result => new PowerForgeModuleArtefactOutputSummary
                 {
                     Type = result.Type,
-                    OutputPath = Path.GetFullPath(result.OutputPath)
+                    OutputPath = Path.GetFullPath(result.OutputPath),
+                    EntryPointRelativePath = result.EntryPointRelativePath
                 })
                 .ToArray()
         });

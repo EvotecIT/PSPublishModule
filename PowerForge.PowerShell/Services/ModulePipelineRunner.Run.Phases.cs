@@ -117,7 +117,8 @@ public sealed partial class ModulePipelineRunner
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }
 
-            if (!state.PackageWithoutScriptFolders &&
+            if (!state.MergeExecution.MergedModule &&
+                !state.PackageWithoutScriptFolders &&
                 !plan.BuildSpec.RefreshManifestOnly &&
                 !IsReusingCompiledPowerShellModule(plan))
                 TryRegenerateBootstrapperFromManifest(

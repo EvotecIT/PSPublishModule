@@ -1632,7 +1632,11 @@ internal sealed partial class PowerForgeReleaseService
                 moduleName,
                 buildRequest.ModuleVersion,
                 buildRequest.PreReleaseTag),
-            ArtefactOutputs = ResolveModuleArtefactOutputs(moduleConfig),
+            ArtefactOutputs = ResolveModuleArtefactOutputs(
+                moduleConfig,
+                moduleName,
+                buildRequest.ModuleVersion ?? moduleConfig?.Spec.Build.Version,
+                buildRequest.PreReleaseTag),
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,

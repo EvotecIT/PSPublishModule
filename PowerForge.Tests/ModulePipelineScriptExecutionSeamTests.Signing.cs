@@ -191,8 +191,10 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
-    [Fact]
-    public void Plan_RejectsProvenanceEnabledScriptPackedArtefactBeforePublication()
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Plan_RejectsProvenanceEnabledScriptArtefactBeforePublication(ArtefactType artefactType)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -203,14 +205,14 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             ModulePipelineSpec spec = CreateSignedPackedSpec(
                 root.FullName,
                 moduleName,
-                Path.Combine(root.FullName, "Artefacts", "ScriptPacked"));
+                Path.Combine(root.FullName, "Artefacts", artefactType.ToString()));
             var artefact = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments.Last());
-            artefact.ArtefactType = ArtefactType.ScriptPacked;
+            artefact.ArtefactType = artefactType;
             EnableGitHubPublish(spec, moduleName);
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec));
 
-            Assert.Contains("does not support ScriptPacked", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("does not support Script or ScriptPacked", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

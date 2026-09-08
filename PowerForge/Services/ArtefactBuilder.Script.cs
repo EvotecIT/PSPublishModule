@@ -112,7 +112,8 @@ public sealed partial class ArtefactBuilder
             outputRoot,
             modules.ToArray(),
             copied.ToArray(),
-            evidencePaths);
+            evidencePaths,
+            FrameworkCompatibility.GetRelativePath(outputRoot, scriptPath));
     }
 
     private ArtefactBuildResult BuildScriptPacked(
@@ -181,6 +182,7 @@ public sealed partial class ArtefactBuilder
         var copied = new List<ArtefactCopyEntry>();
         var modules = new List<ArtefactModuleEntry>();
         var evidencePaths = Array.Empty<string>();
+        string? entryPointRelativePath = null;
         try
         {
             _logger.Info($"Staging packed script artefact '{zipPath}'");
@@ -196,6 +198,7 @@ public sealed partial class ArtefactBuilder
                 includeScriptFolders,
                 finalizedPayloadFiles,
                 clearDestination: true);
+            entryPointRelativePath = FrameworkCompatibility.GetRelativePath(tempRoot, scriptPath);
             modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: scriptRoot));
 
             AddRequiredModules(cfg, requiredRoot, requiredModules, modules);
@@ -237,7 +240,8 @@ public sealed partial class ArtefactBuilder
             zipPath,
             modules.ToArray(),
             copied.ToArray(),
-            evidencePaths);
+            evidencePaths,
+            entryPointRelativePath);
     }
 
     private string BuildScriptLayout(
@@ -300,17 +304,7 @@ public sealed partial class ArtefactBuilder
     }
 
     private static string ResolveScriptName(string? configuredName, string moduleName, string moduleVersion, string? preRelease)
-    {
-        var replaced = ModulePathTokenFormatter.ReplacePathTokens(configuredName, moduleName, moduleVersion, preRelease).Trim();
-        var scriptName = string.IsNullOrWhiteSpace(replaced) ? moduleName + ".ps1" : replaced;
-        if (!scriptName.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
-            scriptName += ".ps1";
-
-        if (Path.IsPathRooted(scriptName) || scriptName.IndexOf('/') >= 0 || scriptName.IndexOf('\\') >= 0)
-            throw new InvalidOperationException($"ScriptName must be a file name, but got '{scriptName}'.");
-
-        return scriptName;
-    }
+        => ArtefactLayoutPathResolver.ResolveScriptName(configuredName, moduleName, moduleVersion, preRelease);
 
     private static void RewriteScriptContent(string scriptPath, string? preScriptMerge, string? postScriptMerge)
     {
