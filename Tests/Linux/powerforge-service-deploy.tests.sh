@@ -4,7 +4,7 @@ set -Eeuo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 deploy_script="$repo_root/Deployment/Linux/powerforge-service-deploy.sh"
 test_root="$(mktemp -d "${HOME}/powerforge-service-deploy-tests.XXXXXXXX")"
-trap 'rm -rf "$test_root" /tmp/powerforge-service-example /tmp/powerforge-service-fresh' EXIT
+trap 'rm -rf "$test_root" /tmp/powerforge-service-example /tmp/powerforge-service-fresh /tmp/powerforge-service-compressed /tmp/powerforge-service-expanded' EXIT
 
 mkdir -p "$test_root/config" "$test_root/locks" "$test_root/bin" "$test_root/service"
 export POWERFORGE_SERVICE_CONFIG_ROOT="$test_root/config"
@@ -140,6 +140,33 @@ transaction_dir="$POWERFORGE_SERVICE_TRANSACTION_ROOT/service-example.transactio
 grep -qxF '[Service]' "$drop_in"
 grep -qxF "ReadWritePaths=$test_root/example-data" "$drop_in"
 [[ ! -e /tmp/powerforge-service-example ]]
+
+# Compressed and deceptively small sparse release archives must be rejected
+# before extraction can consume unbounded disk.
+mkdir -p "$test_root/compressed-service"
+write_config compressed "$test_root/compressed-service"
+create_stage compressed 92013 1 dddddddddddddddddddddddddddddddddddddddd
+gzip -c /tmp/powerforge-service-compressed/artifact.tar >"$test_root/compressed-artifact.tar.gz"
+mv "$test_root/compressed-artifact.tar.gz" /tmp/powerforge-service-compressed/artifact.tar
+if TEST_SERVICE_ROOT="$test_root/compressed-service" "$deploy_script" --service compressed; then
+  echo 'Deployment unexpectedly accepted a compressed release archive.' >&2
+  exit 1
+fi
+
+mkdir -p "$test_root/expanded-service" "$test_root/expanded-source"
+write_config expanded "$test_root/expanded-service"
+truncate -s 1073741825 "$test_root/expanded-source/oversized.bin"
+mkdir -p /tmp/powerforge-service-expanded
+tar --sparse -C "$test_root/expanded-source" -cf /tmp/powerforge-service-expanded/artifact.tar oversized.bin
+expanded_sha="$(sha256sum /tmp/powerforge-service-expanded/artifact.tar | awk '{print $1}')"
+printf '{"sourceSha":"%s","artifactSha256":"%s","workflowRunId":"92014","workflowRunAttempt":"1"}\n' \
+  eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee "$expanded_sha" \
+  >/tmp/powerforge-service-expanded/deployment.json
+chmod 0600 /tmp/powerforge-service-expanded/artifact.tar /tmp/powerforge-service-expanded/deployment.json
+if TEST_SERVICE_ROOT="$test_root/expanded-service" "$deploy_script" --service expanded; then
+  echo 'Deployment unexpectedly accepted an archive with oversized logical expansion.' >&2
+  exit 1
+fi
 
 # A release-filesystem flush failure must happen before the commit marker and
 # roll the current link back through the still-live transaction.
