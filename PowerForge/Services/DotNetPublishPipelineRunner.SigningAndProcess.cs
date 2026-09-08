@@ -1023,8 +1023,8 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             var stdoutCapture = new RedirectedOutputCapture();
             var stderrCapture = new RedirectedOutputCapture();
-            Task stdoutRead = ReadRedirectedOutputAsync(p.StandardOutput, stdoutCapture);
-            Task stderrRead = ReadRedirectedOutputAsync(p.StandardError, stderrCapture);
+            Task stdoutRead = StartRedirectedOutputReader(p.StandardOutput, stdoutCapture);
+            Task stderrRead = StartRedirectedOutputReader(p.StandardError, stderrCapture);
 
             var timeoutMs = ToTimeoutMilliseconds(timeout.Value);
             bool exited = p.WaitForExit(timeoutMs);

@@ -54,29 +54,66 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static Task ReadRedirectedOutputAsync(
+    // Start each reader on its own thread so the caller can arm the process
+    // timeout even when a Unix pipe keeps completing reads synchronously. The
+    // thread exits at the first asynchronous read; the continuation then
+    // completes normally without occupying a worker for the process lifetime.
+    private static Task StartRedirectedOutputReader(
         StreamReader reader,
         RedirectedOutputCapture capture)
-        => Task.Run(async () =>
+    {
+        var completion = new TaskCompletionSource<object?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
         {
-            var buffer = new char[4096];
-            try
-            {
-                int count;
-                while ((count = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
-                    capture.Append(buffer, count);
-            }
-            catch (IOException)
-            {
-                // Disposing an inherited redirected stream ends the bounded read.
-            }
-            catch (ObjectDisposedException)
-            {
-                // Disposing an inherited redirected stream ends the bounded read.
-            }
-            catch (InvalidOperationException)
-            {
-                // The asynchronous reader can report disposal as an invalid operation.
-            }
-        });
+            _ = CompleteRedirectedOutputReaderAsync(reader, capture, completion);
+        })
+        {
+            IsBackground = true,
+            Name = "PowerForge redirected output reader"
+        };
+        thread.Start();
+        return completion.Task;
+    }
+
+    private static async Task CompleteRedirectedOutputReaderAsync(
+        StreamReader reader,
+        RedirectedOutputCapture capture,
+        TaskCompletionSource<object?> completion)
+    {
+        try
+        {
+            await ReadRedirectedOutputAsync(reader, capture).ConfigureAwait(false);
+            completion.TrySetResult(null);
+        }
+        catch (Exception ex)
+        {
+            completion.TrySetException(ex);
+        }
+    }
+
+    private static async Task ReadRedirectedOutputAsync(
+        StreamReader reader,
+        RedirectedOutputCapture capture)
+    {
+        var buffer = new char[4096];
+        try
+        {
+            int count;
+            while ((count = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
+                capture.Append(buffer, count);
+        }
+        catch (IOException)
+        {
+            // Disposing an inherited redirected stream ends the bounded read.
+        }
+        catch (ObjectDisposedException)
+        {
+            // Disposing an inherited redirected stream ends the bounded read.
+        }
+        catch (InvalidOperationException)
+        {
+            // The asynchronous reader can report disposal as an invalid operation.
+        }
+    }
 }
