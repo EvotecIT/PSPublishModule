@@ -3,10 +3,9 @@ namespace PowerForge.Tests;
 public sealed partial class AppleReleaseWorkflowTests
 {
     [Fact]
-    public void PublicModuleReleaseBindsSigningAndPublicationToExactMain()
+    public void PublicModuleReleaseHasNoGitHubWorkflowAndRetainsGuardedLocalScript()
     {
         var root = FindRepoRoot();
-        var workflow = Read(root, ".github", "workflows", "pspublishmodule-public-release.yml");
         var script = Read(root, "Build", "Invoke-PowerForgePublicRelease.ps1");
         var sourceState = Read(root, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
         var evidenceWorkspace = Read(root, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1");
@@ -15,11 +14,30 @@ public sealed partial class AppleReleaseWorkflowTests
         var moduleConfig = Read(root, "powerforge.json");
         var releaseSchema = Read(root, "Schemas", "powerforge.release.schema.json");
 
-        Assert.Contains("runs-on: [self-hosted, windows, runner-github-runner-w]", workflow, StringComparison.Ordinal);
-        Assert.Contains("$mainCommit -ine $env:EXPECTED_COMMIT", workflow, StringComparison.Ordinal);
-        Assert.Contains("Unable to refresh origin/main", workflow, StringComparison.Ordinal);
-        Assert.Contains("permission -notin @('admin', 'maintain', 'write')", workflow, StringComparison.Ordinal);
-        Assert.Contains("publish:<version>:<expected_commit>", workflow, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(root, ".github", "workflows", "pspublishmodule-public-release.yml")));
+        Assert.True(File.Exists(Path.Combine(root, "Build", "Invoke-PowerForgePublicRelease.ps1")));
+        var workflowDirectory = Path.Combine(root, ".github", "workflows");
+        var workflowFiles = Directory.EnumerateFiles(workflowDirectory, "*.yml")
+            .Concat(Directory.EnumerateFiles(workflowDirectory, "*.yaml"));
+        Assert.All(workflowFiles, workflowPath =>
+        {
+            var workflow = File.ReadAllText(workflowPath);
+            Assert.DoesNotContain(
+                "Invoke-PowerForgePublicRelease.ps1",
+                workflow,
+                StringComparison.OrdinalIgnoreCase);
+            if (workflow.Contains("Build-Project.ps1", StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.False(System.Text.RegularExpressions.Regex.IsMatch(
+                    workflow,
+                    @"(?<![\w-])-(?:Publish(?:Nuget|ProjectGitHub|ToolGitHub)?)(?=\s|:|$)",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+                Assert.False(System.Text.RegularExpressions.Regex.IsMatch(
+                    workflow,
+                    @"-RunMode\s+['\""]?Publish\b",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+            }
+        });
         Assert.Contains("$expectedConfirmation = \"publish:$Version`:$ExpectedCommit\"", script, StringComparison.Ordinal);
         Assert.Contains("-or -not $certificate.HasPrivateKey", script, StringComparison.Ordinal);
         Assert.Contains("$certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)", script, StringComparison.Ordinal);
@@ -65,26 +83,11 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.DoesNotContain("Status         = 'Running'", script, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.psd1\"", moduleConfig, StringComparison.Ordinal);
-        Assert.Contains(". .\\Build\\Private\\Assert-PowerForgeCommittedReleaseVersion.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("Set-PowerForgeAuthorizedReleaseCommitish", script, StringComparison.Ordinal);
         Assert.Contains("$Operation -eq 'Prepare'", commitishAuthorization, StringComparison.Ordinal);
         Assert.Contains("Add-Member -NotePropertyName Commitish", commitishAuthorization, StringComparison.Ordinal);
         Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
         Assert.Contains("Status         = 'Failed'", script, StringComparison.Ordinal);
-        Assert.Contains("$release.isDraft -eq $true", workflow, StringComparison.Ordinal);
-        Assert.Contains("$release.isPrerelease -eq $true", workflow, StringComparison.Ordinal);
-        Assert.Contains("[string]::IsNullOrWhiteSpace([string] $release.publishedAt)", workflow, StringComparison.Ordinal);
-        Assert.Contains("$tagCommit -ine $env:EXPECTED_COMMIT", workflow, StringComparison.Ordinal);
-        Assert.Contains("Unable to push release branch", workflow, StringComparison.Ordinal);
-        Assert.Contains("$remoteCommit -ine $preparedCommit", workflow, StringComparison.Ordinal);
-        Assert.Contains("gh pr list --repo $env:REPOSITORY --state all", workflow, StringComparison.Ordinal);
-        Assert.Contains("git merge-base --is-ancestor $env:EXPECTED_COMMIT $remoteCommit", workflow, StringComparison.Ordinal);
-        Assert.Contains("git diff --quiet \"origin/$branch\" --", workflow, StringComparison.Ordinal);
-        Assert.Contains("git branch -D $branch", workflow, StringComparison.Ordinal);
-        Assert.Contains("url=$($existingPullRequest.url)", workflow, StringComparison.Ordinal);
-        Assert.Contains("Invoke-PowerForgePublicRelease.ps1", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("gh pr merge", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("pull_request:", workflow, StringComparison.Ordinal);
         Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
         Assert.Contains("\"Commitish\"", releaseSchema, StringComparison.Ordinal);
     }

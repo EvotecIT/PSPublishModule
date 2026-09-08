@@ -696,8 +696,7 @@ public sealed partial class AppleReleaseWorkflowTests
                      "powerforge-apple-version-pr.yml",
                      "powerforge-apple-advance.yml",
                      "powerforge-apple-governance.yml",
-                     "powerforge-apple-approval.yml",
-                     "pspublishmodule-public-release.yml"
+                     "powerforge-apple-approval.yml"
                  })
         {
             var workflow = Read(root, ".github", "workflows", workflowName);
@@ -721,8 +720,7 @@ public sealed partial class AppleReleaseWorkflowTests
                      "powerforge-apple-version-pr.yml",
                      "powerforge-apple-advance.yml",
                      "powerforge-apple-governance.yml",
-                     "powerforge-apple-approval.yml",
-                     "pspublishmodule-public-release.yml"
+                     "powerforge-apple-approval.yml"
                  })
         {
             var workflow = Read(root, ".github", "workflows", workflowName);
