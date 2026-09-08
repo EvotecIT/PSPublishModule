@@ -61,13 +61,16 @@ public sealed partial class ArtefactBuilder
         ValidateScriptCopyMappings(
             cfg,
             outputRoot,
+            outputRoot,
             scriptRoot,
             Path.Combine(scriptRoot, scriptName),
             requiredRoot,
             filteredRequiredModules,
+            projectRoot,
             moduleName,
             moduleVersion,
             preRelease,
+            ArtefactType.Script,
             enforceRelativeDestination: false);
 
         if (cfg.DoNotClear != true)
@@ -175,13 +178,16 @@ public sealed partial class ArtefactBuilder
         ValidateScriptCopyMappings(
             cfg,
             tempRoot,
+            outputRoot,
             scriptRoot,
             Path.Combine(scriptRoot, scriptName),
             requiredRoot,
             filteredRequiredModules,
+            projectRoot,
             moduleName,
             moduleVersion,
             preRelease,
+            ArtefactType.ScriptPacked,
             enforceRelativeDestination: true);
 
         Directory.CreateDirectory(outputRoot);

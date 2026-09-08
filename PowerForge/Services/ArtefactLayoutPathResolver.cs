@@ -101,8 +101,11 @@ internal static class ArtefactLayoutPathResolver
         return !(stem.Length == 4 &&
                  (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
                   stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
-                 stem[3] is >= '1' and <= '9');
+                 IsWindowsDeviceNumber(stem[3]));
     }
+
+    private static bool IsWindowsDeviceNumber(char character)
+        => character is >= '1' and <= '9' or '\u00B9' or '\u00B2' or '\u00B3';
 
     internal static string ResolveOutputRoot(
         string? configuredPath,

@@ -244,13 +244,16 @@ public sealed partial class ArtefactBuilder
     private static void ValidateScriptCopyMappings(
         ArtefactConfiguration cfg,
         string destinationRoot,
+        string outputRootToClear,
         string scriptRoot,
         string scriptPath,
         string requiredRoot,
         IReadOnlyList<RequiredModuleReference> requiredModules,
+        string projectRoot,
         string moduleName,
         string moduleVersion,
         string? preRelease,
+        ArtefactType artefactType,
         bool enforceRelativeDestination)
     {
         string[] requiredModuleDestinations = cfg.RequiredModules.Enabled == true
@@ -259,11 +262,27 @@ public sealed partial class ArtefactBuilder
                 .Select(module => Path.GetFullPath(Path.Combine(requiredRoot, module.ModuleName.Trim())))
                 .ToArray()
             : Array.Empty<string>();
+        var mappingSources = new List<(string Path, bool IsDirectory)>();
+        var directoryDestinations = new List<string>();
+        var fileDestinations = new List<string>();
 
         foreach (var mapping in cfg.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
         {
             if (mapping is null)
                 continue;
+            var source = ResolveInputPath(
+                mapping.Source,
+                projectRoot,
+                moduleName,
+                moduleVersion,
+                preRelease);
+            ValidateScriptCopyMappingSource(
+                source,
+                sourceIsDirectory: true,
+                cfg.DoNotClear != true,
+                outputRootToClear,
+                artefactType);
+            mappingSources.Add((source, true));
             var destination = ResolveOutputPath(
                 mapping.Destination,
                 destinationRoot,
@@ -272,6 +291,7 @@ public sealed partial class ArtefactBuilder
                 moduleName,
                 moduleVersion,
                 preRelease);
+            directoryDestinations.Add(destination);
             if (IsSameOrBelowPath(scriptRoot, destination))
             {
                 throw new InvalidOperationException(
@@ -291,6 +311,19 @@ public sealed partial class ArtefactBuilder
         {
             if (mapping is null)
                 continue;
+            var source = ResolveInputPath(
+                mapping.Source,
+                projectRoot,
+                moduleName,
+                moduleVersion,
+                preRelease);
+            ValidateScriptCopyMappingSource(
+                source,
+                sourceIsDirectory: false,
+                cfg.DoNotClear != true,
+                outputRootToClear,
+                artefactType);
+            mappingSources.Add((source, false));
             var destination = ResolveOutputPath(
                 mapping.Destination,
                 destinationRoot,
@@ -299,6 +332,7 @@ public sealed partial class ArtefactBuilder
                 moduleName,
                 moduleVersion,
                 preRelease);
+            fileDestinations.Add(destination);
             if (string.Equals(Path.GetFullPath(destination), Path.GetFullPath(scriptPath), GetPathComparison(destination, scriptPath)))
             {
                 throw new InvalidOperationException(
@@ -310,6 +344,99 @@ public sealed partial class ArtefactBuilder
             {
                 throw new InvalidOperationException(
                     $"Script artefact file copy destination '{destination}' is inside required module destination '{requiredModuleDestination}' and would overwrite bundled dependency content.");
+            }
+        }
+
+        ValidateScriptCopyMappingSourcesSurviveDestinations(
+            mappingSources,
+            directoryDestinations,
+            fileDestinations);
+    }
+
+    private static void ValidateScriptCopyMappingSource(
+        string source,
+        bool sourceIsDirectory,
+        bool clearsOutput,
+        string outputRoot,
+        ArtefactType artefactType)
+    {
+        bool exists = sourceIsDirectory ? Directory.Exists(source) : File.Exists(source);
+        if (!exists)
+        {
+            string kind = sourceIsDirectory ? "directory" : "file";
+            throw new InvalidOperationException(
+                $"Script artefact {kind} copy source '{source}' does not exist.");
+        }
+
+        if (!clearsOutput || !WouldScriptOutputClearRemoveSource(source, sourceIsDirectory, outputRoot, artefactType))
+            return;
+
+        throw new InvalidOperationException(
+            $"Script artefact copy source '{source}' would be removed while clearing output root '{Path.GetFullPath(outputRoot)}'. " +
+            "Keep copy sources outside the artefact output root or enable DoNotClear.");
+    }
+
+    private static bool WouldScriptOutputClearRemoveSource(
+        string source,
+        bool sourceIsDirectory,
+        string outputRoot,
+        ArtefactType artefactType)
+    {
+        if (!IsSameOrBelowPath(source, outputRoot))
+            return false;
+
+        if (artefactType == ArtefactType.Script)
+            return true;
+
+        if (artefactType != ArtefactType.ScriptPacked)
+            return false;
+
+        string fullSource = Path.GetFullPath(source);
+        string fullOutputRoot = Path.GetFullPath(outputRoot);
+        if (string.Equals(fullSource, fullOutputRoot, GetPathComparison(fullSource, fullOutputRoot)))
+            return true;
+        if (sourceIsDirectory)
+            return false;
+
+        string? parent = Path.GetDirectoryName(fullSource);
+        return parent is not null &&
+               string.Equals(parent, fullOutputRoot, GetPathComparison(parent, fullOutputRoot)) &&
+               !WildcardMatch(Path.GetFileName(fullSource), "*.zip");
+    }
+
+    private static void ValidateScriptCopyMappingSourcesSurviveDestinations(
+        IReadOnlyList<(string Path, bool IsDirectory)> sources,
+        IReadOnlyList<string> directoryDestinations,
+        IReadOnlyList<string> fileDestinations)
+    {
+        foreach (string destination in directoryDestinations)
+        {
+            foreach ((string source, bool sourceIsDirectory) in sources)
+            {
+                bool overlaps = IsSameOrBelowPath(source, destination) ||
+                                (sourceIsDirectory && IsSameOrBelowPath(destination, source));
+                if (!overlaps)
+                    continue;
+
+                throw new InvalidOperationException(
+                    $"Script artefact directory copy destination '{Path.GetFullPath(destination)}' overlaps configured copy source '{Path.GetFullPath(source)}'. " +
+                    "Use separate source and destination trees.");
+            }
+        }
+
+        foreach (string destination in fileDestinations)
+        {
+            foreach ((string source, bool sourceIsDirectory) in sources)
+            {
+                if (sourceIsDirectory ||
+                    !string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), GetPathComparison(source, destination)))
+                {
+                    continue;
+                }
+
+                throw new InvalidOperationException(
+                    $"Script artefact file copy destination '{Path.GetFullPath(destination)}' overlaps configured file copy source '{Path.GetFullPath(source)}'. " +
+                    "Use separate source and destination files.");
             }
         }
     }
