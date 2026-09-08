@@ -28,6 +28,19 @@ function Assert-WorkspacePath {
     }
 }
 
+function Assert-ServiceSourceRevision {
+    param(
+        [Parameter(Mandatory)][string] $Workspace,
+        [Parameter(Mandatory)][string] $ExpectedSha
+    )
+
+    $checkedOutSha = @(& git -C $Workspace rev-parse HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $checkedOutSha.Count -ne 1 -or
+        -not [string]::Equals($checkedOutSha[0], $ExpectedSha, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The checked-out service source does not match its exact provenance commit.'
+    }
+}
+
 if ($env:RUNNER_OS -ne 'Linux') {
     throw 'PowerForge Linux service packaging requires a Linux runner.'
 }
@@ -42,11 +55,7 @@ if ($env:GITHUB_RUN_ID -notmatch '^\d+$' -or $env:GITHUB_RUN_ATTEMPT -notmatch '
 }
 
 $workspace = Resolve-CanonicalPath -Path $env:GITHUB_WORKSPACE
-$checkedOutSha = @(& git -C $workspace rev-parse HEAD 2>$null)
-if ($LASTEXITCODE -ne 0 -or $checkedOutSha.Count -ne 1 -or
-    -not [string]::Equals($checkedOutSha[0], $env:POWERFORGE_SOURCE_SHA, [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'The checked-out service source does not match its exact provenance commit.'
-}
+Assert-ServiceSourceRevision -Workspace $workspace -ExpectedSha $env:POWERFORGE_SOURCE_SHA
 $serviceRoot = [IO.Path]::GetFullPath((Join-Path $workspace $env:POWERFORGE_SERVICE_ROOT))
 Assert-WorkspacePath -Path $serviceRoot -Workspace $workspace -Description 'service-root'
 
@@ -75,6 +84,7 @@ if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_SERVICE_VALIDATION_SCRIPT)
         }
     }
 }
+Assert-ServiceSourceRevision -Workspace $workspace -ExpectedSha $env:POWERFORGE_SOURCE_SHA
 
 if (-not (Test-Path -LiteralPath $serviceRoot -PathType Container)) {
     throw "Service root not found after validation: $serviceRoot"

@@ -87,8 +87,16 @@ jobs:
           DEPLOYMENT_SERVICE: ${{ inputs.deployment_service }}
           SERVICE_ROOT: ${{ inputs.service_root }}
           SERVICE_VALIDATION_SCRIPT: ${{ inputs.service_validation_script }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           $ErrorActionPreference = 'Stop'
+          function Assert-SourceRevision {
+            $checkedOutSha = @(& git -C $env:GITHUB_WORKSPACE rev-parse HEAD 2>$null)
+            if ($LASTEXITCODE -ne 0 -or $checkedOutSha.Count -ne 1 -or
+                -not [string]::Equals($checkedOutSha[0], $env:SOURCE_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw 'The checked-out service source does not match its exact provenance commit.'
+            }
+          }
           if ($env:RUNNER_OS -ne 'Linux') {
             throw 'The service packaging runner must be Linux.'
           }
@@ -98,6 +106,7 @@ jobs:
 
           $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([System.IO.Path]::DirectorySeparatorChar)
           $workspacePrefix = $workspace + [System.IO.Path]::DirectorySeparatorChar
+          Assert-SourceRevision
 
           if (-not [string]::IsNullOrWhiteSpace($env:SERVICE_VALIDATION_SCRIPT)) {
             $scriptPath = [System.IO.Path]::GetFullPath((Join-Path $workspace $env:SERVICE_VALIDATION_SCRIPT))
@@ -110,6 +119,7 @@ jobs:
             bash $scriptPath
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+          Assert-SourceRevision
 
           $serviceRoot = [System.IO.Path]::GetFullPath((Join-Path $workspace $env:SERVICE_ROOT))
           if (-not [string]::Equals($serviceRoot, $workspace, [System.StringComparison]::Ordinal) -and
@@ -224,27 +234,68 @@ jobs:
           DEPLOYMENT_KNOWN_HOSTS: ${{ secrets.deployment_ssh_known_hosts }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
           $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-service-deployment-ssh'
+          $stageRoot = Join-Path $env:RUNNER_TEMP 'powerforge-service'
           New-Item -ItemType Directory -Force -Path $sshRoot | Out-Null
           $keyPath = Join-Path $sshRoot 'id_ed25519'
           $knownHostsPath = Join-Path $sshRoot 'known_hosts'
+          $transportPath = Join-Path $stageRoot 'deployment-transport.tar'
+          tar --create --file $transportPath --directory $stageRoot -- artifact.tar deployment.json
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $transportPath -PathType Leaf) -or
+              (Get-Item -LiteralPath $transportPath).Length -eq 0) {
+            throw 'Unable to create the restricted service deployment payload.'
+          }
           Set-Content -LiteralPath $keyPath -Value $env:DEPLOYMENT_PRIVATE_KEY -Encoding utf8NoBOM
           Set-Content -LiteralPath $knownHostsPath -Value $env:DEPLOYMENT_KNOWN_HOSTS -Encoding utf8NoBOM
           chmod 700 $sshRoot
           chmod 600 $keyPath $knownHostsPath
 
-          $remoteBase = "/tmp/powerforge-service-$($env:DEPLOYMENT_SERVICE)"
           $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
-          $sshOptions = @('-i', $keyPath, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
-          $scpArgs = @('-P', $env:DEPLOYMENT_PORT) + $sshOptions + @((Join-Path $env:RUNNER_TEMP 'powerforge-service/artifact.tar'), (Join-Path $env:RUNNER_TEMP 'powerforge-service/deployment.json'), "${target}:${remoteBase}/")
-          ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "rm -rf -- '$remoteBase' && install -d -m 0700 '$remoteBase'"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          scp @scpArgs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ssh @sshOptions -p $env:DEPLOYMENT_PORT $target "sudo /usr/local/sbin/powerforge-service-deploy --service '$($env:DEPLOYMENT_SERVICE)'"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $sshOptions = @(
+            '-i', $keyPath,
+            '-o', 'IdentitiesOnly=yes',
+            '-o', 'BatchMode=yes',
+            '-o', 'StrictHostKeyChecking=yes',
+            '-o', 'ConnectTimeout=30',
+            '-o', 'ServerAliveInterval=15',
+            '-o', 'ServerAliveCountMax=4',
+            '-o', "UserKnownHostsFile=$knownHostsPath"
+          )
+          $startInfo = [Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = 'ssh'
+          $startInfo.UseShellExecute = $false
+          $startInfo.RedirectStandardInput = $true
+          $startInfo.RedirectStandardOutput = $true
+          $startInfo.RedirectStandardError = $true
+          foreach ($argument in $sshOptions + @(
+            '-p', $env:DEPLOYMENT_PORT, $target,
+            "powerforge-service-deploy-v1 --service $($env:DEPLOYMENT_SERVICE)"
+          )) {
+            [void]$startInfo.ArgumentList.Add($argument)
+          }
+          $process = [Diagnostics.Process]::new()
+          $process.StartInfo = $startInfo
+          if (-not $process.Start()) {
+            throw 'Unable to start the restricted SSH deployment transport.'
+          }
+          $stdout = $process.StandardOutput.ReadToEndAsync()
+          $stderr = $process.StandardError.ReadToEndAsync()
+          $stream = [IO.File]::OpenRead($transportPath)
+          try {
+            $stream.CopyTo($process.StandardInput.BaseStream)
+          } finally {
+            $stream.Dispose()
+            $process.StandardInput.Close()
+          }
+          $process.WaitForExit()
+          [void]$stdout.GetAwaiter().GetResult()
+          [void]$stderr.GetAwaiter().GetResult()
+          if ($process.ExitCode -ne 0) {
+            throw "Restricted SSH service deployment failed with exit code $($process.ExitCode)."
+          }
 
-      - name: Cleanup deployment credentials and remote staging
+      - name: Cleanup deployment credentials
         if: ${{ always() }}
         continue-on-error: true
         shell: pwsh
@@ -254,16 +305,6 @@ jobs:
           DEPLOYMENT_USER: ${{ inputs.deployment_user }}
         run: |
           $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-service-deployment-ssh'
-          $keyPath = Join-Path $sshRoot 'id_ed25519'
-          $knownHostsPath = Join-Path $sshRoot 'known_hosts'
-          $remoteBase = "/tmp/powerforge-service-${{ inputs.deployment_service }}"
-          $target = "$($env:DEPLOYMENT_USER)@$($env:DEPLOYMENT_HOST)"
-          try {
-            if ((Test-Path -LiteralPath $keyPath) -and (Test-Path -LiteralPath $knownHostsPath)) {
-              ssh -i $keyPath -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$knownHostsPath" -p $env:DEPLOYMENT_PORT $target "rm -rf -- '$remoteBase'"
-            }
-          } finally {
-            if (Test-Path -LiteralPath $sshRoot) {
-              Remove-Item -LiteralPath $sshRoot -Recurse -Force
-            }
+          if (Test-Path -LiteralPath $sshRoot) {
+            Remove-Item -LiteralPath $sshRoot -Recurse -Force
           }

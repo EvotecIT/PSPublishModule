@@ -14,11 +14,17 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.Contains("deployment_ssh_private_key is required", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_ssh_known_hosts is required", workflow, StringComparison.Ordinal);
         Assert.Contains("service_validation_script", workflow, StringComparison.Ordinal);
+        Assert.Contains("Assert-SourceRevision", workflow, StringComparison.Ordinal);
+        Assert.Contains("does not match its exact provenance commit", workflow, StringComparison.Ordinal);
         Assert.Contains("artifactSha256", workflow, StringComparison.Ordinal);
         Assert.Contains("realpath -e", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge-service-deployment-ssh", workflow, StringComparison.Ordinal);
         Assert.Contains("UserKnownHostsFile=$knownHostsPath", workflow, StringComparison.Ordinal);
-        Assert.Contains("powerforge-service-deploy --service", workflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-service-deploy-v1 --service", workflow, StringComparison.Ordinal);
+        Assert.Contains("deployment-transport.tar", workflow, StringComparison.Ordinal);
+        Assert.Contains("RedirectStandardInput = $true", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("scp @", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("sudo /usr/local/sbin/powerforge-service-deploy --service", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("--archive '$remoteBase", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("$HOME/.ssh", workflow, StringComparison.Ordinal);
@@ -54,6 +60,22 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.Contains("must not overlap deployment control path", script, StringComparison.Ordinal);
         Assert.Contains("rollback 143", script, StringComparison.Ordinal);
         Assert.Contains("Rejected release retained for recovery", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RestrictedSshTransport_ShouldAllowOnlyPinnedServicePromotion()
+    {
+        var script = ReadRepoFile("Deployment", "Linux", "powerforge-service-deploy-ssh.sh");
+
+        Assert.Contains("SSH_ORIGINAL_COMMAND", script, StringComparison.Ordinal);
+        Assert.Contains("--allow-service", script, StringComparison.Ordinal);
+        Assert.Contains("powerforge-service-deploy-v1", script, StringComparison.Ordinal);
+        Assert.Contains("max_payload_bytes=1073741824", script, StringComparison.Ordinal);
+        Assert.Contains("archive_entries", script, StringComparison.Ordinal);
+        Assert.Contains("artifact.tar", script, StringComparison.Ordinal);
+        Assert.Contains("deployment.json", script, StringComparison.Ordinal);
+        Assert.Contains("flock -w 900", script, StringComparison.Ordinal);
+        Assert.Contains("sudo /usr/local/sbin/powerforge-service-deploy --service", script, StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(params string[] relativePath)

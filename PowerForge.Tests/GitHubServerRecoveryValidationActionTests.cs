@@ -66,11 +66,17 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("GIT_CONFIG_NOSYSTEM = '1'", anonymousGit, StringComparison.Ordinal);
         Assert.Contains("GIT_CONFIG_GLOBAL = $emptyGlobalConfig", anonymousGit, StringComparison.Ordinal);
         Assert.Contains("GIT_CONFIG_COUNT = '0'", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("$env:NETRC = $emptyGlobalConfig", anonymousGit, StringComparison.Ordinal);
         Assert.Contains("StartsWith('GIT_'", anonymousGit, StringComparison.Ordinal);
         Assert.Contains("StartsWith('GCM_'", anonymousGit, StringComparison.Ordinal);
         Assert.Contains("anonymous-git-askpass", anonymousGit, StringComparison.Ordinal);
         Assert.Contains("'credential.helper='", anonymousGit, StringComparison.Ordinal);
         Assert.Contains("'http.extraHeader='", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("Test-PowerForgePublicGitHubRepository", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("curl --disable --fail --silent --show-error", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("--no-netrc", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("--header 'Authorization:'", anonymousGit, StringComparison.Ordinal);
+        Assert.Contains("001e# service=git-upload-pack", anonymousGit, StringComparison.Ordinal);
         Assert.Contains("'clone', '--quiet', '--no-checkout', '--filter=blob:none'", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("'checkout', '--quiet', '--detach', $RepositoryRef", sourceValidation, StringComparison.Ordinal);
         Assert.Contains("External managed recovery source checkout did not resolve the pinned revision", sourceValidation, StringComparison.Ordinal);

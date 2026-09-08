@@ -1,3 +1,33 @@
+function Test-PowerForgePublicGitHubRepository {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string] $RepositorySlug,
+        [Parameter(Mandatory)][string] $IsolationRoot
+    )
+
+    $advertisementPath = Join-Path $IsolationRoot ($RepositorySlug.Replace('/', '-') + '.git-advertisement')
+    $advertisementUrl = "https://github.com/$RepositorySlug.git/info/refs?service=git-upload-pack"
+    & curl --disable --fail --silent --show-error --location --max-time 60 `
+        --proto '=https' --tlsv1.2 --no-netrc `
+        --header 'Authorization:' --header 'Proxy-Authorization:' `
+        --output $advertisementPath -- $advertisementUrl 2>$null
+    if ($LASTEXITCODE -ne 0 -or
+        -not (Test-Path -LiteralPath $advertisementPath -PathType Leaf) -or
+        (Get-Item -LiteralPath $advertisementPath).Length -eq 0) {
+        return $false
+    }
+
+    $prefixLength = [Math]::Min(64, (Get-Item -LiteralPath $advertisementPath).Length)
+    $stream = [IO.File]::OpenRead($advertisementPath)
+    try {
+        $prefix = [byte[]]::new($prefixLength)
+        [void]$stream.Read($prefix, 0, $prefix.Length)
+    } finally {
+        $stream.Dispose()
+    }
+    [Text.Encoding]::ASCII.GetString($prefix).StartsWith('001e# service=git-upload-pack', [StringComparison]::Ordinal)
+}
+
 function Invoke-PowerForgeAnonymousGit {
     [CmdletBinding()]
     param(
@@ -41,7 +71,7 @@ function Invoke-PowerForgeAnonymousGit {
     foreach ($name in @(
         'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_TERMINAL_PROMPT', 'GCM_INTERACTIVE',
         'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM',
-        'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT'
+        'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'NETRC'
     )) {
         [void]$controlledNames.Add($name)
     }
@@ -59,6 +89,7 @@ function Invoke-PowerForgeAnonymousGit {
         $env:GIT_CONFIG_NOSYSTEM = '1'
         $env:GIT_CONFIG_GLOBAL = $emptyGlobalConfig
         $env:GIT_CONFIG_COUNT = '0'
+        $env:NETRC = $emptyGlobalConfig
 
         $gitArguments = @(
             '-c', 'credential.helper=',

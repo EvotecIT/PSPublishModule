@@ -106,6 +106,9 @@ function Resolve-ExternalRepositoryRoot {
     if (Test-Path -LiteralPath $checkout) {
         throw "External repository validation checkout already exists: $RepositorySlug"
     }
+    if (-not (Test-PowerForgePublicGitHubRepository -RepositorySlug $RepositorySlug -IsolationRoot $root)) {
+        throw "External managed recovery source repository is not publicly available at its pinned GitHub URL: $RepositorySlug"
+    }
 
     $clone = Invoke-PowerForgeAnonymousGit -IsolationRoot $root -Arguments @(
         'clone', '--quiet', '--no-checkout', '--filter=blob:none', '--', $canonicalUrl, $checkout

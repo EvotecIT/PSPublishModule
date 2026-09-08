@@ -439,6 +439,10 @@ jobs:
         shell: bash
         run: bash Deployment/Linux/tests/powerforge-certbot-reload-apache-fixture.sh
 
+      - name: Test restricted Linux service deployment transport
+        shell: bash
+        run: bash Deployment/Linux/tests/powerforge-service-deploy-ssh-fixture.sh
+
       - name: Test with Pester
         shell: pwsh
         timeout-minutes: 10

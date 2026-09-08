@@ -70,8 +70,9 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.Contains("tar --directory $resolvedServiceRoot", script, StringComparison.Ordinal);
         Assert.Contains("package.json", script, StringComparison.Ordinal);
         Assert.Contains("sourceRepository", script, StringComparison.Ordinal);
-        Assert.Contains("git -C $workspace rev-parse HEAD", script, StringComparison.Ordinal);
+        Assert.Contains("git -C $Workspace rev-parse HEAD", script, StringComparison.Ordinal);
         Assert.Contains("does not match its exact provenance commit", script, StringComparison.Ordinal);
+        Assert.Equal(3, script.Split("Assert-ServiceSourceRevision", StringSplitOptions.None).Length - 1);
         Assert.Contains("workflowRunId", script, StringComparison.Ordinal);
         Assert.DoesNotContain("POWERFORGE_DEPLOYMENT_SSH", script, StringComparison.Ordinal);
         Assert.InRange(NormalizedLineCount(script), 1, 150);
@@ -82,6 +83,8 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
     {
         var action = ReadRepoFile(".github", "actions", "powerforge-linux-service-deploy", "action.yml");
         var script = ReadRepoFile(".github", "actions", "powerforge-linux-service-deploy", "Invoke-PowerForgeLinuxServiceDeploy.ps1");
+        var transport = ReadRepoFile(".github", "actions", "powerforge-linux-service-deploy", "Invoke-PowerForgeSshTransport.ps1");
+        var dispatcher = ReadRepoFile("Deployment", "Linux", "powerforge-service-deploy-ssh.sh");
 
         Assert.Contains("using: composite", action, StringComparison.Ordinal);
         Assert.Contains("artifact-name", action, StringComparison.Ordinal);
@@ -96,12 +99,18 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.Contains("does not match its expected source", script, StringComparison.Ordinal);
         Assert.Contains("artifactSha256", script, StringComparison.Ordinal);
         Assert.Contains("GITHUB_RUN_ID", script, StringComparison.Ordinal);
-        Assert.Contains("flock -w 900", script, StringComparison.Ordinal);
-        Assert.Contains("/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE).lock", script, StringComparison.Ordinal);
+        Assert.Contains("flock -w 900", dispatcher, StringComparison.Ordinal);
+        Assert.Contains("lock_path=\"/tmp/powerforge-service-${service_id}.lock\"", dispatcher, StringComparison.Ordinal);
         Assert.DoesNotContain(".powerforge/locks", script, StringComparison.Ordinal);
         Assert.Contains("powerforge-service-deploy", script, StringComparison.Ordinal);
         Assert.Contains("IdentitiesOnly=yes", script, StringComparison.Ordinal);
         Assert.Contains("StrictHostKeyChecking=yes", script, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgeSshTransport", script, StringComparison.Ordinal);
+        Assert.Contains("deployment-transport.tar", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("scp @", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$handoffCommand", script, StringComparison.Ordinal);
+        Assert.Contains("powerforge-service-deploy-v1 --service $Service", transport, StringComparison.Ordinal);
+        Assert.Contains("RedirectStandardInput = $true", transport, StringComparison.Ordinal);
         Assert.Contains("finally", script, StringComparison.Ordinal);
         Assert.InRange(NormalizedLineCount(script), 1, 250);
     }
