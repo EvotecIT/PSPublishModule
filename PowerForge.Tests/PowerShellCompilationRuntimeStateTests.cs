@@ -645,7 +645,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Build_InterpolatedRuntimeStatePropagatesThroughLocalCalls()
+    public void Build_OpaquePreferenceInterpolationRetainsLocalCallClosure()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-PreferenceText { [CmdletBinding(SupportsShouldProcess = $true)] param() return \"whatif=$WhatIfPreference\" }; " +
@@ -654,19 +654,19 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.InterpolatedRuntimeState", "CompiledPowerShell", "net8.0");
 
-        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
-        Assert.Equal(2, typed.Methods.Length);
-        Assert.All(typed.Methods, static method => Assert.True(method.RequiresPowerShellRuntimeState));
-        Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Empty(typed.Methods);
+        Assert.Contains(typed.Diagnostics, static diagnostic => diagnostic.Message.Contains("caller locals", StringComparison.Ordinal));
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.InterpolatedRuntimeState",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict,
+            PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true));
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
         var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; " +
             "Get-PreferenceText -WhatIf; Invoke-PreferenceText -WhatIf");
@@ -679,7 +679,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [Theory]
     [InlineData("return ([string] $WhatIfPreference) -split 'r'")]
     [InlineData("return ([string[]] @([string] $WhatIfPreference)) -join ','")]
-    public void Transpile_StringOperatorsCarryNestedRuntimeStateRequirement(string body)
+    public void Transpile_StringOperatorsRetainOpaqueNestedRuntimeState(string body)
     {
         using var fixture = ArtifactFixture.Create(
             $"function Get-PreferenceText {{ [CmdletBinding(SupportsShouldProcess = $true)] param() {body} }}",
@@ -688,9 +688,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.StringRuntimeState", "CompiledPowerShell", "net8.0");
 
-        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
-        Assert.True(Assert.Single(typed.Methods).RequiresPowerShellRuntimeState);
-        Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Empty(typed.Methods);
+        Assert.Contains(typed.Diagnostics, static diagnostic => diagnostic.Message.Contains("caller locals", StringComparison.Ordinal));
     }
 
     [Fact]

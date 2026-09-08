@@ -6,7 +6,8 @@ internal enum PowerShellIntegralMutationSemantics
     None,
     CheckedConversion,
     PromotedBigIntegerProduct,
-    UnconstrainedInt32OrDouble
+    UnconstrainedInt32OrDouble,
+    UnsignedDecrement
 }
 
 internal enum PowerShellBoundMutationOperator
@@ -33,13 +34,16 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         PowerShellBoundExpression? value,
         PowerShellTypeFact type,
         bool normalizeNullString,
-        PowerShellIntegralMutationSemantics integralSemantics)
+        PowerShellIntegralMutationSemantics integralSemantics,
+        bool preserveStatementErrors = false)
         : base(
             span,
             type,
             PowerShellValueState.Unknown,
-            PowerShellSemanticEffect.Mutation | (value?.Effects ?? PowerShellSemanticEffect.None),
-            value?.Capabilities ?? PowerShellRequiredCapability.None)
+            PowerShellSemanticEffect.Mutation | (value?.Effects ?? PowerShellSemanticEffect.None) |
+                (preserveStatementErrors ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
+            (value?.Capabilities ?? PowerShellRequiredCapability.None) |
+                (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Target = target;
         TargetClrType = targetClrType;
@@ -47,6 +51,7 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         Value = value;
         NormalizeNullString = normalizeNullString;
         IntegralSemantics = integralSemantics;
+        PreserveStatementErrors = preserveStatementErrors;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -55,4 +60,5 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
     internal PowerShellBoundExpression? Value { get; }
     internal bool NormalizeNullString { get; }
     internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
+    internal bool PreserveStatementErrors { get; }
 }

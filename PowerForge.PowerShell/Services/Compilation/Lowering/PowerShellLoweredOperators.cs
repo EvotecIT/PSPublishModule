@@ -9,7 +9,8 @@ internal sealed class PowerShellLoweredBinaryExpression : PowerShellLoweredExpre
         PowerShellLoweredExpression left,
         PowerShellLoweredExpression right,
         string? leftTemporary,
-        string? rightTemporary)
+        string? rightTemporary,
+        bool preserveStatementErrors = false)
         : base(span, clrType)
     {
         Operation = operation;
@@ -17,6 +18,7 @@ internal sealed class PowerShellLoweredBinaryExpression : PowerShellLoweredExpre
         Right = right;
         LeftTemporary = leftTemporary;
         RightTemporary = rightTemporary;
+        PreserveStatementErrors = preserveStatementErrors;
     }
 
     internal PowerShellBoundBinaryOperator Operation { get; }
@@ -24,6 +26,7 @@ internal sealed class PowerShellLoweredBinaryExpression : PowerShellLoweredExpre
     internal PowerShellLoweredExpression Right { get; }
     internal string? LeftTemporary { get; }
     internal string? RightTemporary { get; }
+    internal bool PreserveStatementErrors { get; }
 }
 
 internal sealed class PowerShellLoweredUnaryExpression : PowerShellLoweredExpression

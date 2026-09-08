@@ -187,7 +187,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("$null = Write-Output 'hidden'", generated, StringComparison.Ordinal);
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest!.UnitDispositionLedger);
-        Assert.Equal(4, ledger.SchemaVersion);
+        Assert.Equal(5, ledger.SchemaVersion);
         var entry = Assert.Single(ledger.Entries, static candidate => candidate.Name == "Invoke-FrontierRegion");
         var graph = Assert.IsType<PowerShellCompilationRegionGraph>(entry.RegionGraph);
         Assert.Equal(1, graph.SchemaVersion);

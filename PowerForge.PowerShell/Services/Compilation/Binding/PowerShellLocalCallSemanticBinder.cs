@@ -321,6 +321,9 @@ internal static class PowerShellLocalCallSemanticBinder
             if (!PowerShellClrTypeSemantics.CanAssign(parameter.Type, argument.Type.ClrType) &&
                 !(argument.ValueState == PowerShellValueState.Null && !parameter.Type.IsValueType))
             {
+                if (PowerShellStringificationScopePolicy.RequiresCallerScope(parameter.Type, argument))
+                    return Reject(diagnostics, PowerShellStringificationScopePolicy.DiagnosticCode,
+                        PowerShellStringificationScopePolicy.DiagnosticMessage, argument.Span);
                 if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
                     return Reject(diagnostics, "PSB2808", $"Argument for '-{parameter.Contract.Name}' has CLR type '{argument.Type.ClrType.FullName}', not assignable to '{parameter.Type.FullName}'.", argument.Span);
                 argument = new PowerShellBoundConversionExpression(

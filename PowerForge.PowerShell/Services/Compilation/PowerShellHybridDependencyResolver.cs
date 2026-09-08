@@ -66,7 +66,12 @@ internal static class PowerShellHybridDependencyResolver
         => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false, conventionalLoaders);
 
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
-        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths: null, moduleScopeOnly: true, conventionalLoaders: null);
+        => DiscoverModuleScopeDependencies(sourcePath, null, null);
+
+    internal static string[] DiscoverModuleScopeDependencies(string sourcePath,
+        IEnumerable<string>? additionalEntryPaths,
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders)
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: true, conventionalLoaders);
 
     private static string[] DiscoverDependenciesCore(
         string sourcePath,

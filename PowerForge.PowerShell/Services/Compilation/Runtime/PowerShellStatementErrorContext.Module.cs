@@ -29,6 +29,7 @@ namespace PowerForge.Generated.Runtime
             private readonly object _previousEngineState;
             private readonly object? _previousCommandState;
             private readonly object _state;
+            private readonly object _previousScope;
             private readonly object? _scope;
             private PSCmdlet? _cmdlet;
 
@@ -39,14 +40,24 @@ namespace PowerForge.Generated.Runtime
                 _previousEngineState = _contract.GetRequired(_contract.EngineSessionState, _context);
                 _previousCommandState = _contract.CmdletSessionState.GetValue(cmdlet);
                 _state = _contract.GetRequired(_contract.NativeSessionState, state);
-                _scope = createInvocationScope ? NativeContract.Invoke(_contract.NewScope, _state, false) : null;
+                _previousScope = _contract.GetRequired(_contract.CurrentScope, _state);
+                BindingFrames.TryGetValue(cmdlet, out var bindingFrame);
+                _scope = createInvocationScope
+                    ? bindingFrame is not null
+                        ? bindingFrame.Scope
+                        : NativeContract.Invoke(_contract.NewScope, _state, false)
+                    : null;
                 _cmdlet = cmdlet;
                 try
                 {
                     if (_scope is not null) _contract.CurrentScope.SetValue(_state, _scope, null);
                     _contract.CmdletSessionState.SetValue(cmdlet, state);
                     _contract.EngineSessionState.SetValue(_context, _state, null);
-                    if (createInvocationScope) ApplyBoundPreferences(cmdlet);
+                    if (createInvocationScope)
+                    {
+                        if (bindingFrame is not null) bindingFrame.CompleteInvocationBinding();
+                        else ApplyBoundPreferences(cmdlet);
+                    }
                 }
                 catch
                 {
@@ -66,8 +77,12 @@ namespace PowerForge.Generated.Runtime
                 }
                 finally
                 {
-                    try { _contract.CmdletSessionState.SetValue(cmdlet, _previousCommandState); }
-                    finally { _contract.EngineSessionState.SetValue(_context, _previousEngineState, null); }
+                    try { _contract.CurrentScope.SetValue(_state, _previousScope, null); }
+                    finally
+                    {
+                        try { _contract.CmdletSessionState.SetValue(cmdlet, _previousCommandState); }
+                        finally { _contract.EngineSessionState.SetValue(_context, _previousEngineState, null); }
+                    }
                 }
             }
 
@@ -75,22 +90,32 @@ namespace PowerForge.Generated.Runtime
             {
                 var bound = cmdlet.MyInvocation.BoundParameters;
                 var preferences = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                if (bound.TryGetValue("Verbose", out var verbose))
-                    preferences.Add("VerbosePreference", LanguagePrimitives.IsTrue(verbose) ? ActionPreference.Continue : ActionPreference.SilentlyContinue);
-                if (bound.TryGetValue("Debug", out var debug))
-                    preferences.Add("DebugPreference", LanguagePrimitives.IsTrue(debug)
-                        ? (typeof(PSObject).Assembly.GetName().Version!.Major >= 7 ? ActionPreference.Continue : ActionPreference.Inquire)
-                        : ActionPreference.SilentlyContinue);
-                foreach (var name in new[] { "Warning", "Information", "Error", "Progress" })
-                    if (bound.TryGetValue(name + "Action", out var action))
-                        preferences.Add(name == "Error" ? "ErrorActionPreference" : name + "Preference", action);
-                if (bound.TryGetValue("WhatIf", out var whatIf)) preferences.Add("WhatIfPreference", whatIf);
-                if (bound.TryGetValue("Confirm", out var confirm))
-                    preferences.Add("ConfirmPreference", LanguagePrimitives.IsTrue(confirm) ? ConfirmImpact.Low : ConfirmImpact.None);
+                foreach (var pair in bound)
+                    if (TryGetBoundPreference(pair.Key, pair.Value, out var name, out var value)) preferences.Add(name, value);
                 // Native function locals shadow even inherited AllScope and ReadOnly variables.
                 // PSVariable.Set would mutate those shared objects or fail before the body runs.
                 if (preferences.Count != 0)
                     _contract.ScopeLocalsTuple.SetValue(_scope, _contract.CreateTuple(preferences), null);
+            }
+        }
+
+        private static bool TryGetBoundPreference(string parameter, object value, out string name, out object result)
+        {
+            name = parameter + "Preference";
+            result = value;
+            switch (parameter.ToLowerInvariant())
+            {
+                case "verbose": result = LanguagePrimitives.IsTrue(value) ? ActionPreference.Continue : ActionPreference.SilentlyContinue; return true;
+                case "debug": result = LanguagePrimitives.IsTrue(value)
+                    ? (typeof(PSObject).Assembly.GetName().Version!.Major >= 7 ? ActionPreference.Continue : ActionPreference.Inquire)
+                    : ActionPreference.SilentlyContinue; return true;
+                case "erroraction": name = "ErrorActionPreference"; return true;
+                case "warningaction": name = "WarningPreference"; return true;
+                case "informationaction": name = "InformationPreference"; return true;
+                case "progressaction": name = "ProgressPreference"; return true;
+                case "whatif": return true;
+                case "confirm": result = LanguagePrimitives.IsTrue(value) ? ConfirmImpact.Low : ConfirmImpact.None; return true;
+                default: return false;
             }
         }
     }

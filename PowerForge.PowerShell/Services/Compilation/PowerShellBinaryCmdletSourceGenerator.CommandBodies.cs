@@ -189,6 +189,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("        try");
             builder.AppendLine("        {");
         }
+        if (cmdlet.Method.RequiresPowerShellStopping)
+            arguments = arguments.Append("global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.CreateLoopInterrupt(this)");
         if (cmdlet.Method.RequiresPowerShellStreams)
             arguments = arguments.Concat(new[]
             {

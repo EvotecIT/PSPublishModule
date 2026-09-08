@@ -8,7 +8,7 @@ internal static class PowerShellStatementErrorRuntimeSource
     internal static string Render()
     {
         var source = new StringBuilder("#nullable enable\n");
-        foreach (var suffix in new[] { ".cs", ".Contract.cs", ".Exceptions.cs", ".Enumeration.cs", ".Finally.cs", ".Functions.cs", ".Module.cs", ".Variables.cs" })
+        foreach (var suffix in new[] { ".cs", ".Contract.cs", ".Exceptions.cs", ".Enumeration.cs", ".Finally.cs", ".Functions.cs", ".Module.cs", ".Binding.cs", ".Variables.cs", ".NativeFunction.cs" })
         {
             var resource = "PowerForge.PowerShell.Compilation.PowerShellStatementErrorContext" + suffix;
             using var stream = typeof(PowerShellStatementErrorRuntimeSource).Assembly.GetManifestResourceStream(resource)

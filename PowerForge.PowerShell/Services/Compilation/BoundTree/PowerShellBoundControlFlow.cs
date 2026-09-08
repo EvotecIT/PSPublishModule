@@ -221,7 +221,12 @@ internal sealed class PowerShellBoundTryStatement : PowerShellBoundStatement
             span,
             catches.Aggregate(body.Effects | (finallyBlock?.Effects ?? PowerShellSemanticEffect.None), static (effects, clause) => effects | clause.Body.Effects),
             catches.Aggregate(body.Capabilities | (finallyBlock?.Capabilities ?? PowerShellRequiredCapability.None) |
-                PowerShellLoopInterruptContract.Capabilities(suspendHostStopping), static (capabilities, clause) => capabilities | clause.Body.Capabilities))
+                PowerShellLoopInterruptContract.Capabilities(suspendHostStopping), static (capabilities, clause) => capabilities | clause.Body.Capabilities) |
+                (suspendHostStopping || PowerShellLoopInterruptContract.RequiresContext(body.Capabilities) ||
+                 catches.Any(static clause => PowerShellLoopInterruptContract.RequiresContext(clause.Body.Capabilities)) ||
+                 finallyBlock is not null && PowerShellLoopInterruptContract.RequiresContext(finallyBlock.Capabilities)
+                    ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes
+                    : PowerShellRequiredCapability.None))
     {
         Body = body;
         Catches = catches;

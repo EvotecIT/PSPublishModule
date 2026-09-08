@@ -89,21 +89,25 @@ internal static class PowerShellOperatorSemanticBinder
 
         if (operation is "Plus" or "Minus" or "Multiply" or "Divide" or "Rem")
         {
+            if (operation == "Plus" && leftType == typeof(string) && left.ValueState == PowerShellValueState.Known &&
+                rightType != typeof(void) && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+                return Binary(span, PowerShellBoundBinaryOperator.NativeStringConcatenate, left, right, typeof(string));
             if (operation == "Plus" && leftType == typeof(string) && rightType == typeof(string))
                 return Binary(span, PowerShellBoundBinaryOperator.Add, left, right, typeof(string));
             if (!PowerShellClrTypeSemantics.IsNumeric(leftType) || !PowerShellClrTypeSemantics.IsNumeric(rightType))
                 return Reject(diagnostics, span, "PSB2204", $"Arithmetic operator '{syntax.Operator}' requires two numeric operands of known compatible types.");
             if ((leftType == typeof(decimal)) != (rightType == typeof(decimal)))
                 return Reject(diagnostics, span, "PSB2205", "Mixed decimal and non-decimal arithmetic relies on PowerShell coercion and is not supported.");
-            if (leftType == typeof(decimal) && PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+            var preserveArithmeticErrors = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors);
+            if (leftType == typeof(decimal) && !preserveArithmeticErrors && PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
                 return Reject(diagnostics, span, "PSB2216", "Decimal arithmetic inside a RuntimeException catch requires PowerShell arithmetic-error wrapping.");
             if (operation == "Rem" && PowerShellClrTypeSemantics.IsIntegral(leftType) && leftType == rightType)
             {
-                if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+                if (!preserveArithmeticErrors && PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
                     return Reject(diagnostics, span, "PSB2216", "Integral remainder inside a RuntimeException catch requires PowerShell divide-by-zero error wrapping.");
                 var integralType = PowerShellClrTypeSemantics.PromoteIntegral(leftType);
                 return Binary(span, PowerShellBoundBinaryOperator.IntegralRemainder,
-                    WidenArithmeticOperand(left, integralType), WidenArithmeticOperand(right, integralType), integralType);
+                    WidenArithmeticOperand(left, integralType), WidenArithmeticOperand(right, integralType), integralType, preserveArithmeticErrors);
             }
             if (operation == "Divide" && PowerShellClrTypeSemantics.IsIntegral(leftType) && PowerShellClrTypeSemantics.IsIntegral(rightType))
                 return Reject(diagnostics, span, "PSB2206", "PowerShell integral division changes runtime result type based on the quotient and is not supported by one static CLR return type.");
@@ -126,7 +130,7 @@ internal static class PowerShellOperatorSemanticBinder
                 "Divide" => PowerShellBoundBinaryOperator.Divide,
                 _ => PowerShellBoundBinaryOperator.Remainder
             };
-            return Binary(span, bound, left, right, resultType);
+            return Binary(span, bound, left, right, resultType, preserveArithmeticErrors && resultType == typeof(decimal));
         }
 
         if (operation is "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge")
@@ -488,7 +492,8 @@ internal static class PowerShellOperatorSemanticBinder
         PowerShellBoundBinaryOperator operation,
         PowerShellBoundExpression left,
         PowerShellBoundExpression right,
-        Type type)
+        Type type,
+        bool preserveStatementErrors = false)
         => new PowerShellBoundBinaryExpression(
             span,
             operation,
@@ -498,7 +503,7 @@ internal static class PowerShellOperatorSemanticBinder
                 type,
                 PowerShellBoundBinaryExpression.RequiresPowerShellLanguageRuntime(operation)
                     ? $"Operator '{operation}' selects the public PowerShell language-operator runtime."
-                    : $"Operator '{operation}' selects a direct CLR operation."));
+                    : $"Operator '{operation}' selects a direct CLR operation."), preserveStatementErrors);
 
     private static PowerShellBoundExpression Unary(SourceSpan span, PowerShellBoundUnaryOperator operation, PowerShellBoundExpression operand, Type type)
         => new PowerShellBoundUnaryExpression(span, operation, operand, Fact(type, $"Operator '{operation}' selects a direct CLR operation."));

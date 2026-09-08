@@ -9,7 +9,7 @@ internal static class PowerShellBoundStatementRewriter
             PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
                 capture.Span, capture.Target, rewriteBlock(capture.Body)),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
-                rewriteBlock(boundary.Body), boundary.SourcePath, boundary.SourceText),
+                rewriteBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus),
             PowerShellBoundIfStatement conditional => new PowerShellBoundIfStatement(
                 conditional.Span,
                 conditional.Clauses.Select(clause => new PowerShellBoundConditionalClause(clause.Condition, rewriteBlock(clause.Body))).ToArray(),

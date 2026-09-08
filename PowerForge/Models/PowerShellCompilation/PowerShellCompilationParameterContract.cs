@@ -36,7 +36,8 @@ public static class PowerShellCompilationCapabilities
     public const PowerShellCompilationCapability HybridModule =
         BinaryModule |
         PowerShellCompilationCapability.PowerShellModuleState |
-        PowerShellCompilationCapability.HybridTypedRegions;
+        PowerShellCompilationCapability.HybridTypedRegions |
+        PowerShellCompilationCapability.NativeFunctionBinding;
 
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =

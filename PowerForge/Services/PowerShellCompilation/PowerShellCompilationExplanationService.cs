@@ -20,9 +20,9 @@ public static class PowerShellCompilationExplanationService
         PowerShellCompilationArtifactKind artifactKind,
         PowerShellTypedCompilationResult? shapedCompilation)
     {
-        if (shapedCompilation?.Methods.Any(static method => method.RequiresPowerShellModuleState) == true)
+        if (shapedCompilation?.Methods.Any(static method => method.RequiresPowerShellModuleState || method.NativeFunctionBinding is not null) == true)
             throw new InvalidOperationException(
-                "The pre-ledger explanation overload cannot represent directional parent-module state evidence. " +
+                "The pre-ledger explanation overload cannot represent directional parent-module state evidence or native function binding evidence. " +
                 "Create the immutable final unit-disposition ledger and use the ledger overload.");
         var explanation = CreateCore(plan, artifactKind, shapedCompilation, finalShape: true);
         explanation.SchemaVersion = 2;
@@ -47,6 +47,7 @@ public static class PowerShellCompilationExplanationService
             unit.SemanticEligible = entry.SemanticEligible;
             unit.Emitted = entry.Emitted;
             unit.RetainedHostedSource = entry.RetainedHostedSource;
+            unit.UsesNativeFunctionBinding = entry.UsesNativeFunctionBinding;
             unit.RuntimeCommandRegions = entry.RuntimeCommandRegions;
             unit.ModuleStateReadBoundaryCrossings = entry.ModuleStateReadBoundaryCrossings;
             unit.ModuleStateWriteBoundaryCrossings = entry.ModuleStateWriteBoundaryCrossings;
@@ -341,6 +342,8 @@ public static class PowerShellCompilationExplanationService
                 Append(unit.SemanticEligible ? "true" : "false");
                 Append(unit.Emitted ? "true" : "false");
                 Append(unit.RetainedHostedSource ? "true" : "false");
+                if (explanation.SemanticCompatibilityVersion >= 5)
+                    Append(unit.UsesNativeFunctionBinding ? "true" : "false");
                 Append(unit.RuntimeCommandRegions.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 if (explanation.SemanticCompatibilityVersion >= 2)
                 {

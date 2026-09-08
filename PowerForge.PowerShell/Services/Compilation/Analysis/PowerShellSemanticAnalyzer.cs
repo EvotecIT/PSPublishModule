@@ -66,7 +66,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
             foreach (var function in program.Functions)
             {
-                foreach (var local in function.Locals.Where(static local => local.Type.Provenance == PowerShellTypeFactProvenance.Unknown))
+                foreach (var local in function.Locals.Where(local => function.NativeFunctionBinding is null && local.Type.Provenance == PowerShellTypeFactProvenance.Unknown))
                 {
                     diagnostics.Add(new PowerShellSemanticDiagnostic(
                         "PST2001",
@@ -112,6 +112,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
             RunFixedPoint(functions, (function, lookup) =>
             {
                 var value = function.Body.Statements.Aggregate(PowerShellRequiredCapability.None, static (current, statement) => current | statement.Capabilities);
+                // Binding callbacks and their storage belong to the native invocation even when the body is constant.
+                if (function.NativeFunctionBinding is not null)
+                    value |= PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost;
                 foreach (var callee in GetCallees(function, lookup)) value |= callee.Capabilities;
                 return function.WithAnalysis(capabilities: value);
             }, static (left, right) => left.Capabilities == right.Capabilities);
@@ -276,6 +279,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundInterpolatedStringExpression interpolated => interpolated.Parts.Where(static part => part.Expression is not null).Select(static part => part.Expression!),
             PowerShellBoundMutationExpression mutation when mutation.Value is not null => new[] { mutation.Value },
             PowerShellBoundArrayExpression array => array.Elements,
+            PowerShellBoundNativeCollectionExpression collection => collection.Items.Select(static item => item.Value),
             PowerShellBoundArrayCopyExpression copy => new[] { copy.Source },
             PowerShellBoundArrayConcatenationExpression concatenation => new[] { concatenation.Left, concatenation.Right },
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.SelectMany(static entry => new[] { entry.Key, entry.Value }),
@@ -303,6 +307,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         => statement switch
         {
             PowerShellBoundAssignmentStatement assignment => assignment.Value,
+            PowerShellBoundNativeVariableAssignmentStatement assignment => assignment.Value,
             PowerShellBoundModuleVariableAssignmentStatement assignment => assignment.Value,
             PowerShellBoundReturnStatement returned => returned.Expression,
             PowerShellBoundExpressionStatement expression => expression.Expression,
@@ -518,6 +523,11 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(element))
                 yield return read;
         }
+        if (expression is PowerShellBoundNativeCollectionExpression collection)
+        {
+            foreach (var item in collection.Items)
+            foreach (var read in EnumerateVariableReads(item.Value)) yield return read;
+        }
         if (expression is PowerShellBoundArrayCopyExpression copy)
         {
             foreach (var read in EnumerateVariableReads(copy.Source)) yield return read;
@@ -650,6 +660,11 @@ internal sealed partial class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundArrayCopyExpression copy)
         {
             foreach (var nested in EnumerateInvocations(copy.Source)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeCollectionExpression collection)
+        {
+            foreach (var item in collection.Items)
+            foreach (var nested in EnumerateInvocations(item.Value)) yield return nested;
         }
         if (expression is PowerShellBoundArrayConcatenationExpression concatenation)
         {

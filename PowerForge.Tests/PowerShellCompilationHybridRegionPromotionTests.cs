@@ -548,7 +548,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(1, result.Manifest.Boundaries.PromotedTypedRegions);
         Assert.Equal(1, result.Manifest.Boundaries.StaticBoundarySites);
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
-        Assert.Equal(4, ledger.SchemaVersion);
+        Assert.Equal(5, ledger.SchemaVersion);
         Assert.Equal(1, ledger.PromotedTypedRegions);
         var entry = Assert.Single(ledger.Entries, static candidate => candidate.Name == "Get-RegionalValue");
         Assert.False(entry.EmittedClrMethod);
@@ -564,8 +564,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("HostedSource", entry.ArtifactDisposition, StringComparison.Ordinal);
         Assert.Single(entry.GeneratedRegionMemberNames);
         var trace = Assert.IsType<PowerShellCompilationExplanation>(result.Manifest.DecisionTrace);
-        Assert.Equal(5, trace.SchemaVersion);
-        Assert.Equal(4, trace.SemanticCompatibilityVersion);
+        Assert.Equal(6, trace.SchemaVersion);
+        Assert.Equal(5, trace.SemanticCompatibilityVersion);
         Assert.Equal(1, trace.PromotedTypedRegions);
         var unit = Assert.Single(Assert.Single(trace.Files).Units, static candidate => candidate.Name == "Get-RegionalValue");
         Assert.Equal(PowerShellCompilationDecisionKind.RuntimeFallback, unit.Decision);

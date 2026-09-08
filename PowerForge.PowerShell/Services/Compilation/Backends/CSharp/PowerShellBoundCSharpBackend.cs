@@ -24,8 +24,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var sourceMap = new List<PowerShellCompilationSourceMapEntry>();
         var parameterParts = function.Parameters.Select(parameter =>
             $"{PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType)} {PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name)}").ToList();
-        var requiresBoundParameters = function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
-            PowerShellParameterValidationPolicy.RequiresBoundParameterSet(parameter.Contract, targetCapabilities));
+        if (function.NativeFunctionBinding is not null)
+            parameterParts = new List<string> { "global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext __nativeFunction" };
+        var requiresBoundParameters = function.NativeFunctionBinding is null && (function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
+            PowerShellParameterValidationPolicy.RequiresBoundParameterSet(parameter.Contract, targetCapabilities)));
         AddHostParameters(parameterParts, function, requiresBoundParameters);
         var parameters = string.Join(", ", parameterParts);
         var usedIdentifiers = function.Parameters.Select(static parameter => PowerShellClrSymbolMapper.MapIdentifier(parameter.Symbol.Name))
@@ -65,7 +67,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             builder.Append("            static void ").Append(discardHelper).AppendLine("<T>(T value) { }");
         }
-        var parameterContracts = function.Parameters.Select(static parameter => new PowerShellParameterEmissionContract(
+        var parameterContracts = function.Parameters.Where(_ => function.NativeFunctionBinding is null).Select(static parameter => new PowerShellParameterEmissionContract(
             parameter.Symbol.Name,
             parameter.ClrType,
             parameter.Contract)).ToArray();
@@ -113,6 +115,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             requiresPowerShellModuleStateRead: function.RequiresPowerShellModuleStateRead,
             requiresPowerShellModuleStateWrite: function.RequiresPowerShellModuleStateWrite,
             requiresPowerShellStatementErrors: function.RequiresPowerShellStatementErrors,
+            requiresPowerShellStopping: function.RequiresPowerShellStopping,
             help: function.Help?.ToPublicModel(),
             declaredOutputType: function.DeclaredOutputType,
             declaredOutputTypeName: function.DeclaredOutputTypeName,
@@ -138,7 +141,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             moduleStateReadSiteCount: moduleStateReadSiteCount,
             writtenModuleStateVariableNames: writtenModuleStateVariableNames,
             moduleStateWriteSiteCount: moduleStateWriteSiteCount,
-            regionGraph: regionGraph);
+            regionGraph: regionGraph,
+            nativeFunctionBinding: function.NativeFunctionBinding);
     }
 
     private void EmitStatement(
@@ -195,10 +199,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     assignment.Operation,
                     assignment.Value,
                     assignment.NormalizeNullString,
-                    assignment.IntegralSemantics)).AppendLine(";");
+                    assignment.IntegralSemantics, assignment.PreserveStatementErrors)).AppendLine(";");
                 return;
             case PowerShellLoweredModuleVariableAssignmentStatement assignment:
                 builder.Append(prefix).Append("__writePowerShellModuleVariable(")
+                    .Append(PowerShellCSharpLiteral.QuoteString(assignment.Name)).Append(", ")
+                    .Append(EmitExpression(assignment.Value)).AppendLine(");");
+                return;
+            case PowerShellLoweredNativeVariableAssignmentStatement assignment:
+                builder.Append(prefix).Append("__nativeFunction.SetVariable(")
                     .Append(PowerShellCSharpLiteral.QuoteString(assignment.Name)).Append(", ")
                     .Append(EmitExpression(assignment.Value)).AppendLine(");");
                 return;
@@ -361,6 +370,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         => expression switch
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
+            PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
             PowerShellLoweredVariableExpression variable => PowerShellCSharpSymbolRenderer.Identifier(variable.Symbol.Name),
             PowerShellLoweredConstantBooleanDelegateExpression booleanDelegate => EmitConstantBooleanDelegate(booleanDelegate),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
@@ -383,8 +393,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.Operation,
                 mutation.Value,
                 mutation.NormalizeNullString,
-                mutation.IntegralSemantics),
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors),
             PowerShellLoweredArrayExpression array => EmitArray(array),
+            PowerShellLoweredNativeCollectionExpression collection => EmitNativeCollection(collection),
             PowerShellLoweredArrayCopyExpression copy => EmitArrayCopy(copy),
             PowerShellLoweredArrayConcatenationExpression concatenation => EmitArrayConcatenation(concatenation),
             PowerShellLoweredDictionaryExpression dictionary => EmitDictionary(dictionary),
@@ -605,11 +616,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellBoundMutationOperator operation,
         PowerShellLoweredExpression? value,
         bool normalizeNullString,
-        PowerShellIntegralMutationSemantics integralSemantics)
+        PowerShellIntegralMutationSemantics integralSemantics,
+        bool preserveStatementErrors)
     {
         var identifier = PowerShellCSharpSymbolRenderer.Identifier(target.Name);
-        if (integralSemantics != PowerShellIntegralMutationSemantics.None)
-            return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics);
+        if (integralSemantics != PowerShellIntegralMutationSemantics.None || preserveStatementErrors)
+            return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics, preserveStatementErrors);
         if (operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement or
             PowerShellBoundMutationOperator.PostIncrement or PowerShellBoundMutationOperator.PostDecrement)
         {
@@ -640,6 +652,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var left = EmitExpression(expression.Left);
         var right = EmitExpression(expression.Right);
+        if (expression.PreserveStatementErrors)
+            return "__statementErrors.EvaluateArithmetic(" + left + ", " + right + ", (" +
+                expression.LeftTemporary + ", " + expression.RightTemporary + ") => " +
+                EmitBinaryOperation(expression, expression.LeftTemporary!, expression.RightTemporary!) + ")";
+        return EmitBinaryOperation(expression, left, right);
+    }
+
+    private string EmitBinaryOperation(PowerShellLoweredBinaryExpression expression, string left, string right)
+    {
+        if (expression.Operation == PowerShellBoundBinaryOperator.NativeStringConcatenate)
+            return $"global::System.String.Concat({left}, __nativeFunction.Stringify({right}))";
         if (expression.Operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat)
             return $"__statementErrors.FormatScalar(({left} ?? string.Empty), (object?)({right}))";
         if (expression.Operation == PowerShellBoundBinaryOperator.RuntimeFreeScalarFormat)

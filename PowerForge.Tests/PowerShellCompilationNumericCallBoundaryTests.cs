@@ -59,7 +59,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
     [Trait("Category", "PowerShellCompilerGate")]
     [Theory]
-    [InlineData("System.Management.Automation.PSInvalidCastException", false)]
+    [InlineData("System.Management.Automation.PSInvalidCastException", true)]
     [InlineData("System.InvalidCastException", true)]
     public void Bind_NumericErrorObservationCrossesDocumentsWithoutRejectingClrCatchContracts(string exception, bool typed)
     {

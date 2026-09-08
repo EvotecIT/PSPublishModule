@@ -30,8 +30,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void Build_ImplicitScalarOutputPreservesContinuationAndLocalCallStreams(string framework, string host)
     {
         if (framework == "net472" && !OperatingSystem.IsWindows()) return;
@@ -58,17 +57,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [CmdletBinding()] param([bool]$Enabled, [System.Text.StringBuilder]$Trace)
                 try { if ($Enabled) { 'first'; 'second' } } finally { [void]$Trace.Append('cleanup') }
             }
+            function Get-ScalarRecord { return 1 }
+            function Get-LoopRecords {
+                [CmdletBinding()] param()
+                for ([int]$index=0; $index -lt 2; $index++) { Get-ScalarRecord }
+                return 2
+            }
             """, ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "ImplicitOutput", framework);
-        Assert.Equal(5, typed.Methods.Length);
+        Assert.Equal(7, typed.Methods.Length);
         Assert.All(typed.Methods, method => Assert.False(method.RequiresPowerShellCommandRegions));
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "PowerForge.ImplicitOutput",
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(5, result.Manifest!.CompiledMethods);
+        Assert.Equal(7, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         const string probe = """
             foreach ($enabled in $false,$true) {
@@ -81,6 +86,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             $trace = [System.Text.StringBuilder]::new()
             $stopped = @(Get-StopRecords -Enabled $true -Trace $trace | Select-Object -First 1)
             'stopped:{0}:trace:{1}' -f ($stopped -join '|'),$trace.ToString()
+            'loop:' + (@(Get-LoopRecords) -join '|')
             """;
         var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
@@ -91,6 +97,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("11:String:start|String:text|Int32:1|Int32:2|Int32:3|String:record|String:record|String:try|String:catch|String:finally|String:end", original.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("before|early|cleanup", original.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("stopped:first:trace:cleanup", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("loop:1|1|2", original.StandardOutput, StringComparison.Ordinal);
         Assert.True((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()) ==
             (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()),
             "ORIGINAL:\n" + original.StandardOutput + "\nGENERATED:\n" + compiled.StandardOutput + "\nERROR:\n" + compiled.StandardError);

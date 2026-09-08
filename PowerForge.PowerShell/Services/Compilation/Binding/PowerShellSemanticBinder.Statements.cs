@@ -16,6 +16,7 @@ internal sealed partial class PowerShellSemanticBinder
         bool allowNonTerminalSuccessOutput = false,
         Type? nonTerminalSuccessOutputType = null)
     {
+        allowNonTerminalSuccessOutput |= capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
         PowerShellSemanticSymbolBinding? assignedSymbol = null;
         if (statement is AssignmentStatementAst authoredAssignment &&
             PowerShellAssignmentTargetPolicy.FindDirectVariable(authoredAssignment.Left) is { } assignedVariable)
@@ -23,7 +24,12 @@ internal sealed partial class PowerShellSemanticBinder
         var priorValueState = assignedSymbol?.ValueState;
         var bound = BindStatementCore(document, statement, symbols, functions, diagnostics, isTerminal,
             targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
-        if (bound is null || !bound.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) &&
+        if (bound is null) return null;
+        var nativeSuccessStatus = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)
+            ? PowerShellNativeStatementStatusPolicy.OnCompletion(statement, bound,
+                _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51)
+            : null;
+        if (!nativeSuccessStatus.HasValue && !bound.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) &&
             !(bound is PowerShellBoundThrowStatement && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))) return bound;
         // A failed RHS leaves the previous slot intact. A successful constructor's
         // non-null fact cannot override a possible null value on the error edge.
@@ -35,7 +41,8 @@ internal sealed partial class PowerShellSemanticBinder
             .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
         if (bound is PowerShellBoundThrowStatement thrown)
             bound = new PowerShellBoundThrowStatement(thrown.Span, thrown.Expression, true, document.Path, sourceText);
-        return new PowerShellBoundStatementErrorBoundary(new PowerShellBoundBlock(bound.Span, new[] { bound }), document.Path, sourceText);
+        return new PowerShellBoundStatementErrorBoundary(new PowerShellBoundBlock(bound.Span, new[] { bound }), document.Path, sourceText,
+            nativeSuccessStatus);
     }
 
     private PowerShellBoundStatement? BindStatementCore(
@@ -52,6 +59,24 @@ internal sealed partial class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } nativeVariable)
+            {
+                if (assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst)
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2417",
+                        "Native variable constraints and compound writes require their native assignment operation contract.",
+                        PowerShellSourceParser.GetSpan(document, assignment.Extent)));
+                    return null;
+                }
+                var nativeValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
+                    targetFramework: targetFramework, capabilities: capabilities);
+                if (nativeVariable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase))
+                    return nativeValue is null ? null : new PowerShellBoundExpressionStatement(
+                        PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeValue, emitsOutput: false);
+                return nativeValue is null ? null : new PowerShellBoundNativeVariableAssignmentStatement(
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeVariable.VariablePath.UserPath, nativeValue);
+            }
             if (assignment.Right is ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
@@ -138,7 +163,7 @@ internal sealed partial class PowerShellSemanticBinder
                 assignment,
                 symbols,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
-                diagnostics);
+                diagnostics, capabilities);
             return mutation is null
                 ? null
                 : new PowerShellBoundAssignmentStatement(
@@ -147,7 +172,7 @@ internal sealed partial class PowerShellSemanticBinder
                     mutation.Value!,
                     mutation.Operation,
                     mutation.NormalizeNullString,
-                    mutation.IntegralSemantics);
+                    mutation.IntegralSemantics, mutation.PreserveStatementErrors);
         }
         if (statement is ReturnStatementAst returnStatement)
         {
@@ -215,12 +240,13 @@ internal sealed partial class PowerShellSemanticBinder
                 foreach (var constraint in clause.CatchTypes)
                 {
                     var type = constraint.TypeName.GetReflectionType();
-                    var supportedPowerShellRuntimeException = type is not null &&
+                    var supportedPowerShellException = type is not null &&
                                                                (type == typeof(System.Management.Automation.RuntimeException) ||
+                                                                type == typeof(System.Management.Automation.PSInvalidCastException) ||
                                                                 type == typeof(System.Management.Automation.SessionStateUnauthorizedAccessException)) &&
                                                                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
                     if (type is null || !typeof(Exception).IsAssignableFrom(type) ||
-                        !supportedPowerShellRuntimeException && !PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))
+                        !supportedPowerShellException && !PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))
                     {
                         diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2310", $"Typed catch '{constraint.TypeName.FullName}' is outside the generated project reference set.", PowerShellSourceParser.GetSpan(document, constraint.Extent)));
                         return null;

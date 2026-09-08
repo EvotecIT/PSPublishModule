@@ -13,7 +13,7 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
         var commandHost = program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
             program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding);
         var selected = program.Functions.Where(function =>
-                function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) ||
+                function.NativeFunctionBinding is not null || function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) ||
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
                     statement is PowerShellBoundStreamWriteStatement { Provider: null }) ||
                 commandHost && function.Body.Effects.HasFlag(PowerShellSemanticEffect.SuccessOutput) &&

@@ -9,6 +9,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         if (function.RequiresPowerShellStatementErrors)
             parameters.Add("global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext __statementErrors");
+        if (function.RequiresPowerShellStopping)
+            parameters.Add("global::System.Action __checkLoopInterrupts");
         if (function.RequiresPowerShellStreams)
         {
             parameters.Add("global::System.Action<object?> __writeOutput");

@@ -94,7 +94,8 @@ internal static class PowerShellMutationSemanticBinder
         AssignmentStatementAst syntax,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left);
         if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target)) return null;
@@ -194,7 +195,10 @@ internal static class PowerShellMutationSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2410", "Compound arithmetic on an unconstrained Single local produces a Double result and changes its CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return null;
         }
-        if (operation != PowerShellBoundMutationOperator.Assign &&
+        var preserveNumericErrors = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) &&
+            operation != PowerShellBoundMutationOperator.Assign &&
+            (PowerShellClrTypeSemantics.IsIntegral(targetType) || targetType == typeof(decimal));
+        if (!preserveNumericErrors && operation != PowerShellBoundMutationOperator.Assign &&
             (PowerShellClrTypeSemantics.IsIntegral(targetType) || targetType == typeof(decimal)) &&
             PowerShellRuntimeExceptionCatchPolicy.ContainsNumericErrorWrapping(syntax))
         {
@@ -214,7 +218,7 @@ internal static class PowerShellMutationSemanticBinder
             value,
             target.Type,
             operation == PowerShellBoundMutationOperator.Assign && explicitType && targetType == typeof(string),
-            SelectIntegralSemantics(operation.Value, targetType, value.Type.ClrType));
+            SelectIntegralSemantics(operation.Value, targetType, value.Type.ClrType), preserveNumericErrors);
     }
 
     internal static bool TryBindIncrement(
@@ -222,7 +226,8 @@ internal static class PowerShellMutationSemanticBinder
         UnaryExpressionAst syntax,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         out PowerShellBoundMutationExpression? mutation,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         mutation = null;
         var operation = syntax.TokenKind.ToString() switch
@@ -257,7 +262,9 @@ internal static class PowerShellMutationSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2404", $"Increment or decrement of '${target.Symbol.Name}' requires one explicitly typed supported CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return true;
         }
-        if (PowerShellRuntimeExceptionCatchPolicy.ContainsNumericErrorWrapping(syntax) &&
+        var preserveNumericErrors = !boundedDecrement && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) &&
+            (PowerShellClrTypeSemantics.IsIntegral(target.Type.ClrType) || target.Type.ClrType == typeof(decimal));
+        if (!preserveNumericErrors && PowerShellRuntimeExceptionCatchPolicy.ContainsNumericErrorWrapping(syntax) &&
             (PowerShellClrTypeSemantics.IsIntegral(target.Type.ClrType) || target.Type.ClrType == typeof(decimal)))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2409", "Integral increment or decrement inside a RuntimeException catch cannot preserve PowerShell overflow-error wrapping.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
@@ -271,7 +278,8 @@ internal static class PowerShellMutationSemanticBinder
             null,
             new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "Increment and decrement are statement-valued on the conservative path."),
             false,
-            boundedDecrement ? PowerShellIntegralMutationSemantics.None : SelectIntegralSemantics(operation.Value, target.Type.ClrType, target.Type.ClrType));
+            boundedDecrement ? PowerShellIntegralMutationSemantics.None : SelectIntegralSemantics(operation.Value, target.Type.ClrType, target.Type.ClrType),
+            preserveNumericErrors);
         return true;
     }
 
@@ -280,6 +288,11 @@ internal static class PowerShellMutationSemanticBinder
     {
         if (operation == PowerShellBoundMutationOperator.Assign || !PowerShellClrTypeSemantics.IsIntegral(target))
             return PowerShellIntegralMutationSemantics.None;
+        // Native decrement adds a signed -1. UInt32 therefore reaches a signed
+        // Int64 result and UInt64 a Decimal result before its variable conversion.
+        if (operation is PowerShellBoundMutationOperator.Decrement or PowerShellBoundMutationOperator.PostDecrement &&
+            (target == typeof(uint) || target == typeof(ulong)))
+            return PowerShellIntegralMutationSemantics.UnsignedDecrement;
         // PowerShell's 64-bit product promotes through BigInteger. Its conversion
         // to Double differs from Decimal rounding near Int64's negative boundary.
         return operation == PowerShellBoundMutationOperator.Multiply &&

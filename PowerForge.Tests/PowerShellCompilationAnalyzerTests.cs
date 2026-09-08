@@ -50,6 +50,20 @@ public sealed class PowerShellCompilationAnalyzerTests
     }
 
     [Theory]
+    [InlineData(PowerShellCompilationCapabilities.StaticRuntimeFacts)]
+    [InlineData(PowerShellCompilationCapabilities.TypedLibrary)]
+    [InlineData(PowerShellCompilationCapabilities.TypedExecutable)]
+    [InlineData(PowerShellCompilationCapabilities.BinaryModule)]
+    [InlineData(PowerShellCompilationCapabilities.HybridModule)]
+    public void PublicCompilationSpecAcceptsCanonicalCapabilitySets(PowerShellCompilationCapability capabilities)
+    {
+        var spec = new PowerShellCompilationSpec(Path.GetTempPath(), capabilities: capabilities);
+        Assert.Equal(capabilities, spec.Capabilities);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PowerShellCompilationSpec(
+            Path.GetTempPath(), capabilities: capabilities | (PowerShellCompilationCapability)(1 << 30)));
+    }
+
+    [Theory]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package, true)]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid, true)]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict, true)]

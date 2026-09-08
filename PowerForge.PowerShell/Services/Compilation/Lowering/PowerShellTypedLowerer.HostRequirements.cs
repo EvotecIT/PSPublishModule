@@ -50,7 +50,8 @@ internal sealed partial class PowerShellTypedLowerer
         bool requiresPowerShellRuntimeState,
         bool requiresPowerShellModuleStateRead,
         bool requiresPowerShellModuleStateWrite,
-        bool requiresPowerShellStatementErrors = false)
+        bool requiresPowerShellStatementErrors = false,
+        bool requiresPowerShellStopping = false)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -58,6 +59,7 @@ internal sealed partial class PowerShellTypedLowerer
             requiresBoundParameters ? "__boundParameters" : string.Empty
         };
         if (requiresPowerShellStatementErrors) generated.Add("__statementErrors");
+        if (requiresPowerShellStopping) generated.Add("__checkLoopInterrupts");
         if (requiresPowerShellStreams) generated.UnionWith(StreamHostParameterNames);
         if (requiresPowerShellCommandRegions) generated.UnionWith(CommandRegionHostParameterNames);
         if (requiresPowerShellRuntimeState) generated.UnionWith(RuntimeStateHostParameterNames);

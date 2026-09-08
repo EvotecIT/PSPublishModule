@@ -28,32 +28,37 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
-    public void Build_StrictBinaryModuleMatchesPowerShellForPostTestLoops(string targetFramework, string host)
+    [InlineData("net8.0", "pwsh", false)]
+    [InlineData("net8.0", "pwsh", true)]
+    [InlineData("net472", "powershell.exe", false)]
+    [InlineData("net472", "powershell.exe", true)]
+    public void Build_ModuleMatchesPowerShellForBasicAndAdvancedPostTestLoops(string targetFramework, string host, bool advanced)
     {
         if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
+        var binding = advanced ? "[CmdletBinding()] " : string.Empty;
+        var noParameters = advanced ? "[CmdletBinding()] param() " : string.Empty;
         using var fixture = ArtifactFixture.Create(
-            "function Invoke-DoWhile { param([int] $Start) [int] $Value = $Start; " +
+            "function Invoke-DoWhile { " + binding + "param([int] $Start) [int] $Value = $Start; " +
             "do { $Value += 1; if ($Value -eq 2) { continue }; if ($Value -gt 4) { break } } while ($Value -lt 4); return $Value }; " +
-            "function Invoke-DoUntil { param([int] $Start) [int] $Value = $Start; " +
+            "function Invoke-DoUntil { " + binding + "param([int] $Start) [int] $Value = $Start; " +
             "do { $Value += 1; if ($Value -eq 2) { continue }; if ($Value -gt 4) { break } } until ($Value -ge 4); return $Value }; " +
-            "function Invoke-ConstantPostTest { [int] $Value = 0; do { $Value += 1; continue } while ($false); return $Value }; " +
-            "function Invoke-BodyAssigned { do { [string] $Value = 'ok' } while ($Value.Length -lt 2); return $Value }",
+            "function Invoke-ConstantPostTest { " + noParameters + "[int] $Value = 0; do { $Value += 1; continue } while ($false); return $Value }; " +
+            "function Invoke-BodyAssigned { " + noParameters + "do { [string] $Value = 'ok' } while ($Value.Length -lt 2); return $Value }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.PostTestLoops",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict,
+            advanced ? PowerShellCompilationMode.Strict : PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = targetFramework
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(advanced ? 4 : 0, result.Manifest!.CompiledMethods);
         const string invocation =
             "Invoke-DoWhile -Start 0; Invoke-DoWhile -Start 5; " +
             "Invoke-DoUntil -Start 0; Invoke-DoUntil -Start 5; Invoke-ConstantPostTest; Invoke-BodyAssigned";

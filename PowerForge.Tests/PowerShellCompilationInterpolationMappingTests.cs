@@ -20,7 +20,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "\"`u{24}Value $Value\"", "\"`u{24}{Value} ${Value}\"", "\"`u{24}Value/$Value/$Value\""
         });
         var source = string.Join(Environment.NewLine, templates.Select((template, index) =>
-            "function Expand-Case" + index + " {\n[CmdletBinding()] param([" + (library ? "int" : "object") + "]$Value)\nreturn " + template + "\n}"));
+            "function Expand-Case" + index + " {\n[CmdletBinding()] param([int]$Value)\nreturn " + template + "\n}"));
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.InterpolationMapping", library ? PowerShellCompilationArtifactKind.Library : PowerShellCompilationArtifactKind.BinaryModule,

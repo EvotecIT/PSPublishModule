@@ -2,6 +2,16 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellTypedLowerer
 {
+    private static bool HasUnbridgedNativeStorage(PowerShellBoundBlock body)
+    {
+        var statements = PowerShellSemanticAnalyzer.EnumerateStatements(body).ToArray();
+        return statements.Any(static statement => statement is PowerShellBoundAssignmentStatement or PowerShellBoundForEachStatement or
+                   PowerShellBoundOutputCaptureStatement or PowerShellBoundCommandCaptureStatement) ||
+               statements.SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+                   .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+                   .Any(static expression => expression is PowerShellBoundMutationExpression or PowerShellBoundVariableExpression);
+    }
+
     private static bool RequiresHostExceptionHandling(PowerShellBoundTryStatement statement,
         IReadOnlyDictionary<string, LoweringFunctionContext> functions)
     {
@@ -12,8 +22,19 @@ internal sealed partial class PowerShellTypedLowerer
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
             .OfType<PowerShellBoundInvocationExpression>()
-            .Any(call => functions.TryGetValue(call.Target.StableKey, out var target) && target.RequiresPowerShellStatementErrors);
+            .Any(call => functions.TryGetValue(call.Target.StableKey, out var target) &&
+                (target.RequiresPowerShellStatementErrors || target.RequiresPowerShellStopping));
     }
+
+    private static bool ContainsTryCallingHostedLoop(PowerShellBoundBlock body, ISet<string> loopFunctions)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(body).OfType<PowerShellBoundTryStatement>()
+            .SelectMany(static attempted => new[] { attempted.Body }.Concat(attempted.Catches.Select(static clause => clause.Body))
+                .Concat(attempted.FinallyBlock is null ? Array.Empty<PowerShellBoundBlock>() : new[] { attempted.FinallyBlock }))
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateStatements)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundInvocationExpression>()
+            .Any(call => loopFunctions.Contains(call.Target.StableKey));
 
     private sealed class LoweredNameAllocator
     {
@@ -44,7 +65,8 @@ internal sealed partial class PowerShellTypedLowerer
             bool requiresPowerShellRuntimeState,
             bool requiresPowerShellModuleStateRead,
             bool requiresPowerShellModuleStateWrite,
-            bool requiresPowerShellStatementErrors = false)
+            bool requiresPowerShellStatementErrors = false,
+            bool requiresPowerShellStopping = false)
         {
             Function = function;
             RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
@@ -55,6 +77,7 @@ internal sealed partial class PowerShellTypedLowerer
             RequiresPowerShellModuleStateRead = requiresPowerShellModuleStateRead;
             RequiresPowerShellModuleStateWrite = requiresPowerShellModuleStateWrite;
             RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
+            RequiresPowerShellStopping = requiresPowerShellStopping;
         }
 
         internal PowerShellBoundFunction Function { get; }
@@ -66,6 +89,7 @@ internal sealed partial class PowerShellTypedLowerer
         internal bool RequiresPowerShellModuleStateRead { get; }
         internal bool RequiresPowerShellModuleStateWrite { get; }
         internal bool RequiresPowerShellStatementErrors { get; }
+        internal bool RequiresPowerShellStopping { get; }
         internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
     }
 }

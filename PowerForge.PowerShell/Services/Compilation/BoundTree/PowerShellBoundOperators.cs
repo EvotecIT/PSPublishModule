@@ -49,7 +49,8 @@ internal enum PowerShellBoundBinaryOperator
     NumericUnionLessThan,
     NumericUnionLessThanOrEqual,
     NumericUnionGreaterThan,
-    NumericUnionGreaterThanOrEqual
+    NumericUnionGreaterThanOrEqual,
+    NativeStringConcatenate
 }
 
 internal enum PowerShellBoundUnaryOperator
@@ -67,29 +68,38 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
         PowerShellBoundBinaryOperator operation,
         PowerShellBoundExpression left,
         PowerShellBoundExpression right,
-        PowerShellTypeFact type)
+        PowerShellTypeFact type,
+        bool preserveStatementErrors = false)
         : base(
             span,
             type,
-            PowerShellValueState.Unknown,
-            left.Effects | right.Effects | (operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
-                ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
-            left.Capabilities | right.Capabilities | GetRequiredCapabilities(operation))
+            operation == PowerShellBoundBinaryOperator.NativeStringConcatenate ? PowerShellValueState.Known : PowerShellValueState.Unknown,
+            left.Effects | right.Effects | (preserveStatementErrors || operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
+                ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None) |
+                (operation == PowerShellBoundBinaryOperator.NativeStringConcatenate
+                    ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError
+                    : PowerShellSemanticEffect.None),
+            left.Capabilities | right.Capabilities | GetRequiredCapabilities(operation) |
+                (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Operation = operation;
         Left = left;
         Right = right;
+        PreserveStatementErrors = preserveStatementErrors;
     }
 
     internal PowerShellBoundBinaryOperator Operation { get; }
     internal PowerShellBoundExpression Left { get; }
     internal PowerShellBoundExpression Right { get; }
+    internal bool PreserveStatementErrors { get; }
 
     internal static bool RequiresPowerShellLanguageRuntime(PowerShellBoundBinaryOperator operation)
         => GetRequiredCapabilities(operation).HasFlag(PowerShellRequiredCapability.PowerShellLanguageOperators);
 
     private static PowerShellRequiredCapability GetRequiredCapabilities(PowerShellBoundBinaryOperator operation)
-        => operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
+        => operation == PowerShellBoundBinaryOperator.NativeStringConcatenate
+            ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors
+            : operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
             ? PowerShellRequiredCapability.PowerShellStatementErrors
             : operation is PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase or
             PowerShellBoundBinaryOperator.PowerShellNotEqualIgnoreCase or

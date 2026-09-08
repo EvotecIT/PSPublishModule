@@ -31,6 +31,12 @@ internal static class PowerShellConversionSemanticBinder
         if (targetType == typeof(string) && BindClosedStringConversion(operand) is { } stringValue)
             return stringValue;
         var usePowerShellLanguageRuntime = !PowerShellClrTypeSemantics.CanAssign(targetType, operand.Type.ClrType);
+        if (usePowerShellLanguageRuntime && PowerShellStringificationScopePolicy.RequiresCallerScope(targetType, operand))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(PowerShellStringificationScopePolicy.DiagnosticCode,
+                PowerShellStringificationScopePolicy.DiagnosticMessage, span));
+            return null;
+        }
         if (usePowerShellLanguageRuntime && !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(

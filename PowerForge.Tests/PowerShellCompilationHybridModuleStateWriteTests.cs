@@ -364,7 +364,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
 
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
-        Assert.Equal(4, ledger.SchemaVersion);
+        Assert.Equal(5, ledger.SchemaVersion);
         var hosted = Assert.Single(ledger.Entries, static entry => entry.Name == "Set-StateFromHostedCommand");
         Assert.Equal(1, hosted.RuntimeCommandRegions);
         Assert.Equal(0, hosted.ModuleStateReadBoundaryCrossings);

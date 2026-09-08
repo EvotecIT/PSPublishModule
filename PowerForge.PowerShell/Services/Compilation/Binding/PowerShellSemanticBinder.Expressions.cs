@@ -18,6 +18,7 @@ internal sealed partial class PowerShellSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         var functionBody = FindOwningFunctionBody(syntax);
         if (functionBody is not null &&
+            !(syntax is VariableExpressionAst && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) &&
             PowerShellRuntimeStateSemanticBinder.TryBind(
                 document,
                 syntax,
@@ -44,8 +45,8 @@ internal sealed partial class PowerShellSemanticBinder
                     document,
                     expandable,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
-                    capabilities,
-                    diagnostics);
+                    diagnostics,
+                    capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
             case StringConstantExpressionAst text:
                 return new PowerShellBoundLiteralExpression(span, text.Value, LiteralType(typeof(string), "String literal syntax determines the CLR representation."), PowerShellValueState.Known);
             case ConstantExpressionAst constant:
@@ -62,13 +63,22 @@ internal sealed partial class PowerShellSemanticBinder
                     diagnostics);
             case ArrayExpressionAst array:
             {
+                if (array.SubExpression.Traps is not null)
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501", "Collected arrays with traps retain their native statement handlers.", span));
+                    return null;
+                }
+                if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && array.SubExpression.Statements.Count > 1)
+                    return PowerShellArraySemanticBinder.BindNativeCollection(document, array, contextualType,
+                        (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType, targetFramework, capabilities),
+                        _semanticProfile, diagnostics);
                 var elements = new List<ExpressionAst>();
                 foreach (var statement in array.SubExpression.Statements)
                 {
                     if (statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
-                        pipeline.PipelineElements[0] is not CommandExpressionAst command)
+                        pipeline.PipelineElements[0] is not CommandExpressionAst { Redirections.Count: 0 } command)
                     {
-                        diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501", "Typed @() expressions accept only side-effect-free expression statements.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
+                        diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501", "Typed @() expressions accept expression statements without redirection.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
                         return null;
                     }
                     elements.Add(command.Expression);
@@ -110,6 +120,12 @@ internal sealed partial class PowerShellSemanticBinder
                             ? "$null has no narrower CLR representation."
                             : "$null is represented by the exact contextual reference type."),
                     PowerShellValueState.Null);
+            case VariableExpressionAst variable when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
+                return new PowerShellBoundNativeVariableExpression(span, variable.VariablePath.UserPath,
+                    PowerShellNativeFunctionBindingPolicy.IsInsideExpandableString(variable), document.Path,
+                    string.Join("\n", document.Text.Replace("\r\n", "\n").Split('\n')
+                        .Skip(span.StartLine - 1).Take(span.EndLine - span.StartLine + 1)),
+                    PowerShellNativeVariableAnalysis.IsDirectLocal(variable));
             case VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var symbol):
                 return new PowerShellBoundVariableExpression(
                     span,
@@ -172,7 +188,7 @@ internal sealed partial class PowerShellSemanticBinder
                     targetFramework,
                     capabilities);
             case UnaryExpressionAst unary:
-                if (PowerShellMutationSemanticBinder.TryBindIncrement(document, unary, symbols, out var mutation, diagnostics)) return mutation;
+                if (PowerShellMutationSemanticBinder.TryBindIncrement(document, unary, symbols, out var mutation, diagnostics, capabilities)) return mutation;
                 return PowerShellOperatorSemanticBinder.BindUnary(
                     unary,
                     span,
@@ -185,7 +201,7 @@ internal sealed partial class PowerShellSemanticBinder
                     assignment,
                     symbols,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
-                    diagnostics);
+                    diagnostics, capabilities);
             case IndexExpressionAst index:
                 return PowerShellDictionarySemanticBinder.BindIndex(
                     document,

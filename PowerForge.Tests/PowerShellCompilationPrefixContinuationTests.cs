@@ -135,7 +135,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.HybridModule);
         Assert.Empty(typed.PromotedRegions);
         var candidate = Assert.Single(typed.RegionCandidates);
-        Assert.Equal("region.error-route", candidate.DecisionCode);
+        Assert.Equal("region.statement-errors", candidate.DecisionCode);
+        Assert.Contains("PowerShellStatementError", Assert.Single(candidate.RegionGraph!.Regions).Errors);
         Assert.Contains("ClrException", Assert.Single(candidate.RegionGraph!.Regions).Errors);
     }
 

@@ -95,11 +95,13 @@ internal sealed class PowerShellBoundOptimizer
             PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
                 capture.Span, capture.Target, OptimizeBlock(capture.Body)),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
-                OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText),
+                OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus),
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(
                 assignment.Span, assignment.Target, OptimizeExpression(assignment.Value), assignment.Operation,
-                assignment.NormalizeNullString, assignment.IntegralSemantics),
+                assignment.NormalizeNullString, assignment.IntegralSemantics, assignment.PreserveStatementErrors),
             PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellBoundModuleVariableAssignmentStatement(
+                assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
+            PowerShellBoundNativeVariableAssignmentStatement assignment => new PowerShellBoundNativeVariableAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
                 returned.Span, returned.Expression is null ? null : OptimizeExpression(returned.Expression), returned.EmitsValue),
@@ -154,7 +156,7 @@ internal sealed class PowerShellBoundOptimizer
                 _constantExpressionsFolded++;
                 return new PowerShellBoundLiteralExpression(binary.Span, value, binary.Type, PowerShellValueState.Known);
             }
-            return new PowerShellBoundBinaryExpression(binary.Span, binary.Operation, left, right, binary.Type);
+            return new PowerShellBoundBinaryExpression(binary.Span, binary.Operation, left, right, binary.Type, binary.PreserveStatementErrors);
         }
         if (expression is PowerShellBoundUnaryExpression unary)
         {
@@ -187,9 +189,14 @@ internal sealed class PowerShellBoundOptimizer
                 invocation.AuthoredEvaluationOrder.ToArray(), invocation.BoundParameterNames.ToArray());
         if (expression is PowerShellBoundMutationExpression mutation)
             return new PowerShellBoundMutationExpression(mutation.Span, mutation.Target, mutation.TargetClrType, mutation.Operation,
-                mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString, mutation.IntegralSemantics);
+                mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString,
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors);
         if (expression is PowerShellBoundArrayExpression array)
             return new PowerShellBoundArrayExpression(array.Span, array.Type.ClrType, array.Kind, array.Elements.Select(OptimizeExpression).ToArray());
+        if (expression is PowerShellBoundNativeCollectionExpression collection)
+            return new PowerShellBoundNativeCollectionExpression(collection.Span, collection.SourcePath,
+                collection.Items.Select(item => new PowerShellBoundNativeCollectionItem(item.Span, item.SourceText,
+                    OptimizeExpression(item.Value), item.Enumerate, item.SetSuccess)).ToArray(), collection.ShareEmptyResult);
         if (expression is PowerShellBoundArrayCopyExpression copy)
             return new PowerShellBoundArrayCopyExpression(copy.Span, OptimizeExpression(copy.Source), copy.ShareEmptyResult);
         return expression;

@@ -6,9 +6,35 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RegionOpportunities_RejectDirectCallsWithoutAnEligibleBoundTarget(bool retainRejectedTarget)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Leaf { param(); return 'value' }; " +
+            "function Get-Middle { param(); Get-Leaf }; " +
+            "function Get-Caller { param(); Get-Middle }; " +
+            "function Get-Independent { param(); return 'safe' }", "missing-call-target.psm1");
+        var capabilities = PowerShellCompilationCapabilities.HybridModule;
+        var bound = new PowerShellSemanticBinder().BindWithRegionCandidates(new[] { document }, "net10.0", capabilities).Program;
+        var leaf = Assert.Single(bound.Functions, function => function.Symbol.Name == "Get-Leaf");
+        // Model the binder's two failure outputs while retaining actual bound CLR call edges.
+        bound = retainRejectedTarget
+            ? bound.WithDiagnostics(new[] { new PowerShellSemanticDiagnostic("PSBTEST", "Rejected leaf contract.", leaf.Symbol.Declaration) })
+            : bound.WithFunctions(bound.Functions.Where(function => function != leaf).ToArray());
+        var analyzed = new PowerShellSemanticAnalyzer().AnalyzeRegionOpportunities(bound);
+        foreach (var caller in new[] { "Get-Middle", "Get-Caller" })
+            Assert.Equal(PowerShellExecutionDispositionKind.Fallback,
+                Assert.Single(analyzed.Functions, function => function.Symbol.Name == caller).Disposition.Kind);
+        Assert.Equal(PowerShellExecutionDispositionKind.Typed,
+            Assert.Single(analyzed.Functions, function => function.Symbol.Name == "Get-Independent").Disposition.Kind);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("return [string]([Console]::WriteLine('probe'))", false)]
     [InlineData("return 'value'", true)]
-    public void ValueConsumption_ProtectsTransitiveRegionCallClosure(string body, bool emitted)
+    public void RegionOpportunities_ProtectRejectedTransitiveCallClosure(string body, bool emitted)
     {
         var document = PowerShellSourceParser.Parse(
             "function Get-Leaf { [CmdletBinding()] param(); " + body + " }; " +

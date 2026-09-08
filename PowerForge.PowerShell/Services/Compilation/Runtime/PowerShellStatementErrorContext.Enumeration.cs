@@ -1,10 +1,30 @@
 namespace PowerForge.Generated.Runtime
 {
+    using System;
     using System.Collections;
     using System.Management.Automation;
 
     public sealed partial class PowerShellStatementErrorContext
     {
+        /// <summary>Captures only the retained invocation's execution context for compiled loop boundaries.</summary>
+        public static Action CreateLoopInterrupt(EngineIntrinsics engine)
+        {
+            if (engine is null) throw new ArgumentNullException(nameof(engine));
+            var contract = NativeContract.Shared;
+            var state = contract.GetRequired(contract.NativeSessionState, engine.SessionState);
+            return CreateLoopInterrupt(contract, contract.GetRequired(contract.SessionExecutionContext, state));
+        }
+
+        internal static Action CreateLoopInterrupt(PSCmdlet cmdlet)
+        {
+            if (cmdlet is null) throw new ArgumentNullException(nameof(cmdlet));
+            var contract = NativeContract.Shared;
+            return CreateLoopInterrupt(contract, contract.GetRequired(contract.CmdletContext, cmdlet));
+        }
+
+        private static Action CreateLoopInterrupt(NativeContract contract, object context)
+            => () => NativeContract.Invoke(contract.CheckEnumerationInterrupts, null, context);
+
         /// <summary>Acquires the native enumerator, including scalar fallback and acquisition-error semantics.</summary>
         internal IEnumerator? GetEnumerator(object value)
         {

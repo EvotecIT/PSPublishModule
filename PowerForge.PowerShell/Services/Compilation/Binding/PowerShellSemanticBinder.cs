@@ -46,6 +46,8 @@ internal sealed partial class PowerShellSemanticBinder
         IDictionary<string, PowerShellBoundRegionOpportunity>? regionOpportunities = null)
     {
         var functionDiagnosticStart = diagnostics.Count;
+        var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(function, capabilities);
+        if (nativeFunctionBinding is null) capabilities &= ~PowerShellCompilationCapability.NativeFunctionBinding;
         ClearFunctionRegionEvidence(
             regionCandidates,
             regionOpportunities,
@@ -176,7 +178,9 @@ internal sealed partial class PowerShellSemanticBinder
         // A fully bound body may still need its authored PowerShell header after cmdlet shaping.
         // Keep the ordinary terminal-region candidate so that final shaping can retain that header
         // while delegating the proven body through the same region ABI.
-        if (regionCandidates is not null && bodyIsValid && diagnostics.Count == functionDiagnosticStart &&
+        if (regionCandidates is not null && bodyIsValid &&
+            diagnostics.Skip(functionDiagnosticStart).All(static diagnostic =>
+                diagnostic.Code == PowerShellNativeStringPipelineBindingPolicy.DiagnosticCode) &&
             PowerShellBoundRegionCandidateSelector.TryCreate(
                 document, function, functionSymbol, parameters, locals, authoredStatements,
                 statementBindings, -1, out var completeBodyCandidate))
@@ -236,7 +240,8 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellOutputCardinality.Unknown,
             PowerShellSemanticEffect.None,
             PowerShellRequiredCapability.None,
-            PowerShellExecutionDisposition.Typed);
+            PowerShellExecutionDisposition.Typed,
+            nativeFunctionBinding);
     }
 
     private PowerShellBoundParameter[]? BindParameters(
@@ -280,7 +285,8 @@ internal sealed partial class PowerShellSemanticBinder
                     span));
                 invalid = true;
             }
-            if (parameter.DefaultValue is not null && contract.DefaultValue is null)
+            if (parameter.DefaultValue is not null && contract.DefaultValue is null &&
+                !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     PowerShellCompilationFeatureIds.ParameterDefault,
@@ -301,6 +307,7 @@ internal sealed partial class PowerShellSemanticBinder
                             ? $"Parameter '${name}' has an authored type constraint."
                             : $"Untyped parameter '${name}' preserves the PowerShell host's object-valued parameter contract.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) type = PowerShellTypeFact.Unknown;
             var bound = new PowerShellBoundParameter(symbol, type, contract);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             parameters.Add(bound);
@@ -318,7 +325,7 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, function.Extent)));
             invalid = true;
         }
-        if (!PowerShellParameterSemanticValidator.Validate(
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && !PowerShellParameterSemanticValidator.Validate(
                 document,
                 function,
                 parameters.Select(static parameter => parameter.Contract).ToArray(),

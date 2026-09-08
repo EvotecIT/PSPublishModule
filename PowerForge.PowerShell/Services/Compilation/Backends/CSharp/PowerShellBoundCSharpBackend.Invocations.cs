@@ -18,6 +18,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var callArguments = arguments.ToList();
         if (invocation.RequiresPowerShellStatementErrors)
             callArguments.Add(invocation.StatementErrorContextTemporary);
+        if (invocation.RequiresPowerShellStopping)
+            callArguments.Add("__checkLoopInterrupts");
         if (invocation.RequiresPowerShellStreams)
             callArguments.AddRange(new[] { "__writeOutput", "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeHost", "__writeError" });
         if (invocation.RequiresProviderCancellation)

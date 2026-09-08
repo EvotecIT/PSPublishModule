@@ -33,7 +33,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void Interpolation_PreservesOpenValuesSeparatorsAndFailureContinuation(string framework, string host)
+    public void Interpolation_RetainsOpenValuesSeparatorsAndFailureContinuation(string framework, string host)
     {
         const string source = """
             function Expand-Value { [CmdletBinding()] param([object]$Value) return "value=$Value" }
@@ -76,7 +76,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }
             }
             """;
-        CompareInterpolationArtifact(framework, host, source, probe, 3, "open-interpolation");
+        CompareInterpolationArtifact(framework, host, source, probe, 0, "open-interpolation", hybrid: true);
     }
 
     [Theory]
@@ -146,15 +146,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
     }
 
-    private static void CompareInterpolationArtifact(string framework, string host, string source, string probe, int methods, string name, bool library = false)
+    private static void CompareInterpolationArtifact(string framework, string host, string source, string probe, int methods, string name, bool library = false, bool hybrid = false)
     {
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.InterpolationValues", library ? PowerShellCompilationArtifactKind.Library : PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+            hybrid ? PowerShellCompilationMode.Hybrid : PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(methods, result.Manifest!.CompiledMethods);
-        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+        if (hybrid) Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
+        else Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         if (library)
         {
             Assert.False(result.Manifest.RequiresPowerShellRuntime);

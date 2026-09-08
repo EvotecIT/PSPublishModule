@@ -87,11 +87,14 @@ internal static class PowerShellCompilationIrSnapshotBuilder
     private static PowerShellRequiredCapability GetLoweredCapabilities(PowerShellLoweredFunction function)
     {
         var capabilities = PowerShellRequiredCapability.None;
+        if (function.NativeFunctionBinding is not null)
+            capabilities |= PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost;
         if (function.RequiresPowerShellBoundParameters) capabilities |= PowerShellRequiredCapability.PowerShellHost;
         if (function.RequiresPowerShellHostStreams) capabilities |= PowerShellRequiredCapability.PowerShellStreams;
         if (function.RequiresPowerShellStatementErrors)
             capabilities |= PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes;
-        if (function.RequiresPowerShellStopping) capabilities |= PowerShellRequiredCapability.PowerShellStopping;
+        if (function.RequiresPowerShellStopping)
+            capabilities |= PowerShellRequiredCapability.PowerShellStopping | PowerShellRequiredCapability.PowerShellHostTypes;
         if (function.RequiresRuntimeFreeProviderOperations) capabilities |= PowerShellRequiredCapability.RuntimeFreeProviderOperations;
         if (function.RequiresPowerShellCommandRegions) capabilities |= PowerShellRequiredCapability.CommandRegion;
         if (function.RequiresPowerShellRuntimeState) capabilities |= PowerShellRequiredCapability.RuntimeStateIntrinsics;

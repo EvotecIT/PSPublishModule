@@ -1,0 +1,44 @@
+namespace PowerForge;
+
+internal sealed class PowerShellLoweredNativeCollectionExpression : PowerShellLoweredExpression
+{
+    internal PowerShellLoweredNativeCollectionExpression(SourceSpan span, string sourcePath,
+        PowerShellLoweredNativeCollectionItem[] items, bool shareEmptyResult, string resultTemporary)
+        : base(span, typeof(object[]))
+    {
+        SourcePath = sourcePath;
+        Items = items;
+        ShareEmptyResult = shareEmptyResult;
+        ResultTemporary = resultTemporary;
+    }
+
+    internal string SourcePath { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredNativeCollectionItem> Items { get; }
+    internal bool ShareEmptyResult { get; }
+    internal string ResultTemporary { get; }
+}
+
+internal sealed class PowerShellLoweredNativeCollectionItem
+{
+    internal PowerShellLoweredNativeCollectionItem(SourceSpan span, string sourceText, PowerShellLoweredExpression value,
+        bool enumerate, bool setSuccess, string valueTemporary, string recordTemporary, string exceptionTemporary)
+    {
+        Span = span;
+        SourceText = sourceText;
+        Value = value;
+        Enumerate = enumerate;
+        SetSuccess = setSuccess;
+        ValueTemporary = valueTemporary;
+        RecordTemporary = recordTemporary;
+        ExceptionTemporary = exceptionTemporary;
+    }
+
+    internal SourceSpan Span { get; }
+    internal string SourceText { get; }
+    internal PowerShellLoweredExpression Value { get; }
+    internal bool Enumerate { get; }
+    internal bool SetSuccess { get; }
+    internal string ValueTemporary { get; }
+    internal string RecordTemporary { get; }
+    internal string ExceptionTemporary { get; }
+}

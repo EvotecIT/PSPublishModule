@@ -48,19 +48,20 @@ internal static class PowerShellRuntimeExceptionCatchPolicy
     internal static bool RequiresNumericErrorWrapping(PowerShellBoundFunction function)
         => PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
             .OfType<PowerShellBoundAssignmentStatement>()
-            .Any(static assignment => assignment.IntegralSemantics is PowerShellIntegralMutationSemantics.CheckedConversion or PowerShellIntegralMutationSemantics.PromotedBigIntegerProduct ||
-                assignment.Operation != PowerShellBoundMutationOperator.Assign && assignment.Value.Type.ClrType == typeof(decimal)) ||
+            .Any(static assignment => !assignment.PreserveStatementErrors &&
+                (assignment.IntegralSemantics is PowerShellIntegralMutationSemantics.CheckedConversion or PowerShellIntegralMutationSemantics.PromotedBigIntegerProduct or PowerShellIntegralMutationSemantics.UnsignedDecrement ||
+                assignment.Operation != PowerShellBoundMutationOperator.Assign && assignment.Value.Type.ClrType == typeof(decimal))) ||
             PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
             .Any(static expression => expression switch
             {
-                PowerShellBoundMutationExpression mutation => mutation.Operation != PowerShellBoundMutationOperator.Assign &&
-                    (mutation.IntegralSemantics is PowerShellIntegralMutationSemantics.CheckedConversion or PowerShellIntegralMutationSemantics.PromotedBigIntegerProduct || mutation.TargetClrType == typeof(decimal)),
-                PowerShellBoundBinaryExpression binary => binary.Operation == PowerShellBoundBinaryOperator.IntegralRemainder ||
+                PowerShellBoundMutationExpression mutation => !mutation.PreserveStatementErrors && mutation.Operation != PowerShellBoundMutationOperator.Assign &&
+                    (mutation.IntegralSemantics is PowerShellIntegralMutationSemantics.CheckedConversion or PowerShellIntegralMutationSemantics.PromotedBigIntegerProduct or PowerShellIntegralMutationSemantics.UnsignedDecrement || mutation.TargetClrType == typeof(decimal)),
+                PowerShellBoundBinaryExpression binary => !binary.PreserveStatementErrors && (binary.Operation == PowerShellBoundBinaryOperator.IntegralRemainder ||
                     binary.Type.ClrType == typeof(decimal) && binary.Operation is PowerShellBoundBinaryOperator.Add or
                         PowerShellBoundBinaryOperator.Subtract or PowerShellBoundBinaryOperator.Multiply or
-                        PowerShellBoundBinaryOperator.Divide or PowerShellBoundBinaryOperator.Remainder,
+                        PowerShellBoundBinaryOperator.Divide or PowerShellBoundBinaryOperator.Remainder),
                 _ => false
             });
 

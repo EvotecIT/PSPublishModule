@@ -8,7 +8,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
-    public void Build_InferredStringForEachPreservesNullAndScalarValues(string framework, string host)
+    public void Build_RuntimeFreeInferredStringForEachPreservesNullAndScalarValues(string framework, string host)
     {
         if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
@@ -19,15 +19,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "PowerForge.InferredStringLoops",
-            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
+            PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(4, result.Manifest!.CompiledMethods);
+        Assert.False(result.Manifest.RequiresPowerShellRuntime);
         const string probe = "Get-CastCount; Get-EmptyStringCount; Get-NullStringCount; Get-ConstrainedStringCount";
         var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
         var compiled = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
-            "Import-Module '" + result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
+            "$assembly=[Reflection.Assembly]::LoadFrom('" + result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal) + "'); " +
+            "foreach($name in 'Get_CastCount','Get_EmptyStringCount','Get_NullStringCount','Get_ConstrainedStringCount') { " +
+            "$method=$assembly.GetTypes().GetMethods() | Where-Object Name -eq $name; $method.Invoke($null,@()) }");
         Assert.Equal((0, "1|1|0|1", string.Empty),
             (original.ExitCode, string.Join("|", original.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)), original.StandardError.Trim()));
         Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),

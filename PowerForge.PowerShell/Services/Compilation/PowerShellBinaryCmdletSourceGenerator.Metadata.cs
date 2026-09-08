@@ -10,6 +10,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
     {
         var selected = exportedFunctions?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         return typed.Methods.Where(method => selected is null || selected.Contains(method.SourceName))
+            .Where(static method => method.NativeFunctionBinding is null)
             .Select(CreateDescriptor)
             .Select(cmdlet => new PowerShellCommandMetadataNames.Identity(
                 typed.NamespaceName + "." + cmdlet.ClassName.TrimStart('@'),

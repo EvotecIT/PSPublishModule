@@ -18,6 +18,7 @@ namespace PowerForge.Generated.Runtime
         public override object Transform(EngineIntrinsics engineIntrinsics, object inputData)
         {
             var contract = NativeContract.Shared;
+            using var bindingScope = PowerShellStatementErrorContext.EnterStringParameterBinding(engineIntrinsics, _advancedFunction);
             try
             {
                 return contract.Transform.Invoke(contract.Converter,

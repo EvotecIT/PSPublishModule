@@ -13,8 +13,8 @@ internal static class PowerShellLoopInterruptContract
         => enabled ? PowerShellRequiredCapability.PowerShellStopping | PowerShellRequiredCapability.PowerShellHostTypes
             : PowerShellRequiredCapability.None;
 
-    // The same qualified native context supplies both services. Requiring that
-    // context does not imply that a stop-only loop can write ordinary error state.
+    // Native exception handling requires the full context for either service;
+    // a loop without an enclosing handler needs only its stopping callback.
     internal static bool RequiresContext(PowerShellRequiredCapability capabilities)
         => (capabilities & (PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellStopping)) != 0;
 }

@@ -6,7 +6,20 @@ internal static class PowerShellCommandHostRuntimeSource
     internal static IReadOnlyDictionary<string, string> Render(PowerShellTypedCompilationResult typed)
     {
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
-        var requiresModuleState = typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState);
+        if (typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
+        {
+            foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionContext" })
+            {
+                using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
+                    "PowerForge.PowerShell.Compilation." + name + ".cs")
+                    ?? throw new InvalidOperationException("Missing native function runtime source: " + name);
+                using var reader = new StreamReader(stream);
+                sources.Add(name + ".g.cs", "#nullable enable\n" + reader.ReadToEnd());
+            }
+        }
+        var requiresModuleState = typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState) ||
+            typed.PromotedRegions.Any(static region => region.RequiresPowerShellStopping) ||
+            typed.Methods.Any(static method => method.NativeFunctionBinding is not null && method.RequiresPowerShellStatementErrors);
         if (requiresModuleState)
         {
             using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
@@ -15,7 +28,7 @@ internal static class PowerShellCommandHostRuntimeSource
             using var reader = new StreamReader(stream);
             sources.Add("ModuleSessionState.g.cs", "#nullable enable\n" + reader.ReadToEnd());
         }
-        if (typed.Methods.Any(static method => method.Parameters.Any(static parameter => parameter.TypeName == typeof(string).FullName)))
+        if (typed.Methods.Any(static method => method.NativeFunctionBinding is null && method.Parameters.Any(static parameter => parameter.TypeName == typeof(string).FullName)))
         {
             using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
                 "PowerForge.PowerShell.Compilation.PowerShellStringParameterAttribute.cs")

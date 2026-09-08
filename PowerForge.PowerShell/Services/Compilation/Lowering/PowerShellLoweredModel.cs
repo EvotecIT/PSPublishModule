@@ -69,7 +69,8 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         bool requiresPowerShellModuleStateWrite,
         bool requiresPowerShellStatementErrors = false,
         string statementErrorContextTemporary = "",
-        string statementErrorTemporary = "")
+        string statementErrorTemporary = "",
+        bool requiresPowerShellStopping = false)
         : base(span, clrType)
     {
         Target = target;
@@ -87,6 +88,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
         StatementErrorContextTemporary = statementErrorContextTemporary;
         StatementErrorTemporary = statementErrorTemporary;
+        RequiresPowerShellStopping = requiresPowerShellStopping;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -105,6 +107,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal bool RequiresPowerShellStatementErrors { get; }
     internal string StatementErrorContextTemporary { get; }
     internal string StatementErrorTemporary { get; }
+    internal bool RequiresPowerShellStopping { get; }
 }
 
 internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
@@ -143,7 +146,8 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
         bool declare,
         PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         bool normalizeNullString = false,
-        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None)
+        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None,
+        bool preserveStatementErrors = false)
         : base(span)
     {
         Target = target;
@@ -153,6 +157,7 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
         Operation = operation;
         NormalizeNullString = normalizeNullString;
         IntegralSemantics = integralSemantics;
+        PreserveStatementErrors = preserveStatementErrors;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -162,6 +167,7 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
     internal PowerShellBoundMutationOperator Operation { get; }
     internal bool NormalizeNullString { get; }
     internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
+    internal bool PreserveStatementErrors { get; }
 }
 
 internal sealed class PowerShellLoweredLocalDeclarationStatement : PowerShellLoweredStatement
@@ -219,7 +225,8 @@ internal sealed class PowerShellLoweredFunction
         PowerShellLoweredStatement[] statements,
         SourceSpan span,
         bool requiresPowerShellStatementErrors = false,
-        bool requiresPowerShellStopping = false)
+        bool requiresPowerShellStopping = false,
+        PowerShellNativeFunctionBinding? nativeFunctionBinding = null)
     {
         Symbol = symbol;
         GeneratedName = generatedName;
@@ -247,6 +254,7 @@ internal sealed class PowerShellLoweredFunction
         Span = span;
         RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
         RequiresPowerShellStopping = requiresPowerShellStopping;
+        NativeFunctionBinding = nativeFunctionBinding;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -265,6 +273,7 @@ internal sealed class PowerShellLoweredFunction
     internal bool RequiresPowerShellHostStreams { get; }
     internal bool RequiresPowerShellStatementErrors { get; }
     internal bool RequiresPowerShellStopping { get; }
+    internal PowerShellNativeFunctionBinding? NativeFunctionBinding { get; }
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }

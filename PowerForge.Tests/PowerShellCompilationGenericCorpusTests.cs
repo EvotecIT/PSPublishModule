@@ -62,7 +62,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             });
 
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-            Assert.Equal(8, result.Manifest!.CompiledMethods);
+            Assert.True(result.Manifest!.CompiledMethods == 8,
+                "Expected eight compiled corpus methods.\n" + string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(diagnostic => $"{diagnostic.Line}:{diagnostic.Column}: {diagnostic.Message}")));
             Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
             Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
             Assert.True(result.Manifest.AllowsPowerShellRuntimeEvaluation);

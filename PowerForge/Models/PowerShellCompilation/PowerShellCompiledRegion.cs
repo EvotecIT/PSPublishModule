@@ -29,7 +29,8 @@ public sealed class PowerShellCompiledRegion
         IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
         PowerShellCompilationRegionGraph regionGraph,
         string documentId,
-        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null)
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null,
+        bool requiresPowerShellStopping = false)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -50,6 +51,7 @@ public sealed class PowerShellCompiledRegion
         RegionGraph = regionGraph ?? new PowerShellCompilationRegionGraph(Array.Empty<PowerShellCompilationRegion>());
         DocumentId = documentId ?? string.Empty;
         ContinuationLocals = Array.AsReadOnly((continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
+        RequiresPowerShellStopping = requiresPowerShellStopping;
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -91,6 +93,9 @@ public sealed class PowerShellCompiledRegion
 
     /// <summary>Ordered scalar locals restored before PowerShell resumes; empty for a terminal return.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
+
+    /// <summary>Whether the helper requires the retained invocation's native loop-stopping callback.</summary>
+    public bool RequiresPowerShellStopping { get; }
 
     [JsonIgnore]
     internal string GeneratedSource { get; set; } = string.Empty;

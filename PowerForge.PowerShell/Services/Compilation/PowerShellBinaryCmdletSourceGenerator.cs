@@ -65,10 +65,15 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         var invalid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var descriptors = new List<CmdletDescriptor>();
-        foreach (var method in typed.Methods.Where(method => selected is null || selected.Contains(method.SourceName)))
+        foreach (var method in typed.Methods.Where(method => method.NativeFunctionBinding is not null || selected is null || selected.Contains(method.SourceName)))
         {
             try
             {
+                if (method.NativeFunctionBinding is not null)
+                {
+                    PowerShellNativeFunctionSourceGenerator.Validate(method);
+                    continue;
+                }
                 var descriptor = CreateDescriptor(method);
                 ValidateDescriptor(descriptor, targetFramework);
                 descriptors.Add(descriptor);
@@ -140,6 +145,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
     {
         var selected = exportedFunctions?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var cmdlets = typed.Methods
+            .Where(static method => method.NativeFunctionBinding is null)
             .Where(method => selected is null || selected.Contains(method.SourceName))
             .Select(CreateDescriptor)
             .ToArray();
@@ -165,6 +171,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         AppendRuntimeHost(builder, typed, cmdlets);
         foreach (var cmdlet in cmdlets)
             AppendCmdlet(builder, typed, cmdlet, targetFramework);
+        PowerShellNativeFunctionSourceGenerator.Append(builder, typed);
         return builder.ToString();
     }
 

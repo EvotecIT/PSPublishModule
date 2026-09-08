@@ -390,10 +390,10 @@ public sealed class PowerShellTypedCompilationTranspiler
         PowerShellCSharpMethodEmission emitted,
         PowerShellCompilationCapability capabilities)
     {
-        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) ||
+        if (emitted.NativeFunctionBinding is not null || !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) ||
             PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function) ||
-            !emitted.RequiresPowerShellStreams && !emitted.RequiresPowerShellCommandRegions && !emitted.RequiresPowerShellStatementErrors ||
-            emitted.SupportsBasicCommandQuerySurface && !emitted.RequiresPowerShellStatementErrors)
+            !emitted.RequiresPowerShellStreams && !emitted.RequiresPowerShellCommandRegions && !emitted.RequiresPowerShellStatementErrors && !emitted.RequiresPowerShellStopping ||
+            emitted.SupportsBasicCommandQuerySurface && !emitted.RequiresPowerShellStatementErrors && !emitted.RequiresPowerShellStopping)
             return;
         throw new PowerShellCSharpEmissionException(
             source.Function,
@@ -429,12 +429,14 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.HostedRegionSiteCount,
             emitted.RequiresProviderCancellation);
         method.RegionGraph = emitted.RegionGraph;
+        method.NativeFunctionBinding = emitted.NativeFunctionBinding;
         method.DocumentId = emitted.SourceSpan.DocumentId;
         method.DeclaredOutputTypeIsSemanticContract = emitted.DeclaredOutputType is not null;
         method.RequiresPowerShellModuleState = emitted.RequiresPowerShellModuleState;
         method.RequiresPowerShellModuleStateRead = emitted.RequiresPowerShellModuleStateRead;
         method.RequiresPowerShellModuleStateWrite = emitted.RequiresPowerShellModuleStateWrite;
         method.RequiresPowerShellStatementErrors = emitted.RequiresPowerShellStatementErrors;
+        method.RequiresPowerShellStopping = emitted.RequiresPowerShellStopping;
         method.RequiredPowerShellModuleVariables = emitted.ModuleStateVariableNames;
         method.PowerShellModuleStateReadSiteCount = emitted.ModuleStateReadSiteCount;
         method.WrittenPowerShellModuleVariables = emitted.WrittenModuleStateVariableNames;
@@ -466,7 +468,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.SourceMap,
             emitted.RegionGraph,
             emitted.SourceSpan.DocumentId,
-            candidate.ContinuationLocals.ToArray());
+            candidate.ContinuationLocals.ToArray(),
+            emitted.RequiresPowerShellStopping);
         compiled.GeneratedSource = emitted.Source;
         return compiled;
     }
@@ -652,7 +655,9 @@ internal sealed class PowerShellCSharpMethodEmission
         string[]? writtenModuleStateVariableNames = null,
         int moduleStateWriteSiteCount = 0,
         PowerShellCompilationRegionGraph? regionGraph = null,
-        bool requiresPowerShellStatementErrors = false)
+        bool requiresPowerShellStatementErrors = false,
+        bool requiresPowerShellStopping = false,
+        PowerShellNativeFunctionBinding? nativeFunctionBinding = null)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -666,6 +671,8 @@ internal sealed class PowerShellCSharpMethodEmission
         RequiresPowerShellModuleStateRead = requiresPowerShellModuleStateRead;
         RequiresPowerShellModuleStateWrite = requiresPowerShellModuleStateWrite;
         RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
+        RequiresPowerShellStopping = requiresPowerShellStopping;
+        NativeFunctionBinding = nativeFunctionBinding;
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? declaredOutputType?.FullName ?? string.Empty;
         Help = help;
@@ -698,6 +705,8 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellModuleStateRead { get; }
     internal bool RequiresPowerShellModuleStateWrite { get; }
     internal bool RequiresPowerShellStatementErrors { get; }
+    internal bool RequiresPowerShellStopping { get; }
+    internal PowerShellNativeFunctionBinding? NativeFunctionBinding { get; }
     internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }

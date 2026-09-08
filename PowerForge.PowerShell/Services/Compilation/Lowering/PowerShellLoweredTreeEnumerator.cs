@@ -178,6 +178,9 @@ internal static class PowerShellLoweredTreeEnumerator
             case PowerShellLoweredArrayExpression array:
                 foreach (var element in array.Elements) yield return element;
                 break;
+            case PowerShellLoweredNativeCollectionExpression collection:
+                foreach (var item in collection.Items) yield return item.Value;
+                break;
             case PowerShellLoweredArrayCopyExpression copy:
                 yield return copy.Source;
                 break;

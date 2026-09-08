@@ -53,7 +53,10 @@ internal static class PowerShellHybridRegionRewriter
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' source changed after semantic selection.");
             if (!HasSafeGraph(region.RegionGraph))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' does not carry a fail-closed typed boundary graph.");
-            var arguments = string.Join(", ", region.InputParameters.Select(static parameter => "${" + parameter.Name + "}"));
+            var inputs = region.InputParameters.Select(static parameter => "${" + parameter.Name + "}");
+            if (region.RequiresPowerShellStopping)
+                inputs = inputs.Append("[PowerForge.Generated.Runtime.PowerShellStatementErrorContext]::CreateLoopInterrupt($ExecutionContext)");
+            var arguments = string.Join(", ", inputs);
             if (region.ContinuationLocals.Any(static local =>
                     local.HasTypeConstraint && string.IsNullOrWhiteSpace(local.TypeConstraintSyntax)))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' is missing its authored continuation type constraint.");

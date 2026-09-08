@@ -66,6 +66,8 @@ public sealed class PowerShellCompilationUnitExplanation
     public bool Emitted { get; set; }
     /// <summary>Whether authored source remains in the delivered hosted payload.</summary>
     public bool RetainedHostedSource { get; set; }
+    /// <summary>Whether the emitted CLR body still requires native PowerShell parameter binding and invocation storage.</summary>
+    public bool UsesNativeFunctionBinding { get; set; }
     /// <summary>Number of hosted command regions in the emitted implementation.</summary>
     public int RuntimeCommandRegions { get; set; }
     /// <summary>Number of reads from emitted CLR into retained parent Hybrid script-module state.</summary>
@@ -199,9 +201,9 @@ public sealed class PowerShellCompilationReproductionEvidence
 public sealed class PowerShellCompilationExplanation
 {
     /// <summary>Explanation schema version.</summary>
-    public int SchemaVersion { get; set; } = 5;
+    public int SchemaVersion { get; set; } = 6;
     /// <summary>Compatibility contract used by semantic fingerprints across supported hosts.</summary>
-    public int SemanticCompatibilityVersion { get; set; } = 4;
+    public int SemanticCompatibilityVersion { get; set; } = 5;
     /// <summary>SHA-256 over semantic decisions with authored coordinates and traversal order removed.</summary>
     public string SemanticFingerprintSha256 { get; set; } = string.Empty;
     /// <summary>Selected compilation mode.</summary>

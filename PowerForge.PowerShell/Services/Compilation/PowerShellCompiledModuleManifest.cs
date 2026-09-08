@@ -112,7 +112,7 @@ internal static class PowerShellCompiledModuleManifest
         var targetManifest = Path.Combine(moduleDirectory, artifactName + ".psd1");
         File.Copy(sourceManifest, targetManifest, overwrite: true);
         var allFunctions = ReadFunctionNames(typed.SourcePaths);
-        var compiled = typed.Methods.Select(static method => method.SourceName).ToArray();
+        var compiled = typed.Methods.Where(static method => method.NativeFunctionBinding is null).Select(static method => method.SourceName).ToArray();
         var compiledSet = compiled.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fallback = allFunctions.Where(name => !compiledSet.Contains(name)).ToArray();
         var explicitExports = PowerShellModuleExportContract.TryRead(sourcePath);

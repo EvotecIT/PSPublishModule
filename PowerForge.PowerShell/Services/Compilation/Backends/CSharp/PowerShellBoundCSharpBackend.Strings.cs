@@ -6,10 +6,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var parts = interpolated.Parts.Select(part => part.Expression is null
             ? PowerShellCSharpLiteral.QuoteString(part.Text ?? string.Empty)
+            : interpolated.UsesNativeInvocation
+                ? $"__nativeFunction.Stringify({EmitExpression(part.Expression)})"
             : part.Expression.ClrType == typeof(string)
                 ? $"({EmitExpression(part.Expression)} ?? string.Empty)"
-                : interpolated.UsePowerShellRuntime
-                    ? $"__statementErrors.InterpolateValue((object?)({EmitExpression(part.Expression)}))"
+                : part.NumericTemporary.Length != 0
+                    ? EmitNumericUnionInterpolation(part.Expression, part.NumericTemporary)
                     : EmitScalarInterpolation(part.Expression)).ToArray();
         return parts.Length switch
         {
@@ -17,6 +19,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
             1 => parts[0],
             _ => $"global::System.String.Concat(new string[] {{ {string.Join(", ", parts)} }})"
         };
+    }
+
+    private string EmitNumericUnionInterpolation(PowerShellLoweredExpression expression, string temporary)
+    {
+        const string provider = "global::System.Globalization.CultureInfo.InvariantCulture";
+        return $"new global::System.Func<string>(() => {{ var {temporary} = {EmitExpression(expression)}; " +
+               $"return {temporary} is double ? ((double){temporary}).ToString(\"G15\", {provider}) : ((int){temporary}).ToString({provider}); }})()";
     }
 
     private string EmitScalarInterpolation(PowerShellLoweredExpression expression)

@@ -61,6 +61,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                               unit.Kind == PowerShellCompilationUnitKind.Script &&
                               unit.IsCompilable;
                 var emittedBinaryCmdlet = artifactKind == PowerShellCompilationArtifactKind.BinaryModule &&
+                                          dispositionMethod?.NativeFunctionBinding is null &&
                                           (wrappedMethodKeys.Contains(unitKey) || lifecycleMethod is not null);
                 var retainedHostedSource = IsRetainedHostedSource(
                     plan.Mode,
@@ -79,7 +80,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     ? Math.Max(1, dispositionMethod.PowerShellModuleStateWriteSiteCount)
                     : 0;
                 var moduleStateBoundaryCrossings = moduleStateReadBoundaryCrossings + moduleStateWriteBoundaryCrossings;
-                var runtimeRouted = retainedHostedSource || runtimeCommandRegions > 0 || moduleStateBoundaryCrossings > 0;
+                var nativeFunctionBinding = dispositionMethod?.NativeFunctionBinding is not null;
+                var runtimeRouted = nativeFunctionBinding || retainedHostedSource || runtimeCommandRegions > 0 || moduleStateBoundaryCrossings > 0;
                 var rejected = !emitted &&
                                (plan.Mode == PowerShellCompilationMode.Strict ||
                                 artifactKind == PowerShellCompilationArtifactKind.Library);
@@ -119,6 +121,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     runtimeCommandRegions,
                     boundaryCrossings: runtimeCommandRegions +
                                         moduleStateBoundaryCrossings +
+                                        (nativeFunctionBinding ? 1 : 0) +
                                         (retainedHostedSource && (emitted || emittedBinaryCmdlet) ? 1 : 0) +
                                         promotedRegions.Length,
                     shapingFallback: retainedHostedSource && (unit.IsCompilable || lifecycleMethod is not null),
@@ -134,7 +137,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     moduleStateWriteBoundaryCrossings,
                     dispositionMethod?.RegionGraph ?? promotedRegions.FirstOrDefault()?.RegionGraph,
                     promotedRegions.Length,
-                    promotedRegions.Select(static region => region.GeneratedName).ToArray()));
+                    promotedRegions.Select(static region => region.GeneratedName).ToArray(),
+                    nativeFunctionBinding));
             }
         }
 
@@ -270,10 +274,13 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         IReadOnlyList<PowerShellCompiledRegion> promotedRegions)
     {
         var causes = new List<string>();
+        if (method?.NativeFunctionBinding is not null)
+            causes.Add("The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.");
         if (retainedHostedSource) causes.Add("Authored source remains on the hosted PowerShell path after artifact shaping.");
         if (method?.RequiresPowerShellCommandRegions == true) causes.Add("The emitted CLR method contains hosted PowerShell command regions.");
         if (method?.RequiresPowerShellRuntimeState == true) causes.Add("The emitted CLR method captures PowerShell runtime state.");
         if (method?.RequiresPowerShellStatementErrors == true) causes.Add("The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.");
+        if (method?.RequiresPowerShellStopping == true) causes.Add("The emitted CLR method requires the invocation's native PowerShell loop-stopping callback.");
         if (method?.RequiredPowerShellModuleVariables.Length > 0)
             causes.Add("The emitted CLR method reads live parent Hybrid script-module state: " +
                        string.Join(", ", method.RequiredPowerShellModuleVariables.Select(static name => "$script:" + name)) + ".");
@@ -287,6 +294,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         if (method?.Lifecycle is not null) causes.Add("The emitted cmdlet uses a hosted advanced-function lifecycle.");
         if (promotedRegions.Count > 0)
             causes.Add($"The retained function delegates {promotedRegions.Count} terminal typed region(s) to generated CLR helpers while keeping its PowerShell command surface.");
+        if (promotedRegions.Any(static region => region.RequiresPowerShellStopping))
+            causes.Add("Promoted CLR loop helpers require the retained invocation's native PowerShell stopping callback.");
         return causes.ToArray();
     }
 

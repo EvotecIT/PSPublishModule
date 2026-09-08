@@ -23,10 +23,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.StringParameters", PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(10, result.Manifest!.CompiledMethods);
-        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(0, result.Manifest.PromotedTypedRegions);
+        Assert.Equal(5, result.Manifest.RuntimeFallbackUnits); // Native parameter binding remains runtime-owned.
+        Assert.Equal(5, result.Manifest.UnitDispositionLedger!.Entries.Count(unit => unit.UsesNativeFunctionBinding));
+        Assert.DoesNotContain(result.Manifest.UnitDispositionLedger.Entries, unit => unit.RetainedHostedSource);
         const string probe = """
             Add-Type -TypeDefinition @'
             using System;

@@ -27,9 +27,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Transpile_ValueCastDoesNotConstrainLaterAssignments(string body, bool represented)
     {
         using var fixture = ArtifactFixture.Create("function Get-CastValue { " + body + " }", ".psm1");
-        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "CastValueMethods", "net10.0",
-            PowerShellCompilationCapabilities.HybridModule);
+        var typed = new PowerShellTypedCompilationTranspiler().Transpile(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "CastValueMethods", "net10.0");
         Assert.Equal(represented, typed.Methods.Any(method => method.SourceName == "Get-CastValue"));
         if (!represented) Assert.Empty(typed.PromotedRegions);
     }

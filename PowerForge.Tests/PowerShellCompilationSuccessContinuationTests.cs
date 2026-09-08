@@ -19,10 +19,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("Get-Number; Get-Number")]
-    [InlineData("if ($Enabled) { Get-Number }; return 2")]
-    [InlineData("for ([int]$i = 0; $i -lt 2; $i++) { Get-Number }; return 2")]
-    public void Transpile_RetainsNonTerminalLocalCallOutputInsteadOfReturningEarly(string body)
+    [InlineData("Get-Number; Get-Number", false)]
+    [InlineData("if ($Enabled) { Get-Number }; return 2", false)]
+    [InlineData("for ([int]$i = 0; $i -lt 2; $i++) { Get-Number }; return 2", true)]
+    public void Transpile_LocalCallContinuationRequiresAQualifiedStreamOwner(string body, bool hasStreamOwner)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-Number { return 1 }; function Invoke-Sequence { [CmdletBinding()] param([bool]$Enabled) " + body + " }",
@@ -32,8 +32,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.HybridModule);
 
         Assert.Contains(typed.Methods, method => method.SourceName == "Get-Number");
-        Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Invoke-Sequence");
-        Assert.Contains(typed.Diagnostics, diagnostic => diagnostic.Message.Contains("Non-terminal success output", StringComparison.Ordinal));
+        if (hasStreamOwner)
+            Assert.True(Assert.Single(typed.Methods, method => method.SourceName == "Invoke-Sequence").RequiresPowerShellStreams);
+        else
+        {
+            Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Invoke-Sequence");
+            Assert.Contains(typed.Diagnostics, diagnostic => diagnostic.Message.Contains("Non-terminal success output", StringComparison.Ordinal));
+        }
         Assert.Empty(typed.PromotedRegions);
     }
 

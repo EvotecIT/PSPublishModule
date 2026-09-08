@@ -71,7 +71,10 @@ public enum PowerShellCompilationCapability
     PowerShellStatementErrors = 32768,
 
     /// <summary>CLR-callable lifecycle methods accept typed collections with explicit CLR argument validation.</summary>
-    ClrPipelineCollectionBinding = 65536
+    ClrPipelineCollectionBinding = 65536,
+
+    /// <summary>Hybrid modules may emit compiled function bodies with native parameter and variable ownership.</summary>
+    NativeFunctionBinding = 131072
 }
 
 /// <summary>
@@ -433,6 +436,7 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.UntypedObjectParameters |
                               PowerShellCompilationCapability.AdvisoryOutputTypeMetadata |
                               PowerShellCompilationCapability.PowerShellModuleState |
+                              PowerShellCompilationCapability.NativeFunctionBinding |
                               PowerShellCompilationCapability.HybridTypedRegions)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();

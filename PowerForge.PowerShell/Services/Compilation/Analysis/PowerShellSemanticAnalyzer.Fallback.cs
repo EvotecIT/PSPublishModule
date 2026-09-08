@@ -12,10 +12,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             RunFixedPoint(functions, (function, lookup) =>
             {
                 if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed) return function;
-                var blockingDiagnostic = program.Diagnostics.FirstOrDefault(diagnostic =>
-                    diagnostic.Span.DocumentId.Equals(function.Symbol.DocumentId, StringComparison.Ordinal) &&
-                    diagnostic.Span.StartOffset >= function.Symbol.Declaration.StartOffset &&
-                    diagnostic.Span.StartOffset <= function.Symbol.Declaration.EndOffset);
+                var blockingDiagnostic = GetBlockingDiagnostic(function, program.Diagnostics);
                 if (blockingDiagnostic is not null)
                 {
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
@@ -106,18 +103,13 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         "control.return.fallthrough",
                         $"Typed non-void unit '{function.Symbol.Name}' must end with an explicit return statement on every reachable path."));
                 }
-                var unresolvedCall = EnumerateStatements(function.Body)
-                    .SelectMany(EnumerateDirectExpressions)
-                    .SelectMany(EnumerateInvocations)
-                    .FirstOrDefault(invocation => !lookup.ContainsKey(invocation.Target.StableKey));
-                if (unresolvedCall is not null)
-                {
+                var shouldProcessTarget = GetCallees(function, lookup).FirstOrDefault(ContainsShouldProcess);
+                var nativeBindingTarget = GetCallees(function, lookup).FirstOrDefault(static callee => callee.NativeFunctionBinding is not null);
+                if (nativeBindingTarget is not null)
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
-                        "call.binding.unavailable",
-                        $"Local function '{unresolvedCall.Target.Name}' did not produce a bound function contract."));
-                }
-                var shouldProcessTarget = GetCallees(function, lookup).FirstOrDefault(ContainsShouldProcess);
+                        "call.native-function.binding",
+                        $"Local function '{nativeBindingTarget.Symbol.Name}' requires its native parameter binder and cannot use the direct CLR argument ABI."));
                 if (shouldProcessTarget is not null)
                 {
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
@@ -147,7 +139,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                             ? $"Local function '{consumedTarget.Symbol.Name}' writes success records through its command host; consuming its CLR return alone would lose or misroute those records."
                             : $"Local function '{consumedTarget.Symbol.Name}' returns an array whose PowerShell pipeline cardinality cannot be preserved when the result is consumed."));
                 }
-                return ApplyFallbackCallDisposition(function, lookup);
+                return ApplyFallbackCallDisposition(function, lookup, program.Diagnostics);
             }, static (left, right) => left.Disposition.Kind == right.Disposition.Kind && left.Disposition.ReasonCode == right.Disposition.ReasonCode);
             return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
         }

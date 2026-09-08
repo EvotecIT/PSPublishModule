@@ -54,6 +54,9 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         PowerShellCompiledRegionLocal[]? continuationLocals = null)
     {
         candidate = null!;
+        // A standalone region has no native function context argument. Do not detach reads from their invocation owner.
+        if (statements.Any(static statement => statement.Capabilities.HasFlag(PowerShellRequiredCapability.NativeFunctionBinding)))
+            return false;
         var first = statements[0].Span;
         var last = statements[statements.Length - 1].Span;
         var span = new SourceSpan(

@@ -35,7 +35,8 @@ internal static class PowerShellHybridModuleComposer
         string sourcePath,
         string assemblyFileName,
         PowerShellTypedCompilationResult typed,
-        bool manifestControlsExports = false)
+        bool manifestControlsExports = false,
+        IEnumerable<string>? retainedSourcePaths = null)
     {
         Token[] tokens;
         ParseError[] errors;
@@ -76,7 +77,7 @@ internal static class PowerShellHybridModuleComposer
             edits.Add(new PowerShellHybridSourceEdit(
                 function.Extent.StartOffset,
                 function.Extent.EndOffset - function.Extent.StartOffset,
-                string.Empty,
+                GetNativeFunctionRegistration(typed, sourcePath, function),
                 "function:" + function.Name));
         }
         if (exportContract is not null)
@@ -92,16 +93,19 @@ internal static class PowerShellHybridModuleComposer
             source.Insert(edit.Start, edit.Replacement);
         }
 
-        var fallbackFunctions = ReadModuleScopeFunctions(typed.SourcePaths)
+        var fallbackFunctions = ReadModuleScopeFunctions(typed.SourcePaths.Concat(retainedSourcePaths ?? Array.Empty<string>()))
             .Where(function => !wrapped.Contains(GetCompiledMethodKey(function.Path, function.Name, function.Line)))
             .Select(static function => function.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var compiledCmdlets = typed.Methods
+            .Where(static method => method.NativeFunctionBinding is null)
             .Select(static method => method.SourceName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var exportedFallbackFunctions = (exportContract?.SelectFunctions(fallbackFunctions) ?? fallbackFunctions)
+        var scriptFunctions = fallbackFunctions.Concat(typed.Methods.Where(static method => method.NativeFunctionBinding is not null)
+            .Select(static method => method.SourceName)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var exportedFallbackFunctions = (exportContract?.SelectFunctions(scriptFunctions) ?? scriptFunctions)
             .Concat(PowerShellCompiledModuleManifest.GetNestedModuleFunctionExportPatterns(sourcePath, fallbackFunctions))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -302,7 +306,7 @@ internal static class PowerShellHybridModuleComposer
             edits.Add(new PowerShellHybridSourceEdit(
                 function.Extent.StartOffset,
                 function.Extent.EndOffset - function.Extent.StartOffset,
-                string.Empty,
+                GetNativeFunctionRegistration(typed, sourcePath, function),
                 "function:" + function.Name));
         }
         edits.AddRange(PowerShellHybridRegionRewriter.CreateEdits(sourcePath, ast, typed, wrappedCompiledMethods));
@@ -354,7 +358,7 @@ internal static class PowerShellHybridModuleComposer
         var wrappedFunctionNames = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return typed.Methods
-            .Where(method => wrappedFunctionNames is null || wrappedFunctionNames.Contains(method.SourceName))
+            .Where(method => method.NativeFunctionBinding is not null || wrappedFunctionNames is null || wrappedFunctionNames.Contains(method.SourceName))
             .Select(method => GetCompiledMethodKey(
                 string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
                 method.SourceName,
@@ -387,6 +391,15 @@ internal static class PowerShellHybridModuleComposer
 
     internal static string GetCompiledMethodKey(string sourcePath, string name, int line)
         => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + line;
+
+    private static string GetNativeFunctionRegistration(PowerShellTypedCompilationResult typed, string sourcePath, FunctionDefinitionAst function)
+    {
+        var method = typed.Methods.SingleOrDefault(method => method.NativeFunctionBinding is not null &&
+            method.SourceName.Equals(function.Name, StringComparison.OrdinalIgnoreCase) &&
+            method.SourceLine == function.Body.Extent.StartLineNumber &&
+            PowerShellCompilationPathSafety.PathEquals(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath, sourcePath));
+        return method is null ? string.Empty : PowerShellNativeFunctionSourceGenerator.Registration(typed, method);
+    }
 
     private static string JoinPowerShellNames(IEnumerable<string> names)
         => string.Join(", ", names.Select(name => "'" + EscapePowerShellSingleQuotedString(name) + "'"));

@@ -29,6 +29,16 @@ internal static class PowerShellParameterSemanticValidator
             var name = parameter.Name.VariablePath.UserPath;
             var span = PowerShellSourceParser.GetSpan(document, parameter.Extent);
             var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
+            if (capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+                !capabilities.HasFlag(PowerShellCompilationCapability.ClrPipelineCollectionBinding) &&
+                PowerShellNativeStringPipelineBindingPolicy.RequiresScriptBinding(contract))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellNativeStringPipelineBindingPolicy.DiagnosticCode,
+                    $"String pipeline parameter '${name}' requires native script binding to preserve conversion-pass ordering and callback scope. Retain its binding in Hybrid mode.", span));
+                valid = false;
+            }
             if (!hasAuthoredType && !PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities))
             {
                 Add(diagnostics, PowerShellCompilationFeatureIds.ParameterType,

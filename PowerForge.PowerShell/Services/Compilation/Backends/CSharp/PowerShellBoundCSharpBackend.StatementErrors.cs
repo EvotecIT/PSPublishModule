@@ -43,7 +43,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(attempted.ExceptionTemporary).Append(", new global::System.Type?[] { ").Append(string.Join(", ", types))
                 .Append(" }, new int[] { ").Append(string.Join(", ", indices)).Append(" }, out var ")
                 .Append(attempted.RecordTemporary).AppendLine(");");
-            builder.Append(prefix).Append("    using (__statementErrors.EnterCatch(").Append(attempted.ExceptionTemporary).AppendLine("))");
+            builder.Append(prefix).Append("    using (__statementErrors.EnterCatch(").Append(attempted.ExceptionTemporary)
+                .Append(", ").Append(attempted.RecordTemporary).AppendLine("))");
             builder.Append(prefix).AppendLine("    {");
             for (var index = 0; index < attempted.Catches.Length; index++)
             {
@@ -71,7 +72,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("try");
-        EmitBlock(builder, boundary.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+        builder.Append(prefix).AppendLine("{");
+        foreach (var statement in boundary.Statements)
+            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+        if (boundary.NativeSuccessStatus is { } success)
+            builder.Append(prefix).Append("    __nativeFunction.SetExecutionStatus(").Append(success ? "true" : "false").AppendLine(");");
+        builder.Append(prefix).AppendLine("}");
         builder.Append(prefix).Append("catch (global::System.Exception ").Append(boundary.ExceptionTemporary)
             .Append(") when (").Append(StatementErrorContextType).Append(".IsOperationFailure(")
             .Append(boundary.ExceptionTemporary).AppendLine("))");

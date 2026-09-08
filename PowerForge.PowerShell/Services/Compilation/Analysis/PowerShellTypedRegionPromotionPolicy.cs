@@ -14,6 +14,10 @@ internal static class PowerShellTypedRegionPromotionPolicy
         if (candidate is null) throw new ArgumentNullException(nameof(candidate));
         if (lowered is null) throw new ArgumentNullException(nameof(lowered));
         if (emitted is null) throw new ArgumentNullException(nameof(emitted));
+        // The error host changes CLR returns into stream writes. Report the missing
+        // host contract before the resulting void return obscures that dependency.
+        if (lowered.RequiresPowerShellStatementErrors)
+            return Reject("region.statement-errors", "The candidate requires a PowerShell statement-error host not represented by the helper ABI.");
         if (candidate.ContinuationLocals.Length > 0 && !HasCompleteContinuationResult(candidate))
             return Reject("region.continuation-result", "The helper does not return the exact ordered scalar local transfer contract.");
         var transfersMultipleLocals = candidate.ContinuationLocals.Length > 1;
@@ -23,8 +27,6 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a stable scalar transfer type.");
         if (lowered.RequiresPowerShellStreams)
             return Reject("region.stream-contract", "The candidate requires PowerShell stream semantics beyond the single scalar Success result contract.");
-        if (lowered.RequiresPowerShellStatementErrors)
-            return Reject("region.statement-errors", "The candidate requires a PowerShell statement-error host not represented by the helper ABI.");
         if (lowered.RequiresProviderCancellation)
             return Reject("region.provider-cancellation", "The candidate requires provider cancellation and cannot execute as an isolated helper.");
         if (lowered.RequiresPowerShellCommandRegions)

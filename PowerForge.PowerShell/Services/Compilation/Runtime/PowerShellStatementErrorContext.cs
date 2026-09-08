@@ -22,6 +22,7 @@ namespace PowerForge.Generated.Runtime
         private readonly string _sourceName;
         private readonly bool _ownsVariableLists;
         private readonly PowerShellCommandVariableScope? _variableScope;
+        private readonly object? _nativeFunction;
         private IScriptExtent? _lastErrorExtent;
         private int _handlerDepth;
         private bool _disposed;
@@ -71,6 +72,11 @@ namespace PowerForge.Generated.Runtime
             ThrowIfDisposed();
             var extent = CreateExtent(file, line, column, endLine, endColumn, sourceText);
             _lastErrorExtent = extent;
+            if (_nativeFunction is not null)
+            {
+                HandleNativeFunction(error, extent);
+                return;
+            }
             var function = NativeContract.Construct(_contract.FunctionContextConstructor);
             _contract.FunctionExecutionContext.SetValue(function, _context);
             _contract.FunctionOutputPipe.SetValue(function, _outputPipe);
@@ -104,6 +110,7 @@ namespace PowerForge.Generated.Runtime
 
         internal Exception LeaveCommand(Exception error)
         {
+            if (_nativeFunction is not null) return error;
             if (error is RuntimeException { WasThrownFromThrowStatement: true }) return error;
             if (error is CmdletInvocationException)
             {

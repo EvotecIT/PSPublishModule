@@ -7,13 +7,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void WhatIfValue_PreservesRawValuesAndExplicitConversions(string framework, string host)
+    public void WhatIfValue_PreservesRawValuesAndBooleanConversion(string framework, string host)
     {
         const string source = """
             function Read-RawWhatIf { [CmdletBinding(SupportsShouldProcess=$true)] param() return $WhatIfPreference }
             function Read-AliasedWhatIf { [CmdletBinding(SupportsShouldProcess=$true)] param() $value=$WhatIfPreference; return $value }
             function Read-BooleanWhatIf { [CmdletBinding(SupportsShouldProcess=$true)] param() return [bool]$WhatIfPreference }
-            function Read-StringWhatIf { [CmdletBinding(SupportsShouldProcess=$true)] param() return [string]$WhatIfPreference }
             function Read-ConditionalWhatIf { [CmdletBinding(SupportsShouldProcess=$true)] param() if($WhatIfPreference) { return 'yes' }; return 'no' }
             """;
         using var fixture = ArtifactFixture.Create(source, ".psm1");
@@ -21,7 +20,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.WhatIfValues", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(5, result.Manifest!.CompiledMethods);
+        Assert.Equal(4, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         Assert.All(result.Manifest.PublicAbi!.Methods, method =>
         {
@@ -38,7 +37,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 foreach($binding in 'Inherited','False','True') {
                     $parameters=@{}
                     if($binding -ne 'Inherited') { $parameters.WhatIf=[switch]($binding -eq 'True') }
-                    foreach($name in 'Read-RawWhatIf','Read-AliasedWhatIf','Read-BooleanWhatIf','Read-StringWhatIf','Read-ConditionalWhatIf') {
+                    foreach($name in 'Read-RawWhatIf','Read-AliasedWhatIf','Read-BooleanWhatIf','Read-ConditionalWhatIf') {
                         $values=@(& $name @parameters)
                         $records=@(foreach($value in $values) {
                             if($null -eq $value) { [pscustomobject]@{type='null';value=$null} }

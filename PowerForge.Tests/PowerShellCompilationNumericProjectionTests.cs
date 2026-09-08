@@ -146,7 +146,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("return $counter.GetType().Name", true)]
     [InlineData("return [object]$counter", true)]
     [InlineData("$copy = $counter; return $copy", true)]
-    [InlineData("return \"counter=$counter\"", false)]
+    [InlineData("return \"counter=$counter\"", true)]
     [InlineData("return $counter -eq 2", true)]
     [InlineData("return [Math]::Abs($counter)", false)]
     [InlineData("[Console]::WriteLine('observe'); return 0.0 + $counter", true)]

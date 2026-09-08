@@ -198,6 +198,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Typed method parameters.</summary>
     public PowerShellCompilationParameter[] Parameters { get; }
 
+    /// <summary>Native binding and invocation storage for a compiled function body, when required.</summary>
+    public PowerShellNativeFunctionBinding? NativeFunctionBinding { get; internal set; }
+
     /// <summary>One-based source line of the PowerShell function body.</summary>
     public int SourceLine { get; }
 
@@ -248,6 +251,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Whether the generated command requires native statement-error dispatch.</summary>
     public bool RequiresPowerShellStatementErrors { get; internal set; }
+
+    /// <summary>Whether the generated method accepts the invocation's native loop-stopping callback.</summary>
+    public bool RequiresPowerShellStopping { get; internal set; }
 
     /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
     public bool RequiresPowerShellCommandRegions { get; }

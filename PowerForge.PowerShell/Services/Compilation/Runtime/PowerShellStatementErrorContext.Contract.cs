@@ -20,19 +20,22 @@ namespace PowerForge.Generated.Runtime
             internal readonly PropertyInfo CmdletContext, OutputPipe, ErrorOutputPipe, ErrorMergeTo, IsRedirected;
             internal readonly PropertyInfo EngineSessionState, CurrentScope, ShellErrorPipe, PropagateExceptions, InvocationScriptPosition;
             internal readonly PropertyInfo ScopeLocalsTuple;
+            internal readonly PropertyInfo SessionExecutionContext, CurrentCommandProcessor, ProcessorCommand, ScopeVariables;
+            internal readonly PropertyInfo ProcessorRuntime;
+            internal readonly PropertyInfo ContextSessionState;
+            internal readonly ConstructorInfo ArgumentConverterConstructor;
             internal readonly MethodInfo NewScope, RemoveScope, CheckActionPreference;
             internal readonly MethodInfo MakeTuple, MakeTupleType, SetTupleValue, GetTupleValue, FindMatchingHandler, ConvertToRuntimeException, ConvertToThrownException;
             internal readonly ConstructorInfo FunctionContextConstructor, FunctionInfoConstructor, InvocationInfoConstructor, CommandExceptionConstructor;
             internal readonly MethodInfo ConvertToMethodInvocationException, ConvertToArgumentConversionException;
             internal readonly MethodInfo NewInterpreterException;
             internal readonly MethodInfo FormatOperator;
-            internal readonly MethodInfo StringifyValue;
             internal readonly MethodInfo UnwrapObjectArgument;
             internal readonly MethodInfo CheckEnumerationInterrupts;
             internal readonly MethodInfo SuspendStoppingPipeline, RestoreStoppingPipeline;
             internal readonly MethodInfo AppendErrorToVariables;
             internal readonly PropertyInfo NullInvocationResource;
-            internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints;
+            internal readonly FieldInfo FunctionExecutionContext, FunctionOutputPipe, FunctionSequencePoints, FunctionCurrentSequencePointIndex;
             internal readonly FieldInfo CmdletSessionState;
             internal readonly PropertyInfo NativeSessionState;
             internal readonly PropertyInfo ScriptBlockSessionState;
@@ -60,7 +63,6 @@ namespace PowerForge.Generated.Runtime
                 RestoreStoppingPipeline = Method(errors, "RestoreStoppingPipeline", true, typeof(void), context, typeof(bool));
                 FormatOperator = Method(RequireType(assembly, "System.Management.Automation.StringOps"),
                     "FormatOperator", true, typeof(string), typeof(string), typeof(object));
-                StringifyValue = Method(typeof(PSObject), "ToStringParser", true, typeof(string), context, typeof(object));
                 UnwrapObjectArgument = Method(typeof(PSObject), "Base", true, typeof(object), typeof(object));
                 var tuple = RequireType(assembly, "System.Management.Automation.MutableTuple");
                 ObjectTupleType = RequireType(assembly, "System.Management.Automation.MutableTuple`1").MakeGenericType(typeof(object));
@@ -73,12 +75,20 @@ namespace PowerForge.Generated.Runtime
                 MergeToOutput = Enum.Parse(ErrorMergeTo.PropertyType, "Output");
                 IsRedirected = Property(pipe, "IsRedirected", typeof(bool));
                 EngineSessionState = Property(context, "EngineSessionState", state, writable: true);
+                ContextSessionState = Property(context, "SessionState", typeof(SessionState));
                 NativeSessionState = Property(typeof(SessionState), "Internal", state);
                 ScriptBlockSessionState = Property(typeof(ScriptBlock), "SessionStateInternal", state, writable: true);
                 CmdletSessionState = Field(RequireType(assembly, "System.Management.Automation.Internal.InternalCommand"),
                     major == 5 ? "state" : "_state", typeof(SessionState));
                 CurrentScope = Property(state, "CurrentScope", scope, writable: true);
                 ScopeLocalsTuple = Property(scope, "LocalsTuple", tuple, writable: true);
+                SessionExecutionContext = Property(state, "ExecutionContext", context);
+                var processor = RequireType(assembly, "System.Management.Automation.CommandProcessorBase");
+                CurrentCommandProcessor = Property(context, "CurrentCommandProcessor", processor);
+                ProcessorRuntime = Property(processor, "CommandRuntime", CommandRuntimeType);
+                ProcessorCommand = Property(processor, "Command", RequireType(assembly, "System.Management.Automation.Internal.InternalCommand"));
+                ScopeVariables = Property(scope, "Variables", typeof(IDictionary<string, PSVariable>));
+                ArgumentConverterConstructor = Constructor(RequireType(assembly, "System.Management.Automation.ArgumentTypeConverterAttribute"), typeof(Type[]));
                 ShellErrorPipe = Property(context, "ShellFunctionErrorOutputPipe", pipe, writable: true);
                 PropagateExceptions = Property(context, "PropagateExceptionsToEnclosingStatementBlock", typeof(bool), writable: true);
                 InvocationScriptPosition = Property(typeof(InvocationInfo), "ScriptPosition", typeof(IScriptExtent));
@@ -112,6 +122,7 @@ namespace PowerForge.Generated.Runtime
                 FunctionExecutionContext = Field(function, "_executionContext", context);
                 FunctionOutputPipe = Field(function, "_outputPipe", pipe);
                 FunctionSequencePoints = Field(function, "_sequencePoints", typeof(IScriptExtent[]));
+                FunctionCurrentSequencePointIndex = Field(function, "_currentSequencePointIndex", typeof(int));
             }
 
             internal object GetRequired(PropertyInfo property, object? instance)
@@ -139,6 +150,20 @@ namespace PowerForge.Generated.Runtime
                 var tuple = Invoke(MakeTuple, null, type, names, null)!;
                 foreach (var value in values) Invoke(SetTupleValue, tuple, names[value.Key], value.Value);
                 return tuple;
+            }
+
+            internal object CreateUninitializedTuple(IReadOnlyDictionary<string, Type> fields, out Dictionary<string, int> names)
+            {
+                names = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                var types = new Type[fields.Count];
+                var index = 0;
+                foreach (var field in fields)
+                {
+                    names.Add(field.Key, index);
+                    types[index++] = field.Value;
+                }
+                var type = Invoke(MakeTupleType, null, (object)types)!;
+                return Invoke(MakeTuple, null, type, names, null)!;
             }
 
             private static Type RequireType(Assembly assembly, string name)

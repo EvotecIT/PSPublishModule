@@ -42,24 +42,28 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(FindFunction(plan, "Get-LoopExitState").IsCompilable);
     }
 
-    [Fact]
+    [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Analyze_LoopOriginPropagationKeepsIndependentCollectionEligible()
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Analyze_LoopOriginDistinguishesIndependentCollectionsFromOpaqueStringObservers(bool stringify)
     {
         using var fixture = ArtifactFixture.Create("""
             function Get-IndependentLoop {
                 param([string[]]$Seed)
                 for ([int]$Index = 0; $Index -lt 2; $Index++) {
-                    $Unused = [string]$script:State
+                    $Unused = READ_STATE
                     foreach ($Item in $Seed) { $null = $Item }
                 }
                 return 1
             }
-            """, ".psm1");
+            """.Replace("READ_STATE", stringify ? "[string]$script:State" : "[object]$script:State", StringComparison.Ordinal), ".psm1");
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath, PowerShellCompilationMode.Analyze, targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.HybridModule));
-        Assert.True(FindFunction(plan, "Get-IndependentLoop").IsCompilable);
+        var unit = FindFunction(plan, "Get-IndependentLoop");
+        Assert.Equal(!stringify, unit.IsCompilable);
+        if (stringify) Assert.Contains(unit.Diagnostics, diagnostic => diagnostic.Message.Contains("Opaque string conversion", StringComparison.Ordinal));
     }
 
     [Theory]

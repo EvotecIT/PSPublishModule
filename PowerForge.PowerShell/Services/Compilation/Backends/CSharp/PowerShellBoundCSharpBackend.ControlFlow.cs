@@ -39,7 +39,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("{");
         if (checkHostInterrupts)
-            builder.Append(prefix).AppendLine("    __statementErrors.CheckLoopInterrupts();");
+            builder.Append(prefix).AppendLine("    __checkLoopInterrupts();");
         foreach (var statement in statements)
             EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
         builder.Append(prefix).AppendLine("}");
@@ -160,7 +160,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         // Native foreach checks after successful advancement and before assigning
         // the authored loop variable. General enumerators do this in MoveEnumerator.
         if (loop.CheckHostInterrupts && loop.EnumerationKind != PowerShellForEachEnumerationKind.PowerShellEnumerable)
-            builder.Append(prefix).AppendLine("__statementErrors.CheckLoopInterrupts();");
+            builder.Append(prefix).AppendLine("__checkLoopInterrupts();");
         builder.Append(prefix)
             .Append(loop.DeclareVariable ? elementTypeName + " " : string.Empty)
             .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")

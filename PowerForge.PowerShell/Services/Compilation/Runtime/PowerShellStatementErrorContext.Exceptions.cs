@@ -8,19 +8,20 @@ namespace PowerForge.Generated.Runtime
     {
         private Exception? _caughtException;
 
+        /// <summary>Wraps arithmetic failures after both operands have completed evaluation.</summary>
+        internal TResult EvaluateArithmetic<TLeft, TRight, TResult>(TLeft left, TRight right, Func<TLeft, TRight, TResult> operation)
+        {
+            ThrowIfDisposed();
+            try { return operation(left, right); }
+            catch (DivideByZeroException error) { throw new RuntimeException(error.Message, error); }
+            catch (OverflowException error) { throw new RuntimeException(error.Message, error); }
+        }
+
         /// <summary>Formats evaluated operands with the loaded host's culture and native FormatError wrapping.</summary>
         internal string FormatScalar(string format, object? value)
         {
             ThrowIfDisposed();
             return (string)NativeContract.Invoke(_contract.FormatOperator, null, format, value)!;
-        }
-
-        /// <summary>Preserves native interpolation, including scalar precision, OFS, and stringification errors.</summary>
-        internal string InterpolateValue(object? value)
-        {
-            ThrowIfDisposed();
-            var unwrapped = NativeContract.Invoke(_contract.UnwrapObjectArgument, null, value);
-            return (string)NativeContract.Invoke(_contract.StringifyValue, null, _context, unwrapped)!;
         }
 
         /// <summary>Converts a stored PowerShell value to the base object seen by a CLR Object parameter.</summary>
@@ -30,10 +31,10 @@ namespace PowerForge.Generated.Runtime
             return NativeContract.Invoke(_contract.UnwrapObjectArgument, null, value);
         }
 
-        internal IDisposable EnterCatch(Exception error)
+        internal IDisposable EnterCatch(Exception error, ErrorRecord? record = null)
         {
             ThrowIfDisposed();
-            var scope = new CatchScope(this, _caughtException);
+            var scope = new CatchScope(this, _caughtException, record);
             _caughtException = error;
             return scope;
         }
@@ -107,13 +108,26 @@ namespace PowerForge.Generated.Runtime
         {
             private PowerShellStatementErrorContext? _owner;
             private readonly Exception? _previous;
-            internal CatchScope(PowerShellStatementErrorContext owner, Exception? previous) { _owner = owner; _previous = previous; }
+            private readonly SessionState? _nativeSession;
+            private readonly object? _previousUnder;
+            internal CatchScope(PowerShellStatementErrorContext owner, Exception? previous, ErrorRecord? record)
+            {
+                _owner = owner;
+                _previous = previous;
+                if (owner._nativeFunction is not null && record is not null)
+                {
+                    _nativeSession = (SessionState)owner._contract.GetRequired(owner._contract.ContextSessionState, owner._context);
+                    _previousUnder = _nativeSession.PSVariable.GetValue("_");
+                    _nativeSession.PSVariable.Set("_", record);
+                }
+            }
             public void Dispose()
             {
                 var owner = _owner;
                 if (owner is null) return;
                 _owner = null;
                 owner._caughtException = _previous;
+                _nativeSession?.PSVariable.Set("_", _previousUnder);
             }
         }
     }

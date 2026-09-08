@@ -8,8 +8,8 @@ internal static class PowerShellStringSemanticBinder
         ParsedSourceDocument document,
         ExpandableStringExpressionAst syntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
-        PowerShellCompilationCapability capabilities,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        bool usesNativeInvocation = false)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!PowerShellExpandableStringSyntax.TryRead(syntax, out var fragments))
@@ -19,7 +19,6 @@ internal static class PowerShellStringSemanticBinder
         }
 
         var parts = new List<PowerShellBoundInterpolatedStringPart>();
-        var usePowerShellRuntime = false;
         foreach (var fragment in fragments)
         {
             if (fragment.ExpressionIndex is not int expressionIndex)
@@ -35,17 +34,14 @@ internal static class PowerShellStringSemanticBinder
             }
             var expression = bindExpression(nested, null);
             if (expression is null) return null;
-            if (!PowerShellStableScalarTypePolicy.IsSupported(expression.Type.ClrType))
+            if (!usesNativeInvocation && PowerShellStringificationScopePolicy.RequiresCallerScope(typeof(string), expression))
             {
-                if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
-                {
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2803", "Expandable-string values require a stable scalar representation or the PowerShell statement-error host's stringification contract.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
-                    return null;
-                }
-                usePowerShellRuntime = true;
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2803", "Expandable-string values require a closed scalar representation. Opaque stringification can invoke callbacks that observe or mutate caller locals and remains on the PowerShell runtime path.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
+                return null;
             }
-            parts.Add(new PowerShellBoundInterpolatedStringPart(null, expression));
+            parts.Add(new PowerShellBoundInterpolatedStringPart(null, expression,
+                expression.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble));
         }
-        return new PowerShellBoundInterpolatedStringExpression(span, parts.ToArray(), usePowerShellRuntime);
+        return new PowerShellBoundInterpolatedStringExpression(span, parts.ToArray(), usesNativeInvocation);
     }
 }

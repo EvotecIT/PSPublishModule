@@ -164,14 +164,17 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [InlineData("[int]", "$Value -= 1", "PSInvalidCastException")]
     [InlineData("[decimal]", "$Value += 1d", "RuntimeException")]
     [InlineData("[decimal]", "$Value = $Value * $Value", "RuntimeException")]
-    public void Analyze_RejectsNumericOperationsRequiringExactPowerShellErrorWrapping(string type, string operation, string exception)
+    public void Analyze_SeparatesHostedNumericErrorsFromRuntimeFreeCatchContracts(string type, string operation, string exception)
     {
         using var fixture = ArtifactFixture.Create(
             $"function Test-NumericWrapping {{ param({type} $Value) try {{ {operation}; return 1 }} " +
             $"catch [System.Management.Automation.{exception}] {{ return 2 }} }}", ".psm1");
-        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
-            fixture.ScriptPath, PowerShellCompilationMode.Strict, targetFramework: "net10.0",
-            capabilities: PowerShellCompilationCapabilities.BinaryModule));
-        Assert.False(Assert.Single(Assert.Single(plan.Files).Units).IsCompilable);
+        foreach (var hosted in new[] { true, false })
+        {
+            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+                fixture.ScriptPath, PowerShellCompilationMode.Strict, targetFramework: "net10.0",
+                capabilities: hosted ? PowerShellCompilationCapabilities.BinaryModule : PowerShellCompilationCapabilities.TypedLibrary));
+            Assert.Equal(hosted, Assert.Single(Assert.Single(plan.Files).Units).IsCompilable);
+        }
     }
 }

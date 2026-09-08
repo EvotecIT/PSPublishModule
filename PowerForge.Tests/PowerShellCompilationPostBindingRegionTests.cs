@@ -26,10 +26,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Transpile_HybridDiscoversRegionAfterCmdletParameterShapingRejectsFunction()
+    public void Transpile_HybridPromotesRegionAfterCmdletParameterShapingRejectsFunction()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Scaled { param([int]$Verbose) [int]$Result = 2; $Result += $Verbose; return $Result }",
+            "function Get-Scaled { param([int]$Verbose) [int]$Result = 2; $Result = $Verbose; return $Result }",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "RegionalMethods", "net10.0",
@@ -51,7 +51,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(PowerShellCompilationRegionContinuation.Terminating, opportunity.Continuation);
         Assert.Contains(opportunity.LiveInputs, input => input.Identity == "Parameter:VERBOSE" && input.StableScalar);
         Assert.True(opportunity.AnalysisOnly);
-        Assert.Empty(prepared.PromotedRegions);
+        Assert.Single(prepared.PromotedRegions);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Transpile_HybridDiscoversRetainedFunctionWithResolvedLocalCallClosure()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Seed { param([int]$Value) if ($Value -gt 0) { return $Value }; return 2 }; function Get-Scaled { param([int]$Value) [int]$Result = Get-Seed -Value $Value; $Result += $Value; return $Result }",
+            "function Get-Seed { param([int]$Value) if ($Value -gt 0) { return $Value }; return 2 }; function Get-Scaled { param([int]$Value) [double]$Result = Get-Seed -Value $Value; $Result += $Value; return $Result }",
             ".psm1");
         var transpiler = new PowerShellTypedCompilationTranspiler();
         var typed = transpiler.TranspileForBinaryModule(
