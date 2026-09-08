@@ -113,6 +113,7 @@ public sealed partial class AppStoreConnectClientTests
             }).ToArray()
         });
         Assert.True(result.IsReady);
+        Assert.Equal(new[] { "en-US", "pl" }, result.Localizations.Select(localization => localization.Locale));
         Assert.Equal(new[] { "en-US", "pl" }, result.ScreenshotSets.Select(set => set.Locale));
         Assert.Contains(result.Checks, check => check.Name == "pl.screenshots.APP_IPHONE_65.complete");
     }

@@ -41,6 +41,8 @@ public sealed class AppStoreConnectReleaseReadinessService
             foreach (var spec in specs)
                 results.Add(await CheckAsync(request.ForScreenshotLocale(spec), cancellationToken).ConfigureAwait(false));
             var aggregate = results[0];
+            aggregate.Localizations = results.Where(static result => result.Localization is not null)
+                .Select(static result => result.Localization!).ToArray();
             aggregate.IsReady = results.All(static result => result.IsReady);
             aggregate.ScreenshotSets = results.SelectMany(static result => result.ScreenshotSets).ToArray();
             aggregate.Checks = results.SelectMany((result, index) => result.Checks.Select(check => new AppStoreConnectReleaseReadinessCheck

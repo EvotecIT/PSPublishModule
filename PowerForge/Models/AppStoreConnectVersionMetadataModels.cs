@@ -186,6 +186,9 @@ public sealed class AppStoreConnectReleaseReadinessResult
     /// <summary>Matched localization when found.</summary>
     public AppStoreConnectVersionLocalizationInfo? Localization { get; set; }
 
+    /// <summary>All matched localizations checked for a multi-locale release.</summary>
+    public AppStoreConnectVersionLocalizationInfo[] Localizations { get; set; } = Array.Empty<AppStoreConnectVersionLocalizationInfo>();
+
     /// <summary>Screenshot set readiness details.</summary>
     public AppStoreConnectReleaseScreenshotSetReadiness[] ScreenshotSets { get; set; } = Array.Empty<AppStoreConnectReleaseScreenshotSetReadiness>();
 

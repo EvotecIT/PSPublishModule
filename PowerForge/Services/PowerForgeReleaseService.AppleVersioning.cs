@@ -561,10 +561,13 @@ internal sealed partial class PowerForgeReleaseService
             readiness.Build,
             readiness.SelectedBuildId,
             readiness.Localization,
+            Localizations = readiness.Localizations.OrderBy(static localization => localization.Locale, StringComparer.Ordinal).ToArray(),
             ScreenshotSets = readiness.ScreenshotSets
-                .OrderBy(static set => set.ScreenshotDisplayType, StringComparer.Ordinal)
+                .OrderBy(static set => set.Locale, StringComparer.Ordinal)
+                .ThenBy(static set => set.ScreenshotDisplayType, StringComparer.Ordinal)
                 .Select(static set => new
                 {
+                    set.Locale,
                     set.ScreenshotDisplayType,
                     set.ScreenshotSetId,
                     set.Count,
