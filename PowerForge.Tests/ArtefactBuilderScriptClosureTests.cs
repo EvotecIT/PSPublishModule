@@ -437,6 +437,204 @@ public sealed class ArtefactBuilderScriptClosureTests
     [Theory]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_GeneratedExportMarkerInsideHereStringDoesNotTruncateScript(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        string? extractionRoot = null;
+        try
+        {
+            const string moduleName = "LiteralMarkerModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psd1"),
+                "@{ RootModule = 'LiteralMarkerModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "$literal = @'\n" +
+                "# Export functions and aliases as required\n" +
+                "'@\n" +
+                "function Get-LiteralMarker { $literal }\n" +
+                "Export-ModuleMember -Function Get-LiteralMarker\n" +
+                "$script:Tail = 'preserved'");
+
+            ArtefactBuildResult result = Build(root.FullName, stagingRoot, Path.Combine(root.FullName, "output"), moduleName, artefactType);
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractionRoot = Path.Combine(root.FullName, "extracted");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractionRoot);
+                inspectionRoot = extractionRoot;
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            Assert.Contains("# Export functions and aliases as required", script, StringComparison.Ordinal);
+            Assert.Contains("$script:Tail = 'preserved'", script, StringComparison.Ordinal);
+            Assert.DoesNotContain("Export-ModuleMember -Function Get-LiteralMarker", script, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script, "& Export-ModuleMember")]
+    [InlineData(ArtefactType.Script, ". Microsoft.PowerShell.Core\\Export-ModuleMember")]
+    [InlineData(ArtefactType.ScriptPacked, "& Export-ModuleMember")]
+    [InlineData(ArtefactType.ScriptPacked, ". Microsoft.PowerShell.Core\\Export-ModuleMember")]
+    public void Build_RemovesCallOperatorExportInvocations(ArtefactType artefactType, string invocation)
+    {
+        var root = CreateRoot();
+        string? extractionRoot = null;
+        try
+        {
+            const string moduleName = "CallOperatorModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psd1"),
+                "@{ RootModule = 'CallOperatorModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "function Get-CallOperator { 'ok' }\n" +
+                invocation + " -Function Get-CallOperator; $script:Tail = 'preserved'\n");
+
+            ArtefactBuildResult result = Build(root.FullName, stagingRoot, Path.Combine(root.FullName, "output"), moduleName, artefactType);
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractionRoot = Path.Combine(root.FullName, "extracted");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractionRoot);
+                inspectionRoot = extractionRoot;
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            Assert.DoesNotContain("Export-ModuleMember", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("$script:Tail = 'preserved'", script, StringComparison.Ordinal);
+            System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_RequiresManifestToSelectExpectedScriptRootModule(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "EmptyRootModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psm1"), "function Get-Value { 'stale' }");
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string marker = Path.Combine(outputRoot, "preserve.txt");
+            File.WriteAllText(marker, "preserve");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                Build(root.FullName, stagingRoot, outputRoot, moduleName, artefactType));
+
+            Assert.Contains("manifest to select", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(marker));
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script, "Dependency")]
+    [InlineData(ArtefactType.Script, "Dependency/main")]
+    [InlineData(ArtefactType.ScriptPacked, "Dependency")]
+    [InlineData(ArtefactType.ScriptPacked, "Dependency/main")]
+    public void Build_RequiredModuleDestinationCannotContainGeneratedScriptRoot(
+        ArtefactType artefactType,
+        string modulesPath)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "RequiredCollisionModule";
+            const string dependencyName = "Dependency";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteScriptModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string marker = Path.Combine(outputRoot, "preserve.txt");
+            File.WriteAllText(marker, "preserve");
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, artefactType);
+            segment.Configuration.RequiredModules = new ArtefactRequiredModulesConfiguration
+            {
+                Enabled = true,
+                ModulesPath = modulesPath
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    root.FullName,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    new[] { new RequiredModuleReference(dependencyName) }));
+
+            Assert.Contains("required module destination", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("script root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(marker));
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Fact]
+    public void Build_ScriptPackedRejectsRelativeDirectoryMappingTraversalBeforeCopy()
+    {
+        var root = CreateRoot();
+        string uniqueName = "PowerForgeTraversal_" + Guid.NewGuid().ToString("N");
+        string victim = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", uniqueName);
+        try
+        {
+            const string moduleName = "TraversalModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteScriptModule(stagingRoot, moduleName);
+            string source = Directory.CreateDirectory(Path.Combine(root.FullName, "mapping-source")).FullName;
+            File.WriteAllText(Path.Combine(source, "replacement.txt"), "replacement");
+            Directory.CreateDirectory(victim);
+            string marker = Path.Combine(victim, "preserve.txt");
+            File.WriteAllText(marker, "preserve");
+            ConfigurationArtefactSegment segment = CreateSegment(Path.Combine(root.FullName, "output"), ArtefactType.ScriptPacked);
+            segment.Configuration.DestinationDirectoriesRelative = true;
+            segment.Configuration.DirectoryOutput = new[]
+            {
+                new ArtefactCopyMapping { Source = source, Destination = "../" + uniqueName }
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    segment,
+                    root.FullName,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    Array.Empty<RequiredModuleReference>()));
+
+            Assert.Contains("outside the temporary packed artefact root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve", File.ReadAllText(marker));
+        }
+        finally
+        {
+            Delete(root);
+            try { Directory.Delete(victim, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
     public void Build_ScriptNameCannotReplacePackagedPayloadBeforeOutputChanges(ArtefactType artefactType)
     {
         var root = CreateRoot();

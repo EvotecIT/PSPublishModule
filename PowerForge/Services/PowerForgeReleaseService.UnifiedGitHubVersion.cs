@@ -197,6 +197,25 @@ internal sealed partial class PowerForgeReleaseService
             .ToArray();
     }
 
+    internal static PowerForgeModuleArtefactOutputSummary[] ResolveModuleArtefactOutputs(
+        ModulePipelineConfigurationContext? context)
+    {
+        if (context is null)
+            return Array.Empty<PowerForgeModuleArtefactOutputSummary>();
+
+        return (context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
+            .OfType<ConfigurationArtefactSegment>()
+            .Where(static segment => segment.Configuration?.Enabled == true)
+            .Select(segment => new PowerForgeModuleArtefactOutputSummary
+            {
+                Type = segment.ArtefactType,
+                OutputRoot = Path.GetFullPath(string.IsNullOrWhiteSpace(segment.Configuration.Path)
+                    ? Path.Combine(context.ProjectRoot, "Artefacts", segment.ArtefactType.ToString())
+                    : segment.Configuration.Path!)
+            })
+            .ToArray();
+    }
+
     private static string? ResolvePackedModuleRoot(
         ArtefactConfiguration configuration,
         string projectRoot,

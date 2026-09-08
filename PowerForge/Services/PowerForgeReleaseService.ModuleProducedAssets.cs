@@ -40,8 +40,8 @@ internal sealed partial class PowerForgeReleaseService
             Source = "Module",
             Version = ResolveModuleReleaseVersion(plan),
             IsFinalPackageOutput = ContainsProducedModuleArtifact(producedArtifactPaths, fullPath) &&
-                                   (IsFinalPowerShellModulePackage(fullPath, plan) ||
-                                    IsFinalPowerShellScriptPackage(fullPath))
+                                    (IsFinalPowerShellModulePackage(fullPath, plan) ||
+                                     IsFinalPowerShellScriptPackage(fullPath, plan))
         };
     }
 
@@ -64,10 +64,13 @@ internal sealed partial class PowerForgeReleaseService
         });
     }
 
-    private static bool IsFinalPowerShellScriptPackage(string path)
+    private static bool IsFinalPowerShellScriptPackage(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan)
     {
         if (!File.Exists(path) ||
-            !string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase) ||
+            !IsProducedByScriptPackedArtefact(path, plan))
         {
             return false;
         }
@@ -109,6 +112,41 @@ internal sealed partial class PowerForgeReleaseService
         {
             return false;
         }
+    }
+
+    private static bool IsProducedByScriptPackedArtefact(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan)
+    {
+        string fullPath = Path.GetFullPath(path);
+        PowerForgeModuleArtefactOutputSummary[] outputs =
+            plan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>();
+        ArtefactType[] exactTypes = outputs
+            .Where(output => output is not null &&
+                             !string.IsNullOrWhiteSpace(output.OutputPath) &&
+                             string.Equals(
+                                 Path.GetFullPath(output.OutputPath!),
+                                 fullPath,
+                                 FrameworkCompatibility.GetPathStringComparison(output.OutputPath!)))
+            .Select(static output => output.Type)
+            .Distinct()
+            .ToArray();
+        if (exactTypes.Length > 0)
+            return exactTypes.Length == 1 && exactTypes[0] == ArtefactType.ScriptPacked;
+
+        string directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
+        ArtefactType[] matchingTypes = outputs
+            .Where(output => output is not null &&
+                             string.IsNullOrWhiteSpace(output.OutputPath) &&
+                             !string.IsNullOrWhiteSpace(output.OutputRoot) &&
+                             string.Equals(
+                                 Path.GetFullPath(output.OutputRoot),
+                                 directory,
+                                 FrameworkCompatibility.GetPathStringComparison(output.OutputRoot)))
+            .Select(static output => output.Type)
+            .Distinct()
+            .ToArray();
+        return matchingTypes.Length == 1 && matchingTypes[0] == ArtefactType.ScriptPacked;
     }
 
     private static bool IsNuGetPackagePath(string path)

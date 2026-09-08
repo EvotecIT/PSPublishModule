@@ -28,16 +28,16 @@ public sealed partial class ArtefactBuilder
             ? legacyRootModule
             : configuredRootModule;
         var modulePath = Path.Combine(stagingPath, expectedRootModule);
-        if (!string.IsNullOrWhiteSpace(effectiveRootModule) &&
+        if (string.IsNullOrWhiteSpace(effectiveRootModule) ||
             !string.Equals(
                 Path.GetFullPath(Path.Combine(
                     stagingPath,
-                    effectiveRootModule!.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar))),
+                    (effectiveRootModule ?? string.Empty).Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar))),
                 Path.GetFullPath(modulePath),
                 GetPathComparison(stagingPath, modulePath)))
         {
             throw new InvalidOperationException(
-                $"Script artefacts require the staged script root module '{expectedRootModule}', but the module manifest selects '{effectiveRootModule}'. " +
+                $"Script artefacts require the module manifest to select the staged script root module '{expectedRootModule}', but it selects '{effectiveRootModule ?? "(empty)"}'. " +
                 "Binary-only and nested root modules cannot be converted to a standalone script.");
         }
 
@@ -289,6 +289,34 @@ public sealed partial class ArtefactBuilder
                 throw new InvalidOperationException(
                     $"Script artefact file copy destination '{destination}' would overwrite the generated entry point '{Path.GetFullPath(scriptPath)}'.");
             }
+        }
+    }
+
+    private static void ValidateRequiredModuleDestinations(
+        ArtefactConfiguration cfg,
+        string requiredRoot,
+        string scriptRoot,
+        IReadOnlyList<RequiredModuleReference> requiredModules)
+    {
+        if (cfg.RequiredModules.Enabled != true)
+            return;
+
+        foreach (var module in requiredModules)
+        {
+            if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
+                continue;
+
+            var destination = Path.GetFullPath(Path.Combine(requiredRoot, module.ModuleName.Trim()));
+            if (!IsSameOrBelowPath(destination, requiredRoot))
+            {
+                throw new InvalidOperationException(
+                    $"Required module destination '{destination}' resolves outside required modules root '{Path.GetFullPath(requiredRoot)}'.");
+            }
+            if (!IsSameOrBelowPath(scriptRoot, destination))
+                continue;
+
+            throw new InvalidOperationException(
+                $"Required module destination '{destination}' contains the generated script root '{Path.GetFullPath(scriptRoot)}' and would erase it.");
         }
     }
 

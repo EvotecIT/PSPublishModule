@@ -577,6 +577,9 @@ internal sealed partial class PowerForgeReleaseService
                     return result;
                 }
 
+                if (result.ModulePlan is not null && moduleResult.ArtefactOutputs.Length > 0)
+                    result.ModulePlan.ArtefactOutputs = moduleResult.ArtefactOutputs;
+
                 UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
                 result.ModuleAssets = ExpandModuleArtifactPaths(
                     result.ModuleAssets,
@@ -1629,6 +1632,7 @@ internal sealed partial class PowerForgeReleaseService
                 moduleName,
                 buildRequest.ModuleVersion,
                 buildRequest.PreReleaseTag),
+            ArtefactOutputs = ResolveModuleArtefactOutputs(moduleConfig),
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,

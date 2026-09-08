@@ -270,7 +270,7 @@ public sealed class ModulePipelineManifestRefreshTests
     }
 
     [Fact]
-    public void Run_MergedModuleRemovesMergedScriptsToProcessFromDeliveredManifest()
+    public void Run_MergedModulePreservesScriptsToProcessOutsideRootModule()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -321,9 +321,10 @@ public sealed class ModulePipelineManifestRefreshTests
             var deliveredModule = Path.Combine(Path.GetDirectoryName(deliveredManifest)!, moduleName + ".psm1");
 
             Assert.True(File.Exists(deliveredManifest));
-            Assert.Contains("class TestClass", File.ReadAllText(deliveredModule), StringComparison.Ordinal);
-            Assert.False(ManifestEditor.TryGetTopLevelStringArray(deliveredManifest, "ScriptsToProcess", out _));
-            Assert.False(Directory.Exists(Path.Combine(Path.GetDirectoryName(deliveredManifest)!, "Classes")));
+            Assert.DoesNotContain("class TestClass", File.ReadAllText(deliveredModule), StringComparison.Ordinal);
+            Assert.True(ManifestEditor.TryGetTopLevelStringArray(deliveredManifest, "ScriptsToProcess", out var scripts));
+            Assert.Equal(new[] { ".\\Classes\\Initialize.ps1" }, scripts);
+            Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(deliveredManifest)!, "Classes", "Initialize.ps1")));
         }
         finally
         {
@@ -332,12 +333,11 @@ public sealed class ModulePipelineManifestRefreshTests
     }
 
     [Theory]
-    [InlineData(".\\classes\\initialize.ps1", false)]
-    [InlineData(".\\Classes\\..\\Classes\\Initialize.ps1", true)]
-    [InlineData("./Classes/../Classes/Initialize.ps1", true)]
-    public void Run_MergedModulePrunesScriptsToProcessUsingCanonicalStagingFileSystemPaths(
-        string manifestScriptPath,
-        bool removeOnCaseSensitiveFileSystem)
+    [InlineData(".\\classes\\initialize.ps1")]
+    [InlineData(".\\Classes\\..\\Classes\\Initialize.ps1")]
+    [InlineData("./Classes/../Classes/Initialize.ps1")]
+    public void Run_MergedModulePreservesCanonicalScriptsToProcessPaths(
+        string manifestScriptPath)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -375,22 +375,14 @@ public sealed class ModulePipelineManifestRefreshTests
 
             var runner = new ModulePipelineRunner(new NullLogger());
             var result = runner.Run(spec, runner.Plan(spec));
-            bool caseInsensitive = FrameworkCompatibility.GetPathStringComparison(result.BuildResult.StagingPath) ==
-                                   StringComparison.OrdinalIgnoreCase;
-
             bool hasScriptsToProcess = ManifestEditor.TryGetTopLevelStringArray(
                 result.BuildResult.ManifestPath,
                 "ScriptsToProcess",
                 out var remainingScripts);
-            if (caseInsensitive || removeOnCaseSensitiveFileSystem)
-            {
-                Assert.False(hasScriptsToProcess);
-            }
-            else
-            {
-                Assert.True(hasScriptsToProcess);
-                Assert.Equal(new[] { manifestScriptPath }, remainingScripts);
-            }
+            Assert.True(hasScriptsToProcess);
+            Assert.Equal(new[] { manifestScriptPath }, remainingScripts);
+            string mergedModule = File.ReadAllText(Path.Combine(result.BuildResult.StagingPath, moduleName + ".psm1"));
+            Assert.DoesNotContain("class TestClass", mergedModule, StringComparison.Ordinal);
         }
         finally
         {

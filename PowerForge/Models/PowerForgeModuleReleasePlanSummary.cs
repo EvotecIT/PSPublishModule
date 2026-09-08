@@ -39,6 +39,10 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     [JsonIgnore]
     public string[] PackedModuleRoots { get; set; } = Array.Empty<string>();
 
+    [JsonIgnore]
+    public PowerForgeModuleArtefactOutputSummary[] ArtefactOutputs { get; set; } =
+        Array.Empty<PowerForgeModuleArtefactOutputSummary>();
+
     public bool NoSign { get; set; }
 
     public bool SkipInstall { get; set; }
@@ -50,4 +54,13 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     public bool UnifiedGitHubRelease { get; set; }
 
     public string[] ArtifactPaths { get; set; } = Array.Empty<string>();
+}
+
+internal sealed class PowerForgeModuleArtefactOutputSummary
+{
+    public ArtefactType Type { get; set; }
+
+    public string OutputRoot { get; set; } = string.Empty;
+
+    public string? OutputPath { get; set; }
 }

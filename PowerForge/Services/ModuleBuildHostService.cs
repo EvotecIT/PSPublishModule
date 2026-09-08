@@ -42,6 +42,7 @@ public sealed class ModuleBuildHostService
             preferPwsh: !FrameworkCompatibility.IsWindows(),
             requiredRuntimeMajor: 0,
             progress: null,
+            captureModuleProtocol: false,
             cancellationToken: cancellationToken);
     }
 
@@ -71,6 +72,7 @@ public sealed class ModuleBuildHostService
             preferPwsh: hostRequirements.PreferPwsh,
             requiredRuntimeMajor: hostRequirements.RequiredRuntimeMajor,
             progress: request.Progress,
+            captureModuleProtocol: true,
             cancellationToken: cancellationToken);
     }
 
@@ -81,22 +83,24 @@ public sealed class ModuleBuildHostService
         bool preferPwsh,
         int requiredRuntimeMajor,
         IPowerForgeReleaseProgressReporterV2? progress,
+        bool captureModuleProtocol,
         CancellationToken cancellationToken)
     {
         var startedAt = Stopwatch.StartNew();
         var executableOverride = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE");
-        var environment = progress is null
+        var environment = !captureModuleProtocol
             ? null
             : new Dictionary<string, string?>
             {
                 [ModulePipelineProgressProtocol.EnvironmentVariable] = "1"
             };
         string? progressFailure = null;
-        Action<string>? outputLineReceived = progress is null
+        var artefactOutputs = new List<PowerForgeModuleArtefactOutputSummary>();
+        Action<string>? outputLineReceived = !captureModuleProtocol
             ? null
             : line =>
             {
-                var failure = ForwardProgress(line, progress);
+                var failure = ForwardProtocol(line, progress, artefactOutputs);
                 if (!string.IsNullOrWhiteSpace(failure))
                     progressFailure = failure;
             };
@@ -128,14 +132,45 @@ public sealed class ModuleBuildHostService
             : await Task.Run(() => _powerShellRunner.Run(runRequest), cancellationToken).ConfigureAwait(false);
         startedAt.Stop();
 
+        foreach (string line in result.StdOut.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+        {
+            var failure = ForwardProtocol(line, progress: null, artefactOutputs);
+            if (string.IsNullOrWhiteSpace(progressFailure) && !string.IsNullOrWhiteSpace(failure))
+                progressFailure = failure;
+        }
+
         return new ModuleBuildHostExecutionResult {
             ExitCode = result.ExitCode,
             Duration = startedAt.Elapsed,
-            StandardOutput = progress is null ? result.StdOut : StripProgressLines(result.StdOut),
+            StandardOutput = captureModuleProtocol ? StripProgressLines(result.StdOut) : result.StdOut,
             StandardError = result.StdErr,
             FailureMessage = progressFailure,
-            Executable = result.Executable
+            Executable = result.Executable,
+            ArtefactOutputs = DistinctArtefactOutputs(artefactOutputs)
         };
+    }
+
+    private static PowerForgeModuleArtefactOutputSummary[] DistinctArtefactOutputs(
+        IEnumerable<PowerForgeModuleArtefactOutputSummary> outputs)
+    {
+        var distinct = new List<PowerForgeModuleArtefactOutputSummary>();
+        foreach (PowerForgeModuleArtefactOutputSummary output in outputs)
+        {
+            if (output is null || string.IsNullOrWhiteSpace(output.OutputPath))
+                continue;
+
+            string fullPath = Path.GetFullPath(output.OutputPath!);
+            bool alreadyCaptured = distinct.Any(existing =>
+                existing.Type == output.Type &&
+                string.Equals(
+                    Path.GetFullPath(existing.OutputPath!),
+                    fullPath,
+                    FrameworkCompatibility.GetPathStringComparisonForPath(fullPath)));
+            if (!alreadyCaptured)
+                distinct.Add(output);
+        }
+
+        return distinct.ToArray();
     }
 
     private static string StripProgressLines(string output)
@@ -149,20 +184,30 @@ public sealed class ModuleBuildHostService
         return string.Join(Environment.NewLine, lines).TrimEnd('\r', '\n');
     }
 
-    private static string? ForwardProgress(
+    private static string? ForwardProtocol(
         string line,
-        IPowerForgeReleaseProgressReporterV2 progress)
+        IPowerForgeReleaseProgressReporterV2? progress,
+        ICollection<PowerForgeModuleArtefactOutputSummary> artefactOutputs)
     {
         if (!ModulePipelineProgressProtocol.TryParse(line, out var message) || message is null)
             return null;
 
-        if (message.Items is { Length: > 0 })
+        if (message.ArtefactOutputs is { Length: > 0 })
+        {
+            foreach (PowerForgeModuleArtefactOutputSummary output in message.ArtefactOutputs)
+            {
+                if (output is not null && !string.IsNullOrWhiteSpace(output.OutputPath))
+                    artefactOutputs.Add(output);
+            }
+        }
+
+        if (progress is not null && message.Items is { Length: > 0 })
         {
             foreach (var group in message.Items.GroupBy(item => item.Phase))
                 progress.ItemsPlanned(group.Key, group.ToArray());
         }
 
-        if (message.Item is not null && message.State.HasValue)
+        if (progress is not null && message.Item is not null && message.State.HasValue)
             progress.ItemUpdated(message.Item, message.State.Value, message.Detail);
 
         return message.State == PowerForgeReleaseProgressItemState.Failed

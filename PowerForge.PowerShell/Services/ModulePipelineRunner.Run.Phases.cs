@@ -103,8 +103,7 @@ public sealed partial class ModulePipelineRunner
                     plan,
                     buildResult,
                     manifestRequiredModules,
-                    manifestExternalModuleDependencies,
-                    state.MergeExecution.MergedScriptFiles);
+                    manifestExternalModuleDependencies);
 
             if (!IsReusingCompiledPowerShellModule(plan) && plan.Delivery is not null && plan.Delivery.Enable)
             {
@@ -299,8 +298,7 @@ public sealed partial class ModulePipelineRunner
                     plan,
                     buildResult,
                     manifestRequiredModules,
-                    manifestExternalModuleDependencies,
-                    state.MergeExecution.MergedScriptFiles);
+                    manifestExternalModuleDependencies);
             if (state.MergeExecution.MergedModule) {
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }

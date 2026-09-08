@@ -10,8 +10,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         RequiredModuleReference[] manifestRequiredModules,
-        string[] manifestExternalModuleDependencies,
-        IReadOnlyList<string> mergedScriptFiles)
+        string[] manifestExternalModuleDependencies)
     {
         RefreshManifestPathFromPlan(
             plan,
@@ -20,8 +19,6 @@ public sealed partial class ModulePipelineRunner
             manifestExternalModuleDependencies,
             preserveCompiledRootModule: IsReusingCompiledPowerShellModule(plan));
 
-        if (mergedScriptFiles.Count > 0)
-            PruneMergedScriptsToProcess(buildResult, mergedScriptFiles);
     }
 
     private void RefreshProjectManifestFromPlan(
@@ -132,35 +129,6 @@ public sealed partial class ModulePipelineRunner
         // Keep command/module hints in the in-memory plan only.
         // Persisting them into the PSD1 breaks downstream Import-Module consumers such as the documentation engine.
         _manifestMutator.TryRemoveTopLevelKey(manifestPath, "CommandModuleDependencies");
-    }
-
-    private void PruneMergedScriptsToProcess(
-        ModuleBuildResult buildResult,
-        IReadOnlyList<string> mergedScriptFiles)
-    {
-        var scriptsToProcess = ModuleManifestValueReader.ReadTopLevelStringOrArray(
-            buildResult.ManifestPath,
-            "ScriptsToProcess");
-        if (scriptsToProcess.Length == 0)
-            return;
-
-        var pathComparer = FrameworkCompatibility.GetPathStringComparison(buildResult.StagingPath) ==
-                           StringComparison.OrdinalIgnoreCase
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
-        var mergedScripts = new HashSet<string>(
-            mergedScriptFiles.Select(Path.GetFullPath),
-            pathComparer);
-        var remaining = scriptsToProcess
-            .Where(script => ResolveManifestScriptPath(buildResult.StagingPath, script) is not { } resolvedPath ||
-                             !mergedScripts.Contains(resolvedPath))
-            .ToArray();
-        if (remaining.Length == scriptsToProcess.Length)
-            return;
-
-        _manifestMutator.TryRemoveTopLevelKey(buildResult.ManifestPath, "ScriptsToProcess");
-        if (remaining.Length > 0)
-            _manifestMutator.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", remaining);
     }
 
     private static string? ResolveManifestScriptPath(string stagingPath, string path)

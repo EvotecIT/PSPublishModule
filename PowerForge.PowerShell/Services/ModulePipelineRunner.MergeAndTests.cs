@@ -15,7 +15,10 @@ public sealed partial class ModulePipelineRunner
         if (plan is null || buildResult is null) return MergeExecutionResult.None;
         if (!plan.MergeModule && !plan.MergeMissing) return MergeExecutionResult.None;
 
-        var scriptFiles = ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information);
+        var scriptFiles = ExcludeManifestScriptsToProcess(
+            buildResult.ManifestPath,
+            buildResult.StagingPath,
+            ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information));
         var conditionalExportDependencies = ResolveConditionalExportDependencies(
             plan,
             scriptFiles,
@@ -79,6 +82,33 @@ public sealed partial class ModulePipelineRunner
             hasBinaryOutputs: mergeOutcome.HasBinaryOutputs,
             hasScriptSources: mergeOutcome.HasScriptSources,
             mergedScriptFiles: mergeOutcome.MergedModule ? mergeInfo.ScriptFiles : Array.Empty<string>());
+    }
+
+    private static string[] ExcludeManifestScriptsToProcess(
+        string manifestPath,
+        string stagingPath,
+        IReadOnlyList<string> scriptFiles)
+    {
+        // ScriptsToProcess run before RootModule import and retain caller-session semantics.
+        // Keep those hooks as delivered files instead of moving them into the merged PSM1.
+        var manifestScripts = ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, "ScriptsToProcess");
+        if (manifestScripts.Length == 0 || scriptFiles.Count == 0)
+            return scriptFiles.ToArray();
+
+        // Manifest paths are a portable module contract and are commonly authored on Windows.
+        // Match them case-insensitively so a Linux build does not merge a hook merely because
+        // the manifest's casing differs from the staged file-system entry.
+        var runtimeHooks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var script in manifestScripts)
+        {
+            var resolved = ResolveManifestScriptPath(stagingPath, script);
+            if (resolved is not null)
+                runtimeHooks.Add(resolved);
+        }
+
+        return scriptFiles
+            .Where(path => !runtimeHooks.Contains(Path.GetFullPath(path)))
+            .ToArray();
     }
 
     private void ApplyPlaceholders(ModulePipelinePlan plan, ModuleBuildResult buildResult)

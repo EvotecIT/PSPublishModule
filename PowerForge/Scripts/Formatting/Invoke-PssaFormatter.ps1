@@ -5,22 +5,27 @@ try {
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         Select-Object -Unique)
     $PssaCandidates = foreach ($ModuleRoot in $ModuleRoots) {
-        $PssaRoot = [System.IO.Path]::Combine($ModuleRoot, 'PSScriptAnalyzer')
-        $DirectManifest = [System.IO.Path]::Combine($PssaRoot, 'PSScriptAnalyzer.psd1')
-        if ([System.IO.File]::Exists($DirectManifest)) {
-            [pscustomobject]@{ Path = $DirectManifest; Version = [version]'0.0' }
-        }
-        if ([System.IO.Directory]::Exists($PssaRoot)) {
-            foreach ($VersionDirectory in [System.IO.Directory]::EnumerateDirectories($PssaRoot)) {
-                $Version = $null
-                if (-not [version]::TryParse([System.IO.Path]::GetFileName($VersionDirectory), [ref]$Version)) {
-                    continue
-                }
-                $VersionedManifest = [System.IO.Path]::Combine($VersionDirectory, 'PSScriptAnalyzer.psd1')
-                if ([System.IO.File]::Exists($VersionedManifest)) {
-                    [pscustomobject]@{ Path = $VersionedManifest; Version = $Version }
+        try {
+            $PssaRoot = [System.IO.Path]::Combine($ModuleRoot, 'PSScriptAnalyzer')
+            $DirectManifest = [System.IO.Path]::Combine($PssaRoot, 'PSScriptAnalyzer.psd1')
+            if ([System.IO.File]::Exists($DirectManifest)) {
+                [pscustomobject]@{ Path = $DirectManifest; Version = [version]'0.0' }
+            }
+            if ([System.IO.Directory]::Exists($PssaRoot)) {
+                foreach ($VersionDirectory in [System.IO.Directory]::EnumerateDirectories($PssaRoot)) {
+                    $Version = $null
+                    if (-not [version]::TryParse([System.IO.Path]::GetFileName($VersionDirectory), [ref]$Version)) {
+                        continue
+                    }
+                    $VersionedManifest = [System.IO.Path]::Combine($VersionDirectory, 'PSScriptAnalyzer.psd1')
+                    if ([System.IO.File]::Exists($VersionedManifest)) {
+                        [pscustomobject]@{ Path = $VersionedManifest; Version = $Version }
+                    }
                 }
             }
+        } catch {
+            # One inaccessible or malformed module root must not hide later usable installations.
+            continue
         }
     }
     $PssaModulePaths = @($PssaCandidates |

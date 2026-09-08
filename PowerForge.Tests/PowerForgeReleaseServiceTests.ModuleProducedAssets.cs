@@ -5,6 +5,64 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void ResolveModuleArtefactOutputs_CarriesConfiguredProducingTypes()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            var context = new ModulePipelineConfigurationContext
+            {
+                ProjectRoot = root,
+                Spec = new ModulePipelineSpec
+                {
+                    Build = new ModuleBuildSpec { Name = "Company.Tools", SourcePath = root, Version = "4.0.0" },
+                    Segments = new IConfigurationSegment[]
+                    {
+                        new ConfigurationArtefactSegment
+                        {
+                            ArtefactType = ArtefactType.Packed,
+                            Configuration = new ArtefactConfiguration
+                            {
+                                Enabled = true,
+                                Path = Path.Combine(root, "packed")
+                            }
+                        },
+                        new ConfigurationArtefactSegment
+                        {
+                            ArtefactType = ArtefactType.ScriptPacked,
+                            Configuration = new ArtefactConfiguration
+                            {
+                                Enabled = true,
+                                Path = Path.Combine(root, "scripts")
+                            }
+                        }
+                    }
+                }
+            };
+
+            PowerForgeModuleArtefactOutputSummary[] outputs =
+                PowerForgeReleaseService.ResolveModuleArtefactOutputs(context);
+
+            Assert.Collection(
+                outputs,
+                output =>
+                {
+                    Assert.Equal(ArtefactType.Packed, output.Type);
+                    Assert.Equal(Path.Combine(root, "packed"), output.OutputRoot);
+                },
+                output =>
+                {
+                    Assert.Equal(ArtefactType.ScriptPacked, output.Type);
+                    Assert.Equal(Path.Combine(root, "scripts"), output.OutputRoot);
+                });
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void CreateModuleAssetEntries_ClassifiesProjectBuildNuGetPackage()
     {
         string root = CreateSandbox();
@@ -156,7 +214,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ManifestPath = Path.Combine(root, "Company.Tools.psd1"),
                         ModuleName = "Company.Tools",
-                        ModuleVersion = "4.0.0"
+                        ModuleVersion = "4.0.0",
+                        ArtefactOutputs = new[]
+                        {
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.ScriptPacked,
+                                OutputRoot = root
+                            }
+                        }
                     },
                     new[] { currentScriptPackedPath }));
 
@@ -197,7 +263,15 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ManifestPath = Path.Combine(root, "Company.Tools.psd1"),
                         ModuleName = "Company.Tools",
-                        ModuleVersion = "4.0.0"
+                        ModuleVersion = "4.0.0",
+                        ArtefactOutputs = new[]
+                        {
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.ScriptPacked,
+                                OutputRoot = root
+                            }
+                        }
                     },
                     new[] { producedPath }));
 
@@ -241,11 +315,100 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ManifestPath = Path.Combine(root, "Company.Tools.psd1"),
                         ModuleName = "Company.Tools",
-                        ModuleVersion = "4.0.0"
+                        ModuleVersion = "4.0.0",
+                        ArtefactOutputs = new[]
+                        {
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.ScriptPacked,
+                                OutputRoot = root
+                            }
+                        }
                     },
                     new[] { scriptPackedPath }));
 
             Assert.Equal(scriptPackedPath, entry.Path);
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void CreateModuleAssetEntries_DoesNotReclassifyMalformedPackedArchiveAsScriptPacked()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string packedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(packedPath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry helper = archive.CreateEntry("Invoke-Helper.ps1");
+                using var writer = new StreamWriter(helper.Open());
+                writer.Write("Get-Date");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    packedPath,
+                    new PowerForgeModuleReleasePlanSummary
+                    {
+                        ModuleName = "Company.Tools",
+                        ModuleVersion = "4.0.0",
+                        ArtefactOutputs = new[]
+                        {
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.Packed,
+                                OutputRoot = root
+                            }
+                        }
+                    },
+                    new[] { packedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void CreateModuleAssetEntries_UsesExactLegacyBuildArtefactOutputType()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry script = archive.CreateEntry("Company.Tools.ps1");
+                using var writer = new StreamWriter(script.Open());
+                writer.Write("Get-Date");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    new PowerForgeModuleReleasePlanSummary
+                    {
+                        ScriptPath = Path.Combine(root, "Build-Module.ps1"),
+                        ModuleName = "Company.Tools",
+                        ModuleVersion = "4.0.0",
+                        ArtefactOutputs = new[]
+                        {
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.ScriptPacked,
+                                OutputPath = scriptPackedPath
+                            }
+                        }
+                    },
+                    new[] { scriptPackedPath }));
+
             Assert.True(entry.IsFinalPackageOutput);
         }
         finally

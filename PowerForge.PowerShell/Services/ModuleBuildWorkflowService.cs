@@ -42,6 +42,7 @@ internal sealed class ModuleBuildWorkflowService
                 ? _runInteractive!(context.PipelineSpec, plan, configLabel)
                 : _runPipeline(context.PipelineSpec, plan);
 
+            ModulePipelineProgressProtocol.ReportArtefactOutputsFromEnvironment(result.ArtefactResults);
             _writeSummary(result);
             return new ModuleBuildWorkflowResult
             {

@@ -372,10 +372,16 @@ public sealed partial class ArtefactBuilder
         if (enforceRelativeDestination && Path.IsPathRooted(raw))
             throw new InvalidOperationException($"Packed artefact copy destinations must be relative, but got rooted path '{raw}'.");
 
-        if (relativeToRoot || !Path.IsPathRooted(raw))
-            return Path.GetFullPath(Path.Combine(destinationRoot, raw));
+        var resolved = relativeToRoot || !Path.IsPathRooted(raw)
+            ? Path.GetFullPath(Path.Combine(destinationRoot, raw))
+            : Path.GetFullPath(raw);
+        if (enforceRelativeDestination && !IsSameOrBelowPath(resolved, destinationRoot))
+        {
+            throw new InvalidOperationException(
+                $"Packed artefact copy destination '{raw}' resolves outside the temporary packed artefact root '{Path.GetFullPath(destinationRoot)}'.");
+        }
 
-        return Path.GetFullPath(raw);
+        return resolved;
     }
 
     private static string ResolveRequiredModulesRootForUnpacked(

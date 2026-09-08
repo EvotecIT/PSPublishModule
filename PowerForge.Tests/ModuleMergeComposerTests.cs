@@ -7,6 +7,34 @@ namespace PowerForge.Tests;
 public sealed class ModuleMergeComposerTests
 {
     [Fact]
+    public void BuildSources_ReportsOnlyFilesSuccessfullyIncorporated()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string included = Path.Combine(root, "Included.ps1");
+            string missing = Path.Combine(root, "Missing.ps1");
+            File.WriteAllText(included, "function Get-Included { 'ok' }");
+
+            ModuleMergeSources sources = ModuleMergeComposer.BuildSources(
+                root,
+                "DemoModule",
+                information: null,
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true,
+                scriptFiles: new[] { included, missing });
+
+            Assert.Equal(new[] { Path.GetFullPath(included) }, sources.ScriptFiles);
+            Assert.Contains("Get-Included", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildSources_PreservesUsingLinesInsidePowerShellHereStrings()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

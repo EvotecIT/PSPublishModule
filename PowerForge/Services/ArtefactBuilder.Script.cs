@@ -50,6 +50,11 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        ValidateRequiredModuleDestinations(
+            cfg,
+            requiredRoot,
+            scriptRoot,
+            FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName));
         ValidateScriptCopyMappings(
             cfg,
             outputRoot,
@@ -153,6 +158,11 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        ValidateRequiredModuleDestinations(
+            cfg,
+            requiredRoot,
+            scriptRoot,
+            FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName));
         ValidateScriptCopyMappings(
             cfg,
             tempRoot,
@@ -308,8 +318,7 @@ public sealed partial class ArtefactBuilder
         var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         var lines = content.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
 
-        var exportBoundary = lines.FindLastIndex(static line =>
-            string.Equals(line.Trim(), "# Export functions and aliases as required", StringComparison.Ordinal));
+        var exportBoundary = FindGeneratedExportBoundary(lines);
         if (exportBoundary >= 0)
         {
             lines.RemoveRange(exportBoundary, lines.Count - exportBoundary);
@@ -341,6 +350,27 @@ public sealed partial class ArtefactBuilder
 
     private static string NormalizeNewlines(string value, string newline)
         => value.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", newline);
+
+    private static int FindGeneratedExportBoundary(IReadOnlyList<string> lines)
+    {
+        var state = ScriptLexicalState.Normal;
+        var blockCommentDepth = 0;
+        var boundary = -1;
+        for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+        {
+            var line = lines[lineIndex] ?? string.Empty;
+            if (state == ScriptLexicalState.Normal &&
+                blockCommentDepth == 0 &&
+                string.Equals(line.Trim(), "# Export functions and aliases as required", StringComparison.Ordinal))
+            {
+                boundary = lineIndex;
+            }
+
+            UpdateScriptLexicalState(line, ref state, ref blockCommentDepth);
+        }
+
+        return boundary;
+    }
 
     private static void RemoveHandWrittenExportInvocations(List<string> lines)
     {
@@ -639,6 +669,7 @@ public sealed partial class ArtefactBuilder
         var state = ScriptLexicalState.Normal;
         var blockCommentDepth = 0;
         var previousSignificant = '\0';
+        var previousSignificantIndex = -1;
         for (var index = 0; index < source.Length; index++)
         {
             var current = source[index];
@@ -711,15 +742,20 @@ public sealed partial class ArtefactBuilder
             if (char.IsWhiteSpace(current))
                 continue;
 
-            if ((previousSignificant == '\0' || previousSignificant is ';' or '{') &&
+            var callOperator = previousSignificant is '&' or '.' &&
+                               previousSignificantIndex >= 0 &&
+                               source.Substring(previousSignificantIndex + 1, index - previousSignificantIndex - 1)
+                                   .All(char.IsWhiteSpace);
+            if ((previousSignificant == '\0' || previousSignificant is ';' or '{' || callOperator) &&
                 (StartsWithCommandName(source.Substring(index), "Export-ModuleMember") ||
                  StartsWithCommandName(source.Substring(index), "Microsoft.PowerShell.Core\\Export-ModuleMember")))
             {
-                commandStart = index;
+                commandStart = callOperator ? previousSignificantIndex : index;
                 return true;
             }
 
             previousSignificant = current;
+            previousSignificantIndex = index;
         }
 
         commandStart = -1;

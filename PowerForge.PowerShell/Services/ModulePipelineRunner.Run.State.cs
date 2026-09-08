@@ -58,10 +58,16 @@ public sealed partial class ModulePipelineRunner
         public string? ProjectManifestSyncMessage { get; set; }
         public string? AuthorizedProjectManifestSha256 { get; set; }
         public string? AuthorizedStagingManifestSha256 { get; set; }
-        public bool PackageWithoutScriptFolders => PowerShellCompilationResult is not null
-            ? !PowerShellCompilationResult.UsesPowerShellRuntimeFallback
-            : MergeExecution.MergedModule ||
-              (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);
+        public bool PackageWithoutScriptFolders => !HasScriptsToProcess &&
+            (PowerShellCompilationResult is not null
+                ? !PowerShellCompilationResult.UsesPowerShellRuntimeFallback
+                : MergeExecution.MergedModule ||
+                  (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources));
+
+        private bool HasScriptsToProcess => BuildResult is not null &&
+            ModuleManifestValueReader.ReadTopLevelStringOrArray(
+                BuildResult.ManifestPath,
+                "ScriptsToProcess").Length > 0;
 
         public ModuleBuildResult RequireBuildResult()
             => BuildResult ?? throw new InvalidOperationException("Build result is not available for the current pipeline state.");

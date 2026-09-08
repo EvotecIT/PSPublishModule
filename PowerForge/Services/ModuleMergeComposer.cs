@@ -45,14 +45,22 @@ internal static partial class ModuleMergeComposer
             ? ResolveScriptFiles(root, information)
             : NormalizeScriptFiles(scriptFiles);
 
+        string[] incorporated = Array.Empty<string>();
         var merged = ordered.Length > 0
-            ? BuildMergedScriptContent(root, ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
+            ? BuildMergedScriptContent(
+                root,
+                ordered,
+                exports,
+                fixRelativePaths,
+                conditionalFunctionDependencies,
+                moduleName,
+                out incorporated)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
         var assemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyFileNames(moduleName, exportAssemblies);
         var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, assemblyFileNames, SearchOption.AllDirectories);
 
-        return new ModuleMergeSources(psm1, ordered, merged, hasLib);
+        return new ModuleMergeSources(psm1, incorporated, merged, hasLib);
     }
 
     internal static void SyncMergedPsm1WithGeneratedScripts(
@@ -300,12 +308,14 @@ internal static partial class ModuleMergeComposer
         ExportSet exports,
         bool fixRelativePaths,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
-        string moduleName)
+        string moduleName,
+        out string[] incorporatedFiles)
     {
         var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var sourceBlocks = new List<string>();
         var sourceBlockHasPreamble = new List<bool>();
+        var incorporated = new List<string>();
 
         foreach (var file in files)
         {
@@ -361,7 +371,10 @@ internal static partial class ModuleMergeComposer
             }
             sourceBlocks.Add(sourceBlock);
             sourceBlockHasPreamble.Add(sourcePreambleLines.Count > 0);
+            incorporated.Add(file);
         }
+
+        incorporatedFiles = incorporated.ToArray();
 
         var body = new StringBuilder(8192);
         var boundaryToken = ComputeMergedSourceBoundaryToken(sourceBlocks);

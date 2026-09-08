@@ -49,6 +49,32 @@ internal static class ModulePipelineProgressProtocol
         => !string.IsNullOrWhiteSpace(line) &&
            line!.StartsWith(Prefix, StringComparison.Ordinal);
 
+    internal static void ReportArtefactOutputsFromEnvironment(
+        IReadOnlyCollection<ArtefactBuildResult>? artefactResults)
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable(EnvironmentVariable),
+                "1",
+                StringComparison.Ordinal) ||
+            artefactResults is null ||
+            artefactResults.Count == 0)
+        {
+            return;
+        }
+
+        Write(new ModulePipelineProgressProtocolMessage
+        {
+            ArtefactOutputs = artefactResults
+                .Where(static result => result is not null && !string.IsNullOrWhiteSpace(result.OutputPath))
+                .Select(static result => new PowerForgeModuleArtefactOutputSummary
+                {
+                    Type = result.Type,
+                    OutputPath = Path.GetFullPath(result.OutputPath)
+                })
+                .ToArray()
+        });
+    }
+
     private static void Write(ModulePipelineProgressProtocolMessage message)
     {
         var json = JsonSerializer.Serialize(message);
@@ -145,4 +171,6 @@ internal sealed class ModulePipelineProgressProtocolMessage
     public PowerForgeReleaseProgressItemState? State { get; set; }
 
     public string? Detail { get; set; }
+
+    public PowerForgeModuleArtefactOutputSummary[]? ArtefactOutputs { get; set; }
 }
