@@ -261,7 +261,7 @@ internal sealed partial class PowerForgeReleaseService
             var boundScreenshotSpecs = matchingScreenshotSpecs
                 .Select(value => (Spec: BindScreenshotSpec(value.Spec, app, values.MarketingVersion), value.ConfigPath)).ToArray();
             var matchingMetadataSpecs = checkReadiness
-                ? ResolveMatchingMetadataSpecs(metadataSpecs, app, values.MarketingVersion)
+                ? ResolveMatchingMetadataSpecs(metadataSpecs, app, values.MarketingVersion, required: metadataSpecs.Length > 0)
                 : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
             foreach (var configured in matchingMetadataSpecs)
                 ValidateAppleMetadataPreflight(configured);

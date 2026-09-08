@@ -2416,7 +2416,7 @@ internal sealed partial class PowerForgeReleaseService
                         metadataSpecs,
                         app,
                         valuesByApp[app].MarketingVersion,
-                        required: plan.SyncMetadata)
+                        required: plan.SyncMetadata || metadataSpecs.Length > 0)
                     : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
                 metadataByApp[app] = matchingMetadataSpecs;
                 foreach (var matchingMetadataSpec in matchingMetadataSpecs)
