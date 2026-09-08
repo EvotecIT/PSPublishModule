@@ -443,6 +443,14 @@ jobs:
         shell: bash
         run: bash Deployment/Linux/tests/powerforge-service-deploy-ssh-fixture.sh
 
+      - name: Test bounded Linux service deployment diagnostics
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -File Deployment/Linux/tests/powerforge-ssh-diagnostic-fixture.ps1
+
+      - name: Test Linux service deployment promotion state machine
+        shell: bash
+        run: bash Tests/Linux/powerforge-service-deploy.tests.sh
+
       - name: Test with Pester
         shell: pwsh
         timeout-minutes: 10

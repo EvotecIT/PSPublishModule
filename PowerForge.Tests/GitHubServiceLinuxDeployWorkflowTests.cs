@@ -23,6 +23,12 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.Contains("powerforge-service-deploy-v1 --service", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment-transport.tar", workflow, StringComparison.Ordinal);
         Assert.Contains("RedirectStandardInput = $true", workflow, StringComparison.Ordinal);
+        Assert.Contains("Format-SshDiagnostic", workflow, StringComparison.Ordinal);
+        Assert.Contains("Remote stderr", workflow, StringComparison.Ordinal);
+        Assert.Contains("earlier output truncated", workflow, StringComparison.Ordinal);
+        Assert.Contains("tail --bytes=8193", workflow, StringComparison.Ordinal);
+        Assert.Contains("  | $_", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReadToEndAsync", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("scp @", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("sudo /usr/local/sbin/powerforge-service-deploy --service", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("--archive '$remoteBase", workflow, StringComparison.Ordinal);
@@ -32,6 +38,8 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.DoesNotContain("vars.POWERFORGE_DEPLOY_HOST", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("steps.deployment_target.outputs.host", workflow, StringComparison.Ordinal);
         Assert.Contains("deployment_host:\n        description:", normalizedWorkflow, StringComparison.Ordinal);
+        Assert.Contains("powerforge-ssh-diagnostic-fixture.ps1", ReadRepoFile(".github", "workflows", "BuildModule.yml"), StringComparison.Ordinal);
+        Assert.Contains("bash Tests/Linux/powerforge-service-deploy.tests.sh", ReadRepoFile(".github", "workflows", "BuildModule.yml"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -43,7 +51,7 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.Contains("install -m 0600 \"$archive\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("{40,64}", script, StringComparison.Ordinal);
         Assert.Contains("artifactSha256", script, StringComparison.Ordinal);
-        Assert.Contains("tar -tvf", script, StringComparison.Ordinal);
+        Assert.Contains("tar --list --verbose --numeric-owner --full-time", script, StringComparison.Ordinal);
         Assert.Contains("mv -Tf", script, StringComparison.Ordinal);
         Assert.Contains("systemctl restart", script, StringComparison.Ordinal);
         Assert.Contains("systemctl stop", script, StringComparison.Ordinal);
@@ -60,6 +68,11 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.Contains("must not overlap deployment control path", script, StringComparison.Ordinal);
         Assert.Contains("rollback 143", script, StringComparison.Ordinal);
         Assert.Contains("Rejected release retained for recovery", script, StringComparison.Ordinal);
+        Assert.Contains("MAX_RELEASE_ARCHIVE_ENTRIES=100000", script, StringComparison.Ordinal);
+        Assert.Contains("Artifact must be an uncompressed tar archive", script, StringComparison.Ordinal);
+        Assert.Contains("Archive expands beyond the deployment size limit", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("archive-names", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("archive-listing", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -71,7 +84,15 @@ public sealed class GitHubServiceLinuxDeployWorkflowTests
         Assert.Contains("--allow-service", script, StringComparison.Ordinal);
         Assert.Contains("powerforge-service-deploy-v1", script, StringComparison.Ordinal);
         Assert.Contains("max_payload_bytes=1073741824", script, StringComparison.Ordinal);
-        Assert.Contains("archive_entries", script, StringComparison.Ordinal);
+        Assert.Contains("max_metadata_bytes=1048576", script, StringComparison.Ordinal);
+        Assert.Contains("Sparse deployment payload files are not supported", script, StringComparison.Ordinal);
+        Assert.Contains("Deployment payload must be an uncompressed tar archive", script, StringComparison.Ordinal);
+        Assert.Contains("dispatcher_lock_target", script, StringComparison.Ordinal);
+        Assert.Contains("exec 8<\"$dispatcher_lock_target\"", script, StringComparison.Ordinal);
+        Assert.Contains("timeout --foreground", script, StringComparison.Ordinal);
+        Assert.Contains("logical_size", script, StringComparison.Ordinal);
+        Assert.Contains("allocated_bytes", script, StringComparison.Ordinal);
+        Assert.Contains("head --bytes=1024", script, StringComparison.Ordinal);
         Assert.Contains("artifact.tar", script, StringComparison.Ordinal);
         Assert.Contains("deployment.json", script, StringComparison.Ordinal);
         Assert.Contains("flock -w 900", script, StringComparison.Ordinal);

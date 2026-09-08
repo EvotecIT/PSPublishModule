@@ -101,6 +101,9 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.Contains("GITHUB_RUN_ID", script, StringComparison.Ordinal);
         Assert.Contains("flock -w 900", dispatcher, StringComparison.Ordinal);
         Assert.Contains("lock_path=\"/tmp/powerforge-service-${service_id}.lock\"", dispatcher, StringComparison.Ordinal);
+        Assert.Contains("dispatcher_lock_target", dispatcher, StringComparison.Ordinal);
+        Assert.Contains("exec 8<\"$dispatcher_lock_target\"", dispatcher, StringComparison.Ordinal);
+        Assert.Contains("timeout --foreground", dispatcher, StringComparison.Ordinal);
         Assert.DoesNotContain(".powerforge/locks", script, StringComparison.Ordinal);
         Assert.Contains("powerforge-service-deploy", script, StringComparison.Ordinal);
         Assert.Contains("IdentitiesOnly=yes", script, StringComparison.Ordinal);
@@ -111,6 +114,12 @@ public sealed class GitHubProtectedEnvironmentDeployActionTests
         Assert.DoesNotContain("$handoffCommand", script, StringComparison.Ordinal);
         Assert.Contains("powerforge-service-deploy-v1 --service $Service", transport, StringComparison.Ordinal);
         Assert.Contains("RedirectStandardInput = $true", transport, StringComparison.Ordinal);
+        Assert.Contains("Format-PowerForgeSshDiagnostic", transport, StringComparison.Ordinal);
+        Assert.Contains("Remote stderr", transport, StringComparison.Ordinal);
+        Assert.Contains("earlier output truncated", transport, StringComparison.Ordinal);
+        Assert.Contains("tail --bytes=8193", transport, StringComparison.Ordinal);
+        Assert.Contains("  | $_", transport, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReadToEndAsync", transport, StringComparison.Ordinal);
         Assert.Contains("finally", script, StringComparison.Ordinal);
         Assert.InRange(NormalizedLineCount(script), 1, 250);
     }

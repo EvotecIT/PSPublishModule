@@ -235,6 +235,20 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $false
+          function Format-SshDiagnostic {
+            param([AllowEmptyString()][string] $Text, [Parameter(Mandatory)][string] $Label)
+            if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+            $safeText = [Text.RegularExpressions.Regex]::Replace(
+              $Text.Replace("`r`n", "`n").Replace("`r", "`n"),
+              '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]',
+              '?'
+            )
+            if ($safeText.Length -gt 8192) {
+              $safeText = "[earlier output truncated]`n" + $safeText.Substring($safeText.Length - 8192)
+            }
+            $indented = ($safeText.TrimEnd() -split "`n" | ForEach-Object { "  | $_" }) -join "`n"
+            "${Label}:`n$indented"
+          }
           $sshRoot = Join-Path $env:RUNNER_TEMP 'powerforge-service-deployment-ssh'
           $stageRoot = Join-Path $env:RUNNER_TEMP 'powerforge-service'
           New-Item -ItemType Directory -Force -Path $sshRoot | Out-Null
@@ -262,13 +276,18 @@ jobs:
             '-o', 'ServerAliveCountMax=4',
             '-o', "UserKnownHostsFile=$knownHostsPath"
           )
+          $stdoutPath = "$transportPath.stdout"
+          $stderrPath = "$transportPath.stderr"
+          [IO.File]::Delete($stdoutPath)
+          [IO.File]::Delete($stderrPath)
           $startInfo = [Diagnostics.ProcessStartInfo]::new()
-          $startInfo.FileName = 'ssh'
+          $startInfo.FileName = 'bash'
           $startInfo.UseShellExecute = $false
           $startInfo.RedirectStandardInput = $true
-          $startInfo.RedirectStandardOutput = $true
-          $startInfo.RedirectStandardError = $true
-          foreach ($argument in $sshOptions + @(
+          $startInfo.Environment['POWERFORGE_STDOUT_PATH'] = $stdoutPath
+          $startInfo.Environment['POWERFORGE_STDERR_PATH'] = $stderrPath
+          $captureCommand = 'ssh "$@" > >(tail --bytes=8193 > "$POWERFORGE_STDOUT_PATH") 2> >(tail --bytes=8193 > "$POWERFORGE_STDERR_PATH"); status=$?; wait; exit "$status"'
+          foreach ($argument in @('-c', $captureCommand, 'powerforge-ssh') + $sshOptions + @(
             '-p', $env:DEPLOYMENT_PORT, $target,
             "powerforge-service-deploy-v1 --service $($env:DEPLOYMENT_SERVICE)"
           )) {
@@ -279,20 +298,35 @@ jobs:
           if (-not $process.Start()) {
             throw 'Unable to start the restricted SSH deployment transport.'
           }
-          $stdout = $process.StandardOutput.ReadToEndAsync()
-          $stderr = $process.StandardError.ReadToEndAsync()
-          $stream = [IO.File]::OpenRead($transportPath)
+          $copyFailure = $null
           try {
-            $stream.CopyTo($process.StandardInput.BaseStream)
-          } finally {
-            $stream.Dispose()
-            $process.StandardInput.Close()
+            $stream = [IO.File]::OpenRead($transportPath)
+            try {
+              $stream.CopyTo($process.StandardInput.BaseStream)
+            } finally {
+              $stream.Dispose()
+              $process.StandardInput.Close()
+            }
+          } catch {
+            $copyFailure = $_
+            try { $process.StandardInput.Close() } catch { }
           }
           $process.WaitForExit()
-          [void]$stdout.GetAwaiter().GetResult()
-          [void]$stderr.GetAwaiter().GetResult()
-          if ($process.ExitCode -ne 0) {
-            throw "Restricted SSH service deployment failed with exit code $($process.ExitCode)."
+          $stdoutText = if ([IO.File]::Exists($stdoutPath)) { [IO.File]::ReadAllText($stdoutPath) } else { '' }
+          $stderrText = if ([IO.File]::Exists($stderrPath)) { [IO.File]::ReadAllText($stderrPath) } else { '' }
+          if ($null -ne $copyFailure -or $process.ExitCode -ne 0) {
+            $diagnostics = [Collections.Generic.List[string]]::new()
+            if ($null -ne $copyFailure) {
+              $diagnostics.Add((Format-SshDiagnostic -Text $copyFailure.Exception.Message -Label 'Local payload transfer error'))
+            }
+            foreach ($item in @(
+              (Format-SshDiagnostic -Text $stderrText -Label 'Remote stderr'),
+              (Format-SshDiagnostic -Text $stdoutText -Label 'Remote stdout')
+            )) {
+              if (-not [string]::IsNullOrWhiteSpace($item)) { $diagnostics.Add($item) }
+            }
+            $detail = if ($diagnostics.Count -gt 0) { "`n" + ($diagnostics -join "`n") } else { '' }
+            throw "Restricted SSH service deployment failed with exit code $($process.ExitCode).$detail"
           }
 
       - name: Cleanup deployment credentials
