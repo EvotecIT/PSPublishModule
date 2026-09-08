@@ -5,6 +5,55 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
     [Theory]
+    [InlineData(ArtefactType.Packed)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void CollectModuleReleaseAssets_RejectsSynthesizedScriptArchiveCollisionWithSelectedOutput(
+        ArtefactType packedType)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            string scriptRoot = Directory.CreateDirectory(Path.Combine(root, "script")).FullName;
+            string scriptPath = Path.Combine(scriptRoot, "Shared.ps1");
+            File.WriteAllText(scriptPath, "'script'");
+            string archiveRoot = Directory.CreateDirectory(Path.Combine(root, "release", "modules")).FullName;
+            string packedPath = Path.Combine(archiveRoot, "Shared.zip");
+            File.WriteAllText(packedPath, "packed-sentinel");
+            var script = new ArtefactBuildResult(
+                ArtefactType.Script,
+                "shared",
+                scriptRoot,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                Array.Empty<string>(),
+                "Shared.ps1");
+            var packed = new ArtefactBuildResult(
+                packedType,
+                "shared",
+                packedPath,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                Array.Empty<string>(),
+                packedType == ArtefactType.ScriptPacked ? "Shared.ps1" : null);
+            var method = typeof(ModulePipelineRunner).GetMethod(
+                "CollectModuleReleaseAssets",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+            Assert.NotNull(method);
+            var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+                method!.Invoke(null, new object?[] { new[] { script, packed }, "shared", archiveRoot }));
+
+            InvalidOperationException collision = Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("overlaps selected artefact output", collision.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("packed-sentinel", File.ReadAllText(packedPath));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void CollectModuleReleaseAssets_ArchivesCompleteNestedScriptLayoutAndSelectsEvidence(

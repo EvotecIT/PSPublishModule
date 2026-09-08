@@ -146,8 +146,7 @@ internal sealed partial class PowerForgeReleaseService
             if (files.Length == 0 ||
                 files.Distinct(StringComparer.Ordinal).Count() != files.Length ||
                 files.Any(static name =>
-                    name.StartsWith("/", StringComparison.Ordinal) ||
-                    Path.IsPathRooted(name) ||
+                    IsPortableArchivePathRooted(name) ||
                     name.Split('/').Any(static segment => segment is "." or "..") ||
                     name.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
                     name.Contains("/.git/", StringComparison.OrdinalIgnoreCase) ||
@@ -192,11 +191,11 @@ internal sealed partial class PowerForgeReleaseService
         string[] entryPoints = matchingOutputs
             .Select(static output => output.EntryPointRelativePath)
             .Where(static entryPoint => !string.IsNullOrWhiteSpace(entryPoint))
-            .Select(static entryPoint => entryPoint!.Replace('\\', '/').TrimStart('/'))
+            .Select(static entryPoint => entryPoint!.Replace('\\', '/'))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (entryPoints.Length != 1 ||
-            Path.IsPathRooted(entryPoints[0]) ||
+            IsPortableArchivePathRooted(entryPoints[0]) ||
             entryPoints[0].Split('/').Any(static segment => segment is "." or "..") ||
             !string.Equals(Path.GetExtension(entryPoints[0]), ".ps1", StringComparison.OrdinalIgnoreCase))
         {
@@ -205,6 +204,20 @@ internal sealed partial class PowerForgeReleaseService
 
         entryPointRelativePath = entryPoints[0];
         return true;
+    }
+
+    private static bool IsPortableArchivePathRooted(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) ||
+            path.StartsWith("/", StringComparison.Ordinal) ||
+            Path.IsPathRooted(path))
+        {
+            return true;
+        }
+
+        return path.Length >= 2 &&
+               path[1] == ':' &&
+               ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'));
     }
 
     private static PowerForgeModuleArtefactOutputSummary[] ResolveMatchingModuleArtefactOutputs(

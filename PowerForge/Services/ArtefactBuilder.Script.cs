@@ -360,14 +360,27 @@ public sealed partial class ArtefactBuilder
         }
 
         var moduleContent = string.Join(newline, lines).TrimEnd('\r', '\n');
-        var preamble = ModuleMergeComposer.ExtractMergedScriptPreamble(moduleContent, out var body);
+        var modulePreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(moduleContent, out var body);
+        var normalizedPreScript = string.IsNullOrWhiteSpace(preScriptMerge)
+            ? string.Empty
+            : NormalizeNewlines(preScriptMerge!.Trim(), newline);
+        var shebang = ExtractLeadingShebang(normalizedPreScript, newline, out var preScriptWithoutShebang);
+        var preScriptPreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(
+            preScriptWithoutShebang,
+            out var preScriptBody);
 
-        var sections = new List<string>(4);
-        if (!string.IsNullOrWhiteSpace(preamble))
-            sections.Add(NormalizeNewlines(preamble.Trim(), newline));
+        var sections = new List<string>(6);
+        if (!string.IsNullOrWhiteSpace(shebang))
+            sections.Add(shebang);
 
-        if (!string.IsNullOrWhiteSpace(preScriptMerge))
-            sections.Add(NormalizeNewlines(preScriptMerge!.Trim(), newline));
+        if (!string.IsNullOrWhiteSpace(preScriptPreamble))
+            sections.Add(NormalizeNewlines(preScriptPreamble.Trim(), newline));
+
+        if (!string.IsNullOrWhiteSpace(modulePreamble))
+            sections.Add(NormalizeNewlines(modulePreamble.Trim(), newline));
+
+        if (!string.IsNullOrWhiteSpace(preScriptBody))
+            sections.Add(NormalizeNewlines(preScriptBody.Trim(), newline));
 
         if (!string.IsNullOrEmpty(body))
             sections.Add(NormalizeNewlines(body.TrimEnd('\r', '\n'), newline));
@@ -401,6 +414,23 @@ public sealed partial class ArtefactBuilder
 
     private static string NormalizeNewlines(string value, string newline)
         => value.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", newline);
+
+    private static string ExtractLeadingShebang(string content, string newline, out string remainder)
+    {
+        remainder = content;
+        if (!content.StartsWith("#!", StringComparison.Ordinal))
+            return string.Empty;
+
+        int lineEnd = content.IndexOf(newline, StringComparison.Ordinal);
+        if (lineEnd < 0)
+        {
+            remainder = string.Empty;
+            return content;
+        }
+
+        remainder = content.Substring(lineEnd + newline.Length).TrimStart('\r', '\n');
+        return content.Substring(0, lineEnd);
+    }
 
     private static int FindGeneratedExportBoundary(IReadOnlyList<string> lines)
     {

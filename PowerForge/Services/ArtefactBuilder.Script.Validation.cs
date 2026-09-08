@@ -81,7 +81,7 @@ public sealed partial class ArtefactBuilder
                 string.Join(", ", manifestLoadedKeys) + ".");
         }
 
-        if (!string.IsNullOrWhiteSpace(preScriptMerge) &&
+        if (HasExecutablePreScriptContent(preScriptMerge) &&
             HasLeadingScriptParameterBlock(ModuleManifestValueReader.ReadPowerShellCompatibleText(modulePath)))
         {
             throw new InvalidOperationException(
@@ -98,6 +98,15 @@ public sealed partial class ArtefactBuilder
             throw new InvalidOperationException(
                 $"ScriptName '{scriptName}' conflicts with a packaged payload file. Choose an entry point name that does not replace included module content.");
         }
+    }
+
+    private static bool HasExecutablePreScriptContent(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
+
+        _ = ModuleMergeComposer.ExtractMergedScriptPreamble(content, out string body);
+        return SkipPowerShellTrivia(body, 0) < body.Length;
     }
 
     private static void AddManifestLoadedKey(

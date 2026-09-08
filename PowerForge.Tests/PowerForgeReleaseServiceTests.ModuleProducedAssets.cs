@@ -631,6 +631,52 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
+    [InlineData("C:/payload.dll")]
+    [InlineData("C:\\payload.dll")]
+    [InlineData("C:payload.dll")]
+    public void CreateModuleAssetEntries_RejectsWindowsDriveQualifiedScriptPackedEntriesOnEveryHost(
+        string unsafeEntryName)
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                using (var writer = new StreamWriter(archive.CreateEntry("Company.Tools.ps1").Open()))
+                    writer.Write("Get-Date");
+                using (var writer = new StreamWriter(archive.CreateEntry(unsafeEntryName).Open()))
+                    writer.Write("unsafe");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    new PowerForgeModuleReleasePlanSummary
+                    {
+                        ModuleName = "Company.Tools",
+                        ModuleVersion = "4.0.0",
+                        ArtefactOutputs =
+                        [
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.ScriptPacked,
+                                OutputPath = scriptPackedPath,
+                                EntryPointRelativePath = "Company.Tools.ps1"
+                            }
+                        ]
+                    },
+                    new[] { scriptPackedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void CreateModuleAssetEntries_ScriptPackedProducerCannotFallBackToModuleArchiveVerification(

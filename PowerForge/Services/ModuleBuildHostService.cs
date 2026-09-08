@@ -160,18 +160,29 @@ public sealed class ModuleBuildHostService
                 continue;
 
             string fullPath = Path.GetFullPath(output.OutputPath!);
+            string entryPoint = NormalizeArtefactEntryPoint(output.EntryPointRelativePath);
+            StringComparison comparison = FrameworkCompatibility.GetPathStringComparisonForPath(fullPath);
             bool alreadyCaptured = distinct.Any(existing =>
                 existing.Type == output.Type &&
                 string.Equals(
                     Path.GetFullPath(existing.OutputPath!),
                     fullPath,
-                    FrameworkCompatibility.GetPathStringComparisonForPath(fullPath)));
+                    comparison) &&
+                string.Equals(
+                    NormalizeArtefactEntryPoint(existing.EntryPointRelativePath),
+                    entryPoint,
+                    comparison));
             if (!alreadyCaptured)
                 distinct.Add(output);
         }
 
         return distinct.ToArray();
     }
+
+    private static string NormalizeArtefactEntryPoint(string? entryPointRelativePath) =>
+        string.IsNullOrWhiteSpace(entryPointRelativePath)
+            ? string.Empty
+            : entryPointRelativePath!.Replace('\\', '/').TrimStart('/');
 
     private static string StripProgressLines(string output)
     {
