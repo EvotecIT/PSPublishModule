@@ -10,8 +10,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(PowerShellCSharpLiteral.QuoteString(function.SourceText)).AppendLine(");");
 
     private string EmitNativeMutation(PowerShellLoweredNativeVariableExpression target,
-        PowerShellBoundMutationOperator operation, PowerShellLoweredExpression? value, SourceSpan span, string sourceText)
-        => EmitNativeExpressionPosition(EmitNativeMutationValue(target, operation, value), span, target.SourcePath, sourceText);
+        PowerShellBoundMutationOperator operation, PowerShellLoweredExpression? value, SourceSpan span, string sourceText, PowerShellNativeAssignmentTarget? assignmentTarget = null)
+        => EmitNativeExpressionPosition(EmitNativeMutationValue(target, operation, value, assignmentTarget), span, target.SourcePath, sourceText);
 
     private static string EmitNativeExpressionPosition(string value, SourceSpan span, string sourcePath, string sourceText, bool postTestCondition = false)
         => "__statementErrors.EvaluateNativeExpression(() => " + value + ", " +
@@ -19,8 +19,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
             span.EndLine + ", " + span.EndColumn + ", " + PowerShellCSharpLiteral.QuoteString(sourceText) + (postTestCondition ? ", true)" : ")");
 
     private string EmitNativeMutationValue(PowerShellLoweredNativeVariableExpression target,
-        PowerShellBoundMutationOperator operation, PowerShellLoweredExpression? value)
+        PowerShellBoundMutationOperator operation, PowerShellLoweredExpression? value, PowerShellNativeAssignmentTarget? assignmentTarget = null)
     {
+        if (assignmentTarget is not null)
+        {
+            if (value is null) throw new InvalidOperationException("A native assignment requires its compiled value expression.");
+            return EmitNativeAssignmentTarget(assignmentTarget, operation, value);
+        }
         var name = PowerShellCSharpLiteral.QuoteString(target.Name);
         if (operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement or
             PowerShellBoundMutationOperator.PostIncrement or PowerShellBoundMutationOperator.PostDecrement)
@@ -29,21 +34,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
             var postfix = operation is PowerShellBoundMutationOperator.PostIncrement or PowerShellBoundMutationOperator.PostDecrement;
             return $"__nativeFunction.MutateVariable({name}, {EmitNativeVariableRead(target)}, {(decrement ? "true" : "false")}, {(postfix ? "true" : "false")})";
         }
-        if (value is null) throw new InvalidOperationException($"Native mutation '{operation}' requires a value.");
-        var right = EmitExpression(value);
-        if (operation != PowerShellBoundMutationOperator.Assign)
-        {
-            var binary = operation switch
-            {
-                PowerShellBoundMutationOperator.Add => "Add",
-                PowerShellBoundMutationOperator.Subtract => "Subtract",
-                PowerShellBoundMutationOperator.Multiply => "Multiply",
-                PowerShellBoundMutationOperator.Divide => "Divide",
-                PowerShellBoundMutationOperator.Remainder => "Modulo",
-                _ => throw new InvalidOperationException($"Native mutation '{operation}' has no operation owner.")
-            };
-            right = $"__nativeFunction.EvaluateBinary(global::System.Linq.Expressions.ExpressionType.{binary}, true, {EmitNativeVariableRead(target)}, {right})";
-        }
-        return $"__nativeFunction.AssignVariable({name}, {right}, {(target.DirectLocal ? "true" : "false")})";
+        throw new InvalidOperationException($"Native mutation '{operation}' requires its authored assignment target.");
     }
+
+    private string EmitNativeAssignmentTarget(PowerShellNativeAssignmentTarget target,
+        PowerShellBoundMutationOperator operation, PowerShellLoweredExpression value)
+        => "__nativeFunction.AssignVariableTarget(" + PowerShellCSharpLiteral.QuoteString(target.Text) + ", " +
+            PowerShellCSharpLiteral.QuoteString(operation.ToString()) + ", () => (object?)(" + EmitExpression(value) + "), " +
+            PowerShellCSharpLiteral.QuoteString(target.SourcePath) + ", " + target.Span.StartLine + ", " +
+            target.Span.StartColumn + ", " + PowerShellCSharpLiteral.QuoteString(target.SourceDocument) + ", " +
+            target.StartOffset + ", " + target.EndOffset + ")";
 }

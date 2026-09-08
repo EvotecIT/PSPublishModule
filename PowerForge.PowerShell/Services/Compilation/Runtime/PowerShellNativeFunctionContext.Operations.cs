@@ -14,13 +14,6 @@ namespace PowerForge.Generated.Runtime
         private static readonly ConcurrentDictionary<Tuple<ExpressionType, bool>, Func<object?, object?, object?>> BinarySites = new();
         private static readonly ConcurrentDictionary<ExpressionType, Func<object?, object?>> MutationSites = new();
 
-        /// <summary>Writes a mutation result through existing native constraints and returns its expression value.</summary>
-        public object? AssignVariable(string name, object? value, bool directLocal)
-        {
-            SetVariable(name, value);
-            return directLocal && TryReadLocalValue(name, out var stored) ? stored : value;
-        }
-
         /// <summary>Applies native increment or decrement to an already evaluated variable value.</summary>
         public object? MutateVariable(string name, object? before, bool decrement, bool postfix)
         {

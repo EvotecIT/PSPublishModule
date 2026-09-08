@@ -4,13 +4,12 @@ namespace PowerForge.Generated.Runtime
     using System.Collections.Generic;
     using System.Linq;
     using System.Linq.Expressions;
-    using System.Management.Automation;
     using System.Management.Automation.Language;
     using System.Reflection;
 
     public sealed partial class PowerShellNativeFunctionContext
     {
-        private readonly Dictionary<string, NativeCommandRegion> _commandRegions = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, NativeAstOperation> _commandRegions = new(StringComparer.Ordinal);
 
         /// <summary>Executes an explicitly hosted pipeline region in the existing native invocation.</summary>
         public void InvokeCommandRegion(string source, string file, int line, int column,
@@ -47,7 +46,7 @@ namespace PowerForge.Generated.Runtime
             }
         }
 
-        private NativeCommandRegion GetCommandRegion(string source, string file, int line, int column,
+        private NativeAstOperation GetCommandRegion(string source, string file, int line, int column,
             bool capture, bool preservePartialOutput, string? sourceDocument, int startOffset, int endOffset)
         {
             EnsureActive();
@@ -61,38 +60,7 @@ namespace PowerForge.Generated.Runtime
 
         private sealed class NativeCommandRegion
         {
-            private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-            private const BindingFlags Static = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
-            private readonly Func<object, object?> _body;
-            private readonly IScriptExtent[] _points;
-            private readonly FieldInfo _sequencePoints, _sequenceIndex;
-
-            private NativeCommandRegion(Func<object, object?> body, IScriptExtent[] points, Type contextType)
-            {
-                _body = body;
-                _points = points;
-                _sequencePoints = contextType.GetField("_sequencePoints", Instance)!;
-                _sequenceIndex = contextType.GetField("_currentSequencePointIndex", Instance)!;
-            }
-
-            internal object? Invoke(object context)
-            {
-                var previousPoints = _sequencePoints.GetValue(context);
-                var previousIndex = _sequenceIndex.GetValue(context);
-                try
-                {
-                    _sequencePoints.SetValue(context, _points);
-                    _sequenceIndex.SetValue(context, 0);
-                    return _body(context);
-                }
-                finally
-                {
-                    _sequenceIndex.SetValue(context, previousIndex);
-                    _sequencePoints.SetValue(context, previousPoints);
-                }
-            }
-
-            internal static NativeCommandRegion Create(PowerShellNativeFunctionContext owner,
+            internal static NativeAstOperation Create(PowerShellNativeFunctionContext owner,
                 string source, string file, int line, int column, bool capture, bool preservePartialOutput,
                 string? sourceDocument, int startOffset, int endOffset)
             {
@@ -124,64 +92,27 @@ namespace PowerForge.Generated.Runtime
                     ast.EndBlock.Statements.Any(statement => statement is not PipelineAst))
                     throw new ArgumentException("A native command region requires explicit pipeline statements.", nameof(source));
 
-                var assembly = typeof(PSObject).Assembly;
-                var compilerType = assembly.GetType("System.Management.Automation.Language.Compiler", true)!;
-                var analysisType = assembly.GetType("System.Management.Automation.Language.VariableAnalysis", true)!;
-                var functionScript = (ScriptBlock)owner.FunctionContext.GetType().GetField("_scriptBlock", Instance)!
-                    .GetValue(owner.FunctionContext)!;
-                var usesCmdletBinding = (bool)typeof(ScriptBlock).GetProperty("UsesCmdletBinding", Instance)!
-                    .GetValue(functionScript, null)!;
-                var analyze = analysisType.GetMethods(Static).Single(method => method.Name == "Analyze" && method.GetParameters().Length == 3);
-                PowerShellNativeFunctionHost.Invoke(analyze, null, new object[] { ast, true, usesCmdletBinding });
-                var compiler = Activator.CreateInstance(compilerType, nonPublic: true)!;
-                compilerType.GetProperty("Optimize", Instance)!.SetValue(compiler, false, null);
-                compilerType.GetField("_compilingScriptCmdlet", Instance)!.SetValue(compiler, usesCmdletBinding);
-                compilerType.GetField("_switchTupleIndex", Instance)!.SetValue(compiler, -2);
-                compilerType.GetField("_foreachTupleIndex", Instance)!.SetValue(compiler, -2);
-
-                // Analysis keeps ordinary variables dynamic. Automatic slots are emitted against
-                // this invocation's actual tuple, rather than allocating a region-local scope.
-                var tupleType = owner._contract.LocalsTuple.GetValue(owner.FunctionContext)!.GetType();
-                var locals = Expression.Variable(tupleType, "locals");
-                compilerType.GetProperty("LocalVariablesTupleType", Instance)!.SetValue(compiler, tupleType, null);
-                compilerType.GetProperty("LocalVariablesParameter", Instance)!.SetValue(compiler, locals, null);
-                var nativeContext = (ParameterExpression)(compilerType.GetField("s_functionContext", Static) ??
-                    compilerType.GetField("_functionContext", Static) ??
-                    throw new NotSupportedException("PowerShell's native compiler context parameter is unavailable.")).GetValue(null)!;
-                var execution = (ParameterExpression)(compilerType.GetField("s_executionContextParameter", Static) ??
-                    compilerType.GetField("_executionContextParameter", Static) ??
-                    throw new NotSupportedException("PowerShell's native compiler execution parameter is unavailable.")).GetValue(null)!;
-                var expressions = new List<Expression>
-                {
-                    Expression.Assign(execution, Expression.Field(nativeContext, owner._contract.ExecutionContext)),
-                    Expression.Assign(locals, Expression.Convert(Expression.Field(nativeContext, owner._contract.LocalsTuple), tupleType))
-                };
-                var temporaries = new List<ParameterExpression> { execution, locals };
+                var native = new NativeAstCompiler(owner, ast);
+                var expressions = native.Expressions;
+                var temporaries = native.Temporaries;
+                var compilerType = native.CompilerType;
                 if (capture)
                 {
                     if (ast.EndBlock.Statements.Count != 1)
                         throw new ArgumentException("A captured native region requires one authored pipeline.", nameof(source));
                     var captureContext = Enum.Parse(compilerType.GetNestedType("CaptureAstContext", BindingFlags.NonPublic)!,
                         preservePartialOutput ? "AssignmentWithResultPreservation" : "AssignmentWithoutResultPreservation");
-                    var compile = compilerType.GetMethod("CaptureStatementResults", Instance)!;
-                    var result = (Expression)PowerShellNativeFunctionHost.Invoke(compile, compiler,
-                        new object[] { ast.EndBlock.Statements[0], captureContext, null! })!;
+                    var result = (Expression)native.Invoke("CaptureStatementResults",
+                        ast.EndBlock.Statements[0], captureContext, null!)!;
                     expressions.Add(Expression.Convert(result, typeof(object)));
                 }
                 else
                 {
-                    var compile = compilerType.GetMethod("CompileStatementListWithTraps", Instance)!;
-                    PowerShellNativeFunctionHost.Invoke(compile, compiler,
-                        new object[] { ast.EndBlock.Statements, ast.EndBlock.Traps!, expressions, temporaries });
+                    native.Invoke("CompileStatementListWithTraps",
+                        ast.EndBlock.Statements, ast.EndBlock.Traps!, expressions, temporaries);
                     expressions.Add(Expression.Constant(null, typeof(object)));
                 }
-                var lambda = Expression.Lambda(Expression.Block(typeof(object), temporaries, expressions), nativeContext);
-                var context = Expression.Parameter(typeof(object), "context");
-                var body = Expression.Lambda<Func<object, object?>>(
-                    Expression.Invoke(lambda, Expression.Convert(context, nativeContext.Type)), context).Compile();
-                var points = ((IEnumerable<IScriptExtent>)compilerType.GetField("_sequencePoints", Instance)!.GetValue(compiler)!).ToArray();
-                if (points.Length == 0) points = new[] { ast.EndBlock.Statements[0].Extent };
-                return new NativeCommandRegion(body, points, nativeContext.Type);
+                return native.Compile();
             }
         }
     }

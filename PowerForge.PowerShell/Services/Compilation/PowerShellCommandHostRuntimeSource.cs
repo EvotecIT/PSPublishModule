@@ -11,7 +11,8 @@ internal static class PowerShellCommandHostRuntimeSource
             foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionContext", "PowerShellNativeFunctionContext.Operations",
                 "PowerShellNativeFunctionContext.Output", "PowerShellNativeFunctionContext.Members", "PowerShellNativeFunctionContext.Indexing",
                 "PowerShellNativeFunctionContext.Conversions", "PowerShellNativeFunctionContext.Invocations",
-                "PowerShellNativeFunctionContext.CommandRegions" })
+                "PowerShellNativeFunctionContext.CommandRegions", "PowerShellNativeFunctionContext.Compilation",
+                "PowerShellNativeFunctionContext.Declarations" })
             {
                 using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
                     "PowerForge.PowerShell.Compilation." + name + ".cs")
@@ -38,6 +39,14 @@ internal static class PowerShellCommandHostRuntimeSource
                 ?? throw new InvalidOperationException("Missing script string-parameter runtime source.");
             using var reader = new StreamReader(stream);
             sources.Add("StringParameters.g.cs", "#nullable enable\n" + reader.ReadToEnd());
+        }
+        if (requiresModuleState || typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
+        {
+            using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
+                "PowerForge.PowerShell.Compilation.PowerShellSourceExtent.cs")
+                ?? throw new InvalidOperationException("Missing native source-extent runtime source.");
+            using var reader = new StreamReader(stream);
+            sources.Add("SourceExtent.g.cs", "#nullable enable\n" + reader.ReadToEnd());
         }
         if (requiresModuleState)
             sources.Add("StatementErrors.g.cs", PowerShellStatementErrorRuntimeSource.Render());

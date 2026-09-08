@@ -18,7 +18,6 @@ internal static class PowerShellArraySemanticBinder
             return null;
         }
         var windowsPowerShell = semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51;
-        var sourceLines = document.Text.Replace("\r\n", "\n").Split('\n');
         var items = new List<PowerShellBoundNativeCollectionItem>();
         var singlePureExpression = false;
         foreach (var statement in syntax.SubExpression.Statements)
@@ -41,8 +40,7 @@ internal static class PowerShellArraySemanticBinder
                     nativeSetSequencePoint: mutation.Value is not null && mutation.NativeSetSequencePoint);
             if (syntax.SubExpression.Statements.Count == 1 && command?.Expression is ArrayLiteralAst)
                 return value;
-            var sourceText = string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
-                .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
+            var sourceText = PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Extent));
             items.Add(new PowerShellBoundNativeCollectionItem(PowerShellSourceParser.GetSpan(document, statement.Extent),
                 sourceText, value, PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(statement, windowsPowerShell)));
         }

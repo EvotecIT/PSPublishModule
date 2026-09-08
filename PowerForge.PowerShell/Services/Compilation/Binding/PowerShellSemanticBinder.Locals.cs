@@ -22,7 +22,7 @@ internal sealed partial class PowerShellSemanticBinder
         foreach (var assignment in assignments)
         {
             if (excludedTailOffset.HasValue && assignment.Extent.StartOffset >= excludedTailOffset.Value) continue;
-            var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
+            var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
             if (variable is null) continue;
             var name = variable.VariablePath.UserPath;
             if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(assignment, capabilities, out _) ||
@@ -174,7 +174,7 @@ internal sealed partial class PowerShellSemanticBinder
         foreach (var assignment in assignments)
         {
             if (assignment.Extent.StartOffset <= first.Extent.StartOffset) continue;
-            var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
+            var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
             if (variable is null || !variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
             if (!assignment.Operator.ToString().Equals("Equals", StringComparison.Ordinal)) return false;
             if (IsNullAssignment(assignment)) continue;

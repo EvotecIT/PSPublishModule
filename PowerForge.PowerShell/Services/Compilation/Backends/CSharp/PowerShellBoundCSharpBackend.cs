@@ -209,9 +209,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     .Append(EmitExpression(assignment.Value)).AppendLine(");");
                 return;
             case PowerShellLoweredNativeVariableAssignmentStatement assignment:
-                builder.Append(prefix).Append("__nativeFunction.SetVariable(")
-                    .Append(PowerShellCSharpLiteral.QuoteString(assignment.Name)).Append(", ")
-                    .Append(EmitExpression(assignment.Value)).AppendLine(");");
+                builder.Append(prefix).Append(EmitNativeAssignmentTarget(assignment.Target,
+                    assignment.Operation, assignment.Value)).AppendLine(";");
                 return;
             case PowerShellLoweredIndexAssignmentStatement assignment:
                 builder.Append(prefix).Append(EmitIndexAssignment(assignment)).AppendLine(";");
@@ -393,7 +392,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.Operation,
                 mutation.Value,
                 mutation.NormalizeNullString,
-                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.Span, mutation.NativeSourceText, mutation.NativeSetSequencePoint),
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.Span, mutation.NativeSourceText, mutation.NativeSetSequencePoint, mutation.NativeAssignmentTarget),
             PowerShellLoweredArrayExpression array => EmitArray(array),
             PowerShellLoweredNativeMemberExpression memberRead => EmitNativeMember(memberRead),
             PowerShellLoweredNativeCommandExpression nativeCommand => EmitNativeCommandCapture(nativeCommand),
@@ -612,12 +611,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
         bool preserveStatementErrors,
         PowerShellLoweredNativeVariableExpression? nativeTargetRead = null,
         SourceSpan? nativeSpan = null,
-        string nativeSourceText = "", bool nativeSetSequencePoint = true)
+        string nativeSourceText = "", bool nativeSetSequencePoint = true, PowerShellNativeAssignmentTarget? nativeAssignmentTarget = null)
     {
         if (nativeTargetRead is not null)
             return nativeSetSequencePoint ? EmitNativeMutation(nativeTargetRead, operation, value,
-                nativeSpan ?? throw new InvalidOperationException("Native mutation source span is required."), nativeSourceText) :
-                EmitNativeMutationValue(nativeTargetRead, operation, value);
+                nativeSpan ?? throw new InvalidOperationException("Native mutation source span is required."), nativeSourceText, nativeAssignmentTarget) :
+                EmitNativeMutationValue(nativeTargetRead, operation, value, nativeAssignmentTarget);
         var identifier = PowerShellCSharpSymbolRenderer.Identifier(target.Name);
         if (integralSemantics != PowerShellIntegralMutationSemantics.None || preserveStatementErrors)
             return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics, preserveStatementErrors);

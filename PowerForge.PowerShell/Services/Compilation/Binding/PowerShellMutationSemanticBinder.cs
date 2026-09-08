@@ -97,8 +97,14 @@ internal static partial class PowerShellMutationSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
-        var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left);
-        if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target)) return null;
+        var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
+        if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target))
+        {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2417", "Native assignment target has no bound storage symbol: " + variable?.VariablePath.UserPath,
+                    PowerShellSourceParser.GetSpan(document, syntax.Left.Extent)));
+            return null;
+        }
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             return BindNativeAssignment(document, syntax, variable, target, bindExpression, diagnostics);
         if (!PowerShellAssignmentTargetPolicy.PreservesConstraint(syntax.Left, target.Type))

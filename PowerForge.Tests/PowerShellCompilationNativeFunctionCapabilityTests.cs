@@ -55,9 +55,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Theory]
-    [InlineData("'value' > 'redirected.txt'")]
     [InlineData("trap { continue }; 'value'")]
-    [InlineData("'first'; 'value' > 'redirected.txt'")]
     public void NativeFunctionBinding_RetainsUnbridgedCollectionStatementEffects(string body)
     {
         var document = PowerShellSourceParser.Parse(

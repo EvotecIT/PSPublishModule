@@ -25,17 +25,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.BackgroundPipelines", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(3, result.Manifest!.CompiledMethods);
         var units = result.Manifest.UnitDispositionLedger!.Entries;
-        Assert.All(units.Where(unit => unit.Name != "Invoke-LegacyBackground2"), unit =>
+        Assert.All(units, unit =>
         {
             Assert.True(unit.UsesNativeFunctionBinding);
             Assert.False(unit.RetainedHostedSource);
         });
-        // Explicit local declarations still require the separate native constraint contract.
         var constrained = Assert.Single(units, unit => unit.Name == "Invoke-LegacyBackground2");
-        Assert.False(constrained.EmittedClrMethod);
-        Assert.True(constrained.RetainedHostedSource);
+        Assert.True(constrained.EmittedClrMethod);
+        Assert.False(constrained.RetainedHostedSource);
         const string probe = """
             foreach($shape in 0,1,2) {
                 $name='Invoke-LegacyBackground'+$shape
@@ -56,7 +55,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.RootPath, "background-routes-compiled");
         Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
-        Assert.True(original.StandardOutput == compiled.StandardOutput, "Original: " + original.StandardOutput + "\nGenerated: " + compiled.StandardOutput);
+        Assert.True(original.StandardOutput == compiled.StandardOutput, "Original: " + original.StandardOutput + "\nGenerated: " + compiled.StandardOutput + "\nErrors: " + compiled.StandardError);
         Assert.Equal(original.StandardError, compiled.StandardError);
     }
 

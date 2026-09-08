@@ -22,18 +22,23 @@ internal sealed class PowerShellBoundNativeVariableExpression : PowerShellBoundE
     internal bool DirectLocal { get; }
 }
 
-/// <summary>Writes an unconstrained assignment through the native variable owner, including existing parameter constraints.</summary>
+/// <summary>Executes an assignment through invocation-owned storage and its existing constraints.</summary>
 internal sealed class PowerShellBoundNativeVariableAssignmentStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundNativeVariableAssignmentStatement(SourceSpan span, string name, PowerShellBoundExpression value)
+    internal PowerShellBoundNativeVariableAssignmentStatement(SourceSpan span, string name, PowerShellBoundExpression value,
+        PowerShellBoundMutationOperator operation, PowerShellNativeAssignmentTarget target)
         : base(span, value.Effects | PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError,
             value.Capabilities | PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost |
             PowerShellRequiredCapability.PowerShellStatementErrors)
     {
         Name = name;
         Value = value;
+        Target = target;
+        Operation = operation;
     }
 
     internal string Name { get; }
     internal PowerShellBoundExpression Value { get; }
+    internal PowerShellNativeAssignmentTarget Target { get; }
+    internal PowerShellBoundMutationOperator Operation { get; }
 }

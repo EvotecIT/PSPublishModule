@@ -15,8 +15,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
     }
 
     internal static string SourceLines(ParsedSourceDocument document, SourceSpan span)
-        => string.Join("\n", document.Text.Replace("\r\n", "\n").Split('\n')
-            .Skip(span.StartLine - 1).Take(span.EndLine - span.StartLine + 1));
+        => PowerShellSourceParser.GetSourceLines(document, span);
 
     internal static bool IsInsideExpandableString(Ast syntax)
     {
@@ -57,7 +56,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
         var declaration = function.Body.ParamBlock is { } block
             ? string.Join("\n", block.Attributes.Select(static attribute => attribute.Extent.Text).Concat(new[] { block.Extent.Text }))
             : "param(" + string.Join(",", parameters.Select(static parameter => parameter.Extent.Text)) + ")";
-        return new PowerShellNativeFunctionBinding(declaration, PowerShellNativeVariableAnalysis.Analyze(function));
+        var locals = PowerShellNativeVariableAnalysis.Analyze(function);
+        return new PowerShellNativeFunctionBinding(declaration, locals,
+            PowerShellNativeVariableAnalysis.FindLocalTypeDeclarations(function, locals));
     }
 
     internal static Ast? FindNativePipelineOperator(FunctionDefinitionAst function, bool includeCommandRedirections = true)

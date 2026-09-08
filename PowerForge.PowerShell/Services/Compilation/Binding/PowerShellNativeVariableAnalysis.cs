@@ -32,4 +32,15 @@ internal static class PowerShellNativeVariableAnalysis
 
     internal static bool IsDirectLocal(VariableExpressionAst variable)
         => (int)TupleIndex.GetValue(variable)! >= 0 && !(bool)Automatic.GetValue(variable)!;
+
+    /// <summary>Retains the authored type metadata needed by the already-analyzed optimized slots.</summary>
+    internal static string[] FindLocalTypeDeclarations(FunctionDefinitionAst function, IEnumerable<string> localNames)
+    {
+        var names = localNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return function.Body.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false)
+            .Cast<AssignmentStatementAst>().Where(assignment => assignment.Left is AttributedExpressionAst &&
+                PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } variable &&
+                IsDirectLocal(variable) && names.Contains((variable.VariablePath.IsLocal ? variable.VariablePath.UserPath.Substring(6) : variable.VariablePath.UserPath)))
+            .Select(static assignment => assignment.Left.Extent.Text).Distinct(StringComparer.Ordinal).ToArray();
+    }
 }

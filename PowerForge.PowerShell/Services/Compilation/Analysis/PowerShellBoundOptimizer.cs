@@ -102,7 +102,7 @@ internal sealed class PowerShellBoundOptimizer
             PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellBoundModuleVariableAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
             PowerShellBoundNativeVariableAssignmentStatement assignment => new PowerShellBoundNativeVariableAssignmentStatement(
-                assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
+                assignment.Span, assignment.Name, OptimizeExpression(assignment.Value), assignment.Operation, assignment.Target),
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
                 returned.Span, returned.Expression is null ? null : OptimizeExpression(returned.Expression), returned.EmitsValue),
             PowerShellBoundExpressionStatement expression => new PowerShellBoundExpressionStatement(
@@ -192,7 +192,7 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundMutationExpression mutation)
             return new PowerShellBoundMutationExpression(mutation.Span, mutation.Target, mutation.TargetClrType, mutation.Operation,
                 mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString,
-                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.NativeSourceText, mutation.NativeSetSequencePoint);
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.NativeSourceText, mutation.NativeSetSequencePoint, mutation.NativeAssignmentTarget);
         if (expression is PowerShellBoundArrayExpression array)
             return new PowerShellBoundArrayExpression(array.Span, array.Type.ClrType, array.Kind, array.Elements.Select(OptimizeExpression).ToArray());
         if (expression is PowerShellBoundNativeMemberExpression memberRead)

@@ -19,11 +19,16 @@ internal sealed class PowerShellLoweredNativeVariableExpression : PowerShellLowe
 
 internal sealed class PowerShellLoweredNativeVariableAssignmentStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredNativeVariableAssignmentStatement(SourceSpan span, string name, PowerShellLoweredExpression value) : base(span)
+    internal PowerShellLoweredNativeVariableAssignmentStatement(SourceSpan span, string name, PowerShellLoweredExpression value,
+        PowerShellBoundMutationOperator operation, PowerShellNativeAssignmentTarget target) : base(span)
     {
         Name = name;
         Value = value;
+        Target = target;
+        Operation = operation;
     }
     internal string Name { get; }
     internal PowerShellLoweredExpression Value { get; }
+    internal PowerShellNativeAssignmentTarget Target { get; }
+    internal PowerShellBoundMutationOperator Operation { get; }
 }

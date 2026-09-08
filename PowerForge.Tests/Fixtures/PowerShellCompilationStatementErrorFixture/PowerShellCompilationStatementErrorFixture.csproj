@@ -21,5 +21,6 @@
     <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellNativeFunction*.cs" Link="Runtime\%(Filename)%(Extension)" />
     <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellStatementErrorContext*.cs" Link="Runtime\%(Filename)%(Extension)" />
     <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellModuleSessionState.cs" Link="Runtime\PowerShellModuleSessionState.cs" />
+    <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellSourceExtent.cs" Link="Runtime\PowerShellSourceExtent.cs" />
   </ItemGroup>
 </Project>

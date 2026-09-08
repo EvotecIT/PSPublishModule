@@ -23,7 +23,7 @@ internal sealed partial class PowerShellSemanticBinder
         allowNonTerminalSuccessOutput |= capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
         PowerShellSemanticSymbolBinding? assignedSymbol = null;
         if (statement is AssignmentStatementAst authoredAssignment &&
-            PowerShellAssignmentTargetPolicy.FindDirectVariable(authoredAssignment.Left) is { } assignedVariable)
+            PowerShellAssignmentTargetPolicy.FindDirectVariable(authoredAssignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } assignedVariable)
             symbols.TryGetValue(assignedVariable.VariablePath.UserPath, out assignedSymbol);
         var priorValueState = assignedSymbol?.ValueState;
         var bound = BindStatementCore(document, statement, symbols, functions, diagnostics, isTerminal,
@@ -45,8 +45,10 @@ internal sealed partial class PowerShellSemanticBinder
             !assignedSymbol.Type.ClrType.IsValueType && assignedSymbol.ValueState != priorValueState)
             assignedSymbol.ForgetValueState();
         var sourceLines = document.Text.Replace("\r\n", "\n").Split('\n');
-        var sourceText = string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
-            .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
+        var sourceText = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)
+            ? PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Extent))
+            : string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
+                .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
         if (bound is PowerShellBoundThrowStatement thrown)
             bound = new PowerShellBoundThrowStatement(thrown.Span, thrown.Expression, true, document.Path, sourceText);
         return new PowerShellBoundStatementErrorBoundary(new PowerShellBoundBlock(bound.Span, new[] { bound }), document.Path, sourceText,
@@ -73,29 +75,24 @@ internal sealed partial class PowerShellSemanticBinder
             if (assignment.Right is ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-                PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } nativeVariable)
+                PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } nativeVariable)
             {
-                if (assignment.Left is not VariableExpressionAst)
+                if (assignment.Left is VariableExpressionAst &&
+                    PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator) is { } nativeOperation)
                 {
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2417",
-                        "Native variable constraints and compound writes require their native assignment operation contract.",
-                        PowerShellSourceParser.GetSpan(document, assignment.Extent)));
-                    return null;
-                }
-                if (assignment.Operator != TokenKind.Equals)
-                {
-                    var nativeMutation = BindExpression(document, assignment, symbols, functions, diagnostics,
+                    var nativeValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
                         targetFramework: targetFramework, capabilities: capabilities);
-                    return nativeMutation is null ? null : new PowerShellBoundExpressionStatement(
-                        PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeMutation, emitsOutput: false);
+                    if (nativeValue is null || nativeValue.Type.ClrType == typeof(void)) return null;
+                    return new PowerShellBoundNativeVariableAssignmentStatement(
+                        PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeVariable.VariablePath.UserPath,
+                        nativeValue, nativeOperation, new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text, document.Path,
+                            document.Text, PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
+                            assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset));
                 }
-                var nativeValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
+                var nativeMutation = BindExpression(document, assignment, symbols, functions, diagnostics,
                     targetFramework: targetFramework, capabilities: capabilities);
-                if (nativeVariable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase))
-                    return nativeValue is null ? null : new PowerShellBoundExpressionStatement(
-                        PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeValue, emitsOutput: false);
-                return nativeValue is null ? null : new PowerShellBoundNativeVariableAssignmentStatement(
-                    PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeVariable.VariablePath.UserPath, nativeValue);
+                return nativeMutation is null ? null : new PowerShellBoundExpressionStatement(
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeMutation, emitsOutput: false);
             }
             if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
                     assignment,
@@ -124,7 +121,7 @@ internal sealed partial class PowerShellSemanticBinder
                     moduleVariableName,
                     moduleValue);
             }
-            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } scopedTarget &&
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } scopedTarget &&
                 IsRuntimeOwnedScope(scopedTarget.VariablePath.UserPath))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -133,7 +130,7 @@ internal sealed partial class PowerShellSemanticBinder
                     PowerShellSourceParser.GetSpan(document, assignment.Extent)));
                 return null;
             }
-            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } automatic &&
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } automatic &&
                 PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(automatic.VariablePath.UserPath))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -142,7 +139,7 @@ internal sealed partial class PowerShellSemanticBinder
                     PowerShellSourceParser.GetSpan(document, assignment.Extent)));
                 return null;
             }
-            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } discarded &&
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } discarded &&
                 discarded.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase))
             {
                 if (assignment.Operator.ToString() != "Equals")

@@ -47,9 +47,7 @@ namespace PowerForge.Generated.Runtime
         {
             EnsureActive();
             if (directLocal && TryReadLocalValue(name, out var localValue)) return localValue;
-            var lines = sourceText.Replace("\r\n", "\n").Split('\n');
-            var extent = new ScriptExtent(new ScriptPosition(file, line, column, lines[0]),
-                new ScriptPosition(file, endLine, endColumn, lines[lines.Length - 1]));
+            var extent = PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, sourceText);
             var variable = new VariableExpressionAst(extent, name, splatted: false);
             if (inExpandableString)
                 // This metadata-only parent preserves StrictMode 1's interpolation exception. It is never evaluated.

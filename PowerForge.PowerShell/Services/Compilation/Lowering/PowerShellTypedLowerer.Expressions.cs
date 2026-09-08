@@ -123,7 +123,7 @@ internal sealed partial class PowerShellTypedLowerer
                 mutation.NormalizeNullString,
                 mutation.IntegralSemantics, mutation.PreserveStatementErrors,
                 mutation.NativeTargetRead is null ? null : (PowerShellLoweredNativeVariableExpression)
-                    LowerExpression(mutation.NativeTargetRead, functions, names, targetCapabilities), mutation.NativeSourceText, mutation.NativeSetSequencePoint),
+                    LowerExpression(mutation.NativeTargetRead, functions, names, targetCapabilities), mutation.NativeSourceText, mutation.NativeSetSequencePoint, mutation.NativeAssignmentTarget),
             PowerShellBoundArrayExpression array => new PowerShellLoweredArrayExpression(
                 array.Span,
                 array.Type.ClrType,

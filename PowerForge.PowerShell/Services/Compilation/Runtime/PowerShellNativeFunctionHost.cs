@@ -39,11 +39,11 @@ namespace PowerForge.Generated.Runtime
             Action<PowerShellNativeFunctionContext>? begin,
             Action<PowerShellNativeFunctionContext>? process,
             Action<PowerShellNativeFunctionContext>? end,
-            Action<PowerShellNativeFunctionContext>? clean = null)
+            Action<PowerShellNativeFunctionContext>? clean = null, string[]? localTypeDeclarations = null)
         {
             if (module == null) throw new ArgumentNullException(nameof(module));
             if (localNames == null) throw new ArgumentNullException(nameof(localNames));
-            return module.NewBoundScriptBlock(CreateCore(parameterDeclaration, sourcePath, localNames, begin, process, end, clean));
+            return module.NewBoundScriptBlock(CreateCore(parameterDeclaration, sourcePath, localNames, begin, process, end, clean, localTypeDeclarations));
         }
 
         /// <summary>Creates a fresh function block containing parameter metadata and compiled callbacks.</summary>
@@ -59,7 +59,7 @@ namespace PowerForge.Generated.Runtime
             Action<PowerShellNativeFunctionContext>? begin,
             Action<PowerShellNativeFunctionContext>? process,
             Action<PowerShellNativeFunctionContext>? end,
-            Action<PowerShellNativeFunctionContext>? clean)
+            Action<PowerShellNativeFunctionContext>? clean, string[]? localTypeDeclarations = null)
         {
             if (parameterDeclaration == null) throw new ArgumentNullException(nameof(parameterDeclaration));
             if (clean != null && typeof(ScriptBlockAst).GetProperty("CleanBlock") == null)
@@ -75,12 +75,22 @@ namespace PowerForge.Generated.Runtime
             // ParamBlock.Extent excludes its function attributes, including CmdletBinding.
             var source = parameterDeclaration;
             var localDeclarations = string.Empty;
+            var typedLocals = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var typedDeclarations = string.Empty;
+            foreach (var declaration in localTypeDeclarations ?? Array.Empty<string>())
+            {
+                var validated = ValidateLocalTypeDeclaration(declaration, localNames, out var name);
+                typedLocals.Add(name);
+                typedDeclarations += "; " + validated + " = $null";
+            }
             foreach (var name in localNames)
             {
                 if (string.IsNullOrEmpty(name) || name.IndexOf(':') >= 0)
                     throw new ArgumentException("Native local storage requires unqualified variable names.", nameof(localNames));
-                localDeclarations += "; ${" + name.Replace("`", "``").Replace("}", "`}") + "} = $null";
+                if (!typedLocals.Contains(name))
+                    localDeclarations += "; ${" + name.Replace("`", "``").Replace("}", "`}") + "} = $null";
             }
+            localDeclarations += typedDeclarations;
             if (begin != null) source += "\nbegin { throw 'Compiled begin callback was not installed.' }";
             if (process != null) source += "\nprocess { throw 'Compiled process callback was not installed.' }";
             if (end != null || begin == null && process == null)
@@ -98,6 +108,30 @@ namespace PowerForge.Generated.Runtime
                 contract.Install(data, "EndBlock", end ?? (_ => { }));
             if (clean != null) contract.Install(data, "CleanBlock", clean);
             return script;
+        }
+
+        private static string ValidateLocalTypeDeclaration(string declaration, string[] localNames, out string name)
+        {
+            var ast = Parse(declaration + " = $null", null);
+            if (ast.ParamBlock != null || ast.BeginBlock != null || ast.ProcessBlock != null ||
+                ast.DynamicParamBlock != null || ast.EndBlock?.Statements.Count != 1 ||
+                ast.EndBlock.Statements[0] is not AssignmentStatementAst assignment || assignment.Left.Extent.Text != declaration)
+                throw new ArgumentException("Native local type metadata requires one assignment target.", nameof(declaration));
+            ExpressionAst target = assignment.Left;
+            if (target is not AttributedExpressionAst)
+                throw new ArgumentException("Native local type metadata requires an attributed target.", nameof(declaration));
+            while (target is AttributedExpressionAst attribute)
+            {
+                if (attribute.Attribute is not TypeConstraintAst)
+                    throw new ArgumentException("Optimized local storage accepts type constraints only.", nameof(declaration));
+                target = attribute.Child;
+            }
+            if (target is not VariableExpressionAst variable ||
+                !(variable.VariablePath.IsUnqualified || variable.VariablePath.IsLocal) ||
+                !Array.Exists(localNames, name => name.Equals((variable.VariablePath.IsLocal ? variable.VariablePath.UserPath.Substring(6) : variable.VariablePath.UserPath), StringComparison.OrdinalIgnoreCase)))
+                throw new ArgumentException("Native local type metadata must name a declared local slot.", nameof(declaration));
+            name = variable.VariablePath.IsLocal ? variable.VariablePath.UserPath.Substring(6) : variable.VariablePath.UserPath;
+            return declaration;
         }
 
         private static ScriptBlockAst Parse(string source, string? sourcePath)

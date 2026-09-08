@@ -9,13 +9,21 @@ internal static partial class PowerShellMutationSemanticBinder
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression, ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
-        if (syntax.Left is not VariableExpressionAst)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2417",
-                "Adding a native variable constraint requires its native constraint-transition contract.", span));
-            return null;
-        }
-        var operation = syntax.Operator switch
+        var operation = GetAssignmentOperator(syntax.Operator);
+        if (operation is null) return null;
+        var value = bindExpression(syntax.Right, null);
+        if (value is null || value.Type.ClrType == typeof(void)) return null;
+        return new PowerShellBoundMutationExpression(span, target.Symbol, typeof(object), operation.Value, value,
+            PowerShellTypeFact.Unknown, false, PowerShellIntegralMutationSemantics.None,
+            nativeTargetRead: PowerShellNativeFunctionBindingPolicy.BindVariable(document, variable),
+            nativeSourceText: PowerShellNativeFunctionBindingPolicy.SourceLines(document, span),
+            nativeAssignmentTarget: new PowerShellNativeAssignmentTarget(
+                syntax.Left.Extent.Text, document.Path, document.Text, PowerShellSourceParser.GetSpan(document, syntax.Left.Extent),
+                syntax.Left.Extent.StartOffset, syntax.Left.Extent.EndOffset));
+    }
+
+    internal static PowerShellBoundMutationOperator? GetAssignmentOperator(TokenKind operation)
+        => operation switch
         {
             TokenKind.Equals => PowerShellBoundMutationOperator.Assign,
             TokenKind.PlusEquals => PowerShellBoundMutationOperator.Add,
@@ -25,12 +33,4 @@ internal static partial class PowerShellMutationSemanticBinder
             TokenKind.RemainderEquals => PowerShellBoundMutationOperator.Remainder,
             _ => (PowerShellBoundMutationOperator?)null
         };
-        if (operation is null) return null;
-        var value = bindExpression(syntax.Right, null);
-        if (value is null || value.Type.ClrType == typeof(void)) return null;
-        return new PowerShellBoundMutationExpression(span, target.Symbol, typeof(object), operation.Value, value,
-            PowerShellTypeFact.Unknown, false, PowerShellIntegralMutationSemantics.None,
-            nativeTargetRead: PowerShellNativeFunctionBindingPolicy.BindVariable(document, variable),
-            nativeSourceText: PowerShellNativeFunctionBindingPolicy.SourceLines(document, span));
-    }
 }

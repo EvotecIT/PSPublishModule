@@ -130,12 +130,7 @@ namespace PowerForge.Generated.Runtime
         }
 
         private static IScriptExtent CreateExtent(string file, int line, int column, int endLine, int endColumn, string text)
-        {
-            var lines = (text ?? string.Empty).Replace("\r\n", "\n").Split('\n');
-            return new ScriptExtent(
-                new ScriptPosition(file, line, column, lines[0]),
-                new ScriptPosition(file, endLine, endColumn, lines[lines.Length - 1]));
-        }
+            => PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, text);
 
         /// <summary>Releases only this invocation's stream-variable registrations.</summary>
         public void Dispose()

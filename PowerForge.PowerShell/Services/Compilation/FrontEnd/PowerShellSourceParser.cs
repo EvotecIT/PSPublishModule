@@ -50,6 +50,18 @@ internal static class PowerShellSourceParser
                 .Append(parameterBlock.Extent.Text));
     }
 
+    /// <summary>Returns complete authored lines, preserving their original line endings for native error metadata.</summary>
+    internal static string GetSourceLines(ParsedSourceDocument document, SourceSpan span)
+    {
+        var start = span.StartOffset - span.StartColumn + 1;
+        var endLineStart = span.EndOffset - span.EndColumn + 1;
+        var end = endLineStart;
+        while (end < document.Text.Length && document.Text[end] is not '\r' and not '\n') end++;
+        if (end < document.Text.Length && document.Text[end++] == '\r' &&
+            end < document.Text.Length && document.Text[end] == '\n') end++;
+        return document.Text.Substring(start, end - start);
+    }
+
     internal static string CreateDocumentId(string path, string? identityRoot, StringComparison? pathComparison = null)
     {
         var fullPath = Path.GetFullPath(path);

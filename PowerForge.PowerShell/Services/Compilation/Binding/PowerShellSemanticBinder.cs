@@ -106,7 +106,7 @@ internal sealed partial class PowerShellSemanticBinder
                 functionDiagnosticStart);
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var runtimeTailStart = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
+        var runtimeTailStart = nativeFunctionBinding is null && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
             ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames, capabilities, _commandResolver)
             : -1;
         var runtimeTailOffset = runtimeTailStart >= 0 ? authoredStatements[runtimeTailStart].Extent.StartOffset : (int?)null;

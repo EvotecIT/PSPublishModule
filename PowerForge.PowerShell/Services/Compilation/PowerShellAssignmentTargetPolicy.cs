@@ -31,13 +31,17 @@ internal static class PowerShellAssignmentTargetPolicy
     };
 
     /// <summary>Returns the directly assigned local variable, including an explicit typed declaration.</summary>
-    internal static VariableExpressionAst? FindDirectVariable(ExpressionAst left)
-        => left switch
+    internal static VariableExpressionAst? FindDirectVariable(ExpressionAst left, bool nativeAttributes = false)
+    {
+        if (nativeAttributes)
+            while (left is AttributedExpressionAst attributed) left = attributed.Child;
+        return left switch
         {
             VariableExpressionAst variable => variable,
             ConvertExpressionAst { Child: VariableExpressionAst variable } => variable,
             _ => null
         };
+    }
 
     /// <summary>Checks that an assignment does not introduce an unrepresented variable-constraint transition.</summary>
     internal static bool PreservesConstraint(ExpressionAst left, PowerShellTypeFact target)

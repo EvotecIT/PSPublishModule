@@ -419,7 +419,7 @@ internal sealed partial class PowerShellTypedLowerer
                 assignment.NormalizeNullString,
                 assignment.IntegralSemantics, assignment.PreserveStatementErrors),
             PowerShellBoundNativeVariableAssignmentStatement assignment => new PowerShellLoweredNativeVariableAssignmentStatement(
-                assignment.Span, assignment.Name, LowerExpression(assignment.Value, functions, names, targetCapabilities)),
+                assignment.Span, assignment.Name, LowerExpression(assignment.Value, functions, names, targetCapabilities), assignment.Operation, assignment.Target),
             PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellLoweredModuleVariableAssignmentStatement(
                 assignment.Span,
                 assignment.Name,

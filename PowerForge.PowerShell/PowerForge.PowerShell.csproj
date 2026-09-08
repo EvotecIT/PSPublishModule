@@ -67,6 +67,7 @@
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellStringParameterAttribute.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellStringParameterAttribute.cs" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellNativeFunction*.cs" LogicalName="PowerForge.PowerShell.Compilation.%(Filename)%(Extension)" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellModuleSessionState.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellModuleSessionState.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellSourceExtent.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellSourceExtent.cs" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Build\PowerShellCommandMetadataNames*.cs" LogicalName="PowerForge.PowerShell.Compilation.%(Filename)%(Extension)" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\CommandMetadata.targets.template" LogicalName="PowerForge.PowerShell.Compilation.CommandMetadata.targets.template" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\CommandMetadataTask.cs.template" LogicalName="PowerForge.PowerShell.Compilation.CommandMetadataTask.cs.template" WithCulture="false" />

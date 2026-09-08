@@ -54,7 +54,9 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 builder.Append("                foreach (var value in ").Append(call).AppendLine(") context.WriteValue(value);");
             else
                 builder.Append("                context.WriteValue(").Append(call).AppendLine(");");
-            builder.AppendLine("            });").AppendLine("    }");
+            builder.Append("            }, localTypeDeclarations: new string[] { ")
+                .Append(string.Join(", ", method.NativeFunctionBinding.LocalTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString)))
+                .AppendLine(" });").AppendLine("    }");
         }
         builder.AppendLine("}");
     }
