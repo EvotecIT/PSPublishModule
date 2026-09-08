@@ -72,7 +72,7 @@ internal static class ArtefactLayoutPathResolver
         return fileName;
     }
 
-    private static bool IsPortableFileName(string fileName)
+    internal static bool IsPortableFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName) ||
             Path.IsPathRooted(fileName) ||

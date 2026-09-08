@@ -139,15 +139,17 @@ internal sealed partial class PowerForgeReleaseService
             if (archive.Entries.Count == 0 || archive.Entries.Count > 50000)
                 return false;
 
+            var entries = archive.Entries
+                .Select(static entry => entry.FullName.Replace('\\', '/'))
+                .ToArray();
             var files = archive.Entries
                 .Where(static entry => !string.IsNullOrWhiteSpace(entry.Name))
                 .Select(static entry => entry.FullName.Replace('\\', '/'))
                 .ToArray();
             if (files.Length == 0 ||
                 files.Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Length ||
+                entries.Any(static name => !IsPortableArchiveEntryPath(name)) ||
                 files.Any(static name =>
-                    IsPortableArchivePathRooted(name) ||
-                    name.Split('/').Any(static segment => segment is "." or "..") ||
                     name.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
                     name.Contains("/.git/", StringComparison.OrdinalIgnoreCase) ||
                     name.StartsWith(".github/", StringComparison.OrdinalIgnoreCase) ||
@@ -195,8 +197,7 @@ internal sealed partial class PowerForgeReleaseService
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (entryPoints.Length != 1 ||
-            IsPortableArchivePathRooted(entryPoints[0]) ||
-            entryPoints[0].Split('/').Any(static segment => segment is "." or "..") ||
+            !IsPortableArchiveEntryPath(entryPoints[0]) ||
             !string.Equals(Path.GetExtension(entryPoints[0]), ".ps1", StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -218,6 +219,28 @@ internal sealed partial class PowerForgeReleaseService
         return path.Length >= 2 &&
                path[1] == ':' &&
                ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'));
+    }
+
+    private static bool IsPortableArchiveEntryPath(string path)
+    {
+        if (IsPortableArchivePathRooted(path))
+            return false;
+
+        string[] segments = path.Split('/');
+        int segmentCount = path.EndsWith("/", StringComparison.Ordinal)
+            ? segments.Length - 1
+            : segments.Length;
+        if (segmentCount == 0)
+            return false;
+
+        for (int index = 0; index < segmentCount; index++)
+        {
+            string segment = segments[index];
+            if (segment is "." or ".." || !ArtefactLayoutPathResolver.IsPortableFileName(segment))
+                return false;
+        }
+
+        return segmentCount == segments.Length || string.IsNullOrEmpty(segments[segments.Length - 1]);
     }
 
     private static PowerForgeModuleArtefactOutputSummary[] ResolveMatchingModuleArtefactOutputs(
