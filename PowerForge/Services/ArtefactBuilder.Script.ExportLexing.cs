@@ -94,12 +94,16 @@ public sealed partial class ArtefactBuilder
             if (char.IsWhiteSpace(current))
                 continue;
 
-            var callOperator = previousSignificant is '&' or '.' &&
+            var pipelineChainBoundary = IsPipelineChainBoundary(source, previousSignificantIndex);
+            var callOperator = !pipelineChainBoundary &&
+                               previousSignificant is '&' or '.' &&
                                previousSignificantIndex >= 0 &&
                                source.Substring(previousSignificantIndex + 1, index - previousSignificantIndex - 1)
                                    .All(char.IsWhiteSpace);
             var expressionBoundary = previousSignificant is '=' or '(';
-            var expressionPosition = expressionBoundary || RequiresExpressionPlaceholder(source, index);
+            var expressionPosition = pipelineChainBoundary ||
+                                     expressionBoundary ||
+                                     RequiresExpressionPlaceholder(source, index);
             if ((previousSignificant == '\0' || previousSignificant is ';' or '{' || expressionPosition || callOperator) &&
                 (StartsWithCommandName(source.Substring(index), "Export-ModuleMember") ||
                  StartsWithCommandName(source.Substring(index), "Microsoft.PowerShell.Core\\Export-ModuleMember")))
@@ -116,6 +120,16 @@ public sealed partial class ArtefactBuilder
         commandStart = -1;
         preserveExpression = false;
         return false;
+    }
+
+    private static bool IsPipelineChainBoundary(string source, int operatorEndIndex)
+    {
+        if (operatorEndIndex <= 0)
+            return false;
+
+        char operatorCharacter = source[operatorEndIndex];
+        return operatorCharacter is '&' or '|' &&
+               source[operatorEndIndex - 1] == operatorCharacter;
     }
 
     private static bool IsQuotedExportCommandName(string source, int quoteStart)
@@ -182,6 +196,12 @@ public sealed partial class ArtefactBuilder
 
         if (prefix[prefix.Length - 1] is '=' or '(')
             return true;
+
+        if (prefix.EndsWith("&&", StringComparison.Ordinal) ||
+            prefix.EndsWith("||", StringComparison.Ordinal))
+        {
+            return true;
+        }
 
         const string returnKeyword = "return";
         if (!prefix.EndsWith(returnKeyword, StringComparison.OrdinalIgnoreCase))

@@ -44,6 +44,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("safe/trailing-space ", false)]
     [InlineData("safe/bad?.dll", false)]
     [InlineData("safe/control\u0001.dll", false)]
+    [InlineData("scripts\\Tool.ps1", false)]
     public void CreateModuleAssetEntries_RejectsNonPortableScriptPackedEntryOnEveryHost(
         string unsafeEntryName,
         bool directoryEntry)
@@ -64,6 +65,62 @@ public sealed partial class PowerForgeReleaseServiceTests
                     writer.Write("unsafe");
                 }
             }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    CreateScriptPackedPlan(root, scriptPackedPath, "Company.Tools.ps1"),
+                    new[] { scriptPackedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void CreateModuleAssetEntries_RejectsUnreadableScriptPackedPayload()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                using var writer = new StreamWriter(archive.CreateEntry("Company.Tools.ps1").Open());
+                writer.Write("Get-Date");
+            }
+            ReplaceCompressionMethodWithUnsupportedValue(scriptPackedPath);
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    CreateScriptPackedPlan(root, scriptPackedPath, "Company.Tools.ps1"),
+                    new[] { scriptPackedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void CreateModuleAssetEntries_RejectsOversizedScriptPackedPayloadDeclaration()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                using var writer = new StreamWriter(archive.CreateEntry("Company.Tools.ps1").Open());
+                writer.Write("Get-Date");
+            }
+            ReplaceUncompressedSize(scriptPackedPath, 0x80000001);
 
             PowerForgeReleaseAssetEntry entry = Assert.Single(
                 PowerForgeReleaseService.CreateModuleAssetEntries(
@@ -208,5 +265,61 @@ public sealed partial class PowerForgeReleaseServiceTests
 
         using var writer = new StreamWriter(entry.Open());
         writer.Write("payload");
+    }
+
+    private static void ReplaceCompressionMethodWithUnsupportedValue(string archivePath)
+        => PatchZipHeaders(
+            archivePath,
+            static (bytes, headerOffset, isLocalHeader) =>
+                WriteUInt16LittleEndian(bytes, headerOffset + (isLocalHeader ? 8 : 10), 99));
+
+    private static void ReplaceUncompressedSize(string archivePath, uint size)
+        => PatchZipHeaders(
+            archivePath,
+            (bytes, headerOffset, isLocalHeader) =>
+                WriteUInt32LittleEndian(bytes, headerOffset + (isLocalHeader ? 22 : 24), size));
+
+    private static void PatchZipHeaders(
+        string archivePath,
+        Action<byte[], int, bool> patch)
+    {
+        byte[] bytes = File.ReadAllBytes(archivePath);
+        bool localHeaderPatched = false;
+        bool centralHeaderPatched = false;
+        for (int index = 0; index <= bytes.Length - 28; index++)
+        {
+            bool isSignature = bytes[index] == 0x50 && bytes[index + 1] == 0x4B;
+            if (!isSignature)
+                continue;
+
+            if (bytes[index + 2] == 0x03 && bytes[index + 3] == 0x04)
+            {
+                patch(bytes, index, true);
+                localHeaderPatched = true;
+            }
+            else if (bytes[index + 2] == 0x01 && bytes[index + 3] == 0x02)
+            {
+                patch(bytes, index, false);
+                centralHeaderPatched = true;
+            }
+        }
+
+        Assert.True(localHeaderPatched);
+        Assert.True(centralHeaderPatched);
+        File.WriteAllBytes(archivePath, bytes);
+    }
+
+    private static void WriteUInt16LittleEndian(byte[] bytes, int offset, ushort value)
+    {
+        bytes[offset] = (byte)value;
+        bytes[offset + 1] = (byte)(value >> 8);
+    }
+
+    private static void WriteUInt32LittleEndian(byte[] bytes, int offset, uint value)
+    {
+        bytes[offset] = (byte)value;
+        bytes[offset + 1] = (byte)(value >> 8);
+        bytes[offset + 2] = (byte)(value >> 16);
+        bytes[offset + 3] = (byte)(value >> 24);
     }
 }

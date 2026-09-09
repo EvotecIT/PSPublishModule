@@ -22,6 +22,8 @@ public sealed class ArtefactBuilderScriptExportExpressionTests
     [InlineData(ArtefactType.ScriptPacked, "$ignored = & (\"Microsoft.PowerShell.Core\\Export-ModuleMember\") -Function Get-Value; $script:Tail = 'parenthesized-quoted-call-operator'")]
     [InlineData(ArtefactType.Script, "return Export-ModuleMember -Function Get-Value; $script:Tail = 'return-expression'")]
     [InlineData(ArtefactType.ScriptPacked, "return Export-ModuleMember -Function Get-Value; $script:Tail = 'return-expression'")]
+    [InlineData(ArtefactType.Script, "Write-Output ready && & 'Export-ModuleMember' -Function Get-Value; $script:Tail = 'chained-call-operator'")]
+    [InlineData(ArtefactType.ScriptPacked, "Write-Output ready && & 'Export-ModuleMember' -Function Get-Value; $script:Tail = 'chained-call-operator'")]
     public void Build_RemovesExportInvocationsWithoutBreakingExpressionContexts(
         ArtefactType artefactType,
         string invocation)
@@ -55,6 +57,59 @@ public sealed class ArtefactBuilderScriptExportExpressionTests
             string script = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
             Assert.DoesNotContain("Export-ModuleMember", script, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("$script:Tail", script, StringComparison.Ordinal);
+            System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script, "&&")]
+    [InlineData(ArtefactType.Script, "||")]
+    [InlineData(ArtefactType.ScriptPacked, "&&")]
+    [InlineData(ArtefactType.ScriptPacked, "||")]
+    public void Build_RemovesExportInvocationAfterPipelineChainWithoutBreakingScript(
+        ArtefactType artefactType,
+        string chainOperator)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "PipelineChainExportModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                "@{ RootModule = 'PipelineChainExportModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "function Get-Value { 'ok' }" + Environment.NewLine +
+                $"Write-Output ready {chainOperator} Export-ModuleMember -Function Get-Value " +
+                $"{(chainOperator == "&&" ? "||" : "&&")} Write-Output fallback; $script:Tail = 'preserved'");
+
+            ArtefactBuildResult result = Build(
+                root.FullName,
+                stagingRoot,
+                Path.Combine(root.FullName, "output"),
+                moduleName,
+                artefactType);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                inspectionRoot = Path.Combine(root.FullName, "extracted-chain");
+                ZipFile.ExtractToDirectory(result.OutputPath, inspectionRoot);
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            Assert.DoesNotContain("Export-ModuleMember", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                $"Write-Output ready {chainOperator} $null {(chainOperator == "&&" ? "||" : "&&")} Write-Output fallback",
+                script,
+                StringComparison.Ordinal);
+            Assert.Contains("$script:Tail = 'preserved'", script, StringComparison.Ordinal);
             System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
             Assert.Empty(parseErrors);
         }

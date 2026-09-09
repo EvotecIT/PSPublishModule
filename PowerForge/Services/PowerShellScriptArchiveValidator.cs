@@ -4,6 +4,8 @@ namespace PowerForge;
 
 internal static class PowerShellScriptArchiveValidator
 {
+    private const long MaxUncompressedArchiveBytes = 2L * 1024L * 1024L * 1024L;
+
     internal static bool TryValidate(
         string path,
         string? expectedEntryPoint,
@@ -44,11 +46,18 @@ internal static class PowerShellScriptArchiveValidator
             var archiveEntries = archive.Entries
                 .Select(static entry => new
                 {
+                    Entry = entry,
+                    RawPath = entry.FullName,
                     Path = entry.FullName.Replace('\\', '/'),
                     IsDirectory = string.IsNullOrWhiteSpace(entry.Name),
                     entry.ExternalAttributes
                 })
                 .ToArray();
+            if (archiveEntries.Any(static entry => entry.RawPath.IndexOf('\\') >= 0))
+            {
+                error = "The archive contains a non-portable entry path with a backslash separator.";
+                return false;
+            }
             var entries = archiveEntries.Select(static entry => entry.Path).ToArray();
             var namespaceEntries = archiveEntries
                 .Select(static entry => new
@@ -60,6 +69,10 @@ internal static class PowerShellScriptArchiveValidator
             var files = namespaceEntries
                 .Where(static entry => !entry.IsDirectory)
                 .Select(static entry => entry.Path)
+                .ToArray();
+            var fileEntries = archiveEntries
+                .Where(static entry => !entry.IsDirectory)
+                .Select(static entry => entry.Entry)
                 .ToArray();
 
             if (files.Length == 0)
@@ -120,6 +133,9 @@ internal static class PowerShellScriptArchiveValidator
                 return false;
             }
 
+            if (!TryReadArchivePayloads(fileEntries, out error))
+                return false;
+
             return true;
         }
         catch (Exception exception)
@@ -127,6 +143,50 @@ internal static class PowerShellScriptArchiveValidator
             error = $"The archive could not be validated: {exception.Message}";
             return false;
         }
+    }
+
+    private static bool TryReadArchivePayloads(
+        IReadOnlyList<ZipArchiveEntry> entries,
+        out string? error)
+    {
+        error = null;
+        long declaredBytes = 0;
+        foreach (ZipArchiveEntry entry in entries)
+        {
+            if (entry.Length < 0 || entry.Length > MaxUncompressedArchiveBytes - declaredBytes)
+            {
+                error = "The archive exceeds the 2 GiB uncompressed payload safety limit.";
+                return false;
+            }
+            declaredBytes += entry.Length;
+        }
+
+        var buffer = new byte[81920];
+        long totalBytesRead = 0;
+        foreach (ZipArchiveEntry entry in entries)
+        {
+            long entryBytesRead = 0;
+            using Stream stream = entry.Open();
+            int bytesRead;
+            while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                if (bytesRead > MaxUncompressedArchiveBytes - totalBytesRead)
+                {
+                    error = "The archive exceeds the 2 GiB uncompressed payload safety limit.";
+                    return false;
+                }
+                totalBytesRead += bytesRead;
+                entryBytesRead += bytesRead;
+            }
+
+            if (entryBytesRead != entry.Length)
+            {
+                error = $"The archive entry '{entry.FullName}' could not be read to its declared length.";
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool IsPortableArchivePathRooted(string path)
