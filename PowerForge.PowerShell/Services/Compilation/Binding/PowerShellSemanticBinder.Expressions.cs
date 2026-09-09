@@ -161,6 +161,9 @@ internal sealed partial class PowerShellSemanticBinder
                     span));
                 return null;
             case ScriptBlockExpressionAst scriptBlock:
+                if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                    _nativeScriptBlocks.ContainsKey(ScriptBlockKey(document.DocumentId, scriptBlock.Extent.StartOffset)))
+                    return BindNativeScriptBlock(document, scriptBlock, functions, diagnostics);
                 return PowerShellConstantBooleanDelegateSemanticBinder.Bind(
                     document,
                     scriptBlock,

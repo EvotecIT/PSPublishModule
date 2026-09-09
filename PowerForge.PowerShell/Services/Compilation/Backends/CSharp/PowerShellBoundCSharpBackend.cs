@@ -9,11 +9,13 @@ namespace PowerForge;
 internal sealed partial class PowerShellBoundCSharpBackend
 {
     private PowerShellLoweredFunction? _sourceFunction;
+    private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
         // Each function owns its temporary names and generated helper registry.
-        var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend().EmitFunction(function, program.TargetCapabilities)).ToArray();
+        var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend { _functions = functions }.EmitFunction(function, program.TargetCapabilities)).ToArray();
         return new PowerShellBoundCSharpResult(methods, program.Diagnostics.ToArray());
     }
 
@@ -49,7 +51,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var discardHelper = ContainsDiscardValue(function.Statements)
             ? GetTemporaryIdentifier("discardValue")
             : null;
-        builder.Append(initializer ? "    private " : managedInstance ? "    public " : "    public static ")
+        builder.Append(initializer ? "    private " : function.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock ? "    private static " : managedInstance ? "    public " : "    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
             .Append(function.GeneratedName)
@@ -107,11 +109,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .AppendLine("            finally { this.__moduleActiveCalls--; }")
             .AppendLine("        }");
         builder.Append("    }");
-        var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function);
-        var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
-        var moduleStateVariableNames = PowerShellLoweredModuleStateCollector.Collect(function.Statements);
+        AppendNativeScriptBlocks(builder, function, targetCapabilities, sourceMap);
+        var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function, _functions);
+        var closureStatements = PowerShellLoweredScriptBlockClosure.Enumerate(function, _functions).SelectMany(static body => body.Statements).ToArray();
+        var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(closureStatements);
+        var moduleStateVariableNames = PowerShellLoweredModuleStateCollector.Collect(closureStatements);
         var moduleStateReadSiteCount = regionGraph.ModuleStateReadBoundarySites;
-        var writtenModuleStateVariableNames = PowerShellLoweredModuleStateCollector.CollectWrites(function.Statements);
+        var writtenModuleStateVariableNames = PowerShellLoweredModuleStateCollector.CollectWrites(closureStatements);
         var moduleStateWriteSiteCount = regionGraph.ModuleStateWriteBoundarySites;
         var hostedRegionSiteCount = regionGraph.HostedCommandBoundarySites;
         var supportsBasicCommandQuerySurface =
@@ -387,6 +391,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
+            PowerShellLoweredNativeScriptBlockExpression block => NativeScriptBlockFactoryName(block.Target) + "(__nativeFunction)",
             PowerShellLoweredNativeLifecycleExpression lifecycle => "(__nativeFunction.LifecycleClause == " + lifecycle.Clause.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")",
             PowerShellLoweredVariableExpression variable => RenderStorage(variable.Symbol),
             PowerShellLoweredConstantBooleanDelegateExpression booleanDelegate => EmitConstantBooleanDelegate(booleanDelegate),

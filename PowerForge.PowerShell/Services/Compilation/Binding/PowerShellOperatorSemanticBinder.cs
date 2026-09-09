@@ -15,6 +15,13 @@ internal static partial class PowerShellOperatorSemanticBinder
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         var operation = syntax.Operator.ToString();
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+            operation is "Ilike" or "Clike" or "Inotlike" or "Cnotlike" or "Isplit" or "Csplit")
+        {
+            var nativeLeft = bindOperand(syntax.Left);
+            var nativeRight = bindOperand(syntax.Right);
+            return nativeLeft is null || nativeRight is null ? null : BindNativeBinary(span, operation, nativeLeft, nativeRight, capabilities);
+        }
         if (operation is "Is" or "IsNot")
             return BindTypeTest(syntax, span, operation == "IsNot", bindOperand, diagnostics, targetFramework, capabilities);
         if (operation is "Match" or "Imatch" or "Cmatch" or "Notmatch" or "Inotmatch" or "Cnotmatch")

@@ -50,7 +50,10 @@ internal enum PowerShellBoundBinaryOperator
     NumericUnionLessThanOrEqual,
     NumericUnionGreaterThan,
     NumericUnionGreaterThanOrEqual,
-    NativeStringConcatenate
+    NativeStringConcatenate,
+    NativeLike,
+    NativeNotLike,
+    NativeSplit
 }
 
 internal enum PowerShellBoundUnaryOperator

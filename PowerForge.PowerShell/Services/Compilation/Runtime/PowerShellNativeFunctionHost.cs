@@ -101,7 +101,34 @@ namespace PowerForge.Generated.Runtime
                 // These declarations allocate native tuple slots. The installed callback replaces the entire clause.
                 source += "\nend { if ($false) { " + localDeclarations + " }; throw 'Compiled end callback was not installed.' }";
             if (clean != null) source += "\nclean { if ($false) { " + localDeclarations + " }; throw 'Compiled clean callback was not installed.' }";
-            var script = Parse(source, sourcePath).GetScriptBlock();
+            return InstallCompiledClauses(Parse(source, sourcePath).GetScriptBlock(), begin, process, end, clean);
+        }
+
+        /// <summary>Preserves a literal block's source metadata while replacing all executable clauses with compiled callbacks.</summary>
+        internal static ScriptBlock CreateCompiledScriptBlock(PSModuleInfo module, string sourceDocument, string sourcePath,
+            int startOffset, int endOffset, Action<PowerShellNativeFunctionContext>? begin,
+            Action<PowerShellNativeFunctionContext>? process, Action<PowerShellNativeFunctionContext>? end,
+            Action<PowerShellNativeFunctionContext>? clean)
+        {
+            var document = ParseSelectedDocument(sourceDocument, sourcePath, startOffset, endOffset);
+            var expression = document.Find(node => node is ScriptBlockExpressionAst &&
+                node.Extent.StartOffset == startOffset && node.Extent.EndOffset == endOffset, searchNestedScriptBlocks: true) as ScriptBlockExpressionAst
+                ?? throw new ArgumentException("The compiled script block's source identity is unavailable.", nameof(sourceDocument));
+            var body = expression.ScriptBlock;
+            var cleanBlock = typeof(ScriptBlockAst).GetProperty("CleanBlock")?.GetValue(body, null);
+            if (body.DynamicParamBlock != null ||
+                (body.BeginBlock != null) != (begin != null) ||
+                (body.ProcessBlock != null) != (process != null) ||
+                (body.EndBlock != null) != (end != null) ||
+                (cleanBlock != null) != (clean != null))
+                throw new ArgumentException("Every executable script-block clause requires its compiled callback.", nameof(sourceDocument));
+            return module.NewBoundScriptBlock(InstallCompiledClauses(body.GetScriptBlock(), begin, process, end, clean));
+        }
+
+        private static ScriptBlock InstallCompiledClauses(ScriptBlock script, Action<PowerShellNativeFunctionContext>? begin,
+            Action<PowerShellNativeFunctionContext>? process, Action<PowerShellNativeFunctionContext>? end,
+            Action<PowerShellNativeFunctionContext>? clean)
+        {
             var contract = NativeContract.Shared;
             Invoke(contract.Compile, script, new object[] { false });
             Invoke(contract.Compile, script, new object[] { true });
@@ -138,13 +165,41 @@ namespace PowerForge.Generated.Runtime
             return declaration;
         }
 
+        private static ScriptBlockAst ParseSelectedDocument(string source, string sourcePath, int startOffset, int endOffset)
+        {
+            var document = ParseCore(source, sourcePath, out var errors);
+            if (errors.Length == 0) return document;
+            if (startOffset < 0 || endOffset <= startOffset || endOffset > source.Length)
+                throw new ArgumentOutOfRangeException(nameof(startOffset));
+            // An older host may reject another command's syntax. Reparse only the literal and
+            // its using metadata, retaining every offset and line break. Never compile an AST
+            // whose root contains parser errors, or discard errors inside the selected literal.
+            var isolated = source.ToCharArray();
+            for (var index = 0; index < isolated.Length; index++)
+                if ((index < startOffset || index >= endOffset) && isolated[index] != '\r' && isolated[index] != '\n')
+                    isolated[index] = ' ';
+            var usingStatements = typeof(ScriptBlockAst).GetProperty("UsingStatements")?.GetValue(document, null) as System.Collections.IEnumerable;
+            if (usingStatements != null)
+                foreach (var item in usingStatements)
+                    if (item is Ast statement)
+                        for (var index = statement.Extent.StartOffset; index < statement.Extent.EndOffset; index++)
+                            isolated[index] = source[index];
+            return Parse(new string(isolated), sourcePath);
+        }
+
         private static ScriptBlockAst Parse(string source, string? sourcePath)
+        {
+            var ast = ParseCore(source, sourcePath, out var errors);
+            if (errors.Length != 0) throw new ArgumentException(errors[0].Message, nameof(source));
+            return ast;
+        }
+
+        private static ScriptBlockAst ParseCore(string source, string? sourcePath, out ParseError[] errors)
         {
             // The installed 5.1 engine exposes this overload even though its reference assembly omits it.
             var arguments = new object[] { source, sourcePath!, null!, null! };
             var ast = (ScriptBlockAst)Invoke(NativeContract.Shared.ParseInputWithFile, null, arguments)!;
-            var errors = (ParseError[])arguments[3];
-            if (errors.Length != 0) throw new ArgumentException(errors[0].Message, nameof(source));
+            errors = (ParseError[])arguments[3];
             return ast;
         }
 
@@ -178,7 +233,7 @@ namespace PowerForge.Generated.Runtime
             internal static NativeContract Shared => Cached.Value;
             internal readonly MethodInfo Compile;
             internal readonly FieldInfo Data;
-            internal readonly FieldInfo ExecutionContext, OutputPipe, LocalsTuple;
+            internal readonly FieldInfo ExecutionContext, OutputPipe, LocalsTuple, DefiningFile;
             internal readonly PropertyInfo SessionState;
             internal readonly PropertyInfo CurrentCommandProcessor, ProcessorRuntime;
             internal readonly PropertyInfo ExecutionStatus;
@@ -205,6 +260,8 @@ namespace PowerForge.Generated.Runtime
                     ?? throw new NotSupportedException("PowerShell's function output pipe is unavailable.");
                 LocalsTuple = _functionContext.GetField("_localsTuple", Flags)
                     ?? throw new NotSupportedException("PowerShell's function local storage is unavailable.");
+                DefiningFile = _functionContext.GetField("_file", Flags)
+                    ?? throw new NotSupportedException("PowerShell's defining source file is unavailable.");
                 TryGetLocalVariable = LocalsTuple.FieldType.GetMethod("TryGetLocalVariable", Flags, null,
                     new[] { typeof(string), typeof(bool), typeof(PSVariable).MakeByRefType() }, null)
                     ?? throw new NotSupportedException("PowerShell's native local-variable operation is unavailable.");

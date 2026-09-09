@@ -70,6 +70,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
 
     private static bool RequiresNativeBinding(FunctionDefinitionAst function)
         => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
+           function.Body.Find(static node => node is ScriptBlockExpressionAst block && PowerShellSemanticBinder.IsAssignedScriptBlock(block), searchNestedScriptBlocks: true) is not null ||
            function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null ||
            FindNativePipelineOperator(function) is not null ||
            function.Body.Find(static node => node is BinaryExpressionAst { Operator: TokenKind.Join } or

@@ -43,11 +43,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [MemberData(nameof(StatementErrorHosts))]
-    public void NativeLifecycle_PreservesFailuresReturnsBindingAndClean(string framework, string host)
+    [MemberData(nameof(NativeFunctionAndScriptBlockHosts))]
+    public void NativeLifecycle_PreservesFailuresReturnsBindingAndClean(string framework, string host, bool scriptBlock)
     {
         var clean = framework == "net472" ? "" : "clean { $Trace.Add('clean:'+ $count); 'discarded-clean-output' }";
-        using var fixture = ArtifactFixture.Create("""
+        var source = """
             function Read-LifecycleFault {
                 [CmdletBinding(DefaultParameterSetName='Value')] param(
                     [Parameter(ValueFromPipeline,ParameterSetName='Value')][AllowNull()][string]$Value,
@@ -71,7 +71,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }
             CLEAN_CLAUSE
             }
-            """.Replace("CLEAN_CLAUSE", clean), ".psm1");
+            """.Replace("CLEAN_CLAUSE", clean);
+        if (scriptBlock)
+            source = source.Replace("function Read-LifecycleFault {", "function Get-LifecycleBlock { $block={") + "\n$block\n}";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeLifecycleFailures", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
@@ -79,10 +82,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Manifest!.CompiledMethods == 1, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
         Assert.All(result.Manifest.UnitDispositionLedger!.Entries, unit => Assert.False(unit.RetainedHostedSource));
-        var lifecycle = Assert.Single(result.Manifest.Lifecycles);
-        Assert.Equal(PowerShellCompilationLifecycleExecution.CompiledNativeCallbacks, lifecycle.Execution);
-        Assert.Equal(framework != "net472", lifecycle.HasClean);
-        Assert.Equal(64, lifecycle.SourceSha256.Length);
+        if (scriptBlock) Assert.Single(Assert.Single(result.Manifest.UnitDispositionLedger.Entries).RegionGraph!.ScriptBlocks);
+        else
+        {
+            var lifecycle = Assert.Single(result.Manifest.Lifecycles);
+            Assert.Equal(PowerShellCompilationLifecycleExecution.CompiledNativeCallbacks, lifecycle.Execution);
+            Assert.Equal(framework != "net472", lifecycle.HasClean);
+            Assert.Equal(64, lifecycle.SourceSha256.Length);
+        }
         const string probe = """
             function Describe-LifecycleError($value) {
                 $record=if($value -is [Management.Automation.ErrorRecord]) {$value} else {$value.ErrorRecord}
@@ -108,8 +115,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }
             }
             """;
-        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe, fixture.RootPath, "original-lifecycle-fault");
-        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe, fixture.RootPath, "compiled-lifecycle-fault");
+        var invocationProbe = (scriptBlock ? "$command=Get-LifecycleBlock; " : "$command='Read-LifecycleFault'; ") +
+            probe.Replace("| Read-LifecycleFault", "| & $command");
+        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + invocationProbe, fixture.RootPath, "original-lifecycle-fault");
+        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + invocationProbe, fixture.RootPath, "compiled-lifecycle-fault");
         Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);

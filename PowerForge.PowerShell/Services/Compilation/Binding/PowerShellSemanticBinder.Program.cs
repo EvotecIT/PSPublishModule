@@ -24,6 +24,7 @@ internal sealed partial class PowerShellSemanticBinder
         var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
         var regionOpportunities = new Dictionary<string, PowerShellBoundRegionOpportunity>(StringComparer.Ordinal);
         var declarations = DeclareFunctions(orderedDocuments, diagnostics);
+        declarations = DeclareNativeScriptBlocks(declarations, capabilities);
         if (_runtimeFreeModule is not null)
             declarations = declarations.Append(new FunctionDeclaration(_runtimeFreeModule.Document, _runtimeFreeModule.Initializer,
                 new PowerShellSymbolId(PowerShellSymbolKind.ModuleInitializer, _runtimeFreeModule.Document.DocumentId,
@@ -88,7 +89,7 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
                         ? regionOpportunities
                         : null,
-                    nativeInvocationClosure.Contains(declaration.Syntax.Name));
+                    declaration.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock || nativeInvocationClosure.Contains(declaration.Syntax.Name));
                 if (bound is not null && numericErrorObservedCallees.Contains(declaration.Syntax.Name) &&
                     PowerShellRuntimeExceptionCatchPolicy.RequiresNumericErrorWrapping(bound))
                 {

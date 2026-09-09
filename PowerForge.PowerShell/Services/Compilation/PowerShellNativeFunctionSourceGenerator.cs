@@ -45,31 +45,17 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 .AppendLine(" });")
                 .AppendLine("            void Invoke(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext context, int clause)")
                 .AppendLine("            {");
-            builder.AppendLine("                context.LifecycleClause = clause;");
-            if (method.RequiresPowerShellStatementErrors || method.RequiresPowerShellStopping)
-                builder.Append("                using var statementErrors = global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.CreateNativeFunction(context.FunctionContext, ")
-                    .Append(PowerShellCSharpLiteral.QuoteString(method.SourceName)).AppendLine(");");
-            var arguments = new List<string> { "context" };
-            if (method.RequiresPowerShellStatementErrors) arguments.Add("statementErrors");
-            if (method.RequiresPowerShellStopping) arguments.Add("statementErrors.CheckLoopInterrupts");
-            if (method.RequiresPowerShellStreams)
-                arguments.AddRange(new[] { "context.WriteValue", "context.WriteVerbose", "context.WriteDebug", "context.WriteWarning",
-                    "context.WriteInformation", "context.WriteHost", "context.WriteError" });
-            var call = PowerShellCSharpSymbolRenderer.Identifier(typed.TypeName) + "." + method.GeneratedName +
-                "(" + string.Join(", ", arguments) + ")";
-            if (method.ReturnType == typeof(void).FullName)
-                builder.Append("                ").Append(call).AppendLine(";");
-            else if (method.OutputScalarization == "EnumerateCollection")
-                builder.Append("                foreach (var value in ").Append(call).AppendLine(") context.WriteValue(value);");
-            else
-                builder.Append("                context.WriteValue(").Append(call).AppendLine(");");
+            PowerShellNativeCallbackSource.AppendBody(builder, "                ",
+                PowerShellCSharpSymbolRenderer.Identifier(typed.TypeName) + "." + method.GeneratedName, method.SourceName,
+                method.RequiresPowerShellStatementErrors, method.RequiresPowerShellStopping, method.RequiresPowerShellStreams,
+                method.ReturnType == typeof(void).FullName, method.OutputScalarization == "EnumerateCollection");
             builder.AppendLine("            }").AppendLine("    }");
         }
         builder.AppendLine("}");
     }
 
     private static string Callback(bool present, int clause)
-        => present ? "context => Invoke(context, " + clause.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")" : "null";
+        => PowerShellNativeCallbackSource.Callback(present, clause);
 
     internal static string Registration(PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method)
     {

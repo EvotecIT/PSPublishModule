@@ -5,7 +5,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void CompleteWorkflow_PinnedLookupRetainsUnprovedClosureAndPreservesOrder(string framework, string host)
+    public void CompleteWorkflow_PinnedLookupCompilesClosureAndPreservesOrder(string framework, string host)
     {
         var source = FindCompleteConversionWorkflow("CleanupMonster", "Get-ComputerLookupCandidates.ps1");
         Assert.Equal("d7decce312bf7c17965ac2c018604a2c6c465c268296e9f9ea6bd283b9e98274",
@@ -16,9 +16,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, item => item.Name == "Get-ComputerLookupCandidates");
-        Assert.False(unit.EmittedClrMethod);
-        Assert.True(unit.RetainedHostedSource);
-        Assert.Contains(unit.DiagnosticChain, cause => cause.FeatureId == "scriptblock.typed");
+        Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
+        Assert.False(unit.RetainedHostedSource);
+        var graph = Assert.IsType<PowerShellCompilationRegionGraph>(unit.RegionGraph);
+        var block = Assert.Single(graph.ScriptBlocks);
+        Assert.Equal(1, block.Graph.HostedCommandBoundarySites);
+        Assert.Equal(6, graph.HostedCommandBoundarySites);
+        Assert.Equal(6, unit.RuntimeCommandRegions);
         const string probe = """
             $cases=@(
                 @{}, @{Name=$null;DNSHostName=$null;SamAccountName=$null},

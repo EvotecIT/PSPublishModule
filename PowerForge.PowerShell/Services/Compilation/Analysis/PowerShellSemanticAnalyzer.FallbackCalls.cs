@@ -25,7 +25,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                 PowerShellExecutionDispositionKind.Fallback, "call.binding.unavailable",
                 $"Local function '{unresolvedCall.Target.Name}' did not produce a bound function contract."));
-        var blocked = GetCallees(function, functions).FirstOrDefault(callee =>
+        var blocked = GetDependencies(function, functions).FirstOrDefault(callee =>
             callee.Disposition.Kind != PowerShellExecutionDispositionKind.Typed || GetBlockingDiagnostic(callee, diagnostics) is not null);
         return blocked is null
             ? function

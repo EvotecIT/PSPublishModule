@@ -10,6 +10,9 @@ internal static partial class PowerShellOperatorSemanticBinder
             left.Type.ClrType == typeof(void) || right.Type.ClrType == typeof(void)) return null;
         PowerShellBoundBinaryOperator? bound = operation switch
         {
+            "Ilike" or "Clike" => PowerShellBoundBinaryOperator.NativeLike,
+            "Inotlike" or "Cnotlike" => PowerShellBoundBinaryOperator.NativeNotLike,
+            "Isplit" or "Csplit" => PowerShellBoundBinaryOperator.NativeSplit,
             "Plus" => PowerShellBoundBinaryOperator.Add,
             "Minus" => PowerShellBoundBinaryOperator.Subtract,
             "Multiply" => PowerShellBoundBinaryOperator.Multiply,

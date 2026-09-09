@@ -86,7 +86,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             var edges = program.Functions.SelectMany(function => EnumerateStatements(function.Body)
                     .SelectMany(EnumerateDirectExpressions)
-                    .SelectMany(EnumerateInvocations)
+                    .SelectMany(EnumerateFunctionReferences)
                     .Select(invocation => new PowerShellCallGraphEdge(function.Symbol, invocation.Target, invocation.Span)))
                 .OrderBy(static edge => edge.StableKey, StringComparer.Ordinal)
                 .ToArray();
@@ -115,7 +115,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 // Binding callbacks and their storage belong to the native invocation even when the body is constant.
                 if (function.NativeFunctionBinding is not null)
                     value |= PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost;
-                foreach (var callee in GetCallees(function, lookup)) value |= callee.Capabilities;
+                foreach (var callee in GetDependencies(function, lookup)) value |= callee.Capabilities;
                 return function.WithAnalysis(capabilities: value);
             }, static (left, right) => left.Capabilities == right.Capabilities);
             return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
@@ -131,7 +131,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         RunFixedPoint(functions, (function, lookup) =>
         {
             var value = function.Body.Statements.Aggregate(PowerShellSemanticEffect.None, static (current, statement) => current | statement.Effects);
-            foreach (var callee in GetCallees(function, lookup)) value |= selector(callee);
+            foreach (var callee in GetDependencies(function, lookup)) value |= selector(callee);
             return update(function, value);
         }, (left, right) => selector(left) == selector(right));
         return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
@@ -166,6 +166,24 @@ internal sealed partial class PowerShellSemanticAnalyzer
             .Select(invocation => functions.TryGetValue(invocation.Target.StableKey, out var callee) ? callee : null)
             .Where(static callee => callee is not null)
             .Cast<PowerShellBoundFunction>();
+
+    private static IEnumerable<PowerShellBoundFunction> GetDependencies(
+        PowerShellBoundFunction function,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        => EnumerateStatements(function.Body).SelectMany(EnumerateDirectExpressions)
+            .SelectMany(EnumerateFunctionReferences)
+            .Select(invocation => functions.TryGetValue(invocation.Target.StableKey, out var callee) ? callee : null)
+            .Where(static callee => callee is not null)
+            .Cast<PowerShellBoundFunction>();
+
+    private static IEnumerable<(PowerShellSymbolId Target, SourceSpan Span)> EnumerateFunctionReferences(PowerShellBoundExpression root)
+    {
+        foreach (var expression in EnumerateExpressions(root))
+        {
+            if (expression is PowerShellBoundInvocationExpression call) yield return (call.Target, call.Span);
+            else if (expression is PowerShellBoundNativeScriptBlockExpression block) yield return (block.Target, block.Span);
+        }
+    }
 
     private static PowerShellBoundFunction? GetValidationCallInsideTypeDiscriminatingTry(
         PowerShellBoundFunction function,

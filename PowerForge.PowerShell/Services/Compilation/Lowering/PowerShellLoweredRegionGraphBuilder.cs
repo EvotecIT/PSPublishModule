@@ -15,7 +15,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
         "Error", "Warning", "Verbose", "Debug", "Information", "Host"
     };
 
-    internal static PowerShellCompilationRegionGraph Create(PowerShellLoweredFunction function)
+    internal static PowerShellCompilationRegionGraph Create(PowerShellLoweredFunction function,
+        IReadOnlyDictionary<string, PowerShellLoweredFunction> functions)
     {
         if (function is null) throw new ArgumentNullException(nameof(function));
         var accumulators = new List<RegionAccumulator>();
@@ -65,7 +66,12 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 fact.ModuleStateReadBoundarySites,
                 fact.ModuleStateWriteBoundarySites);
         }
-        return new PowerShellCompilationRegionGraph(regions);
+        var blocks = PowerShellLoweredScriptBlockClosure.DirectBlocks(function).Select(block =>
+        {
+            var child = functions[block.Target.StableKey];
+            return new PowerShellCompilationScriptBlockRegion(child.GeneratedName, block.Span.StartOffset, block.Span.EndOffset, Create(child, functions));
+        }).ToArray();
+        return new PowerShellCompilationRegionGraph(regions, blocks);
     }
 
     internal static PowerShellCompilationRegionGraph Remap(
@@ -111,7 +117,9 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 region.ModuleStateReadBoundarySites,
                 region.ModuleStateWriteBoundarySites);
         }).ToArray();
-        return new PowerShellCompilationRegionGraph(regions);
+        return new PowerShellCompilationRegionGraph(regions, graph.ScriptBlocks.Select(block => new PowerShellCompilationScriptBlockRegion(
+            block.GeneratedMemberName, MapOffset(block.StartOffset, mappings), MapOffset(block.EndOffset, mappings),
+            Remap(block.Graph, authoredDocumentId, authoredText, mappings))).ToArray());
     }
 
     internal static int CountHostedCommandBoundarySites(IEnumerable<PowerShellLoweredStatement> statements)

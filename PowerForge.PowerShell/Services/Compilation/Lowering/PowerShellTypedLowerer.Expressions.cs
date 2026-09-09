@@ -9,6 +9,7 @@ internal sealed partial class PowerShellTypedLowerer
         PowerShellCompilationCapability targetCapabilities)
         => expression switch
         {
+            PowerShellBoundNativeScriptBlockExpression block => new PowerShellLoweredNativeScriptBlockExpression(block.Span, block.Target, block.SourceDocument),
             PowerShellBoundNativeLifecycleExpression lifecycle => new PowerShellLoweredNativeLifecycleExpression(lifecycle.Span, lifecycle.Clause),
             PowerShellBoundLiteralExpression literal => new PowerShellLoweredLiteralExpression(literal.Span, literal.Type.ClrType, literal.Value),
             PowerShellBoundNativeVariableExpression variable => new PowerShellLoweredNativeVariableExpression(

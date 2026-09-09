@@ -250,6 +250,7 @@ internal sealed partial class PowerShellTypedLowerer
                 PowerShellSuccessOutputTypePolicy.Resolve(function, boundFunctions)));
         }
 
+        CloseLoweringDependencies(functions, program, diagnostics);
         return new PowerShellLoweredProgram(
             functions.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
             diagnostics.OrderBy(static diagnostic => diagnostic.Span.DocumentId, StringComparer.Ordinal)
@@ -257,6 +258,25 @@ internal sealed partial class PowerShellTypedLowerer
                 .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
                 .ToArray(),
             targetCapabilities);
+    }
+
+    private static void CloseLoweringDependencies(List<PowerShellLoweredFunction> functions,
+        PowerShellBoundProgram program, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var available = functions.Select(static function => function.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var edge in program.CallGraph)
+            {
+                if (available.Contains(edge.Callee.StableKey) || !available.Remove(edge.Caller.StableKey)) continue;
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSL1015",
+                    $"Compiled dependency '{edge.Callee.Name}' did not produce an eligible lowered body.", edge.Caller.Declaration));
+                changed = true;
+            }
+        } while (changed);
+        functions.RemoveAll(function => !available.Contains(function.Symbol.StableKey));
     }
 
     private static Type? ResolveCollectionElementType(PowerShellBoundFunction function)

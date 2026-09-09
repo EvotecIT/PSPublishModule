@@ -1,0 +1,66 @@
+namespace PowerForge.Tests;
+
+public sealed partial class PowerShellCompilationBoundPipelineTests
+{
+    [Theory]
+    [InlineData("param($__writeOutput) $__writeOutput")]
+    [InlineData("$nested={ param($__writeOutput) $__writeOutput }; $nested")]
+    public void NativeScriptBlocks_RetainOwnersAfterChildLoweringFailure(string body)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Block { $block={ " + body + " }; $block }",
+            TestPath("scriptblock-lowering-fallback.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(result.Emitted.Methods);
+        Assert.Contains(result.Emitted.Diagnostics, diagnostic => diagnostic.Code == "PSL1009");
+        Assert.Contains(result.Emitted.Diagnostics, diagnostic => diagnostic.Code == "PSL1015");
+    }
+
+    [Fact]
+    public void Lowering_RetainsLocalCallersAfterCalleeLoweringFailure()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Child { param([string]$__writeOutput) $__writeOutput; 'after' } " +
+            "function Read-Owner { Read-Child 'ready'; 'last' }", TestPath("call-lowering-fallback.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(result.Emitted.Methods);
+        Assert.Contains(result.Emitted.Diagnostics, diagnostic => diagnostic.Code == "PSL1009");
+        Assert.Contains(result.Emitted.Diagnostics, diagnostic => diagnostic.Code == "PSL1015");
+    }
+
+    [Theory]
+    [InlineData("dynamicparam { } end { 'value' }")]
+    [InlineData("trap { continue }; 'value'")]
+    [InlineData("$nested={ dynamicparam { } end { 'value' } }; & $nested")]
+    public void NativeScriptBlocks_RetainOwnersWithUnsupportedChildBodies(string body)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Block { $block={ " + body + " }; & $block }",
+            TestPath("scriptblock-fallback.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(result.Emitted.Methods);
+        Assert.NotEmpty(result.Emitted.Diagnostics);
+    }
+
+    [Fact]
+    public void NativeScriptBlocks_RejectRuntimeFreeLoweringOfNativeClosures()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Block { $block={ param($Value) $Value }; & $block 'ready' }",
+            TestPath("scriptblock-capabilities.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(result.Emitted.Diagnostics);
+        Assert.Equal(2, result.Emitted.Methods.Length);
+        var strict = new PowerShellTypedLowerer().Lower(result.Analyzed, PowerShellCompilationCapability.None);
+        Assert.Empty(strict.Functions);
+        Assert.Contains(strict.Diagnostics, diagnostic => diagnostic.Code == "PSL1013");
+    }
+}

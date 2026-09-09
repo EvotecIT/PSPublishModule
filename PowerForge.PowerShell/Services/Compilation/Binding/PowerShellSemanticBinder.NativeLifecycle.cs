@@ -45,7 +45,7 @@ internal sealed partial class PowerShellSemanticBinder
         return new PowerShellBoundFunction(functionSymbol, parameters, locals,
             new PowerShellLexicalScope(functionSymbol, parameters.Select(static parameter => parameter.Symbol)
                 .Concat(locals.Select(static local => local.Symbol)).OrderBy(static symbol => symbol.StableKey, StringComparer.Ordinal).ToArray()),
-            PowerShellCommentHelpBinder.Bind(function), PowerShellAdvancedFunctionPolicy.GetAliases(function),
+            PowerShellCommentHelpBinder.Bind(function, functionSymbol), PowerShellAdvancedFunctionPolicy.GetAliases(function),
             PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body), outputType, outputTypeName,
             body, PowerShellTypeFact.Unknown, PowerShellOutputCardinality.Unknown, body.Effects, body.Capabilities,
             PowerShellExecutionDisposition.Typed, nativeBinding);

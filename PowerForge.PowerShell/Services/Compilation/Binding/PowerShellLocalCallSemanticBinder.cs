@@ -116,7 +116,7 @@ internal static class PowerShellLocalCallSemanticBinder
             PowerShellAdvancedFunctionPolicy.IsAdvanced(function),
             PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             declaredReturnType,
-            PowerShellCommentHelpBinder.Bind(function),
+            PowerShellCommentHelpBinder.Bind(function, symbol),
             pipelineLifecycleParameterIndex,
             pipelineLifecycleParameterIndex >= 0 && PowerShellRuntimeFreePipelineLifecyclePolicy.RequiresNonNullCollection(
                 parameters[pipelineLifecycleParameterIndex].Type, capabilities));

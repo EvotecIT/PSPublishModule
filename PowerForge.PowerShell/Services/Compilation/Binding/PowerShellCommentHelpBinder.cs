@@ -7,8 +7,9 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellCommentHelpBinder
 {
-    internal static PowerShellBoundHelpMetadata? Bind(FunctionDefinitionAst function)
-        => Bind(function?.GetHelpContent());
+    internal static PowerShellBoundHelpMetadata? Bind(FunctionDefinitionAst function, PowerShellSymbolId? symbol = null)
+        // Synthetic bodies have no authored function declaration for PowerShell's comment-help token search.
+        => symbol is { Kind: not PowerShellSymbolKind.Function } ? null : Bind(function?.GetHelpContent());
 
     internal static PowerShellBoundHelpMetadata? Bind(CommentHelpInfo? help)
     {

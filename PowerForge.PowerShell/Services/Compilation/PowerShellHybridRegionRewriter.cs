@@ -77,7 +77,7 @@ internal static class PowerShellHybridRegionRewriter
     }
 
     private static bool HasSafeGraph(PowerShellCompilationRegionGraph graph)
-        => graph.Regions.Count == 1 &&
+        => graph.ScriptBlocks.Count == 0 && graph.Regions.Count == 1 &&
            graph.Regions[0].Execution == PowerShellCompilationRegionExecution.Typed &&
            graph.Regions[0].Errors.Count == 0 &&
            graph.Regions[0].HostedCommandBoundarySites == 0 &&

@@ -40,7 +40,7 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.source-span", "The emitted method span does not match the exact authored candidate span.");
 
         var graph = emitted.RegionGraph;
-        if (graph.Regions.Count != 1)
+        if (graph.ScriptBlocks.Count != 0 || graph.Regions.Count != 1)
             return Reject("region.graph-shape", "The candidate did not lower to exactly one canonical region.");
         var region = graph.Regions[0];
         if (region.Execution != PowerShellCompilationRegionExecution.Typed)

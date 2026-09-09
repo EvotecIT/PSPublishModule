@@ -60,7 +60,7 @@ internal sealed class PowerShellBoundRegionOpportunityAnalyzer
         {
             if (!loweredByKey.TryGetValue(opportunity.RegionFunction.Symbol.StableKey, out var loweredFunction))
                 continue;
-            var graph = PowerShellLoweredRegionGraphBuilder.Create(loweredFunction);
+            var graph = PowerShellLoweredRegionGraphBuilder.Create(loweredFunction, loweredByKey);
             foreach (var region in graph.Regions.Where(static region =>
                          region.Execution == PowerShellCompilationRegionExecution.Typed))
             {

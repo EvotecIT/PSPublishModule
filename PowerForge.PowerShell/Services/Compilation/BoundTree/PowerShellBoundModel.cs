@@ -9,7 +9,8 @@ internal enum PowerShellSymbolKind
     PipelineVariable,
     GeneratedCommand,
     ModuleState,
-    ModuleInitializer
+    ModuleInitializer,
+    NativeScriptBlock
 }
 
 /// <summary>

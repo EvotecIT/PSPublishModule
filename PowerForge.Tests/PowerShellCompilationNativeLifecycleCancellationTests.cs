@@ -2,13 +2,16 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    public static IEnumerable<object[]> NativeFunctionAndScriptBlockHosts()
+        => StatementErrorHosts().SelectMany(host => new[] { false, true }.Select(block => new object[] { host[0], host[1], block }));
+
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [MemberData(nameof(StatementErrorHosts))]
-    public void NativeLifecycle_CancellationPreservesFinallyCleanAndRunspaceReuse(string framework, string host)
+    [MemberData(nameof(NativeFunctionAndScriptBlockHosts))]
+    public void NativeLifecycle_CancellationPreservesFinallyCleanAndRunspaceReuse(string framework, string host, bool scriptBlock)
     {
         var clean = framework == "net472" ? "" : "clean { $State.Clean() }";
-        using var fixture = ArtifactFixture.Create("""
+        var source = """
             function Invoke-LifecycleStop {
                 [CmdletBinding()] param([object]$State,[string]$Phase)
                 begin { if($Phase -eq 'begin') { try { $State.Enter(); while($State.Pause) { }; 'begin' } finally { $State.Finish() } } }
@@ -16,7 +19,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 end { if($Phase -eq 'end') { try { $State.Enter(); while($State.Pause) { }; 'end' } finally { $State.Finish() } } }
             CLEAN_CLAUSE
             }
-            """.Replace("CLEAN_CLAUSE", clean), ".psm1");
+            """.Replace("CLEAN_CLAUSE", clean);
+        if (scriptBlock)
+            source = source.Replace("begin {", "$block={ begin {");
+        if (scriptBlock)
+            source += "\n& $block\n}";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeLifecycleStop", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
@@ -24,6 +32,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Manifest!.CompiledMethods == 1, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
         Assert.All(result.Manifest.UnitDispositionLedger!.Entries, unit => Assert.False(unit.RetainedHostedSource));
+        if (scriptBlock) Assert.Single(Assert.Single(result.Manifest.UnitDispositionLedger.Entries).RegionGraph!.ScriptBlocks);
         const string probe = """
             Add-Type -TypeDefinition @'
             using System.Threading;
