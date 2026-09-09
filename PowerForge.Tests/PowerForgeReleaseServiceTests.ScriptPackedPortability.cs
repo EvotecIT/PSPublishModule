@@ -238,6 +238,46 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
+    [InlineData("Company.Tools.ps1", 0x41ED0000)]
+    [InlineData("scripts/", unchecked((int)0x81A40000u))]
+    public void CreateModuleAssetEntries_RejectsContradictoryScriptPackedEntryTypes(
+        string entryName,
+        int externalAttributes)
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry entryPoint = archive.CreateEntry("Company.Tools.ps1");
+                using (var writer = new StreamWriter(entryPoint.Open()))
+                    writer.Write("Get-Date");
+
+                ZipArchiveEntry contradictoryEntry = string.Equals(
+                    entryName,
+                    "Company.Tools.ps1",
+                    StringComparison.Ordinal)
+                    ? entryPoint
+                    : archive.CreateEntry(entryName);
+                contradictoryEntry.ExternalAttributes = externalAttributes;
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    CreateScriptPackedPlan(root, scriptPackedPath, "Company.Tools.ps1"),
+                    new[] { scriptPackedPath }));
+
+            Assert.False(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
     [InlineData("scripts/Invoke:Tools.ps1")]
     [InlineData("CON/Company.Tools.ps1")]
     [InlineData("scripts./Company.Tools.ps1")]

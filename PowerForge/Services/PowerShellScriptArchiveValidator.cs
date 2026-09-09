@@ -87,9 +87,11 @@ internal static class PowerShellScriptArchiveValidator
                 error = "The archive contains file paths that collide on a case-insensitive filesystem.";
                 return false;
             }
-            if (archiveEntries.Any(static entry => HasUnsupportedArchiveEntryType(entry.ExternalAttributes)))
+            if (archiveEntries.Any(static entry => HasUnsupportedArchiveEntryType(
+                    entry.ExternalAttributes,
+                    entry.IsDirectory)))
             {
-                error = "The archive contains a symbolic link or another unsupported entry type.";
+                error = "The archive contains a symbolic link, contradictory file type, or another unsupported entry type.";
                 return false;
             }
             if (namespaceEntries
@@ -227,9 +229,11 @@ internal static class PowerShellScriptArchiveValidator
         return segmentCount == segments.Length || string.IsNullOrEmpty(segments[segments.Length - 1]);
     }
 
-    private static bool HasUnsupportedArchiveEntryType(int externalAttributes)
+    private static bool HasUnsupportedArchiveEntryType(int externalAttributes, bool isDirectory)
     {
         int unixFileType = (externalAttributes >> 16) & 0xF000;
-        return unixFileType is not 0 and not 0x4000 and not 0x8000;
+        return (unixFileType is not 0 and not 0x4000 and not 0x8000) ||
+               (unixFileType == 0x4000 && !isDirectory) ||
+               (unixFileType == 0x8000 && isDirectory);
     }
 }

@@ -120,6 +120,17 @@ internal sealed partial class PowerForgeReleaseService
 
             string archiveName = Path.GetFileNameWithoutExtension(entryPointPath) + ".zip";
             string archivePath = Path.GetFullPath(Path.Combine(fullArchiveRoot, archiveName));
+            bool collidesWithProducedAsset = producedSet.Contains(archivePath);
+            bool collidesWithRecordedOutput = outputs.Any(other =>
+                other is not null &&
+                !ReferenceEquals(other, output) &&
+                ModuleArtefactOutputUsesPath(other, archivePath));
+            if (collidesWithProducedAsset || collidesWithRecordedOutput)
+            {
+                throw new InvalidOperationException(
+                    $"Script release archive '{archivePath}' collides with another produced or recorded artefact output. " +
+                    "Configure a unique Script entry-point name or release archive directory.");
+            }
             if (archiveSources.TryGetValue(archivePath, out string? existingSource) &&
                 !ModuleArtifactPathComparer.Equals(existingSource, outputRoot))
             {
@@ -168,6 +179,14 @@ internal sealed partial class PowerForgeReleaseService
             .OrderBy(static path => path, ModuleArtifactPathComparer)
             .ToArray();
     }
+
+    private static bool ModuleArtefactOutputUsesPath(
+        PowerForgeModuleArtefactOutputSummary output,
+        string path)
+        => (!string.IsNullOrWhiteSpace(output.OutputPath) &&
+            ModuleArtifactPathComparer.Equals(Path.GetFullPath(output.OutputPath), path)) ||
+           (!string.IsNullOrWhiteSpace(output.ReleaseAssetPath) &&
+            ModuleArtifactPathComparer.Equals(Path.GetFullPath(output.ReleaseAssetPath), path));
 
     private static bool TryResolveScriptLayout(
         PowerForgeModuleArtefactOutputSummary output,

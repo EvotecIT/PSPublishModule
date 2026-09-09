@@ -174,6 +174,7 @@ public sealed partial class ArtefactBuilder
     {
         string fullOutputRoot = Path.GetFullPath(outputRoot);
         string fullProjectRoot = Path.GetFullPath(projectRoot);
+        ValidateScriptBuildRootIsOutsideRepositoryMetadata(fullOutputRoot, "output root");
         if (rejectOutputRootContainingProject && IsSameOrBelowPath(fullProjectRoot, fullOutputRoot))
         {
             throw new InvalidOperationException(
@@ -205,6 +206,7 @@ public sealed partial class ArtefactBuilder
         }
 
         string fullScriptRoot = Path.GetFullPath(scriptRoot);
+        ValidateScriptBuildRootIsOutsideRepositoryMetadata(fullScriptRoot, "generated script root");
         if (!string.Equals(
                 fullScriptRoot,
                 fullOutputRoot,
@@ -243,6 +245,7 @@ public sealed partial class ArtefactBuilder
         if (!string.IsNullOrWhiteSpace(requiredModulesRoot))
         {
             string fullRequiredModulesRoot = Path.GetFullPath(requiredModulesRoot!);
+            ValidateScriptBuildRootIsOutsideRepositoryMetadata(fullRequiredModulesRoot, "required modules root");
             ValidateScriptDestinationDoesNotTraverseReparsePoint(
                 fullRequiredModulesRoot,
                 ResolveTrustedScriptDestinationBoundary(fullRequiredModulesRoot, fullOutputRoot, fullTemporaryBuildRoot),
@@ -273,4 +276,39 @@ public sealed partial class ArtefactBuilder
             ? systemTemporaryRoot
             : null;
     }
+
+    private static void ValidateScriptBuildRootIsOutsideRepositoryMetadata(
+        string path,
+        string description)
+    {
+        string current = NormalizeScriptValidationPath(path);
+        while (true)
+        {
+            string name = Path.GetFileName(current);
+            if (IsRepositoryMetadataDirectoryName(name))
+            {
+                throw new InvalidOperationException(
+                    $"Script artefact {description} '{Path.GetFullPath(path)}' is inside repository metadata '{current}'. " +
+                    "Choose an artefact path outside version-control metadata directories.");
+            }
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) ||
+                string.Equals(parent, current, GetPathComparison(parent, current)))
+            {
+                return;
+            }
+
+            current = parent;
+        }
+    }
+
+    private static bool IsRepositoryMetadataDirectoryName(string name)
+        => string.Equals(name, ".git", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, ".hg", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, ".svn", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, ".bzr", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, "_darcs", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, ".pijul", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, ".fossil-settings", StringComparison.OrdinalIgnoreCase);
 }
