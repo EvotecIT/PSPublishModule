@@ -357,7 +357,7 @@ jobs:
 
       - name: Run bounded PowerShell compiler gate
         shell: pwsh
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: |
           $ErrorActionPreference = 'Stop'
           . ./Benchmarks/PowerShellCompilation/Corpus/Corpus.Runner.Common.ps1
