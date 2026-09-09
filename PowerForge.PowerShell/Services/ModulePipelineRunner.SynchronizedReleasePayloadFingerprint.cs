@@ -66,6 +66,7 @@ public sealed partial class ModulePipelineRunner
         }
 
         RestoreCachedSynchronizedReleasePayloadPaths(cachePath, buildResult, state);
+        RefreshFinalizedReleasePayloadIntegrity(plan, state);
         _logger.Info($"Using exact cached payload for the resumed coordinated release from '{cachePath}'.");
         return buildResult;
     }

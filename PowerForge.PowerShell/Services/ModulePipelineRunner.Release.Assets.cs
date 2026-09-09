@@ -24,7 +24,7 @@ public sealed partial class ModulePipelineRunner
         ArtefactBuildResult[] selected = SelectModuleReleaseArtefacts(releaseArtefacts, publishId);
         ValidateSelectedScriptOutputOwnership(releaseArtefacts, selected);
         var scriptSourcesByArchive = new Dictionary<string, string>(PowerShellCompilationPathSafety.PathComparer);
-        string[] selectedOutputPaths = selected
+        string[] producedOutputPaths = releaseArtefacts
             .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => Path.GetFullPath(path))
@@ -35,7 +35,7 @@ public sealed partial class ModulePipelineRunner
                 artefact,
                 scriptArchiveRoot,
                 scriptSourcesByArchive,
-                selectedOutputPaths).Concat(artefact.EvidencePaths))
+                producedOutputPaths).Concat(artefact.EvidencePaths))
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => Path.GetFullPath(path))
             .Distinct(PowerShellCompilationPathSafety.PathComparer)
@@ -94,7 +94,7 @@ public sealed partial class ModulePipelineRunner
         ArtefactBuildResult artefact,
         string scriptArchiveRoot,
         IDictionary<string, string> scriptSourcesByArchive,
-        IReadOnlyList<string> selectedOutputPaths)
+        IReadOnlyList<string> producedOutputPaths)
     {
         if (artefact.Type == ArtefactType.ScriptPacked)
         {
@@ -127,13 +127,13 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException(
                 $"Script release archive '{archivePath}' must be outside its source layout '{outputRoot}'.");
         }
-        string? conflictingOutput = selectedOutputPaths.FirstOrDefault(path =>
+        string? conflictingOutput = producedOutputPaths.FirstOrDefault(path =>
             PathsEqual(path, archivePath) ||
             (Directory.Exists(path) && IsSameOrChildPath(path, archivePath)));
         if (conflictingOutput is not null)
         {
             throw new InvalidOperationException(
-                $"Script release archive '{archivePath}' overlaps selected artefact output or evidence '{conflictingOutput}'. " +
+                $"Script release archive '{archivePath}' overlaps a produced artefact output or evidence '{conflictingOutput}'. " +
                 "Configure unique release asset paths so synthesizing a Script archive cannot replace another payload.");
         }
         if (scriptSourcesByArchive.TryGetValue(archivePath, out var existingSource) &&

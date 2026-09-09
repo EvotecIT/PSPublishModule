@@ -137,6 +137,19 @@ internal static class PowerShellScriptArchiveValidator
                 return false;
             }
 
+            ZipArchiveEntry entryPoint = archiveEntries.Single(entry =>
+                !entry.IsDirectory &&
+                string.Equals(
+                    entry.Path.Normalize(NormalizationForm.FormC),
+                    normalizedEntryPoint,
+                    StringComparison.Ordinal)).Entry;
+            if (ArchiveEntryStartsWithShebang(entryPoint) &&
+                !HasUnixExecutePermission(entryPoint.ExternalAttributes))
+            {
+                error = $"The shebang entry point '{normalizedEntryPoint}' does not retain Unix execute permission.";
+                return false;
+            }
+
             if (!TryReadArchivePayloads(fileEntries, out error))
                 return false;
 
@@ -235,5 +248,14 @@ internal static class PowerShellScriptArchiveValidator
         return (unixFileType is not 0 and not 0x4000 and not 0x8000) ||
                (unixFileType == 0x4000 && !isDirectory) ||
                (unixFileType == 0x8000 && isDirectory);
+    }
+
+    private static bool HasUnixExecutePermission(int externalAttributes)
+        => (((externalAttributes >> 16) & 0x1FF) & 0x49) != 0;
+
+    private static bool ArchiveEntryStartsWithShebang(ZipArchiveEntry entry)
+    {
+        using Stream stream = entry.Open();
+        return stream.ReadByte() == '#' && stream.ReadByte() == '!';
     }
 }

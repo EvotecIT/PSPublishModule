@@ -167,7 +167,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
                 method!.Invoke(null, new object?[] { new[] { script, packed }, "shared", archiveRoot }));
 
             InvalidOperationException collision = Assert.IsType<InvalidOperationException>(exception.InnerException);
-            Assert.Contains("overlaps selected artefact output", collision.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("overlaps a produced artefact output", collision.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("packed-sentinel", File.ReadAllText(packedPath));
         }
         finally
@@ -305,6 +305,93 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         {
             try { Directory.Delete(root, recursive: true); } catch { }
             try { Directory.Delete(archiveRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Packed, false)]
+    [InlineData(ArtefactType.Packed, true)]
+    [InlineData(ArtefactType.ScriptPacked, false)]
+    [InlineData(ArtefactType.ScriptPacked, true)]
+    public void CollectModuleReleaseAssets_RejectsScriptArchiveCollisionWithUnselectedOutput(
+        ArtefactType unselectedType,
+        bool collisionIsEvidence)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        string scriptRoot = Path.Combine(root, "script");
+        string archiveRoot = Path.Combine(root, "release");
+        string collidingOutput = Path.Combine(archiveRoot, "Invoke-Sample.zip");
+        try
+        {
+            Directory.CreateDirectory(scriptRoot);
+            Directory.CreateDirectory(archiveRoot);
+            File.WriteAllText(Path.Combine(scriptRoot, "Invoke-Sample.ps1"), "'selected'");
+            File.WriteAllText(collidingOutput, "unselected artefact");
+            string unselectedOutput = collisionIsEvidence
+                ? Path.Combine(root, "unselected-output.zip")
+                : collidingOutput;
+            if (collisionIsEvidence)
+                File.WriteAllText(unselectedOutput, "unselected output");
+            var selected = new ArtefactBuildResult(
+                ArtefactType.Script,
+                "selected",
+                scriptRoot,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                Array.Empty<string>(),
+                "Invoke-Sample.ps1");
+            var unselected = new ArtefactBuildResult(
+                unselectedType,
+                "unselected",
+                unselectedOutput,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                collisionIsEvidence ? new[] { collidingOutput } : Array.Empty<string>(),
+                unselectedType == ArtefactType.ScriptPacked ? "Other.ps1" : null);
+            var method = typeof(ModulePipelineRunner).GetMethod(
+                "CollectModuleReleaseAssets",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+            var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+                method!.Invoke(null, new object?[] { new[] { selected, unselected }, "selected", archiveRoot }));
+
+            InvalidOperationException validation = Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("overlaps", validation.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("unselected artefact", File.ReadAllText(collidingOutput));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ScriptArchiveValidator_RejectsShebangEntryPointWithoutExecutePermission()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        string archivePath = Path.Combine(root, "script.zip");
+        try
+        {
+            Directory.CreateDirectory(root);
+            using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry entry = archive.CreateEntry("Invoke-Sample.ps1");
+                entry.ExternalAttributes = unchecked((0x8000 | 0x1A4) << 16);
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write("#!/usr/bin/env pwsh\n'Sample'");
+            }
+
+            bool valid = PowerShellScriptArchiveValidator.TryValidate(
+                archivePath,
+                "Invoke-Sample.ps1",
+                out string? error);
+
+            Assert.False(valid);
+            Assert.Contains("execute permission", error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
 }

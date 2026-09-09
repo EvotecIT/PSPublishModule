@@ -43,6 +43,19 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private static void RefreshFinalizedReleasePayloadIntegrity(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
+        CaptureFinalizedModulePayloadIntegrity(state);
+        state.FinalizedPackedArtefactHashes.Clear();
+        state.FinalizedPackedArtefactUnixModes.Clear();
+        state.FinalizedScriptLayoutFileInventories.Clear();
+        state.FinalizedScriptLayoutDirectoryInventories.Clear();
+        foreach (ArtefactBuildResult artefact in state.ArtefactResults)
+            CaptureFinalizedPackedArtefactIntegrity(plan, state, artefact);
+    }
+
     private static void ValidateFinalizedPackedArtefactIntegrity(ModulePipelineRunState state)
     {
         foreach (KeyValuePair<string, string> expected in state.FinalizedPackedArtefactHashes)
