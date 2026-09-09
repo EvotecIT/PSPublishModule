@@ -183,7 +183,8 @@ internal sealed partial class PowerShellTypedLowerer
 
             var statements = new List<PowerShellLoweredStatement>();
             var declared = new HashSet<string>(StringComparer.Ordinal);
-            var localTypes = function.Locals.ToDictionary(static local => local.Symbol.StableKey, static local => local.Type.ClrType, StringComparer.Ordinal);
+            var localTypes = function.Locals.Where(static local => local.Symbol.Kind != PowerShellSymbolKind.ModuleState)
+                .ToDictionary(static local => local.Symbol.StableKey, static local => local.Type.ClrType, StringComparer.Ordinal);
             if (function.NativeFunctionBinding is not null) localTypes.Clear();
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;

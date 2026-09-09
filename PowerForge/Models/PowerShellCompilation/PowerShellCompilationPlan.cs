@@ -74,7 +74,10 @@ public enum PowerShellCompilationCapability
     ClrPipelineCollectionBinding = 65536,
 
     /// <summary>Hybrid modules may emit compiled function bodies with native parameter and variable ownership.</summary>
-    NativeFunctionBinding = 131072
+    NativeFunctionBinding = 131072,
+
+    /// <summary>CLR libraries may own explicitly typed module state in independent managed instances.</summary>
+    RuntimeFreeModuleState = 262144
 }
 
 /// <summary>
@@ -437,6 +440,7 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.AdvisoryOutputTypeMetadata |
                               PowerShellCompilationCapability.PowerShellModuleState |
                               PowerShellCompilationCapability.NativeFunctionBinding |
+                              PowerShellCompilationCapability.RuntimeFreeModuleState |
                               PowerShellCompilationCapability.HybridTypedRegions)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();

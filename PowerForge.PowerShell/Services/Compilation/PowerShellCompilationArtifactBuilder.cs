@@ -235,7 +235,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if (spec.Mode == PowerShellCompilationMode.Strict && typed.Diagnostics.Length > 0)
                     throw new InvalidOperationException($"Strict mode rejected {typed.Diagnostics.Length} compilation blocker(s). {DescribeBlockers(typed.Diagnostics)}");
                 if (spec.Mode == PowerShellCompilationMode.Strict &&
-                    plan.Files.SelectMany(static file => file.Units).Any(static unit => unit.Kind != PowerShellCompilationUnitKind.Function))
+                    plan.Files.Any(file => file.Units.Any(unit => unit.Kind != PowerShellCompilationUnitKind.Function &&
+                        !(typed.RuntimeFreeModule is not null && typed.Methods.Any(method => method.IsModuleInitializer &&
+                            PowerShellCompilationPathSafety.PathEquals(method.SourcePath, file.FullPath) &&
+                            method.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) && method.SourceLine == unit.StartLine)))))
                     throw new InvalidOperationException("Strict DLL compilation rejected a top-level script unit because DLL emitters currently produce typed functions only.");
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
@@ -335,7 +338,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         workspace,
                         "PowerForge.Compiled",
                         typed?.TypeName ?? "CompiledPowerShellScript",
-                        compiledMethodDetails);
+                        compiledMethodDetails,
+                        typed?.RuntimeFreeModule);
                     publicAbi = runtimeFreeContract.PublicAbi;
                 }
                 else if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)

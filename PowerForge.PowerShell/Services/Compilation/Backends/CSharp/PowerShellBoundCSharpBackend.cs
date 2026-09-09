@@ -22,6 +22,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellCompilationCapability targetCapabilities)
     {
         _sourceFunction = function;
+        var managedInstance = targetCapabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeModuleState);
+        var initializer = function.Symbol.Kind == PowerShellSymbolKind.ModuleInitializer;
+        var bodyIndent = managedInstance ? 5 : 3;
         var builder = new StringBuilder();
         var sourceMap = new List<PowerShellCompilationSourceMapEntry>();
         var parameterParts = function.Parameters.Select(parameter =>
@@ -46,16 +49,23 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var discardHelper = ContainsDiscardValue(function.Statements)
             ? GetTemporaryIdentifier("discardValue")
             : null;
-        builder.Append("    public static ")
+        builder.Append(initializer ? "    private " : managedInstance ? "    public " : "    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
             .Append(function.GeneratedName)
             .Append('(')
             .Append(parameters)
             .AppendLine(")")
-            .AppendLine("    {")
-            .AppendLine("        checked")
-            .AppendLine("        {");
+            .AppendLine("    {");
+        if (managedInstance)
+            builder.AppendLine("        lock (this.__moduleSync)")
+                .AppendLine("        {")
+                .AppendLine("            this.__ThrowIfDisposed();")
+                .AppendLine("            this.__moduleActiveCalls++;")
+                .AppendLine("            try")
+                .AppendLine("            {");
+        builder.AppendLine(managedInstance ? "                checked" : "        checked")
+            .AppendLine(managedInstance ? "                {" : "        {");
 
         if (targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
         {
@@ -80,19 +90,23 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (prologue.Length > 0)
         {
             foreach (var line in prologue.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
-                builder.Append("            ").AppendLine(line);
+                builder.Append(new string(' ', bodyIndent * 4)).AppendLine(line);
         }
 
         if (function.NativeFunctionBinding is not null && function.RequiresPowerShellStatementErrors)
             EmitNativeEntrySequencePoint(builder, function);
         foreach (var statement in function.Statements)
-            EmitStatement(builder, statement, 3, GetTemporaryIdentifier, discardHelper, sourceMap);
+            EmitStatement(builder, statement, bodyIndent, GetTemporaryIdentifier, discardHelper, sourceMap);
 
         foreach (var helper in _numericHelpers.Values)
             builder.AppendLine(helper.Source);
         EmitFormatHelper(builder);
 
-        builder.AppendLine("        }").Append("    }");
+        builder.AppendLine(managedInstance ? "                }" : "        }");
+        if (managedInstance) builder.AppendLine("            }")
+            .AppendLine("            finally { this.__moduleActiveCalls--; }")
+            .AppendLine("        }");
+        builder.Append("    }");
         var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function);
         var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
         var moduleStateVariableNames = PowerShellLoweredModuleStateCollector.Collect(function.Statements);
@@ -374,7 +388,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
             PowerShellLoweredNativeLifecycleExpression lifecycle => "(__nativeFunction.LifecycleClause == " + lifecycle.Clause.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")",
-            PowerShellLoweredVariableExpression variable => PowerShellCSharpSymbolRenderer.Identifier(variable.Symbol.Name),
+            PowerShellLoweredVariableExpression variable => RenderStorage(variable.Symbol),
             PowerShellLoweredConstantBooleanDelegateExpression booleanDelegate => EmitConstantBooleanDelegate(booleanDelegate),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
             PowerShellLoweredCommandAvailabilityExpression discovery => EmitCommandAvailability(discovery),
@@ -618,7 +632,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             return nativeSetSequencePoint ? EmitNativeMutation(nativeTargetRead, operation, value,
                 nativeSpan ?? throw new InvalidOperationException("Native mutation source span is required."), nativeSourceText, nativeAssignmentTarget) :
                 EmitNativeMutationValue(nativeTargetRead, operation, value, nativeAssignmentTarget);
-        var identifier = PowerShellCSharpSymbolRenderer.Identifier(target.Name);
+        var identifier = RenderStorage(target);
         if (integralSemantics != PowerShellIntegralMutationSemantics.None || preserveStatementErrors)
             return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics, preserveStatementErrors);
         if (operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement or

@@ -50,7 +50,15 @@ internal static class PowerShellAssignmentTargetPolicy
 
     /// <summary>Returns whether the name is a non-shadowable PowerShell read-only or constant automatic variable.</summary>
     internal static bool IsReadOnlyAutomaticVariable(string name)
-        => ReadOnlyAutomaticVariables.Contains(name);
+        => ReadOnlyAutomaticVariables.Contains(GetUnscopedVariableName(name));
+
+    /// <summary>Removes PowerShell scope qualifiers without changing provider-drive variable names.</summary>
+    internal static string GetUnscopedVariableName(string name)
+        => name.StartsWith("script:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("local:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("global:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("private:", StringComparison.OrdinalIgnoreCase)
+            ? name.Substring(name.IndexOf(':') + 1) : name;
 
     /// <summary>Returns whether a parameter name collides with an automatic variable that is read-only on the selected runtime.</summary>
     internal static bool IsReadOnlyAutomaticParameter(string name, string? targetFramework)

@@ -7,7 +7,9 @@ internal enum PowerShellSymbolKind
     Parameter,
     Local,
     PipelineVariable,
-    GeneratedCommand
+    GeneratedCommand,
+    ModuleState,
+    ModuleInitializer
 }
 
 /// <summary>

@@ -186,6 +186,12 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Generated C# method name.</summary>
     public string GeneratedName { get; }
 
+    /// <summary>Whether the generated method operates on one managed module instance.</summary>
+    public bool IsInstanceMethod { get; internal set; }
+
+    /// <summary>Whether this private method implements the authored initialization unit.</summary>
+    public bool IsModuleInitializer { get; internal set; }
+
     /// <summary>Resolved CLR return type name.</summary>
     public string ReturnType { get; }
 
@@ -451,6 +457,9 @@ public sealed class PowerShellTypedCompilationResult
 
     /// <summary>Complete generated C# source.</summary>
     public string SourceCode { get; }
+
+    /// <summary>Instance lifetime contract, when this library contains managed module state.</summary>
+    public PowerShellRuntimeFreeModuleContract? RuntimeFreeModule { get; internal set; }
 
     /// <summary>Successfully translated methods.</summary>
     public PowerShellCompiledMethod[] Methods { get; }

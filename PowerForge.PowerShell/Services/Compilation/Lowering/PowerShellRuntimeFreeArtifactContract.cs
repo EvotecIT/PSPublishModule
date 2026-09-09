@@ -25,10 +25,12 @@ internal sealed class PowerShellRuntimeFreeArtifactContract
         string workspace,
         string namespaceName,
         string typeName,
-        IEnumerable<PowerShellCompiledMethod> methods)
+        IEnumerable<PowerShellCompiledMethod> methods,
+        PowerShellRuntimeFreeModuleContract? moduleLifetime = null)
     {
         var profile = new PowerShellCompilationSemanticProfile();
-        var abi = PowerShellCompilationAbiBuilder.Create(namespaceName, typeName, methods);
+        if (moduleLifetime is not null) profile.CompilerRuntimeAbiVersion = "5";
+        var abi = PowerShellCompilationAbiBuilder.Create(namespaceName, typeName, methods, moduleLifetime);
         File.WriteAllText(
             Path.Combine(workspace, "PowerForgeRuntimeFreeContract.g.cs"),
             PowerShellRuntimeFreeContractSource.Generate(profile, abi),

@@ -29,6 +29,13 @@ public sealed partial class PowerShellCompilationAnalyzer
             PowerShellCompilationPathSafety.PathComparer);
         var targets = new List<SemanticUnitTarget>();
         var compilationDocuments = new List<ParsedSourceDocument>(documents);
+        var moduleDiagnostics = new List<PowerShellSemanticDiagnostic>();
+        var managedModule = capabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeModuleState)
+            ? PowerShellRuntimeFreeModuleDefinition.Discover(documents, moduleDiagnostics,
+                new PowerShellCommandSemanticResolver(commandRegistry), capabilities) : null;
+        foreach (var document in documents)
+            sourceDiagnosticsByPath[document.Path] = sourceDiagnosticsByPath[document.Path]
+                .Concat(moduleDiagnostics.Where(diagnostic => diagnostic.Span.DocumentId == document.DocumentId)).ToArray();
 
         foreach (var file in structural)
         {
@@ -62,6 +69,13 @@ public sealed partial class PowerShellCompilationAnalyzer
 
             var scriptUnit = file.Units.FirstOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
             if (scriptUnit is null) continue;
+            if (managedModule is not null && managedModule.Document.DocumentId == document.DocumentId)
+            {
+                targets.Add(new SemanticUnitTarget(file.FullPath, scriptUnit, document.DocumentId,
+                    managedModule.Initializer.Name, managedModule.Initializer.Extent.StartOffset,
+                    managedModule.Initializer.Extent.EndOffset, synthetic: false));
+                continue;
+            }
             var statements = GetEndStatements(
                     document.SyntaxRoot,
                     excludeFunctionDefinitions: true,

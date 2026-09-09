@@ -6,7 +6,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private string EmitCommandRegionArguments(IEnumerable<PowerShellLoweredCommandRegionArgument> arguments)
     {
-        var values = arguments.Select(argument => PowerShellCSharpSymbolRenderer.Identifier(argument.Symbol.Name)).ToArray();
+        var values = arguments.Select(argument => RenderStorage(argument.Symbol)).ToArray();
         return values.Length == 0
             ? "global::System.Array.Empty<object?>()"
             : "new object?[] { " + string.Join(", ", values) + " }";
@@ -23,7 +23,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (capture.TargetType == typeof(string)) converted = $"({converted} ?? string.Empty)";
         builder.Append(prefix);
         if (capture.Declare) builder.Append(targetType).Append(' ');
-        builder.Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target.Name))
+        builder.Append(RenderStorage(capture.Target))
             .Append(" = ").Append(converted).AppendLine(";");
     }
 
@@ -168,7 +168,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).AppendLine("__checkLoopInterrupts();");
         builder.Append(prefix)
             .Append(loop.DeclareVariable ? elementTypeName + " " : string.Empty)
-            .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")
+            .Append(RenderStorage(loop.Variable)).Append(" = ")
             .Append(itemIdentifier).AppendLine(";");
         foreach (var nested in loop.Statements)
         {

@@ -17,6 +17,13 @@ internal sealed partial class PowerShellSemanticBinder
         var authoredSyntax = syntax;
         syntax = UnwrapExpression(syntax, preservePipeline: capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        if (_runtimeFreeModule is not null && syntax is VariableExpressionAst ownedVariable &&
+            (ownedVariable.VariablePath.IsScript || ownedVariable.VariablePath.IsUnqualified &&
+                !symbols.ContainsKey(ownedVariable.VariablePath.UserPath)) &&
+            symbols.TryGetValue(ownedVariable.VariablePath.IsScript ? ownedVariable.VariablePath.UserPath :
+                "script:" + ownedVariable.VariablePath.UserPath, out var ownedField) &&
+            ownedField.Symbol.Kind == PowerShellSymbolKind.ModuleState)
+            return new PowerShellBoundVariableExpression(span, ownedField.Symbol, ownedField.Type);
         var functionBody = FindOwningFunctionBody(syntax);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&

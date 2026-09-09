@@ -88,6 +88,7 @@ internal sealed partial class PowerShellSemanticBinder
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             locals.Add(new PowerShellBoundLocal(symbol, type));
         }
+        if (_runtimeFreeModule is not null) locals.AddRange(_runtimeFreeModule.Fields);
         return locals.ToArray();
     }
 

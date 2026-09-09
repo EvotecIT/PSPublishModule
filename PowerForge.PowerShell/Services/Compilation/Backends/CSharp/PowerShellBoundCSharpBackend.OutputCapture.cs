@@ -43,7 +43,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (value is not null)
             builder.Append("object? ").Append(value).Append(" = ");
         else
-            builder.Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target!.Name)).Append(" = ");
+            builder.Append(RenderStorage(capture.Target!)).Append(" = ");
         builder
             .Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
             .Append(records).Append("[0] : ").Append(records).Append(".ToArray()")

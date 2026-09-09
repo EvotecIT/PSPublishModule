@@ -58,7 +58,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Contains("__invokePowerShellCapture", method.Source, StringComparison.Ordinal);
         Assert.Contains("string captured =", method.Source, StringComparison.Ordinal);
         Assert.Equal(PowerShellIntegralMutationSemantics.CheckedConversion,
-            Assert.Single(lowered.Statements.OfType<PowerShellLoweredAssignmentStatement>(),
+            Assert.Single(PowerShellLoweredTreeEnumerator.EnumerateStatements(lowered.Statements).OfType<PowerShellLoweredAssignmentStatement>(),
                 static assignment => assignment.Operation == PowerShellBoundMutationOperator.Add).IntegralSemantics);
     }
 }

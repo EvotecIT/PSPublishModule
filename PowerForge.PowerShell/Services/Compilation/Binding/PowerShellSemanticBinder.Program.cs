@@ -18,9 +18,17 @@ internal sealed partial class PowerShellSemanticBinder
         if (documents is null) throw new ArgumentNullException(nameof(documents));
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
         var diagnostics = new List<PowerShellSemanticDiagnostic>();
+        _runtimeFreeModule = capabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeModuleState)
+            ? PowerShellRuntimeFreeModuleDefinition.Discover(orderedDocuments, diagnostics, _commandResolver, capabilities) : null;
+        if (_runtimeFreeModule is null) capabilities &= ~PowerShellCompilationCapability.RuntimeFreeModuleState;
         var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
         var regionOpportunities = new Dictionary<string, PowerShellBoundRegionOpportunity>(StringComparer.Ordinal);
         var declarations = DeclareFunctions(orderedDocuments, diagnostics);
+        if (_runtimeFreeModule is not null)
+            declarations = declarations.Append(new FunctionDeclaration(_runtimeFreeModule.Document, _runtimeFreeModule.Initializer,
+                new PowerShellSymbolId(PowerShellSymbolKind.ModuleInitializer, _runtimeFreeModule.Document.DocumentId,
+                    _runtimeFreeModule.Initializer.Name, PowerShellSourceParser.GetSpan(_runtimeFreeModule.Document,
+                        _runtimeFreeModule.Initializer.Extent)))).ToArray();
         var nativeInvocationClosure = PowerShellNativeFunctionBindingPolicy.FindInvocationClosure(
             declarations.Select(static declaration => declaration.Syntax), capabilities);
         var numericErrorObservedCallees = PowerShellRuntimeExceptionCatchPolicy.FindNumericErrorObservedCallees(orderedDocuments);
@@ -90,6 +98,8 @@ internal sealed partial class PowerShellSemanticBinder
                         bound.Body.Span));
                     bound = null;
                 }
+                if (bound is not null && !PowerShellRuntimeFreeModuleInitializationPolicy.Validate(bound, functionDiagnostics))
+                    bound = null;
                 if (bound is not null)
                 {
                     functions.Add(bound);
@@ -141,7 +151,7 @@ internal sealed partial class PowerShellSemanticBinder
                 .ToArray(),
             regionOpportunities.Values
                 .OrderBy(static opportunity => opportunity.RegionFunction.Symbol.StableKey, StringComparer.Ordinal)
-                .ToArray());
+                .ToArray(), _runtimeFreeModule);
     }
 
     private static bool HasTypedFunctionShape(ScriptBlockAst body, PowerShellCompilationCapability capabilities)
@@ -162,13 +172,22 @@ internal sealed class PowerShellSemanticBindingResult
         PowerShellBoundProgram program,
         PowerShellBoundRegionCandidate[] regionCandidates,
         PowerShellBoundRegionOpportunity[] regionOpportunities)
+        : this(program, regionCandidates, regionOpportunities, null) { }
+
+    internal PowerShellSemanticBindingResult(
+        PowerShellBoundProgram program,
+        PowerShellBoundRegionCandidate[] regionCandidates,
+        PowerShellBoundRegionOpportunity[] regionOpportunities,
+        PowerShellRuntimeFreeModuleDefinition? runtimeFreeModule)
     {
         Program = program;
         RegionCandidates = regionCandidates ?? Array.Empty<PowerShellBoundRegionCandidate>();
         RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellBoundRegionOpportunity>();
+        RuntimeFreeModule = runtimeFreeModule;
     }
 
     internal PowerShellBoundProgram Program { get; }
     internal PowerShellImmutableArray<PowerShellBoundRegionCandidate> RegionCandidates { get; }
     internal PowerShellImmutableArray<PowerShellBoundRegionOpportunity> RegionOpportunities { get; }
+    internal PowerShellRuntimeFreeModuleDefinition? RuntimeFreeModule { get; }
 }

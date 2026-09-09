@@ -122,7 +122,9 @@ internal sealed partial class PowerShellSemanticBinder
                     moduleValue);
             }
             if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } scopedTarget &&
-                IsRuntimeOwnedScope(scopedTarget.VariablePath.UserPath))
+                IsRuntimeOwnedScope(scopedTarget.VariablePath.UserPath) &&
+                !(_runtimeFreeModule is not null && symbols.TryGetValue(scopedTarget.VariablePath.UserPath, out var ownedTarget) &&
+                    ownedTarget.Symbol.Kind == PowerShellSymbolKind.ModuleState))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     PowerShellCompilationFeatureIds.RuntimeScope,

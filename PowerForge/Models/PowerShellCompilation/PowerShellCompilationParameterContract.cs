@@ -14,7 +14,8 @@ public static class PowerShellCompilationCapabilities
     /// <summary>Capabilities supplied by a runtime-independent CLR library.</summary>
     public const PowerShellCompilationCapability TypedLibrary =
         StaticRuntimeFacts |
-        PowerShellCompilationCapability.ClrPipelineCollectionBinding;
+        PowerShellCompilationCapability.ClrPipelineCollectionBinding |
+        PowerShellCompilationCapability.RuntimeFreeModuleState;
 
     /// <summary>Capabilities supplied by generated binary cmdlets.</summary>
     public const PowerShellCompilationCapability BinaryModule =

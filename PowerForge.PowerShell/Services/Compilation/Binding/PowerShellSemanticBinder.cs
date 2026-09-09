@@ -11,6 +11,7 @@ internal sealed partial class PowerShellSemanticBinder
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
     private readonly PowerShellCommandSemanticResolver _commandResolver;
     private readonly PowerShellCompilationSemanticOracleProfile _semanticProfile;
+    private PowerShellRuntimeFreeModuleDefinition? _runtimeFreeModule;
 
     internal PowerShellSemanticBinder()
         : this(PowerShellCommandSemanticRegistry.Default, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
@@ -88,6 +89,9 @@ internal sealed partial class PowerShellSemanticBinder
             : capabilities;
         var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework, bindingCapabilities);
         if (parameters is null) return null;
+        if (_runtimeFreeModule is not null)
+            foreach (var field in _runtimeFreeModule.Fields)
+                symbols.Add("script:" + field.Symbol.Name, new PowerShellSemanticSymbolBinding(field.Symbol, field.Type));
         if (nativeFunctionBinding is not null && PowerShellRuntimeFreePipelineLifecyclePolicy.HasNamedLifecycle(function.Body))
             return BindNativeLifecycleFunction(document, function, functionSymbol, functions, diagnostics, targetFramework,
                 capabilities, symbols, parameters, nativeFunctionBinding, outputTypeContract.SemanticType,

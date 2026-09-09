@@ -52,6 +52,7 @@ internal sealed class PowerShellSemanticCompilationPipeline
     {
         var binding = _binder.BindWithRegionCandidates(documents, targetFramework, capabilities);
         var bound = binding.Program;
+        capabilities = bound.TargetCapabilities;
         var optimized = _optimizer.Optimize(bound);
         var analyzed = _analyzer.Analyze(optimized.Program);
         var lowered = _lowerer.Lower(analyzed, capabilities);
@@ -70,7 +71,7 @@ internal sealed class PowerShellSemanticCompilationPipeline
             emitted,
             regions.Promoted,
             regions.Decisions,
-            regionOpportunities);
+            regionOpportunities, binding.RuntimeFreeModule);
     }
 
     private PowerShellRegionCompilationResult CompileRegions(
@@ -136,7 +137,8 @@ internal sealed class PowerShellSemanticCompilationResult
         PowerShellBoundCSharpResult emitted,
         PowerShellPromotedRegionEmission[] promotedRegions,
         PowerShellRegionCandidateDecision[] regionCandidateDecisions,
-        PowerShellCompilationRegionOpportunity[] regionOpportunities)
+        PowerShellCompilationRegionOpportunity[] regionOpportunities,
+        PowerShellRuntimeFreeModuleDefinition? runtimeFreeModule = null)
     {
         Bound = bound;
         Optimization = optimization;
@@ -146,6 +148,7 @@ internal sealed class PowerShellSemanticCompilationResult
         PromotedRegions = promotedRegions ?? Array.Empty<PowerShellPromotedRegionEmission>();
         RegionCandidateDecisions = regionCandidateDecisions ?? Array.Empty<PowerShellRegionCandidateDecision>();
         RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
+        RuntimeFreeModule = runtimeFreeModule;
     }
 
     internal PowerShellBoundProgram Bound { get; }
@@ -156,6 +159,7 @@ internal sealed class PowerShellSemanticCompilationResult
     internal PowerShellImmutableArray<PowerShellPromotedRegionEmission> PromotedRegions { get; }
     internal PowerShellImmutableArray<PowerShellRegionCandidateDecision> RegionCandidateDecisions { get; }
     internal PowerShellImmutableArray<PowerShellCompilationRegionOpportunity> RegionOpportunities { get; }
+    internal PowerShellRuntimeFreeModuleDefinition? RuntimeFreeModule { get; }
 }
 
 internal sealed class PowerShellRegionCompilationResult

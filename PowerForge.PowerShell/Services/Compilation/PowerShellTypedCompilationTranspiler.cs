@@ -123,6 +123,9 @@ public sealed class PowerShellTypedCompilationTranspiler
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework, semanticProfileId);
         var boundResult = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry, semanticProfileId);
         var boundEmissions = boundResult.Emissions;
+        if (boundResult.RuntimeFreeModule is not null &&
+            PowerShellRuntimeFreeModuleDefinition.IsReservedMemberName(PowerShellClrSymbolMapper.MapIdentifier(typeName)))
+            typeName += "Module";
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
 
         var duplicateFunctions = parsedFiles
@@ -249,6 +252,18 @@ public sealed class PowerShellTypedCompilationTranspiler
             diagnostics);
         methodSources.AddRange(selectedRegions.Promoted.Select(static region => region.GeneratedSource));
 
+        if (boundResult.RuntimeFreeModule is { } module && boundResult.Initializer is { } initializer)
+        {
+            var parsed = parsedFiles.Single(file => file.Document.DocumentId == module.Document.DocumentId);
+            var unit = parsed.Plan.Units.Single(unit => unit.Kind != PowerShellCompilationUnitKind.Function);
+            var emission = boundEmissions[GetSemanticMethodKey(parsed.Path, initializer.Symbol.Name, initializer.Symbol.Declaration.StartLine)];
+            var method = CreateCompiledMethod(new FunctionSource(parsed, module.Initializer, unit), emission, unit.Name);
+            method.IsModuleInitializer = true;
+            methods.Add(method);
+            methodSources.Add(emission.Source);
+            foreach (var instanceMethod in methods) instanceMethod.IsInstanceMethod = true;
+        }
+
         return CreateResult(
             fullPaths,
             namespaceName,
@@ -263,7 +278,9 @@ public sealed class PowerShellTypedCompilationTranspiler
             boundResult.IrSnapshots,
             selectedRegions.Promoted,
             selectedRegions.Candidates,
-            boundResult.RegionOpportunities);
+            boundResult.RegionOpportunities,
+            boundResult.RuntimeFreeModule,
+            boundResult.Initializer);
     }
 
     private static void EmitFunctionGraph(
@@ -379,7 +396,9 @@ public sealed class PowerShellTypedCompilationTranspiler
             PowerShellCompilationIrSnapshotBuilder.Create(result),
             promotedRegions,
             regionCandidates,
-            result.RegionOpportunities.ToArray());
+            result.RegionOpportunities.ToArray(),
+            result.RuntimeFreeModule,
+            result.Lowered.Functions.SingleOrDefault(static function => function.Symbol.Kind == PowerShellSymbolKind.ModuleInitializer));
     }
 
     private static string GetSemanticMethodKey(string path, string name, int definitionStartLine)
@@ -400,10 +419,10 @@ public sealed class PowerShellTypedCompilationTranspiler
             $"Basic function '{source.Function.Name}' uses PowerShell stream or command-host behavior that cannot preserve loose handling of generated binary-cmdlet common-parameter names.");
     }
 
-    private static PowerShellCompiledMethod CreateCompiledMethod(FunctionSource source, PowerShellCSharpMethodEmission emitted)
+    private static PowerShellCompiledMethod CreateCompiledMethod(FunctionSource source, PowerShellCSharpMethodEmission emitted, string? sourceName = null)
     {
         var method = new PowerShellCompiledMethod(
-            source.Function.Name,
+            sourceName ?? source.Function.Name,
             emitted.GeneratedName,
             emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
             source.Unit.Parameters,
@@ -502,13 +521,18 @@ public sealed class PowerShellTypedCompilationTranspiler
         PowerShellCompilationIrSnapshotBundle? irSnapshots = null,
         PowerShellCompiledRegion[]? promotedRegions = null,
         PowerShellCompilationRegionCandidate[]? regionCandidates = null,
-        PowerShellCompilationRegionOpportunity[]? regionOpportunities = null)
+        PowerShellCompilationRegionOpportunity[]? regionOpportunities = null,
+        PowerShellRuntimeFreeModuleDefinition? runtimeFreeModule = null,
+        PowerShellLoweredFunction? initializer = null)
     {
         var template = ReadTemplate();
         var source = template
             .Replace("{{NAMESPACE}}", SanitizeQualifiedName(namespaceName))
             .Replace("{{TYPE_NAME}}", PowerShellCSharpSymbolRenderer.Identifier(typeName))
             .Replace("{{METHODS}}", string.Join(Environment.NewLine + Environment.NewLine, methodSources));
+        if (runtimeFreeModule is not null && initializer is not null)
+            source = PowerShellRuntimeFreeModuleSourceGenerator.Generate(SanitizeQualifiedName(namespaceName),
+                PowerShellCSharpSymbolRenderer.Identifier(typeName), methodSources, runtimeFreeModule, initializer);
         var result = new PowerShellTypedCompilationResult(
             sourcePaths[0],
             SanitizeQualifiedName(namespaceName),
@@ -525,6 +549,21 @@ public sealed class PowerShellTypedCompilationTranspiler
             parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework, semanticProfileId)).ToArray(),
             optimization,
             irSnapshots);
+        if (runtimeFreeModule is not null && initializer is not null)
+            result.RuntimeFreeModule = new PowerShellRuntimeFreeModuleContract
+            {
+                SourcePath = runtimeFreeModule.Document.Path,
+                DocumentId = runtimeFreeModule.Document.DocumentId,
+                InitializerName = initializer.GeneratedName,
+                Parameters = initializer.Parameters.Select(static parameter => parameter.Contract).ToArray(),
+                SupportedParameterCounts = PowerShellRuntimeFreeModuleSourceGenerator.SupportedParameterCounts(
+                    initializer.Parameters.Select(static parameter => parameter.Contract)),
+                Fields = runtimeFreeModule.Fields.Select(static field => new PowerShellRuntimeFreeModuleField
+                {
+                    Name = field.Symbol.Name,
+                    TypeName = field.Type.ClrType.FullName ?? field.Type.ClrType.Name
+                }).ToArray()
+            };
         result.PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
         result.RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
         result.RegionOpportunities = (regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>())
@@ -544,7 +583,9 @@ public sealed class PowerShellTypedCompilationTranspiler
             PowerShellCompilationIrSnapshotBundle irSnapshots,
             PowerShellCompiledRegion[] promotedRegions,
             PowerShellCompilationRegionCandidate[] regionCandidates,
-            PowerShellCompilationRegionOpportunity[] regionOpportunities)
+            PowerShellCompilationRegionOpportunity[] regionOpportunities,
+            PowerShellRuntimeFreeModuleDefinition? runtimeFreeModule,
+            PowerShellLoweredFunction? initializer)
         {
             Emissions = emissions;
             Optimization = optimization;
@@ -552,6 +593,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
             RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
             RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
+            RuntimeFreeModule = runtimeFreeModule;
+            Initializer = initializer;
         }
 
         internal IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> Emissions { get; }
@@ -560,6 +603,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         internal PowerShellCompiledRegion[] PromotedRegions { get; }
         internal PowerShellCompilationRegionCandidate[] RegionCandidates { get; }
         internal PowerShellCompilationRegionOpportunity[] RegionOpportunities { get; }
+        internal PowerShellRuntimeFreeModuleDefinition? RuntimeFreeModule { get; }
+        internal PowerShellLoweredFunction? Initializer { get; }
     }
 
     private static string ReadTemplate()

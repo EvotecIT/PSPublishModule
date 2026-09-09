@@ -11,6 +11,9 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
         foreach (var function in program.Functions)
         {
             var assigned = function.Parameters.Select(static parameter => parameter.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
+            if (function.Symbol.Kind != PowerShellSymbolKind.ModuleInitializer)
+                assigned.UnionWith(function.Locals.Where(static local => local.Symbol.Kind == PowerShellSymbolKind.ModuleState)
+                    .Select(static local => local.Symbol.StableKey));
             var locals = function.Locals.ToDictionary(static local => local.Symbol.StableKey, static local => local.Type, StringComparer.Ordinal);
             Analyze(function.Body, assigned, locals, diagnostics);
         }

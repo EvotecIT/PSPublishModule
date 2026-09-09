@@ -52,6 +52,9 @@ public sealed class PowerShellCompilationAbiManifest
     /// <summary>Stable command-to-CLR mappings sorted by PowerShell command identity.</summary>
     public PowerShellCompilationAbiMethod[] Methods { get; set; } = Array.Empty<PowerShellCompilationAbiMethod>();
 
+    /// <summary>Managed instance lifetime; absent for static function libraries.</summary>
+    public PowerShellRuntimeFreeModuleContract? ModuleLifetime { get; set; }
+
     /// <summary>SHA-256 of the canonical ABI representation.</summary>
     public string Sha256 { get; set; } = string.Empty;
 }
@@ -59,6 +62,9 @@ public sealed class PowerShellCompilationAbiManifest
 /// <summary>One PowerShell-command-to-CLR member mapping.</summary>
 public sealed class PowerShellCompilationAbiMethod
 {
+    /// <summary>Whether invocation requires a generated module instance.</summary>
+    public bool IsInstanceMethod { get; set; }
+
     /// <summary>Authored PowerShell command name.</summary>
     public string PowerShellName { get; set; } = string.Empty;
 
