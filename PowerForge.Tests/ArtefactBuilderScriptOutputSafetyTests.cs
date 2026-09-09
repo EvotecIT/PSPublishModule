@@ -4,6 +4,56 @@ namespace PowerForge.Tests;
 
 public sealed class ArtefactBuilderScriptOutputSafetyTests
 {
+    [Fact]
+    public void Build_RejectsScriptRootThatContainsOutputRootBeforeCleanup()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SafeModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            string artefactContainer = Directory.CreateDirectory(Path.Combine(root.FullName, "releases")).FullName;
+            string outputRoot = Directory.CreateDirectory(Path.Combine(artefactContainer, "current")).FullName;
+            File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psd1"), "@{ RootModule = 'SafeModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(stagingRoot, moduleName + ".psm1"), "'ok'");
+            string outputMarker = Path.Combine(outputRoot, "preserve-output.txt");
+            string siblingMarker = Path.Combine(artefactContainer, "preserve-sibling.txt");
+            File.WriteAllText(outputMarker, "output");
+            File.WriteAllText(siblingMarker, "sibling");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new ArtefactBuilder(new NullLogger()).Build(
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Script,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = outputRoot,
+                            RequiredModules = new ArtefactRequiredModulesConfiguration
+                            {
+                                ModulesPath = ".."
+                            }
+                        }
+                    },
+                    projectRoot,
+                    stagingRoot,
+                    moduleName,
+                    "1.0.0",
+                    null,
+                    Array.Empty<RequiredModuleReference>()));
+
+            Assert.Contains("contains output root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("output", File.ReadAllText(outputMarker));
+            Assert.Equal("sibling", File.ReadAllText(siblingMarker));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(ArtefactType.Script, false)]
     [InlineData(ArtefactType.Script, true)]

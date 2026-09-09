@@ -534,6 +534,17 @@ public sealed partial class ArtefactBuilder
         }
 
         string fullScriptRoot = Path.GetFullPath(scriptRoot);
+        if (!string.Equals(
+                fullScriptRoot,
+                fullOutputRoot,
+                GetPathComparison(fullScriptRoot, fullOutputRoot)) &&
+            IsSameOrBelowPath(fullOutputRoot, fullScriptRoot))
+        {
+            throw new InvalidOperationException(
+                $"Script artefact generated script root '{fullScriptRoot}' contains output root '{fullOutputRoot}' and would erase the output tree while preparing the script layout. " +
+                "Keep the generated script root equal to or inside the artefact output root.");
+        }
+
         if (ScriptPathsOverlap(fullScriptRoot, fullProjectRoot) &&
             !IsSameOrBelowPath(fullScriptRoot, fullOutputRoot))
         {

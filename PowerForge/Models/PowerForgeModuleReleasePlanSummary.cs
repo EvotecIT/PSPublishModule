@@ -65,4 +65,7 @@ internal sealed class PowerForgeModuleArtefactOutputSummary
     public string? OutputPath { get; set; }
 
     public string? EntryPointRelativePath { get; set; }
+
+    [JsonIgnore]
+    public string? ReleaseAssetPath { get; set; }
 }

@@ -358,9 +358,7 @@ public sealed partial class ArtefactBuilder
     }
 
     private static StringComparer CreateCurrentFileSystemPathComparer()
-        => Path.DirectorySeparatorChar == '\\'
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
+        => FrameworkCompatibility.PathComparer;
 
     private readonly struct ModulePackageCopyEntry
     {

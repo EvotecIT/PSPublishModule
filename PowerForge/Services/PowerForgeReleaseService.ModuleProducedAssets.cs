@@ -64,10 +64,42 @@ internal sealed partial class PowerForgeReleaseService
         {
             ArtefactType.Packed => IsModuleArtifactForResolvedVersion(path, plan) &&
                                    IsFinalPowerShellModulePackage(path, plan),
-            ArtefactType.Script => IsFinalPowerShellScript(path, plan),
-            ArtefactType.ScriptPacked => IsFinalPowerShellScriptPackage(path, plan),
+            ArtefactType.Script => IsFinalPowerShellScript(path, plan) ||
+                                   IsFinalPowerShellScriptPackage(path, plan, ArtefactType.Script),
+            ArtefactType.ScriptPacked => IsFinalPowerShellScriptPackage(path, plan, ArtefactType.ScriptPacked),
             _ => false
         };
+    }
+
+    private static bool IsScriptArtefactSourceReplacedByReleaseArchive(
+        string path,
+        PowerForgeModuleReleasePlanSummary? plan)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        string fullPath = Path.GetFullPath(path);
+        return (plan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>())
+            .Any(output => output is not null &&
+                           output.Type == ArtefactType.Script &&
+                           !string.IsNullOrWhiteSpace(output.ReleaseAssetPath) &&
+                           IsSameOrBelowScriptLayout(fullPath, output));
+    }
+
+    private static bool IsSameOrBelowScriptLayout(
+        string fullPath,
+        PowerForgeModuleArtefactOutputSummary output)
+    {
+        string root = string.IsNullOrWhiteSpace(output.OutputPath)
+            ? output.OutputRoot
+            : output.OutputPath!;
+        if (string.IsNullOrWhiteSpace(root))
+            return false;
+
+        string fullRoot = Path.GetFullPath(root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(fullPath, fullRoot, ResolvePathComparison(fullPath, fullRoot)) ||
+               IsModuleReleaseAssetBelowDirectory(fullPath, fullRoot);
     }
 
     private static bool IsProducedModuleArtifactForResolvedVersion(
@@ -124,11 +156,12 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool IsFinalPowerShellScriptPackage(
         string path,
-        PowerForgeModuleReleasePlanSummary? plan)
+        PowerForgeModuleReleasePlanSummary? plan,
+        ArtefactType expectedProducerType)
     {
         if (!File.Exists(path) ||
             !string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase) ||
-            !TryResolveScriptPackedEntryPoint(path, plan, out string? expectedEntryPoint))
+            !TryResolveScriptPackageEntryPoint(path, plan, expectedProducerType, out string? expectedEntryPoint))
         {
             return false;
         }
@@ -196,16 +229,17 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private static bool TryResolveScriptPackedEntryPoint(
+    private static bool TryResolveScriptPackageEntryPoint(
         string path,
         PowerForgeModuleReleasePlanSummary? plan,
+        ArtefactType expectedProducerType,
         out string? entryPointRelativePath)
     {
         entryPointRelativePath = null;
         PowerForgeModuleArtefactOutputSummary[] matchingOutputs =
             ResolveMatchingModuleArtefactOutputs(path, plan);
         if (matchingOutputs.Length == 0 ||
-            matchingOutputs.Any(static output => output.Type != ArtefactType.ScriptPacked))
+            matchingOutputs.Any(output => output.Type != expectedProducerType))
         {
             return false;
         }
@@ -278,8 +312,13 @@ internal sealed partial class PowerForgeReleaseService
             plan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>();
         PowerForgeModuleArtefactOutputSummary[] matchingOutputs = outputs
             .Where(output => output is not null &&
-                             !string.IsNullOrWhiteSpace(output.OutputPath) &&
-                             MatchesRecordedModuleArtefactOutput(output, fullPath, output.OutputPath!))
+                             ((!string.IsNullOrWhiteSpace(output.ReleaseAssetPath) &&
+                               string.Equals(
+                                   Path.GetFullPath(output.ReleaseAssetPath!),
+                                   fullPath,
+                                   ResolvePathComparison(output.ReleaseAssetPath!, fullPath))) ||
+                              (!string.IsNullOrWhiteSpace(output.OutputPath) &&
+                               MatchesRecordedModuleArtefactOutput(output, fullPath, output.OutputPath!))))
             .ToArray();
         if (matchingOutputs.Length == 0)
         {

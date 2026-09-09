@@ -6,6 +6,8 @@ namespace PowerForge;
 
 internal static class FrameworkCompatibility
 {
+    internal static StringComparer PathComparer { get; } = new FileSystemAwarePathComparer();
+
     public static T NotNull<T>(T value, string paramName) where T : class
     {
         if (value is null)
@@ -125,6 +127,33 @@ internal static class FrameworkCompatibility
         {
             // best effort cleanup
         }
+    }
+
+    private sealed class FileSystemAwarePathComparer : StringComparer
+    {
+        public override int Compare(string? x, string? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+            return string.Compare(x, y, ResolveComparison(x, y));
+        }
+
+        public override bool Equals(string? x, string? y)
+        {
+            if (ReferenceEquals(x, y)) return true;
+            if (x is null || y is null) return false;
+            return string.Equals(x, y, ResolveComparison(x, y));
+        }
+
+        public override int GetHashCode(string obj)
+            => StringComparer.OrdinalIgnoreCase.GetHashCode(obj);
+
+        private static StringComparison ResolveComparison(string first, string second)
+            => GetPathStringComparisonForPath(first) == StringComparison.OrdinalIgnoreCase ||
+               GetPathStringComparisonForPath(second) == StringComparison.OrdinalIgnoreCase
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
     }
 
     public static string GetSha256Hex(X509Certificate2 certificate)

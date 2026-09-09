@@ -47,12 +47,14 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void CreateModuleAssetEntries_DirectoryIncludesNestedProducedScriptEntryPoint()
+    public void ResolveProducedModuleArtifacts_ArchivesCompleteNestedScriptLayout()
     {
         string root = CreateSandbox();
+        string archiveRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         try
         {
             string scriptPath = Path.Combine(root, "app", "Company.Tools.ps1");
+            string supportPath = Path.Combine(root, "support", "helper.ps1");
             var plan = new PowerForgeModuleReleasePlanSummary
             {
                 ManifestPath = Path.Combine(root, "Company.Tools.psd1"),
@@ -72,21 +74,31 @@ public sealed partial class PowerForgeReleaseServiceTests
                 PowerForgeReleaseService.CaptureModuleArtifactBaseline(new[] { root }, plan);
             Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
             File.WriteAllText(scriptPath, "Get-Date");
+            Directory.CreateDirectory(Path.GetDirectoryName(supportPath)!);
+            File.WriteAllText(supportPath, "function Get-Support { 'ok' }");
 
             string[] produced = PowerForgeReleaseService.ResolveProducedModuleArtifacts(
                 new[] { root },
                 baseline,
-                plan);
+                plan,
+                archiveRoot);
+            string archivePath = Assert.Single(produced);
             PowerForgeReleaseAssetEntry entry = Assert.Single(
-                PowerForgeReleaseService.CreateModuleAssetEntries(root, plan, produced));
+                PowerForgeReleaseService.CreateModuleAssetEntries(archivePath, plan, produced));
 
-            Assert.Equal(new[] { scriptPath }, produced);
-            Assert.Equal(scriptPath, entry.Path);
+            Assert.Equal(Path.Combine(archiveRoot, "Company.Tools.zip"), archivePath);
+            using (ZipArchive archive = ZipFile.OpenRead(archivePath))
+            {
+                Assert.Contains(archive.Entries, static item => item.FullName == "app/Company.Tools.ps1");
+                Assert.Contains(archive.Entries, static item => item.FullName == "support/helper.ps1");
+            }
+            Assert.Equal(archivePath, entry.Path);
             Assert.True(entry.IsFinalPackageOutput);
         }
         finally
         {
             TryDelete(root);
+            TryDelete(archiveRoot);
         }
     }
 
@@ -99,7 +111,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             if (FrameworkCompatibility.GetPathStringComparisonForPath(root) != StringComparison.Ordinal)
                 return;
 
-            string lowerPath = Path.Combine(root, "app", "Tool.ps1");
+            string lowerPath = Path.Combine(root, "app", "tool.ps1");
             string upperPath = Path.Combine(root, "App", "Tool.ps1");
             Directory.CreateDirectory(Path.GetDirectoryName(lowerPath)!);
             Directory.CreateDirectory(Path.GetDirectoryName(upperPath)!);
@@ -133,11 +145,12 @@ public sealed partial class PowerForgeReleaseServiceTests
             string[] produced = PowerForgeReleaseService.ResolveProducedModuleArtifacts(
                 Array.Empty<string>(),
                 baseline,
-                plan);
+                plan,
+                Path.Combine(root, "archives"));
 
             Assert.Equal(2, produced.Length);
-            Assert.Contains(lowerPath, produced, StringComparer.Ordinal);
-            Assert.Contains(upperPath, produced, StringComparer.Ordinal);
+            Assert.Contains(Path.Combine(root, "archives", "tool.zip"), produced, StringComparer.Ordinal);
+            Assert.Contains(Path.Combine(root, "archives", "Tool.zip"), produced, StringComparer.Ordinal);
         }
         finally
         {

@@ -270,7 +270,7 @@ internal sealed partial class PowerForgeReleaseService
                 "Apple target identity resolution requires an explicit validation-only summary run.");
         }
 
-        using var deferredModuleStaging = new DeferredModuleStagingDirectory(_logger);
+        using var temporaryReleaseDirectory = new TemporaryReleaseDirectory(_logger);
         request.CancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(request.ConfigPath))
@@ -549,7 +549,7 @@ internal sealed partial class PowerForgeReleaseService
                     !request.ValidateOnly &&
                     string.IsNullOrWhiteSpace(module.Request.StagingPath))
                 {
-                    module.Request.StagingPath = deferredModuleStaging.GetOrCreatePath();
+                    module.Request.StagingPath = temporaryReleaseDirectory.GetOrCreateSubdirectory("module-staging");
                     module.Plan.StagingPath = module.Request.StagingPath;
                 }
                 module.Request.RequireReusableOutput = module.Request.ScriptPath is not null;
@@ -609,7 +609,8 @@ internal sealed partial class PowerForgeReleaseService
                     result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
                         result.ModuleAssets,
                         moduleArtifactBaseline,
-                        result.ModulePlan);
+                        result.ModulePlan,
+                        temporaryReleaseDirectory.GetOrCreateSubdirectory("script-release-assets"));
                 }
 
                 if (result.ModulePlan?.IncludesProjectPackages == true &&
@@ -1040,7 +1041,8 @@ internal sealed partial class PowerForgeReleaseService
                 result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
                     result.ModuleAssets,
                     moduleArtifactBaseline,
-                    result.ModulePlan);
+                    result.ModulePlan,
+                    temporaryReleaseDirectory.GetOrCreateSubdirectory("script-release-assets"));
             }
 
             request.Progress?.PhaseCompleted(
@@ -4934,8 +4936,22 @@ internal sealed partial class PowerForgeReleaseService
 
         assets.AddRange(
             (result.ModuleAssets ?? Array.Empty<string>())
+            .Where(path => !IsScriptArtefactSourceReplacedByReleaseArchive(path, result.ModulePlan))
             .SelectMany(path => CreateModuleAssetEntries(
                 path,
+                result.ModulePlan,
+                result.ModuleProducedAssets)));
+
+        assets.AddRange(
+            (result.ModulePlan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>())
+            .Where(static output => output is not null &&
+                                    output.Type == ArtefactType.Script &&
+                                    !string.IsNullOrWhiteSpace(output.ReleaseAssetPath))
+            .Select(static output => output.ReleaseAssetPath!)
+            .Where(path => File.Exists(path) &&
+                           ContainsProducedModuleArtifact(result.ModuleProducedAssets, path))
+            .Select(path => CreateModuleProducedAssetEntry(
+                Path.GetFullPath(path),
                 result.ModulePlan,
                 result.ModuleProducedAssets)));
 

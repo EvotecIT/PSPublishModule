@@ -68,28 +68,30 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private sealed class DeferredModuleStagingDirectory : IDisposable
+    private sealed class TemporaryReleaseDirectory : IDisposable
     {
         private readonly ILogger _logger;
         private string? _path;
 
-        public DeferredModuleStagingDirectory(ILogger logger)
+        public TemporaryReleaseDirectory(ILogger logger)
         {
             _logger = logger;
         }
 
-        public string GetOrCreatePath()
+        public string GetOrCreateSubdirectory(string name)
         {
-            if (_path is not null)
-                return _path;
+            if (_path is null)
+            {
+                _path = Path.Combine(
+                    Path.GetTempPath(),
+                    "PowerForge",
+                    "unified-release",
+                    Guid.NewGuid().ToString("N"));
+            }
 
-            _path = Path.Combine(
-                Path.GetTempPath(),
-                "PowerForge",
-                "unified-release",
-                Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(_path);
-            return _path;
+            string path = Path.Combine(_path, name);
+            Directory.CreateDirectory(path);
+            return path;
         }
 
         public void Dispose()
@@ -104,7 +106,7 @@ internal sealed partial class PowerForgeReleaseService
             catch (Exception exception)
             {
                 _logger.Verbose(
-                    $"Unable to remove deferred module staging directory '{_path}': {exception.Message}");
+                    $"Unable to remove temporary release directory '{_path}': {exception.Message}");
             }
         }
     }

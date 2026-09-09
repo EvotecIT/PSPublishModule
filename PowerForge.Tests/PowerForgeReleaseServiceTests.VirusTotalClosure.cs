@@ -5,6 +5,94 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_CheckpointBuildStagesCompleteScriptLayoutAsArchive()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string buildScriptPath = Path.Combine(root, "Build-Module.ps1");
+            string releasePath = Path.Combine(root, "release.json");
+            string scriptLayout = Path.Combine(root, "script-layout");
+            string stageRoot = Path.Combine(root, "staged-release");
+            File.WriteAllText(buildScriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not plan."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run."),
+                loadDotNetToolsSpec: (_, _) => throw new InvalidOperationException("DotNet tools should not load."),
+                planDotNetTools: (_, _, _, _) => throw new InvalidOperationException("DotNet tools should not plan."),
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
+                executeModuleBuild: (_, _) =>
+                {
+                    string entryPoint = Path.Combine(scriptLayout, "app", "ExampleModule.ps1");
+                    string supportFile = Path.Combine(scriptLayout, "support", "helper.ps1");
+                    Directory.CreateDirectory(Path.GetDirectoryName(entryPoint)!);
+                    Directory.CreateDirectory(Path.GetDirectoryName(supportFile)!);
+                    File.WriteAllText(entryPoint, "Get-Date");
+                    File.WriteAllText(supportFile, "function Get-Support { 'ok' }");
+                    return new ModuleBuildHostExecutionResult
+                    {
+                        ExitCode = 0,
+                        ArtefactOutputs =
+                        [
+                            new PowerForgeModuleArtefactOutputSummary
+                            {
+                                Type = ArtefactType.Script,
+                                OutputPath = scriptLayout,
+                                EntryPointRelativePath = "app/ExampleModule.ps1"
+                            }
+                        ]
+                    };
+                });
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = root,
+                    ScriptPath = buildScriptPath,
+                    ModuleName = "ExampleModule",
+                    ModuleVersion = "1.2.3",
+                    ArtifactPaths = [Path.Combine(scriptLayout, "app", "ExampleModule.ps1")]
+                },
+                VirusTotal = new PowerForgeVirusTotalOptions
+                {
+                    Enabled = true,
+                    ApiKeyEnvName = "POWERFORGE_TEST_UNUSED_" + Guid.NewGuid().ToString("N"),
+                    ArtifactKinds = [VirusTotalArtifactKind.PowerShellModule]
+                }
+            };
+
+            PowerForgeReleaseResult result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleOnly = true,
+                    ModuleRunMode = ConfigurationGateMode.Build,
+                    CaptureModuleArtifactProvenance = true,
+                    StageRoot = stageRoot
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            PowerForgeReleaseAssetEntry moduleEntry = Assert.Single(
+                result.ReleaseAssetEntries,
+                static entry => entry.Category == PowerForgeReleaseAssetCategory.Module);
+            Assert.True(moduleEntry.IsFinalPackageOutput);
+            Assert.NotNull(moduleEntry.StagedPath);
+            using ZipArchive archive = ZipFile.OpenRead(moduleEntry.StagedPath!);
+            Assert.Contains(archive.Entries, static item => item.FullName == "app/ExampleModule.ps1");
+            Assert.Contains(archive.Entries, static item => item.FullName == "support/helper.ps1");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_CheckpointBuildWithVirusTotalModuleKind_CapturesProducedModuleProvenance()
     {
         var root = CreateSandbox();

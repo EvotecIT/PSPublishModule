@@ -229,7 +229,6 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
     }
 
-
     [Fact]
     public void Run_SignedPackedArtifactStripsPreexistingProvenanceWhenProtectionIsDisabled()
     {
