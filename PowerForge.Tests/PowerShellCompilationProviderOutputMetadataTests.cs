@@ -4,6 +4,26 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationProviderPackageTests
 {
+    [Fact]
+    public void BinaryHostedOutputMetadataIncludesUnknownRecordsButExcludesCapturedOutput()
+    {
+        using var fixture = ScriptFixture.Create("""
+            function Get-HostedMixed { [CmdletBinding()] param(); Get-UnknownMetadataRecord; 'text' }
+            function Get-HostedOnly { [CmdletBinding()] param(); Get-UnknownMetadataRecord }
+            function Get-CapturedOnly { [CmdletBinding()] param(); [int] $value = Get-UnknownMetadataRecord; 'text' }
+            """);
+        var typed = new PowerShellTypedCompilationTranspiler()
+            .TranspileForBinaryModule(new[] { fixture.ScriptPath }, "PowerForge.Compiled", "HostedOutputMethods", "net8.0");
+        Assert.Empty(typed.Diagnostics);
+        Assert.Equal("System.Object", Assert.Single(typed.Methods, method => method.SourceName == "Get-HostedMixed").SuccessOutputType);
+        Assert.Equal("System.Object", Assert.Single(typed.Methods, method => method.SourceName == "Get-HostedOnly").SuccessOutputType);
+        Assert.Equal("System.String", Assert.Single(typed.Methods, method => method.SourceName == "Get-CapturedOnly").SuccessOutputType);
+        var source = PowerShellBinaryCmdletSourceGenerator.Generate(typed,
+            new[] { "Get-HostedMixed", "Get-HostedOnly", "Get-CapturedOnly" }, "net8.0");
+        Assert.Equal(2, source.Split("[OutputType(typeof(object))]", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, source.Split("[OutputType(typeof(string))]", StringSplitOptions.None).Length - 1);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

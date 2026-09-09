@@ -23,6 +23,9 @@ internal static class PowerShellSuccessOutputTypePolicy
     private static Type? ResolveStatement(PowerShellBoundStatement statement,
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions, HashSet<string> visiting)
     {
+        // A hosted region can emit records without a typed output expression.
+        // Captured regions do not contribute records to the enclosing command.
+        if (statement is PowerShellBoundCommandRegionStatement) return typeof(object);
         var expression = PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement);
         if (expression is null) return null;
         if (statement is PowerShellBoundStreamWriteStatement { Provider.Adapter.EntryPoint: { } entryPoint })
