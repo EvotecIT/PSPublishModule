@@ -557,6 +557,7 @@ public sealed partial class ModulePipelineRunner
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
+        plan.ReleaseCheckpoint = spec.ReleaseCheckpoint;
         ApplyReleaseSourceProtection(spec, plan, localVersioning, releaseProtection, gateMode);
         return plan;
     }

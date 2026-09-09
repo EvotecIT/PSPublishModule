@@ -219,6 +219,153 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_ModuleOwnedPackages_PropagatesResolvedPackageVersionToValidation()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            var validationPath = Path.Combine(root, "Test-Release.ps1");
+            var manifestPath = Path.Combine(root, "Sample.psd1");
+            var packagePath = Path.Combine(root, "Sample.1.2.3.nupkg");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(validationPath, "# release validation");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.2.X' }");
+
+            string? validationVersion = null;
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                request =>
+                {
+                    if (request.RunMode != ConfigurationGateMode.Build)
+                        return;
+
+                    using var archive = System.IO.Compression.ZipFile.Open(
+                        packagePath,
+                        System.IO.Compression.ZipArchiveMode.Create);
+                    var nuspec = archive.CreateEntry("Sample.nuspec");
+                    using var writer = new StreamWriter(nuspec.Open());
+                    writer.Write("<package><metadata><id>Sample</id><version>1.2.3</version></metadata></package>");
+                },
+                runReleaseValidation: (_, context, _, _) =>
+                {
+                    validationVersion = context.ResolvedVersion;
+                    return new PowerForgeReleaseValidationResult
+                    {
+                        Name = "release",
+                        Succeeded = true,
+                        ExitCode = 0
+                    };
+                });
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = root,
+                    ScriptPath = scriptPath,
+                    ManifestPath = manifestPath,
+                    ModuleVersion = "1.2.X",
+                    IncludesPackages = true,
+                    ArtifactPaths = [Path.Combine(root, "Sample.{ModuleVersionWithPreRelease}.nupkg")]
+                },
+                Outputs = new PowerForgeReleaseOutputsOptions
+                {
+                    Staging = new PowerForgeReleaseStagingOptions
+                    {
+                        RootPath = Path.Combine(root, "staged")
+                    }
+                },
+                Validation = new PowerForgeReleaseValidationOptions
+                {
+                    AfterStaging =
+                    [
+                        new PowerForgeReleaseValidationAction
+                        {
+                            Name = "release",
+                            FilePath = validationPath
+                        }
+                    ]
+                }
+            };
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleOnly = true,
+                    ModuleRunMode = ConfigurationGateMode.Publish
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("1.2.3", result.ModulePlan!.ModuleVersion);
+            Assert.Equal("1.2.3", validationVersion);
+            Assert.Contains(packagePath, result.ModuleProducedAssets, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal(2, moduleCalls.Count);
+            Assert.Equal("1.2.X", moduleCalls[0].ModuleVersion);
+            Assert.Equal("1.2.3", moduleCalls[1].ModuleVersion);
+            Assert.True(moduleCalls[0].ReleaseCheckpoint);
+            Assert.False(moduleCalls[1].ReleaseCheckpoint);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ModuleConfig_UsesBuildVersionWhenReleaseProfileOmitsVersion()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var moduleConfigPath = Path.Combine(root, "module.json");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(
+                moduleConfigPath,
+                """
+                {
+                  "SchemaVersion": 1,
+                  "Build": {
+                    "Name": "Sample",
+                    "SourcePath": ".",
+                    "Version": "1.2.X"
+                  },
+                  "Segments": []
+                }
+                """);
+            File.WriteAllText(releasePath, "{}");
+
+            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        RepositoryRoot = root,
+                        ConfigPath = moduleConfigPath
+                    }
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal("1.2.X", result.ModulePlan!.ModuleVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ModulePackageCheckpoint_RejectsPackageMissingFromValidatedStage()
     {
         var root = CreateSandbox();

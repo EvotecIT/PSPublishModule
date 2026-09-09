@@ -563,6 +563,7 @@ internal sealed partial class PowerForgeReleaseService
                         module.Request,
                         ConfigurationGateMode.Build,
                         includeModulePublishing: false,
+                        releaseCheckpoint: true,
                         cancellationToken: request.CancellationToken)
                     : _executeModuleBuild(module.Request, request.CancellationToken);
                 result.Module = moduleResult;
@@ -580,7 +581,19 @@ internal sealed partial class PowerForgeReleaseService
                 if (result.ModulePlan is not null && moduleResult.ArtefactOutputs.Length > 0)
                     result.ModulePlan.ArtefactOutputs = moduleResult.ArtefactOutputs;
 
-                UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
+                var resolvedVersionEvidence = result.ModuleAssets;
+                if (captureModuleArtifactProvenance)
+                {
+                    result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
+                        result.ModuleAssets,
+                        moduleArtifactBaseline,
+                        result.ModulePlan,
+                        ResolvePersistentModuleScriptArchiveRoot(result.ModulePlan, configDirectory));
+                    if (result.ModuleProducedAssets.Length > 0)
+                        resolvedVersionEvidence = result.ModuleProducedAssets;
+                }
+
+                UpdateResolvedModuleVersion(result.ModulePlan, resolvedVersionEvidence);
                 if (result.ModulePlan is not null)
                 {
                     if (moduleResult.ArtefactOutputs.Length == 0)
@@ -597,6 +610,12 @@ internal sealed partial class PowerForgeReleaseService
                         result.ModulePlan.ModuleVersion,
                         result.ModulePlan.PreReleaseTag);
                 }
+
+                if (deferredModulePublishRequest is not null && result.ModulePlan is not null)
+                {
+                    deferredModulePublishRequest.ModuleVersion = result.ModulePlan.ModuleVersion;
+                    deferredModulePublishRequest.PreReleaseTag = result.ModulePlan.PreReleaseTag;
+                }
                 result.ModuleAssets = ExpandModuleArtifactPaths(
                     result.ModuleAssets,
                     result.ModulePlan?.ModuleName,
@@ -604,14 +623,6 @@ internal sealed partial class PowerForgeReleaseService
                     result.ModulePlan?.PreReleaseTag);
                 if (result.ModulePlan is not null)
                     result.ModulePlan.ArtifactPaths = result.ModuleAssets;
-                if (captureModuleArtifactProvenance)
-                {
-                    result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
-                        result.ModuleAssets,
-                        moduleArtifactBaseline,
-                        result.ModulePlan,
-                        ResolvePersistentModuleScriptArchiveRoot(result.ModulePlan, configDirectory));
-                }
 
                 if (result.ModulePlan?.IncludesProjectPackages == true &&
                     module.Request.ConfigPath is not null)
@@ -1608,7 +1619,7 @@ internal sealed partial class PowerForgeReleaseService
             NoDotnetBuild = noDotnetBuildOverride ?? false,
             NoDotnetBuildWasSpecified = noDotnetBuildOverride.HasValue,
             ModuleVersion = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
-                ? request.ModuleVersion ?? options.ModuleVersion
+                ? request.ModuleVersion ?? options.ModuleVersion ?? moduleConfig?.Spec.Build.Version
                 : PackageVersionUtility.GetNumericVersion(request.ResolvedReleaseVersion!),
             PreReleaseTag = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
                 ? request.ModulePreReleaseTag ?? options.PreReleaseTag

@@ -7,6 +7,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModulePipelinePlan
 {
+    internal bool ReleaseCheckpoint { get; set; }
     internal bool UseLocalVersioning { get; set; }
     internal string? SourceRevision { get; set; }
     internal bool SourceDirty { get; set; }
