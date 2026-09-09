@@ -16,6 +16,10 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
                 function.NativeFunctionBinding is not null || function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) ||
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
                     statement is PowerShellBoundStreamWriteStatement { Provider: null }) ||
+                commandHost && PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
+                    PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output &&
+                    output is not PowerShellBoundInvocationExpression && output.Type.ClrType != typeof(void) &&
+                    !PowerShellStableScalarTypePolicy.IsSupported(output.Type)) ||
                 commandHost && function.Body.Effects.HasFlag(PowerShellSemanticEffect.SuccessOutput) &&
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
                     statement is PowerShellBoundTryStatement { FinallyBlock: not null }))

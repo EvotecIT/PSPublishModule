@@ -223,16 +223,30 @@ internal static class PowerShellLocalCallSemanticBinder
             VariableExpressionAst variable when knownTypes.TryGetValue(variable.VariablePath.UserPath, out var type) => type,
             ConvertExpressionAst conversion when conversion.StaticType != typeof(object) => conversion.StaticType,
             ArrayLiteralAst array => InferArrayType(array.Elements, knownTypes),
-            ArrayExpressionAst array => InferArrayType(
-                array.SubExpression.Statements
-                    .OfType<PipelineAst>()
-                    .SelectMany(static pipeline => pipeline.PipelineElements.OfType<CommandExpressionAst>())
-                    .Select(static expression => expression.Expression),
-                knownTypes),
+            ArrayExpressionAst array => InferCollectedArrayType(array, knownTypes, functions),
             CommandAst command when functions is not null && command.GetCommandName() is { } name &&
                                     functions.TryGetValue(name, out var signature) => signature.DeclaredReturnType,
             _ => syntax is ExpressionAst expression && expression.StaticType != typeof(object) ? expression.StaticType : null
         };
+
+    private static Type? InferCollectedArrayType(ArrayExpressionAst array, IReadOnlyDictionary<string, Type> knownTypes,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature>? functions)
+    {
+        var recordTypes = new List<Type>();
+        foreach (var statement in array.SubExpression.Statements)
+        {
+            if (statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                pipeline.PipelineElements[0] is not CommandExpressionAst command)
+                return null;
+            var type = InferExpressionType(Unwrap(command.Expression), knownTypes, functions);
+            if (type is null) return null;
+            // Collection expressions enumerate each expression's result once. A comma
+            // array contributes its elements; an extra unary comma preserves nesting.
+            recordTypes.Add(type.IsArray ? type.GetElementType()! : type);
+        }
+        var distinct = recordTypes.Distinct().ToArray();
+        return distinct.Length == 1 ? distinct[0].MakeArrayType() : null;
+    }
 
     private static Type? InferArrayType(IEnumerable<ExpressionAst> elements, IReadOnlyDictionary<string, Type> parameterTypes)
     {

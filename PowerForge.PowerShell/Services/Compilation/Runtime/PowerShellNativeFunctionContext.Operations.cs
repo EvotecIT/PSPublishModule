@@ -67,16 +67,21 @@ namespace PowerForge.Generated.Runtime
 
         private static Func<object?, object?, object?> CreateBinarySite(Tuple<ExpressionType, bool> key)
         {
-            var type = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.PSBinaryOperationBinder", true)!;
-            var get = type.GetMethod("Get", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public, null,
-                new[] { typeof(ExpressionType), typeof(bool), typeof(bool) }, null)
-                ?? throw new NotSupportedException("PowerShell's native binary-operation binder is unavailable.");
-            var binder = (CallSiteBinder)PowerShellNativeFunctionHost.Invoke(get, null,
-                new object[] { key.Item1, key.Item2, false })!;
+            var binder = GetBinaryBinder(key.Item1, key.Item2, false);
             var left = Expression.Parameter(typeof(object), "left");
             var right = Expression.Parameter(typeof(object), "right");
             return Expression.Lambda<Func<object?, object?, object?>>(
                 Expression.Dynamic(binder, typeof(object), left, right), left, right).Compile();
+        }
+
+        private static CallSiteBinder GetBinaryBinder(ExpressionType operation, bool ignoreCase, bool scalarCompare)
+        {
+            var type = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.PSBinaryOperationBinder", true)!;
+            var get = type.GetMethod("Get", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public, null,
+                new[] { typeof(ExpressionType), typeof(bool), typeof(bool) }, null)
+                ?? throw new NotSupportedException("PowerShell's native binary-operation binder is unavailable.");
+            return (CallSiteBinder)PowerShellNativeFunctionHost.Invoke(get, null,
+                new object[] { operation, ignoreCase, scalarCompare })!;
         }
     }
 }

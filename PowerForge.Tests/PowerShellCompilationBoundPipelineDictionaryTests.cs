@@ -158,8 +158,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
-        var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
-            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements)).Expression);
+        var member = Assert.Single(PowerShellSemanticAnalyzer.EnumerateStatements(Assert.Single(result.Analyzed.Functions).Body)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundClrMemberExpression>());
         Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookup, member.ReceiverBehavior);
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains(".Contains(\"AjaxSessionKey\")", source, StringComparison.Ordinal);
@@ -179,8 +181,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
-        var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
-            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements)).Expression);
+        var member = Assert.Single(PowerShellSemanticAnalyzer.EnumerateStatements(Assert.Single(result.Analyzed.Functions).Body)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundClrMemberExpression>());
         Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback, member.ReceiverBehavior);
         Assert.False(member.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellHostTypes));
         var source = Assert.Single(result.Emitted.Methods).Source;

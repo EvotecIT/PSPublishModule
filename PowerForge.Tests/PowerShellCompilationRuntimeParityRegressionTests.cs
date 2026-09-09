@@ -167,11 +167,12 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
-        Assert.Contains(result.Manifest.Diagnostics, static diagnostic =>
-            diagnostic.Message.Contains("pipeline cardinality", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal("System.String", RuntimeParityRunModuleProof(result.ArtifactPath!, "Get-ConsumedType"));
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.All(result.Manifest.UnitDispositionLedger!.Entries.Where(unit => unit.EmittedClrMethod),
+            unit => Assert.True(unit.UsesNativeFunctionBinding));
+        var compiledValue = RuntimeParityRunModuleProof(result.ArtifactPath!, "Get-ConsumedType");
+        Assert.Equal(RuntimeParityRunModuleProof(fixture.ScriptPath, "Get-ConsumedType"), compiledValue);
+        Assert.Equal("System.String", compiledValue);
     }
 
     [Fact]

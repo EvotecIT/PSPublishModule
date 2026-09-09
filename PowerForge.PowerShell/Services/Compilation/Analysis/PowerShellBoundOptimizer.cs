@@ -146,6 +146,10 @@ internal sealed class PowerShellBoundOptimizer
 
     private PowerShellBoundExpression OptimizeExpression(PowerShellBoundExpression expression)
     {
+        if (expression is PowerShellBoundMembershipExpression membership)
+            return new PowerShellBoundMembershipExpression(membership.Span, OptimizeExpression(membership.Left),
+                OptimizeExpression(membership.Right), membership.ElementType, membership.CollectionOnRight,
+                membership.IgnoreCase, membership.Negate, membership.UsesNativeInvocation);
         if (expression is PowerShellBoundBinaryExpression binary)
         {
             var left = OptimizeExpression(binary.Left);

@@ -234,13 +234,15 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
         Type elementType,
         bool collectionOnRight,
         bool ignoreCase,
-        bool negate)
+        bool negate,
+        bool usesNativeInvocation = false)
         : base(
             span,
-            new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "The membership operator binds one invariant PowerShell LanguagePrimitives comparison."),
+            new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "The membership operator produces one Boolean comparison result."),
             PowerShellValueState.Unknown,
-            left.Effects | right.Effects,
-            left.Capabilities | right.Capabilities | PowerShellRequiredCapability.PowerShellLanguageOperators)
+            left.Effects | right.Effects | (usesNativeInvocation ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
+            left.Capabilities | right.Capabilities | PowerShellRequiredCapability.PowerShellLanguageOperators |
+            (usesNativeInvocation ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Left = left;
         Right = right;
@@ -248,6 +250,7 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
         CollectionOnRight = collectionOnRight;
         IgnoreCase = ignoreCase;
         Negate = negate;
+        UsesNativeInvocation = usesNativeInvocation;
     }
 
     internal PowerShellBoundExpression Left { get; }
@@ -256,6 +259,7 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
     internal bool CollectionOnRight { get; }
     internal bool IgnoreCase { get; }
     internal bool Negate { get; }
+    internal bool UsesNativeInvocation { get; }
 }
 
 internal sealed class PowerShellBoundStringSplitExpression : PowerShellBoundExpression

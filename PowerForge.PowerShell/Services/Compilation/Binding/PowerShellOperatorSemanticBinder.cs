@@ -34,7 +34,7 @@ internal static partial class PowerShellOperatorSemanticBinder
             return BindWildcard(syntax, span, operation, bindOperand, diagnostics);
         if (operation is "Icontains" or "Ccontains" or "Inotcontains" or "Cnotcontains" or
             "Iin" or "Cin" or "Inotin" or "Cnotin")
-            return BindMembership(syntax, span, operation, bindOperand, diagnostics);
+            return BindMembership(syntax, span, operation, bindOperand, diagnostics, capabilities);
         if (operation is "Isplit" or "Csplit")
             return BindStringSplit(syntax, span, operation, bindOperand, diagnostics);
         if (operation == "Join")
@@ -403,14 +403,19 @@ internal static partial class PowerShellOperatorSemanticBinder
         SourceSpan span,
         string operation,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities)
     {
-        var left = bindOperand(syntax.Left);
-        var right = bindOperand(syntax.Right);
-        if (left is null || right is null) return null;
         var collectionOnRight = operation.EndsWith("in", StringComparison.OrdinalIgnoreCase);
-        var collection = collectionOnRight ? right : left;
-        var candidate = collectionOnRight ? left : right;
+        var collection = bindOperand(collectionOnRight ? syntax.Right : syntax.Left);
+        var candidate = bindOperand(collectionOnRight ? syntax.Left : syntax.Right);
+        if (collection is null || candidate is null) return null;
+        var left = collectionOnRight ? candidate : collection;
+        var right = collectionOnRight ? collection : candidate;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return new PowerShellBoundMembershipExpression(span, left, right, typeof(object), collectionOnRight,
+                operation.StartsWith("I", StringComparison.Ordinal), operation.Contains("not", StringComparison.OrdinalIgnoreCase),
+                usesNativeInvocation: true);
         var collectionType = collection.Type.ClrType;
         if (!collectionType.IsArray || collectionType.GetArrayRank() != 1)
             return Reject(diagnostics, span, "PSB2226", $"Operator '-{operation.ToLowerInvariant()}' requires a statically typed one-dimensional array on its collection side.");

@@ -115,6 +115,8 @@ Native-bound Hybrid functions now compile `-replace`, `-ireplace`, and `-creplac
 
 Native-bound Hybrid functions compile expression and command-pipeline statements inside `$()` through the shared collection owner. Empty `$()` preserves ordinary null; nonempty captures preserve zero/one/many records, nested arrays, object identity, mutation suppression, and `[void]` side effects. Direct pipeline records remain distinct from parenthesized expression output, including `-NoEnumerate` values. The three-host differential matrix covers enumeration failures, error preferences and variables, continuation, downstream stop, and later invocation. Control-flow statements and traps inside subexpressions remain unsupported, and this host-dependent contract does not expand runtime-free Strict admission.
 
+Native-bound Hybrid membership operators use the installed host's comparison and enumeration semantics. Differential checks cover all case and negation forms, collection-before-candidate evaluation, conversion, enumeration failures, error continuation, and downstream stop on the three selected hosts. Typed membership preserves the same operand order. Collected-array inference follows emitted element types, and command array returns use the shared success-stream owner to preserve nested records on Windows PowerShell 5.1. These bounded checks do not close the complete-workflow gates or expand runtime-free Strict admission.
+
 ## Milestone 25 — Compile complete pipelines and advanced functions
 
 **Outcome:** compile an entire command workflow, including multiple success outputs, instead of restricting useful work to a scalar terminal return.

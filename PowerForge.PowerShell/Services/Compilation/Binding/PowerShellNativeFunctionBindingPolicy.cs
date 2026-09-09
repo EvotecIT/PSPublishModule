@@ -76,7 +76,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(static node =>
                node is ConvertExpressionAst conversion && conversion.Parent is CommandExpressionAst { Parent: PipelineAst discardPipeline } &&
                    PowerShellCompilationConversionPolicy.IsStatementDiscard(conversion) && IsCapturedPipeline(discardPipeline) ||
-               node is SubExpressionAst or BinaryExpressionAst { Operator: TokenKind.Join or TokenKind.Ireplace or TokenKind.Creplace } or
+               node is SubExpressionAst or BinaryExpressionAst { Operator: TokenKind.Join or TokenKind.Ireplace or TokenKind.Creplace or
+                   TokenKind.Icontains or TokenKind.Ccontains or TokenKind.Inotcontains or TokenKind.Cnotcontains or
+                   TokenKind.Iin or TokenKind.Cin or TokenKind.Inotin or TokenKind.Cnotin } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is PipelineAst pipeline &&
                PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline) && IsCapturedPipeline(pipeline),

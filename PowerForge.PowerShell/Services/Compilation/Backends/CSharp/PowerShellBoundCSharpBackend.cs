@@ -490,11 +490,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitMembership(PowerShellLoweredMembershipExpression expression)
     {
+        if (expression.UsesNativeInvocation)
+            return $"__nativeFunction.EvaluateMembership({(expression.IgnoreCase ? "true" : "false")}, {(expression.Negate ? "true" : "false")}, " +
+                $"(object?)({EmitExpression(expression.CollectionOnRight ? expression.Right : expression.Left)}), " +
+                $"(object?)({EmitExpression(expression.CollectionOnRight ? expression.Left : expression.Right)}))";
         var collection = expression.CollectionOnRight ? expression.RightTemporary : expression.LeftTemporary;
         var candidate = expression.CollectionOnRight ? expression.LeftTemporary : expression.RightTemporary;
         var comparison = $"global::System.Linq.Enumerable.Any(({collection} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(expression.ElementType)}>()), {expression.ItemTemporary} => global::System.Management.Automation.LanguagePrimitives.Equals((object?){expression.ItemTemporary}, (object?)({candidate}), {(expression.IgnoreCase ? "true" : "false")}, global::System.Globalization.CultureInfo.InvariantCulture))";
         if (expression.Negate) comparison = $"!({comparison})";
-        return $"new global::System.Func<bool>(() => {{ var {expression.LeftTemporary} = {EmitExpression(expression.Left)}; var {expression.RightTemporary} = {EmitExpression(expression.Right)}; return {comparison}; }})()";
+        var left = $"{PowerShellCSharpSymbolRenderer.TypeName(expression.Left.ClrType)} {expression.LeftTemporary} = {EmitExpression(expression.Left)}; ";
+        var right = $"{PowerShellCSharpSymbolRenderer.TypeName(expression.Right.ClrType)} {expression.RightTemporary} = {EmitExpression(expression.Right)}; ";
+        return $"new global::System.Func<bool>(() => {{ {(expression.CollectionOnRight ? right + left : left + right)}return {comparison}; }})()";
     }
 
     private string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)

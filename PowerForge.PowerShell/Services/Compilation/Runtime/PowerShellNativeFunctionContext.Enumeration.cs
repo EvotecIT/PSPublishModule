@@ -61,16 +61,17 @@ namespace PowerForge.Generated.Runtime
         {
             internal static readonly Lazy<NativeEnumerationContract> Shared = new(() => new NativeEnumerationContract());
             internal readonly Func<object?, IEnumerator?> GetEnumerator;
+            internal readonly CallSiteBinder Binder;
 
             private NativeEnumerationContract()
             {
                 var binderType = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.PSEnumerableBinder", true)!;
                 var get = binderType.GetMethod("Get", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
                     null, Type.EmptyTypes, null) ?? throw new NotSupportedException("PowerShell's enumeration binder is unavailable.");
-                var binder = (CallSiteBinder)PowerShellNativeFunctionHost.Invoke(get, null, Array.Empty<object>())!;
+                Binder = (CallSiteBinder)PowerShellNativeFunctionHost.Invoke(get, null, Array.Empty<object>())!;
                 var value = Expression.Parameter(typeof(object), "value");
                 GetEnumerator = Expression.Lambda<Func<object?, IEnumerator?>>(
-                    Expression.Dynamic(binder, typeof(IEnumerator), value), value).Compile();
+                    Expression.Dynamic(Binder, typeof(IEnumerator), value), value).Compile();
             }
         }
 

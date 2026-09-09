@@ -97,7 +97,7 @@ internal sealed partial class PowerShellTypedLowerer
                 membership.Negate,
                 names.Allocate("pf_membership_left"),
                 names.Allocate("pf_membership_right"),
-                names.Allocate("pf_membership_item")),
+                names.Allocate("pf_membership_item"), membership.UsesNativeInvocation),
             PowerShellBoundStringSplitExpression split => new PowerShellLoweredStringSplitExpression(
                 split.Span,
                 LowerExpression(split.Input, functions, names, targetCapabilities),

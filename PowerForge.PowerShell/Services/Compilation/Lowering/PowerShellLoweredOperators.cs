@@ -128,7 +128,8 @@ internal sealed class PowerShellLoweredMembershipExpression : PowerShellLoweredE
         bool negate,
         string leftTemporary,
         string rightTemporary,
-        string itemTemporary)
+        string itemTemporary,
+        bool usesNativeInvocation = false)
         : base(span, typeof(bool))
     {
         Left = left;
@@ -140,6 +141,7 @@ internal sealed class PowerShellLoweredMembershipExpression : PowerShellLoweredE
         LeftTemporary = leftTemporary;
         RightTemporary = rightTemporary;
         ItemTemporary = itemTemporary;
+        UsesNativeInvocation = usesNativeInvocation;
     }
 
     internal PowerShellLoweredExpression Left { get; }
@@ -151,6 +153,7 @@ internal sealed class PowerShellLoweredMembershipExpression : PowerShellLoweredE
     internal string LeftTemporary { get; }
     internal string RightTemporary { get; }
     internal string ItemTemporary { get; }
+    internal bool UsesNativeInvocation { get; }
 }
 
 internal sealed class PowerShellLoweredStringSplitExpression : PowerShellLoweredExpression
