@@ -39,6 +39,8 @@ internal static class PowerShellCompilationConversionPolicy
         {
             switch (current)
             {
+                case ArrayExpressionAst:
+                case SubExpressionAst:
                 case NamedBlockAst:
                     return true;
                 case StatementBlockAst:

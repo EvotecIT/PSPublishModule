@@ -209,7 +209,7 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundNativeCollectionExpression collection)
             return new PowerShellBoundNativeCollectionExpression(collection.Span, collection.SourcePath,
                 collection.Items.Select(item => new PowerShellBoundNativeCollectionItem(item.Span, item.SourceText,
-                    OptimizeExpression(item.Value), item.SetSuccess)).ToArray(), collection.ShareEmptyResult, collection.SingleExpression);
+                    OptimizeExpression(item.Value), item.SetSuccess, item.EmitsOutput, item.IsPipelineStatement)).ToArray(), collection.ShareEmptyResult, collection.SingleExpression, collection.CollapseResult);
         if (expression is PowerShellBoundArrayCopyExpression copy)
             return new PowerShellBoundArrayCopyExpression(copy.Span, OptimizeExpression(copy.Source), copy.ShareEmptyResult);
         return expression;

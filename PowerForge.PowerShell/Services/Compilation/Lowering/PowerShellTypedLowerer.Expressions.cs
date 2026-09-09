@@ -148,8 +148,8 @@ internal sealed partial class PowerShellTypedLowerer
                 collection.Span, collection.SourcePath,
                 collection.Items.Select(item => new PowerShellLoweredNativeCollectionItem(item.Span, item.SourceText,
                     LowerExpression(item.Value, functions, names, targetCapabilities), item.SetSuccess,
-                    names.Allocate("pf_collection_value"), names.Allocate("pf_collection_error"))).ToArray(),
-                collection.ShareEmptyResult, names.Allocate("pf_collection_result"), collection.SingleExpression),
+                    names.Allocate("pf_collection_value"), names.Allocate("pf_collection_error"), item.EmitsOutput, item.IsPipelineStatement)).ToArray(),
+                collection.ShareEmptyResult, names.Allocate("pf_collection_result"), collection.SingleExpression, collection.CollapseResult),
             PowerShellBoundArrayConcatenationExpression concatenation => new PowerShellLoweredArrayConcatenationExpression(
                 concatenation.Span,
                 LowerExpression(concatenation.Left, functions, names, targetCapabilities),

@@ -10,42 +10,58 @@ internal static class PowerShellArraySemanticBinder
     internal static PowerShellBoundExpression? BindNativeCollection(ParsedSourceDocument document, ArrayExpressionAst syntax,
         Type? contextualType, Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         PowerShellCompilationSemanticOracleProfile semanticProfile, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        => BindNativeStatements(document, syntax, syntax.SubExpression, contextualType, bindExpression, semanticProfile, diagnostics, false);
+
+    internal static PowerShellBoundExpression? BindNativeSubexpression(ParsedSourceDocument document, SubExpressionAst syntax,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationSemanticOracleProfile semanticProfile, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        => BindNativeStatements(document, syntax, syntax.SubExpression, null, bindExpression, semanticProfile, diagnostics, true);
+
+    private static PowerShellBoundExpression? BindNativeStatements(ParsedSourceDocument document, Ast syntax,
+        StatementBlockAst statements, Type? contextualType, Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationSemanticOracleProfile semanticProfile, ICollection<PowerShellSemanticDiagnostic> diagnostics, bool collapseResult)
     {
-        if (syntax.SubExpression.Traps is not null || contextualType is { IsArray: true } && contextualType != typeof(object[]))
+        if (statements.Traps is not null || contextualType is { IsArray: true } && contextualType != typeof(object[]))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2503",
                 "Native collected statements currently require Object array storage without traps.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return null;
         }
+        // An empty authored $() is an ordinary null literal; nonempty captures with no output use AutomationNull.
+        if (collapseResult && statements.Statements.Count == 0)
+            return new PowerShellBoundLiteralExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent), null,
+                PowerShellTypeFact.Unknown, PowerShellValueState.Null);
         var windowsPowerShell = semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51;
         var items = new List<PowerShellBoundNativeCollectionItem>();
         var singlePureExpression = false;
-        foreach (var statement in syntax.SubExpression.Statements)
+        foreach (var statement in statements.Statements)
         {
             if (statement is not PipelineAst pipeline)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501",
-                    "Native collected arrays require expression or command-pipeline statements.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
+                    "Native value collections require expression or command-pipeline statements.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
                 return null;
             }
             var command = !PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline)
                 ? pipeline.PipelineElements[0] as CommandExpressionAst : null;
-            var value = bindExpression(command is null ? pipeline : command.Expression, typeof(object));
+            var discard = command?.Expression is ConvertExpressionAst conversion && conversion.StaticType == typeof(void);
+            var expression = discard ? ((ConvertExpressionAst)command!.Expression).Child : command?.Expression;
+            var value = bindExpression(expression is null ? pipeline : expression, typeof(object));
             if (value is null) return null;
-            singlePureExpression = syntax.SubExpression.Statements.Count == 1 && command is not null;
+            singlePureExpression = !collapseResult && statements.Statements.Count == 1 && command is not null;
             // A single pure expression bypasses the statement-output suppression
             // used by a multi-statement collector, including bare ++/-- results.
-            if (syntax.SubExpression.Statements.Count == 1 && value is PowerShellBoundMutationExpression { UsesNativeInvocation: true } mutation)
+            if (!collapseResult && statements.Statements.Count == 1 && value is PowerShellBoundMutationExpression { UsesNativeInvocation: true } mutation)
                 value = mutation.WithResultType(PowerShellTypeFact.Unknown,
                     nativeSetSequencePoint: mutation.Value is not null && mutation.NativeSetSequencePoint);
-            if (syntax.SubExpression.Statements.Count == 1 && command?.Expression is ArrayLiteralAst)
+            if (!collapseResult && statements.Statements.Count == 1 && command?.Expression is ArrayLiteralAst)
                 return value;
             var sourceText = PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Extent));
             items.Add(new PowerShellBoundNativeCollectionItem(PowerShellSourceParser.GetSpan(document, statement.Extent),
-                sourceText, value, PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(statement, windowsPowerShell)));
+                sourceText, value, PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(statement, windowsPowerShell), !discard, command is null));
         }
         return new PowerShellBoundNativeCollectionExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
-            document.Path, items.ToArray(), !windowsPowerShell, singlePureExpression);
+            document.Path, items.ToArray(), !windowsPowerShell, singlePureExpression, collapseResult);
     }
 
     internal static PowerShellBoundExpression? Bind(

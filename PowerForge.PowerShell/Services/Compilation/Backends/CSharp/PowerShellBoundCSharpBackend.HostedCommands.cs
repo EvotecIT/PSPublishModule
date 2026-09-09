@@ -21,6 +21,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(", ").Append(EmitCommandRegionArguments(region.Arguments)).AppendLine(");");
     }
 
+    private string EmitNativeCommandRecords(PowerShellLoweredNativeCommandExpression command, string sink)
+        => $"__nativeFunction.InvokeCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
+           $"{PowerShellCSharpLiteral.QuoteString(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
+           $"{sink}, {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset})";
+
     private string EmitNativeCommandCapture(PowerShellLoweredNativeCommandExpression command)
         => $"__nativeFunction.CaptureCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
            $"{PowerShellCSharpLiteral.QuoteString(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +

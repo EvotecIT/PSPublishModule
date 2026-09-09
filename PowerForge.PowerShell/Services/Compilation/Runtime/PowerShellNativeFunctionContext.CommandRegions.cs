@@ -16,6 +16,14 @@ namespace PowerForge.Generated.Runtime
             string? sourceDocument = null, int startOffset = -1, int endOffset = -1)
             => GetCommandRegion(source, file, line, column, false, false, sourceDocument, startOffset, endOffset).Invoke(FunctionContext);
 
+        /// <summary>Writes pipeline records directly into an enclosing collector without scalarizing them.</summary>
+        public void InvokeCommandRegion(string source, string file, int line, int column, Action<object?> output,
+            string? sourceDocument = null, int startOffset = -1, int endOffset = -1)
+        {
+            using (RedirectOutput(output))
+                InvokeCommandRegion(source, file, line, column, sourceDocument, startOffset, endOffset);
+        }
+
         /// <summary>Captures an authored pipeline value with its explicit partial-output-on-error contract.</summary>
         public object? CaptureCommandRegion(string source, string file, int line, int column, bool preservePartialOutput,
             string? sourceDocument = null, int startOffset = -1, int endOffset = -1)

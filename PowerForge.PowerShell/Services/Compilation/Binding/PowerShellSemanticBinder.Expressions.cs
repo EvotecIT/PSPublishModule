@@ -64,6 +64,10 @@ internal sealed partial class PowerShellSemanticBinder
             return knownProperty;
         switch (syntax)
         {
+            case SubExpressionAst subexpression when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
+                return PowerShellArraySemanticBinder.BindNativeSubexpression(document, subexpression,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    _semanticProfile, diagnostics);
             case ExpandableStringExpressionAst expandable:
                 return PowerShellStringSemanticBinder.BindInterpolated(
                     document,
