@@ -10,7 +10,7 @@ public sealed class RandomWorkflowStopState {
 }
 '@
 $configure = {
-    param($path, $state)
+    param($path, $state, $commandName)
     $target = Import-Module $path -PassThru
     foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword') {
         if (!$target.ExportedCommands.ContainsKey($name)) { throw ('The selected module does not export ' + $name) }
@@ -34,19 +34,25 @@ $configure = {
             }
         }
     } $state
+    $qualifiedName = $target.Name + '\' + $commandName
+    $selected = Get-Command -Name $qualifiedName -ErrorAction Stop
+    if ($selected.Module.Path -ne $target.Path) { throw 'Command lookup selected a different module.' }
+    $qualifiedName
 }
 foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword') {
     $state = [RandomWorkflowStopState]::new()
     $ps = [powershell]::Create()
     try {
-        [void]$ps.AddScript($configure.ToString()).AddArgument($modulePath).AddArgument($state)
-        [void]$ps.Invoke()
+        [void]$ps.AddScript($configure.ToString()).AddArgument($modulePath).AddArgument($state).AddArgument($name)
+        $selectedCommands = @($ps.Invoke())
         if ($ps.HadErrors) { throw ('Provider setup failed: ' + $ps.Streams.Error) }
+        if ($selectedCommands.Count -ne 1) { throw 'The selected command was not returned.' }
+        $selectedCommand = [string]$selectedCommands[0]
         $ps.Commands.Clear()
-        [void]$ps.AddCommand($name)
+        [void]$ps.AddCommand($selectedCommand)
         if ($name -eq 'Get-RandomCharacters') { [void]$ps.AddParameter('length', 3).AddParameter('characters', 'abc') }
         $running = $ps.BeginInvoke()
-        if (!$state.Started.WaitOne(5000)) { throw ('The workflow did not reach the provider: ' + $ps.Streams.Error) }
+        if (!$state.Started.WaitOne(5000)) { throw ('The workflow did not reach the provider: ' + $selectedCommand + ':' + $ps.InvocationStateInfo.State + ':' + $ps.Streams.Error) }
         $stop = $ps.BeginStop($null, $null)
         $deadline = [DateTime]::UtcNow.AddSeconds(5)
         while ($ps.InvocationStateInfo.State -ne 'Stopping' -and [DateTime]::UtcNow -lt $deadline) { [Threading.Thread]::Sleep(1) }
@@ -60,7 +66,7 @@ foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword') {
             errors = @($ps.Streams.Error | ForEach-Object FullyQualifiedErrorId)
         } | ConvertTo-Json -Compress
         $ps.Commands.Clear(); $ps.Streams.Error.Clear(); $state.Calls = 0; $state.Cleanups = 0
-        [void]$ps.AddCommand($name)
+        [void]$ps.AddCommand($selectedCommand)
         if ($name -eq 'Get-RandomCharacters') { [void]$ps.AddParameter('length', 3).AddParameter('characters', 'abc') }
         $records = @($ps.Invoke())
         [pscustomobject]@{
