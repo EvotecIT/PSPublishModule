@@ -7,7 +7,10 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellStatementErrorContext
     {
-        private ConditionalWeakTable<Exception, IScriptExtent>? _nativeExpressionExtents;
+        private ConditionalWeakTable<Exception, IScriptExtent>? _expressionErrorExtents;
+
+        private void RememberExpressionFailure(Exception error, IScriptExtent extent)
+            => (_expressionErrorExtents ??= new ConditionalWeakTable<Exception, IScriptExtent>()).GetValue(error, _ => extent);
         private NativeExpressionPosition _nativeExpressionPosition;
         private bool _hasNativeSequencePoint;
 
@@ -29,8 +32,7 @@ namespace PowerForge.Generated.Runtime
             catch (Exception error)
             {
                 var position = _nativeExpressionPosition;
-                (_nativeExpressionExtents ??= new ConditionalWeakTable<Exception, IScriptExtent>())
-                    .GetValue(error, _ => position.ToExtent());
+                RememberExpressionFailure(error, position.ToExtent());
                 throw;
             }
         }
@@ -78,10 +80,10 @@ namespace PowerForge.Generated.Runtime
 
         private void HandleNativeFunction(Exception error, IScriptExtent extent)
         {
-            if (_nativeExpressionExtents?.TryGetValue(error, out var expressionExtent) == true)
+            if (_expressionErrorExtents?.TryGetValue(error, out var expressionExtent) == true)
             {
                 extent = expressionExtent;
-                _nativeExpressionExtents.Remove(error);
+                _expressionErrorExtents.Remove(error);
             }
             else if (_hasNativeSequencePoint)
             {

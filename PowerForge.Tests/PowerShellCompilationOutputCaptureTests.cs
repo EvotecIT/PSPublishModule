@@ -11,7 +11,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$script:Values=for ([int]$i=0;$i -lt 2;$i++) { $i }")]
     [InlineData("$Values=for ([int]$i=0;$i -lt 2;$i++) { $Values='x'; $i }")]
     [InlineData("$Values=for ([int]$i=0;$i -lt 2;$i++) { [string]$Values='x'; $i }")]
-    [InlineData("$Values=foreach ($Values in 1,2) { $Values }")]
     [InlineData("[int]$i=0; $Values=while ($i -lt 2) { $Values='x'; $i; $i++ }")]
     [InlineData("[int]$i=0; $Values=do { $Values='x'; $i; $i++ } while ($i -lt 2)")]
     [InlineData("[int]$i=0; $Values=do { [string]$Values='x'; $i; $i++ } until ($i -eq 2)")]
@@ -26,8 +25,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("net10.0", "pwsh")]
-    [InlineData("net8.0", "pwsh")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void OutputCapture_PreservesNestedNullAndFlowRecords(string framework, string host)
     {
         if (framework == "net8.0") host = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH") ?? host;
@@ -78,15 +76,21 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 'after'
                 return ,$Values
             }
+            function Get-SelfCapture {
+                [CmdletBinding()] param()
+                $Values=foreach ($Values in 1,2) { $Values }
+                'after'
+                return ,$Values
+            }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.NestedOutputCapture", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(7, result.Manifest!.CompiledMethods);
+        Assert.Equal(8, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         const string probe = """
-            foreach ($name in 'Get-NestedCapture','Get-NullCapture','Get-FlowCapture','Get-CallCapture','Get-WhileCapture','Get-DoCapture') {
+            foreach ($name in 'Get-NestedCapture','Get-NullCapture','Get-FlowCapture','Get-CallCapture','Get-WhileCapture','Get-DoCapture','Get-SelfCapture') {
                 $records=@(& $name)
                 [pscustomobject]@{name=$name;count=$records.Count;records=$records} | ConvertTo-Json -Depth 10 -Compress
             }
@@ -126,8 +130,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             framework == "net472" ? PowerShellCompilationMode.Hybrid : PowerShellCompilationMode.Strict,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(framework == "net472" ? 1 : 2, result.Manifest!.CompiledMethods);
-        Assert.Equal(framework == "net472" ? 1 : 0, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         const string probe = """
             foreach ($count in 0,1,3) {
                 $records=@(Get-CapturedValues $count)

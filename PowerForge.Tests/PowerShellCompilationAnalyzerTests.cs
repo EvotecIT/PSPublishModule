@@ -336,7 +336,7 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Equal(2, plan.RuntimeFallbackUnits);
         var units = Assert.Single(plan.Files).Units;
         Assert.Contains(units.Single(unit => unit.Name == "Get-EscapingMap").Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("lookup-only local", StringComparison.OrdinalIgnoreCase));
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"));
         Assert.Contains(units.Single(unit => unit.Name == "Get-DynamicMetadata").Diagnostics, diagnostic =>
             diagnostic.Message.Contains("AttributeAst", StringComparison.Ordinal));
     }

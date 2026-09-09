@@ -23,6 +23,7 @@ namespace PowerForge.Generated.Runtime
         private readonly bool _ownsVariableLists;
         private readonly PowerShellCommandVariableScope? _variableScope;
         private readonly object? _nativeFunction;
+        private readonly IScriptExtent? _invocationExtent;
         private IScriptExtent? _lastErrorExtent;
         private int _handlerDepth;
         private bool _disposed;
@@ -32,6 +33,7 @@ namespace PowerForge.Generated.Runtime
             _contract = NativeContract.Shared;
             if (cmdlet is null) throw new ArgumentNullException(nameof(cmdlet));
             _sourceName = sourceName ?? throw new ArgumentNullException(nameof(sourceName));
+            _invocationExtent = (IScriptExtent)_contract.GetRequired(_contract.InvocationScriptPosition, cmdlet.MyInvocation);
             _ownsVariableLists = true;
             _context = _contract.GetRequired(_contract.CmdletContext, cmdlet);
             _runtime = cmdlet.CommandRuntime;
@@ -71,6 +73,11 @@ namespace PowerForge.Generated.Runtime
         {
             ThrowIfDisposed();
             var extent = CreateExtent(file, line, column, endLine, endColumn, sourceText);
+            if (_nativeFunction is null && _expressionErrorExtents?.TryGetValue(error, out var expressionExtent) == true)
+            {
+                extent = expressionExtent;
+                _expressionErrorExtents.Remove(error);
+            }
             _lastErrorExtent = extent;
             if (_nativeFunction is not null)
             {
@@ -118,9 +125,9 @@ namespace PowerForge.Generated.Runtime
                 return error;
             }
             var errorInvocation = (error as RuntimeException)?.ErrorRecord.InvocationInfo;
-            var extent = errorInvocation is null
+            var extent = _invocationExtent ?? (errorInvocation is null
                 ? _lastErrorExtent ?? CreateExtent(string.Empty, 1, 1, 1, 1, string.Empty)
-                : (IScriptExtent)_contract.GetRequired(_contract.InvocationScriptPosition, errorInvocation);
+                : (IScriptExtent)_contract.GetRequired(_contract.InvocationScriptPosition, errorInvocation));
             var function = NativeContract.Construct(_contract.FunctionInfoConstructor,
                 _sourceName, ScriptBlock.Create(string.Empty), _context);
             var invocation = NativeContract.Construct(_contract.InvocationInfoConstructor, function, extent, _context);

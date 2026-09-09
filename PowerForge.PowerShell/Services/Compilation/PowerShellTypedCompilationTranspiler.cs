@@ -432,6 +432,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         method.NativeFunctionBinding = emitted.NativeFunctionBinding;
         method.DocumentId = emitted.SourceSpan.DocumentId;
         method.DeclaredOutputTypeIsSemanticContract = emitted.DeclaredOutputType is not null;
+        method.SuccessOutputType = emitted.SuccessOutputType?.FullName ?? string.Empty;
         method.RequiresPowerShellModuleState = emitted.RequiresPowerShellModuleState;
         method.RequiresPowerShellModuleStateRead = emitted.RequiresPowerShellModuleStateRead;
         method.RequiresPowerShellModuleStateWrite = emitted.RequiresPowerShellModuleStateWrite;
@@ -657,7 +658,8 @@ internal sealed class PowerShellCSharpMethodEmission
         PowerShellCompilationRegionGraph? regionGraph = null,
         bool requiresPowerShellStatementErrors = false,
         bool requiresPowerShellStopping = false,
-        PowerShellNativeFunctionBinding? nativeFunctionBinding = null)
+        PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
+        Type? successOutputType = null)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -683,6 +685,7 @@ internal sealed class PowerShellCSharpMethodEmission
         OutputCardinality = outputCardinality ?? string.Empty;
         OutputValueStates = outputValueStates ?? Array.Empty<string>();
         CollectionElementType = collectionElementType ?? string.Empty;
+        SuccessOutputType = successOutputType;
         OutputScalarization = outputScalarization ?? string.Empty;
         HostedRegionSiteCount = hostedRegionSiteCount;
         SupportsBasicCommandQuerySurface = supportsBasicCommandQuerySurface;
@@ -718,6 +721,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string OutputCardinality { get; }
     internal string[] OutputValueStates { get; }
     internal string CollectionElementType { get; }
+    internal Type? SuccessOutputType { get; }
     internal string OutputScalarization { get; }
     internal int HostedRegionSiteCount { get; }
     internal bool SupportsBasicCommandQuerySurface { get; }

@@ -8,6 +8,7 @@ namespace PowerForge;
 /// </summary>
 internal sealed partial class PowerShellBoundCSharpBackend
 {
+    private PowerShellLoweredFunction? _sourceFunction;
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
@@ -20,6 +21,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredFunction function,
         PowerShellCompilationCapability targetCapabilities)
     {
+        _sourceFunction = function;
         var builder = new StringBuilder();
         var sourceMap = new List<PowerShellCompilationSourceMapEntry>();
         var parameterParts = function.Parameters.Select(parameter =>
@@ -144,7 +146,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             writtenModuleStateVariableNames: writtenModuleStateVariableNames,
             moduleStateWriteSiteCount: moduleStateWriteSiteCount,
             regionGraph: regionGraph,
-            nativeFunctionBinding: function.NativeFunctionBinding);
+            nativeFunctionBinding: function.NativeFunctionBinding,
+            successOutputType: function.SuccessOutputType);
     }
 
     private void EmitStatement(

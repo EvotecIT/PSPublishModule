@@ -12,6 +12,7 @@ internal sealed partial class PowerShellTypedLowerer
         if (program is null) throw new ArgumentNullException(nameof(program));
         var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
         var functions = new List<PowerShellLoweredFunction>();
+        var boundFunctions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
         var boundParameterBindings = PropagateHostRequirement(program, function =>
             ContainsBoundParameterPresence(function.Body) ||
             function.NativeFunctionBinding is null && function.Parameters.Any(parameter =>
@@ -229,7 +230,7 @@ internal sealed partial class PowerShellTypedLowerer
                 moduleStateReadBindings.Contains(function.Symbol.StableKey),
                 moduleStateWriteBindings.Contains(function.Symbol.StableKey),
                 function.OutputCardinality,
-                PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
+                PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false)
                     .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
                     .Where(static expression => expression is not null)
                     .Select(static expression => expression!.ValueState)
@@ -244,7 +245,8 @@ internal sealed partial class PowerShellTypedLowerer
                 function.NativeFunctionBinding,
                 functionDocument?.Path ?? string.Empty,
                 string.Join("\n", (functionDocument?.SourceText ?? string.Empty).Replace("\r\n", "\n").Split('\n')
-                    .Skip(function.Body.Span.StartLine - 1).Take(function.Body.Span.EndLine - function.Body.Span.StartLine + 1))));
+                    .Skip(function.Body.Span.StartLine - 1).Take(function.Body.Span.EndLine - function.Body.Span.StartLine + 1)),
+                PowerShellSuccessOutputTypePolicy.Resolve(function, boundFunctions)));
         }
 
         return new PowerShellLoweredProgram(
@@ -260,7 +262,7 @@ internal sealed partial class PowerShellTypedLowerer
     {
         if (function.OutputCardinality != PowerShellOutputCardinality.Collection)
             return null;
-        var elementTypes = PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
+        var elementTypes = PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false)
             .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
             .Where(static expression => expression is not null)
             .SelectMany(static expression => expression is PowerShellBoundArrayExpression array
@@ -456,7 +458,7 @@ internal sealed partial class PowerShellTypedLowerer
                 stream.Provider,
                 LowerExpression(stream.Message, functions, names, targetCapabilities),
                 stream.Provider is null && stream.Message is PowerShellBoundArrayExpression,
-                stream.OutputBinding, stream.UsesNativeInvocation),
+                stream.OutputBinding, stream.UsesNativeInvocation, stream.UsesCommandHostEnumeration),
             PowerShellBoundCommandRegionStatement region => new PowerShellLoweredCommandRegionStatement(
                 region.Span,
                 region.HostedFallbackSource,

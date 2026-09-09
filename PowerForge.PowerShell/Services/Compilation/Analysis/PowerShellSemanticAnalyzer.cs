@@ -252,9 +252,15 @@ internal sealed partial class PowerShellSemanticAnalyzer
         return EnumerateStatements(function.Body)
             .Select(GetSuccessOutputExpression)
             .Where(static expression => expression is not null)
-            .Any(expression => expression is PowerShellBoundDictionaryExpression ||
-                               expression is PowerShellBoundVariableExpression variable && dictionaryLocals.Contains(variable.Symbol.StableKey));
+            .Any(expression => CarriesCompilerDictionary(expression!, dictionaryLocals));
     }
+
+    private static bool CarriesCompilerDictionary(PowerShellBoundExpression expression, ISet<string> dictionaryLocals)
+        => expression is PowerShellBoundDictionaryExpression || expression.Type.DictionaryValueKind != PowerShellDictionaryValueKind.None ||
+           expression is PowerShellBoundVariableExpression variable && dictionaryLocals.Contains(variable.Symbol.StableKey) ||
+           expression is PowerShellBoundArrayExpression array && array.Elements.Any(element => CarriesCompilerDictionary(element, dictionaryLocals)) ||
+           expression is PowerShellBoundConversionExpression conversion && conversion.Type.ClrType == typeof(object) &&
+               CarriesCompilerDictionary(conversion.Operand, dictionaryLocals);
 
     internal static IEnumerable<PowerShellBoundExpression> EnumerateExpressions(PowerShellBoundExpression expression)
     {
@@ -342,56 +348,59 @@ internal sealed partial class PowerShellSemanticAnalyzer
         };
 
     internal static IEnumerable<PowerShellBoundStatement> EnumerateStatements(PowerShellBoundBlock block)
+        => EnumerateStatements(block, descendIntoCaptures: true);
+
+    internal static IEnumerable<PowerShellBoundStatement> EnumerateStatements(PowerShellBoundBlock block, bool descendIntoCaptures)
     {
         foreach (var statement in block.Statements)
         {
             yield return statement;
-            if (statement is PowerShellBoundOutputCaptureStatement capture)
+            if (descendIntoCaptures && statement is PowerShellBoundOutputCaptureStatement capture)
             {
-                foreach (var nested in EnumerateStatements(capture.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(capture.Body, descendIntoCaptures)) yield return nested;
             }
             if (statement is PowerShellBoundStatementErrorBoundary boundary)
             {
-                foreach (var nested in EnumerateStatements(boundary.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(boundary.Body, descendIntoCaptures)) yield return nested;
             }
             else if (statement is PowerShellBoundIfStatement conditional)
             {
                 foreach (var clause in conditional.Clauses)
-                foreach (var nested in EnumerateStatements(clause.Body))
+                foreach (var nested in EnumerateStatements(clause.Body, descendIntoCaptures))
                     yield return nested;
                 if (conditional.ElseBlock is not null)
-                foreach (var nested in EnumerateStatements(conditional.ElseBlock))
+                foreach (var nested in EnumerateStatements(conditional.ElseBlock, descendIntoCaptures))
                     yield return nested;
             }
             else if (statement is PowerShellBoundWhileStatement loop)
             {
-                foreach (var nested in EnumerateStatements(loop.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(loop.Body, descendIntoCaptures)) yield return nested;
             }
             else if (statement is PowerShellBoundForStatement forLoop)
             {
-                foreach (var nested in EnumerateStatements(forLoop.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(forLoop.Body, descendIntoCaptures)) yield return nested;
             }
             else if (statement is PowerShellBoundForEachStatement forEachLoop)
             {
-                foreach (var nested in EnumerateStatements(forEachLoop.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(forEachLoop.Body, descendIntoCaptures)) yield return nested;
             }
             else if (statement is PowerShellBoundSwitchStatement switchStatement)
             {
                 foreach (var clause in switchStatement.Clauses)
-                foreach (var nested in EnumerateStatements(clause.Body))
+                foreach (var nested in EnumerateStatements(clause.Body, descendIntoCaptures))
                     yield return nested;
                 if (switchStatement.DefaultBlock is not null)
-                foreach (var nested in EnumerateStatements(switchStatement.DefaultBlock))
+                foreach (var nested in EnumerateStatements(switchStatement.DefaultBlock, descendIntoCaptures))
                     yield return nested;
             }
             else if (statement is PowerShellBoundTryStatement tryStatement)
             {
-                foreach (var nested in EnumerateStatements(tryStatement.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(tryStatement.Body, descendIntoCaptures)) yield return nested;
                 foreach (var clause in tryStatement.Catches)
-                foreach (var nested in EnumerateStatements(clause.Body))
+                foreach (var nested in EnumerateStatements(clause.Body, descendIntoCaptures))
                     yield return nested;
                 if (tryStatement.FinallyBlock is not null)
-                foreach (var nested in EnumerateStatements(tryStatement.FinallyBlock))
+                foreach (var nested in EnumerateStatements(tryStatement.FinallyBlock, descendIntoCaptures))
                     yield return nested;
             }
         }

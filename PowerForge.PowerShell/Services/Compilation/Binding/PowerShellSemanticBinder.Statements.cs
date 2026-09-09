@@ -429,7 +429,8 @@ internal sealed partial class PowerShellSemanticBinder
             if (!isTerminal && !allowNonTerminalSuccessOutput && emitsOutput &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
-                (expression is PowerShellBoundArrayExpression ||
+                (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) ||
+                 expression is PowerShellBoundArrayExpression ||
                  expression is PowerShellBoundLiteralExpression or PowerShellBoundVariableExpression or
                     PowerShellBoundClrInvocationExpression { PreserveStatementErrors: true } or
                     PowerShellBoundBinaryExpression { Operation: PowerShellBoundBinaryOperator.PowerShellScalarFormat } &&

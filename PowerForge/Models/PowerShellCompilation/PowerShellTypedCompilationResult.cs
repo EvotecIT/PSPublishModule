@@ -189,6 +189,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Resolved CLR return type name.</summary>
     public string ReturnType { get; }
 
+    /// <summary>Inferred CLR type of success records, independent of a void streaming method return; empty when no output is inferred.</summary>
+    public string SuccessOutputType { get; internal set; } = string.Empty;
+
     /// <summary>Authored OutputType metadata, or an empty string when none is declared.</summary>
     public string DeclaredOutputType { get; }
 

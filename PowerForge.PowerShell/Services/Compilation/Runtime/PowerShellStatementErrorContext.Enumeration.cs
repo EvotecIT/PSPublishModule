@@ -6,6 +6,26 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellStatementErrorContext
     {
+        /// <summary>Enumerates one implicit output expression through the loaded PowerShell host.</summary>
+        internal void WriteOutput(object? value, Action<object?> sink, string file, int line, int column,
+            int endLine, int endColumn, string text)
+        {
+            ThrowIfDisposed();
+            try { PowerShellNativeOutput.Write(value, sink, _context); }
+            catch (Exception error)
+            {
+                RememberExpressionFailure(error, CreateExtent(file, line, column, endLine, endColumn, text));
+                throw;
+            }
+        }
+
+        /// <summary>Publishes an already enumerated record without cmdlet-specific PSObject wrapping.</summary>
+        internal void WriteOutputRecord(object? value)
+        {
+            ThrowIfDisposed();
+            PowerShellNativeOutput.Shared.Value.AddRecord(_outputPipe, value);
+        }
+
         /// <summary>Captures only the retained invocation's execution context for compiled loop boundaries.</summary>
         public static Action CreateLoopInterrupt(EngineIntrinsics engine)
         {

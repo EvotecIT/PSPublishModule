@@ -20,7 +20,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(cmdlet.Method.DeclaredOutputType)}))]");
         else if (!string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType))
             builder.AppendLine($"[OutputType({PowerShellCSharpLiteral.QuoteString(cmdlet.Method.DeclaredOutputType)})]");
-        else if (GetCmdletOutputTypeName(cmdlet.Method.ReturnType) is { } inferredOutputType)
+        else if ((!string.IsNullOrWhiteSpace(cmdlet.Method.SuccessOutputType) ? cmdlet.Method.SuccessOutputType :
+            GetCmdletOutputTypeName(cmdlet.Method.ReturnType)) is { } inferredOutputType)
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(inferredOutputType)}))]");
         var requiresProviderCancellation = cmdlet.Method.RequiresProviderCancellation;
         var implementsDisposable = requiresProviderCancellation ||
@@ -194,7 +195,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.RequiresPowerShellStreams)
             arguments = arguments.Concat(new[]
             {
-                "value => WriteObject(value, enumerateCollection: false)",
+                cmdlet.Method.RequiresPowerShellStatementErrors ? "__statementErrors.WriteOutputRecord" : "value => WriteObject(value, enumerateCollection: false)",
                 "WriteVerbose",
                 "WriteDebug",
                 "WriteWarning",

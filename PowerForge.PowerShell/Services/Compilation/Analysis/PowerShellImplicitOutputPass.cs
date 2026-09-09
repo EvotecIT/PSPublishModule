@@ -6,7 +6,7 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
 {
-    public string Id => "08-implicit-success-output";
+    public string Id => "06-implicit-success-output";
 
     public PowerShellBoundProgram Run(PowerShellBoundProgram program)
     {
@@ -37,38 +37,68 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
                 if (!selected.Contains(function.Symbol.StableKey) && calls[function.Symbol.StableKey].Any(selected.Contains))
                     changed |= selected.Add(function.Symbol.StableKey);
         } while (changed);
+        var documents = program.Documents.ToDictionary(static document => document.DocumentId, StringComparer.Ordinal);
+        var commandEnumeration = program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors);
         return program.WithFunctions(program.Functions.Select(function => selected.Contains(function.Symbol.StableKey)
-            ? function.WithBody(RewriteBlock(function.Body, function.NativeFunctionBinding is not null))
+            ? function.WithBody(RewriteBlock(function.Body, function.NativeFunctionBinding is not null,
+                commandEnumeration, documents[function.Symbol.DocumentId]))
             : function).ToArray());
     }
 
-    private static PowerShellBoundBlock RewriteBlock(PowerShellBoundBlock block, bool usesNativeInvocation)
+    private static PowerShellBoundBlock RewriteBlock(PowerShellBoundBlock block, bool usesNativeInvocation,
+        bool commandEnumeration, PowerShellBoundSourceDocument document, bool alreadyProtected = false)
     {
         var statements = new List<PowerShellBoundStatement>();
         foreach (var statement in block.Statements)
         {
-            if (statement is PowerShellBoundReturnStatement { EmitsValue: true, Expression: not null } returned)
+            if (statement is PowerShellBoundStatementErrorBoundary boundary)
             {
-                statements.Add(Output(returned.Span, returned.Expression, usesNativeInvocation));
-                statements.Add(new PowerShellBoundReturnStatement(returned.Span, null));
+                statements.Add(new PowerShellBoundStatementErrorBoundary(
+                    RewriteBlock(boundary.Body, usesNativeInvocation, commandEnumeration, document, true),
+                    boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint));
+            }
+            else if (statement is PowerShellBoundReturnStatement { EmitsValue: true, Expression: not null } returned)
+            {
+                var output = Output(returned.Span, returned.Expression, usesNativeInvocation, commandEnumeration);
+                var exit = new PowerShellBoundReturnStatement(returned.Span, null);
+                if (output.UsesCommandHostEnumeration && !alreadyProtected)
+                    statements.Add(Protect(new PowerShellBoundStatement[] { output, exit }, returned.Span, document));
+                else
+                {
+                    statements.Add(output);
+                    statements.Add(exit);
+                }
             }
             else if (statement is PowerShellBoundExpressionStatement { EmitsOutput: true } expression)
             {
-                statements.Add(Output(expression.Span, expression.Expression, usesNativeInvocation));
+                statements.Add(Output(expression.Span, expression.Expression, usesNativeInvocation, commandEnumeration));
             }
-            else if (usesNativeInvocation && statement is PowerShellBoundStreamWriteStatement { Provider: null } stream)
+            else if (statement is PowerShellBoundStreamWriteStatement { Provider: null } stream)
             {
-                statements.Add(Output(stream.Span, stream.Message, usesNativeInvocation));
+                statements.Add(Output(stream.Span, stream.Message, usesNativeInvocation, commandEnumeration));
             }
             else
             {
-                statements.Add(PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement, nested => RewriteBlock(nested, usesNativeInvocation)));
+                statements.Add(PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement,
+                    nested => RewriteBlock(nested, usesNativeInvocation, commandEnumeration, document)));
             }
         }
         return new PowerShellBoundBlock(block.Span, statements.ToArray());
     }
 
-    private static PowerShellBoundStreamWriteStatement Output(SourceSpan span, PowerShellBoundExpression expression, bool usesNativeInvocation)
-        => new(span, PowerShellStreamCommandKind.Success, provider: null, expression, usesNativeInvocation: usesNativeInvocation);
+    private static PowerShellBoundStreamWriteStatement Output(SourceSpan span, PowerShellBoundExpression expression,
+        bool usesNativeInvocation, bool commandEnumeration)
+        => new(span, PowerShellStreamCommandKind.Success, provider: null, expression, usesNativeInvocation: usesNativeInvocation,
+            usesCommandHostEnumeration: !usesNativeInvocation && commandEnumeration &&
+                expression.Type.ClrType != typeof(void) &&
+                !PowerShellStableScalarTypePolicy.IsSupported(expression.Type));
+
+    // A failed returned output must resume after the authored return statement,
+    // rather than execute the CLR exit after its output operation has failed.
+    private static PowerShellBoundStatementErrorBoundary Protect(PowerShellBoundStatement[] statements,
+        SourceSpan span, PowerShellBoundSourceDocument document)
+        => new(new PowerShellBoundBlock(span, statements), document.Path,
+            string.Join("\n", document.SourceText.Replace("\r\n", "\n").Split('\n')
+                .Skip(span.StartLine - 1).Take(span.EndLine - span.StartLine + 1)));
 
 }

@@ -239,7 +239,7 @@ internal sealed class PowerShellLoweredFunction
         bool requiresPowerShellStatementErrors = false,
         bool requiresPowerShellStopping = false,
         PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
-        string sourcePath = "", string sourceText = "")
+        string sourcePath = "", string sourceText = "", Type? successOutputType = null)
     {
         Symbol = symbol;
         GeneratedName = generatedName;
@@ -270,6 +270,7 @@ internal sealed class PowerShellLoweredFunction
         NativeFunctionBinding = nativeFunctionBinding;
         SourcePath = sourcePath;
         SourceText = sourceText;
+        SuccessOutputType = successOutputType;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -300,6 +301,7 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellOutputCardinality OutputCardinality { get; }
     internal PowerShellImmutableArray<PowerShellValueState> OutputValueStates { get; }
     internal Type? CollectionElementType { get; }
+    internal Type? SuccessOutputType { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal SourceSpan Span { get; }
 }

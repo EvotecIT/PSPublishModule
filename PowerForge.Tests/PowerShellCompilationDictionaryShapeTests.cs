@@ -97,7 +97,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void DictionaryShapes_HybridRetainsOpenBranchMutationOutput(string framework, string host)
+    public void DictionaryShapes_CommandHostPreservesOpenBranchMutationOutput(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""
             function Get-MapValue {
@@ -111,8 +111,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.DictionaryBranchValues", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(0, result.Manifest!.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         const string probe = """
             foreach($flag in $true,$false) {
                 try {

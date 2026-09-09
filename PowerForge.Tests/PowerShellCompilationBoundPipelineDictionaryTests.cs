@@ -2,6 +2,19 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
+    [Theory]
+    [InlineData("'before'; @{ Text='ready' }")]
+    [InlineData("$map=@{ Text='ready' }; $copy=$map; 'before'; $copy")]
+    [InlineData("$map=@{ Text='ready' }; 'before'; return ,$map")]
+    [InlineData("$result=$null; $result=for($i=0;$i -lt 1;$i++) { @{ Text='ready' } }; return $result")]
+    public void StreamedDictionaryLiteralsKeepTheirUnqualifiedEscapeBoundary(string body)
+    {
+        var document = PowerShellSourceParser.Parse("function Get-Map { [CmdletBinding()] param(); " + body + " }", TestPath("dictionary-output.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0", PowerShellCompilationCapabilities.BinaryModule);
+        Assert.Empty(result.Emitted.Methods);
+        Assert.Contains(result.Analyzed.Functions, function => function.Disposition.Explanation.Contains("lookup-only local", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void HostedDictionariesPreserveHeterogeneousObjectValuesInIr()
     {

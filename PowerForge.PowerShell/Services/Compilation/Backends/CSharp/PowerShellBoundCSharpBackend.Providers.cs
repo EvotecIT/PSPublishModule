@@ -43,6 +43,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     .Append(EmitExpression(stream.Message)).AppendLine(", __writeOutput);");
                 return;
             }
+            if (stream.UsesCommandHostEnumeration)
+            {
+                builder.Append(prefix).Append("__statementErrors.WriteOutput((object?)")
+                    .Append(EmitExpression(stream.Message)).Append(", __writeOutput, ")
+                    .Append(EmitSourceExtentArguments(stream.Message.Span)).AppendLine(");");
+                return;
+            }
             if (stream.EnumerateAuthoredArray)
             {
                 var record = getTemporaryIdentifier("outputRecord");

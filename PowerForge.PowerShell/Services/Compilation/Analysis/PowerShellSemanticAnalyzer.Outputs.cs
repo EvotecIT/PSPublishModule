@@ -75,7 +75,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundFunction function,
             IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
         {
-            var statements = EnumerateStatements(function.Body).ToArray();
+            var statements = EnumerateStatements(function.Body, descendIntoCaptures: false).ToArray();
             var outputs = statements
                 .Select(GetSuccessOutputExpression)
                 .Where(static expression => expression is not null)

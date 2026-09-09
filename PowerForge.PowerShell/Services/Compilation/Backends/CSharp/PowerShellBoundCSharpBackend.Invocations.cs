@@ -41,7 +41,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             var result = invocation.ClrType == typeof(void) ? call + ";" : "return " + call + ";";
             call = "new " + (invocation.ClrType == typeof(void) ? "global::System.Action" :
                 "global::System.Func<" + PowerShellCSharpSymbolRenderer.TypeName(invocation.ClrType) + ">") +
-                "(() => { using (var " + context + " = __statementErrors.EnterFunction(" + PowerShellCSharpLiteral.QuoteString(invocation.Target.Name) +
+                "(() => { using (var " + context + " = __statementErrors.EnterFunction(" + PowerShellCSharpLiteral.QuoteString(invocation.Target.Name) + ", " + EmitSourceExtentArguments(invocation.Span) +
                 ")) { try { " + result + " } catch (global::System.Exception " + error +
                 ") when (" + StatementErrorContextType + ".IsOperationFailure(" + error + ")) { throw " + context + ".LeaveCommand(" + error + "); } } })()";
         }
@@ -51,6 +51,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (invocation.ClrType == typeof(void))
             return $"new global::System.Action(() => {{ {string.Join(" ", evaluations)} {call}; }})()";
         return $"new global::System.Func<{PowerShellCSharpSymbolRenderer.TypeName(invocation.ClrType)}>(() => {{ {string.Join(" ", evaluations)} return {call}; }})()";
+    }
+
+    private string EmitSourceExtentArguments(SourceSpan span)
+    {
+        var function = _sourceFunction ?? throw new InvalidOperationException("Local invocation source requires its lowered function.");
+        var text = string.Join("\n", function.SourceText.Replace("\r\n", "\n").Split('\n')
+            .Skip(span.StartLine - function.Span.StartLine).Take(span.EndLine - span.StartLine + 1));
+        return PowerShellCSharpLiteral.QuoteString(function.SourcePath) + ", " +
+            $"{span.StartLine}, {span.StartColumn}, {span.EndLine}, {span.EndColumn}, " + PowerShellCSharpLiteral.QuoteString(text);
     }
 
     private string EmitBoundParameterSet(IEnumerable<string> names)

@@ -24,6 +24,37 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.CompiledMethods == 7, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
+        VerifyEnumerationFaults(fixture, result.ArtifactPath!, host, new[] {
+            "Read-NativeEnumeration", "Read-NativeCollectedEnumeration", "Read-NativeCapturedEnumeration", "Read-NativeCatchEnumeration",
+            "Read-NativeSingleEnumeration", "Read-NativeForeachEnumeration", "Read-NativeCapturedForeachEnumeration" });
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void CommandOutput_PreservesEnumerationFailuresDisposalAndPartialRecords(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Read-CommandEnumeration { [CmdletBinding()] param([object]$Value); 'before'; $Value; 'after' }
+            function Read-CommandReturnEnumeration { [CmdletBinding()] param([object]$Value); 'before'; return $Value; 'after' }
+            function Read-CommandCatchEnumeration { [CmdletBinding()] param([object]$Value); try { $Value; 'try-tail' } catch { 'caught' } finally { 'finally' }; 'after' }
+            function Read-CommandCapturedEnumeration { [CmdletBinding()] param([object]$Value); $result=$null; $result=for ($i=0;$i -lt 1;$i++) { $Value; 'tail' }; return ,$result }
+            function Read-CommandInnerEnumeration { [CmdletBinding()] param([object]$Value); $Value; 'inner-tail' }
+            function Read-CommandCallEnumeration { [CmdletBinding()] param([object]$Value); 'before'; Read-CommandInnerEnumeration -Value $Value; 'after' }
+            function Read-CommandNestedEnumeration { [CmdletBinding()] param([object]$Value); 'outer-before'; Read-CommandCallEnumeration -Value $Value; 'outer-after' }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.CommandEnumeration", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(7, result.Manifest!.CompiledMethods);
+        VerifyEnumerationFaults(fixture, result.ArtifactPath!, host, new[] {
+            "Read-CommandEnumeration", "Read-CommandReturnEnumeration", "Read-CommandCatchEnumeration", "Read-CommandCapturedEnumeration",
+            "Read-CommandInnerEnumeration", "Read-CommandCallEnumeration", "Read-CommandNestedEnumeration" });
+    }
+
+    private static void VerifyEnumerationFaults(ArtifactFixture fixture, string artifactPath, string host, string[] names)
+    {
         const string probe = """
             Add-Type -TypeDefinition @'
             using System;
@@ -55,9 +86,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             }
             '@
             function Describe-Fault($fault) {
-                $fault.FullyQualifiedErrorId+':'+$fault.Exception.GetType().FullName+':'+$fault.InvocationInfo.ScriptLineNumber+':'+$fault.InvocationInfo.OffsetInLine
+                $record=if($fault -is [Management.Automation.ErrorRecord]) { $fault } else { $fault.ErrorRecord }
+                $fault.GetType().FullName+':'+$record.FullyQualifiedErrorId+':'+$record.Exception.GetType().FullName+':'+$record.InvocationInfo.ScriptLineNumber+':'+$record.InvocationInfo.OffsetInLine
             }
-            foreach ($name in 'Read-NativeEnumeration','Read-NativeCollectedEnumeration','Read-NativeCapturedEnumeration','Read-NativeCatchEnumeration','Read-NativeSingleEnumeration','Read-NativeForeachEnumeration','Read-NativeCapturedForeachEnumeration') {
+            foreach ($name in $names) {
                 foreach ($kind in 'enumerable','cursor') {
                     foreach ($failure in 'none','get','runtime-get','move','runtime-move','current','runtime-current','dispose','runtime-dispose') {
                         foreach ($action in 'Continue','SilentlyContinue','Ignore','Stop') {
@@ -75,15 +107,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }
             }
             """;
-        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+        var selectNames = "$names=@(" + string.Join(",", names.Select(name => "'" + name + "'")) + "); ";
+        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + selectNames + probe,
             fixture.RootPath, "original-native-enumeration");
-        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(artifactPath) + "'; " + selectNames + probe,
             fixture.RootPath, "compiled-native-enumeration");
         Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         var expected = original.StandardOutput.Split('\n');
         var actual = compiled.StandardOutput.Split('\n');
-        Assert.Equal(7 * 2 * 9 * 4, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
+        Assert.Equal(names.Length * 2 * 9 * 4, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
         Assert.Equal(expected.Length, actual.Length);
         Assert.True(expected.SequenceEqual(actual), string.Join(Environment.NewLine, expected.Zip(actual)
             .Where(pair => pair.First != pair.Second).Take(8).Select(pair => "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second)));

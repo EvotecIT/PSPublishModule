@@ -232,6 +232,7 @@ internal static class PowerShellTypedExecutableCompiler
             requiresProviderCancellation: method.RequiresProviderCancellation);
         description.DocumentId = function.Symbol.DocumentId;
         description.DeclaredOutputTypeIsSemanticContract = method.DeclaredOutputType is not null;
+        description.SuccessOutputType = method.SuccessOutputType?.FullName ?? string.Empty;
         description.RequiresPowerShellModuleState = method.RequiresPowerShellModuleState;
         description.RequiresPowerShellModuleStateRead = method.RequiresPowerShellModuleStateRead;
         description.RequiresPowerShellModuleStateWrite = method.RequiresPowerShellModuleStateWrite;

@@ -29,7 +29,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         "Non-terminal success output requires a continuation-preserving output contract; it cannot become an early CLR return."));
                 }
                 if (EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
-                        statement.Provider is null && !statement.UsesNativeInvocation &&
+                        statement.Provider is null && !statement.UsesNativeInvocation && !statement.UsesCommandHostEnumeration &&
                         statement.Message is not PowerShellBoundArrayExpression &&
                         ResolveType(statement.Message, lookup).ClrType != typeof(void) &&
                         !PowerShellStableScalarTypePolicy.IsSupported(ResolveType(statement.Message, lookup))))
@@ -39,7 +39,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         "Implicit streamed output currently requires stable scalar records; wider enumeration and failure continuation remain on the PowerShell path."));
                 if (program.SemanticHostFamily == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
                     EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
-                        statement.Provider is null && !statement.UsesNativeInvocation && statement.Message is PowerShellBoundArrayExpression array &&
+                        statement.Provider is null && !statement.UsesNativeInvocation && !statement.UsesCommandHostEnumeration && statement.Message is PowerShellBoundArrayExpression array &&
                         array.Elements.Any(element => element is not PowerShellBoundLiteralExpression { Value: null } &&
                             !PowerShellStableScalarTypePolicy.IsSupported(element.Type))))
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
@@ -64,15 +64,12 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         PowerShellExecutionDispositionKind.Fallback,
                         "control.finally.stream-stop",
                         "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve."));
-                if ((function.ReturnType.ClrType == typeof(Dictionary<string, string>) ||
-                     function.ReturnType.ClrType == typeof(System.Collections.Hashtable) ||
-                     function.ReturnType.ClrType == typeof(System.Collections.Specialized.OrderedDictionary)) &&
-                    ReturnsCompilerDictionary(function))
+                if (ReturnsCompilerDictionary(function))
                 {
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
                         PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"),
-                        "Typed dictionaries are lookup-only locals and cannot escape through the current public CLR return contract."));
+                        "Typed dictionary literals are lookup-only locals; escaping through a return, streamed record, or output capture requires separate construction and record-identity qualification."));
                 }
                 if (IsMutuallyRecursive(function.Symbol, program.CallGraph))
                 {

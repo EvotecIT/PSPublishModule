@@ -131,7 +131,7 @@ internal sealed class PowerShellBoundOptimizer
                 attempted.Catches.Select(clause => new PowerShellBoundCatchClause(clause.ExceptionTypes.ToArray(), OptimizeBlock(clause.Body))).ToArray(),
                 attempted.FinallyBlock is null ? null : OptimizeBlock(attempted.FinallyBlock), attempted.SuspendHostStopping),
             PowerShellBoundStreamWriteStatement stream => new PowerShellBoundStreamWriteStatement(
-                stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message), stream.OutputBinding, stream.UsesNativeInvocation),
+                stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message), stream.OutputBinding, stream.UsesNativeInvocation, stream.UsesCommandHostEnumeration),
             PowerShellBoundIndexAssignmentStatement index => new PowerShellBoundIndexAssignmentStatement(
                 index.Span, OptimizeExpression(index.Target), OptimizeExpression(index.Index), OptimizeExpression(index.Value), index.Kind, index.UsePowerShellRuntimeErrors),
             PowerShellBoundClrMemberAssignmentStatement member => new PowerShellBoundClrMemberAssignmentStatement(

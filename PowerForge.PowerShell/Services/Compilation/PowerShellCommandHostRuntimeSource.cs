@@ -42,6 +42,11 @@ internal static class PowerShellCommandHostRuntimeSource
         }
         if (requiresModuleState || typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
         {
+            using var outputStream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
+                "PowerForge.PowerShell.Compilation.PowerShellNativeOutput.cs")
+                ?? throw new InvalidOperationException("Missing native output runtime source.");
+            using var outputReader = new StreamReader(outputStream);
+            sources.Add("NativeOutput.g.cs", "#nullable enable\n" + outputReader.ReadToEnd());
             using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
                 "PowerForge.PowerShell.Compilation.PowerShellSourceExtent.cs")
                 ?? throw new InvalidOperationException("Missing native source-extent runtime source.");
