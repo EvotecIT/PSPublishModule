@@ -1,11 +1,201 @@
 using System.IO.Compression;
 using System.Management.Automation.Language;
+using System.Text.RegularExpressions;
 using PowerForge;
 
 namespace PowerForge.Tests;
 
 public sealed class ArtefactBuilderScriptPreambleTests
 {
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_ConsolidatesRuntimeRequirementsFromManifestAndNestedModuleContent(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "RuntimeRequirementModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0'; PowerShellVersion = '5.1'; CompatiblePSEditions = 'Core' }}");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "function Get-RuntimeRequirement {\n" +
+                "    #requires -Version 5\n" +
+                "    #requires -PSEdition Core\n" +
+                "    $example = @'\n" +
+                "#requires -Version 99.0\n" +
+                "'@ | ForEach-Object { $_ }\n" +
+                "    $example\n" +
+                "}");
+
+            ArtefactBuildResult result = Build(
+                Path.Combine(root.FullName, "output"),
+                root.FullName,
+                stagingRoot,
+                moduleName,
+                artefactType,
+                string.Empty);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-runtime-requirements");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            string content = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            Assert.Matches(@"\A#requires -Version 5\.1\r?\n#requires -PSEdition Core", content);
+            Assert.Single(Regex.Matches(content, @"(?im)^#requires -PSEdition Core\s*$", RegexOptions.CultureInvariant).Cast<Match>());
+            Assert.Contains("#requires -Version 99.0", content, StringComparison.Ordinal);
+            Parser.ParseInput(content, out _, out ParseError[] parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_DoesNotConsolidateRequirementsInsideMultilineStringsAfterHereStringTerminators(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "HereStringSuffixModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0'; PowerShellVersion = '5.1'; CompatiblePSEditions = 'Core' }}");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "$doubleQuoted = @'\n" +
+                "literal\n" +
+                "'@ + \"\n" +
+                "#requires -Version 98.0\n" +
+                "\"\n" +
+                "$singleQuoted = @\"\n" +
+                "literal\n" +
+                "\"@ + '\n" +
+                "#requires -PSEdition Desktop\n" +
+                "'\n" +
+                "function Get-HereStringSuffix { $doubleQuoted + $singleQuoted }");
+
+            ArtefactBuildResult result = Build(
+                Path.Combine(root.FullName, "output"),
+                root.FullName,
+                stagingRoot,
+                moduleName,
+                artefactType,
+                string.Empty);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-here-string-suffix");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            string content = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            Assert.StartsWith("#requires -Version 5.1", content, StringComparison.Ordinal);
+            Assert.Contains("#requires -Version 98.0", content, StringComparison.Ordinal);
+            Assert.Contains("#requires -PSEdition Desktop", content, StringComparison.Ordinal);
+            Parser.ParseInput(content, out _, out ParseError[] parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_PreservesStricterNestedVersionRequirement(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "StricterRuntimeRequirementModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0'; PowerShellVersion = '5.1' }}");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "function Get-StricterRuntimeRequirement {\n    #requires -Version 7.0\n    'ok'\n}");
+
+            ArtefactBuildResult result = Build(
+                Path.Combine(root.FullName, "output"),
+                root.FullName,
+                stagingRoot,
+                moduleName,
+                artefactType,
+                string.Empty);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-stricter-requirement");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            string content = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            Assert.StartsWith("#requires -Version 7.0", content, StringComparison.Ordinal);
+            Parser.ParseInput(content, out _, out ParseError[] parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_RejectsConflictingEditionRequirements(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "ConflictingEditionModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0'; CompatiblePSEditions = 'Desktop' }}");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "function Get-ConflictingEdition {\n    #requires -PSEdition Core\n    'unreachable'\n}");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => Build(
+                Path.Combine(root.FullName, "output"),
+                root.FullName,
+                stagingRoot,
+                moduleName,
+                artefactType,
+                string.Empty));
+
+            Assert.Contains("both Core and Desktop PSEditions are required", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]
