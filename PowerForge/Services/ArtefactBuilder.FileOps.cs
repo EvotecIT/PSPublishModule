@@ -65,6 +65,7 @@ public sealed partial class ArtefactBuilder
         IReadOnlyCollection<string>? executableEntryNames,
         DateTimeOffset? entryTimestamp)
     {
+        ValidateDirectoryTreeContainsNoReparsePoints(sourceDir);
         var unixFileModes = new Dictionary<string, int>(StringComparer.Ordinal);
         if (File.Exists(zipPath)) File.Delete(zipPath);
         Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
@@ -118,6 +119,38 @@ public sealed partial class ArtefactBuilder
             unixFileModes[executableEntry] = 0x1ED;
         if (unixFileModes.Count > 0)
             ZipArchiveUnixPermissionPatcher.ApplyUnixFilePermissions(zipPath, unixFileModes);
+    }
+
+    internal static void ValidateDirectoryTreeContainsNoReparsePoints(string rootPath)
+    {
+        string root = Path.GetFullPath(rootPath);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Directory not found: {root}");
+
+        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Script artefact layouts must not contain symbolic links or reparse points: '{root}'.");
+        }
+
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            string current = pending.Pop();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(current, "*", SearchOption.TopDirectoryOnly))
+            {
+                FileAttributes attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Script artefact layouts must not contain symbolic links or reparse points: '{entry}'.");
+                }
+
+                if ((attributes & FileAttributes.Directory) != 0)
+                    pending.Push(entry);
+            }
+        }
     }
 
     private static void ClearDirectorySafe(string path)

@@ -136,6 +136,39 @@ public sealed class ArtefactBuilderScriptRuntimeAndArchiveTests
         }
     }
 
+    [Fact]
+    public void CreateDeterministicZipFromDirectoryContents_RejectsDescendantSymlink()
+    {
+        var root = CreateRoot();
+        try
+        {
+            string sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "source")).FullName;
+            string externalRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "external")).FullName;
+            File.WriteAllText(Path.Combine(sourceRoot, "Invoke-Sample.ps1"), "'sample'");
+            File.WriteAllText(Path.Combine(externalRoot, "outside.ps1"), "'outside'");
+            try
+            {
+                Directory.CreateSymbolicLink(Path.Combine(sourceRoot, "linked"), externalRoot);
+            }
+            catch (Exception linkError) when (linkError is UnauthorizedAccessException or PlatformNotSupportedException or IOException)
+            {
+                return;
+            }
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                ArtefactBuilder.CreateDeterministicZipFromDirectoryContents(
+                    sourceRoot,
+                    Path.Combine(root.FullName, "output.zip")));
+
+            Assert.Contains("symbolic links or reparse points", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(root.FullName, "output.zip")));
+        }
+        finally
+        {
+            TryDelete(root.FullName);
+        }
+    }
+
     private static ArtefactBuildResult Build(
         string projectRoot,
         string stagingRoot,

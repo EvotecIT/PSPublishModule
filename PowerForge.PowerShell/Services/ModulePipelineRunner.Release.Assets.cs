@@ -75,6 +75,12 @@ public sealed partial class ModulePipelineRunner
         IDictionary<string, string> scriptSourcesByArchive,
         IReadOnlyList<string> selectedOutputPaths)
     {
+        if (artefact.Type == ArtefactType.ScriptPacked)
+        {
+            ValidateModuleReleaseScriptArchive(artefact.OutputPath, artefact.EntryPointRelativePath);
+            return new[] { artefact.OutputPath };
+        }
+
         if (artefact.Type != ArtefactType.Script)
             return new[] { artefact.OutputPath };
 
@@ -122,7 +128,20 @@ public sealed partial class ModulePipelineRunner
             ArtefactBuilder.ScriptStartsWithShebang(entryPointPath!)
                 ? new[] { artefact.EntryPointRelativePath! }
                 : Array.Empty<string>());
+        ValidateModuleReleaseScriptArchive(archivePath, artefact.EntryPointRelativePath);
         return new[] { archivePath };
+    }
+
+    private static void ValidateModuleReleaseScriptArchive(string archivePath, string? entryPointRelativePath)
+    {
+        if (!PowerShellScriptArchiveValidator.TryValidate(
+                archivePath,
+                entryPointRelativePath,
+                out string? validationError))
+        {
+            throw new InvalidOperationException(
+                $"Script release archive '{archivePath}' is not a valid portable release payload: {validationError}");
+        }
     }
 
     private static string[] CollectPackageReleaseAssets(

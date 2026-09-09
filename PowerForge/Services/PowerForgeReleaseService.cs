@@ -610,7 +610,7 @@ internal sealed partial class PowerForgeReleaseService
                         result.ModuleAssets,
                         moduleArtifactBaseline,
                         result.ModulePlan,
-                        temporaryReleaseDirectory.GetOrCreateSubdirectory("script-release-assets"));
+                        ResolvePersistentModuleScriptArchiveRoot(result.ModulePlan, configDirectory));
                 }
 
                 if (result.ModulePlan?.IncludesProjectPackages == true &&
@@ -1042,7 +1042,7 @@ internal sealed partial class PowerForgeReleaseService
                     result.ModuleAssets,
                     moduleArtifactBaseline,
                     result.ModulePlan,
-                    temporaryReleaseDirectory.GetOrCreateSubdirectory("script-release-assets"));
+                    ResolvePersistentModuleScriptArchiveRoot(result.ModulePlan, configDirectory));
             }
 
             request.Progress?.PhaseCompleted(

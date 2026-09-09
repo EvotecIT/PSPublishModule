@@ -4,6 +4,82 @@ namespace PowerForge.Tests;
 
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
+    [Fact]
+    public void CollectModuleReleaseAssets_RejectsNonPortableScriptPackedArchive()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            string archivePath = Path.Combine(root, "Invoke-Sample.zip");
+            using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                using (var writer = new StreamWriter(archive.CreateEntry("Invoke-Sample.ps1").Open()))
+                    writer.Write("'sample'");
+                using (var writer = new StreamWriter(archive.CreateEntry("../escape.txt").Open()))
+                    writer.Write("unsafe");
+            }
+
+            var artefact = new ArtefactBuildResult(
+                ArtefactType.ScriptPacked,
+                "release-script",
+                archivePath,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                Array.Empty<string>(),
+                "Invoke-Sample.ps1");
+            var method = typeof(ModulePipelineRunner).GetMethod(
+                "CollectModuleReleaseAssets",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+            var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+                method!.Invoke(null, new object?[] { new[] { artefact }, "release-script", Path.Combine(root, "release") }));
+
+            InvalidOperationException validation = Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("valid portable release payload", validation.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void CollectModuleReleaseAssets_ValidatesSynthesizedScriptArchive()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        string archiveRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "tests"));
+            File.WriteAllText(Path.Combine(root, "Invoke-Sample.ps1"), "'sample'");
+            File.WriteAllText(Path.Combine(root, "tests", "Sample.csproj"), "<Project />");
+            var artefact = new ArtefactBuildResult(
+                ArtefactType.Script,
+                "release-script",
+                root,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                Array.Empty<string>(),
+                "Invoke-Sample.ps1");
+            var method = typeof(ModulePipelineRunner).GetMethod(
+                "CollectModuleReleaseAssets",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+            var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+                method!.Invoke(null, new object?[] { new[] { artefact }, "release-script", archiveRoot }));
+
+            InvalidOperationException validation = Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("valid portable release payload", validation.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("repository or source-project content", validation.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(archiveRoot, recursive: true); } catch { }
+        }
+    }
+
     [Theory]
     [InlineData(ArtefactType.Packed)]
     [InlineData(ArtefactType.ScriptPacked)]

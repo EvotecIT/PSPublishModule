@@ -135,6 +135,14 @@ internal sealed partial class PowerForgeReleaseService
                 ArtefactBuilder.ScriptStartsWithShebang(entryPointPath!)
                     ? new[] { output.EntryPointRelativePath! }
                     : Array.Empty<string>());
+            if (!PowerShellScriptArchiveValidator.TryValidate(
+                    archivePath,
+                    output.EntryPointRelativePath,
+                    out string? validationError))
+            {
+                throw new InvalidOperationException(
+                    $"Script release archive '{archivePath}' is not a valid portable release payload: {validationError}");
+            }
             output.ReleaseAssetPath = archivePath;
             if (!archives.Contains(archivePath, ModuleArtifactPathComparer))
                 archives.Add(archivePath);

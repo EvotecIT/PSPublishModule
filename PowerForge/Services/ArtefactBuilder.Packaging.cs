@@ -137,6 +137,11 @@ public sealed partial class ArtefactBuilder
         IEnumerable<string> sourceFiles)
     {
         var plan = new List<ModulePackageCopyEntry>();
+        StringComparer destinationComparer =
+            FrameworkCompatibility.GetPathStringComparisonForPath(destinationRoot) == StringComparison.OrdinalIgnoreCase
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+        var destinations = new Dictionary<string, string>(destinationComparer);
         foreach (string file in sourceFiles)
         {
             string sourcePath = Path.GetFullPath(file);
@@ -154,6 +159,15 @@ public sealed partial class ArtefactBuilder
                     $"Module package destination '{destinationPath}' resolves outside destination root '{destinationRoot}'.");
             }
 
+            if (destinations.TryGetValue(destinationPath, out string? existingSource) &&
+                !string.Equals(existingSource, sourcePath, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Module package sources '{existingSource}' and '{sourcePath}' resolve to the same destination " +
+                    $"'{destinationPath}' on the output filesystem.");
+            }
+
+            destinations[destinationPath] = sourcePath;
             plan.Add(new ModulePackageCopyEntry(sourcePath, destinationPath));
         }
 

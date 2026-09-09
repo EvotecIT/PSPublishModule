@@ -86,7 +86,9 @@ public sealed partial class ModulePipelineRunner
         }
         else
         {
+            SkipActions(ModulePipelineActionStage.BeforePublish, plan, session);
             ExecutePublishOperations(plan, session, buildResult, state);
+            SkipActions(ModulePipelineActionStage.AfterPublish, plan, session);
         }
         state.ReleaseCoordinationResult ??= PrepareUnifiedReleaseAssets(plan, state, publishId: null);
 

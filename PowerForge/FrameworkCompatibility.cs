@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -6,6 +7,11 @@ namespace PowerForge;
 
 internal static class FrameworkCompatibility
 {
+    private static readonly FileSystemPathComparisonCache PathComparisonCache = new(
+        IsCaseSensitiveDirectory,
+        DefaultPathStringComparison,
+        IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     internal static StringComparer PathComparer { get; } = new FileSystemAwarePathComparer();
 
     public static T NotNull<T>(T value, string paramName) where T : class
@@ -34,6 +40,9 @@ internal static class FrameworkCompatibility
     }
 
     public static StringComparison PathStringComparison()
+        => DefaultPathStringComparison();
+
+    private static StringComparison DefaultPathStringComparison()
         => IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -43,9 +52,7 @@ internal static class FrameworkCompatibility
         try
         {
             if (Directory.Exists(directory))
-                return IsCaseSensitiveDirectory(directory)
-                    ? StringComparison.Ordinal
-                    : StringComparison.OrdinalIgnoreCase;
+                return PathComparisonCache.GetComparison(directory);
         }
         catch
         {
@@ -177,5 +184,56 @@ internal static class FrameworkCompatibility
 #else
         return content.ReadAsStreamAsync(cancellationToken);
 #endif
+    }
+}
+
+internal sealed class FileSystemPathComparisonCache
+{
+    private readonly ConcurrentDictionary<string, Lazy<StringComparison>> _comparisons;
+    private readonly Func<string, bool> _caseSensitivityProbe;
+    private readonly Func<StringComparison> _fallback;
+
+    internal FileSystemPathComparisonCache(
+        Func<string, bool> caseSensitivityProbe,
+        Func<StringComparison> fallback,
+        StringComparer keyComparer)
+    {
+        _caseSensitivityProbe = caseSensitivityProbe ?? throw new ArgumentNullException(nameof(caseSensitivityProbe));
+        _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
+        _comparisons = new ConcurrentDictionary<string, Lazy<StringComparison>>(
+            keyComparer ?? throw new ArgumentNullException(nameof(keyComparer)));
+    }
+
+    internal StringComparison GetComparison(string directory)
+    {
+        string key = NormalizeDirectoryKey(directory);
+        return _comparisons.GetOrAdd(
+            key,
+            path => new Lazy<StringComparison>(
+                () => Probe(path),
+                LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+    }
+
+    private StringComparison Probe(string directory)
+    {
+        try
+        {
+            return _caseSensitivityProbe(directory)
+                ? StringComparison.Ordinal
+                : StringComparison.OrdinalIgnoreCase;
+        }
+        catch
+        {
+            return _fallback();
+        }
+    }
+
+    private static string NormalizeDirectoryKey(string directory)
+    {
+        string fullPath = Path.GetFullPath(directory);
+        string? root = Path.GetPathRoot(fullPath);
+        return string.Equals(fullPath, root, StringComparison.Ordinal)
+            ? fullPath
+            : fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 }

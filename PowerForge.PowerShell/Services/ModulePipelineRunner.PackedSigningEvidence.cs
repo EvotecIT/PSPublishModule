@@ -165,6 +165,7 @@ public sealed partial class ModulePipelineRunner
                 "The finalized script entry point must exist inside the completed script artefact layout before signing.");
         }
 
+        ArtefactBuilder.ValidateDirectoryTreeContainsNoReparsePoints(rootPath);
         string[] packageFiles = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)
             .ToArray();
