@@ -122,7 +122,9 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
     private static bool IsPotentiallyMutatingInvocation(Type declaringType, PowerShellBoundExpression? receiver)
         => receiver is not null &&
            (declaringType.IsValueType || declaringType.IsConstructedGenericType &&
-            declaringType.GetGenericTypeDefinition() == typeof(List<>));
+            (declaringType.GetGenericTypeDefinition() == typeof(List<>) ||
+             declaringType.GetGenericTypeDefinition() == typeof(HashSet<>) ||
+             declaringType.GetGenericTypeDefinition() == typeof(Dictionary<,>)));
 }
 
 internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBoundStatement

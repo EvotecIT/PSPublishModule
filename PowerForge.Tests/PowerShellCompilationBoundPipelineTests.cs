@@ -298,11 +298,14 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Contains("(global::System.DateTimeKind)1L", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ConstructedGenericListInvocationPropagatesPossibleMutationFromParameterReceiver()
+    [Theory]
+    [InlineData("List[string]", "'alpha'")]
+    [InlineData("HashSet[string]", "'alpha'")]
+    [InlineData("Dictionary[string,int]", "'alpha',1")]
+    public void ConstructedGenericCollectionInvocationPropagatesPossibleMutationFromParameterReceiver(string collection, string arguments)
     {
         var document = PowerShellSourceParser.Parse(
-            "function Add-Item { param([System.Collections.Generic.List[string]] $Items) $Items.Add('alpha') } function Invoke-Root { param([System.Collections.Generic.List[string]] $Items) Add-Item -Items $Items }",
+            $"function Add-Item {{ param([System.Collections.Generic.{collection}] $Items) $Items.Add({arguments}) }} function Invoke-Root {{ param([System.Collections.Generic.{collection}] $Items) Add-Item -Items $Items }}",
             TestPath("generic-list-mutation.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
