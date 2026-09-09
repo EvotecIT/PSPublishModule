@@ -157,7 +157,7 @@ internal sealed class PowerShellBoundOptimizer
                 return new PowerShellBoundLiteralExpression(binary.Span, value, binary.Type, PowerShellValueState.Known);
             }
             return new PowerShellBoundBinaryExpression(binary.Span, binary.Operation, left, right, binary.Type,
-                binary.PreserveStatementErrors, binary.UsesNativeInvocation, binary.NativeIgnoreCase);
+                binary.PreserveStatementErrors, binary.UsesNativeInvocation, binary.NativeIgnoreCase, binary.OperatorSpan, binary.OperatorSourceText);
         }
         if (expression is PowerShellBoundUnaryExpression unary)
         {

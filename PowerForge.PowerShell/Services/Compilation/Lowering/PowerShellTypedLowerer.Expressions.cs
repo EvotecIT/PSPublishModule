@@ -60,7 +60,7 @@ internal sealed partial class PowerShellTypedLowerer
                     binary.PreserveStatementErrors ? names.Allocate("pf_binary_left") : null,
                 IsNullOrderedComparison(binary.Operation) ? names.Allocate("pf_null_order_right") :
                     binary.PreserveStatementErrors ? names.Allocate("pf_binary_right") : null,
-                binary.PreserveStatementErrors, binary.UsesNativeInvocation, binary.NativeIgnoreCase),
+                binary.PreserveStatementErrors, binary.UsesNativeInvocation, binary.NativeIgnoreCase, binary.OperatorSpan, binary.OperatorSourceText),
             PowerShellBoundUnaryExpression unary => new PowerShellLoweredUnaryExpression(
                 unary.Span,
                 unary.Type.ClrType,

@@ -53,7 +53,8 @@ internal enum PowerShellBoundBinaryOperator
     NativeStringConcatenate,
     NativeLike,
     NativeNotLike,
-    NativeSplit
+    NativeSplit,
+    NativeReplace
 }
 
 internal enum PowerShellBoundUnaryOperator
@@ -74,7 +75,9 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
         PowerShellTypeFact type,
         bool preserveStatementErrors = false,
         bool usesNativeInvocation = false,
-        bool nativeIgnoreCase = true)
+        bool nativeIgnoreCase = true,
+        SourceSpan? operatorSpan = null,
+        string? operatorSourceText = null)
         : base(
             span,
             type,
@@ -95,6 +98,8 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
         PreserveStatementErrors = preserveStatementErrors;
         UsesNativeInvocation = usesNativeInvocation;
         NativeIgnoreCase = nativeIgnoreCase;
+        OperatorSpan = operatorSpan;
+        OperatorSourceText = operatorSourceText;
     }
 
     internal PowerShellBoundBinaryOperator Operation { get; }
@@ -103,6 +108,10 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
     internal bool PreserveStatementErrors { get; }
     internal bool UsesNativeInvocation { get; }
     internal bool NativeIgnoreCase { get; }
+    /// <summary>The authored operator token used by native pattern-operation diagnostics.</summary>
+    internal SourceSpan? OperatorSpan { get; }
+    /// <summary>Complete authored operator lines, preserving their original line endings.</summary>
+    internal string? OperatorSourceText { get; }
 
     internal static bool RequiresPowerShellLanguageRuntime(PowerShellBoundBinaryOperator operation)
         => GetRequiredCapabilities(operation).HasFlag(PowerShellRequiredCapability.PowerShellLanguageOperators);

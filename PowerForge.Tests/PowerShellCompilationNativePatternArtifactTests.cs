@@ -4,8 +4,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [MemberData(nameof(StatementErrorHosts))]
-    public void NativePatterns_PreserveCollectionResultsErrorsAndContinuation(string framework, string host)
+    [MemberData(nameof(NativePatternSourceHosts))]
+    public void NativePatterns_PreserveCollectionResultsErrorsAndContinuation(string framework, string host, string lineEnding)
     {
         using var fixture = ArtifactFixture.Create("""
             function Invoke-PatternFlow {
@@ -19,7 +19,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 if ($Mode -eq 'csplit') { $Value -csplit $Pattern }
                 'after'
             }
-            """, ".psm1");
+            """.ReplaceLineEndings(lineEnding), ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativePatterns", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
@@ -31,7 +31,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Describe-PatternRecord($item) {
                 if ($item -is [Management.Automation.ErrorRecord]) {
                     [pscustomobject]@{error=$item.FullyQualifiedErrorId;type=$item.Exception.GetType().FullName;
-                        category=[string]$item.CategoryInfo.Category;message=$item.Exception.Message}
+                        category=[string]$item.CategoryInfo.Category;message=$item.Exception.Message;
+                        line=$item.InvocationInfo.ScriptLineNumber;column=$item.InvocationInfo.OffsetInLine;source=$item.InvocationInfo.Line}
                 } else { [pscustomobject]@{type=$item.GetType().FullName;value=$item} }
             }
             $cases=@(

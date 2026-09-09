@@ -49,7 +49,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             Assert.Equal(System.Text.Json.JsonSerializer.Serialize(unit.RegionGraph),
                 System.Text.Json.JsonSerializer.Serialize(explained.RegionGraph));
         }
-        foreach (var name in new[] { "Get-PSRegistry", "Get-PSRegistryDictionaries", "Get-ComputerSplit", "Get-PSConvertSpecialRegistry", "ConvertTo-HkeyUser", "Unregister-MountedRegistry" })
+        foreach (var name in new[] { "Get-PSRegistry", "Get-PSRegistryDictionaries", "Get-ComputerSplit", "Get-PSConvertSpecialRegistry", "ConvertTo-HkeyUser", "Unregister-MountedRegistry", "Resolve-PrivateRegistry" })
         {
             var unit = Assert.Single(units, item => item.Name == name);
             Assert.True(unit.EmittedClrMethod, name + ": " + string.Join("; ", unit.DiagnosticChain.Select(cause => cause.Message)));

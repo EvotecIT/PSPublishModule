@@ -111,6 +111,8 @@ Hosted `finally` blocks suspend pipeline stopping while cleanup runs and restore
 
 CLR Object arguments now use the loaded host's wrapper conversion after all arguments have been evaluated. Homogeneous hashtable literals retain Hashtable identity through loop input, aliases, and interface conversions. Calls on an open Object receiver remain hosted because their method lookup, wrapper handling, and overload selection are not closed by a static Object signature; statically typed receivers and the existing closed numeric value contract retain their separate support.
 
+Native-bound Hybrid functions now compile `-replace`, `-ireplace`, and `-creplace` through the existing PowerShell pattern-operation owner. Collection results, conversion callbacks, supplied script-block replacement callbacks, culture, enumeration failures, error preferences, and failed-assignment state match the selected hosts. The operator token's source extent and complete authored lines travel through binding, optimization, and lowering so native diagnostics preserve its spelling, location, and line endings. The differential matrix executes 417 observations for each LF/CRLF variant per host, including downstream stop and later invocation. Wildcard and split checks cover the same source-metadata boundary. Strict targets retain their separate bounded scalar Regex contract.
+
 ## Milestone 25 — Compile complete pipelines and advanced functions
 
 **Outcome:** compile an entire command workflow, including multiple success outputs, instead of restricting useful work to a scalar terminal return.

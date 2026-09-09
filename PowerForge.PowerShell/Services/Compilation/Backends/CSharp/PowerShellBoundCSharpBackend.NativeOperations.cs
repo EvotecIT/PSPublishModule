@@ -4,15 +4,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private string EmitNativeBinary(PowerShellLoweredBinaryExpression expression, string left, string right)
     {
-        if (expression.Operation is PowerShellBoundBinaryOperator.NativeLike or PowerShellBoundBinaryOperator.NativeNotLike or PowerShellBoundBinaryOperator.NativeSplit)
+        if (expression.Operation is PowerShellBoundBinaryOperator.NativeLike or PowerShellBoundBinaryOperator.NativeNotLike or
+            PowerShellBoundBinaryOperator.NativeSplit or PowerShellBoundBinaryOperator.NativeReplace)
         {
             var function = _sourceFunction!;
-            var source = string.Join("\n", function.SourceText.Split('\n').Skip(expression.Span.StartLine - function.Span.StartLine)
-                .Take(expression.Span.EndLine - expression.Span.StartLine + 1));
+            var extent = expression.OperatorSpan ?? throw new InvalidOperationException("Native pattern operator extent is missing.");
+            var source = expression.OperatorSourceText ?? throw new InvalidOperationException("Native pattern operator source is missing.");
             return "__nativeFunction.EvaluatePattern(" + PowerShellCSharpLiteral.QuoteString(expression.Operation.ToString()) + ", " +
                 (expression.NativeIgnoreCase ? "true" : "false") + ", " + left + ", " + right + ", " +
-                PowerShellCSharpLiteral.QuoteString(function.SourcePath) + ", " + expression.Span.StartLine + ", " + expression.Span.StartColumn + ", " +
-                expression.Span.EndLine + ", " + expression.Span.EndColumn + ", " + PowerShellCSharpLiteral.QuoteString(source) + ")";
+                PowerShellCSharpLiteral.QuoteString(function.SourcePath) + ", " + extent.StartLine + ", " + extent.StartColumn + ", " +
+                extent.EndLine + ", " + extent.EndColumn + ", " + PowerShellCSharpLiteral.QuoteString(source) + ")";
         }
         var operation = expression.Operation switch
         {

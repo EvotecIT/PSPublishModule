@@ -4,7 +4,9 @@ internal static partial class PowerShellOperatorSemanticBinder
 {
     /// <summary>Keeps native operands on the invocation's language-operation path, including literal arithmetic.</summary>
     private static PowerShellBoundExpression? BindNativeBinary(SourceSpan span, string operation,
-        PowerShellBoundExpression left, PowerShellBoundExpression right, PowerShellCompilationCapability capabilities)
+        PowerShellBoundExpression left, PowerShellBoundExpression right, PowerShellCompilationCapability capabilities,
+        SourceSpan? operatorSpan = null,
+        string? operatorSourceText = null)
     {
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
             left.Type.ClrType == typeof(void) || right.Type.ClrType == typeof(void)) return null;
@@ -13,6 +15,7 @@ internal static partial class PowerShellOperatorSemanticBinder
             "Ilike" or "Clike" => PowerShellBoundBinaryOperator.NativeLike,
             "Inotlike" or "Cnotlike" => PowerShellBoundBinaryOperator.NativeNotLike,
             "Isplit" or "Csplit" => PowerShellBoundBinaryOperator.NativeSplit,
+            "Ireplace" or "Creplace" => PowerShellBoundBinaryOperator.NativeReplace,
             "Plus" => PowerShellBoundBinaryOperator.Add,
             "Minus" => PowerShellBoundBinaryOperator.Subtract,
             "Multiply" => PowerShellBoundBinaryOperator.Multiply,
@@ -34,6 +37,7 @@ internal static partial class PowerShellOperatorSemanticBinder
         return bound is null ? null : new PowerShellBoundBinaryExpression(span, bound.Value, left, right,
             new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred,
                 "The active PowerShell operation preserves its runtime scalar or collection result."),
-            usesNativeInvocation: true, nativeIgnoreCase: !operation.StartsWith("C", StringComparison.Ordinal));
+            usesNativeInvocation: true, nativeIgnoreCase: !operation.StartsWith("C", StringComparison.Ordinal),
+            operatorSpan: operatorSpan, operatorSourceText: operatorSourceText);
     }
 }
