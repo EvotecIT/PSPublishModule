@@ -76,6 +76,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(scriptPath, "Get-Date");
             Directory.CreateDirectory(Path.GetDirectoryName(supportPath)!);
             File.WriteAllText(supportPath, "function Get-Support { 'ok' }");
+            Directory.CreateDirectory(Path.Combine(root, "runtime", "empty"));
 
             string[] produced = PowerForgeReleaseService.ResolveProducedModuleArtifacts(
                 new[] { root },
@@ -91,6 +92,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             {
                 Assert.Contains(archive.Entries, static item => item.FullName == "app/Company.Tools.ps1");
                 Assert.Contains(archive.Entries, static item => item.FullName == "support/helper.ps1");
+                Assert.Contains(archive.Entries, static item => item.FullName == "runtime/empty/");
             }
             Assert.Equal(archivePath, entry.Path);
             Assert.True(entry.IsFinalPackageOutput);

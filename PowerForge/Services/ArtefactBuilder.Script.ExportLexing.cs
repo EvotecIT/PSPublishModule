@@ -69,6 +69,13 @@ public sealed partial class ArtefactBuilder
                 break;
             if (current == '@' && next is '\'' or '"')
                 break;
+            if (current is '\'' or '"' &&
+                TryGetQuotedExportCallOperator(source, index, out int quotedCallOperatorIndex))
+            {
+                commandStart = quotedCallOperatorIndex;
+                preserveExpression = RequiresExpressionPlaceholder(source, commandStart);
+                return true;
+            }
             if (current == '\'')
             {
                 state = ScriptLexicalState.SingleQuotedString;
@@ -109,6 +116,62 @@ public sealed partial class ArtefactBuilder
         commandStart = -1;
         preserveExpression = false;
         return false;
+    }
+
+    private static bool IsQuotedExportCommandName(string source, int quoteStart)
+    {
+        char quote = source[quoteStart];
+        int quoteEnd = quoteStart + 1;
+        while (quoteEnd < source.Length)
+        {
+            if (source[quoteEnd] == quote)
+            {
+                if (quote == '\'' &&
+                    quoteEnd + 1 < source.Length && source[quoteEnd + 1] == '\'')
+                {
+                    return false;
+                }
+                break;
+            }
+            if (quote == '"' && (source[quoteEnd] is '`' or '$'))
+                return false;
+            quoteEnd++;
+        }
+        if (quoteEnd >= source.Length)
+            return false;
+
+        string commandName = source.Substring(quoteStart + 1, quoteEnd - quoteStart - 1);
+        return string.Equals(commandName, "Export-ModuleMember", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(
+                   commandName,
+                   "Microsoft.PowerShell.Core\\Export-ModuleMember",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetQuotedExportCallOperator(
+        string source,
+        int quoteStart,
+        out int callOperatorIndex)
+    {
+        callOperatorIndex = -1;
+        if (!IsQuotedExportCommandName(source, quoteStart))
+            return false;
+
+        int index = quoteStart - 1;
+        while (index >= 0 && char.IsWhiteSpace(source[index]))
+            index--;
+        while (index >= 0 && source[index] == '(')
+        {
+            index--;
+            while (index >= 0 && char.IsWhiteSpace(source[index]))
+                index--;
+        }
+
+        if (index < 0 || source[index] is not ('&' or '.'))
+            return false;
+
+        callOperatorIndex = index;
+        return true;
     }
 
     private static bool RequiresExpressionPlaceholder(string source, int commandStart)

@@ -122,7 +122,10 @@ internal static class ModuleManifestValueReader
             $"PowerShell manifest property '{key}' must contain a literal string or string array for {purpose}.");
     }
 
-    internal static string? ReadTopLevelLiteralStringOrThrow(string manifestPath, string key)
+    internal static string? ReadTopLevelLiteralStringOrThrow(
+        string manifestPath,
+        string key,
+        string purpose = "compiled module ownership preservation")
     {
         if (!TryReadManifestText(manifestPath, out var manifestText) ||
             !ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression))
@@ -138,7 +141,7 @@ internal static class ModuleManifestValueReader
         }
 
         throw new InvalidDataException(
-            $"PowerShell manifest property '{key}' must contain a literal string for compiled module ownership preservation.");
+            $"PowerShell manifest property '{key}' must contain a literal string for {purpose}.");
     }
 
     internal static string[] ReadPsDataStringOrArray(string manifestPath, string key)

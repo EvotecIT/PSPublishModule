@@ -24,7 +24,7 @@ public sealed partial class ArtefactBuilder
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
         var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
-        ValidateScriptSourceLayout(
+        string manifestRuntimePreamble = ValidateScriptSourceLayout(
             stagingPath,
             moduleName,
             cfg.PreScriptMerge,
@@ -112,6 +112,7 @@ public sealed partial class ArtefactBuilder
             delivery,
             includeScriptFolders,
             finalizedPayloadFiles,
+            manifestRuntimePreamble,
             clearDestination: cfg.DoNotClear != true);
         modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: scriptRoot));
 
@@ -159,7 +160,7 @@ public sealed partial class ArtefactBuilder
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
         var scriptName = ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease);
-        ValidateScriptSourceLayout(
+        string manifestRuntimePreamble = ValidateScriptSourceLayout(
             stagingPath,
             moduleName,
             cfg.PreScriptMerge,
@@ -251,6 +252,7 @@ public sealed partial class ArtefactBuilder
                 delivery,
                 includeScriptFolders,
                 finalizedPayloadFiles,
+                manifestRuntimePreamble,
                 clearDestination: true);
             entryPointRelativePath = FrameworkCompatibility.GetRelativePath(tempRoot, scriptPath);
             modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: scriptRoot));
@@ -314,6 +316,7 @@ public sealed partial class ArtefactBuilder
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders,
         IReadOnlyList<string>? finalizedPayloadFiles,
+        string manifestRuntimePreamble,
         bool clearDestination)
     {
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
@@ -335,7 +338,11 @@ public sealed partial class ArtefactBuilder
         if (File.Exists(scriptPath))
             File.Delete(scriptPath);
         File.Move(modulePath, scriptPath);
-        RewriteScriptContent(scriptPath, cfg.PreScriptMerge, cfg.PostScriptMerge);
+        RewriteScriptContent(
+            scriptPath,
+            cfg.PreScriptMerge,
+            cfg.PostScriptMerge,
+            manifestRuntimePreamble);
         return scriptPath;
     }
 
@@ -365,7 +372,11 @@ public sealed partial class ArtefactBuilder
     private static string ResolveScriptName(string? configuredName, string moduleName, string moduleVersion, string? preRelease)
         => ArtefactLayoutPathResolver.ResolveScriptName(configuredName, moduleName, moduleVersion, preRelease);
 
-    private static void RewriteScriptContent(string scriptPath, string? preScriptMerge, string? postScriptMerge)
+    private static void RewriteScriptContent(
+        string scriptPath,
+        string? preScriptMerge,
+        string? postScriptMerge,
+        string manifestRuntimePreamble)
     {
         var content = RemoveTrailingAuthenticodeSignatureBlock(ModuleManifestValueReader.ReadPowerShellCompatibleText(scriptPath));
         var newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
@@ -391,9 +402,12 @@ public sealed partial class ArtefactBuilder
             preScriptWithoutShebang,
             out var preScriptBody);
 
-        var sections = new List<string>(6);
+        var sections = new List<string>(7);
         if (!string.IsNullOrWhiteSpace(shebang))
             sections.Add(shebang);
+
+        if (!string.IsNullOrWhiteSpace(manifestRuntimePreamble))
+            sections.Add(NormalizeNewlines(manifestRuntimePreamble.Trim(), newline));
 
         if (!string.IsNullOrWhiteSpace(preScriptPreamble))
             sections.Add(NormalizeNewlines(preScriptPreamble.Trim(), newline));

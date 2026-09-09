@@ -72,6 +72,17 @@ public sealed partial class ArtefactBuilder
         using (var fs = File.Create(zipPath))
         using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
         {
+            foreach (var directory in Directory
+                         .EnumerateDirectories(sourceDir, "*", SearchOption.AllDirectories)
+                         .Where(static directory => !Directory.EnumerateFileSystemEntries(directory).Any())
+                         .OrderBy(directory => ComputeRelativePath(sourceDir, directory), StringComparer.Ordinal))
+            {
+                var rel = ComputeRelativePath(sourceDir, directory).Replace('\\', '/').TrimEnd('/') + "/";
+                var entry = zip.CreateEntry(rel, CompressionLevel.NoCompression);
+                if (entryTimestamp.HasValue)
+                    entry.LastWriteTime = entryTimestamp.Value;
+            }
+
             foreach (var file in Directory
                          .EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories)
                          .OrderBy(file => ComputeRelativePath(sourceDir, file), StringComparer.Ordinal))

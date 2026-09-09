@@ -664,8 +664,14 @@ public sealed partial class ArtefactBuilderScriptClosureTests
     [Theory]
     [InlineData(ArtefactType.Script, "& Export-ModuleMember")]
     [InlineData(ArtefactType.Script, ". Microsoft.PowerShell.Core\\Export-ModuleMember")]
+    [InlineData(ArtefactType.Script, "& 'Export-ModuleMember'")]
+    [InlineData(ArtefactType.Script, ". \"Microsoft.PowerShell.Core\\Export-ModuleMember\"")]
+    [InlineData(ArtefactType.Script, "& ('Export-ModuleMember')")]
     [InlineData(ArtefactType.ScriptPacked, "& Export-ModuleMember")]
     [InlineData(ArtefactType.ScriptPacked, ". Microsoft.PowerShell.Core\\Export-ModuleMember")]
+    [InlineData(ArtefactType.ScriptPacked, "& 'Export-ModuleMember'")]
+    [InlineData(ArtefactType.ScriptPacked, ". \"Microsoft.PowerShell.Core\\Export-ModuleMember\"")]
+    [InlineData(ArtefactType.ScriptPacked, "& ('Export-ModuleMember')")]
     public void Build_RemovesCallOperatorExportInvocations(ArtefactType artefactType, string invocation)
     {
         var root = CreateRoot();

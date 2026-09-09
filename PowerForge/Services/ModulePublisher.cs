@@ -968,6 +968,7 @@ public sealed partial class ModulePublisher
         var isPreRelease = !string.IsNullOrWhiteSpace(plan.PreRelease) && !publish.DoNotMarkAsPreRelease;
 
         var selected = SelectPackedArtefacts(artefactResults, publish.ID);
+        ValidateDirectGitHubArtefactAssets(selected);
         var assets = selected
             .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
             .Where(static path => !string.IsNullOrWhiteSpace(path))

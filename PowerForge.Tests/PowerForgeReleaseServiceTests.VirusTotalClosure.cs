@@ -33,6 +33,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Directory.CreateDirectory(Path.GetDirectoryName(supportFile)!);
                     File.WriteAllText(entryPoint, "Get-Date");
                     File.WriteAllText(supportFile, "function Get-Support { 'ok' }");
+                    Directory.CreateDirectory(Path.Combine(scriptLayout, "runtime", "empty"));
                     return new ModuleBuildHostExecutionResult
                     {
                         ExitCode = 0,
@@ -85,6 +86,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             using ZipArchive archive = ZipFile.OpenRead(moduleEntry.StagedPath!);
             Assert.Contains(archive.Entries, static item => item.FullName == "app/ExampleModule.ps1");
             Assert.Contains(archive.Entries, static item => item.FullName == "support/helper.ps1");
+            Assert.Contains(archive.Entries, static item => item.FullName == "runtime/empty/");
         }
         finally
         {

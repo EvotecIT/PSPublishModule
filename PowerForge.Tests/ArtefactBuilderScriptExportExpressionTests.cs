@@ -16,6 +16,10 @@ public sealed class ArtefactBuilderScriptExportExpressionTests
     [InlineData(ArtefactType.ScriptPacked, "$ignored = @((Export-ModuleMember -Function Get-Value)); $script:Tail = 'array-expression'")]
     [InlineData(ArtefactType.Script, "$ignored = & Export-ModuleMember -Function Get-Value; $script:Tail = 'call-operator'")]
     [InlineData(ArtefactType.ScriptPacked, "$ignored = & Export-ModuleMember -Function Get-Value; $script:Tail = 'call-operator'")]
+    [InlineData(ArtefactType.Script, "$ignored = & 'Export-ModuleMember' -Function Get-Value; $script:Tail = 'quoted-call-operator'")]
+    [InlineData(ArtefactType.ScriptPacked, "$ignored = & \"Microsoft.PowerShell.Core\\Export-ModuleMember\" -Function Get-Value; $script:Tail = 'quoted-call-operator'")]
+    [InlineData(ArtefactType.Script, "$ignored = & ('Export-ModuleMember') -Function Get-Value; $script:Tail = 'parenthesized-quoted-call-operator'")]
+    [InlineData(ArtefactType.ScriptPacked, "$ignored = & (\"Microsoft.PowerShell.Core\\Export-ModuleMember\") -Function Get-Value; $script:Tail = 'parenthesized-quoted-call-operator'")]
     [InlineData(ArtefactType.Script, "return Export-ModuleMember -Function Get-Value; $script:Tail = 'return-expression'")]
     [InlineData(ArtefactType.ScriptPacked, "return Export-ModuleMember -Function Get-Value; $script:Tail = 'return-expression'")]
     public void Build_RemovesExportInvocationsWithoutBreakingExpressionContexts(

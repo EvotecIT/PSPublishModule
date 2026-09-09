@@ -7,7 +7,7 @@ namespace PowerForge;
 
 public sealed partial class ArtefactBuilder
 {
-    private static void ValidateScriptSourceLayout(
+    private static string ValidateScriptSourceLayout(
         string stagingPath,
         string moduleName,
         string? preScriptMerge,
@@ -43,6 +43,8 @@ public sealed partial class ArtefactBuilder
                 $"Script artefacts require the staged script root module '{expectedRootModule}', but it was not found. " +
                 "Binary-only compiled modules cannot be converted to a standalone script.");
         }
+
+        string manifestRuntimePreamble = CreateScriptManifestRuntimePreamble(manifestPath);
 
         var packageSourceFiles = ResolveModulePackageSourceFiles(
             stagingPath,
@@ -98,6 +100,8 @@ public sealed partial class ArtefactBuilder
             throw new InvalidOperationException(
                 $"ScriptName '{scriptName}' conflicts with a packaged payload file. Choose an entry point name that does not replace included module content.");
         }
+
+        return manifestRuntimePreamble;
     }
 
     private static bool HasExecutablePreScriptContent(string? content)
