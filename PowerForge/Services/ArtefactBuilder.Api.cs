@@ -60,7 +60,7 @@ public sealed partial class ArtefactBuilder
     /// <param name="information">Optional include/exclude configuration for packaging.</param>
     /// <param name="delivery">Optional delivery configuration used to auto-include bundled internals.</param>
     /// <param name="includeScriptFolders">When false, skips packaging script-only folders (Public/Private/Classes/Enums).</param>
-    /// <param name="finalizePackedArtefact">Optional finalizer invoked after the complete packed layout is assembled and before it is archived. Returned files are recorded as release evidence and remain owned by the callback.</param>
+    /// <param name="finalizePackedArtefact">Optional finalizer invoked after the complete packed or script layout is assembled and before delivery. Returned files are recorded as release evidence and remain owned by the callback.</param>
     public ArtefactBuildResult BuildWithFinalizer(
         ConfigurationArtefactSegment segment,
         string projectRoot,
@@ -114,13 +114,25 @@ public sealed partial class ArtefactBuilder
         if (cfg.Enabled != true)
             throw new InvalidOperationException($"Artefact '{segment.ArtefactType}' is not enabled.");
 
+        // Resolve and validate configured package inputs before any artefact builder can clear
+        // an existing destination. Individual builders resolve the same selection again when
+        // constructing their copy plan.
+        _ = ResolveModulePackageSourceFiles(
+            stagingPath,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
+
         var root = ResolveOutputRoot(cfg.Path, projectRoot, moduleName, moduleVersion, preRelease, segment.ArtefactType);
 
         return segment.ArtefactType switch
         {
             ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizedPayloadFiles),
             ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
-            _ => throw new NotSupportedException($"Artefact type '{segment.ArtefactType}' is not supported yet.")
+            ArtefactType.Script => BuildScript(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
+            ArtefactType.ScriptPacked => BuildScriptPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
+            _ => throw new NotSupportedException($"Artefact type '{segment.ArtefactType}' is not supported.")
         };
     }
 
@@ -211,14 +223,13 @@ public sealed partial class ArtefactBuilder
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact,
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
+        var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
+        var zipPath = Path.Combine(outputRoot, artefactName);
         Directory.CreateDirectory(outputRoot);
         if (cfg.DoNotClear != true)
             ClearDirectoryContentsSafe(outputRoot, excludePatterns: new[] { "*.zip" }, includeDirectories: false);
 
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
-
-        var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
-        var zipPath = Path.Combine(outputRoot, artefactName);
 
         var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", $"{moduleName}_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
@@ -267,25 +278,18 @@ public sealed partial class ArtefactBuilder
             if (finalizePackedArtefact is not null)
             {
                 string version = ModulePathTokenFormatter.FormatVersionWithPreRelease(moduleVersion, preRelease);
+                string manifestPath = Path.Combine(mainModuleDest, moduleName + ".psd1");
+                string entryPointPath = ResolvePackedEntryPointPath(mainModuleDest, manifestPath);
                 var context = new PackedArtefactFinalizationContext(
+                    ArtefactType.Packed,
                     tempRoot,
                     mainModuleDest,
-                    Path.Combine(mainModuleDest, moduleName + ".psd1"),
+                    manifestPath,
+                    entryPointPath,
                     zipPath,
                     moduleName,
                     version);
-                evidencePaths = (finalizePackedArtefact(context) ?? Array.Empty<string>())
-                    .Where(static path => !string.IsNullOrWhiteSpace(path))
-                    .Select(Path.GetFullPath)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                string? internalEvidence = evidencePaths.FirstOrDefault(path => IsSameOrBelowPath(path, tempRoot));
-                if (internalEvidence is not null)
-                    throw new InvalidOperationException(
-                        $"Packed artefact evidence must be emitted beside the archive, not inside its temporary layout: {internalEvidence}");
-                string? missingEvidence = evidencePaths.FirstOrDefault(static path => !File.Exists(path));
-                if (missingEvidence is not null)
-                    throw new FileNotFoundException("Packed artefact finalization evidence was not found.", missingEvidence);
+                evidencePaths = FinalizeArtefactLayout(finalizePackedArtefact, context);
             }
 
             CreateZipFromDirectoryContents(tempRoot, zipPath);
@@ -304,6 +308,27 @@ public sealed partial class ArtefactBuilder
             evidencePaths);
     }
 
+    private static string ResolvePackedEntryPointPath(string mainModulePath, string manifestPath)
+    {
+        var entryPoint = ModuleManifestValueReader.ReadModuleEntryPoint(manifestPath, out var propertyName);
+        if (string.IsNullOrWhiteSpace(entryPoint))
+            return manifestPath;
+
+        var normalizedEntryPoint = entryPoint!
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        var entryPointPath = Path.GetFullPath(Path.Combine(mainModulePath, normalizedEntryPoint));
+        if (!IsSameOrBelowPath(entryPointPath, mainModulePath))
+        {
+            throw new InvalidOperationException(
+                $"Packed artefact {propertyName} '{entryPoint}' resolves outside the primary module directory '{Path.GetFullPath(mainModulePath)}'.");
+        }
+        if (!File.Exists(entryPointPath))
+            throw new FileNotFoundException($"The packed artefact {propertyName} entry point was not found.", entryPointPath);
+
+        return entryPointPath;
+    }
+
     private static bool IsSameOrBelowPath(string path, string root)
     {
         string candidate = Path.GetFullPath(path);
@@ -312,6 +337,40 @@ public sealed partial class ArtefactBuilder
         return string.Equals(candidate, fullRoot, comparison) ||
                candidate.StartsWith(fullRoot + Path.DirectorySeparatorChar, comparison);
     }
+
+    private static string[] FinalizeArtefactLayout(
+        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?> finalizer,
+        PackedArtefactFinalizationContext context)
+    {
+        string[] normalizedEvidencePaths = (finalizer(context) ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .ToArray();
+        var evidencePaths = new List<string>(normalizedEvidencePaths.Length);
+        foreach (string path in normalizedEvidencePaths)
+        {
+            bool duplicate = evidencePaths.Any(existing =>
+                string.Equals(existing, path, GetPathComparison(existing, path)));
+            if (!duplicate)
+                evidencePaths.Add(path);
+        }
+
+        string? internalEvidence = evidencePaths.FirstOrDefault(path => IsSameOrBelowPath(path, context.RootPath));
+        if (internalEvidence is not null)
+            throw new InvalidOperationException(
+                $"Artefact evidence must be emitted outside its finalized layout: {internalEvidence}");
+        string? missingEvidence = evidencePaths.FirstOrDefault(static path => !File.Exists(path));
+        if (missingEvidence is not null)
+            throw new FileNotFoundException("Artefact finalization evidence was not found.", missingEvidence);
+
+        return evidencePaths.ToArray();
+    }
+
+    private static StringComparison GetPathComparison(string firstPath, string secondPath)
+        => FrameworkCompatibility.GetPathStringComparisonForPath(firstPath) == StringComparison.OrdinalIgnoreCase ||
+           FrameworkCompatibility.GetPathStringComparisonForPath(secondPath) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 
     private IReadOnlyList<RequiredModuleReference> FilterRequiredModulesForArtefact(
         IReadOnlyList<RequiredModuleReference>? requiredModules,

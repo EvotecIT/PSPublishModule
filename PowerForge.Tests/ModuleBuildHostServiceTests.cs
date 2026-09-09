@@ -724,6 +724,51 @@ public sealed class ModuleBuildHostServiceTests
             result.FailureMessage);
     }
 
+    [Fact]
+    public async Task ExecuteBuildAsync_CapturesProducedArtefactsWithoutProgressReporter()
+    {
+        PowerShellRunRequest? captured = null;
+        string outputPath = Path.GetFullPath(@"C:\repo\Artefacts\Company.Tools.zip");
+        var message = JsonSerializer.Serialize(new ModulePipelineProgressProtocolMessage
+        {
+            ArtefactOutputs = new[]
+            {
+                new PowerForgeModuleArtefactOutputSummary
+                {
+                    Type = ArtefactType.ScriptPacked,
+                    OutputPath = outputPath,
+                    EntryPointRelativePath = "app/Company.Tools.ps1"
+                }
+            }
+        });
+        string protocolLine = "##powerforge-module-progress-v1##" +
+                              Convert.ToBase64String(Encoding.UTF8.GetBytes(message));
+        var runner = new StubPowerShellRunner(request =>
+        {
+            captured = request;
+            request.OutputLineReceived!(protocolLine);
+            return new PowerShellRunResult(0, protocolLine + Environment.NewLine + "ok", string.Empty, "pwsh");
+        });
+
+        ModuleBuildHostExecutionResult result = await new ModuleBuildHostService(runner).ExecuteBuildAsync(
+            new ModuleBuildHostBuildRequest
+            {
+                RepositoryRoot = @"C:\repo",
+                ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+                ModulePath = @"C:\repo\Module\PSPublishModule.psd1"
+            });
+
+        PowerForgeModuleArtefactOutputSummary output = Assert.Single(result.ArtefactOutputs);
+        Assert.Equal(ArtefactType.ScriptPacked, output.Type);
+        Assert.Equal(outputPath, output.OutputPath);
+        Assert.Equal("app/Company.Tools.ps1", output.EntryPointRelativePath);
+        Assert.DoesNotContain("##powerforge-module-progress", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal("ok", result.StandardOutput);
+        Assert.NotNull(captured);
+        Assert.Equal("1", captured!.EnvironmentVariables![ModulePipelineProgressProtocol.EnvironmentVariable]);
+        Assert.NotNull(captured.OutputLineReceived);
+    }
+
     private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2
     {
         public List<PowerForgeReleaseProgressItem> Planned { get; } = new();

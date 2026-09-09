@@ -197,6 +197,70 @@ internal sealed partial class PowerForgeReleaseService
             .ToArray();
     }
 
+    internal static PowerForgeModuleArtefactOutputSummary[] ResolveModuleArtefactOutputs(
+        ModulePipelineConfigurationContext? context)
+        => ResolveModuleArtefactOutputs(
+            context,
+            context?.Spec.Build.Name,
+            context?.Spec.Build.Version,
+            preRelease: null);
+
+    internal static PowerForgeModuleArtefactOutputSummary[] ResolveModuleArtefactOutputs(
+        ModulePipelineConfigurationContext? context,
+        string? moduleName,
+        string? moduleVersion,
+        string? preRelease)
+    {
+        if (context is null || string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(moduleVersion))
+            return Array.Empty<PowerForgeModuleArtefactOutputSummary>();
+
+        return (context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
+            .OfType<ConfigurationArtefactSegment>()
+            .Where(static segment => segment.Configuration?.Enabled == true)
+            .Select(segment =>
+            {
+                string outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
+                    segment.Configuration.Path,
+                    context.ProjectRoot,
+                    moduleName!,
+                    moduleVersion!,
+                    preRelease,
+                    segment.ArtefactType);
+                bool packed = segment.ArtefactType is ArtefactType.Packed or ArtefactType.ScriptPacked;
+                return new PowerForgeModuleArtefactOutputSummary
+                {
+                    Type = segment.ArtefactType,
+                    OutputRoot = outputRoot,
+                    OutputPath = packed
+                        ? Path.Combine(
+                            outputRoot,
+                            ArtefactLayoutPathResolver.ResolveArtefactFileName(
+                                segment.Configuration,
+                                moduleName!,
+                                moduleVersion!,
+                                preRelease))
+                        : outputRoot,
+                    EntryPointRelativePath = segment.ArtefactType switch
+                    {
+                        ArtefactType.Script => ArtefactLayoutPathResolver.ResolveScriptEntryPointRelativePath(
+                            segment.Configuration,
+                            outputRoot,
+                            moduleName!,
+                            moduleVersion!,
+                            preRelease),
+                        ArtefactType.ScriptPacked => ArtefactLayoutPathResolver.ResolveScriptPackedEntryPointRelativePath(
+                            segment.Configuration,
+                            outputRoot,
+                            moduleName!,
+                            moduleVersion!,
+                            preRelease),
+                        _ => null
+                    }
+                };
+            })
+            .ToArray();
+    }
+
     private static string? ResolvePackedModuleRoot(
         ArtefactConfiguration configuration,
         string projectRoot,

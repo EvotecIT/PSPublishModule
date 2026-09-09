@@ -6,6 +6,17 @@ namespace PowerForge;
 
 internal static class ModuleManifestValueReader
 {
+    internal static string? ReadModuleEntryPoint(string manifestPath, out string propertyName)
+    {
+        propertyName = "RootModule";
+        var entryPoint = ReadTopLevelString(manifestPath, propertyName);
+        if (!string.IsNullOrWhiteSpace(entryPoint))
+            return entryPoint;
+
+        propertyName = "ModuleToProcess";
+        return ReadTopLevelString(manifestPath, propertyName);
+    }
+
     internal static string? ReadTopLevelString(string manifestPath, string key)
     {
         if (!TryReadManifestText(manifestPath, out var manifestText))
@@ -89,7 +100,10 @@ internal static class ModuleManifestValueReader
         return null;
     }
 
-    internal static string[]? ReadTopLevelLiteralStringOrArrayOrThrow(string manifestPath, string key)
+    internal static string[]? ReadTopLevelLiteralStringOrArrayOrThrow(
+        string manifestPath,
+        string key,
+        string purpose = "compiled module export preservation")
     {
         if (!TryReadManifestText(manifestPath, out var manifestText) ||
             !ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression))
@@ -105,10 +119,13 @@ internal static class ModuleManifestValueReader
         }
 
         throw new InvalidDataException(
-            $"PowerShell manifest property '{key}' must contain a literal string or string array for compiled module export preservation.");
+            $"PowerShell manifest property '{key}' must contain a literal string or string array for {purpose}.");
     }
 
-    internal static string? ReadTopLevelLiteralStringOrThrow(string manifestPath, string key)
+    internal static string? ReadTopLevelLiteralStringOrThrow(
+        string manifestPath,
+        string key,
+        string purpose = "compiled module ownership preservation")
     {
         if (!TryReadManifestText(manifestPath, out var manifestText) ||
             !ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression))
@@ -124,7 +141,7 @@ internal static class ModuleManifestValueReader
         }
 
         throw new InvalidDataException(
-            $"PowerShell manifest property '{key}' must contain a literal string for compiled module ownership preservation.");
+            $"PowerShell manifest property '{key}' must contain a literal string for {purpose}.");
     }
 
     internal static string[] ReadPsDataStringOrArray(string manifestPath, string key)

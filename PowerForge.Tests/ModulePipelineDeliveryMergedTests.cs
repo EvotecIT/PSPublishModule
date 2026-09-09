@@ -211,6 +211,96 @@ public sealed class ModulePipelineDeliveryMergedTests
     }
 
     [Fact]
+    public void Run_MergedModuleWithManifestHook_IncludesGeneratedDeliveryCommandsInRootPsm1()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var projectRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "src"));
+            var publicDir = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Public"));
+            var classesDir = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Classes"));
+            string artefactsDir = Path.Combine(tempRoot.FullName, "artefacts");
+            File.WriteAllText(
+                Path.Combine(projectRoot.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ScriptsToProcess = @('Classes/Initialize.ps1')" + Environment.NewLine +
+                "    FunctionsToExport = @()" + Environment.NewLine +
+                "    CmdletsToExport = @()" + Environment.NewLine +
+                "    AliasesToExport = @()" + Environment.NewLine +
+                "}");
+            File.WriteAllText(Path.Combine(projectRoot.FullName, moduleName + ".psm1"), string.Empty);
+            File.WriteAllText(Path.Combine(classesDir.FullName, "Initialize.ps1"), "$script:Initialized = $true");
+            File.WriteAllText(Path.Combine(publicDir.FullName, "Get-Test.ps1"), "function Get-Test { 'ok' }");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { Enable = true, Merge = true }
+                    },
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Delivery = new DeliveryOptionsConfiguration
+                            {
+                                Enable = true,
+                                GenerateInstallCommand = true,
+                                GenerateUpdateCommand = true
+                            }
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = artefactsDir
+                        }
+                    }
+                ]
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var result = runner.Run(spec, runner.Plan(spec));
+
+            string stagingPsm1 = File.ReadAllText(
+                Path.Combine(result.BuildResult.StagingPath, moduleName + ".psm1"));
+            Assert.Contains("function Install-TestModule", stagingPsm1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("function Update-TestModule", stagingPsm1, StringComparison.OrdinalIgnoreCase);
+            Assert.True(ManifestEditor.TryGetTopLevelStringArray(
+                result.BuildResult.ManifestPath,
+                "ScriptsToProcess",
+                out string[]? scriptsToProcess));
+            Assert.NotNull(scriptsToProcess);
+            Assert.Equal(new[] { "Classes/Initialize.ps1" }, scriptsToProcess);
+
+            string artefactPsm1 = File.ReadAllText(
+                Path.Combine(artefactsDir, moduleName, moduleName + ".psm1"));
+            Assert.Contains("function Install-TestModule", artefactPsm1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("function Update-TestModule", artefactPsm1, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_ReusedExistingPsm1_EmbedsGeneratedDeliveryCommands_WithoutLooseScriptFolders()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

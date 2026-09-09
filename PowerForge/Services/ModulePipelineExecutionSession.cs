@@ -180,6 +180,15 @@ internal sealed class ModulePipelineExecutionSession
         try { Reporter.StepFailed(step, error); } catch { }
     }
 
+    internal void Skip(ModulePipelineStep? step)
+    {
+        if (step is null || _reporterV2 is null) return;
+        if (!string.IsNullOrWhiteSpace(step.Key))
+            _startedKeys.Add(step.Key);
+
+        try { _reporterV2.StepSkipped(step); } catch { }
+    }
+
     internal void NotifySkippedOnFailure()
     {
         if (_reporterV2 is null) return;

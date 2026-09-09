@@ -7,6 +7,59 @@ namespace PowerForge.Tests;
 public sealed class ModuleMergeComposerTests
 {
     [Fact]
+    public void ResolveScriptFiles_OrdersCaseDistinctPathsWithOrdinalTieBreaker()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparisonForPath(root.FullName) != StringComparison.Ordinal)
+                return;
+
+            string publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public")).FullName;
+            File.WriteAllText(Path.Combine(publicRoot, "foo.ps1"), "'lower'");
+            File.WriteAllText(Path.Combine(publicRoot, "Foo.ps1"), "'upper'");
+
+            string[] files = ModuleMergeComposer.ResolveScriptFiles(
+                root.FullName,
+                new InformationConfiguration { IncludePS1 = ["Public"] });
+
+            Assert.Equal(new[] { "Foo.ps1", "foo.ps1" }, files.Select(Path.GetFileName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void BuildSources_ReportsOnlyFilesSuccessfullyIncorporated()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string included = Path.Combine(root, "Included.ps1");
+            string missing = Path.Combine(root, "Missing.ps1");
+            File.WriteAllText(included, "function Get-Included { 'ok' }");
+
+            ModuleMergeSources sources = ModuleMergeComposer.BuildSources(
+                root,
+                "DemoModule",
+                information: null,
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                fixRelativePaths: true,
+                scriptFiles: new[] { included, missing });
+
+            Assert.Equal(new[] { Path.GetFullPath(included) }, sources.ScriptFiles);
+            Assert.Contains("Get-Included", sources.MergedScriptContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildSources_PreservesUsingLinesInsidePowerShellHereStrings()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -362,22 +415,38 @@ public sealed class ModuleMergeComposerTests
     {
         var content =
             "#requires -Version 5.1" + Environment.NewLine +
+            "# comment between directives" + Environment.NewLine +
+            "<#" + Environment.NewLine +
+            "block comment between directives" + Environment.NewLine +
+            "#>" + Environment.NewLine +
             "using module @{" + Environment.NewLine +
             "    ModuleName = './Types.psm1'" + Environment.NewLine +
             "    ModuleVersion = '1.0.0'" + Environment.NewLine +
-            "}" + Environment.NewLine + Environment.NewLine +
+            "}" + Environment.NewLine +
+            "# another directive separator" + Environment.NewLine +
+            "using namespace System.Text" + Environment.NewLine +
+            "# body comment must remain with the body" + Environment.NewLine +
             "function Get-Demo { [SharedType]::new() }";
 
         var preamble = ModuleMergeComposer.ExtractMergedScriptPreamble(content, out var body);
 
         Assert.Equal(
             "#requires -Version 5.1" + Environment.NewLine +
+            "# comment between directives" + Environment.NewLine +
+            "<#" + Environment.NewLine +
+            "block comment between directives" + Environment.NewLine +
+            "#>" + Environment.NewLine +
             "using module @{" + Environment.NewLine +
             "    ModuleName = './Types.psm1'" + Environment.NewLine +
             "    ModuleVersion = '1.0.0'" + Environment.NewLine +
-            "}",
+            "}" + Environment.NewLine +
+            "# another directive separator" + Environment.NewLine +
+            "using namespace System.Text",
             preamble);
-        Assert.Equal("function Get-Demo { [SharedType]::new() }", body);
+        Assert.Equal(
+            "# body comment must remain with the body" + Environment.NewLine +
+            "function Get-Demo { [SharedType]::new() }",
+            body);
     }
 
     [Fact]

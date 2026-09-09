@@ -36,7 +36,10 @@ public sealed partial class ModulePipelineRunner
         public ModuleTypeAcceleratorSurfaceReport? TypeAcceleratorSurfaceReport { get; set; }
         public BuildDiagnostic[] AutomaticBinaryConflictDiagnostics { get; set; } = Array.Empty<BuildDiagnostic>();
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
-        public Dictionary<string, string> FinalizedPackedArtefactHashes { get; } = new(System.StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> FinalizedPackedArtefactHashes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
+        public Dictionary<string, int> FinalizedPackedArtefactUnixModes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
+        public Dictionary<string, string[]> FinalizedScriptLayoutFileInventories { get; } = new(PowerShellCompilationPathSafety.PathComparer);
+        public Dictionary<string, string[]> FinalizedScriptLayoutDirectoryInventories { get; } = new(PowerShellCompilationPathSafety.PathComparer);
         public Dictionary<string, string> FinalizedModulePayloadHashes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
         public List<ModulePublishResult> PublishResults { get; } = new();
         public List<ProjectBuildHostExecutionResult> ProjectBuildResults { get; } = new();
@@ -57,10 +60,18 @@ public sealed partial class ModulePipelineRunner
         public string? ProjectManifestSyncMessage { get; set; }
         public string? AuthorizedProjectManifestSha256 { get; set; }
         public string? AuthorizedStagingManifestSha256 { get; set; }
-        public bool PackageWithoutScriptFolders => PowerShellCompilationResult is not null
-            ? !PowerShellCompilationResult.UsesPowerShellRuntimeFallback
-            : MergeExecution.MergedModule ||
-              (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);
+        public bool PackageWithoutScriptFolders => !HasScriptsToProcess && HasMergedRootModule;
+
+        public bool HasMergedRootModule =>
+            PowerShellCompilationResult is not null
+                ? !PowerShellCompilationResult.UsesPowerShellRuntimeFallback
+                : MergeExecution.MergedModule ||
+                  (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);
+
+        private bool HasScriptsToProcess => BuildResult is not null &&
+            ModuleManifestValueReader.ReadTopLevelStringOrArray(
+                BuildResult.ManifestPath,
+                "ScriptsToProcess").Length > 0;
 
         public ModuleBuildResult RequireBuildResult()
             => BuildResult ?? throw new InvalidOperationException("Build result is not available for the current pipeline state.");

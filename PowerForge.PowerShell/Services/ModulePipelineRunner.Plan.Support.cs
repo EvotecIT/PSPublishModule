@@ -171,6 +171,14 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException(
                 "GenerateProvenance requires module signing, at least one artefact, and a GitHub release destination.");
         }
+        if (plan.GenerateReleaseProvenance &&
+            SelectProvenanceBoundReleaseArtefacts(spec, plan).Any(static artefact =>
+                artefact.ArtefactType is ArtefactType.Script or ArtefactType.ScriptPacked))
+        {
+            throw new InvalidOperationException(
+                "GenerateProvenance does not support Script or ScriptPacked artefacts. " +
+                "Use a Packed module artefact for provenance-bound GitHub releases, or disable provenance for the standalone script archive.");
+        }
         if (!plan.RequireCleanReleaseSource) return;
 
         var generatedProvenancePaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot);
@@ -221,6 +229,67 @@ public sealed partial class ModulePipelineRunner
         plan.SourceDirty = false;
         if (plan.GenerateReleaseProvenance)
             plan.SourceRepositoryUrl = ResolveGitHubModuleRepositoryUrl(plan);
+    }
+
+    private static ConfigurationArtefactSegment[] SelectProvenanceBoundReleaseArtefacts(
+        ModulePipelineSpec spec,
+        ModulePipelinePlan plan)
+    {
+        ConfigurationArtefactSegment[] unifiedReleaseArtefacts = plan.Artefacts
+            .Where(static artefact => artefact is not null &&
+                                      artefact.ArtefactType is ArtefactType.Packed or
+                                          ArtefactType.Script or
+                                          ArtefactType.ScriptPacked)
+            .ToArray();
+        if (spec.UnifiedGitHubRelease)
+        {
+            ConfigurationArtefactSegment? first = unifiedReleaseArtefacts.FirstOrDefault();
+            return first is null ? Array.Empty<ConfigurationArtefactSegment>() : new[] { first };
+        }
+
+        ConfigurationArtefactSegment[] directReleaseArtefacts = unifiedReleaseArtefacts
+            .Where(static artefact => artefact.ArtefactType is ArtefactType.Packed or ArtefactType.ScriptPacked)
+            .ToArray();
+
+        var selected = new List<ConfigurationArtefactSegment>();
+        foreach (ConfigurationPublishSegment publish in plan.Publishes.Where(static publish =>
+                     publish?.Configuration?.Destination == PublishDestination.GitHub))
+        {
+            string? publishId = publish.Configuration.ID;
+            if (string.IsNullOrWhiteSpace(publishId))
+            {
+                ConfigurationArtefactSegment? first = directReleaseArtefacts.FirstOrDefault() ??
+                                                      unifiedReleaseArtefacts.FirstOrDefault();
+                if (first is not null && !selected.Contains(first))
+                    selected.Add(first);
+                continue;
+            }
+
+            string idValue = publishId!.Trim();
+            ConfigurationArtefactSegment[] matching = directReleaseArtefacts
+                .Where(artefact => string.Equals(
+                    artefact.Configuration.ID,
+                    idValue,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matching.Length == 0)
+            {
+                matching = unifiedReleaseArtefacts
+                    .Where(artefact => string.Equals(
+                        artefact.Configuration.ID,
+                        idValue,
+                        StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+            }
+
+            foreach (ConfigurationArtefactSegment artefact in matching)
+            {
+                if (!selected.Contains(artefact))
+                    selected.Add(artefact);
+            }
+        }
+
+        return selected.ToArray();
     }
 
     private static string[] GetGeneratedReleaseProvenancePaths(string projectRoot) =>

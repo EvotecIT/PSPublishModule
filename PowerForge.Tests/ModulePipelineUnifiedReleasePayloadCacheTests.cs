@@ -70,21 +70,20 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             FakeHostedOperations CreateHostedOperations()
                 => new(new List<string>())
                 {
-                    ModuleAction = (action, context) =>
+                    ModuleAction = (action, context) => CreateActionResult(action, context, succeeded: true),
+                    ModuleSigningCompleted = (_, verified) =>
                     {
-                        if (context.Stage == ModulePipelineActionStage.BeforeArtefacts)
+                        foreach (string path in verified.Where(path =>
+                                     string.Equals(Path.GetExtension(path), ".psm1", StringComparison.OrdinalIgnoreCase)))
                         {
-                            File.AppendAllText(
-                                Path.Combine(context.StagingPath!, $"{moduleName}.psm1"),
-                                $"{Environment.NewLine}# timestamped-signature-{runNumber}");
+                            File.AppendAllText(path, $"{Environment.NewLine}# timestamped-signature-{runNumber}");
                         }
-                        return CreateActionResult(action, context, succeeded: true);
                     }
                 };
 
             var firstRunner = CreateRunner(CreateHostedOperations(), ExecutePackageBuild, PublishGitHub);
             var firstException = Assert.Throws<InvalidOperationException>(() => firstRunner.Run(
-                CreateGalleryAndGitHubReleaseSpec(root.FullName, firstStagingPath, moduleName)));
+                CreateGalleryAndGitHubReleaseSpec(root.FullName, firstStagingPath, moduleName, signed: true)));
             Assert.Contains("GitHub outage", firstException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(1, gitHubPublishCount);
             var checkpointRoot = GetCoordinatedReleaseCheckpointRoot(root.FullName);
@@ -96,7 +95,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             runNumber = 2;
             var secondRunner = CreateRunner(CreateHostedOperations(), ExecutePackageBuild, PublishGitHub);
             var result = secondRunner.Run(
-                CreateGalleryAndGitHubReleaseSpec(root.FullName, secondStagingPath, moduleName));
+                CreateGalleryAndGitHubReleaseSpec(root.FullName, secondStagingPath, moduleName, signed: true));
 
             Assert.Equal("2.0.11", result.Plan.ResolvedVersion);
             Assert.Equal(2, gitHubPublishCount);
@@ -287,7 +286,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     private static ModulePipelineSpec CreateGalleryAndGitHubReleaseSpec(
         string rootPath,
         string stagingPath,
-        string moduleName)
+        string moduleName,
+        bool signed = false)
     {
         var spec = CreateGitHubPostPublishSpec(rootPath, stagingPath, moduleName);
         var segments = spec.Segments.ToList();
@@ -316,7 +316,54 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             });
         var release = Assert.IsType<ConfigurationReleaseSegment>(segments[^1]);
         release.Configuration.PublishOrder = new[] { "PowerShellGallery", "GitHub" };
+        if (signed)
+        {
+            segments.Insert(0, new ConfigurationOptionsSegment
+            {
+                Options = new ConfigurationOptions
+                {
+                    Signing = new SigningOptionsConfiguration { CertificateThumbprint = "ABC123" }
+                }
+            });
+            segments.Insert(1, new ConfigurationBuildSegment
+            {
+                BuildModule = new BuildModuleConfiguration { SignMerged = true }
+            });
+        }
         spec.Segments = segments.ToArray();
         return spec;
+    }
+
+    private sealed partial class FakeHostedOperations
+    {
+        public Action<string, string[]>? ModuleSigningCompleted { get; set; }
+
+        public ModuleSigningResult SignModuleOutput(
+            string moduleName,
+            string rootPath,
+            string[] packageFilePaths,
+            string[] includePatterns,
+            string[] excludeSubstrings,
+            SigningOptionsConfiguration signing)
+        {
+            if (ModuleSigningCompleted is null)
+                throw new InvalidOperationException("Signing is not used in this test.");
+
+            string[] verified = packageFilePaths
+                .Where(path => includePatterns.Any(pattern =>
+                    string.Equals("*", pattern, StringComparison.Ordinal) ||
+                    string.Equals("*" + Path.GetExtension(path), pattern, StringComparison.OrdinalIgnoreCase)))
+                .Where(path => !excludeSubstrings.Any(excluded =>
+                    path.IndexOf(excluded, StringComparison.OrdinalIgnoreCase) >= 0))
+                .ToArray();
+            ModuleSigningCompleted(rootPath, verified);
+            return new ModuleSigningResult
+            {
+                TotalMatched = verified.Length,
+                TotalAfterExclude = verified.Length,
+                SignedNew = verified.Length,
+                VerifiedFilePaths = verified
+            };
+        }
     }
 }

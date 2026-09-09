@@ -10,10 +10,15 @@ namespace PowerForge;
 
 public sealed partial class ArtefactBuilder
 {
+    private static readonly DateTimeOffset DeterministicZipEntryTimestamp =
+        new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     private static void CopyDirectory(string sourceDir, string destDir, bool excludeBuildHostMetadata = false)
     {
         if (!Directory.Exists(sourceDir))
             throw new DirectoryNotFoundException($"Directory not found: {sourceDir}");
+
+        ValidateDirectoryTreeContainsNoReparsePoints(sourceDir);
 
         if (Directory.Exists(destDir))
             Directory.Delete(destDir, recursive: true);
@@ -40,21 +45,118 @@ public sealed partial class ArtefactBuilder
         }
     }
 
-    private static void CreateZipFromDirectoryContents(string sourceDir, string zipPath)
+    internal static void CreateZipFromDirectoryContents(
+        string sourceDir,
+        string zipPath,
+        IReadOnlyCollection<string>? executableEntryNames = null)
+        => CreateZipFromDirectoryContents(sourceDir, zipPath, executableEntryNames, entryTimestamp: null);
+
+    internal static void CreateDeterministicZipFromDirectoryContents(
+        string sourceDir,
+        string zipPath,
+        IReadOnlyCollection<string>? executableEntryNames = null)
+        => CreateZipFromDirectoryContents(
+            sourceDir,
+            zipPath,
+            executableEntryNames,
+            DeterministicZipEntryTimestamp);
+
+    private static void CreateZipFromDirectoryContents(
+        string sourceDir,
+        string zipPath,
+        IReadOnlyCollection<string>? executableEntryNames,
+        DateTimeOffset? entryTimestamp)
     {
+        ValidateDirectoryTreeContainsNoReparsePoints(sourceDir);
+        var unixFileModes = new Dictionary<string, int>(StringComparer.Ordinal);
         if (File.Exists(zipPath)) File.Delete(zipPath);
         Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
 
-        using var fs = File.Create(zipPath);
-        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
-
-        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+        using (var fs = File.Create(zipPath))
+        using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
         {
-            var rel = ComputeRelativePath(sourceDir, file).Replace('\\', '/');
-            var entry = zip.CreateEntry(rel, CompressionLevel.Optimal);
-            using var entryStream = entry.Open();
-            using var fileStream = File.OpenRead(file);
-            fileStream.CopyTo(entryStream);
+            foreach (var directory in Directory
+                         .EnumerateDirectories(sourceDir, "*", SearchOption.AllDirectories)
+                         .Where(static directory => !Directory.EnumerateFileSystemEntries(directory).Any())
+                         .OrderBy(directory => ComputeRelativePath(sourceDir, directory), StringComparer.Ordinal))
+            {
+                var rel = ComputeRelativePath(sourceDir, directory).Replace('\\', '/').TrimEnd('/') + "/";
+                var entry = zip.CreateEntry(rel, CompressionLevel.NoCompression);
+                if (entryTimestamp.HasValue)
+                    entry.LastWriteTime = entryTimestamp.Value;
+            }
+
+            foreach (var file in Directory
+                         .EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories)
+                         .OrderBy(file => ComputeRelativePath(sourceDir, file), StringComparer.Ordinal))
+            {
+                var rel = ComputeRelativePath(sourceDir, file).Replace('\\', '/');
+#if NET8_0_OR_GREATER
+                if (!OperatingSystem.IsWindows())
+                {
+                    UnixFileMode mode = File.GetUnixFileMode(file);
+                    const UnixFileMode executeBits =
+                        UnixFileMode.UserExecute |
+                        UnixFileMode.GroupExecute |
+                        UnixFileMode.OtherExecute;
+                    if ((mode & executeBits) != 0)
+                        unixFileModes[rel] = (int)mode;
+                }
+#endif
+                var entry = zip.CreateEntry(rel, CompressionLevel.Optimal);
+                if (entryTimestamp.HasValue)
+                    entry.LastWriteTime = entryTimestamp.Value;
+                using var entryStream = entry.Open();
+                using var fileStream = File.OpenRead(file);
+                fileStream.CopyTo(entryStream);
+            }
+        }
+
+        var executableEntries = (executableEntryNames ?? Array.Empty<string>())
+            .Where(static entry => !string.IsNullOrWhiteSpace(entry))
+            .Select(static entry => entry.Replace('\\', '/').TrimStart('/'))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        foreach (string executableEntry in executableEntries)
+            unixFileModes[executableEntry] = 0x1ED;
+        if (unixFileModes.Count > 0)
+            ZipArchiveUnixPermissionPatcher.ApplyUnixFilePermissions(zipPath, unixFileModes);
+    }
+
+    internal static void ValidateDirectoryTreeContainsNoReparsePoints(string rootPath)
+        => ValidateDirectoryTreeContainsNoReparsePoints(rootPath, "Script artefact layouts");
+
+    private static void ValidateDirectoryTreeContainsNoReparsePoints(
+        string rootPath,
+        string description)
+    {
+        string root = Path.GetFullPath(rootPath);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Directory not found: {root}");
+
+        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"{description} must not contain symbolic links or reparse points: '{root}'.");
+        }
+
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            string current = pending.Pop();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(current, "*", SearchOption.TopDirectoryOnly))
+            {
+                FileAttributes attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"{description} must not contain symbolic links or reparse points: '{entry}'.");
+                }
+
+                if ((attributes & FileAttributes.Directory) != 0)
+                    pending.Push(entry);
+            }
         }
     }
 

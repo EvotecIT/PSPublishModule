@@ -24,6 +24,11 @@ public sealed class ArtefactBuildResult
     public string[] EvidencePaths { get; }
 
     /// <summary>
+    /// Executable entry point relative to the output directory or packed archive root, when the artefact has one.
+    /// </summary>
+    public string? EntryPointRelativePath { get; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
     /// <param name="type">Artefact type that was created.</param>
@@ -37,7 +42,7 @@ public sealed class ArtefactBuildResult
         string outputPath,
         ArtefactModuleEntry[] modules,
         ArtefactCopyEntry[] copiedItems)
-        : this(type, id, outputPath, modules, copiedItems, Array.Empty<string>())
+        : this(type, id, outputPath, modules, copiedItems, Array.Empty<string>(), null)
     {
     }
 
@@ -57,6 +62,28 @@ public sealed class ArtefactBuildResult
         ArtefactModuleEntry[] modules,
         ArtefactCopyEntry[] copiedItems,
         string[]? evidencePaths)
+        : this(type, id, outputPath, modules, copiedItems, evidencePaths, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new result instance with finalization evidence and an executable entry point.
+    /// </summary>
+    /// <param name="type">Artefact type.</param>
+    /// <param name="id">Optional logical artefact id.</param>
+    /// <param name="outputPath">Output directory or archive path.</param>
+    /// <param name="modules">Modules included in the artefact.</param>
+    /// <param name="copiedItems">Extra files or directories copied into the artefact.</param>
+    /// <param name="evidencePaths">Evidence files emitted from the final assembled artefact.</param>
+    /// <param name="entryPointRelativePath">Executable entry point relative to the output directory or archive root.</param>
+    public ArtefactBuildResult(
+        ArtefactType type,
+        string? id,
+        string outputPath,
+        ArtefactModuleEntry[] modules,
+        ArtefactCopyEntry[] copiedItems,
+        string[]? evidencePaths,
+        string? entryPointRelativePath)
     {
         Type = type;
         Id = id;
@@ -64,6 +91,9 @@ public sealed class ArtefactBuildResult
         Modules = modules ?? Array.Empty<ArtefactModuleEntry>();
         CopiedItems = copiedItems ?? Array.Empty<ArtefactCopyEntry>();
         EvidencePaths = evidencePaths ?? Array.Empty<string>();
+        EntryPointRelativePath = string.IsNullOrWhiteSpace(entryPointRelativePath)
+            ? null
+            : entryPointRelativePath!.Replace('\\', '/').TrimStart('/');
     }
 }
 /// <summary>

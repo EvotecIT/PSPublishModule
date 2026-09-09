@@ -99,21 +99,26 @@ public sealed partial class ModulePipelineRunner
         try
         {
             if (!IsReusingCompiledPowerShellModule(plan))
-                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+                RefreshManifestFromPlan(
+                    plan,
+                    buildResult,
+                    manifestRequiredModules,
+                    manifestExternalModuleDependencies);
 
             if (!IsReusingCompiledPowerShellModule(plan) && plan.Delivery is not null && plan.Delivery.Enable)
             {
                 ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
 
                 if (plan.Delivery.GenerateInstallCommand || plan.Delivery.GenerateUpdateCommand)
-                    UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.PackageWithoutScriptFolders);
+                    UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.HasMergedRootModule);
             }
 
             if (!IsReusingCompiledPowerShellModule(plan) && state.MergeExecution.MergedModule) {
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }
 
-            if (!state.PackageWithoutScriptFolders &&
+            if (!state.MergeExecution.MergedModule &&
+                !state.PackageWithoutScriptFolders &&
                 !plan.BuildSpec.RefreshManifestOnly &&
                 !IsReusingCompiledPowerShellModule(plan))
                 TryRegenerateBootstrapperFromManifest(
@@ -290,7 +295,11 @@ public sealed partial class ModulePipelineRunner
         try
         {
             if (!IsReusingCompiledPowerShellModule(plan))
-                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+                RefreshManifestFromPlan(
+                    plan,
+                    buildResult,
+                    manifestRequiredModules,
+                    manifestExternalModuleDependencies);
             if (state.MergeExecution.MergedModule) {
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }
@@ -719,7 +728,10 @@ public sealed partial class ModulePipelineRunner
         ExecuteActions(ModulePipelineActionStage.AfterTests, plan, session, state);
     }
 
-    internal void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)
+    internal void UpdateManifestForGeneratedDeliveryCommands(
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        bool synchronizeMergedRootModule)
     {
         var generator = new DeliveryCommandGenerator(_logger);
         var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery!);
@@ -737,7 +749,7 @@ public sealed partial class ModulePipelineRunner
                 _manifestMutator.TrySetManifestExports(buildResult.ManifestPath, functions.ToArray(), cmdlets: null, aliases: null);
             }
 
-            if (packageWithoutScriptFolders)
+            if (synchronizeMergedRootModule)
             {
                 var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
                 var conditionalExportDependencies = ResolveConditionalExportDependencies(

@@ -45,14 +45,22 @@ internal static partial class ModuleMergeComposer
             ? ResolveScriptFiles(root, information)
             : NormalizeScriptFiles(scriptFiles);
 
+        string[] incorporated = Array.Empty<string>();
         var merged = ordered.Length > 0
-            ? BuildMergedScriptContent(root, ordered, exports, fixRelativePaths, conditionalFunctionDependencies, moduleName)
+            ? BuildMergedScriptContent(
+                root,
+                ordered,
+                exports,
+                fixRelativePaths,
+                conditionalFunctionDependencies,
+                moduleName,
+                out incorporated)
             : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
         var assemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyFileNames(moduleName, exportAssemblies);
         var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, assemblyFileNames, SearchOption.AllDirectories);
 
-        return new ModuleMergeSources(psm1, ordered, merged, hasLib);
+        return new ModuleMergeSources(psm1, incorporated, merged, hasLib);
     }
 
     internal static void SyncMergedPsm1WithGeneratedScripts(
@@ -70,13 +78,13 @@ internal static partial class ModuleMergeComposer
             return;
 
         var generatedScripts = (scriptPaths ?? System.Array.Empty<string>())
-            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path));
+        var generatedScriptContents = DistinctFileSystemPaths(generatedScripts)
             .Select(File.ReadAllText)
             .Where(static content => !string.IsNullOrWhiteSpace(content))
             .ToArray();
 
-        if (generatedScripts.Length == 0)
+        if (generatedScriptContents.Length == 0)
             return;
 
         var existing = File.ReadAllText(psm1Path);
@@ -84,7 +92,7 @@ internal static partial class ModuleMergeComposer
         withoutExportBlock = withoutExportBlock.TrimEnd();
 
         var builder = new StringBuilder(withoutExportBlock);
-        foreach (var script in generatedScripts)
+        foreach (var script in generatedScriptContents)
         {
             if (builder.Length > 0)
                 builder.AppendLine().AppendLine();
@@ -133,37 +141,67 @@ internal static partial class ModuleMergeComposer
         var normalized = body.Replace("\r\n", "\n").Replace('\r', '\n');
         var lines = normalized.Split('\n');
         var preamble = new List<string>();
+        var leadingTrivia = new List<string>();
+        var pendingTrivia = new List<string>();
+        var pendingTriviaStart = -1;
+        var foundDirective = false;
+        var blockCommentDepth = 0;
         var index = 0;
         for (; index < lines.Length; index++)
         {
             var line = lines[index];
-            var directiveStart = 0;
-            while (directiveStart < line.Length && char.IsWhiteSpace(line[directiveStart]))
-                directiveStart++;
-
-            if (StartsWithDirective(line, directiveStart, "#requires"))
+            var kind = ClassifyPreambleLine(line, ref blockCommentDepth, out var directiveStart);
+            if (kind == PreambleLineKind.Trivia)
             {
-                preamble.Add(line);
+                if (!foundDirective)
+                {
+                    leadingTrivia.Add(line);
+                    continue;
+                }
+
+                if (pendingTriviaStart < 0)
+                    pendingTriviaStart = index;
+                pendingTrivia.Add(line);
                 continue;
             }
 
-            if (StartsWithDirective(line, directiveStart, "using"))
+            if (kind == PreambleLineKind.Requires)
             {
+                if (!foundDirective)
+                    preamble.AddRange(leadingTrivia);
+                else
+                    preamble.AddRange(pendingTrivia);
+                pendingTrivia.Clear();
+                pendingTriviaStart = -1;
+                preamble.Add(line);
+                foundDirective = true;
+                continue;
+            }
+
+            if (kind == PreambleLineKind.Using)
+            {
+                if (!foundDirective)
+                    preamble.AddRange(leadingTrivia);
+                else
+                    preamble.AddRange(pendingTrivia);
+                pendingTrivia.Clear();
+                pendingTriviaStart = -1;
                 var directiveEnd = FindUsingDirectiveEnd(lines, index, directiveStart);
                 for (; index <= directiveEnd; index++)
                     preamble.Add(lines[index]);
                 index--;
+                foundDirective = true;
                 continue;
             }
-
-            if (string.IsNullOrWhiteSpace(line) && preamble.Count > 0)
-                continue;
 
             break;
         }
 
-        if (preamble.Count == 0)
+        if (!foundDirective)
             return string.Empty;
+
+        if (pendingTriviaStart >= 0)
+            index = pendingTriviaStart;
 
         body = string.Join(System.Environment.NewLine, lines.Skip(index)).TrimStart('\r', '\n');
         return string.Join(System.Environment.NewLine, preamble);
@@ -199,7 +237,8 @@ internal static partial class ModuleMergeComposer
                 files.AddRange(
                     Directory.EnumerateFiles(full, "*", SearchOption.AllDirectories)
                         .Where(static file => string.Equals(Path.GetExtension(file), ".ps1", StringComparison.OrdinalIgnoreCase))
-                        .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase));
+                        .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(static file => file, StringComparer.Ordinal));
             }
             catch
             {
@@ -211,13 +250,31 @@ internal static partial class ModuleMergeComposer
     }
 
     private static string[] NormalizeScriptFiles(IEnumerable<string> files)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return files
+        => DistinctFileSystemPaths(files
             .Where(static file => !string.IsNullOrWhiteSpace(file))
-            .Select(Path.GetFullPath)
-            .Where(seen.Add)
-            .ToArray();
+            .Select(Path.GetFullPath));
+
+    private static string[] DistinctFileSystemPaths(IEnumerable<string> paths)
+    {
+        var distinct = new List<(string Path, StringComparison Comparison)>();
+        foreach (string path in paths)
+        {
+            string fullPath = Path.GetFullPath(path);
+            StringComparison pathComparison = FrameworkCompatibility.GetPathStringComparisonForPath(fullPath);
+            bool seen = distinct.Any(existing =>
+            {
+                StringComparison comparison =
+                    existing.Comparison == StringComparison.OrdinalIgnoreCase ||
+                    pathComparison == StringComparison.OrdinalIgnoreCase
+                        ? StringComparison.OrdinalIgnoreCase
+                        : StringComparison.Ordinal;
+                return string.Equals(existing.Path, fullPath, comparison);
+            });
+            if (!seen)
+                distinct.Add((fullPath, pathComparison));
+        }
+
+        return distinct.Select(static entry => entry.Path).ToArray();
     }
 
     internal static string[] ResolveMergeDirectories(InformationConfiguration? information)
@@ -270,12 +327,14 @@ internal static partial class ModuleMergeComposer
         ExportSet exports,
         bool fixRelativePaths,
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
-        string moduleName)
+        string moduleName,
+        out string[] incorporatedFiles)
     {
         var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var sourceBlocks = new List<string>();
         var sourceBlockHasPreamble = new List<bool>();
+        var incorporated = new List<string>();
 
         foreach (var file in files)
         {
@@ -331,7 +390,10 @@ internal static partial class ModuleMergeComposer
             }
             sourceBlocks.Add(sourceBlock);
             sourceBlockHasPreamble.Add(sourcePreambleLines.Count > 0);
+            incorporated.Add(file);
         }
+
+        incorporatedFiles = incorporated.ToArray();
 
         var body = new StringBuilder(8192);
         var boundaryToken = ComputeMergedSourceBoundaryToken(sourceBlocks);

@@ -522,7 +522,8 @@ public sealed partial class ModulePipelineRunner
             totalInlinedFunctions: 0,
             scriptFilesDetected: 0,
             hasBinaryOutputs: false,
-            hasScriptSources: false);
+            hasScriptSources: false,
+            mergedScriptFiles: Array.Empty<string>());
 
         internal bool MergedModule { get; }
         internal bool UsedExistingPsm1 { get; }
@@ -534,6 +535,7 @@ public sealed partial class ModulePipelineRunner
         internal int ScriptFilesDetected { get; }
         internal bool HasBinaryOutputs { get; }
         internal bool HasScriptSources { get; }
+        internal string[] MergedScriptFiles { get; }
 
         internal MergeExecutionResult(
             bool mergedModule,
@@ -545,7 +547,8 @@ public sealed partial class ModulePipelineRunner
             int totalInlinedFunctions,
             int scriptFilesDetected,
             bool hasBinaryOutputs,
-            bool hasScriptSources)
+            bool hasScriptSources,
+            string[] mergedScriptFiles)
         {
             MergedModule = mergedModule;
             UsedExistingPsm1 = usedExistingPsm1;
@@ -557,6 +560,7 @@ public sealed partial class ModulePipelineRunner
             ScriptFilesDetected = scriptFilesDetected;
             HasBinaryOutputs = hasBinaryOutputs;
             HasScriptSources = hasScriptSources;
+            MergedScriptFiles = mergedScriptFiles ?? Array.Empty<string>();
         }
     }
 

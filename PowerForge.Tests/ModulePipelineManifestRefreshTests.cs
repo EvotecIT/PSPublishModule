@@ -270,6 +270,191 @@ public sealed class ModulePipelineManifestRefreshTests
     }
 
     [Fact]
+    public void Run_MergedModulePreservesScriptsToProcessOutsideRootModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var classes = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes"));
+            File.WriteAllText(Path.Combine(classes.FullName, "Initialize.ps1"), "class TestClass { [string] GetValue() { return 'ok' } }");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
+            File.WriteAllText(
+                Path.Combine(root.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    ScriptsToProcess = @('.\\Classes\\Initialize.ps1')" + Environment.NewLine +
+                "}");
+
+            var artefactRoot = Path.Combine(root.FullName, "Artefacts", "Unpacked");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { Enable = true, Merge = true }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration { Enabled = true, Path = artefactRoot }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var result = runner.Run(spec, runner.Plan(spec));
+            var deliveredManifest = Path.Combine(
+                Assert.Single(result.ArtefactResults).OutputPath,
+                moduleName,
+                moduleName + ".psd1");
+            var deliveredModule = Path.Combine(Path.GetDirectoryName(deliveredManifest)!, moduleName + ".psm1");
+
+            Assert.True(File.Exists(deliveredManifest));
+            Assert.DoesNotContain("class TestClass", File.ReadAllText(deliveredModule), StringComparison.Ordinal);
+            Assert.True(ManifestEditor.TryGetTopLevelStringArray(deliveredManifest, "ScriptsToProcess", out var scripts));
+            Assert.Equal(new[] { ".\\Classes\\Initialize.ps1" }, scripts);
+            Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(deliveredManifest)!, "Classes", "Initialize.ps1")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(".\\classes\\initialize.ps1", "Classes/Initialize.ps1")]
+    [InlineData(".\\Classes\\..\\Classes\\Initialize.ps1", ".\\Classes\\..\\Classes\\Initialize.ps1")]
+    [InlineData("./Classes/../Classes/Initialize.ps1", "./Classes/../Classes/Initialize.ps1")]
+    public void Run_MergedModulePreservesCanonicalScriptsToProcessPaths(
+        string manifestScriptPath,
+        string expectedManifestScriptPath)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            var classes = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes"));
+            File.WriteAllText(Path.Combine(classes.FullName, "Initialize.ps1"), "class TestClass { }");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
+            File.WriteAllText(
+                Path.Combine(root.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    ScriptsToProcess = @('" + manifestScriptPath + "')" + Environment.NewLine +
+                "}");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { Enable = true, Merge = true }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var result = runner.Run(spec, runner.Plan(spec));
+            bool hasScriptsToProcess = ManifestEditor.TryGetTopLevelStringArray(
+                result.BuildResult.ManifestPath,
+                "ScriptsToProcess",
+                out var remainingScripts);
+            Assert.True(hasScriptsToProcess);
+            Assert.Equal(new[] { expectedManifestScriptPath }, remainingScripts);
+            string mergedModule = File.ReadAllText(Path.Combine(result.BuildResult.StagingPath, moduleName + ".psm1"));
+            Assert.DoesNotContain("class TestClass", mergedModule, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_MergedModulePreservesCaseDistinctNonHookOnCaseSensitiveFileSystem()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.Ordinal)
+                return;
+
+            const string moduleName = "TestModule";
+            string hookDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes")).FullName;
+            File.WriteAllText(Path.Combine(hookDirectory, "Initialize.ps1"), "class RuntimeHookClass { }");
+            File.WriteAllText(Path.Combine(hookDirectory, "initialize.ps1"), "function Get-CaseDistinctMerged { 'ok' }");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
+            File.WriteAllText(
+                Path.Combine(root.FullName, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "    RootModule = 'TestModule.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    ScriptsToProcess = @('Classes/Initialize.ps1')" + Environment.NewLine +
+                "}");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { Enable = true, Merge = true }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
+            string stagedHookDirectory = Path.Combine(result.BuildResult.StagingPath, "Classes");
+            Assert.True(result.Plan.MergeModule);
+            Assert.True(File.Exists(Path.Combine(stagedHookDirectory, "Initialize.ps1")));
+            Assert.True(File.Exists(Path.Combine(stagedHookDirectory, "initialize.ps1")));
+            string mergedModule = File.ReadAllText(Path.Combine(result.BuildResult.StagingPath, moduleName + ".psm1"));
+
+            Assert.Contains("Get-CaseDistinctMerged", mergedModule, StringComparison.Ordinal);
+            Assert.DoesNotContain("RuntimeHookClass", mergedModule, StringComparison.Ordinal);
+            Assert.True(ManifestEditor.TryGetTopLevelStringArray(
+                result.BuildResult.ManifestPath,
+                "ScriptsToProcess",
+                out string[]? scripts));
+            Assert.Equal(new[] { "Classes/Initialize.ps1" }, scripts);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Run_WritesPrereleaseToPsDataAndRemovesTopLevelPrerelease()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

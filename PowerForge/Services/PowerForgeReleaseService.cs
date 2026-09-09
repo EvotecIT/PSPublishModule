@@ -270,7 +270,7 @@ internal sealed partial class PowerForgeReleaseService
                 "Apple target identity resolution requires an explicit validation-only summary run.");
         }
 
-        using var deferredModuleStaging = new DeferredModuleStagingDirectory(_logger);
+        using var temporaryReleaseDirectory = new TemporaryReleaseDirectory(_logger);
         request.CancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(request.ConfigPath))
@@ -535,7 +535,7 @@ internal sealed partial class PowerForgeReleaseService
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
             if (captureModuleArtifactProvenance)
-                moduleArtifactBaseline = CaptureModuleArtifactBaseline(result.ModuleAssets);
+                moduleArtifactBaseline = CaptureModuleArtifactBaseline(result.ModuleAssets, result.ModulePlan);
             var deferModulePublishing = ShouldDeferModulePublishing(
                 module.Request,
                 request,
@@ -549,7 +549,7 @@ internal sealed partial class PowerForgeReleaseService
                     !request.ValidateOnly &&
                     string.IsNullOrWhiteSpace(module.Request.StagingPath))
                 {
-                    module.Request.StagingPath = deferredModuleStaging.GetOrCreatePath();
+                    module.Request.StagingPath = temporaryReleaseDirectory.GetOrCreateSubdirectory("module-staging");
                     module.Plan.StagingPath = module.Request.StagingPath;
                 }
                 module.Request.RequireReusableOutput = module.Request.ScriptPath is not null;
@@ -577,7 +577,26 @@ internal sealed partial class PowerForgeReleaseService
                     return result;
                 }
 
+                if (result.ModulePlan is not null && moduleResult.ArtefactOutputs.Length > 0)
+                    result.ModulePlan.ArtefactOutputs = moduleResult.ArtefactOutputs;
+
                 UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
+                if (result.ModulePlan is not null)
+                {
+                    if (moduleResult.ArtefactOutputs.Length == 0)
+                    {
+                        result.ModulePlan.ArtefactOutputs = ResolveModuleArtefactOutputs(
+                            module.ConfigurationContext,
+                            result.ModulePlan.ModuleName,
+                            result.ModulePlan.ModuleVersion,
+                            result.ModulePlan.PreReleaseTag);
+                    }
+                    result.ModulePlan.PackedModuleRoots = ResolvePackedModuleRoots(
+                        module.ConfigurationContext,
+                        result.ModulePlan.ModuleName,
+                        result.ModulePlan.ModuleVersion,
+                        result.ModulePlan.PreReleaseTag);
+                }
                 result.ModuleAssets = ExpandModuleArtifactPaths(
                     result.ModuleAssets,
                     result.ModulePlan?.ModuleName,
@@ -589,7 +608,9 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
                         result.ModuleAssets,
-                        moduleArtifactBaseline);
+                        moduleArtifactBaseline,
+                        result.ModulePlan,
+                        ResolvePersistentModuleScriptArchiveRoot(result.ModulePlan, configDirectory));
                 }
 
                 if (result.ModulePlan?.IncludesProjectPackages == true &&
@@ -1019,7 +1040,9 @@ internal sealed partial class PowerForgeReleaseService
             {
                 result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
                     result.ModuleAssets,
-                    moduleArtifactBaseline);
+                    moduleArtifactBaseline,
+                    result.ModulePlan,
+                    ResolvePersistentModuleScriptArchiveRoot(result.ModulePlan, configDirectory));
             }
 
             request.Progress?.PhaseCompleted(
@@ -1478,7 +1501,11 @@ internal sealed partial class PowerForgeReleaseService
         return (service, spec, workspaceConfigPath, workspaceRequest, plan);
     }
 
-    private static (ModuleBuildHostBuildRequest Request, PowerForgeModuleReleasePlanSummary Plan, string[] ArtifactPaths) PrepareModuleRelease(
+    private static (
+        ModuleBuildHostBuildRequest Request,
+        PowerForgeModuleReleasePlanSummary Plan,
+        string[] ArtifactPaths,
+        ModulePipelineConfigurationContext? ConfigurationContext) PrepareModuleRelease(
         PowerForgeModuleReleaseOptions options,
         string releaseConfigPath,
         PowerForgeReleaseRequest request,
@@ -1629,6 +1656,11 @@ internal sealed partial class PowerForgeReleaseService
                 moduleName,
                 buildRequest.ModuleVersion,
                 buildRequest.PreReleaseTag),
+            ArtefactOutputs = ResolveModuleArtefactOutputs(
+                moduleConfig,
+                moduleName,
+                buildRequest.ModuleVersion ?? moduleConfig?.Spec.Build.Version,
+                buildRequest.PreReleaseTag),
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,
@@ -1637,7 +1669,7 @@ internal sealed partial class PowerForgeReleaseService
             ArtifactPaths = artifactPaths
         };
 
-        return (buildRequest, plan, artifactPaths);
+        return (buildRequest, plan, artifactPaths, moduleConfig);
     }
 
     private static string ExpandModulePath(string? path, string configuration, string framework)
@@ -4904,8 +4936,22 @@ internal sealed partial class PowerForgeReleaseService
 
         assets.AddRange(
             (result.ModuleAssets ?? Array.Empty<string>())
+            .Where(path => !IsScriptArtefactSourceReplacedByReleaseArchive(path, result.ModulePlan))
             .SelectMany(path => CreateModuleAssetEntries(
                 path,
+                result.ModulePlan,
+                result.ModuleProducedAssets)));
+
+        assets.AddRange(
+            (result.ModulePlan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>())
+            .Where(static output => output is not null &&
+                                    output.Type == ArtefactType.Script &&
+                                    !string.IsNullOrWhiteSpace(output.ReleaseAssetPath))
+            .Select(static output => output.ReleaseAssetPath!)
+            .Where(path => File.Exists(path) &&
+                           ContainsProducedModuleArtifact(result.ModuleProducedAssets, path))
+            .Select(path => CreateModuleProducedAssetEntry(
+                Path.GetFullPath(path),
                 result.ModulePlan,
                 result.ModuleProducedAssets)));
 
@@ -5034,11 +5080,10 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(path))
             yield break;
 
-        var produced = producedArtifactPaths is null
-            ? null
-            : new HashSet<string>(
-                producedArtifactPaths.Select(Path.GetFullPath),
-                StringComparer.OrdinalIgnoreCase);
+        var produced = producedArtifactPaths?
+            .Where(static candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Select(Path.GetFullPath)
+            .ToArray();
 
         if (File.Exists(path))
         {
@@ -5050,14 +5095,40 @@ internal sealed partial class PowerForgeReleaseService
         if (!Directory.Exists(path))
             yield break;
 
-        foreach (var file in Directory
-            .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly)
-            .Where(file => IsModuleArtifactForResolvedVersion(file, plan))
+        StringComparer candidateComparer =
+            FrameworkCompatibility.GetPathStringComparisonForPath(path) == StringComparison.OrdinalIgnoreCase
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+        IEnumerable<string> candidateFiles = Directory
+            .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly);
+        if (produced is not null)
+        {
+            string fullDirectory = Path.GetFullPath(path)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            candidateFiles = candidateFiles.Concat(produced.Where(file =>
+                File.Exists(file) &&
+                IsModuleReleaseAssetBelowDirectory(file, fullDirectory)));
+        }
+
+        foreach (var file in candidateFiles
+            .Distinct(candidateComparer)
+            .Where(file => produced is not null
+                ? ContainsProducedModuleArtifact(produced, file) &&
+                  IsProducedModuleArtifactForResolvedVersion(file, plan)
+                : IsModuleArtifactForResolvedVersion(file, plan))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
         {
             var fullPath = Path.GetFullPath(file);
             yield return CreateModuleProducedAssetEntry(fullPath, plan, produced);
         }
+    }
+
+    private static bool IsModuleReleaseAssetBelowDirectory(string path, string directory)
+    {
+        string fullPath = Path.GetFullPath(path);
+        StringComparison comparison = ResolvePathComparison(fullPath, directory);
+        return fullPath.StartsWith(directory + Path.DirectorySeparatorChar, comparison) ||
+               fullPath.StartsWith(directory + Path.AltDirectorySeparatorChar, comparison);
     }
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> StageReleaseAssets(
