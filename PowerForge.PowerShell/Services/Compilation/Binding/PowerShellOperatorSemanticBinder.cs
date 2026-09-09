@@ -416,6 +416,10 @@ internal static partial class PowerShellOperatorSemanticBinder
             return new PowerShellBoundMembershipExpression(span, left, right, typeof(object), collectionOnRight,
                 operation.StartsWith("I", StringComparison.Ordinal), operation.Contains("not", StringComparison.OrdinalIgnoreCase),
                 usesNativeInvocation: true);
+        if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
+            return new PowerShellBoundMembershipExpression(span, left, right, typeof(object), collectionOnRight,
+                operation.StartsWith("I", StringComparison.Ordinal), operation.Contains("not", StringComparison.OrdinalIgnoreCase),
+                usesCommandHostInvocation: true);
         var collectionType = collection.Type.ClrType;
         if (!collectionType.IsArray || collectionType.GetArrayRank() != 1)
             return Reject(diagnostics, span, "PSB2226", $"Operator '-{operation.ToLowerInvariant()}' requires a statically typed one-dimensional array on its collection side.");

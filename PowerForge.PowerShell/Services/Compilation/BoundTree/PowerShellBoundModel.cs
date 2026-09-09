@@ -49,7 +49,9 @@ internal enum PowerShellTypeFactProvenance
     Widened,
     Unknown,
     // A closed numeric union keeps the authored boxed CLR type through promotion.
-    Int32OrDouble
+    Int32OrDouble,
+    // A command's consumed success stream collapses to empty, one record, or an array.
+    CapturedCommandOutput
 }
 
 internal enum PowerShellDictionaryValueKind
@@ -334,19 +336,22 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
         PowerShellTypeFact returnType,
         int[]? authoredEvaluationOrder = null,
         string[]? boundParameterNames = null,
-        bool returnsModuleStateDerived = false)
+        bool returnsModuleStateDerived = false,
+        bool capturesSuccessOutput = false)
         : base(
             span,
             returnType,
             PowerShellValueState.Unknown,
             arguments.Aggregate(PowerShellSemanticEffect.None, static (effects, argument) => effects | argument.Effects),
-            arguments.Aggregate(PowerShellRequiredCapability.None, static (capabilities, argument) => capabilities | argument.Capabilities))
+            arguments.Aggregate(capturesSuccessOutput ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellStreams :
+                PowerShellRequiredCapability.None, static (capabilities, argument) => capabilities | argument.Capabilities))
     {
         Target = target;
         Arguments = arguments ?? Array.Empty<PowerShellBoundExpression>();
         AuthoredEvaluationOrder = authoredEvaluationOrder ?? Enumerable.Range(0, Arguments.Length).ToArray();
         BoundParameterNames = boundParameterNames ?? Array.Empty<string>();
         ReturnsModuleStateDerived = returnsModuleStateDerived;
+        CapturesSuccessOutput = capturesSuccessOutput;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -354,6 +359,7 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
     internal PowerShellImmutableArray<int> AuthoredEvaluationOrder { get; }
     internal PowerShellImmutableArray<string> BoundParameterNames { get; }
     internal bool ReturnsModuleStateDerived { get; }
+    internal bool CapturesSuccessOutput { get; }
 }
 
 internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement

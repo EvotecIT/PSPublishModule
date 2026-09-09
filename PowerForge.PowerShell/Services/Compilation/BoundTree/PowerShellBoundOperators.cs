@@ -62,7 +62,8 @@ internal enum PowerShellBoundUnaryOperator
     Identity,
     Negate,
     LogicalNot,
-    BitwiseNot
+    BitwiseNot,
+    NormalizeCommandArgument
 }
 
 internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpression
@@ -136,7 +137,8 @@ internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression
         PowerShellBoundUnaryOperator operation,
         PowerShellBoundExpression operand,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown, operand.Effects, operand.Capabilities)
+        : base(span, type, PowerShellValueState.Unknown, operand.Effects, operand.Capabilities |
+            (operation == PowerShellBoundUnaryOperator.NormalizeCommandArgument ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Operation = operation;
         Operand = operand;
@@ -235,14 +237,16 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
         bool collectionOnRight,
         bool ignoreCase,
         bool negate,
-        bool usesNativeInvocation = false)
+        bool usesNativeInvocation = false,
+        bool usesCommandHostInvocation = false)
         : base(
             span,
             new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "The membership operator produces one Boolean comparison result."),
             PowerShellValueState.Unknown,
-            left.Effects | right.Effects | (usesNativeInvocation ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
+            left.Effects | right.Effects | (usesNativeInvocation || usesCommandHostInvocation ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
             left.Capabilities | right.Capabilities | PowerShellRequiredCapability.PowerShellLanguageOperators |
-            (usesNativeInvocation ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
+            (usesNativeInvocation ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
+            (usesCommandHostInvocation ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Left = left;
         Right = right;
@@ -251,6 +255,7 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
         IgnoreCase = ignoreCase;
         Negate = negate;
         UsesNativeInvocation = usesNativeInvocation;
+        UsesCommandHostInvocation = usesCommandHostInvocation;
     }
 
     internal PowerShellBoundExpression Left { get; }
@@ -260,6 +265,7 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
     internal bool IgnoreCase { get; }
     internal bool Negate { get; }
     internal bool UsesNativeInvocation { get; }
+    internal bool UsesCommandHostInvocation { get; }
 }
 
 internal sealed class PowerShellBoundStringSplitExpression : PowerShellBoundExpression

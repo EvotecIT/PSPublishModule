@@ -49,6 +49,11 @@ internal static class PowerShellCommandHostRuntimeSource
                 ?? throw new InvalidOperationException("Missing native output runtime source.");
             using var outputReader = new StreamReader(outputStream);
             sources.Add("NativeOutput.g.cs", "#nullable enable\n" + outputReader.ReadToEnd());
+            using var operationStream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
+                "PowerForge.PowerShell.Compilation.PowerShellNativeLanguageOperations.cs")
+                ?? throw new InvalidOperationException("Missing native language-operation runtime source.");
+            using var operationReader = new StreamReader(operationStream);
+            sources.Add("NativeLanguageOperations.g.cs", "#nullable enable\n" + operationReader.ReadToEnd());
             using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
                 "PowerForge.PowerShell.Compilation.PowerShellSourceExtent.cs")
                 ?? throw new InvalidOperationException("Missing native source-extent runtime source.");

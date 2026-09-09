@@ -5,6 +5,73 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
+    public void TypedMembership_PreservesObjectCollectionsAndEnumerationFailures(string framework, string host)
+    {
+        var operators = new[] { "contains", "icontains", "ccontains", "notcontains", "inotcontains", "cnotcontains",
+            "in", "iin", "cin", "notin", "inotin", "cnotin" };
+        var source = string.Join(Environment.NewLine, operators.Select((operation, index) => {
+            var expression = operation.EndsWith("in", StringComparison.Ordinal)
+                ? "$Candidate -" + operation + " $Collection" : "$Collection -" + operation + " $Candidate";
+            return "function Test-ObjectMembership" + index + " { [CmdletBinding()] param([object]$Collection,[object]$Candidate) " +
+                "'before'; [bool]$result=$false; $result=" + expression + "; 'after'; $result }";
+        }));
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        const string probe = """
+            Add-Type -TypeDefinition @'
+            using System;
+            using System.Collections;
+            public sealed class FailingMembershipSequence : IEnumerable {
+                public IEnumerator GetEnumerator() { throw new InvalidOperationException("get-fault"); }
+            }
+            '@
+            $pairs=@(
+                @{collection=$null;candidate=$null},
+                @{collection=@();candidate=$null},
+                @{collection='Alpha';candidate='alpha'},
+                @{collection='I';candidate='i'},
+                @{collection=1;candidate='1'},
+                @{collection=@(1,2,3);candidate='2'},
+                @{collection=@('1','2');candidate=2},
+                @{collection=@($null,'x');candidate=$null},
+                @{collection=@((1,2),(3,4));candidate=@(1,2)},
+                @{collection=[int[,]]::new(2,2);candidate=0},
+                @{collection=[FailingMembershipSequence]::new();candidate=0})
+            foreach($culture in 'en-US','tr-TR') {
+                [Globalization.CultureInfo]::CurrentCulture=[Globalization.CultureInfo]::GetCultureInfo($culture)
+                foreach($index in 0..11) {
+                    foreach($pair in $pairs) {
+                        foreach($action in 'Continue','SilentlyContinue','Stop') {
+                            $records=@(try { & ('Test-ObjectMembership'+$index) -Collection $pair.collection -Candidate $pair.candidate -ErrorAction $action 2>&1 } catch { 'caught' })
+                            $normalized=@(foreach($record in $records) {
+                                if($record -is [Management.Automation.ErrorRecord]) {
+                                    [pscustomobject]@{id=$record.FullyQualifiedErrorId;category=$record.CategoryInfo.Category.ToString()}
+                                } else { $record }
+                            })
+                            ConvertTo-Json -InputObject $normalized -Depth 8 -Compress
+                        }
+                    }
+                }
+            }
+            """;
+        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "typed-object-membership-original");
+        Assert.Equal(0, original.ExitCode);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.TypedObjectMembership", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(operators.Length, result.Manifest!.CompiledMethods);
+        Assert.All(result.Manifest.UnitDispositionLedger!.Entries.Where(unit => unit.EmittedClrMethod),
+            unit => Assert.False(unit.UsesNativeFunctionBinding));
+        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "typed-object-membership-compiled");
+        Assert.True(original == compiled, "Original: " + original.StandardOutput + original.StandardError + Environment.NewLine +
+            "Compiled: " + compiled.StandardOutput + compiled.StandardError);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void TypedMembership_EvaluatesTheCollectionBeforeTheCandidate(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""

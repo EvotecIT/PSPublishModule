@@ -339,6 +339,11 @@ internal static class PowerShellLocalCallSemanticBinder
             var parameter = signature.Parameters[parameterIndex];
             var argument = bindExpression(argumentSyntax, parameter.Type);
             if (argument is null) return null;
+            if (argument.Type.ClrType == typeof(object) &&
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
+                argument = new PowerShellBoundUnaryExpression(argument.Span, PowerShellBoundUnaryOperator.NormalizeCommandArgument,
+                    argument, new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.CommandContract,
+                        "Parameter binding normalizes an empty-output sentinel to null before conversion."));
             if (!PowerShellClrTypeSemantics.CanAssign(parameter.Type, argument.Type.ClrType) &&
                 !(argument.ValueState == PowerShellValueState.Null && !parameter.Type.IsValueType))
             {
@@ -383,6 +388,12 @@ internal static class PowerShellLocalCallSemanticBinder
         var returnType = signature.AnalyzedReturnType ?? (invocationReturnType is null
             ? PowerShellTypeFact.Unknown
             : new PowerShellTypeFact(invocationReturnType, PowerShellTypeFactProvenance.Explicit, $"Local function '{signature.Symbol.Name}' declares its success-output type."));
+        var capturesSuccessOutput = returnType.Provenance == PowerShellTypeFactProvenance.CapturedCommandOutput &&
+            command.Parent is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+            pipeline.Parent is not (StatementBlockAst or NamedBlockAst or ReturnStatementAst);
+        if (returnType.Provenance == PowerShellTypeFactProvenance.CapturedCommandOutput && !capturesSuccessOutput)
+            returnType = new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.CommandContract,
+                "An unconsumed local command writes directly to its caller's success stream.");
         return new PowerShellBoundInvocationExpression(
             span,
             signature.Symbol,
@@ -390,7 +401,8 @@ internal static class PowerShellLocalCallSemanticBinder
             returnType,
             authoredOrder.ToArray(),
             bound.Keys.Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray(),
-            signature.ReturnsModuleStateDerived);
+            signature.ReturnsModuleStateDerived,
+            capturesSuccessOutput);
     }
 
     private static int[] GetPositionalParameters(PowerShellLocalCallSignature signature)

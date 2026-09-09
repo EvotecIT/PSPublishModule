@@ -28,8 +28,8 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
 
         Assert.Empty(result.Emitted.Methods);
-        Assert.Contains(result.Emitted.Diagnostics, diagnostic => diagnostic.Code == "PSL1009");
-        Assert.Contains(result.Emitted.Diagnostics, diagnostic => diagnostic.Code == "PSL1015");
+        Assert.Contains("PSL1009", result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code));
+        Assert.Contains("PSL1015", result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code));
     }
 
     [Theory]

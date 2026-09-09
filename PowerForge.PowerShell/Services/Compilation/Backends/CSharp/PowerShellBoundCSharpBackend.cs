@@ -490,8 +490,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitMembership(PowerShellLoweredMembershipExpression expression)
     {
-        if (expression.UsesNativeInvocation)
-            return $"__nativeFunction.EvaluateMembership({(expression.IgnoreCase ? "true" : "false")}, {(expression.Negate ? "true" : "false")}, " +
+        if (expression.UsesNativeInvocation || expression.UsesCommandHostInvocation)
+            return $"{(expression.UsesNativeInvocation ? "__nativeFunction" : "__statementErrors")}.EvaluateMembership({(expression.IgnoreCase ? "true" : "false")}, {(expression.Negate ? "true" : "false")}, " +
                 $"(object?)({EmitExpression(expression.CollectionOnRight ? expression.Right : expression.Left)}), " +
                 $"(object?)({EmitExpression(expression.CollectionOnRight ? expression.Left : expression.Right)}))";
         var collection = expression.CollectionOnRight ? expression.RightTemporary : expression.LeftTemporary;
@@ -793,6 +793,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitUnary(PowerShellLoweredUnaryExpression expression)
     {
+        if (expression.Operation == PowerShellBoundUnaryOperator.NormalizeCommandArgument)
+            return $"global::PowerForge.Generated.Runtime.PowerShellNativeLanguageOperations.NormalizeCommandArgument({EmitExpression(expression.Operand)})";
         var symbol = expression.Operation switch
         {
             PowerShellBoundUnaryOperator.Identity => "+",

@@ -149,7 +149,7 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundMembershipExpression membership)
             return new PowerShellBoundMembershipExpression(membership.Span, OptimizeExpression(membership.Left),
                 OptimizeExpression(membership.Right), membership.ElementType, membership.CollectionOnRight,
-                membership.IgnoreCase, membership.Negate, membership.UsesNativeInvocation);
+                membership.IgnoreCase, membership.Negate, membership.UsesNativeInvocation, membership.UsesCommandHostInvocation);
         if (expression is PowerShellBoundBinaryExpression binary)
         {
             var left = OptimizeExpression(binary.Left);
@@ -192,7 +192,8 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundInvocationExpression invocation)
             return new PowerShellBoundInvocationExpression(invocation.Span, invocation.Target,
                 invocation.Arguments.Select(OptimizeExpression).ToArray(), invocation.Type,
-                invocation.AuthoredEvaluationOrder.ToArray(), invocation.BoundParameterNames.ToArray());
+                invocation.AuthoredEvaluationOrder.ToArray(), invocation.BoundParameterNames.ToArray(),
+                invocation.ReturnsModuleStateDerived, invocation.CapturesSuccessOutput);
         if (expression is PowerShellBoundMutationExpression mutation)
             return new PowerShellBoundMutationExpression(mutation.Span, mutation.Target, mutation.TargetClrType, mutation.Operation,
                 mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString,

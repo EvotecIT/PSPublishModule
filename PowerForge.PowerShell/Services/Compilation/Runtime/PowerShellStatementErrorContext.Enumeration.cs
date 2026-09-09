@@ -6,6 +6,13 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellStatementErrorContext
     {
+        /// <summary>Compares captured command values through the loaded host's membership operation.</summary>
+        internal bool EvaluateMembership(bool ignoreCase, bool negate, object? collection, object? candidate)
+        {
+            ThrowIfDisposed();
+            return PowerShellNativeLanguageOperations.EvaluateMembership(_context, ignoreCase, negate, collection, candidate);
+        }
+
         /// <summary>Enumerates one implicit output expression through the loaded PowerShell host.</summary>
         internal void WriteOutput(object? value, Action<object?> sink, string file, int line, int column,
             int endLine, int endColumn, string text)

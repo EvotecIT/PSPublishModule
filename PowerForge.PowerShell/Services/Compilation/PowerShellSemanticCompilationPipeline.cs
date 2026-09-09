@@ -97,14 +97,22 @@ internal sealed class PowerShellSemanticCompilationPipeline
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions).OfType<PowerShellBoundInvocationExpression>())
         {
-            // A streamed method can have a void CLR return while still producing PowerShell records.
             if (!functions.TryGetValue(call.Target.StableKey, out var target) || target.NativeFunctionBinding is not null ||
-                target.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown ||
-                target.ReturnType.ClrType == typeof(void) && target.OutputCardinality != PowerShellOutputCardinality.None) continue;
-            var actual = target.ReturnType;
+                target.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown) continue;
+            // The call's value contract is independent of the generated method's CLR return.
+            // Command-region callbacks require their own capture routing before joining this path.
+            var capturesCommandOutput = target.ReturnType.ClrType == typeof(void) &&
+                program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) &&
+                program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                !target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion);
+            if (!capturesCommandOutput && target.ReturnType.ClrType == typeof(void) &&
+                target.OutputCardinality != PowerShellOutputCardinality.None) continue;
+            var actual = capturesCommandOutput
+                ? new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.CapturedCommandOutput,
+                    "Consuming a local command collapses its success records to empty, one record, or an array.")
+                : target.ReturnType;
             if (actual.ClrType == call.Type.ClrType &&
-                (actual.Provenance == PowerShellTypeFactProvenance.Int32OrDouble) ==
-                (call.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)) continue;
+                actual.Provenance == call.Type.Provenance) continue;
             if (returnTypes.TryGetValue(target.Symbol.StableKey, out var previous) &&
                 previous.ClrType == actual.ClrType && previous.Provenance == actual.Provenance) continue;
             returnTypes[target.Symbol.StableKey] = actual;

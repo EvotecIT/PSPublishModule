@@ -58,6 +58,15 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
                     // later failures preserve the value assigned before the capture.
                     assigned.Add(capture.Target.StableKey);
                 if (boundary.Body.Statements.Length == 1 && boundary.Body.Statements[0] is PowerShellBoundAssignmentStatement
+                    { Operation: PowerShellBoundMutationOperator.Assign, Value: PowerShellBoundInvocationExpression
+                        { CapturesSuccessOutput: true } } commandCapture &&
+                    locals.TryGetValue(commandCapture.Target.StableKey, out var commandCaptureType) &&
+                    commandCaptureType.ClrType == typeof(object) &&
+                    commandCaptureType.Provenance != PowerShellTypeFactProvenance.Explicit)
+                    // A consumed command uses the same nullable initial slot as a
+                    // statement-output capture. Failure leaves the previous slot intact.
+                    assigned.Add(commandCapture.Target.StableKey);
+                if (boundary.Body.Statements.Length == 1 && boundary.Body.Statements[0] is PowerShellBoundAssignmentStatement
                     { Operation: PowerShellBoundMutationOperator.Assign, Value: PowerShellBoundClrInvocationExpression } initialization &&
                     locals.TryGetValue(initialization.Target.StableKey, out var targetType) &&
                     !targetType.ClrType.IsValueType && targetType.ClrType != typeof(string) &&

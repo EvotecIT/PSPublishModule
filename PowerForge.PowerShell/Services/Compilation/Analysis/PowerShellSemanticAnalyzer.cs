@@ -212,18 +212,30 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             foreach (var root in EnumerateDirectExpressions(statement))
             {
-                foreach (var invocation in EnumerateInvocations(root))
-                {
-                    if (ReferenceEquals(root, invocation) && statement is PowerShellBoundReturnStatement or PowerShellBoundExpressionStatement { EmitsOutput: true } or PowerShellBoundStreamWriteStatement { Provider: null })
-                        continue;
-                    if (functions.TryGetValue(invocation.Target.StableKey, out var target) &&
-                        (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
-                         HasSuccessStreamOutput(target, functions)))
-                        return target;
-                }
+                var consumesValue = statement is not (PowerShellBoundReturnStatement or
+                    PowerShellBoundExpressionStatement or PowerShellBoundStreamWriteStatement { Provider: null });
+                var target = FindConsumedCall(root, consumesValue);
+                if (target is not null) return target;
             }
         }
         return null;
+
+        PowerShellBoundFunction? FindConsumedCall(PowerShellBoundExpression expression, bool consumesValue)
+        {
+            if (consumesValue && expression is PowerShellBoundInvocationExpression { CapturesSuccessOutput: false } invocation &&
+                functions.TryGetValue(invocation.Target.StableKey, out var target) &&
+                (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
+                 HasSuccessStreamOutput(target, functions)))
+                return target;
+            // Native collection items are statement-output roots, not scalar operands.
+            // Their arguments still consume values and are checked recursively.
+            foreach (var child in EnumerateExpressionChildren(expression))
+            {
+                var consumed = FindConsumedCall(child, expression is not PowerShellBoundNativeCollectionExpression);
+                if (consumed is not null) return consumed;
+            }
+            return null;
+        }
     }
 
     private static bool HasSuccessStreamOutput(
@@ -332,6 +344,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
         => expression switch
         {
+            PowerShellBoundInvocationExpression { CapturesSuccessOutput: true } invocation => invocation.Type,
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) => target.ReturnType,
             _ => expression.Type
         };

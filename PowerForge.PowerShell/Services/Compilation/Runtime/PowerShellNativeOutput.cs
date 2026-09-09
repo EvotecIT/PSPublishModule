@@ -5,7 +5,6 @@ namespace PowerForge.Generated.Runtime
     using System.Management.Automation;
     using System.Management.Automation.Runspaces;
     using System.Reflection;
-    using System.Runtime.CompilerServices;
     using System.Threading;
 
     /// <summary>Shared native record enumeration and synchronous pipe adapters for generated command hosts.</summary>
@@ -61,19 +60,10 @@ namespace PowerForge.Generated.Runtime
                 AddRecord = Expression.Lambda<Action<object, object?>>(
                     Expression.Call(Expression.Convert(pipe, pipeType), add, value), pipe, value).Compile();
                 Write = Expression.Lambda<Action<object?, object, object>>(
-                    Expression.Dynamic(GetBinder("PSPipeWriterBinder"), typeof(void), value, Expression.Convert(pipe, pipeType),
+                    Expression.Dynamic(PowerShellNativeLanguageOperations.GetSingletonBinder("PSPipeWriterBinder"), typeof(void), value, Expression.Convert(pipe, pipeType),
                         Expression.Convert(context, contextType)), value, pipe, context).Compile();
                 Collect = Expression.Lambda<Func<object?, object?[]>>(
-                    Expression.Dynamic(GetBinder("PSToObjectArrayBinder"), typeof(object[]), value), value).Compile();
-            }
-
-            private static CallSiteBinder GetBinder(string name)
-            {
-                var type = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language." + name, true)!;
-                var get = type.GetMethod("Get", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
-                    null, Type.EmptyTypes, null) ?? throw new NotSupportedException("PowerShell's " + name + " operation is unavailable.");
-                return Expression.Lambda<Func<CallSiteBinder>>(
-                    Expression.Convert(Expression.Call(get), typeof(CallSiteBinder))).Compile()();
+                    Expression.Dynamic(PowerShellNativeLanguageOperations.GetSingletonBinder("PSToObjectArrayBinder"), typeof(object[]), value), value).Compile();
             }
         }
 

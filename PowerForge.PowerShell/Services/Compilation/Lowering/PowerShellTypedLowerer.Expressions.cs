@@ -97,7 +97,7 @@ internal sealed partial class PowerShellTypedLowerer
                 membership.Negate,
                 names.Allocate("pf_membership_left"),
                 names.Allocate("pf_membership_right"),
-                names.Allocate("pf_membership_item"), membership.UsesNativeInvocation),
+                names.Allocate("pf_membership_item"), membership.UsesNativeInvocation, membership.UsesCommandHostInvocation),
             PowerShellBoundStringSplitExpression split => new PowerShellLoweredStringSplitExpression(
                 split.Span,
                 LowerExpression(split.Input, functions, names, targetCapabilities),
@@ -198,12 +198,12 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,
-                    target.Function.ReturnType.ClrType,
+                    invocation.CapturesSuccessOutput ? invocation.Type.ClrType : target.Function.ReturnType.ClrType,
                     invocation.Target,
                     invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
                     invocation.AuthoredEvaluationOrder.ToArray(),
                     invocation.BoundParameterNames.ToArray(),
-                    CreateEvaluationTemporaryNames(invocation, names, target.RequiresPowerShellStatementErrors),
+                    CreateEvaluationTemporaryNames(invocation, names, target.RequiresPowerShellStatementErrors || invocation.CapturesSuccessOutput),
                     target.RequiresPowerShellBoundParameters,
                     target.RequiresPowerShellStreams,
                     target.RequiresProviderCancellation,
@@ -212,9 +212,11 @@ internal sealed partial class PowerShellTypedLowerer
                     target.RequiresPowerShellModuleStateRead,
                     target.RequiresPowerShellModuleStateWrite,
                     target.RequiresPowerShellStatementErrors,
-                    target.RequiresPowerShellStatementErrors ? names.Allocate("pf_call_error_context") : string.Empty,
+                    target.RequiresPowerShellStatementErrors || invocation.CapturesSuccessOutput ? names.Allocate("pf_call_error_context") : string.Empty,
                     target.RequiresPowerShellStatementErrors ? names.Allocate("pf_call_error") : string.Empty,
-                    target.RequiresPowerShellStopping),
+                    target.RequiresPowerShellStopping,
+                    invocation.CapturesSuccessOutput,
+                    invocation.CapturesSuccessOutput ? names.Allocate("pf_call_output") : string.Empty),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
 

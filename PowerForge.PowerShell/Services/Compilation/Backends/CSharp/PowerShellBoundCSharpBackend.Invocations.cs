@@ -21,7 +21,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (invocation.RequiresPowerShellStopping)
             callArguments.Add("__checkLoopInterrupts");
         if (invocation.RequiresPowerShellStreams)
-            callArguments.AddRange(new[] { "__writeOutput", "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeHost", "__writeError" });
+            callArguments.AddRange(new[] { invocation.CapturesSuccessOutput ? invocation.CapturedOutputTemporary : "__writeOutput",
+                "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeHost", "__writeError" });
         if (invocation.RequiresProviderCancellation)
             callArguments.Add("__providerCancellationToken");
         if (invocation.RequiresPowerShellCommandRegions)
@@ -34,7 +35,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
             callArguments.Add("__writePowerShellModuleVariable");
         if (invocation.RequiresBoundParameters) callArguments.Add(EmitBoundParameterSet(invocation.BoundParameterNames));
         var call = $"{PowerShellCSharpSymbolRenderer.Identifier(invocation.Target.Name)}({string.Join(", ", callArguments)})";
-        if (invocation.RequiresPowerShellStatementErrors)
+        if (invocation.CapturesSuccessOutput)
+        {
+            call = "__statementErrors.CaptureFunction(" + PowerShellCSharpLiteral.QuoteString(invocation.Target.Name) + ", " +
+                EmitSourceExtentArguments(invocation.Span) + ", (" + invocation.StatementErrorContextTemporary + ", " +
+                invocation.CapturedOutputTemporary + ") => { " + call + "; })";
+        }
+        else if (invocation.RequiresPowerShellStatementErrors)
         {
             var context = invocation.StatementErrorContextTemporary;
             var error = invocation.StatementErrorTemporary;
