@@ -9,8 +9,7 @@ internal static class FrameworkCompatibility
 {
     private static readonly FileSystemPathComparisonCache PathComparisonCache = new(
         IsCaseSensitiveDirectory,
-        DefaultPathStringComparison,
-        IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        DefaultPathStringComparison);
 
     internal static StringComparer PathComparer { get; } = new FileSystemAwarePathComparer();
 
@@ -195,13 +194,13 @@ internal sealed class FileSystemPathComparisonCache
 
     internal FileSystemPathComparisonCache(
         Func<string, bool> caseSensitivityProbe,
-        Func<StringComparison> fallback,
-        StringComparer keyComparer)
+        Func<StringComparison> fallback)
     {
         _caseSensitivityProbe = caseSensitivityProbe ?? throw new ArgumentNullException(nameof(caseSensitivityProbe));
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
-        _comparisons = new ConcurrentDictionary<string, Lazy<StringComparison>>(
-            keyComparer ?? throw new ArgumentNullException(nameof(keyComparer)));
+        // Windows directories can independently opt into case sensitivity, so case-variant
+        // paths must never share a cached probe result even when the host default is insensitive.
+        _comparisons = new ConcurrentDictionary<string, Lazy<StringComparison>>(StringComparer.Ordinal);
     }
 
     internal StringComparison GetComparison(string directory)

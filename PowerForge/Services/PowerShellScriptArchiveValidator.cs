@@ -26,7 +26,8 @@ internal static class PowerShellScriptArchiveValidator
 
         string normalizedEntryPoint = (expectedEntryPoint ?? string.Empty)
             .Replace('\\', '/')
-            .TrimStart('/');
+            .TrimStart('/')
+            .Normalize(NormalizationForm.FormC);
         if (string.IsNullOrWhiteSpace(normalizedEntryPoint) ||
             !IsPortableArchiveEntryPath(normalizedEntryPoint) ||
             !string.Equals(Path.GetExtension(normalizedEntryPoint), ".ps1", StringComparison.OrdinalIgnoreCase))

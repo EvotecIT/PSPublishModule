@@ -32,6 +32,34 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void CreateModuleAssetEntries_AcceptsCanonicalUnicodeRecordedEntryPoint()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            const string decomposedEntryPoint = "scripts/cafe\u0301.ps1";
+            string scriptPackedPath = Path.Combine(root, "Company.Tools.zip");
+            using (ZipArchive archive = ZipFile.Open(scriptPackedPath, ZipArchiveMode.Create))
+            {
+                using var writer = new StreamWriter(archive.CreateEntry(decomposedEntryPoint).Open());
+                writer.Write("Get-Date");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    scriptPackedPath,
+                    CreateScriptPackedPlan(root, scriptPackedPath, decomposedEntryPoint),
+                    new[] { scriptPackedPath }));
+
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Theory]
     [InlineData("../escape/", true)]
     [InlineData("safe/../../escape/", true)]

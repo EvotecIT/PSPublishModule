@@ -23,6 +23,9 @@ public sealed partial class ModulePipelineRunner
             if (!File.Exists(path))
                 throw new FileNotFoundException("A finalized signed artefact or its evidence was not found.", path);
             state.FinalizedPackedArtefactHashes[path] = ComputeFileSha256(path);
+            int? unixMode = ReadFinalizedArtefactUnixMode(path);
+            if (unixMode.HasValue)
+                state.FinalizedPackedArtefactUnixModes[path] = unixMode.Value;
         }
 
         foreach (string root in EnumerateFinalizedScriptLayoutRoots(artefact))
@@ -40,7 +43,9 @@ public sealed partial class ModulePipelineRunner
         foreach (KeyValuePair<string, string> expected in state.FinalizedPackedArtefactHashes)
         {
             if (!File.Exists(expected.Key) ||
-                !string.Equals(ComputeFileSha256(expected.Key), expected.Value, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(ComputeFileSha256(expected.Key), expected.Value, StringComparison.OrdinalIgnoreCase) ||
+                (state.FinalizedPackedArtefactUnixModes.TryGetValue(expected.Key, out int expectedMode) &&
+                 ReadFinalizedArtefactUnixMode(expected.Key) != expectedMode))
             {
                 throw new InvalidOperationException(
                     $"The finalized signed artefact or its evidence changed after signing: '{expected.Key}'. " +
@@ -62,6 +67,17 @@ public sealed partial class ModulePipelineRunner
                     "Artifact actions must not mutate signed release outputs after finalization.");
             }
         }
+    }
+
+    private static int? ReadFinalizedArtefactUnixMode(string path)
+    {
+#if NET472
+        return null;
+#else
+        return OperatingSystem.IsWindows()
+            ? null
+            : (int)File.GetUnixFileMode(path);
+#endif
     }
 
     private static IEnumerable<string> EnumerateFinalizedPackedArtefactPaths(ArtefactBuildResult artefact)
