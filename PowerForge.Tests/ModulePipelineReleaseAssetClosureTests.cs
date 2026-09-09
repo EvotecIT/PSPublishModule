@@ -128,6 +128,38 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     }
 
     [Theory]
+    [InlineData(".git")]
+    [InlineData("nested/.git")]
+    public void ScriptArchiveValidator_RejectsStandaloneGitMarkerFile(string markerPath)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        string archivePath = Path.Combine(root, "Invoke-Sample.zip");
+        try
+        {
+            Directory.CreateDirectory(root);
+            using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                using (var writer = new StreamWriter(archive.CreateEntry("Invoke-Sample.ps1").Open()))
+                    writer.Write("'sample'");
+                using (var writer = new StreamWriter(archive.CreateEntry(markerPath).Open()))
+                    writer.Write("gitdir: C:/sensitive/worktree/path");
+            }
+
+            bool valid = PowerShellScriptArchiveValidator.TryValidate(
+                archivePath,
+                "Invoke-Sample.ps1",
+                out string? error);
+
+            Assert.False(valid);
+            Assert.Contains("repository or source-project content", error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
     [InlineData(ArtefactType.Packed)]
     [InlineData(ArtefactType.ScriptPacked)]
     public void CollectModuleReleaseAssets_RejectsSynthesizedScriptArchiveCollisionWithSelectedOutput(

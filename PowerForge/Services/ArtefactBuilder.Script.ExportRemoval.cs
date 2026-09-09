@@ -16,6 +16,8 @@ public sealed partial class ArtefactBuilder
                 blockCommentDepth == 0 &&
                 TryGetExportModuleMemberInvocationStart(line, out var commandStart, out var preserveExpression))
             {
+                preserveExpression = preserveExpression ||
+                                     IsPrecededByPipelineChainOperator(lines, lineIndex);
                 var endLine = FindPowerShellCommandEnd(lines, lineIndex, commandStart, out var suffixStart);
                 var removeCount = endLine - lineIndex + 1;
                 var prefix = line.Substring(0, commandStart);
@@ -44,6 +46,33 @@ public sealed partial class ArtefactBuilder
 
             UpdateScriptLexicalState(line, ref state, ref blockCommentDepth);
         }
+    }
+
+    private static bool IsPrecededByPipelineChainOperator(
+        IReadOnlyList<string> lines,
+        int lineIndex)
+    {
+        for (int previousIndex = lineIndex - 1; previousIndex >= 0; previousIndex--)
+        {
+            string previousLine = (lines[previousIndex] ?? string.Empty).TrimEnd();
+            if (string.IsNullOrWhiteSpace(previousLine) ||
+                previousLine.TrimStart().StartsWith("#", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            int operatorIndex = Math.Max(
+                previousLine.LastIndexOf("&&", StringComparison.Ordinal),
+                previousLine.LastIndexOf("||", StringComparison.Ordinal));
+            if (operatorIndex < 0)
+                return false;
+
+            string trailingText = previousLine.Substring(operatorIndex + 2).TrimStart();
+            return trailingText.Length == 0 ||
+                   trailingText.StartsWith("#", StringComparison.Ordinal);
+        }
+
+        return false;
     }
 
     private static int FindPowerShellCommandEnd(

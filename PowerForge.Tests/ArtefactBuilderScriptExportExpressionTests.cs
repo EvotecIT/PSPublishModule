@@ -119,6 +119,65 @@ public sealed class ArtefactBuilderScriptExportExpressionTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Script, "&&", "")]
+    [InlineData(ArtefactType.Script, "||", "")]
+    [InlineData(ArtefactType.ScriptPacked, "&&", "")]
+    [InlineData(ArtefactType.ScriptPacked, "||", "")]
+    [InlineData(ArtefactType.Script, "&&", " # chain comment")]
+    [InlineData(ArtefactType.Script, "||", " # chain comment")]
+    [InlineData(ArtefactType.ScriptPacked, "&&", " # chain comment")]
+    [InlineData(ArtefactType.ScriptPacked, "||", " # chain comment")]
+    public void Build_RemovesExportInvocationOnNextPipelineChainLineWithoutBreakingScript(
+        ArtefactType artefactType,
+        string chainOperator,
+        string trailingText)
+    {
+        var root = CreateRoot();
+        try
+        {
+            const string moduleName = "MultilinePipelineChainExportModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                "@{ RootModule = 'MultilinePipelineChainExportModule.psm1'; ModuleVersion = '1.0.0' }");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "function Get-Value { 'ok' }" + Environment.NewLine +
+                $"Write-Output ready {chainOperator}{trailingText}" + Environment.NewLine +
+                "Export-ModuleMember -Function Get-Value" + Environment.NewLine +
+                "$script:Tail = 'preserved'");
+
+            ArtefactBuildResult result = Build(
+                root.FullName,
+                stagingRoot,
+                Path.Combine(root.FullName, "output"),
+                moduleName,
+                artefactType);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                inspectionRoot = Path.Combine(root.FullName, "extracted-multiline-chain");
+                ZipFile.ExtractToDirectory(result.OutputPath, inspectionRoot);
+            }
+
+            string script = File.ReadAllText(Path.Combine(inspectionRoot, moduleName + ".ps1"));
+            Assert.DoesNotContain("Export-ModuleMember", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                $"Write-Output ready {chainOperator}{trailingText}{Environment.NewLine}$null",
+                script,
+                StringComparison.Ordinal);
+            Assert.Contains("$script:Tail = 'preserved'", script, StringComparison.Ordinal);
+            System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+            Assert.Empty(parseErrors);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
     private static ArtefactBuildResult Build(
         string projectRoot,
         string stagingRoot,

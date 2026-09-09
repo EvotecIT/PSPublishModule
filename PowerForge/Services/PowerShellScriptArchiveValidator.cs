@@ -113,6 +113,8 @@ internal static class PowerShellScriptArchiveValidator
                 return false;
             }
             if (files.Any(static name =>
+                    string.Equals(name, ".git", StringComparison.OrdinalIgnoreCase) ||
+                    name.EndsWith("/.git", StringComparison.OrdinalIgnoreCase) ||
                     name.StartsWith(".git/", StringComparison.OrdinalIgnoreCase) ||
                     name.Contains("/.git/", StringComparison.OrdinalIgnoreCase) ||
                     name.StartsWith(".github/", StringComparison.OrdinalIgnoreCase) ||
