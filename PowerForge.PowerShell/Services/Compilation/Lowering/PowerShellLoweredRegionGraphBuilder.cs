@@ -144,6 +144,11 @@ internal static class PowerShellLoweredRegionGraphBuilder
             }
             if (expression is PowerShellLoweredVariableExpression variable)
                 RecordFirst(readOffsets, Symbol(variable.Symbol), expression.Span.StartOffset);
+            if (expression is PowerShellLoweredNativeVariableExpression nativeVariable)
+            {
+                RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
+                RecordFirst(readOffsets, "PowerShellSessionVariable:" + nativeVariable.Name.ToUpperInvariant(), expression.Span.StartOffset);
+            }
             if (expression is PowerShellLoweredMutationExpression mutation)
             {
                 RecordFirst(writeOffsets, Symbol(mutation.Target), expression.Span.EndOffset);
@@ -163,11 +168,25 @@ internal static class PowerShellLoweredRegionGraphBuilder
                     Receiver: not null
                 } clrInvocation)
                 RecordFirst(writeOffsets, MutationTarget(clrInvocation.Receiver, ".*"), expression.Span.EndOffset);
+            if (expression is PowerShellLoweredNativeInvocationExpression { Receiver: not null } nativeInvocation)
+            {
+                // An invocation-owned receiver can alias state observed by later hosted code.
+                RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+                RecordFirst(writeOffsets, MutationTarget(nativeInvocation.Receiver, ".*"), expression.Span.EndOffset);
+            }
         }
         foreach (var statement in PowerShellLoweredTreeEnumerator.EnumerateStatements(statements))
         {
             switch (statement)
             {
+                case PowerShellLoweredNativeVariableAssignmentStatement assignment:
+                    // Native assignment observes invocation-owned constraints and can invoke transformations.
+                    RecordFirst(readOffsets, "PowerShellSessionState:*", statement.Span.StartOffset);
+                    RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
+                    RecordFirst(writeOffsets, "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant(), statement.Span.EndOffset);
+                    if (assignment.Operation != PowerShellBoundMutationOperator.Assign)
+                        RecordFirst(readOffsets, "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant(), statement.Span.StartOffset);
+                    break;
                 case PowerShellLoweredAssignmentStatement assignment:
                     RecordFirst(writeOffsets, Symbol(assignment.Target), statement.Span.EndOffset);
                     if (assignment.Operation != PowerShellBoundMutationOperator.Assign)
@@ -273,6 +292,9 @@ internal static class PowerShellLoweredRegionGraphBuilder
             .OfType<PowerShellLoweredConversionExpression>()
             .Any(static conversion => conversion.UsePowerShellLanguageRuntime || conversion.UseNativeConversion))
             result.Add("PowerShellLanguageRuntimeError");
+        if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(static expression => expression is PowerShellLoweredNativeVariableExpression) ||
+            PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement => statement is PowerShellLoweredNativeVariableAssignmentStatement))
+            result.Add("PowerShellSessionStateError");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(CanThrowClr) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>
                 statement is PowerShellLoweredIndexAssignmentStatement or PowerShellLoweredClrMemberAssignmentStatement or
@@ -320,9 +342,12 @@ internal static class PowerShellLoweredRegionGraphBuilder
            CountModuleStateWriteBoundarySites(statements);
 
     private static string MutationTarget(PowerShellLoweredExpression expression, string suffix)
-        => expression is PowerShellLoweredVariableExpression variable
-            ? Symbol(variable.Symbol)
-            : "object" + suffix;
+        => expression switch
+        {
+            PowerShellLoweredVariableExpression variable => Symbol(variable.Symbol),
+            PowerShellLoweredNativeVariableExpression variable => "PowerShellSessionVariable:" + variable.Name.ToUpperInvariant(),
+            _ => "object" + suffix
+        };
 
     private static string Symbol(PowerShellSymbolId symbol) => symbol.Kind + ":" + symbol.Name.ToUpperInvariant();
     private static string ModuleState(string name) => "ModuleState:" + name.ToUpperInvariant();
