@@ -45,6 +45,11 @@ internal sealed class PowerShellStatementErrorCallPass : IPowerShellSemanticPass
                 var rewritten = statement is PowerShellBoundOutputCaptureStatement capture
                     ? new PowerShellBoundOutputCaptureStatement(capture.Span, capture.Target, RewriteBlock(capture.Body, true), capture.NativeTarget, capture.Operation)
                     : PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement, nested => RewriteBlock(nested));
+                // The native host invokes exactly one clause. Its compiler-owned dispatcher is
+                // not an authored statement and must not process a propagating error a second time.
+                if (rewritten is PowerShellBoundIfStatement lifecycle &&
+                    lifecycle.Clauses.All(static clause => clause.Condition is PowerShellBoundNativeLifecycleExpression))
+                    return rewritten;
                 if (alreadyProtected) return rewritten;
                 var callsErrorHost = PowerShellSemanticAnalyzer.EnumerateDirectExpressions(rewritten)
                     .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)

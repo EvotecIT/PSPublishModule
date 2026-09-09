@@ -229,7 +229,8 @@ internal sealed partial class PowerShellSemanticBinder
             if (throwStatement.Pipeline is null) return null;
             var expression = BindExpression(document, throwStatement.Pipeline, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
             if (expression is null) return null;
-            if (!typeof(Exception).IsAssignableFrom(expression.Type.ClrType))
+            if (!typeof(Exception).IsAssignableFrom(expression.Type.ClrType) &&
+                !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2308", $"Typed throw requires a CLR exception expression; resolved type was '{expression.Type.ClrType.FullName}'.", expression.Span));
                 return null;

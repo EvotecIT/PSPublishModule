@@ -430,6 +430,11 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.RequiresProviderCancellation);
         method.RegionGraph = emitted.RegionGraph;
         method.NativeFunctionBinding = emitted.NativeFunctionBinding;
+        if (emitted.NativeFunctionBinding is { } native && (native.HasBegin || native.HasProcess || native.HasClean))
+        {
+            method.Lifecycle = PowerShellNativeLifecycleContract.Create(native, source.Unit.Parameters, emitted.CommandBinding);
+            method.Lifecycle.SourceSha256 = PowerShellLifecycleSourceBinder.ComputeSha256(source.Function.Extent.Text);
+        }
         method.DocumentId = emitted.SourceSpan.DocumentId;
         method.DeclaredOutputTypeIsSemanticContract = emitted.DeclaredOutputType is not null;
         method.SuccessOutputType = emitted.SuccessOutputType?.FullName ?? string.Empty;

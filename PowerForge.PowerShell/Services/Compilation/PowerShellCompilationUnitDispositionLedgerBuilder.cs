@@ -47,8 +47,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var matchingMethods = methods
                     .Where(candidate => MethodMatches(candidate, shapedCompilation, file.FullPath, unit))
                     .ToArray();
-                var method = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle is null);
-                var lifecycleMethod = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle is not null);
+                var method = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
+                var lifecycleMethod = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
                 var dispositionMethod = method ?? lifecycleMethod;
                 var promotedRegions = shapedCompilation?.PromotedRegions
                     .Where(candidate => RegionMatches(candidate, file.FullPath, unit))
@@ -291,7 +291,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             method.RequiredPowerShellModuleVariables.Length == 0 &&
             method.WrittenPowerShellModuleVariables.Length == 0)
             causes.Add("The emitted CLR method depends on live parent Hybrid script-module state through a compiled local call.");
-        if (method?.Lifecycle is not null) causes.Add("The emitted cmdlet uses a hosted advanced-function lifecycle.");
+        if (method?.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline) causes.Add("The emitted cmdlet uses a hosted advanced-function lifecycle.");
         if (promotedRegions.Count > 0)
             causes.Add($"The retained function delegates {promotedRegions.Count} terminal typed region(s) to generated CLR helpers while keeping its PowerShell command surface.");
         if (promotedRegions.Any(static region => region.RequiresPowerShellStopping))

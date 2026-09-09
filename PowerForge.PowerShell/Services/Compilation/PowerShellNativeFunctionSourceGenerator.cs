@@ -35,8 +35,17 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 .Append("            ").Append(PowerShellCSharpLiteral.QuoteString(method.NativeFunctionBinding!.ParameterDeclaration))
                 .Append(", sourcePath, new string[] { ")
                 .Append(string.Join(", ", method.NativeFunctionBinding.LocalNames.Select(PowerShellCSharpLiteral.QuoteString)))
-                .AppendLine(" }, null, null, context =>")
+                .AppendLine(" },")
+                .Append("            ").Append(Callback(method.NativeFunctionBinding.HasBegin, 0)).AppendLine(",")
+                .Append("            ").Append(Callback(method.NativeFunctionBinding.HasProcess, 1)).AppendLine(",")
+                .Append("            ").Append(Callback(method.NativeFunctionBinding.HasEnd, 2)).AppendLine(",")
+                .Append("            ").Append(Callback(method.NativeFunctionBinding.HasClean, 3)).AppendLine(",")
+                .Append("            localTypeDeclarations: new string[] { ")
+                .Append(string.Join(", ", method.NativeFunctionBinding.LocalTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString)))
+                .AppendLine(" });")
+                .AppendLine("            void Invoke(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext context, int clause)")
                 .AppendLine("            {");
+            builder.AppendLine("                context.LifecycleClause = clause;");
             if (method.RequiresPowerShellStatementErrors || method.RequiresPowerShellStopping)
                 builder.Append("                using var statementErrors = global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.CreateNativeFunction(context.FunctionContext, ")
                     .Append(PowerShellCSharpLiteral.QuoteString(method.SourceName)).AppendLine(");");
@@ -54,12 +63,13 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 builder.Append("                foreach (var value in ").Append(call).AppendLine(") context.WriteValue(value);");
             else
                 builder.Append("                context.WriteValue(").Append(call).AppendLine(");");
-            builder.Append("            }, localTypeDeclarations: new string[] { ")
-                .Append(string.Join(", ", method.NativeFunctionBinding.LocalTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString)))
-                .AppendLine(" });").AppendLine("    }");
+            builder.AppendLine("            }").AppendLine("    }");
         }
         builder.AppendLine("}");
     }
+
+    private static string Callback(bool present, int clause)
+        => present ? "context => Invoke(context, " + clause.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")" : "null";
 
     internal static string Registration(PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method)
     {

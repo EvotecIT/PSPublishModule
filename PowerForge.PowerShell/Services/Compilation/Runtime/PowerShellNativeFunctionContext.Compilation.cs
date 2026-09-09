@@ -10,6 +10,16 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
+        private static void ValidateSelectedSyntax(ParseError[] documentErrors, string fragment, string parameterName)
+        {
+            if (documentErrors.Length == 0) return;
+            // A source document can contain another command's newer syntax. Only a matched,
+            // independently valid fragment reaches compilation; unrelated recovered ASTs do not.
+            Parser.ParseInput(fragment, out _, out var fragmentErrors);
+            if (fragmentErrors.Length != 0)
+                throw new ArgumentException(fragmentErrors[0].Message, parameterName);
+        }
+
         // Builds narrowly selected native AST operations against the invocation's existing
         // execution context and local tuple. It never creates another scope or runs a body.
         private sealed class NativeAstCompiler

@@ -28,8 +28,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.ModuleLifecycleState", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(0, result.Manifest!.CompiledMethods);
-        Assert.Equal(PowerShellCompilationLifecycleExecution.HostedSteppablePipeline, Assert.Single(result.Manifest.Lifecycles).Execution);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(PowerShellCompilationLifecycleExecution.CompiledNativeCallbacks, Assert.Single(result.Manifest.Lifecycles).Execution);
+        Assert.False(Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
+            static unit => unit.Name == "Invoke-OwnerLifecycle").RetainedHostedSource);
         Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
         const string probe = """
             Initialize-OwnerError

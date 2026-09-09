@@ -264,10 +264,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     PowerShellCommandMetadataBuildSupport.Write(workspace, projectPath, typed, exportedFunctions);
                 usesPowerShellRuntimeFallback = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                     spec.Mode == PowerShellCompilationMode.Hybrid &&
-                    (typed.Methods.Count(static method => method.Lifecycle is null) != plan.TotalUnits || runtimeManifestHooks.Length > 0);
-                compiledMethods = typed.Methods.Count(static method => method.Lifecycle is null);
+                    (typed.Methods.Count(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline) != plan.TotalUnits || runtimeManifestHooks.Length > 0);
+                compiledMethods = typed.Methods.Count(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
                 compiledMethodDetails = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && exportedFunctions is not null
-                    ? typed.Methods.Where(method => method.Lifecycle is null || exportedFunctions.Contains(method.SourceName, StringComparer.OrdinalIgnoreCase)).ToArray()
+                    ? typed.Methods.Where(method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline || exportedFunctions.Contains(method.SourceName, StringComparer.OrdinalIgnoreCase)).ToArray()
                     : typed.Methods;
                 optimizationEvidence = typed.Optimization;
                 irSnapshots = typed.IrSnapshots;

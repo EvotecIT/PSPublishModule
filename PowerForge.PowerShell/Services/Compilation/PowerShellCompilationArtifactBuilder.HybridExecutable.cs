@@ -58,7 +58,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .Replace("{{PROVIDER_REFERENCES}}", providerProjectReferences)
                 .Replace("{{DEPENDENCY_RESOURCES}}", packagedSources.ProjectResources),
             new UTF8Encoding(false));
-        var compiledMethods = typed.Methods.Where(static method => method.Lifecycle is null).ToArray();
+        var compiledMethods = typed.Methods.Where(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline).ToArray();
         PowerShellCommandMetadataBuildSupport.Write(workspace, projectPath, typed, exportedFunctions: null);
         return new HybridExecutableBuildPlan(projectPath, typed, compiledMethods, plan.TotalUnits);
     }

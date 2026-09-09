@@ -26,7 +26,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
         IEnumerable<PowerShellCompiledRegion>? promotedRegions = null)
     {
         var entries = new List<PowerShellCompilationFailureMapEntry>();
-        foreach (var method in methods.Where(static item => item.Lifecycle is null)
+        foreach (var method in methods.Where(static item => item.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline)
                      .OrderBy(static item => item.DocumentId, StringComparer.Ordinal)
                      .ThenBy(static item => item.SourceLine)
                      .ThenBy(static item => item.SourceName, StringComparer.Ordinal))

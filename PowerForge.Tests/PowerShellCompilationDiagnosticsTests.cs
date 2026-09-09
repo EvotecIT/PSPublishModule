@@ -158,7 +158,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilation")]
-    public void HybridFailureMapIncludesPureFallbackAndHostedLifecycleUnits()
+    public void HybridFailureMapDistinguishesFallbackAndCompiledLifecycleUnits()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-Fallback { [int] $value = 1; Get-Variable -Name value -ValueOnly }; " +
@@ -179,7 +179,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains(entries, static entry =>
             entry.UnitName == "Get-Fallback" && entry.BoundaryContract == "PowerShellRuntime" && entry.GeneratedStartLine == 0);
         Assert.Contains(entries, static entry =>
-            entry.UnitName == "Invoke-Lifecycle" && entry.BoundaryContract == "PowerShellRuntime" && entry.GeneratedStartLine == 0);
+            entry.UnitName == "Invoke-Lifecycle" && entry.BoundaryContract == "TypedClr+PowerShellRuntime" && entry.GeneratedStartLine > 0);
     }
 
     [Fact]

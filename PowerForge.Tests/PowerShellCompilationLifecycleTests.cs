@@ -243,7 +243,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Invoke-LegacyLifecycle {
                 [CmdletBinding()] param([Parameter(ValueFromPipeline)][int] $Number)
                 begin { $total = 0 }
-                process { $total += $Number }
+                process { $total += $Number; $captured = Microsoft.PowerShell.Utility\Write-Output $Number; $null = $captured }
                 end { $total }
             }
             function Invoke-CleanLifecycle {
@@ -251,7 +251,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 process { 'new-host' }
                 clean { $null = 1 }
             }
-            Export-ModuleMember -Function Invoke-LegacyLifecycle,Invoke-CleanLifecycle
+            function Get-AfterClean {
+                [CmdletBinding()] param([ValidateRange(1,2)][int]$Mode=1)
+                $captured = Microsoft.PowerShell.Utility\Write-Output 'after'
+                'plain:'+ $captured
+            }
+            Export-ModuleMember -Function Invoke-LegacyLifecycle,Invoke-CleanLifecycle,Get-AfterClean
             """,
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -267,10 +272,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         var proof = RunWindowsPowerShellModuleProof(
             result.ArtifactPath!,
-            "1,2 | Invoke-LegacyLifecycle; try { Invoke-CleanLifecycle } catch { $_.Exception.Message }");
+            "1,2 | Invoke-LegacyLifecycle; try { Invoke-CleanLifecycle } catch { $_.Exception.Message }; Get-AfterClean");
 
         Assert.StartsWith("3" + Environment.NewLine, proof, StringComparison.Ordinal);
         Assert.Contains("requires PowerShell 7.3 or newer", proof, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("plain:after", proof, StringComparison.Ordinal);
     }
 
     [Fact]

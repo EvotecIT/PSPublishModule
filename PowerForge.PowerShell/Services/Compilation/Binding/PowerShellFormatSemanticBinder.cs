@@ -1,6 +1,6 @@
 namespace PowerForge;
 
-/// <summary>Admits scalar formatting only where the loaded host owns its error semantics.</summary>
+/// <summary>Admits host formatting with invocation-owned callbacks or a qualified scalar argument.</summary>
 internal static class PowerShellFormatSemanticBinder
 {
     internal static PowerShellBoundExpression? Bind(
@@ -11,15 +11,16 @@ internal static class PowerShellFormatSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var type = value.Type.ClrType;
+        var native = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
         var scalar = PowerShellClrTypeSemantics.IsNumeric(type) || type == typeof(string) ||
             type == typeof(bool) || type == typeof(char) || type == typeof(DateTime) ||
             type == typeof(TimeSpan) || type == typeof(Guid) ||
             value.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble;
-        if (format.Type.ClrType == typeof(string) && scalar &&
+        if (format.Type.ClrType == typeof(string) && (scalar || native) &&
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
             return new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.PowerShellScalarFormat,
                 format, value, new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred,
-                    "Scalar formatting uses the loaded PowerShell host's format and error contract."));
+                    "Formatting uses the loaded PowerShell host's format and error contract."), usesNativeInvocation: native);
 
         if (PowerShellRuntimeFreeFormatPolicy.IsSafe(format, value.Type))
             return new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.RuntimeFreeScalarFormat,
@@ -27,7 +28,7 @@ internal static class PowerShellFormatSemanticBinder
                     "The numeric format grammar and every interpolated fragment are statically qualified for CLR formatting."));
 
         diagnostics.Add(new PowerShellSemanticDiagnostic(PowerShellCompilationFeatureIds.ForOperator("format"),
-            "Formatting requires a String template, a qualified scalar argument, and the PowerShell statement-error host; runtime-independent formatting requires a separately proven safe template.", span));
+            "Formatting requires a String template and either a qualified scalar argument or native invocation storage; runtime-independent formatting requires a separately proven safe template.", span));
         return null;
     }
 }

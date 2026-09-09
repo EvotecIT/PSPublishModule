@@ -55,7 +55,7 @@ namespace PowerForge.Generated.Runtime
                 var ast = (ScriptBlockAst)PowerShellNativeFunctionHost.Invoke(
                     owner._contract.ParseInputWithFile, null, parseArguments)!;
                 var errors = (ParseError[])parseArguments[3];
-                if (errors.Length != 0) throw new ArgumentException(errors[0].Message, nameof(source));
+                ValidateSelectedSyntax(errors, source, nameof(source));
                 if (sourceDocument is not null)
                 {
                     // The document supplies source metadata only. Detach exactly the selected pipeline;

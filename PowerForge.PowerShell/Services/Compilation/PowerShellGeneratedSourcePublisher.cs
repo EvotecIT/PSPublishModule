@@ -163,7 +163,7 @@ internal static class PowerShellGeneratedSourcePublisher
 
     private static GeneratedMethodLocation FindGeneratedLocation(string sourceDirectory, PowerShellCompiledMethod method)
     {
-        if (method.Lifecycle is null)
+        if (method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline)
             return FindGeneratedMethod(sourceDirectory, method.GeneratedName);
         var separator = method.SourceName.IndexOf('-');
         if (separator < 1 || separator == method.SourceName.Length - 1)

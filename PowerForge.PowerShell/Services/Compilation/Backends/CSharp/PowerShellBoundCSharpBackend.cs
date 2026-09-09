@@ -373,6 +373,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
+            PowerShellLoweredNativeLifecycleExpression lifecycle => "(__nativeFunction.LifecycleClause == " + lifecycle.Clause.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")",
             PowerShellLoweredVariableExpression variable => PowerShellCSharpSymbolRenderer.Identifier(variable.Symbol.Name),
             PowerShellLoweredConstantBooleanDelegateExpression booleanDelegate => EmitConstantBooleanDelegate(booleanDelegate),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
@@ -659,11 +660,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitBinaryOperation(PowerShellLoweredBinaryExpression expression, string left, string right)
     {
+        if (expression.Operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat)
+            return $"__statementErrors.FormatScalar(({left} ?? string.Empty), (object?)({right}))";
         if (expression.UsesNativeInvocation) return EmitNativeBinary(expression, left, right);
         if (expression.Operation == PowerShellBoundBinaryOperator.NativeStringConcatenate)
             return $"global::System.String.Concat({left}, __nativeFunction.Stringify({right}))";
-        if (expression.Operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat)
-            return $"__statementErrors.FormatScalar(({left} ?? string.Empty), (object?)({right}))";
         if (expression.Operation == PowerShellBoundBinaryOperator.RuntimeFreeScalarFormat)
             return EmitSafeScalarFormat(left, right);
         if (EmitNumericUnionBinary(expression, left, right) is { } numericUnion) return numericUnion;

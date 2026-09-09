@@ -92,7 +92,7 @@ namespace PowerForge.Generated.Runtime
             return handler < 0 ? -1 : clauseIndices[handler];
         }
 
-        internal RuntimeException PrepareThrow(Exception error, string file, int line, int column, int endLine, int endColumn, string text, bool rethrow = false)
+        internal RuntimeException PrepareThrow(object? error, string file, int line, int column, int endLine, int endColumn, string text, bool rethrow = false)
         {
             var extent = CreateExtent(file, line, column, endLine, endColumn, text);
             return (RuntimeException)(_contract.ThrowConversionTakesRethrow

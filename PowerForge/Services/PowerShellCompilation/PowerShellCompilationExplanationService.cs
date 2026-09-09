@@ -275,7 +275,7 @@ public static class PowerShellCompilationExplanationService
             return PowerShellCompilationDecisionKind.Typed;
 
         var emitted = shapedCompilation?.Methods.Any(method =>
-            method.Lifecycle is null &&
+            method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline &&
             PathEquals(
                 string.IsNullOrWhiteSpace(method.SourcePath) ? shapedCompilation.SourcePath : method.SourcePath,
                 fullPath) &&

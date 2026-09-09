@@ -16,6 +16,9 @@ namespace PowerForge.Generated.Runtime
         private readonly bool _optimized;
         internal object FunctionContext { get; }
 
+        /// <summary>Identifies the callback selected by the generated native lifecycle dispatcher.</summary>
+        public int LifecycleClause { get; set; }
+
         internal PowerShellNativeFunctionContext(object functionContext, bool optimized)
         {
             FunctionContext = functionContext;

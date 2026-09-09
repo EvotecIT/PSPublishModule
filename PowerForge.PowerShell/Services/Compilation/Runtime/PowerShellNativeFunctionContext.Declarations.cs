@@ -46,7 +46,7 @@ namespace PowerForge.Generated.Runtime
             };
             var document = (ScriptBlockAst)PowerShellNativeFunctionHost.Invoke(_contract.ParseInputWithFile, null, parseArguments)!;
             var errors = (ParseError[])parseArguments[3];
-            if (errors.Length != 0) throw new ArgumentException(errors[0].Message, nameof(target));
+            ValidateSelectedSyntax(errors, target + " = $null", nameof(target));
             var targetAst = document.FindAll(node => node is AssignmentStatementAst or ForEachStatementAst, searchNestedScriptBlocks: true)
                 .Select(node => node is AssignmentStatementAst assignment ? assignment.Left :
                     token == TokenKind.Equals ? ((ForEachStatementAst)node).Variable : null)

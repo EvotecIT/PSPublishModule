@@ -63,7 +63,7 @@ internal static class PowerShellLifecycleSourceBinder
     private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
         => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;
 
-    private static string ComputeSha256(string value)
+    internal static string ComputeSha256(string value)
     {
         using var sha = SHA256.Create();
         return string.Concat(sha.ComputeHash(Encoding.UTF8.GetBytes(value))

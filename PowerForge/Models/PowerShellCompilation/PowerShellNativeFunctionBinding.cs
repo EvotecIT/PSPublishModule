@@ -15,11 +15,29 @@ public sealed class PowerShellNativeFunctionBinding
     /// <summary>Creates native storage metadata, including type constraints for optimized local slots.</summary>
     public PowerShellNativeFunctionBinding(string parameterDeclaration, System.Collections.Generic.IEnumerable<string> localNames,
         System.Collections.Generic.IEnumerable<string> localTypeDeclarations)
+        : this(parameterDeclaration, localNames, localTypeDeclarations, false, false, true, false) { }
+
+    /// <summary>Creates native storage and clause metadata for separately invoked compiled lifecycle blocks.</summary>
+    public PowerShellNativeFunctionBinding(string parameterDeclaration, System.Collections.Generic.IEnumerable<string> localNames,
+        System.Collections.Generic.IEnumerable<string> localTypeDeclarations, bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean)
     {
         ParameterDeclaration = parameterDeclaration ?? throw new System.ArgumentNullException(nameof(parameterDeclaration));
         LocalNames = System.Array.AsReadOnly(System.Linq.Enumerable.ToArray(localNames));
         LocalTypeDeclarations = System.Array.AsReadOnly(System.Linq.Enumerable.ToArray(localTypeDeclarations));
+        HasBegin = hasBegin;
+        HasProcess = hasProcess;
+        HasEnd = hasEnd;
+        HasClean = hasClean;
     }
+
+    /// <summary>Whether the native invocation has a compiled begin block.</summary>
+    public bool HasBegin { get; }
+    /// <summary>Whether the native invocation has a compiled process block.</summary>
+    public bool HasProcess { get; }
+    /// <summary>Whether the native invocation has a compiled end block.</summary>
+    public bool HasEnd { get; }
+    /// <summary>Whether the native invocation has a compiled clean block.</summary>
+    public bool HasClean { get; }
 
     /// <summary>Authored parameter metadata, including defaults and attributes, without body statements.</summary>
     public string ParameterDeclaration { get; }

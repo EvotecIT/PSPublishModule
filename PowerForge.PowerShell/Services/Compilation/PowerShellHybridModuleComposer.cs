@@ -17,7 +17,7 @@ internal static class PowerShellHybridModuleComposer
         if (errors.Length > 0)
             throw new InvalidOperationException("Hybrid executable source could not be parsed while composing retained fallback code.");
         var compiledNames = typed.Methods
-            .Where(method => method.Lifecycle is null && PowerShellCompilationPathSafety.PathEquals(
+            .Where(method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline && PowerShellCompilationPathSafety.PathEquals(
                 string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
                 sourcePath))
             .Select(static method => method.SourceName)
@@ -368,7 +368,7 @@ internal static class PowerShellHybridModuleComposer
 
     internal static HashSet<string> GetExecutableCompiledMethodKeys(PowerShellTypedCompilationResult typed)
         => typed.Methods
-            .Where(static method => method.Lifecycle is null)
+            .Where(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline)
             .Select(method => GetCompiledMethodKey(
                 string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
                 method.SourceName,

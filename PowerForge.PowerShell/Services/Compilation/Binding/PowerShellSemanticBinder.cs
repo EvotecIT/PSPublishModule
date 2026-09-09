@@ -88,6 +88,10 @@ internal sealed partial class PowerShellSemanticBinder
             : capabilities;
         var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework, bindingCapabilities);
         if (parameters is null) return null;
+        if (nativeFunctionBinding is not null && PowerShellRuntimeFreePipelineLifecyclePolicy.HasNamedLifecycle(function.Body))
+            return BindNativeLifecycleFunction(document, function, functionSymbol, functions, diagnostics, targetFramework,
+                capabilities, symbols, parameters, nativeFunctionBinding, outputTypeContract.SemanticType,
+                outputTypeContract.MetadataTypeName, functionDiagnosticStart);
         if (hasRuntimeFreeLifecycle)
             return BindRuntimeFreePipelineLifecycleFunction(
                 document,

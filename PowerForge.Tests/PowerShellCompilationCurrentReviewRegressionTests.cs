@@ -129,7 +129,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [InlineData("Dispose")]
     public void Build_HybridLifecycleRejectsGeneratedMemberNameCollisions(string parameterName)
     {
-        var source = $"function Invoke-Lifecycle {{ [CmdletBinding()] param([string] ${parameterName}) process {{ ${parameterName} }} }}";
+        var source = $"function Invoke-Lifecycle {{ [CmdletBinding()] param([int] ${parameterName}) process {{ ${parameterName} }} }}";
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var path = fixture.ScriptPath;
         var document = PowerShellSourceParser.Parse(
@@ -159,7 +159,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [Fact]
     public void Build_HybridLifecycleAllowsFormerSyntheticPipelineParameterNameAsAuthoredInput()
     {
-        const string source = "function Invoke-Lifecycle { [CmdletBinding()] param([string] $__PowerForgeInputObject) process { $__PowerForgeInputObject } }";
+        const string source = "function Invoke-Lifecycle { [CmdletBinding()] param([int] $__PowerForgeInputObject) process { $__PowerForgeInputObject } }";
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var document = PowerShellSourceParser.Parse(source, fixture.ScriptPath);
         var empty = new PowerShellTypedCompilationResult(

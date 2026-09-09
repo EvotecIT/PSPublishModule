@@ -56,7 +56,7 @@ internal static class PowerShellCommandHostRuntimeSource
         }
         if (requiresModuleState)
             sources.Add("StatementErrors.g.cs", PowerShellStatementErrorRuntimeSource.Render());
-        else if (typed.Methods.Any(static method => method.Lifecycle is null && method.Parameters.Any(static parameter => parameter.AcceptsPipelineInput)))
+        else if (typed.Methods.Any(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline && method.Parameters.Any(static parameter => parameter.AcceptsPipelineInput)))
             sources.Add("CommandVariables.g.cs", PowerShellStatementErrorRuntimeSource.RenderVariableScope());
         return sources;
     }

@@ -48,8 +48,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
         bool requiresNativeInvocation = false)
     {
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
-            function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
-            function.Body.DynamicParamBlock is not null || function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null)
+            function.Body.DynamicParamBlock is not null)
             return null;
         var parameters = PowerShellParameterSyntax.GetParameters(function.Body).ToArray();
         if (!requiresNativeInvocation && !RequiresNativeBinding(function)) return null;
@@ -58,7 +57,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
             : "param(" + string.Join(",", parameters.Select(static parameter => parameter.Extent.Text)) + ")";
         var locals = PowerShellNativeVariableAnalysis.Analyze(function);
         return new PowerShellNativeFunctionBinding(declaration, locals,
-            PowerShellNativeVariableAnalysis.FindLocalTypeDeclarations(function, locals));
+            PowerShellNativeVariableAnalysis.FindLocalTypeDeclarations(function, locals),
+            function.Body.BeginBlock is not null, function.Body.ProcessBlock is not null,
+            function.Body.EndBlock is not null, function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null);
     }
 
     internal static Ast? FindNativePipelineOperator(FunctionDefinitionAst function, bool includeCommandRedirections = true)
@@ -68,7 +69,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
                 (includeCommandRedirections || command is CommandExpressionAst), searchNestedScriptBlocks: true);
 
     private static bool RequiresNativeBinding(FunctionDefinitionAst function)
-        => FindNativePipelineOperator(function) is not null ||
+        => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
+           function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null ||
+           FindNativePipelineOperator(function) is not null ||
            function.Body.Find(static node => node is BinaryExpressionAst { Operator: TokenKind.Join } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is PipelineAst pipeline &&

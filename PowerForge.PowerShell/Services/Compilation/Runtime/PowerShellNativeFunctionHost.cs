@@ -63,7 +63,11 @@ namespace PowerForge.Generated.Runtime
         {
             if (parameterDeclaration == null) throw new ArgumentNullException(nameof(parameterDeclaration));
             if (clean != null && typeof(ScriptBlockAst).GetProperty("CleanBlock") == null)
-                throw new NotSupportedException("The loaded PowerShell host does not support clean clauses.");
+                // Keep other commands importable on older hosts. The unavailable command still
+                // owns its native parameter metadata and rejects invocation before doing work.
+                return CreateCore(parameterDeclaration, sourcePath, Array.Empty<string>(),
+                    _ => throw new NotSupportedException("This command requires PowerShell 7.3 or newer because it has a clean block."),
+                    null, null, null);
             var metadata = Parse(parameterDeclaration, sourcePath);
             if (metadata.ParamBlock == null || metadata.BeginBlock != null || metadata.ProcessBlock != null ||
                 metadata.DynamicParamBlock != null || HasUsingStatements(metadata) || metadata.ScriptRequirements != null ||
@@ -91,12 +95,12 @@ namespace PowerForge.Generated.Runtime
                     localDeclarations += "; ${" + name.Replace("`", "``").Replace("}", "`}") + "} = $null";
             }
             localDeclarations += typedDeclarations;
-            if (begin != null) source += "\nbegin { throw 'Compiled begin callback was not installed.' }";
-            if (process != null) source += "\nprocess { throw 'Compiled process callback was not installed.' }";
-            if (end != null || begin == null && process == null)
+            if (begin != null) source += "\nbegin { if ($false) { " + localDeclarations + " }; throw 'Compiled begin callback was not installed.' }";
+            if (process != null) source += "\nprocess { if ($false) { " + localDeclarations + " }; throw 'Compiled process callback was not installed.' }";
+            if (end != null || begin == null && process == null && clean == null)
                 // These declarations allocate native tuple slots. The installed callback replaces the entire clause.
                 source += "\nend { if ($false) { " + localDeclarations + " }; throw 'Compiled end callback was not installed.' }";
-            if (clean != null) source += "\nclean { throw 'Compiled clean callback was not installed.' }";
+            if (clean != null) source += "\nclean { if ($false) { " + localDeclarations + " }; throw 'Compiled clean callback was not installed.' }";
             var script = Parse(source, sourcePath).GetScriptBlock();
             var contract = NativeContract.Shared;
             Invoke(contract.Compile, script, new object[] { false });
@@ -104,7 +108,7 @@ namespace PowerForge.Generated.Runtime
             var data = contract.Data.GetValue(script)!;
             if (begin != null) contract.Install(data, "BeginBlock", begin);
             if (process != null) contract.Install(data, "ProcessBlock", process);
-            if (end != null || begin == null && process == null)
+            if (end != null || begin == null && process == null && clean == null)
                 contract.Install(data, "EndBlock", end ?? (_ => { }));
             if (clean != null) contract.Install(data, "CleanBlock", clean);
             return script;

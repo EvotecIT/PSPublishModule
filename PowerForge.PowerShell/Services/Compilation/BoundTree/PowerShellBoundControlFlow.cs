@@ -188,8 +188,10 @@ internal sealed class PowerShellBoundThrowStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundThrowStatement(SourceSpan span, PowerShellBoundExpression? expression,
         bool preserveStatementErrors = false, string sourcePath = "", string sourceText = "")
-        : base(span, PowerShellSemanticEffect.TerminatingError | (expression?.Effects ?? PowerShellSemanticEffect.None),
+        : base(span, PowerShellSemanticEffect.TerminatingError | (expression?.Effects ?? PowerShellSemanticEffect.None) |
+            (RequiresNativeConversion(expression, preserveStatementErrors) ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None),
             (expression?.Capabilities ?? PowerShellRequiredCapability.None) |
+            (RequiresNativeConversion(expression, preserveStatementErrors) ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost : PowerShellRequiredCapability.None) |
             (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes : PowerShellRequiredCapability.None))
     {
         Expression = expression;
@@ -203,6 +205,10 @@ internal sealed class PowerShellBoundThrowStatement : PowerShellBoundStatement
     internal bool PreserveStatementErrors { get; }
     internal string SourcePath { get; }
     internal string SourceText { get; }
+
+    // Non-exception throw values can invoke user conversion while the native invocation owns locals.
+    private static bool RequiresNativeConversion(PowerShellBoundExpression? expression, bool preserveStatementErrors)
+        => preserveStatementErrors && expression is not null && !typeof(Exception).IsAssignableFrom(expression.Type.ClrType);
 }
 
 internal sealed class PowerShellBoundCatchClause
