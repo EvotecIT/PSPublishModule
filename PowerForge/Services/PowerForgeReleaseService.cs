@@ -558,11 +558,16 @@ internal sealed partial class PowerForgeReleaseService
 
             if (!request.PlanOnly && !request.ValidateOnly)
             {
-                var moduleResult = deferModulePublishing
+                var releaseCheckpointBuild =
+                    deferModulePublishing ||
+                    (module.Request.RunMode == ConfigurationGateMode.Build && module.Plan.IncludesProjectPackages);
+                var moduleResult = releaseCheckpointBuild
                     ? ExecuteModuleRequest(
                         module.Request,
                         ConfigurationGateMode.Build,
-                        includeModulePublishing: false,
+                        includeModulePublishing: deferModulePublishing
+                            ? false
+                            : module.Request.IncludeModulePublishing,
                         releaseCheckpoint: true,
                         cancellationToken: request.CancellationToken)
                     : _executeModuleBuild(module.Request, request.CancellationToken);

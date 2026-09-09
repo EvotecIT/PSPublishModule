@@ -232,6 +232,24 @@ public sealed partial class ModuleBuildPreparationServiceTests
     }
 
     [Fact]
+    public void InvokeModuleBuild_ReleaseCheckpoint_AllowsEveryBuildParameterSet()
+    {
+        var releaseCheckpoint = typeof(InvokeModuleBuildCommand).GetProperty(
+            nameof(InvokeModuleBuildCommand.PowerForgeReleaseCheckpoint));
+        Assert.NotNull(releaseCheckpoint);
+
+        var parameterSets = releaseCheckpoint!
+            .GetCustomAttributes(typeof(ParameterAttribute), inherit: false)
+            .Cast<ParameterAttribute>()
+            .Select(static attribute => attribute.ParameterSetName)
+            .ToArray();
+
+        Assert.Contains("Modern", parameterSets);
+        Assert.Contains("Configuration", parameterSets);
+        Assert.Contains("Config", parameterSets);
+    }
+
+    [Fact]
     public void Prepare_from_modern_request_appends_run_mode_gate_segment()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-modulebuild-runmode-" + Guid.NewGuid().ToString("N")));

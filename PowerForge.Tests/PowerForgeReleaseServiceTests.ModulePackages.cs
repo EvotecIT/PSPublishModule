@@ -202,7 +202,6 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = releasePath,
-                    ModuleOnly = true,
                     ModuleRunMode = ConfigurationGateMode.Build
                 });
 
@@ -211,6 +210,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             var package = Assert.Single(result.ReleaseAssetEntries);
             Assert.Equal(PowerForgeReleaseAssetCategory.Package, package.Category);
             Assert.True(package.IsFinalPackageOutput);
+            var moduleCall = Assert.Single(moduleCalls);
+            Assert.Equal(ConfigurationGateMode.Build, moduleCall.RunMode);
+            Assert.True(moduleCall.ReleaseCheckpoint);
         }
         finally
         {
