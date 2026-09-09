@@ -28,6 +28,7 @@ internal sealed partial class PowerForgeReleaseService
         bool? skipInstall = null,
         bool? includeProjectPackages = null,
         bool? reuseStaging = null,
+        bool? releaseCheckpoint = null,
         CancellationToken cancellationToken = default)
     {
         var originalRunMode = request.RunMode;
@@ -37,6 +38,7 @@ internal sealed partial class PowerForgeReleaseService
         var originalSkipInstall = request.SkipInstall;
         var originalIncludeProjectPackages = request.IncludeProjectPackages;
         var originalReuseStaging = request.ReuseStaging;
+        var originalReleaseCheckpoint = request.ReleaseCheckpoint;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -53,6 +55,8 @@ internal sealed partial class PowerForgeReleaseService
                 request.IncludeProjectPackages = includeProjectPackages.Value;
             if (reuseStaging.HasValue)
                 request.ReuseStaging = reuseStaging.Value;
+            if (releaseCheckpoint.HasValue)
+                request.ReleaseCheckpoint = releaseCheckpoint.Value;
 
             return _executeModuleBuild(request, cancellationToken);
         }
@@ -65,6 +69,7 @@ internal sealed partial class PowerForgeReleaseService
             request.SkipInstall = originalSkipInstall;
             request.IncludeProjectPackages = originalIncludeProjectPackages;
             request.ReuseStaging = originalReuseStaging;
+            request.ReleaseCheckpoint = originalReleaseCheckpoint;
         }
     }
 

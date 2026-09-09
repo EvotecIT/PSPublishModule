@@ -12,20 +12,69 @@ internal sealed partial class PowerForgeReleaseService
         if (plan is null)
             return;
 
-        var manifestText = ReadBuiltModuleManifestText(plan, artifactPaths) ?? ReadSourceModuleManifestText(plan);
-        if (string.IsNullOrWhiteSpace(manifestText))
-            return;
+        var builtManifestText = ReadBuiltModuleManifestText(plan, artifactPaths);
+        var sourceManifestText = ReadSourceModuleManifestText(plan);
+        var manifestText = builtManifestText ?? sourceManifestText;
 
-        ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText!, "ModuleVersion", out var moduleVersion);
-        if (NormalizeReleaseVersion(plan.ModuleVersion) is null && !string.IsNullOrWhiteSpace(moduleVersion))
-            plan.ModuleVersion = moduleVersion!.Trim();
+        string? packageVersion = null;
+        if (NormalizeReleaseVersion(plan.ModuleVersion) is null)
+        {
+            var manifestVersion = ResolveExactModuleManifestVersion(builtManifestText);
+            if (string.IsNullOrWhiteSpace(manifestVersion) && plan.IncludesPackages)
+                packageVersion = ResolveUniqueModulePackageVersion(artifactPaths);
+            if (string.IsNullOrWhiteSpace(manifestVersion) && string.IsNullOrWhiteSpace(packageVersion))
+                manifestVersion = ResolveExactModuleManifestVersion(sourceManifestText);
+
+            var resolvedVersion = manifestVersion ?? packageVersion;
+            if (!string.IsNullOrWhiteSpace(resolvedVersion))
+                plan.ModuleVersion = PackageVersionUtility.GetNumericVersion(resolvedVersion!);
+        }
 
         if (string.IsNullOrWhiteSpace(plan.PreReleaseTag))
         {
-            plan.PreReleaseTag = ModuleManifestValueReader
-                .ReadPsDataStringOrArrayFromText(manifestText!, "Prerelease")
-                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(packageVersion))
+            {
+                plan.PreReleaseTag = NullIfEmpty(PackageVersionUtility.GetPrereleaseVersion(packageVersion!));
+            }
+            else
+            {
+                plan.PreReleaseTag = ModuleManifestValueReader
+                    .ReadPsDataStringOrArrayFromText(manifestText ?? string.Empty, "Prerelease")
+                    .FirstOrDefault();
+            }
         }
+    }
+
+    private static string? ResolveExactModuleManifestVersion(string? manifestText)
+    {
+        if (string.IsNullOrWhiteSpace(manifestText) ||
+            !ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(
+                manifestText!,
+                "ModuleVersion",
+                out var moduleVersion) ||
+            NormalizeReleaseVersion(moduleVersion) is null)
+        {
+            return null;
+        }
+
+        return moduleVersion!.Trim();
+    }
+
+    private static string? ResolveUniqueModulePackageVersion(IEnumerable<string>? artifactPaths)
+    {
+        var versions = EnumerateModuleArtifactFiles(artifactPaths, plan: null)
+            .Where(IsNuGetPackagePath)
+            .Select(path => TryReadNuGetPackageIdentity(path, out _, out var packageVersion)
+                ? packageVersion
+                : null)
+            .Select(static version => PackageVersionUtility.TryNormalizeExact(version, out var normalized)
+                ? normalized
+                : string.Empty)
+            .Where(static version => !string.IsNullOrWhiteSpace(version))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return versions.Length == 1 ? versions[0] : null;
     }
 
     internal static string? ResolveUnifiedReleaseVersion(

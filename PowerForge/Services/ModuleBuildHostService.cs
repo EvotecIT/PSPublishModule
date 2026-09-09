@@ -405,6 +405,8 @@ public sealed class ModuleBuildHostService
         AddDirectStringArgument(arguments, "StagingPath", request.StagingPath);
         if (request.ReuseStaging)
             arguments.Add("$moduleBuildArguments['ReuseStaging'] = $true");
+        if (request.ReleaseCheckpoint)
+            arguments.Add("$moduleBuildArguments['PowerForgeReleaseCheckpoint'] = $true");
         AddDirectBooleanArgument(
             arguments,
             "NoDotnetBuild",
