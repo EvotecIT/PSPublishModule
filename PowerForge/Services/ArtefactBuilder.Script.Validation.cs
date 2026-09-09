@@ -315,9 +315,10 @@ public sealed partial class ArtefactBuilder
                 throw new InvalidOperationException(
                     $"Script artefact directory copy destination '{destination}' overlaps required module destination '{requiredModuleDestination}' and could erase or corrupt the bundled dependency.");
             }
-            ValidateScriptDirectoryCopyDestinationDoesNotReplacePackage(
+            ValidateScriptCopyDestinationDoesNotReplacePackage(
                 destination,
-                packageNamespace);
+                packageNamespace,
+                "directory");
         }
 
         foreach (var mapping in cfg.FilesOutput ?? Array.Empty<ArtefactCopyMapping>())
@@ -364,6 +365,10 @@ public sealed partial class ArtefactBuilder
                 throw new InvalidOperationException(
                     $"Script artefact file copy destination '{destination}' overlaps required module destination '{requiredModuleDestination}' and would overwrite or conflict with bundled dependency content.");
             }
+            ValidateScriptCopyDestinationDoesNotReplacePackage(
+                destination,
+                packageNamespace,
+                "file");
         }
 
         ValidateScriptCopyMappingSourcesSurviveDestinations(
@@ -374,9 +379,10 @@ public sealed partial class ArtefactBuilder
         ValidateScriptFileCopyDestinationsDoNotConflict(directoryDestinations, fileDestinations);
     }
 
-    private static void ValidateScriptDirectoryCopyDestinationDoesNotReplacePackage(
+    private static void ValidateScriptCopyDestinationDoesNotReplacePackage(
         string destination,
-        ScriptPackageDestinationNamespace packageNamespace)
+        ScriptPackageDestinationNamespace packageNamespace,
+        string copyKind)
     {
         string? conflictingFile = packageNamespace.Files.FirstOrDefault(packagePath =>
             ScriptPathsOverlap(packagePath, destination));
@@ -387,7 +393,7 @@ public sealed partial class ArtefactBuilder
             return;
 
         throw new InvalidOperationException(
-            $"Script artefact directory copy destination '{Path.GetFullPath(destination)}' conflicts with packaged payload destination '{conflictingPayload}' and would replace included content.");
+            $"Script artefact {copyKind} copy destination '{Path.GetFullPath(destination)}' conflicts with packaged payload destination '{conflictingPayload}' and would replace included content.");
     }
 
     private static void ValidateScriptDirectoryCopyDestinationSafety(
