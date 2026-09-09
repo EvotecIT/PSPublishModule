@@ -48,6 +48,16 @@ public sealed class ModuleBootstrapperExportBridgeScopeTests
         }
     }
 
+    [Fact]
+    public void GeneratedExportBridge_DerivesCaseComparisonFromContainingDirectory()
+    {
+        string bridge = BuildExportBridge();
+
+        Assert.DoesNotContain("OSVersion.Platform", bridge, StringComparison.Ordinal);
+        Assert.Contains("EnumerateFileSystemEntries", bridge, StringComparison.Ordinal);
+        Assert.Contains("StringComparer]::Ordinal", bridge, StringComparison.Ordinal);
+    }
+
     private static string BuildExportBridge()
     {
         MethodInfo? method = typeof(ModuleBootstrapperGenerator).GetMethod(

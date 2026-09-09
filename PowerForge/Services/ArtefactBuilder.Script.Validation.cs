@@ -574,6 +574,18 @@ public sealed partial class ArtefactBuilder
                 $"Script artefact {kind} copy source '{source}' does not exist.");
         }
 
+        if (sourceIsDirectory)
+        {
+            ValidateDirectoryTreeContainsNoReparsePoints(
+                source,
+                $"Script artefact directory copy source '{Path.GetFullPath(source)}'");
+        }
+        else if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Script artefact file copy source '{Path.GetFullPath(source)}' must not be a symbolic link or reparse point.");
+        }
+
         if (!clearsOutput || !WouldScriptOutputClearRemoveSource(source, sourceIsDirectory, outputRoot, artefactType))
             return;
 

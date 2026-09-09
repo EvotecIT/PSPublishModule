@@ -500,6 +500,139 @@ public sealed class ArtefactBuilderScriptOutputSafetyTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Script, false)]
+    [InlineData(ArtefactType.Script, true)]
+    [InlineData(ArtefactType.ScriptPacked, false)]
+    [InlineData(ArtefactType.ScriptPacked, true)]
+    public void Build_RejectsDirectoryMappingSourceReparsePointsBeforeOutputMutation(
+        ArtefactType artefactType,
+        bool linkIsSourceRoot)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? linkPath = null;
+        try
+        {
+            const string moduleName = "LinkedSourceModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string outputMarker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(outputMarker, "preserve-output");
+            string externalRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "external-source")).FullName;
+            File.WriteAllText(Path.Combine(externalRoot, "private.txt"), "must-not-publish");
+
+            string sourceRoot;
+            if (linkIsSourceRoot)
+            {
+                sourceRoot = Path.Combine(root.FullName, "linked-source");
+                linkPath = sourceRoot;
+            }
+            else
+            {
+                sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "mapping-source")).FullName;
+                File.WriteAllText(Path.Combine(sourceRoot, "public.txt"), "publish");
+                linkPath = Path.Combine(sourceRoot, "linked-content");
+            }
+
+            try
+            {
+                Directory.CreateSymbolicLink(linkPath, externalRoot);
+            }
+            catch (Exception linkException) when (linkException is UnauthorizedAccessException or PlatformNotSupportedException or IOException)
+            {
+                return;
+            }
+
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, artefactType);
+            segment.Configuration.DirectoryOutput =
+                [new ArtefactCopyMapping { Source = sourceRoot, Destination = "assets" }];
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                Build(segment, projectRoot, stagingRoot, moduleName));
+
+            Assert.Contains("directory copy source", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("symbolic", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("reparse point", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve-output", File.ReadAllText(outputMarker));
+        }
+        finally
+        {
+            if (linkPath is not null)
+            {
+                try
+                {
+                    if (Directory.Exists(linkPath) &&
+                        (File.GetAttributes(linkPath) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        Directory.Delete(linkPath);
+                    }
+                }
+                catch { }
+            }
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_RejectsFileMappingSourceSymlinkBeforeOutputMutation(ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        string? linkPath = null;
+        try
+        {
+            const string moduleName = "LinkedFileSourceModule";
+            string projectRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "project")).FullName;
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            WriteModule(stagingRoot, moduleName);
+            string outputRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "output")).FullName;
+            string outputMarker = Path.Combine(outputRoot, "existing.txt");
+            File.WriteAllText(outputMarker, "preserve-output");
+            string externalFile = Path.Combine(root.FullName, "private.txt");
+            File.WriteAllText(externalFile, "must-not-publish");
+            linkPath = Path.Combine(root.FullName, "linked-file.txt");
+
+            try
+            {
+                File.CreateSymbolicLink(linkPath, externalFile);
+            }
+            catch (Exception linkException) when (linkException is UnauthorizedAccessException or PlatformNotSupportedException or IOException)
+            {
+                return;
+            }
+
+            ConfigurationArtefactSegment segment = CreateSegment(outputRoot, artefactType);
+            segment.Configuration.FilesOutput =
+                [new ArtefactCopyMapping { Source = linkPath, Destination = "assets/copied.txt" }];
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                Build(segment, projectRoot, stagingRoot, moduleName));
+
+            Assert.Contains("file copy source", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("symbolic link or reparse point", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("preserve-output", File.ReadAllText(outputMarker));
+        }
+        finally
+        {
+            if (linkPath is not null)
+            {
+                try
+                {
+                    if (File.Exists(linkPath) &&
+                        (File.GetAttributes(linkPath) & FileAttributes.ReparsePoint) != 0)
+                    {
+                        File.Delete(linkPath);
+                    }
+                }
+                catch { }
+            }
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Build_RejectsModulePackageDestinationThroughOutputSymlinkBeforeMutation()
     {

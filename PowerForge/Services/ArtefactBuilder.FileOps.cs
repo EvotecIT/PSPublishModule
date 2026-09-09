@@ -18,6 +18,8 @@ public sealed partial class ArtefactBuilder
         if (!Directory.Exists(sourceDir))
             throw new DirectoryNotFoundException($"Directory not found: {sourceDir}");
 
+        ValidateDirectoryTreeContainsNoReparsePoints(sourceDir);
+
         if (Directory.Exists(destDir))
             Directory.Delete(destDir, recursive: true);
 
@@ -122,6 +124,11 @@ public sealed partial class ArtefactBuilder
     }
 
     internal static void ValidateDirectoryTreeContainsNoReparsePoints(string rootPath)
+        => ValidateDirectoryTreeContainsNoReparsePoints(rootPath, "Script artefact layouts");
+
+    private static void ValidateDirectoryTreeContainsNoReparsePoints(
+        string rootPath,
+        string description)
     {
         string root = Path.GetFullPath(rootPath);
         if (!Directory.Exists(root))
@@ -130,7 +137,7 @@ public sealed partial class ArtefactBuilder
         if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidOperationException(
-                $"Script artefact layouts must not contain symbolic links or reparse points: '{root}'.");
+                $"{description} must not contain symbolic links or reparse points: '{root}'.");
         }
 
         var pending = new Stack<string>();
@@ -144,7 +151,7 @@ public sealed partial class ArtefactBuilder
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                 {
                     throw new InvalidOperationException(
-                        $"Script artefact layouts must not contain symbolic links or reparse points: '{entry}'.");
+                        $"{description} must not contain symbolic links or reparse points: '{entry}'.");
                 }
 
                 if ((attributes & FileAttributes.Directory) != 0)

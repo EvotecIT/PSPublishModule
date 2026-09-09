@@ -141,6 +141,9 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("Assets", false, "assets/data.json", false)]
     [InlineData("assets", false, "assets/", true)]
     [InlineData("assets/", true, "Assets/", true)]
+    [InlineData("assets/caf\u00E9.json", false, "assets/cafe\u0301.json", false)]
+    [InlineData("assets/caf\u00E9", false, "assets/cafe\u0301/", true)]
+    [InlineData("assets/caf\u00E9", false, "assets/cafe\u0301/data.json", false)]
     public void CreateModuleAssetEntries_RejectsScriptPackedNamespaceCollisions(
         string firstPath,
         bool firstDirectory,

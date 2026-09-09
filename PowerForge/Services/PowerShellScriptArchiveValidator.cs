@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 
 namespace PowerForge;
 
@@ -62,7 +63,7 @@ internal static class PowerShellScriptArchiveValidator
             var namespaceEntries = archiveEntries
                 .Select(static entry => new
                 {
-                    Path = entry.Path.TrimEnd('/'),
+                    Path = entry.Path.TrimEnd('/').Normalize(NormalizationForm.FormC),
                     entry.IsDirectory
                 })
                 .ToArray();
