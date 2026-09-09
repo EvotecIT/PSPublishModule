@@ -48,14 +48,15 @@ internal sealed partial class PowerShellSemanticBinder
         bool requiresNativeInvocation = false)
     {
         var functionDiagnosticStart = diagnostics.Count;
-        if (new[] { function.Body.BeginBlock, function.Body.ProcessBlock, function.Body.EndBlock, GetCleanBlock(function.Body) }
+        var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(function, capabilities, requiresNativeInvocation);
+        if (nativeFunctionBinding is not null &&
+            new[] { function.Body.BeginBlock, function.Body.ProcessBlock, function.Body.EndBlock, GetCleanBlock(function.Body) }
             .FirstOrDefault(block => block?.Traps is { Count: > 0 }) is { } trappedBlock)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2946", "Function and script-block traps require a separate transfer contract.",
                 PowerShellSourceParser.GetSpan(document, trappedBlock.Extent)));
             return null;
         }
-        var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(function, capabilities, requiresNativeInvocation);
         if (nativeFunctionBinding is null) capabilities &= ~PowerShellCompilationCapability.NativeFunctionBinding;
         ClearFunctionRegionEvidence(
             regionCandidates,

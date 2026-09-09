@@ -195,6 +195,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("Write-Output -InputObject ([string[]]$script:State); return 1")]
     public void Analyze_HostedCommandRegionsCannotLaunderModuleStateOrigin(string body)
     {
+        // CLR-owned storage still cannot carry opaque module state across a hosted boundary.
+        // Native invocation storage has its own qualified live-state contract.
+        var capabilities = PowerShellCompilationCapabilities.HybridModule & ~PowerShellCompilationCapability.NativeFunctionBinding;
         using var fixture = ArtifactFixture.Create(
             $"function Get-StateAccess {{ [CmdletBinding()] param() {body} }}",
             ".psm1");
@@ -202,7 +205,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath,
             PowerShellCompilationMode.Analyze,
             targetFramework: "net10.0",
-            capabilities: PowerShellCompilationCapabilities.HybridModule));
+            capabilities: capabilities));
 
         var function = FindFunction(plan, "Get-StateAccess");
         Assert.False(function.IsCompilable);

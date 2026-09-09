@@ -59,13 +59,15 @@ internal static class PowerShellNativeFunctionSourceGenerator
 
     internal static string Registration(PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method)
     {
-        var builder = new StringBuilder("Microsoft.PowerShell.Management\\Set-Item -LiteralPath '");
+        // A function declaration can share its line with another declaration or command.
+        // Its replacement must provide statement separators on both sides, including aliases.
+        var builder = new StringBuilder().AppendLine().Append("Microsoft.PowerShell.Management\\Set-Item -LiteralPath '");
         builder.Append(("Function:\\local:" + method.SourceName).Replace("'", "''"))
             .Append("' -Value ([").Append(typed.NamespaceName).Append('.').Append(FactoryType(typed))
             .Append("]::").Append(FactoryMethod(method)).Append("($ExecutionContext.SessionState.Module, $PSCommandPath))");
         foreach (var alias in method.Aliases)
             builder.AppendLine().Append("Microsoft.PowerShell.Utility\\Set-Alias -Scope Local -Name '")
                 .Append(alias.Replace("'", "''")).Append("' -Value '").Append(method.SourceName.Replace("'", "''")).Append("'");
-        return builder.ToString();
+        return builder.AppendLine().ToString();
     }
 }

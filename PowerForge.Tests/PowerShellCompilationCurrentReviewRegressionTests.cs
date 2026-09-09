@@ -381,7 +381,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
-    public void Build_HybridBinaryModulePreservesConsumedCommandRegionOutputByRoutingCallerToFallback()
+    public void Build_HybridBinaryModuleCompilesConsumedCommandRegionOutputWithNativeStorage()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-RegionHelper { [CmdletBinding()] param(); Get-Date -Date '2000-01-01T00:00:00Z'; return 7 } " +
@@ -396,10 +396,11 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("command-region success output", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.All(result.Manifest.UnitDispositionLedger!.Entries, unit => Assert.False(unit.RetainedHostedSource));
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-RegionConsumer");
+        Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
         Assert.Equal((0, "2", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 

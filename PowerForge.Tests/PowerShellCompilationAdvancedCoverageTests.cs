@@ -266,11 +266,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.CompiledMethods);
         Assert.Equal(new[] { "region", "2" }, RunModuleProof(result.ArtifactPath!, "function global:Get-RegionText { 'region' }; Get-FrontierRegionOuter -Value 1").Split(Environment.NewLine));
-        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains(
-            "Get_FrontierRegionHelper(Value, __writeOutput, __writeVerbose, __writeDebug, __writeWarning, __writeInformation, __writeHost, __writeError, __invokePowerShellRegion, __invokePowerShellCapture)",
-            generated,
-            StringComparison.Ordinal);
+        Assert.All(result.Manifest.UnitDispositionLedger!.Entries, unit => Assert.False(unit.RetainedHostedSource));
     }
 
     [Fact]

@@ -42,7 +42,7 @@ public sealed class PowerShellCompilationCommandIslandTests
                 source,
                 PowerShellCompilationMode.Strict,
                 targetFramework: "net10.0",
-                capabilities: PowerShellCompilationCapability.PowerShellStreams));
+                capabilities: PowerShellCompilationCapabilities.BinaryModule));
             Assert.Equal(2, binaryModulePlan.CompilableUnits);
 
             var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
