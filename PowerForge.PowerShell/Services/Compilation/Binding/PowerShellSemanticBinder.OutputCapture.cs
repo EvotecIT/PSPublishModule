@@ -43,7 +43,7 @@ internal sealed partial class PowerShellSemanticBinder
                 "The captured body changes its destination's type or constraint; the final assignment requires a qualified conversion contract.", span));
             return null;
         }
-        if (body.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion))
+        if (!usesNativeInvocation && body.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2932",
                 "Captured statement output cannot yet redirect hosted command-region records into its collector.", span));

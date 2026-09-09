@@ -20,8 +20,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(records).Append(".Add(").Append(record).AppendLine("); };");
         builder.Append(prefix).AppendLine("try");
         builder.Append(prefix).AppendLine("{");
+        if (capture.UsesNativeInvocation)
+        {
+            builder.Append(prefix).AppendLine("    using (__nativeFunction.RedirectOutput(__writeOutput))");
+            builder.Append(prefix).AppendLine("    {");
+        }
         foreach (var statement in capture.Statements)
-            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitStatement(builder, statement, indent + (capture.UsesNativeInvocation ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap);
+        if (capture.UsesNativeInvocation)
+            builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).Append("    ");
         if (capture.UsesNativeInvocation)
             builder.Append("__nativeFunction.SetVariable(").Append(PowerShellCSharpLiteral.QuoteString(capture.Target.Name)).Append(", ");

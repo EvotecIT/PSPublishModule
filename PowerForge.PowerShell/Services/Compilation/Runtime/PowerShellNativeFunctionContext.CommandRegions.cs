@@ -27,23 +27,8 @@ namespace PowerForge.Generated.Runtime
             string? sourceDocument = null, int startOffset = -1, int endOffset = -1)
         {
             var region = GetCommandRegion(source, file, line, column, true, preservePartialOutput, sourceDocument, startOffset, endOffset);
-            if (partialOutput is null) throw new ArgumentNullException(nameof(partialOutput));
-            var contract = NativeOutputContract.Shared.Value;
-            var previous = _contract.OutputPipe.GetValue(FunctionContext)!;
-            var writer = new SuccessSinkWriter(partialOutput);
-            var pipe = contract.CreatePipe();
-            contract.ExternalWriter.SetValue(pipe, writer, null);
-            PowerShellNativeFunctionHost.Invoke(contract.SetTemporaryVariableLists, previous, new[] { pipe });
-            try
-            {
-                _contract.OutputPipe.SetValue(FunctionContext, pipe);
+            using (RedirectOutput(partialOutput))
                 return region.Invoke(FunctionContext);
-            }
-            finally
-            {
-                _contract.OutputPipe.SetValue(FunctionContext, previous);
-                writer.Close();
-            }
         }
 
         private NativeAstOperation GetCommandRegion(string source, string file, int line, int column,

@@ -17,7 +17,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             ("Empty", "$result=for ($i=0; $i -lt $Limit; $i++) { $discard=$i }; \"captured=$result\""),
             ("Nested", "$result=for ($i=0; $i -lt $Limit; $i++) { $inner=for ($j=0; $j -lt 2; $j++) { \"$j\" }; \"inner=$inner\" }; \"captured=$result\""),
             ("BodyFailure", "$result='before'; $result=for ($i=0; $i -lt $Limit; $i++) { \"$i\"; $bad=1 / $Zero; 'after' }; \"captured=$result\""),
-            ("TypedDestination", "$Seed=for ($i=0; $i -lt $Limit; $i++) { '2' }; \"seed=$Seed\"") };
+            ("TypedDestination", "$Seed=for ($i=0; $i -lt $Limit; $i++) { '2' }; \"seed=$Seed\""),
+            ("Pipeline", "$result=for ($i=0; $i -lt $Limit; $i++) { Write-Output $i }; \"captured=$result\"; Write-Output 'outside'"),
+            ("NestedPipeline", "$result=for ($i=0; $i -lt $Limit; $i++) { $inner=for ($j=0; $j -lt 2; $j++) { Write-Output $j }; Write-Output \"inner=$inner\" }; \"captured=$result\"; Write-Output 'outside'"),
+            ("PipelineFailure", "$result='before'; $result=for ($i=0; $i -lt $Limit; $i++) { Write-Output $i; Write-Error 'body failure'; Write-Output 'after' }; \"captured=$result\"; Write-Output 'outside'"),
+            ("PipelineVariables", "$seen=@(); $result=for ($i=0; $i -lt $Limit; $i++) { Write-Output $i -OutVariable +seen | ForEach-Object { \"value=$_\" }; \"seen=$seen\" }; \"captured=$result;seen=$seen\"; Write-Output 'outside'"),
+            ("PipelineMergedError", "$result=for ($i=0; $i -lt $Limit; $i++) { Write-Output $i; Write-Error 'merged failure' 2>&1; Write-Output 'after' }; \"captured=$result\"; Write-Output 'outside'"),
+            ("PipelineTransfers", "$result=for ($i=0; $i -lt $Limit; $i++) { Write-Output $i; if ($i -eq 0) { continue }; if ($i -eq 1) { break }; Write-Output 'after' }; \"captured=$result\"; Write-Output 'outside'"),
+            ("PipelineTypedDestination", "$Seed=for ($i=0; $i -lt $Limit; $i++) { Write-Output '2' }; \"seed=$Seed\"; Write-Output 'outside'") };
         var source = string.Join(Environment.NewLine, loops.Select(loop =>
             "function Read-NativeCapture" + loop.Item1 +
             " { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Limit=3,[object]$Zero=0); " +
@@ -34,7 +41,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             foreach ($command in (Get-Command -Module MODULE_NAME -Name 'Read-NativeCapture*' | Sort-Object Name).Name) {
                 foreach ($action in 'Continue','SilentlyContinue','Ignore','Stop') {
                     for ($index=0;$index -lt $cases.Count;$index++) {
-                        if ($command.EndsWith('EmptyDo') -and $index -ne 7) { continue }
                         $Error.Clear(); $faults=@(); $records=@(); $emitted=@(); $caught=$null
                         if ($action -eq 'Stop') {
                             try { $records=@(& $command -Limit $cases[$index] -ErrorAction $action -ErrorVariable faults -OutVariable emitted 2>$null) }
