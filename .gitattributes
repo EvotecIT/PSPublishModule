@@ -2,6 +2,8 @@ Module/PSPublishModule.Tests.ps1 text eol=crlf
 Benchmarks/PowerShellCompilation/Corpus/*.json text eol=lf
 Benchmarks/PowerShellCompilation/Corpus/**/*.ps1 text eol=lf
 Benchmarks/PowerShellCompilation/Corpus/**/*.psm1 text eol=lf
+# Preserve the pinned upstream module snapshot, including its original whitespace.
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSSharedGoods/FullModule/** -text -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/SamErde/Format-Timespan.ps1 -text whitespace=cr-at-eol
 Benchmarks/PowerShellCompilation/Corpus/**/*.txt text eol=lf
 Module/PSPublishModule.psd1 -text whitespace=cr-at-eol

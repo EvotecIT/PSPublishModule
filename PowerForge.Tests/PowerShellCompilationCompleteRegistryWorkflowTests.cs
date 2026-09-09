@@ -8,6 +8,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
     public void CompleteWorkflow_PinnedRegistryPreservesModuleStateAndRetainedCalls(string framework, string host)
+        => AssertPinnedRegistryWorkflow(framework, host, fullModule: false);
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void CompleteWorkflow_PinnedRegistryInFullModule(string framework, string host)
+        => AssertPinnedRegistryWorkflow(framework, host, fullModule: true);
+
+    private static void AssertPinnedRegistryWorkflow(string framework, string host, bool fullModule)
     {
         var sources = new[] {
             ("Get-PSRegistry.ps1", "eab1e288ef253144860ed0e4c1e5f46d3e751fd0028ece44c343dbff65cf48de"),
@@ -26,10 +35,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         {
             var path = FindCompleteConversionWorkflow("PSSharedGoods", "Registry", source.Item1);
             Assert.Equal(source.Item2, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant());
-            File.Copy(path, Path.Combine(dependencyRoot, source.Item1));
+            if (!fullModule)
+                File.Copy(path, Path.Combine(dependencyRoot, source.Item1));
         }
+        if (fullModule)
+            CopyPinnedWorkflowModule(fixture, "PSSharedGoods", "87f61869110c6e6950603027fe4c9304d4d7a4386008754e009710cabae37ea6", 285);
         var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+        if (fullModule)
+            Assert.Equal(284, resolved.SourceFiles.Length);
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             resolved.SourcePath, fixture.OutputPath, "Generated.CompleteRegistry", resolved.Kind,
             resolved.Mode, allowUnreviewedDependencyResolution: true)
