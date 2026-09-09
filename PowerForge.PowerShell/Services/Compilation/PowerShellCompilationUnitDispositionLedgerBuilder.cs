@@ -293,7 +293,9 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             causes.Add("The emitted CLR method depends on live parent Hybrid script-module state through a compiled local call.");
         if (method?.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline) causes.Add("The emitted cmdlet uses a hosted advanced-function lifecycle.");
         if (promotedRegions.Count > 0)
-            causes.Add($"The retained function delegates {promotedRegions.Count} terminal typed region(s) to generated CLR helpers while keeping its PowerShell command surface.");
+            causes.Add($"The retained function delegates {promotedRegions.Count} typed region(s) to generated CLR helpers while keeping its PowerShell command surface.");
+        if (promotedRegions.Any(static region => region.RequiresLocalOwnershipGuard))
+            causes.Add("Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place.");
         if (promotedRegions.Any(static region => region.RequiresPowerShellStopping))
             causes.Add("Promoted CLR loop helpers require the retained invocation's native PowerShell stopping callback.");
         return causes.ToArray();

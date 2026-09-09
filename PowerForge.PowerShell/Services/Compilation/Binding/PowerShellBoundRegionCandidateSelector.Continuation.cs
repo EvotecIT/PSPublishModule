@@ -19,7 +19,11 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         out PowerShellBoundRegionCandidate candidate)
     {
         candidate = null!;
-        if (HasNamedLifecycle(syntax.Body) || bindings.Count == 0 || bindings[0].AuthoredStatementIndex != 0)
+        // A detached initializer has no trap continuation or hosted type-identity contract.
+        // Keep those function owners native until their boundary is separately qualified.
+        if (!PowerShellSourceSemanticValidator.SupportsDetachedFunctionMetadata(document) ||
+            syntax.IsFilter || syntax.IsWorkflow || HasNamedLifecycle(syntax.Body) || syntax.Body.EndBlock?.Traps is { Count: > 0 } ||
+            bindings.Count == 0 || bindings[0].AuthoredStatementIndex != 0)
             return false;
         var selected = new List<PowerShellBoundStatement>();
         var locals = new List<PowerShellBoundLocal>();
@@ -27,10 +31,13 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         var nextIndex = 0;
         foreach (var binding in bindings)
         {
+            // The helper ABI already carries native stopping. Its checkpoint is the only
+            // host effect allowed here; the ordinary promotion policy still checks errors.
+            var stopping = binding.Statement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStopping);
             if (binding.AuthoredStatementIndex != nextIndex ||
                 binding.AuthoredStatementEndIndex >= authoredStatements.Count - 1 ||
-                (binding.Statement.Effects & ~PowerShellSemanticEffect.Mutation) != 0 ||
-                binding.Statement.Capabilities != PowerShellRequiredCapability.None)
+                (binding.Statement.Effects & ~(PowerShellSemanticEffect.Mutation | PowerShellLoopInterruptContract.Effects(stopping))) != 0 ||
+                (binding.Statement.Capabilities & ~PowerShellLoopInterruptContract.Capabilities(stopping)) != PowerShellRequiredCapability.None)
                 break;
             var candidateLocals = locals.ToList();
             PowerShellCompiledRegionLocal? newTransfer = null;

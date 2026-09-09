@@ -28,7 +28,8 @@ public sealed class PowerShellCompilationRegionCandidate
         string reason,
         string generatedName,
         PowerShellCompilationRegionGraph? regionGraph,
-        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null)
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null,
+        bool requiresLocalOwnershipGuard = false)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -48,6 +49,7 @@ public sealed class PowerShellCompilationRegionCandidate
         GeneratedName = generatedName ?? string.Empty;
         RegionGraph = regionGraph;
         ContinuationLocals = Array.AsReadOnly((continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
+        RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -86,4 +88,7 @@ public sealed class PowerShellCompilationRegionCandidate
     public PowerShellCompilationRegionGraph? RegionGraph { get; }
     /// <summary>Ordered scalar locals transferred to the continuation, or empty for a terminal candidate.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
+
+    /// <summary>Whether a promoted helper requires fresh invocation-local targets and retains the original statements when that proof fails.</summary>
+    public bool RequiresLocalOwnershipGuard { get; }
 }

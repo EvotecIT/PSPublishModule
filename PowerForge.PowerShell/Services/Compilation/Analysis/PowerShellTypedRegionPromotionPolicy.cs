@@ -20,6 +20,8 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.statement-errors", "The candidate requires a PowerShell statement-error host not represented by the helper ABI.");
         if (candidate.ContinuationLocals.Length > 0 && !HasCompleteContinuationResult(candidate))
             return Reject("region.continuation-result", "The helper does not return the exact ordered scalar local transfer contract.");
+        if (candidate.ContinuationLocals.Length > 0 && !candidate.RequiresLocalOwnershipGuard)
+            return Reject("region.local-ownership", "Scalar initialization requires a live invocation-local ownership check before detaching its assignments.");
         var transfersMultipleLocals = candidate.ContinuationLocals.Length > 1;
         if (!transfersMultipleLocals && lowered.OutputCardinality != PowerShellOutputCardinality.Scalar)
             return Reject("region.return-cardinality", "The candidate does not return exactly one scalar value on every accepted path.");
@@ -66,7 +68,7 @@ internal static class PowerShellTypedRegionPromotionPolicy
             "region.promoted",
             candidate.ContinuationLocals.Length == 0
                 ? "The candidate satisfies the bounded terminal scalar promotion contract."
-                : "The candidate satisfies the bounded prefix scalar continuation contract.");
+                : "The candidate satisfies the bounded prefix scalar continuation contract when its invocation-local targets are fresh; otherwise its original statements execute in place.");
     }
 
     private static PowerShellTypedRegionPromotionDecision Reject(string code, string reason)

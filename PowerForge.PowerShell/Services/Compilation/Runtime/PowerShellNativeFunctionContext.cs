@@ -15,6 +15,7 @@ namespace PowerForge.Generated.Runtime
         private bool _disposed;
         private readonly bool _optimized;
         internal object FunctionContext { get; }
+        internal SessionState SessionState => _session;
 
         /// <summary>Identifies the callback selected by the generated native lifecycle dispatcher.</summary>
         public int LifecycleClause { get; set; }

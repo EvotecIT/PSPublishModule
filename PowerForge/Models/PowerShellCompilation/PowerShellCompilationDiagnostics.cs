@@ -120,6 +120,8 @@ public sealed class PowerShellCompilationIrUnitSnapshot
     public string[] ValueStates { get; set; } = Array.Empty<string>();
     /// <summary>Required compiler capabilities.</summary>
     public string[] Capabilities { get; set; } = Array.Empty<string>();
+    /// <summary>Invocation-time conditions required before a selected region may execute.</summary>
+    public string[] ExecutionConditions { get; set; } = Array.Empty<string>();
     /// <summary>Semantic effects.</summary>
     public string[] Effects { get; set; } = Array.Empty<string>();
     /// <summary>Execution disposition selected before backend rendering.</summary>

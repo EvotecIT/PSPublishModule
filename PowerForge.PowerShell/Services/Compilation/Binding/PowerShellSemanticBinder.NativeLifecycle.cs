@@ -18,12 +18,7 @@ internal sealed partial class PowerShellSemanticBinder
         for (var clause = 0; clause < blocks.Length; clause++)
         {
             if (blocks[clause] is not { } block) continue;
-            if (block.Traps is { Count: > 0 })
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2946", "Native lifecycle traps require a separate transfer contract.",
-                    PowerShellSourceParser.GetSpan(document, block.Extent)));
-                return null;
-            }
+            if (RejectUnrepresentedTraps(document, block.Traps, diagnostics)) return null;
             var statements = new List<PowerShellBoundStatement>();
             foreach (var statement in block.Statements)
             {

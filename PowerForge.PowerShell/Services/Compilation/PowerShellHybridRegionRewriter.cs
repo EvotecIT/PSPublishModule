@@ -31,6 +31,7 @@ internal static class PowerShellHybridRegionRewriter
             fullPath,
             Path.GetDirectoryName(Path.GetFullPath(typed.SourcePaths.FirstOrDefault() ?? typed.SourcePath)));
         var edits = new List<PowerShellHybridSourceEdit>();
+        var hosted = new Dictionary<FunctionDefinitionAst, List<(PowerShellCompiledRegion Region, string Replacement)>>();
         foreach (var region in regions)
         {
             var owner = functions.SingleOrDefault(function =>
@@ -66,15 +67,51 @@ internal static class PowerShellHybridRegionRewriter
                     (local.HasTypeConstraint ? local.TypeConstraintSyntax : string.Empty) + "${" + local.Name + "}")) + " = ";
             var invocation = receiver + "[" + typed.NamespaceName + "." + typed.TypeName + "]::" +
                              region.GeneratedName + "(" + arguments + ")";
+            if (region.ContinuationLocals.Count > 0 && !region.RequiresLocalOwnershipGuard)
+                throw new InvalidOperationException($"Promoted region '{region.RegionId}' is missing its invocation-local ownership condition.");
+            if (region.RequiresLocalOwnershipGuard)
+            {
+                if (region.ContinuationLocals.Count == 0)
+                    throw new InvalidOperationException($"Promoted region '{region.RegionId}' has no local targets for its ownership condition.");
+            }
+            if (regions.Any(candidate => candidate.RequiresLocalOwnershipGuard &&
+                    candidate.SourceName.Equals(region.SourceName, StringComparison.OrdinalIgnoreCase) && candidate.SourceLine == region.SourceLine))
+            {
+                if (!hosted.TryGetValue(owner, out var replacements))
+                    hosted.Add(owner, replacements = new List<(PowerShellCompiledRegion Region, string Replacement)>());
+                replacements.Add((region, invocation));
+                continue;
+            }
             edits.Add(new PowerShellHybridSourceEdit(
                 region.StartOffset,
                 region.EndOffset - region.StartOffset,
                 invocation,
                 region.RegionId));
         }
+        foreach (var pair in hosted)
+        {
+            var owner = pair.Key;
+            var replacements = pair.Value;
+            // A condition does not reset $? after a successful void expression. Keep the
+            // authored declaration's status while native definition owns scope and aliases.
+            var registration = owner.Extent.Text + "\nif ([PowerForge.Generated.Runtime.PowerShellNativeFunctionHost]::InstallDeclaredFunction($ExecutionContext.SessionState.Module, " +
+                Quote(owner.Name) + ", [PowerForge.Generated.Runtime.PowerShellHybridRegionHost]::Create($ExecutionContext.SessionState.Module, " +
+                Quote(source) + ", $PSCommandPath, " + owner.Extent.StartOffset + ", " + owner.Extent.EndOffset +
+                ", [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.StartOffset)) +
+                "), [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.EndOffset)) +
+                "), [string[]]@(" + string.Join(", ", replacements.Select(item => Quote(item.Replacement))) +
+                "), [bool[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.RequiresLocalOwnershipGuard ? "$true" : "$false")) +
+                "), [string[]]@(" + string.Join(", ", replacements.Where(static item => item.Region.RequiresLocalOwnershipGuard)
+                    .SelectMany(static item => item.Region.ContinuationLocals).Select(local => Quote(local.Name))) + ")))) { }\n";
+            edits.Add(new PowerShellHybridSourceEdit(owner.Extent.StartOffset,
+                owner.Extent.EndOffset - owner.Extent.StartOffset, registration, replacements[0].Region.RegionId));
+        }
+        edits.Sort(static (left, right) => left.Start.CompareTo(right.Start));
         EnsureNonOverlapping(edits);
         return edits.ToArray();
     }
+
+    private static string Quote(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     private static bool HasSafeGraph(PowerShellCompilationRegionGraph graph)
         => graph.ScriptBlocks.Count == 0 && graph.Regions.Count == 1 &&

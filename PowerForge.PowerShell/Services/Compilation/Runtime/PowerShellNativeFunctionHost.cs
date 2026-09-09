@@ -11,6 +11,21 @@ namespace PowerForge.Generated.Runtime
     /// <remarks>This host requires PowerShell; it is not a runtime-free Strict implementation.</remarks>
     public static class PowerShellNativeFunctionHost
     {
+        /// <summary>Installs a prepared body after PowerShell has declared the function and its aliases.</summary>
+        /// <remarks>The native declaration owns preferences, scope, and errors. A rejected read-only declaration is left intact.</remarks>
+        public static void InstallDeclaredFunction(PSModuleInfo module, string name, ScriptBlock script)
+        {
+            if (module == null) throw new ArgumentNullException(nameof(module));
+            if (string.IsNullOrEmpty(name)) throw new ArgumentException("A function name is required.", nameof(name));
+            if (script == null) throw new ArgumentNullException(nameof(script));
+            var contract = NativeContract.Shared;
+            var session = contract.NativeSessionState.GetValue(module.SessionState, null)!;
+            var function = (FunctionInfo?)Invoke(contract.GetFunction, session, new object[] { name });
+            if (function == null || (function.Options & (ScopedItemOptions.ReadOnly | ScopedItemOptions.Constant)) != 0)
+                return;
+            Invoke(contract.UpdateFunction, function, new object[] { script, false, function.Options });
+        }
+
         /// <summary>Creates a compiled function owned by the specified module's native session.</summary>
         /// <remarks>Defaults, validation, private command lookup, and body variables share the defining module.</remarks>
         public static ScriptBlock Create(PSModuleInfo module, string parameterDeclaration,
@@ -165,13 +180,13 @@ namespace PowerForge.Generated.Runtime
             return declaration;
         }
 
-        private static ScriptBlockAst ParseSelectedDocument(string source, string sourcePath, int startOffset, int endOffset)
+        internal static ScriptBlockAst ParseSelectedDocument(string source, string sourcePath, int startOffset, int endOffset)
         {
             var document = ParseCore(source, sourcePath, out var errors);
             if (errors.Length == 0) return document;
             if (startOffset < 0 || endOffset <= startOffset || endOffset > source.Length)
                 throw new ArgumentOutOfRangeException(nameof(startOffset));
-            // An older host may reject another command's syntax. Reparse only the literal and
+            // An older host may reject another command's syntax. Reparse only the selected span and
             // its using metadata, retaining every offset and line break. Never compile an AST
             // whose root contains parser errors, or discard errors inside the selected literal.
             var isolated = source.ToCharArray();
@@ -187,12 +202,15 @@ namespace PowerForge.Generated.Runtime
             return Parse(new string(isolated), sourcePath);
         }
 
-        private static ScriptBlockAst Parse(string source, string? sourcePath)
+        internal static ScriptBlockAst Parse(string source, string? sourcePath)
         {
             var ast = ParseCore(source, sourcePath, out var errors);
             if (errors.Length != 0) throw new ArgumentException(errors[0].Message, nameof(source));
             return ast;
         }
+
+        internal static ScriptBlock CreateFunctionScriptBlock(FunctionDefinitionAst function)
+            => (ScriptBlock)NativeContract.Shared.FunctionScriptBlockConstructor.Invoke(new object[] { function, function.IsFilter });
 
         private static ScriptBlockAst ParseCore(string source, string? sourcePath, out ParseError[] errors)
         {
@@ -234,6 +252,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo Compile;
             internal readonly FieldInfo Data;
             internal readonly FieldInfo ExecutionContext, OutputPipe, LocalsTuple, DefiningFile;
+            internal readonly FieldInfo SequencePoints, SequenceIndex;
             internal readonly PropertyInfo SessionState;
             internal readonly PropertyInfo CurrentCommandProcessor, ProcessorRuntime;
             internal readonly PropertyInfo ExecutionStatus;
@@ -242,7 +261,11 @@ namespace PowerForge.Generated.Runtime
             internal readonly MethodInfo ParseInputWithFile;
             internal readonly MethodInfo TryGetLocalVariable;
             internal readonly ConstructorInfo InterpolationContext;
+            internal readonly ConstructorInfo FunctionScriptBlockConstructor;
+            internal readonly MethodInfo GetFunction, UpdateFunction;
+            internal readonly PropertyInfo NativeSessionState;
             private readonly Type _functionContext;
+            internal Type FunctionContextType => _functionContext;
 
             private NativeContract()
             {
@@ -253,6 +276,16 @@ namespace PowerForge.Generated.Runtime
                     ?? throw new NotSupportedException("PowerShell's compiled script contract is unavailable.");
                 Data = typeof(ScriptBlock).GetField("_scriptBlockData", Flags)
                     ?? throw new NotSupportedException("PowerShell's compiled script data is unavailable.");
+                FunctionScriptBlockConstructor = typeof(ScriptBlock).GetConstructor(Flags, null,
+                    new[] { typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.IParameterMetadataProvider", true)!, typeof(bool) }, null)
+                    ?? throw new NotSupportedException("PowerShell's authored function metadata owner is unavailable.");
+                NativeSessionState = typeof(SessionState).GetProperty("Internal", Flags)
+                    ?? throw new NotSupportedException("PowerShell's declaration session is unavailable.");
+                GetFunction = NativeSessionState.PropertyType.GetMethod("GetFunction", Flags, null, new[] { typeof(string) }, null)
+                    ?? throw new NotSupportedException("PowerShell's declared function lookup is unavailable.");
+                UpdateFunction = typeof(FunctionInfo).GetMethod("Update", Flags, null,
+                    new[] { typeof(ScriptBlock), typeof(bool), typeof(ScopedItemOptions) }, null)
+                    ?? throw new NotSupportedException("PowerShell's prepared function installation is unavailable.");
                 _functionContext = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.FunctionContext", true)!;
                 ExecutionContext = _functionContext.GetField("_executionContext", Flags)
                     ?? throw new NotSupportedException("PowerShell's function execution context is unavailable.");
@@ -262,6 +295,10 @@ namespace PowerForge.Generated.Runtime
                     ?? throw new NotSupportedException("PowerShell's function local storage is unavailable.");
                 DefiningFile = _functionContext.GetField("_file", Flags)
                     ?? throw new NotSupportedException("PowerShell's defining source file is unavailable.");
+                SequencePoints = _functionContext.GetField("_sequencePoints", Flags)
+                    ?? throw new NotSupportedException("PowerShell's function sequence points are unavailable.");
+                SequenceIndex = _functionContext.GetField("_currentSequencePointIndex", Flags)
+                    ?? throw new NotSupportedException("PowerShell's function sequence index is unavailable.");
                 TryGetLocalVariable = LocalsTuple.FieldType.GetMethod("TryGetLocalVariable", Flags, null,
                     new[] { typeof(string), typeof(bool), typeof(PSVariable).MakeByRefType() }, null)
                     ?? throw new NotSupportedException("PowerShell's native local-variable operation is unavailable.");

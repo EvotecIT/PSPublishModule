@@ -6,7 +6,19 @@ internal static class PowerShellCommandHostRuntimeSource
     internal static IReadOnlyDictionary<string, string> Render(PowerShellTypedCompilationResult typed)
     {
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
+        var requiresRegionHost = typed.PromotedRegions.Any(static region => region.RequiresLocalOwnershipGuard);
+        if (requiresRegionHost)
+        {
+            foreach (var name in new[] { "PowerShellRegionLocalOwnership", "PowerShellHybridRegionHost" })
+            {
+                using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
+                    "PowerForge.PowerShell.Compilation." + name + ".cs")
+                    ?? throw new InvalidOperationException("Missing retained region runtime source: " + name);
+                using var reader = new StreamReader(stream);
+                sources.Add(name + ".g.cs", "#nullable enable\n" + reader.ReadToEnd());
+            }
+        }
+        if (requiresRegionHost || typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
         {
             foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionContext", "PowerShellNativeFunctionContext.Operations",
                 "PowerShellNativeFunctionContext.Output", "PowerShellNativeFunctionContext.Members", "PowerShellNativeFunctionContext.Indexing",
@@ -23,7 +35,7 @@ internal static class PowerShellCommandHostRuntimeSource
                 sources.Add(name + ".g.cs", "#nullable enable\n" + reader.ReadToEnd());
             }
         }
-        var requiresModuleState = typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState) ||
+        var requiresModuleState = requiresRegionHost || typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState) ||
             typed.PromotedRegions.Any(static region => region.RequiresPowerShellStopping) ||
             typed.Methods.Any(static method => method.NativeFunctionBinding is not null && method.RequiresPowerShellStatementErrors);
         if (requiresModuleState)

@@ -135,6 +135,8 @@ internal static class PowerShellCommandIslandPolicy
         commandResolver ??= new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
         if (!ReferenceEquals(statement.Parent, body.EndBlock))
             return false;
+        if (statement.Find(static node => node is TrapStatementAst, searchNestedScriptBlocks: true) is not null)
+            return false;
         var commands = statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>().ToArray();
         if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
             commands.Any(IsVariableSessionStateCommand) ||

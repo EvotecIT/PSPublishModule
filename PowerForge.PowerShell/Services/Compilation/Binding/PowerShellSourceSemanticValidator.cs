@@ -5,6 +5,11 @@ namespace PowerForge;
 /// <summary>Owns file-wide source contracts that must be preserved before bound-function analysis.</summary>
 internal static class PowerShellSourceSemanticValidator
 {
+    /// <summary>Whether a function's metadata can be detached without recreating hosted type identities or imports.</summary>
+    internal static bool SupportsDetachedFunctionMetadata(ParsedSourceDocument document)
+        => !document.SyntaxRoot.FindAll(static node => node is TypeDefinitionAst ||
+                node is UsingStatementAst { UsingStatementKind: not UsingStatementKind.Namespace }, searchNestedScriptBlocks: false).Any();
+
     internal static PowerShellSemanticDiagnostic[] Validate(ParsedSourceDocument document, string semanticProfileId)
     {
         var diagnostics = document.SyntaxRoot

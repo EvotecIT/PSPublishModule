@@ -480,6 +480,7 @@ internal sealed partial class PowerShellSemanticBinder
         bool allowNonTerminalSuccessOutput = false,
         Type? nonTerminalSuccessOutputType = null)
     {
+        if (RejectUnrepresentedTraps(document, syntax.Traps, diagnostics)) return null;
         var statements = new List<PowerShellBoundStatement>();
         for (var index = 0; index < syntax.Statements.Count; index++)
         {

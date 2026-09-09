@@ -77,7 +77,7 @@ internal static class PowerShellHybridModuleComposer
             edits.Add(new PowerShellHybridSourceEdit(
                 function.Extent.StartOffset,
                 function.Extent.EndOffset - function.Extent.StartOffset,
-                GetNativeFunctionRegistration(typed, sourcePath, function),
+                GetNativeFunctionRegistration(typed, sourcePath, function, tokens),
                 "function:" + function.Name));
         }
         if (exportContract is not null)
@@ -292,7 +292,7 @@ internal static class PowerShellHybridModuleComposer
             edits.Add(new PowerShellHybridSourceEdit(
                 function.Extent.StartOffset,
                 function.Extent.EndOffset - function.Extent.StartOffset,
-                GetNativeFunctionRegistration(typed, sourcePath, function),
+                GetNativeFunctionRegistration(typed, sourcePath, function, tokens),
                 "function:" + function.Name));
         }
         edits.AddRange(PowerShellHybridRegionRewriter.CreateEdits(sourcePath, ast, typed, wrappedCompiledMethods));
@@ -378,13 +378,21 @@ internal static class PowerShellHybridModuleComposer
     internal static string GetCompiledMethodKey(string sourcePath, string name, int line)
         => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + line;
 
-    private static string GetNativeFunctionRegistration(PowerShellTypedCompilationResult typed, string sourcePath, FunctionDefinitionAst function)
+    private static string GetNativeFunctionRegistration(PowerShellTypedCompilationResult typed, string sourcePath, FunctionDefinitionAst function, Token[] tokens)
     {
         var method = typed.Methods.SingleOrDefault(method => method.NativeFunctionBinding is not null &&
             method.SourceName.Equals(function.Name, StringComparison.OrdinalIgnoreCase) &&
             method.SourceLine == function.Body.Extent.StartLineNumber &&
             PowerShellCompilationPathSafety.PathEquals(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath, sourcePath));
-        return method is null ? string.Empty : PowerShellNativeFunctionSourceGenerator.Registration(typed, method);
+        if (method is null) return string.Empty;
+        // Preserve the authored keyword and escaped name token. Inline parameters are
+        // emitted by the canonical native parameter declaration, not copied twice.
+        var name = tokens.Where(token => token.Extent.StartOffset >= function.Extent.StartOffset &&
+                token.Extent.EndOffset <= function.Body.Extent.StartOffset &&
+                token.Kind != TokenKind.Comment && token.Kind != TokenKind.NewLine)
+            .Skip(1).First();
+        var declaration = function.Extent.Text[..(name.Extent.EndOffset - function.Extent.StartOffset)];
+        return PowerShellNativeFunctionSourceGenerator.Registration(typed, method, declaration);
     }
 
     private static string JoinPowerShellNames(IEnumerable<string> names)

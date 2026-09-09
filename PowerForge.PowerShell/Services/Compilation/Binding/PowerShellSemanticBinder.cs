@@ -48,21 +48,15 @@ internal sealed partial class PowerShellSemanticBinder
         bool requiresNativeInvocation = false)
     {
         var functionDiagnosticStart = diagnostics.Count;
+        ClearFunctionRegionEvidence(regionCandidates, regionOpportunities, document.Path, functionSymbol.Name);
         var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(function, capabilities, requiresNativeInvocation);
-        if (nativeFunctionBinding is not null &&
-            new[] { function.Body.BeginBlock, function.Body.ProcessBlock, function.Body.EndBlock, GetCleanBlock(function.Body) }
+        if (new[] { function.Body.BeginBlock, function.Body.ProcessBlock, function.Body.EndBlock, GetCleanBlock(function.Body) }
             .FirstOrDefault(block => block?.Traps is { Count: > 0 }) is { } trappedBlock)
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2946", "Function and script-block traps require a separate transfer contract.",
-                PowerShellSourceParser.GetSpan(document, trappedBlock.Extent)));
-            return null;
+            RejectUnrepresentedTraps(document, trappedBlock.Traps, diagnostics);
+            if (nativeFunctionBinding is not null) return null;
         }
         if (nativeFunctionBinding is null) capabilities &= ~PowerShellCompilationCapability.NativeFunctionBinding;
-        ClearFunctionRegionEvidence(
-            regionCandidates,
-            regionOpportunities,
-            document.Path,
-            functionSymbol.Name);
         // Command redirections already have target-specific binding diagnostics. Background
         // pipelines and expression redirections must be stopped before ordinary unwrapping.
         if (nativeFunctionBinding is null && PowerShellNativeFunctionBindingPolicy.FindNativePipelineOperator(function, includeCommandRedirections: false) is { } nativeOperator)

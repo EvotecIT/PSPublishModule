@@ -232,6 +232,7 @@ internal static class PowerShellLocalCallSemanticBinder
     private static Type? InferCollectedArrayType(ArrayExpressionAst array, IReadOnlyDictionary<string, Type> knownTypes,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature>? functions)
     {
+        if (array.SubExpression.Traps is { Count: > 0 }) return null;
         var recordTypes = new List<Type>();
         foreach (var statement in array.SubExpression.Statements)
         {

@@ -172,11 +172,12 @@ internal static class PowerShellArraySemanticBinder
         {
             switch (syntax)
             {
-                case StatementBlockAst { Statements.Count: 1 } block: syntax = block.Statements[0]; continue;
+                case StatementBlockAst { Statements.Count: 1 } block when block.Traps is not { Count: > 0 }:
+                    syntax = block.Statements[0]; continue;
                 case PipelineAst { PipelineElements.Count: 1 } pipeline: syntax = pipeline.PipelineElements[0]; continue;
                 case CommandExpressionAst command: syntax = command.Expression; continue;
                 case ParenExpressionAst parentheses: syntax = parentheses.Pipeline; continue;
-                case ArrayExpressionAst { SubExpression.Statements.Count: 1 } array:
+                case ArrayExpressionAst { SubExpression.Statements.Count: 1 } array when array.SubExpression.Traps is not { Count: > 0 }:
                     collected = true; syntax = array.SubExpression.Statements[0]; continue;
                 case VariableExpressionAst variable when collected:
                     var type = findType(variable.VariablePath.UserPath);

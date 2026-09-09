@@ -130,7 +130,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             syntax.Body.Extent.StartLineNumber,
             helper,
             helperParameters.Select(static parameter => parameter.Contract).ToArray(),
-            continuationLocals);
+            continuationLocals,
+            requiresLocalOwnershipGuard: continuationLocals is { Length: > 0 });
         return true;
     }
 
@@ -234,7 +235,8 @@ internal sealed class PowerShellBoundRegionCandidate
         int sourceLine,
         PowerShellBoundFunction regionFunction,
         PowerShellCompilationParameter[] inputParameters,
-        PowerShellCompiledRegionLocal[]? continuationLocals = null)
+        PowerShellCompiledRegionLocal[]? continuationLocals = null,
+        bool requiresLocalOwnershipGuard = false)
     {
         RegionId = regionId;
         SourceSha256 = sourceSha256;
@@ -245,6 +247,7 @@ internal sealed class PowerShellBoundRegionCandidate
         RegionFunction = regionFunction;
         InputParameters = inputParameters ?? Array.Empty<PowerShellCompilationParameter>();
         ContinuationLocals = continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>();
+        RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
     }
 
     internal string RegionId { get; }
@@ -256,4 +259,5 @@ internal sealed class PowerShellBoundRegionCandidate
     internal PowerShellBoundFunction RegionFunction { get; }
     internal PowerShellImmutableArray<PowerShellCompilationParameter> InputParameters { get; }
     internal PowerShellImmutableArray<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
+    internal bool RequiresLocalOwnershipGuard { get; }
 }
