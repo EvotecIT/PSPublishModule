@@ -16,10 +16,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(region.Span.StartOffset).Append(", ").Append(region.Span.EndOffset).AppendLine(");");
             return;
         }
-        builder.Append(prefix).Append("__invokePowerShellRegion(")
+        builder.Append(prefix).Append("__invokePowerShellRegion(__statementErrors, ")
             .Append(PowerShellCSharpLiteral.QuoteString(region.HostedFallbackSource))
-            .Append(", ").Append(EmitCommandRegionArguments(region.Arguments)).AppendLine(");");
+            .Append(", ").Append(EmitCommandRegionArguments(region.Arguments))
+            .Append(", ").Append(EmitRegionSource(region.SourceSelection)).AppendLine(");");
     }
+
+    private static string EmitRegionSource(PowerShellCommandRegionSourceSelection? selection)
+        => selection is null ? "null" : "new global::PowerForge.Generated.Runtime.PowerShellHostedRegionSource(" +
+            PowerShellCSharpLiteral.QuoteString(selection.Path) + ", " + PowerShellCSharpLiteral.QuoteString(selection.Document) +
+            ", new int[] { " + string.Join(", ", selection.Statements.SelectMany(span => new[] { span.StartOffset, span.EndOffset })) + " })";
 
     private string EmitNativeCommandRecords(PowerShellLoweredNativeCommandExpression command, string sink)
         => $"__nativeFunction.InvokeCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
@@ -56,8 +62,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
         script.Append(')');
 
-        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(" +
+        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(__statementErrors, " +
                PowerShellCSharpLiteral.QuoteString(script.ToString()) + ", new object?[] { " +
-               string.Join(", ", values.Select(argument => EmitExpression(argument.Value!))) + " }))";
+               string.Join(", ", values.Select(argument => EmitExpression(argument.Value!))) + " }, null))";
     }
 }

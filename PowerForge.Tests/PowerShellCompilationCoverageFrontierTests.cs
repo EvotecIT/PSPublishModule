@@ -313,25 +313,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
         Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
-        Assert.Equal(
-            new[] { "two", "True", "True" },
-            RunModuleProof(
-                result.ArtifactPath!,
-                "$headers = @{ 'X-Test' = 'two' }; " +
-                "(Get-FrontierTail -Headers $headers).Value; " +
-                "$hostType = [AppDomain]::CurrentDomain.GetAssemblies().GetTypes() | " +
-                "Where-Object Name -Like '*PowerShellRegionHost' | Select-Object -First 1; " +
-                "$runspaceId = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId; " +
-                "$getDispatcher = $hostType.GetMethod('GetDispatcher'); " +
-                "$null -ne $getDispatcher.Invoke($null, @($runspaceId)); " +
-                "Remove-Module -Name 'PowerForge.CommandTail'; " +
-                "$null -eq $getDispatcher.Invoke($null, @($runspaceId))")
-            .Split(Environment.NewLine));
-        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains("$Output = Invoke-FrontierFallback", generated, StringComparison.Ordinal);
-        Assert.Contains("new object?[] { Headers }", generated, StringComparison.Ordinal);
+        Assert.Equal("two", RunModuleProof(result.ArtifactPath!,
+            "$headers = @{ 'X-Test' = 'two' }; (Get-FrontierTail -Headers $headers).Value"));
     }
 
     [Fact]

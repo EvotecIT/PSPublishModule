@@ -123,26 +123,18 @@ internal static class PowerShellHybridModuleComposer
                 .Append(PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed))
                 .Append("]::SetModuleSessionState($_, $ExecutionContext.SessionState) }");
         import.AppendLine();
-        var requiresDispatcher = typed.Methods.Any(static method => method.NativeFunctionBinding is null && method.RequiresPowerShellCommandRegions);
         var requiresModuleStateRead = readModuleStateVariables.Length > 0;
         var requiresModuleStateWrite = writtenModuleStateVariables.Length > 0;
         var requiresModuleState = requiresModuleStateRead || requiresModuleStateWrite;
-        if (requiresDispatcher || requiresModuleState)
+        if (requiresModuleState)
         {
             import.Append('$').Append(runtimeVariables.RunspaceId).AppendLine(" = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId");
             AppendRuntimeRegionGuardStart(
                 import,
                 typed,
                 runtimeVariables,
-                requiresDispatcher,
                 requiresModuleStateRead,
                 requiresModuleStateWrite);
-        }
-        if (requiresDispatcher)
-        {
-            var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
-            import.Append(hostType).Append("::SetDispatcher($").Append(runtimeVariables.RunspaceId)
-                .AppendLine(", { param($script, [object[]] $arguments) & ([scriptblock]::Create($script)) @arguments })");
         }
         if (requiresModuleStateRead)
         {
@@ -185,7 +177,6 @@ internal static class PowerShellHybridModuleComposer
             builder,
             typed,
             runtimeVariables,
-            requiresDispatcher,
             requiresModuleStateRead,
             requiresModuleStateWrite);
         return builder.ToString();
@@ -195,7 +186,6 @@ internal static class PowerShellHybridModuleComposer
         StringBuilder builder,
         PowerShellTypedCompilationResult typed,
         RuntimeRegionVariableNames variables,
-        bool requiresDispatcher,
         bool requiresModuleStateRead,
         bool requiresModuleStateWrite)
     {
@@ -204,7 +194,7 @@ internal static class PowerShellHybridModuleComposer
         builder.Append('$').Append(variables.PreviousOnRemove).Append(" = $").Append(variables.Module).AppendLine(".OnRemove");
         builder.Append('$').Append(variables.InitializationFailed).AppendLine(" = $false");
         builder.Append('$').Append(variables.Cleanup).AppendLine(" = {");
-        AppendRuntimeRegionClear(builder, hostType, variables, requiresDispatcher, requiresModuleStateRead, requiresModuleStateWrite, "    ");
+        AppendRuntimeRegionClear(builder, hostType, variables, requiresModuleStateRead, requiresModuleStateWrite, "    ");
         builder.AppendLine("}.GetNewClosure()");
         builder.Append('$').Append(variables.InstalledOnRemove).AppendLine(" = {");
         builder.AppendLine("    try {");
@@ -221,17 +211,16 @@ internal static class PowerShellHybridModuleComposer
         StringBuilder builder,
         PowerShellTypedCompilationResult typed,
         RuntimeRegionVariableNames variables,
-        bool requiresDispatcher,
         bool requiresModuleStateRead,
         bool requiresModuleStateWrite)
     {
         var requiresModuleState = requiresModuleStateRead || requiresModuleStateWrite;
-        if (!requiresDispatcher && !requiresModuleState)
+        if (!requiresModuleState)
             return;
         var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
         builder.AppendLine("} catch {");
         builder.Append("    $").Append(variables.InitializationFailed).AppendLine(" = $true");
-        AppendRuntimeRegionClear(builder, hostType, variables, requiresDispatcher, requiresModuleStateRead, requiresModuleStateWrite, "    ");
+        AppendRuntimeRegionClear(builder, hostType, variables, requiresModuleStateRead, requiresModuleStateWrite, "    ");
         builder.Append("    $").Append(variables.Module).Append(".OnRemove = $").Append(variables.PreviousOnRemove).AppendLine();
         builder.AppendLine("    throw");
         builder.AppendLine("} finally {");
@@ -261,13 +250,10 @@ internal static class PowerShellHybridModuleComposer
         StringBuilder builder,
         string hostType,
         RuntimeRegionVariableNames variables,
-        bool requiresDispatcher,
         bool requiresModuleStateRead,
         bool requiresModuleStateWrite,
         string indentation)
     {
-        if (requiresDispatcher)
-            builder.Append(indentation).Append(hostType).Append("::ClearDispatcher($").Append(variables.RunspaceId).AppendLine(")");
         if (requiresModuleStateRead)
             builder.Append(indentation).Append(hostType).Append("::ClearModuleVariableReaders($").Append(variables.RunspaceId).AppendLine(")");
         if (requiresModuleStateWrite)

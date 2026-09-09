@@ -37,6 +37,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var call = $"{PowerShellCSharpSymbolRenderer.Identifier(invocation.Target.Name)}({string.Join(", ", callArguments)})";
         if (invocation.CapturesSuccessOutput)
         {
+            if (invocation.CapturesClrReturn)
+                call = invocation.StatementErrorContextTemporary + ".WriteOutput(" + call + ", " +
+                    invocation.CapturedOutputTemporary + ", " + EmitSourceExtentArguments(invocation.Span) + ")";
             call = "__statementErrors.CaptureFunction(" + PowerShellCSharpLiteral.QuoteString(invocation.Target.Name) + ", " +
                 EmitSourceExtentArguments(invocation.Span) + ", (" + invocation.StatementErrorContextTemporary + ", " +
                 invocation.CapturedOutputTemporary + ") => { " + call + "; })";

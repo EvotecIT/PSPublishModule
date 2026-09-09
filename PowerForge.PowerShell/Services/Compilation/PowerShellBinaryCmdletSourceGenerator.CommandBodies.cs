@@ -77,50 +77,18 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         }
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
         {
-            builder.AppendLine("    private void InvokePowerShellRegion(string script, object?[] arguments)");
+            builder.AppendLine("    private void InvokePowerShellRegion(global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext context, string script, object?[] arguments, global::PowerForge.Generated.Runtime.PowerShellHostedRegionSource? source)");
             builder.AppendLine("    {");
-            builder.AppendLine("        var runspaceId = global::System.Management.Automation.Runspaces.Runspace.DefaultRunspace?.InstanceId ?? global::System.Guid.Empty;");
-            builder.AppendLine($"        var dispatcher = {GetRuntimeRegionHostTypeName(typed)}.GetDispatcher(runspaceId);");
-            builder.AppendLine("        var values = dispatcher is null");
-            builder.AppendLine("            ? InvokeCommand.InvokeScript(SessionState, ScriptBlock.Create(script), arguments)");
-            builder.AppendLine("            : dispatcher.Invoke(script, arguments);");
-            builder.AppendLine("        foreach (var value in values)");
-            builder.AppendLine("            WriteObject(value, enumerateCollection: false);");
+            builder.AppendLine("        var block = source is null ? ScriptBlock.Create(script) : source.CreateScriptBlock(script);");
+            builder.AppendLine("        global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.BindModule(this, block);");
+            builder.AppendLine("        context.InvokeCommandRegion(block, arguments);");
             builder.AppendLine("    }");
             builder.AppendLine();
-            builder.AppendLine("    private object? CapturePowerShellRegion(string script, object?[] arguments)");
+            builder.AppendLine("    private object? CapturePowerShellRegion(global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext context, string script, object?[] arguments, global::PowerForge.Generated.Runtime.PowerShellHostedRegionSource? source)");
             builder.AppendLine("    {");
-            builder.AppendLine("        var runspaceId = global::System.Management.Automation.Runspaces.Runspace.DefaultRunspace?.InstanceId ?? global::System.Guid.Empty;");
-            builder.AppendLine($"        var dispatcher = {GetRuntimeRegionHostTypeName(typed)}.GetDispatcher(runspaceId);");
-            builder.AppendLine("        var values = dispatcher is null");
-            builder.AppendLine("            ? InvokeCommand.InvokeScript(SessionState, ScriptBlock.Create(script), arguments)");
-            builder.AppendLine("            : dispatcher.Invoke(script, arguments);");
-            builder.AppendLine("        if (values.Count == 0) return null;");
-            builder.AppendLine("        if (values.Count == 1) return NormalizeCapturedPowerShellValue(values[0]);");
-            builder.AppendLine("        var captured = new object?[values.Count];");
-            builder.AppendLine("        for (var index = 0; index < values.Count; index++)");
-            builder.AppendLine("            captured[index] = NormalizeCapturedPowerShellValue(values[index]);");
-            builder.AppendLine("        return captured;");
-            builder.AppendLine("    }");
-            builder.AppendLine();
-            builder.AppendLine("    private static object? NormalizeCapturedPowerShellValue(global::System.Management.Automation.PSObject? value)");
-            builder.AppendLine("    {");
-            builder.AppendLine("        if (value is null) return null;");
-            builder.AppendLine("        var baseObject = value.BaseObject;");
-            builder.AppendLine("        if (baseObject is null) return value;");
-            builder.AppendLine("        if (baseObject is global::System.Management.Automation.PSCustomObject) return value;");
-            builder.AppendLine("        var baseTypeName = baseObject.GetType().FullName;");
-            builder.AppendLine("        if (value.TypeNames.Count > 0 && !global::System.String.Equals(value.TypeNames[0], baseTypeName, global::System.StringComparison.Ordinal)) return value;");
-            builder.AppendLine("        foreach (var member in value.Members)");
-            builder.AppendLine("        {");
-            builder.AppendLine("            if (!member.IsInstance) continue;");
-            builder.AppendLine("            if (member.MemberType != global::System.Management.Automation.PSMemberTypes.Property &&");
-            builder.AppendLine("                member.MemberType != global::System.Management.Automation.PSMemberTypes.Method &&");
-            builder.AppendLine("                member.MemberType != global::System.Management.Automation.PSMemberTypes.ParameterizedProperty &&");
-            builder.AppendLine("                member.MemberType != global::System.Management.Automation.PSMemberTypes.Event)");
-            builder.AppendLine("                return value;");
-            builder.AppendLine("        }");
-            builder.AppendLine("        return baseObject;");
+            builder.AppendLine("        var block = source is null ? ScriptBlock.Create(script) : source.CreateScriptBlock(script);");
+            builder.AppendLine("        global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext.BindModule(this, block);");
+            builder.AppendLine("        return context.CaptureCommandRegion(block, arguments);");
             builder.AppendLine("    }");
             builder.AppendLine();
         }

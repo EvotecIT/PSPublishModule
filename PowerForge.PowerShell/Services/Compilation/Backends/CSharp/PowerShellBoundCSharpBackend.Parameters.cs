@@ -25,8 +25,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             parameters.Add("global::System.Threading.CancellationToken __providerCancellationToken");
         if (function.RequiresPowerShellCommandRegions && function.NativeFunctionBinding is null)
         {
-            parameters.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
-            parameters.Add("global::System.Func<string, object?[], object?> __invokePowerShellCapture");
+            parameters.Add("global::System.Action<global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext, string, object?[], global::PowerForge.Generated.Runtime.PowerShellHostedRegionSource?> __invokePowerShellRegion");
+            parameters.Add("global::System.Func<global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext, string, object?[], global::PowerForge.Generated.Runtime.PowerShellHostedRegionSource?, object?> __invokePowerShellCapture");
         }
         if (function.RequiresPowerShellRuntimeState)
         {

@@ -448,14 +448,19 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellCommandDiscoveryErrorAction.SilentlyContinue => "SilentlyContinue",
             _ => throw new InvalidOperationException($"Unsupported command-discovery error action '{discovery.ErrorAction}'.")
         };
-        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(" +
+        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(__statementErrors, " +
                PowerShellCSharpLiteral.QuoteString(script) + ", new object?[] { " +
-               EmitExpression(discovery.Name) + ", " + PowerShellCSharpLiteral.QuoteString(errorAction) + " }))";
+               EmitExpression(discovery.Name) + ", " + PowerShellCSharpLiteral.QuoteString(errorAction) + " }, null))";
     }
 
     private string EmitTypeTest(PowerShellLoweredTypeTestExpression expression)
     {
         var operand = EmitExpression(expression.Operand);
+        if (expression.UsesPowerShellSemantics)
+        {
+            var nativeTest = $"global::PowerForge.Generated.Runtime.PowerShellNativeLanguageOperations.IsInstance({operand}, typeof({PowerShellCSharpSymbolRenderer.TypeName(expression.TargetType)}))";
+            return expression.Negate ? $"!{nativeTest}" : nativeTest;
+        }
         if (Nullable.GetUnderlyingType(expression.TargetType) is not null)
             return $"new global::System.Func<bool>(() => {{ _ = (object?)({operand}); return {(expression.Negate ? "true" : "false")}; }})()";
         var test = $"((object?)({operand}) is {PowerShellCSharpSymbolRenderer.TypeName(expression.TargetType)})";

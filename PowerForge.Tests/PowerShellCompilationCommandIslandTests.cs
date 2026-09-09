@@ -132,7 +132,7 @@ public sealed class PowerShellCompilationCommandIslandTests
 
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
             var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-            Assert.Equal(1, generated.Split(new[] { "__invokePowerShellRegion(\"" }, StringSplitOptions.None).Length - 1);
+            Assert.Equal(1, generated.Split(new[] { "__invokePowerShellRegion(__statementErrors, \"" }, StringSplitOptions.None).Length - 1);
             var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
             var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module '{escapedPath}' -Force; Get-CoarseIsland -Name Ada -Upper $true");
             Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);

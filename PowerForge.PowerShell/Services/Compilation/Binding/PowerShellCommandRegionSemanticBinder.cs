@@ -74,7 +74,8 @@ internal static class PowerShellCommandRegionSemanticBinder
             source,
             arguments,
             BindStages(document, statements, commandResolver, localFunctionNames, capabilities),
-            statements.Count);
+            statements.Count, sourceSelection: new PowerShellCommandRegionSourceSelection(document.Path, document.Text,
+                statements.Select(statement => PowerShellSourceParser.GetSpan(document, statement.Extent))));
     }
 
     internal static PowerShellBoundCommandCaptureStatement BindCapture(
@@ -97,7 +98,9 @@ internal static class PowerShellCommandRegionSemanticBinder
             ((ConvertExpressionAst)assignment.Left).StaticType,
             source,
             arguments,
-            BindStages(document, referenced, commandResolver, localFunctionNames, capabilities));
+            BindStages(document, referenced, commandResolver, localFunctionNames, capabilities),
+            new PowerShellCommandRegionSourceSelection(document.Path, document.Text,
+                new[] { PowerShellSourceParser.GetSpan(document, assignment.Right.Extent) }));
     }
 
     private static PowerShellBoundCommandRegionArgument[] BindArguments<TAst>(

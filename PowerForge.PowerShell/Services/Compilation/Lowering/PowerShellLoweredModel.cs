@@ -84,7 +84,8 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         string statementErrorTemporary = "",
         bool requiresPowerShellStopping = false,
         bool capturesSuccessOutput = false,
-        string capturedOutputTemporary = "")
+        string capturedOutputTemporary = "",
+        bool capturesClrReturn = false)
         : base(span, clrType)
     {
         Target = target;
@@ -105,6 +106,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         RequiresPowerShellStopping = requiresPowerShellStopping;
         CapturesSuccessOutput = capturesSuccessOutput;
         CapturedOutputTemporary = capturedOutputTemporary;
+        CapturesClrReturn = capturesClrReturn;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -126,6 +128,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal bool RequiresPowerShellStopping { get; }
     internal bool CapturesSuccessOutput { get; }
     internal string CapturedOutputTemporary { get; }
+    internal bool CapturesClrReturn { get; }
 }
 
 internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement

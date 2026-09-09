@@ -60,7 +60,7 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
         SourceSpan span,
         string source,
         PowerShellLoweredCommandRegionArgument[] arguments,
-        PowerShellLoweredCommandStage[]? stages = null, string? nativeSourcePath = null, string? nativeSourceDocument = null)
+        PowerShellLoweredCommandStage[]? stages = null, string? nativeSourcePath = null, string? nativeSourceDocument = null, PowerShellCommandRegionSourceSelection? sourceSelection = null)
         : base(span)
     {
         HostedFallbackSource = source;
@@ -68,6 +68,7 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
         Stages = stages ?? Array.Empty<PowerShellLoweredCommandStage>();
         NativeSourcePath = nativeSourcePath;
         NativeSourceDocument = nativeSourceDocument;
+        SourceSelection = sourceSelection;
     }
 
     internal string HostedFallbackSource { get; }
@@ -75,6 +76,7 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
     internal PowerShellImmutableArray<PowerShellLoweredCommandStage> Stages { get; }
     internal string? NativeSourcePath { get; }
     internal string? NativeSourceDocument { get; }
+    internal PowerShellCommandRegionSourceSelection? SourceSelection { get; }
 }
 
 internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLoweredStatement
@@ -86,13 +88,14 @@ internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLower
         bool declare,
         string source,
         PowerShellLoweredCommandRegionArgument[] arguments,
-        PowerShellLoweredCommandStage[]? stages = null)
+        PowerShellLoweredCommandStage[]? stages = null, PowerShellCommandRegionSourceSelection? sourceSelection = null)
         : base(span)
     {
         Target = target;
         TargetType = targetType;
         Declare = declare;
         HostedFallbackSource = source;
+        SourceSelection = sourceSelection;
         Arguments = arguments;
         Stages = stages ?? Array.Empty<PowerShellLoweredCommandStage>();
     }
@@ -101,6 +104,7 @@ internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLower
     internal Type TargetType { get; }
     internal bool Declare { get; }
     internal string HostedFallbackSource { get; }
+    internal PowerShellCommandRegionSourceSelection? SourceSelection { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCommandStage> Stages { get; }
 }

@@ -168,7 +168,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine();
         if (cmdlets.SelectMany(static cmdlet => cmdlet.Method.Parameters).Any(RequiresInvariantParameterConversion))
             AppendInvariantParameterAttribute(builder);
-        AppendRuntimeHost(builder, typed, cmdlets);
+        AppendRuntimeHost(builder, typed);
         foreach (var cmdlet in cmdlets)
             AppendCmdlet(builder, typed, cmdlet, targetFramework);
         PowerShellNativeFunctionSourceGenerator.Append(builder, typed);

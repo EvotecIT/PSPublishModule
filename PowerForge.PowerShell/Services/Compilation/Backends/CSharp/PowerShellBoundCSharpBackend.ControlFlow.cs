@@ -18,7 +18,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         string prefix)
     {
         var targetType = PowerShellCSharpSymbolRenderer.TypeName(capture.TargetType);
-        var invocation = $"__invokePowerShellCapture({PowerShellCSharpLiteral.QuoteString(capture.HostedFallbackSource)}, {EmitCommandRegionArguments(capture.Arguments)})";
+        var invocation = $"__invokePowerShellCapture(__statementErrors, {PowerShellCSharpLiteral.QuoteString(capture.HostedFallbackSource)}, {EmitCommandRegionArguments(capture.Arguments)}, {EmitRegionSource(capture.SourceSelection)})";
         var converted = $"({targetType})global::System.Management.Automation.LanguagePrimitives.ConvertTo({invocation}, typeof({targetType}), global::System.Globalization.CultureInfo.InvariantCulture)!";
         if (capture.TargetType == typeof(string)) converted = $"({converted} ?? string.Empty)";
         builder.Append(prefix);

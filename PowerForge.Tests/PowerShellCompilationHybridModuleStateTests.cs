@@ -214,18 +214,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "$type = $assembly.GetTypes() | Where-Object Name -Like '*PowerShellRegionHost' | Select-Object -First 1; " +
             "$ErrorActionPreference = 'Stop'; try { Import-Module -Name '" + escapedPath + "' -Force } catch { }; " +
             "$id = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId; " +
-            "$dispatcherPresent = $null -ne $type.GetMethod('GetDispatcher').Invoke($null, @($id)); " +
             "try { [void]$type.GetMethod('ReadModuleVariable').Invoke($null, @($id, 'State')); $reader = 'leaked' } catch { $reader = 'cleared' }; " +
             "try { [void]$type.GetMethod('WriteModuleVariable').Invoke($null, @($id, 'State', 'leak')); $writer = 'leaked' } catch { $writer = 'cleared' }; " +
-            "\"$dispatcherPresent|$reader|$writer\"";
+            "\"$reader|$writer\"";
         var run = RunModuleStateHostProcess("pwsh", "-NoProfile", "-NonInteractive", "-Command", proof);
 
         Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
-        Assert.Equal("False|cleared|cleared", run.StandardOutput.Trim());
+        Assert.Equal("cleared|cleared", run.StandardOutput.Trim());
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
         var generated = File.ReadAllText(result.ArtifactPath!);
         Assert.Contains("catch {", generated, StringComparison.Ordinal);
-        Assert.Contains("::ClearDispatcher", generated, StringComparison.Ordinal);
         Assert.Contains("::ClearModuleVariableReaders", generated, StringComparison.Ordinal);
         Assert.Contains("::ClearModuleVariableWriters", generated, StringComparison.Ordinal);
     }
@@ -312,13 +310,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "Where-Object Name -Like '*PowerShellRegionHost' | Select-Object -First 1; " +
             "$id = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId; " +
             "try { Remove-Module -ModuleInfo $module -Force -ErrorAction Stop } catch { }; " +
-            "$dispatcherPresent = $null -ne $type.GetMethod('GetDispatcher').Invoke($null, @($id)); " +
             "try { [void]$type.GetMethod('ReadModuleVariable').Invoke($null, @($id, 'State')); $reader = 'leaked' } catch { $reader = 'cleared' }; " +
-            "\"$env:PowerForgeHybridAuthoredCleanup|$dispatcherPresent|$reader\"";
+            "\"$env:PowerForgeHybridAuthoredCleanup|$reader\"";
         var run = RunModuleStateHostProcess("pwsh", "-NoProfile", "-NonInteractive", "-Command", proof);
 
         Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
-        Assert.Equal("ran|False|cleared", run.StandardOutput.Trim());
+        Assert.Equal("ran|cleared", run.StandardOutput.Trim());
     }
 
     [Fact]

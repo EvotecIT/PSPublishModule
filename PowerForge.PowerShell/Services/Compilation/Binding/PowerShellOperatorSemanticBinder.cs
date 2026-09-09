@@ -316,7 +316,7 @@ internal static partial class PowerShellOperatorSemanticBinder
             !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
             return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.");
         var operand = bindOperand(syntax.Left);
-        return operand is null ? null : new PowerShellBoundTypeTestExpression(span, operand, targetType, negate);
+        return operand is null ? null : new PowerShellBoundTypeTestExpression(span, operand, targetType, negate, capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors));
     }
 
     private static PowerShellBoundExpression? BindRegexMatch(

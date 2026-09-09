@@ -49,6 +49,7 @@ namespace PowerForge.Generated.Runtime
             var contract = PowerShellNativeOutput.Shared.Value;
             var pipe = contract.CreatePipe();
             contract.ExternalWriter.SetValue(pipe, writer, null);
+            contract.SetTemporaryVariableLists(_outputPipe, pipe);
             try
             {
                 using var child = new PowerShellStatementErrorContext(this, sourceName,

@@ -150,17 +150,19 @@ internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression
 
 internal sealed class PowerShellBoundTypeTestExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundTypeTestExpression(SourceSpan span, PowerShellBoundExpression operand, Type targetType, bool negate)
-        : base(span, new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "A statically resolved CLR type test returns Boolean."), PowerShellValueState.Known, operand.Effects, operand.Capabilities)
+    internal PowerShellBoundTypeTestExpression(SourceSpan span, PowerShellBoundExpression operand, Type targetType, bool negate, bool usesPowerShellSemantics = false)
+        : base(span, new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "A statically resolved CLR type test returns Boolean."), PowerShellValueState.Known, operand.Effects, operand.Capabilities | (usesPowerShellSemantics ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Operand = operand;
         TargetType = targetType;
         Negate = negate;
+        UsesPowerShellSemantics = usesPowerShellSemantics;
     }
 
     internal PowerShellBoundExpression Operand { get; }
     internal Type TargetType { get; }
     internal bool Negate { get; }
+    internal bool UsesPowerShellSemantics { get; }
 }
 
 internal enum PowerShellBoundRegexOperation

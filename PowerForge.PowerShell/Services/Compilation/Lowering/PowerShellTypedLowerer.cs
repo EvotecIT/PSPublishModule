@@ -29,6 +29,7 @@ internal sealed partial class PowerShellTypedLowerer
             function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStopping));
         var statementErrorBindings = PropagateHostRequirement(program, function =>
             function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) ||
+            commandRegionBindings.Contains(function.Symbol.StableKey) ||
             ContainsTryCallingHostedLoop(function.Body, loopInterruptBindings));
         var bySymbol = program.Functions.ToDictionary(
             static function => function.Symbol.StableKey,
@@ -484,7 +485,7 @@ internal sealed partial class PowerShellTypedLowerer
                 region.Span,
                 region.HostedFallbackSource,
                 region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol, argument.IsSwitch)).ToArray(),
-                LowerCommandStages(region.Stages), region.NativeSourcePath, region.NativeSourceDocument),
+                LowerCommandStages(region.Stages), region.NativeSourcePath, region.NativeSourceDocument, region.SourceSelection),
             PowerShellBoundCommandCaptureStatement capture => LowerCommandCapture(capture, localTypes, declared),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
                 conditional.Span,
@@ -617,7 +618,7 @@ internal sealed partial class PowerShellTypedLowerer
             localTypes.ContainsKey(capture.Target.StableKey) && declared.Add(capture.Target.StableKey),
             capture.HostedFallbackSource,
             capture.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol, argument.IsSwitch)).ToArray(),
-            LowerCommandStages(capture.Stages));
+            LowerCommandStages(capture.Stages), capture.SourceSelection);
 
     private static PowerShellLoweredCommandStage[] LowerCommandStages(IEnumerable<PowerShellBoundCommandStage> stages)
         => stages.Select<PowerShellBoundCommandStage, PowerShellLoweredCommandStage>(static stage =>

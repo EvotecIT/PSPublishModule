@@ -70,7 +70,7 @@ internal sealed partial class PowerShellTypedLowerer
                 typeTest.Span,
                 LowerExpression(typeTest.Operand, functions, names, targetCapabilities),
                 typeTest.TargetType,
-                typeTest.Negate),
+                typeTest.Negate, typeTest.UsesPowerShellSemantics),
             PowerShellBoundRegexExpression regex => new PowerShellLoweredRegexExpression(
                 regex.Span,
                 regex.Type.ClrType,
@@ -216,7 +216,8 @@ internal sealed partial class PowerShellTypedLowerer
                     target.RequiresPowerShellStatementErrors ? names.Allocate("pf_call_error") : string.Empty,
                     target.RequiresPowerShellStopping,
                     invocation.CapturesSuccessOutput,
-                    invocation.CapturesSuccessOutput ? names.Allocate("pf_call_output") : string.Empty),
+                    invocation.CapturesSuccessOutput ? names.Allocate("pf_call_output") : string.Empty,
+                    invocation.CapturesSuccessOutput && target.Function.ReturnType.ClrType != typeof(void)),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
 

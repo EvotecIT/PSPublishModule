@@ -100,11 +100,10 @@ internal sealed class PowerShellSemanticCompilationPipeline
             if (!functions.TryGetValue(call.Target.StableKey, out var target) || target.NativeFunctionBinding is not null ||
                 target.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown) continue;
             // The call's value contract is independent of the generated method's CLR return.
-            // Command-region callbacks require their own capture routing before joining this path.
-            var capturesCommandOutput = target.ReturnType.ClrType == typeof(void) &&
+            var capturesCommandOutput = (target.ReturnType.ClrType == typeof(void) ||
+                target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion)) &&
                 program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) &&
-                program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-                !target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion);
+                program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams);
             if (!capturesCommandOutput && target.ReturnType.ClrType == typeof(void) &&
                 target.OutputCardinality != PowerShellOutputCardinality.None) continue;
             var actual = capturesCommandOutput

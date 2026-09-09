@@ -56,17 +56,19 @@ internal sealed class PowerShellLoweredUnaryExpression : PowerShellLoweredExpres
 
 internal sealed class PowerShellLoweredTypeTestExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredTypeTestExpression(SourceSpan span, PowerShellLoweredExpression operand, Type targetType, bool negate)
+    internal PowerShellLoweredTypeTestExpression(SourceSpan span, PowerShellLoweredExpression operand, Type targetType, bool negate, bool usesPowerShellSemantics = false)
         : base(span, typeof(bool))
     {
         Operand = operand;
         TargetType = targetType;
         Negate = negate;
+        UsesPowerShellSemantics = usesPowerShellSemantics;
     }
 
     internal PowerShellLoweredExpression Operand { get; }
     internal Type TargetType { get; }
     internal bool Negate { get; }
+    internal bool UsesPowerShellSemantics { get; }
 }
 
 internal sealed class PowerShellLoweredRegexExpression : PowerShellLoweredExpression

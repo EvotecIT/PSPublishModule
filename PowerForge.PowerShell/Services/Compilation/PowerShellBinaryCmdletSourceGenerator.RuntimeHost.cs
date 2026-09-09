@@ -6,15 +6,13 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
 {
     private static void AppendRuntimeHost(
         StringBuilder builder,
-        PowerShellTypedCompilationResult typed,
-        IReadOnlyCollection<CmdletDescriptor> cmdlets)
+        PowerShellTypedCompilationResult typed)
     {
-        var requiresCommandRegionHost = cmdlets.Any(static cmdlet => cmdlet.Method.RequiresPowerShellCommandRegions);
         var requiresModuleStateReadHost = typed.Methods.Any(static method => method.RequiresPowerShellModuleStateRead);
         var requiresModuleStateWriteHost = typed.Methods.Any(static method => method.RequiresPowerShellModuleStateWrite);
         var requiresModuleStateHost = requiresModuleStateReadHost || requiresModuleStateWriteHost;
         var requiresRuntimeState = typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState);
-        if (!requiresCommandRegionHost && !requiresModuleStateHost && !requiresRuntimeState) return;
+        if (!requiresModuleStateHost && !requiresRuntimeState) return;
 
         builder.AppendLine($"public static class {GetRuntimeRegionHostTypeName(typed)}");
         builder.AppendLine("{");
@@ -50,13 +48,6 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("        internal ModuleStateError(global::System.Management.Automation.ErrorRecord error) => Error = error;");
             builder.AppendLine("        internal global::System.Management.Automation.ErrorRecord Error { get; }");
             builder.AppendLine("    }");
-        }
-        if (requiresCommandRegionHost)
-        {
-            builder.AppendLine("    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Guid, ScriptBlock> Dispatchers = new();");
-            builder.AppendLine("    public static void SetDispatcher(global::System.Guid runspaceId, ScriptBlock dispatcher) => Dispatchers[runspaceId] = dispatcher;");
-            builder.AppendLine("    public static ScriptBlock? GetDispatcher(global::System.Guid runspaceId) => Dispatchers.TryGetValue(runspaceId, out var dispatcher) ? dispatcher : null;");
-            builder.AppendLine("    public static void ClearDispatcher(global::System.Guid runspaceId) => Dispatchers.TryRemove(runspaceId, out _);");
         }
         if (requiresModuleStateReadHost)
         {
