@@ -1,4 +1,4 @@
-# Pinned conversion workflows
+# Pinned PSSharedGoods workflows
 
 `Convert-BinaryToString.ps1` is the unchanged complete function from [PSSharedGoods commit 2a807a4](https://github.com/EvotecIT/PSSharedGoods/blob/2a807a4f11ba458b7bc405ce3674d93838639af1/Public/Converts/Convert-BinaryToString.ps1). Its MIT license is included in this directory.
 
@@ -13,3 +13,9 @@ Qualification of this function does not imply qualification of the rest of PSSha
 `Convert-HexToBinary.ps1` is the unchanged function from the same commit, with SHA-256 `4ede6b109b121813150cdce0b515964127183c2feedd7e30d8d9c86737194a85`. `CompleteWorkflow_PinnedHexPreservesCaptureErrorsAndContainers` qualifies the complete Hybrid command artifact on Windows PowerShell 5.1, PowerShell 7.4.19, and PowerShell 7.6.5. It compares 132 cases per configuration: exact result containers and serialization, valid and malformed pairs, odd lengths, partial parsing errors, named/positional/pipeline binding, empty input, downstream stop, and later successful invocation. Strict command qualification remains open because the generated cmdlet binder cannot yet preserve the authored string pipeline parameter's conversion callback behavior.
 
 The complete CLR method contains the loop, capture, numeric indexing, and parsing. Its final unqualified `Write-Output -NoEnumerate` remains one explicitly hosted command region so runtime command lookup is preserved. No whole authored function is retained. This command-artifact qualification does not establish a runtime-free library contract.
+
+`Get-RandomCharacters.ps1` and `Get-RandomPassword.ps1` are the unchanged complete functions from `Public/Random` at the same pinned commit. Their SHA-256 hashes are `e6a8113feeeddd18398e73c7556125ff92d238610a84ac241e558cb5c14e0a5d` and `36500278fbbe5eff90b8d7a79cf05e51604e83db71a000f8e7e24511aff0edb1`, respectively.
+
+`CompleteWorkflow_PinnedRandomClosurePreservesCallsCapturesAndFailures` builds their two-file closure through the normal input resolver and artifact builder. Both bodies compile in Hybrid mode; their command pipelines retain native provider lookup. The observer replaces only `Get-Random` inside the selected module with a deterministic provider. It compares values, record types, provider call order, conversion failures, nonterminating and terminating errors, early downstream stop, and a later successful call across 289 observations per host. Four additional observations compare explicit runspace cancellation, provider cleanup, and successful reuse. The test checks the selected module's exports and invokes its command objects so an installed module cannot silently replace the fixture.
+
+The same observers also match in the complete pinned PSSharedGoods module and its generated Hybrid artifact on Windows PowerShell 5.1, PowerShell 7.4.19, and PowerShell 7.6.5. Windows PowerShell 5.1 requires a sufficiently short source path for its module loader. This qualifies these two command workflows, not every function in PSSharedGoods, randomness quality, or a runtime-free Strict target.

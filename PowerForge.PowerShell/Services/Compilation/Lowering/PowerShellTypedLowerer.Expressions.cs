@@ -106,7 +106,7 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(join.Values, functions, names, targetCapabilities),
                 LowerExpression(join.Separator, functions, names, targetCapabilities),
                 names.Allocate("pf_join_left"),
-                names.Allocate("pf_join_right")),
+                names.Allocate("pf_join_right"), join.NativeSourcePath, join.NativeSourceText, join.IsUnary),
             PowerShellBoundInterpolatedStringExpression interpolated => new PowerShellLoweredInterpolatedStringExpression(
                 interpolated.Span,
                 interpolated.Parts.Select(part => new PowerShellLoweredInterpolatedStringPart(

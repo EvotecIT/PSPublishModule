@@ -44,6 +44,8 @@
     <EmbeddedResource Remove="Fixtures\**\*" />
     <None Remove="Fixtures\**\*" />
     <None Include="Fixtures\**\*" Exclude="Fixtures\**\bin\**;Fixtures\**\obj\**" />
+    <None Update="Fixtures\PowerShellCompilationRandomWorkflow\Observe.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\PowerShellCompilationRandomWorkflow\Cancellation.ps1" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -187,6 +187,7 @@ internal sealed partial class PowerShellSemanticBinder
             case BinaryExpressionAst binary:
                 var rightOperandSymbols = RefineShortCircuitRightOperandSymbols(binary, symbols);
                 return PowerShellOperatorSemanticBinder.BindBinary(
+                    document,
                     binary,
                     span,
                     operand => BindExpression(
@@ -203,6 +204,7 @@ internal sealed partial class PowerShellSemanticBinder
             case UnaryExpressionAst unary:
                 if (PowerShellMutationSemanticBinder.TryBindIncrement(document, unary, symbols, out var mutation, diagnostics, capabilities)) return mutation;
                 return PowerShellOperatorSemanticBinder.BindUnary(
+                    document,
                     unary,
                     span,
                     operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities),

@@ -69,6 +69,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
 
     private static bool RequiresNativeBinding(FunctionDefinitionAst function)
         => FindNativePipelineOperator(function) is not null ||
+           function.Body.Find(static node => node is BinaryExpressionAst { Operator: TokenKind.Join } or
+               UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is PipelineAst pipeline &&
                PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline) && IsCapturedPipeline(pipeline),
                searchNestedScriptBlocks: false) is not null ||

@@ -164,17 +164,24 @@ internal sealed class PowerShellLoweredStringSplitExpression : PowerShellLowered
 
 internal sealed class PowerShellLoweredStringJoinExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredStringJoinExpression(SourceSpan span, PowerShellLoweredExpression values, PowerShellLoweredExpression separator, string valuesTemporary, string separatorTemporary)
+    internal PowerShellLoweredStringJoinExpression(SourceSpan span, PowerShellLoweredExpression values, PowerShellLoweredExpression separator, string valuesTemporary, string separatorTemporary,
+        string? nativeSourcePath = null, string nativeSourceText = "", bool isUnary = false)
         : base(span, typeof(string))
     {
         Values = values;
         Separator = separator;
         ValuesTemporary = valuesTemporary;
         SeparatorTemporary = separatorTemporary;
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceText = nativeSourceText;
+        IsUnary = isUnary;
     }
 
     internal PowerShellLoweredExpression Values { get; }
     internal PowerShellLoweredExpression Separator { get; }
     internal string ValuesTemporary { get; }
     internal string SeparatorTemporary { get; }
+    internal string? NativeSourcePath { get; }
+    internal string NativeSourceText { get; }
+    internal bool IsUnary { get; }
 }

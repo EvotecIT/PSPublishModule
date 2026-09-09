@@ -12,7 +12,8 @@ internal static class PowerShellCommandHostRuntimeSource
                 "PowerShellNativeFunctionContext.Output", "PowerShellNativeFunctionContext.Members", "PowerShellNativeFunctionContext.Indexing",
                 "PowerShellNativeFunctionContext.Conversions", "PowerShellNativeFunctionContext.Invocations",
                 "PowerShellNativeFunctionContext.CommandRegions", "PowerShellNativeFunctionContext.Compilation",
-                "PowerShellNativeFunctionContext.Declarations", "PowerShellNativeFunctionContext.Enumeration" })
+                "PowerShellNativeFunctionContext.Declarations", "PowerShellNativeFunctionContext.Enumeration",
+                "PowerShellNativeFunctionContext.StringJoin" })
             {
                 using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
                     "PowerForge.PowerShell.Compilation." + name + ".cs")

@@ -6,6 +6,7 @@ namespace PowerForge;
 internal static partial class PowerShellOperatorSemanticBinder
 {
     internal static PowerShellBoundExpression? BindBinary(
+        ParsedSourceDocument document,
         BinaryExpressionAst syntax,
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
@@ -28,7 +29,7 @@ internal static partial class PowerShellOperatorSemanticBinder
         if (operation is "Isplit" or "Csplit")
             return BindStringSplit(syntax, span, operation, bindOperand, diagnostics);
         if (operation == "Join")
-            return BindStringJoin(syntax, span, bindOperand, diagnostics);
+            return BindStringJoin(document, syntax, span, bindOperand, diagnostics, capabilities);
         if (operation is "As" or "Ias")
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -431,20 +432,26 @@ internal static partial class PowerShellOperatorSemanticBinder
     }
 
     private static PowerShellBoundExpression? BindStringJoin(
+        ParsedSourceDocument document,
         BinaryExpressionAst syntax,
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities)
     {
         var values = bindOperand(syntax.Left);
         var separator = bindOperand(syntax.Right);
         if (values is null || separator is null) return null;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return new PowerShellBoundStringJoinExpression(span, values, separator, document.Path,
+                PowerShellSourceParser.GetSourceLines(document, span));
         if (values.Type.ClrType != typeof(string[]) || separator.Type.ClrType != typeof(string))
             return Reject(diagnostics, span, "PSB2229", "Operator '-join' requires a String array and scalar String separator.");
         return new PowerShellBoundStringJoinExpression(span, values, separator);
     }
 
     internal static PowerShellBoundExpression? BindUnary(
+        ParsedSourceDocument document,
         UnaryExpressionAst syntax,
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
@@ -456,6 +463,11 @@ internal static partial class PowerShellOperatorSemanticBinder
         var operand = bindOperand(syntax.Child);
         if (operand is null) return null;
         var type = operand.Type.ClrType;
+        if (operation == "Join" && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return new PowerShellBoundStringJoinExpression(span, operand,
+                new PowerShellBoundLiteralExpression(span, string.Empty,
+                    new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Literal, "Unary join has no separator operand."),
+                    PowerShellValueState.Known), document.Path, PowerShellSourceParser.GetSourceLines(document, span), isUnary: true);
         if (operation is "Not" or "Exclaim")
         {
             operand = BindTruthiness(operand, capabilities, diagnostics, span, "PSB2213", "Typed logical negation requires a Boolean operand.");

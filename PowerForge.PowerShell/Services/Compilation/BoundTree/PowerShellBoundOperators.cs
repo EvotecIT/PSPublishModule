@@ -268,18 +268,29 @@ internal sealed class PowerShellBoundStringSplitExpression : PowerShellBoundExpr
 
 internal sealed class PowerShellBoundStringJoinExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundStringJoinExpression(SourceSpan span, PowerShellBoundExpression values, PowerShellBoundExpression separator)
+    internal PowerShellBoundStringJoinExpression(SourceSpan span, PowerShellBoundExpression values, PowerShellBoundExpression separator,
+        string? nativeSourcePath = null, string nativeSourceText = "", bool isUnary = false)
         : base(
             span,
-            new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred, "The string join operator binds one String.Join operation."),
+            new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred, "The join operator produces a string using its selected conversion and enumeration contract."),
             PowerShellValueState.Known,
-            values.Effects | separator.Effects,
-            values.Capabilities | separator.Capabilities)
+            values.Effects | separator.Effects | (nativeSourcePath is not null
+                ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError
+                : PowerShellSemanticEffect.None),
+            values.Capabilities | separator.Capabilities | (nativeSourcePath is not null
+                ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors
+                : PowerShellRequiredCapability.None))
     {
         Values = values;
         Separator = separator;
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceText = nativeSourceText;
+        IsUnary = isUnary;
     }
 
     internal PowerShellBoundExpression Values { get; }
     internal PowerShellBoundExpression Separator { get; }
+    internal string? NativeSourcePath { get; }
+    internal string NativeSourceText { get; }
+    internal bool IsUnary { get; }
 }

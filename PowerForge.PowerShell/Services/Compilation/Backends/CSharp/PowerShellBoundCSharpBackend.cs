@@ -510,9 +510,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"global::System.Text.RegularExpressions.Regex.Split(({EmitExpression(split.Input)} ?? string.Empty), ({EmitExpression(split.Pattern)} ?? string.Empty), {options})";
     }
 
-    private string EmitStringJoin(PowerShellLoweredStringJoinExpression join)
-        => $"new global::System.Func<string>(() => {{ var {join.ValuesTemporary} = {EmitExpression(join.Values)}; var {join.SeparatorTemporary} = {EmitExpression(join.Separator)}; return global::System.String.Join(({join.SeparatorTemporary} ?? string.Empty), ({join.ValuesTemporary} ?? global::System.Array.Empty<string>())); }})()";
-
     private string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
     {
         if (assignment.Receiver is null)
