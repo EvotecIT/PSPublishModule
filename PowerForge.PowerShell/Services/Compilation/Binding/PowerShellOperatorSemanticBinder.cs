@@ -124,6 +124,8 @@ internal static partial class PowerShellOperatorSemanticBinder
             {
                 if (PowerShellInt32RangePolicy.TryBindArithmetic(span, operation, left, right, out var boundedArithmetic))
                     return boundedArithmetic;
+                if (PowerShellNumericUnionPolicy.BindBinary(span, operation, left, right, allowInt32Operands: true) is { } promotedArithmetic)
+                    return promotedArithmetic;
                 return Reject(diagnostics, span, "PSB2207", "Unconstrained integral arithmetic can promote on overflow in PowerShell; use an explicitly typed accumulator with compound assignment.");
             }
             // PowerShell evaluates floating arithmetic in Double, including two Single

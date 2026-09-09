@@ -13,7 +13,8 @@ internal sealed partial class PowerShellSemanticBinder
     internal PowerShellSemanticBindingResult BindWithRegionCandidates(
         IEnumerable<ParsedSourceDocument> documents,
         string? targetFramework = null,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        IReadOnlyDictionary<string, PowerShellTypeFact>? analyzedReturnTypes = null)
     {
         if (documents is null) throw new ArgumentNullException(nameof(documents));
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
@@ -41,6 +42,10 @@ internal sealed partial class PowerShellSemanticBinder
                 static group => group.Key,
                 group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities, _semanticProfile.ProfileId),
                 StringComparer.OrdinalIgnoreCase);
+        foreach (var signature in functionsByName.Values)
+            if (!signature.IsPipelineLifecycle && analyzedReturnTypes is not null &&
+                analyzedReturnTypes.TryGetValue(signature.Symbol.StableKey, out var analyzedReturnType))
+                signature.SetAnalyzedReturnType(analyzedReturnType);
         for (var iteration = 0; iteration < functionsByName.Count; iteration++)
         {
             var changed = false;

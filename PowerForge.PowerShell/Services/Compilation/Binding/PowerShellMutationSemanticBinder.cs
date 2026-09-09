@@ -132,6 +132,9 @@ internal static partial class PowerShellMutationSemanticBinder
             typeof(System.Collections.IDictionary).IsAssignableFrom(targetType) ? null : targetType;
         var value = bindExpression(syntax.Right, contextualType);
         if (value is null) return null;
+        if (operation == PowerShellBoundMutationOperator.Assign && target.Type.Provenance == PowerShellTypeFactProvenance.Explicit &&
+            PowerShellConversionSemanticBinder.BindClosedNumericConversion(value, targetType, capabilities) is { } convertedNumeric)
+            value = convertedNumeric;
         if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
         {
             var nonzeroDivision = operation is PowerShellBoundMutationOperator.Divide or PowerShellBoundMutationOperator.Remainder &&

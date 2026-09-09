@@ -50,11 +50,25 @@ internal sealed class PowerShellSemanticCompilationPipeline
         string? targetFramework = null,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
-        var binding = _binder.BindWithRegionCandidates(documents, targetFramework, capabilities);
+        var sourceDocuments = documents.ToArray();
+        var binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities);
         var bound = binding.Program;
         capabilities = bound.TargetCapabilities;
         var optimized = _optimizer.Optimize(bound);
         var analyzed = _analyzer.Analyze(optimized.Program);
+        // OutputType metadata is provisional. Rebind consumers through the ordinary binder
+        // when canonical return analysis discovers a different value representation.
+        var returnTypes = new Dictionary<string, PowerShellTypeFact>(StringComparer.Ordinal);
+        var remainingRounds = Math.Max(1, bound.Functions.Length + 1);
+        while (TryRefineCallReturnTypes(analyzed, returnTypes))
+        {
+            if (remainingRounds-- == 0)
+                throw new InvalidOperationException("Local-call return contracts did not reach a stable representation.");
+            binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities, returnTypes);
+            bound = binding.Program;
+            optimized = _optimizer.Optimize(bound);
+            analyzed = _analyzer.Analyze(optimized.Program);
+        }
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
         var regions = CompileRegions(binding.RegionCandidates, bound.Documents, capabilities, bound.SemanticHostFamily);
@@ -72,6 +86,31 @@ internal sealed class PowerShellSemanticCompilationPipeline
             regions.Promoted,
             regions.Decisions,
             regionOpportunities, binding.RuntimeFreeModule);
+    }
+
+    private static bool TryRefineCallReturnTypes(PowerShellBoundProgram program,
+        IDictionary<string, PowerShellTypeFact> returnTypes)
+    {
+        var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var changed = false;
+        foreach (var call in program.Functions.SelectMany(function => PowerShellSemanticAnalyzer.EnumerateStatements(function.Body))
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions).OfType<PowerShellBoundInvocationExpression>())
+        {
+            // A streamed method can have a void CLR return while still producing PowerShell records.
+            if (!functions.TryGetValue(call.Target.StableKey, out var target) || target.NativeFunctionBinding is not null ||
+                target.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown ||
+                target.ReturnType.ClrType == typeof(void) && target.OutputCardinality != PowerShellOutputCardinality.None) continue;
+            var actual = target.ReturnType;
+            if (actual.ClrType == call.Type.ClrType &&
+                (actual.Provenance == PowerShellTypeFactProvenance.Int32OrDouble) ==
+                (call.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)) continue;
+            if (returnTypes.TryGetValue(target.Symbol.StableKey, out var previous) &&
+                previous.ClrType == actual.ClrType && previous.Provenance == actual.Provenance) continue;
+            returnTypes[target.Symbol.StableKey] = actual;
+            changed = true;
+        }
+        return changed;
     }
 
     private PowerShellRegionCompilationResult CompileRegions(

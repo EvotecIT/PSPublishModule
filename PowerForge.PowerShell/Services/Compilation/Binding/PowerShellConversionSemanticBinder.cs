@@ -54,6 +54,8 @@ internal static class PowerShellConversionSemanticBinder
                     "An authored cast uses the native conversion binder in the active invocation."), operand, useNativeConversion: true);
         if (targetType == typeof(string) && BindClosedStringConversion(operand) is { } stringValue)
             return stringValue;
+        if (BindClosedNumericConversion(operand, targetType, capabilities) is { } numericValue)
+            return numericValue;
         var usePowerShellLanguageRuntime = !PowerShellClrTypeSemantics.CanAssign(targetType, operand.Type.ClrType);
         if (usePowerShellLanguageRuntime && PowerShellStringificationScopePolicy.RequiresCallerScope(targetType, operand))
         {
@@ -91,6 +93,19 @@ internal static class PowerShellConversionSemanticBinder
         if (operand.Type.ClrType != typeof(string)) return null;
         if (operand.ValueState == PowerShellValueState.Known) return operand;
         return new PowerShellBoundConversionExpression(operand.Span, type, operand, normalizeNullString: true);
+    }
+
+    /// <summary>Converts a closed numeric union through the runtime-free library's direct CLR exception contract.</summary>
+    internal static PowerShellBoundExpression? BindClosedNumericConversion(PowerShellBoundExpression operand,
+        Type targetType, PowerShellCompilationCapability capabilities)
+    {
+        if (targetType != typeof(int) || operand.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble ||
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors)) return null;
+        return new PowerShellBoundClrInvocationExpression(operand.Span, typeof(Convert), nameof(Convert.ToInt32),
+            PowerShellClrInvocationKind.StaticMethod, null, PowerShellClrReceiverBehavior.None,
+            new[] { operand }, new[] { typeof(object) },
+            new PowerShellTypeFact(typeof(int), PowerShellTypeFactProvenance.Explicit,
+                "Closed Int32/Double conversion preserves integral values and midpoint-to-even rounding; out-of-range values raise the library's CLR conversion exception."));
     }
 
     private static PowerShellBoundExpression BindResolvedLiteral(SourceSpan span, Type targetType, object? value)

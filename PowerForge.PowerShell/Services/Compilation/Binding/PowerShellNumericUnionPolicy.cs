@@ -31,10 +31,12 @@ internal static class PowerShellNumericUnionPolicy
         => PowerShellInt32RangePolicy.GetRange(expression) is { } range && (range.Minimum > 0 || range.Maximum < 0);
 
     internal static PowerShellBoundExpression? BindBinary(SourceSpan span, string operation,
-        PowerShellBoundExpression left, PowerShellBoundExpression right)
+        PowerShellBoundExpression left, PowerShellBoundExpression right, bool allowInt32Operands = false)
     {
-        if (left.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble &&
-            right.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble || !IsNumeric(left.Type) || !IsNumeric(right.Type)) return null;
+        var hasUnion = left.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble ||
+            right.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble;
+        var closedInt32 = allowInt32Operands && left.Type.ClrType == typeof(int) && right.Type.ClrType == typeof(int);
+        if ((!hasUnion && !closedInt32) || !IsNumeric(left.Type) || !IsNumeric(right.Type)) return null;
         var floating = left.Type.ClrType == typeof(double) || right.Type.ClrType == typeof(double);
         var nonzeroIntegerDivisor = IsNonzeroInteger(right);
         var bound = operation switch

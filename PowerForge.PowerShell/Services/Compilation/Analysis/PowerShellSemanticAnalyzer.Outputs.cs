@@ -45,6 +45,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 fact.Provenance != PowerShellTypeFactProvenance.Unknown &&
                 fact.ClrType != typeof(void)).ToArray();
             if (known.Length == 0) return function;
+            if (known.Any(static fact => fact.Provenance == PowerShellTypeFactProvenance.Int32OrDouble) &&
+                known.All(PowerShellNumericUnionPolicy.IsNumeric))
+                return function.WithAnalysis(returnType: PowerShellNumericUnionPolicy.Int32OrDouble);
             var first = known[0];
             if (known.All(fact => fact.ClrType == first.ClrType))
                 return function.WithAnalysis(returnType: new PowerShellTypeFact(first.ClrType, PowerShellTypeFactProvenance.Inferred, "All reachable success outputs have the same CLR type after call-graph propagation."));

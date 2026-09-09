@@ -49,6 +49,13 @@ internal sealed class PowerShellLocalCallSignature
     internal bool PipelineLifecycleReturnsCollection { get; private set; }
     internal bool PipelineLifecycleRequiresNonNullInput { get; }
     internal bool ReturnsModuleStateDerived { get; private set; }
+    internal PowerShellTypeFact? AnalyzedReturnType { get; private set; }
+
+    internal void SetAnalyzedReturnType(PowerShellTypeFact type)
+    {
+        AnalyzedReturnType = type;
+        DeclaredReturnType = type.ClrType;
+    }
 
     internal bool RefineReturnType(Type type)
     {
@@ -359,9 +366,9 @@ internal static class PowerShellLocalCallSemanticBinder
         var invocationReturnType = signature.DeclaredReturnType is not null && signature.PipelineLifecycleReturnsCollection
             ? signature.DeclaredReturnType.MakeArrayType()
             : signature.DeclaredReturnType;
-        var returnType = invocationReturnType is null
+        var returnType = signature.AnalyzedReturnType ?? (invocationReturnType is null
             ? PowerShellTypeFact.Unknown
-            : new PowerShellTypeFact(invocationReturnType, PowerShellTypeFactProvenance.Explicit, $"Local function '{signature.Symbol.Name}' declares its success-output type.");
+            : new PowerShellTypeFact(invocationReturnType, PowerShellTypeFactProvenance.Explicit, $"Local function '{signature.Symbol.Name}' declares its success-output type."));
         return new PowerShellBoundInvocationExpression(
             span,
             signature.Symbol,
