@@ -19,10 +19,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("Get-Number; Get-Number", false)]
-    [InlineData("if ($Enabled) { Get-Number }; return 2", false)]
-    [InlineData("for ([int]$i = 0; $i -lt 2; $i++) { Get-Number }; return 2", true)]
-    public void Transpile_LocalCallContinuationRequiresAQualifiedStreamOwner(string body, bool hasStreamOwner)
+    [InlineData("Get-Number; Get-Number", "1|1", "1|1")]
+    [InlineData("if ($Enabled) { Get-Number }; return 2", "1|2", "2")]
+    [InlineData("for ([int]$i = 0; $i -lt 2; $i++) { Get-Number }; return 2", "1|1|2", "1|1|2")]
+    public void Build_LocalCallContinuationUsesQualifiedStreamOwner(string body, string enabled, string disabled)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-Number { return 1 }; function Invoke-Sequence { [CmdletBinding()] param([bool]$Enabled) " + body + " }",
@@ -32,14 +32,27 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.HybridModule);
 
         Assert.Contains(typed.Methods, method => method.SourceName == "Get-Number");
-        if (hasStreamOwner)
-            Assert.True(Assert.Single(typed.Methods, method => method.SourceName == "Invoke-Sequence").RequiresPowerShellStreams);
-        else
-        {
-            Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Invoke-Sequence");
-            Assert.Contains(typed.Diagnostics, diagnostic => diagnostic.Message.Contains("Non-terminal success output", StringComparison.Ordinal));
-        }
+        var sequence = Assert.Single(typed.Methods, method => method.SourceName == "Invoke-Sequence");
+        Assert.True(sequence.RequiresPowerShellStreams || sequence.NativeFunctionBinding is not null);
+        Assert.DoesNotContain(typed.Diagnostics, diagnostic => diagnostic.Message.Contains("Non-terminal success output", StringComparison.Ordinal));
         Assert.Empty(typed.PromotedRegions);
+        foreach (var (framework, host) in new[] { ("net10.0", "pwsh"), ("net472", "powershell.exe") })
+        {
+            if (framework == "net472" && !OperatingSystem.IsWindows()) continue;
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                fixture.ScriptPath, Path.Combine(fixture.OutputPath, framework), "PowerForge.LocalContinuation",
+                PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+                allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+            Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+            var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == "Invoke-Sequence");
+            Assert.True(unit.EmittedClrMethod);
+            Assert.False(unit.RetainedHostedSource);
+            const string proof = "@(Invoke-Sequence -Enabled $true) -join '|'; @(Invoke-Sequence -Enabled $false) -join '|'";
+            var original = RunModuleProof(fixture.ScriptPath, proof, host);
+            var compiled = RunModuleProof(result.ArtifactPath!, proof, host);
+            Assert.Equal(original, compiled);
+            Assert.Equal(new[] { enabled, disabled }, compiled.Split(Environment.NewLine));
+        }
     }
 
     [Theory]

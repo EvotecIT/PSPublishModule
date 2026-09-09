@@ -357,8 +357,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
-        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(3, result.Manifest!.CompiledMethods);
+        foreach (var name in new[] { "Join-Position", "Get-Position", "Get-FallbackValue" })
+        {
+            var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, unit => unit.Name == name);
+            Assert.True(unit.EmittedClrMethod);
+            // The private helper retains its authored module entrypoint alongside its CLR method.
+            Assert.Equal(name == "Join-Position", unit.RetainedHostedSource);
+        }
+        Assert.True(Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
+            unit => unit.Name == "Get-FallbackValue").UsesNativeFunctionBinding);
         const string proof = "Get-Position; [int](Get-FallbackValue) -gt 2000";
         var original = RunModuleProof(fixture.ScriptPath, proof, host);
         var compiled = RunModuleProof(result.ArtifactPath!, proof, host);
