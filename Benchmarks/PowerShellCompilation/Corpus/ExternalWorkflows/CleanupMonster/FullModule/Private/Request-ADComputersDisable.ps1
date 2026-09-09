@@ -1,0 +1,115 @@
+﻿function Request-ADComputersDisable {
+    [cmdletbinding(SupportsShouldProcess)]
+    param(
+        [nullable[bool]] $Delete,
+        [nullable[bool]] $Move,
+        [nullable[bool]] $DisableAndMove,
+        [System.Collections.IDictionary] $Report,
+        [switch] $WhatIfDisable,
+        [System.Collections.IDictionary] $ProcessedComputers,
+        [System.Collections.IDictionary] $DisableOnlyIf,
+        [switch] $DisableModifyDescription,
+        [switch] $DisableModifyAdminDescription,
+        [int] $DisableLimit,
+        [switch] $ReportOnly,
+        [DateTime] $Today,
+        [switch] $DontWriteToEventLog,
+        [Object] $DisableMoveTargetOrganizationalUnit,
+        [switch] $DoNotAddToPendingList,
+        [ValidateSet(
+            'DisableAndMove',
+            'MoveAndDisable'
+        )][string] $DisableAndMoveOrder = 'DisableAndMove',
+        [switch] $RemoveProtectedFromAccidentalDeletionFlag
+    )
+
+    if ($DisableAndMove -and $DisableMoveTargetOrganizationalUnit) {
+        if ($DisableMoveTargetOrganizationalUnit -is [System.Collections.IDictionary]) {
+            $OrganizationalUnit = $DisableMoveTargetOrganizationalUnit
+        } elseif ($DisableMoveTargetOrganizationalUnit -is [string]) {
+            $DomainCN = ConvertFrom-DistinguishedName -DistinguishedName $DisableMoveTargetOrganizationalUnit -ToDomainCN
+            $OrganizationalUnit = [ordered] @{
+                $DomainCN = $DisableMoveTargetOrganizationalUnit
+            }
+        } else {
+            Write-Color -Text "[-] DisableMoveTargetOrganizationalUnit is not a string or hashtable. Skipping moving to proper OU." -Color Yellow, Red
+            return
+        }
+    }
+
+    $CountDisable = 0
+    # :top means name of the loop, so we can break it
+    :topLoop foreach ($Domain in $Report.Keys) {
+        Write-Color "[i] ", "Starting process of disabling computers for domain $Domain" -Color Yellow, Green
+        foreach ($Computer in $Report["$Domain"]['Computers']) {
+            $Server = $Report["$Domain"]['Server']
+            if ($Computer.Action -ne 'Disable') {
+                continue
+            }
+            if ($ReportOnly) {
+                $Computer
+            } else {
+                $Success = $true
+                if ($DisableAndMoveOrder -eq 'DisableAndMove') {
+                    $Success = Disable-WinADComputer -Success $Success -WhatIfDisable:$WhatIfDisable -DontWriteToEventLog:$DontWriteToEventLog -Computer $Computer -Server $Server
+                    $Success = Move-WinADComputer -Success $Success -DisableAndMove $DisableAndMove -OrganizationalUnit $OrganizationalUnit -Computer $Computer -WhatIfDisable:$WhatIfDisable -DontWriteToEventLog:$DontWriteToEventLog -Server $Server -Domain $Domain -RemoveProtectedFromAccidentalDeletionFlag:$RemoveProtectedFromAccidentalDeletionFlag.IsPresent
+                } else {
+                    $Success = Move-WinADComputer -Success $Success -DisableAndMove $DisableAndMove -OrganizationalUnit $OrganizationalUnit -Computer $Computer -WhatIfDisable:$WhatIfDisable -DontWriteToEventLog:$DontWriteToEventLog -Server $Server -Domain $Domain -RemoveProtectedFromAccidentalDeletionFlag:$RemoveProtectedFromAccidentalDeletionFlag.IsPresent
+                    $Success = Disable-WinADComputer -Success $Success -WhatIfDisable:$WhatIfDisable -DontWriteToEventLog:$DontWriteToEventLog -Computer $Computer -Server $Server
+                }
+                if ($Success) {
+                    $CurrentDistinguishedName = Get-ADComputerCurrentDistinguishedName -Computer $Computer
+                    if ($DisableModifyDescription -eq $true) {
+                        $DisableModifyDescriptionText = "Disabled by a script, LastLogon $($Computer.LastLogonDate) ($($DisableOnlyIf.LastLogonDateMoreThan)), PasswordLastSet $($Computer.PasswordLastSet) ($($DisableOnlyIf.PasswordLastSetMoreThan))"
+                        try {
+                            Set-ADComputer -Identity $CurrentDistinguishedName -Description $DisableModifyDescriptionText -WhatIf:$WhatIfDisable -ErrorAction Stop -Server $Server
+                            Write-Color -Text "[+] ", "Setting description on disabled computer ", $CurrentDistinguishedName, " (WhatIf: $WhatIfDisable) successful. Set to: ", $DisableModifyDescriptionText -Color Yellow, Green, Yellow, Green, Yellow
+                        } catch {
+                            $Computer.ActionComment = $Computer.ActionComment + [System.Environment]::NewLine + $_.Exception.Message
+                            Write-Color -Text "[-] ", "Setting description on disabled computer ", $CurrentDistinguishedName, " (WhatIf: $WhatIfDisable) failed. Error: $($_.Exception.Message)" -Color Yellow, Red, Yellow
+                        }
+                    }
+                    if ($DisableModifyAdminDescription) {
+                        $DisableModifyAdminDescriptionText = "Disabled by a script, LastLogon $($Computer.LastLogonDate) ($($DisableOnlyIf.LastLogonDateMoreThan)), PasswordLastSet $($Computer.PasswordLastSet) ($($DisableOnlyIf.PasswordLastSetMoreThan))"
+                        try {
+                            Set-ADObject -Identity $CurrentDistinguishedName -Replace @{ AdminDescription = $DisableModifyAdminDescriptionText } -WhatIf:$WhatIfDisable -ErrorAction Stop -Server $Server
+                            Write-Color -Text "[+] ", "Setting admin description on disabled computer ", $CurrentDistinguishedName, " (WhatIf: $WhatIfDisable) successful. Set to: ", $DisableModifyAdminDescriptionText -Color Yellow, Green, Yellow, Green, Yellow
+                        } catch {
+                            $Computer.ActionComment = $Computer.ActionComment + [System.Environment]::NewLine + $_.Exception.Message
+                            Write-Color -Text "[-] ", "Setting admin description on disabled computer ", $CurrentDistinguishedName, " (WhatIf: $WhatIfDisable) failed. Error: $($_.Exception.Message)" -Color Yellow, Red, Yellow
+                        }
+                    }
+                }
+
+                # this is to store actual disabling time - we can't trust WhenChanged date
+                $Computer.ActionDate = $Today
+                if ($WhatIfDisable.IsPresent) {
+                    $Computer.ActionStatus = 'WhatIf'
+                } else {
+                    $Computer.ActionStatus = $Success
+                }
+
+                # Only successful real disable actions should enter the pending list.
+                if ($Success -and -not $WhatIfDisable.IsPresent -and -not $DoNotAddToPendingList) {
+                    $FullComputerName = -join ($Computer.SamAccountName, '@', $Domain)
+                    # Lets add computer to pending list, and lets set time how long it's there so it can be easily visible in reports
+                    if ($Computer.PSObject.Properties.Name -contains 'TimeOnPendingList') {
+                        $Computer.TimeOnPendingList = 0
+                    } else {
+                        Add-Member -InputObject $Computer -MemberType NoteProperty -Name 'TimeOnPendingList' -Value 0 -Force
+                    }
+                    $ProcessedComputers[$FullComputerName] = $Computer
+                }
+
+                # return computer to $ReportDisabled so we can see summary just in case
+                $Computer
+                $CountDisable++
+                if ($DisableLimit) {
+                    if ($DisableLimit -eq $CountDisable) {
+                        break topLoop # this breaks top loop
+                    }
+                }
+            }
+        }
+    }
+}

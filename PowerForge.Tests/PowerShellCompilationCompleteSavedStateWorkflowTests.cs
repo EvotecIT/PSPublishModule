@@ -6,6 +6,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
     public void CompleteWorkflow_PinnedSavedStatePreservesConversionAndAliasing(string framework, string host)
+        => AssertPinnedSavedStateWorkflow(framework, host, fullModule: false);
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void CompleteWorkflow_PinnedSavedStateInFullModule(string framework, string host)
+        => AssertPinnedSavedStateWorkflow(framework, host, fullModule: true);
+
+    private static void AssertPinnedSavedStateWorkflow(string framework, string host, bool fullModule)
     {
         var sources = new[] {
             ("Import-ComputersData.ps1", "98bd6c47fd4adb1ee6b74901b8cc2330912786d24d03067356f4229a025b1324"),
@@ -17,7 +26,30 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         {
             var path = FindCompleteConversionWorkflow("CleanupMonster", source.Item1);
             Assert.Equal(source.Item2, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant());
-            File.Copy(path, Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, source.Item1));
+            if (!fullModule)
+                File.Copy(path, Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, source.Item1));
+        }
+        if (fullModule)
+        {
+            var snapshot = FindCompleteConversionWorkflow("CleanupMonster", "FullModule", "CleanupMonster.psm1");
+            var snapshotRoot = Path.GetDirectoryName(snapshot)!;
+            var hashes = Path.Combine(snapshotRoot, "SHA256SUMS.txt");
+            Assert.Equal("efe6355df50a57bb06472c45378242b6bbff4557d0be5d6c10edd8d21ee5b530",
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(hashes))).ToLowerInvariant());
+            var entries = File.ReadAllLines(hashes);
+            Assert.Equal(68, entries.Length);
+            foreach (var entry in entries)
+                Assert.Equal(entry[..64], Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    File.ReadAllBytes(Path.Combine(snapshotRoot, entry[66..])))).ToLowerInvariant());
+            File.Copy(snapshot, fixture.ScriptPath, overwrite: true);
+            var files = Directory.GetFiles(snapshotRoot, "*.ps1", SearchOption.AllDirectories);
+            Assert.Equal(67, files.Length);
+            foreach (var source in files)
+            {
+                var destination = Path.Combine(fixture.RootPath, Path.GetRelativePath(snapshotRoot, source));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(source, destination);
+            }
         }
         const string probe = """
             $module=Import-Module $modulePath -PassThru -Force
@@ -58,6 +90,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
         var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+        if (fullModule)
+            Assert.Equal(68, resolved.SourceFiles.Length);
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             resolved.SourcePath, fixture.OutputPath, "Generated.CompleteSavedState", resolved.Kind,
             resolved.Mode, allowUnreviewedDependencyResolution: true)
