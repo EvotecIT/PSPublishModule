@@ -488,7 +488,17 @@ public sealed class ModuleMergeComposerTests
                 Path.Combine(publicRoot.FullName, "Get-Demo.ps1"),
                 "$text = @'" + Environment.NewLine +
                 "#requires -Assembly ../DoNotTouch.dll" + Environment.NewLine +
-                "'@" + Environment.NewLine +
+                "'@ | ForEach-Object { $_ }" + Environment.NewLine +
+                "$doubleQuoted = @'" + Environment.NewLine +
+                "literal" + Environment.NewLine +
+                "'@ + \"" + Environment.NewLine +
+                "#requires -Assembly ../AlsoDoNotTouch.dll" + Environment.NewLine +
+                "\"" + Environment.NewLine +
+                "$singleQuoted = @\"" + Environment.NewLine +
+                "literal" + Environment.NewLine +
+                "\"@ + '" + Environment.NewLine +
+                "#requires -Assembly ../StillDoNotTouch.dll" + Environment.NewLine +
+                "'" + Environment.NewLine +
                 "$script:BeforeRequirement = $true" + Environment.NewLine +
                 "#requires -Assembly System.Xml" + Environment.NewLine +
                 "#requires -Assembly ../Lib/RequiredTypes.dll" + Environment.NewLine +
@@ -506,6 +516,10 @@ public sealed class ModuleMergeComposerTests
             Assert.DoesNotContain("#requires -Assembly ./Public/System.Xml", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.Contains("#requires -Assembly ../DoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
             Assert.DoesNotContain("#requires -Assembly ./DoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("#requires -Assembly ../AlsoDoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("#requires -Assembly ./AlsoDoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.Contains("#requires -Assembly ../StillDoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("#requires -Assembly ./StillDoNotTouch.dll", sources.MergedScriptContent, StringComparison.Ordinal);
         }
         finally
         {

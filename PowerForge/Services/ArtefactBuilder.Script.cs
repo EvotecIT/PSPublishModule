@@ -412,12 +412,21 @@ public sealed partial class ArtefactBuilder
 
         var moduleContent = string.Join(newline, lines).TrimEnd('\r', '\n');
         var moduleShebang = ExtractLeadingShebang(moduleContent, newline, out var moduleWithoutShebang);
-        var modulePreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(moduleWithoutShebang, out var body);
         var normalizedPreScript = string.IsNullOrWhiteSpace(preScriptMerge)
             ? string.Empty
             : NormalizeNewlines(preScriptMerge!.Trim(), newline);
         var preScriptShebang = ExtractLeadingShebang(normalizedPreScript, newline, out var preScriptWithoutShebang);
         var shebang = string.IsNullOrWhiteSpace(preScriptShebang) ? moduleShebang : preScriptShebang;
+        var normalizedPostScript = string.IsNullOrWhiteSpace(postScriptMerge)
+            ? string.Empty
+            : NormalizeNewlines(postScriptMerge!.Trim(), newline);
+        var runtimePreamble = ConsolidateScriptRuntimeRequirements(
+            manifestRuntimePreamble,
+            ref preScriptWithoutShebang,
+            ref moduleWithoutShebang,
+            ref normalizedPostScript,
+            newline);
+        var modulePreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(moduleWithoutShebang, out var body);
         var preScriptPreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(
             preScriptWithoutShebang,
             out var preScriptBody);
@@ -426,8 +435,8 @@ public sealed partial class ArtefactBuilder
         if (!string.IsNullOrWhiteSpace(shebang))
             sections.Add(shebang);
 
-        if (!string.IsNullOrWhiteSpace(manifestRuntimePreamble))
-            sections.Add(NormalizeNewlines(manifestRuntimePreamble.Trim(), newline));
+        if (!string.IsNullOrWhiteSpace(runtimePreamble))
+            sections.Add(runtimePreamble);
 
         if (!string.IsNullOrWhiteSpace(preScriptPreamble))
             sections.Add(NormalizeNewlines(preScriptPreamble.Trim(), newline));
@@ -441,8 +450,8 @@ public sealed partial class ArtefactBuilder
         if (!string.IsNullOrEmpty(body))
             sections.Add(NormalizeNewlines(body.TrimEnd('\r', '\n'), newline));
 
-        if (!string.IsNullOrWhiteSpace(postScriptMerge))
-            sections.Add(NormalizeNewlines(postScriptMerge!.Trim(), newline));
+        if (!string.IsNullOrWhiteSpace(normalizedPostScript))
+            sections.Add(normalizedPostScript);
 
         var rewritten = string.Join(newline, sections) + newline;
         bool startsWithShebang = rewritten.StartsWith("#!", StringComparison.Ordinal);
@@ -521,20 +530,19 @@ public sealed partial class ArtefactBuilder
         ref ScriptLexicalState state,
         ref int blockCommentDepth)
     {
+        var scanStart = 0;
         if (state is ScriptLexicalState.SingleQuotedHereString or ScriptLexicalState.DoubleQuotedHereString)
         {
             var terminator = state == ScriptLexicalState.SingleQuotedHereString ? "'@" : "\"@";
             var trimmed = line.TrimStart();
-            if (trimmed.StartsWith(terminator, StringComparison.Ordinal))
-            {
-                var suffix = trimmed.Substring(terminator.Length);
-                if (string.IsNullOrWhiteSpace(suffix) || suffix.TrimStart().StartsWith("#", StringComparison.Ordinal))
-                    state = ScriptLexicalState.Normal;
-            }
-            return;
+            if (!trimmed.StartsWith(terminator, StringComparison.Ordinal))
+                return;
+
+            state = ScriptLexicalState.Normal;
+            scanStart = line.Length - trimmed.Length + terminator.Length;
         }
 
-        for (var characterIndex = 0; characterIndex < line.Length; characterIndex++)
+        for (var characterIndex = scanStart; characterIndex < line.Length; characterIndex++)
         {
             var current = line[characterIndex];
             var next = characterIndex + 1 < line.Length ? line[characterIndex + 1] : '\0';
