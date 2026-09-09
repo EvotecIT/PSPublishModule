@@ -66,6 +66,66 @@ public sealed class ArtefactBuilderScriptPreambleTests
     }
 
     [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_RootModuleShebangPrecedesGeneratedManifestRequirements(ArtefactType artefactType)
+    {
+        var root = CreateRoot();
+        string? extractedRoot = null;
+        try
+        {
+            const string moduleName = "RootShebangModule";
+            string stagingRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "staging")).FullName;
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0'; PowerShellVersion = '7.0' }}");
+            File.WriteAllText(
+                Path.Combine(stagingRoot, moduleName + ".psm1"),
+                "#!/usr/bin/env pwsh\nfunction Get-RootShebang { 'ok' }");
+
+            ArtefactBuildResult result = Build(
+                Path.Combine(root.FullName, "output"),
+                root.FullName,
+                stagingRoot,
+                moduleName,
+                artefactType,
+                string.Empty);
+
+            string inspectionRoot = result.OutputPath;
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                extractedRoot = Path.Combine(root.FullName, "extracted-root-shebang");
+                ZipFile.ExtractToDirectory(result.OutputPath, extractedRoot);
+                inspectionRoot = extractedRoot;
+            }
+
+            string scriptPath = Path.Combine(inspectionRoot, moduleName + ".ps1");
+            byte[] bytes = File.ReadAllBytes(scriptPath);
+            Assert.True(bytes.Length >= 2);
+            Assert.Equal((byte)'#', bytes[0]);
+            Assert.Equal((byte)'!', bytes[1]);
+            string content = File.ReadAllText(scriptPath);
+            Assert.StartsWith("#!/usr/bin/env pwsh", content, StringComparison.Ordinal);
+            Assert.True(content.IndexOf("#requires -Version 7.0", StringComparison.Ordinal) > 0);
+            Parser.ParseInput(content, out _, out ParseError[] parseErrors);
+            Assert.Empty(parseErrors);
+
+            if (artefactType == ArtefactType.ScriptPacked)
+            {
+                using ZipArchive archive = ZipFile.OpenRead(result.OutputPath);
+                ZipArchiveEntry entry = Assert.Single(
+                    archive.Entries,
+                    item => item.FullName == moduleName + ".ps1");
+                Assert.Equal(0x1ED, (entry.ExternalAttributes >> 16) & 0x1FF);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
     [InlineData(ArtefactType.Script, "#requires -Version 7.0")]
     [InlineData(ArtefactType.Script, "# premerge comment")]
     [InlineData(ArtefactType.Script, "using namespace System")]

@@ -237,7 +237,8 @@ internal static partial class ModuleMergeComposer
                 files.AddRange(
                     Directory.EnumerateFiles(full, "*", SearchOption.AllDirectories)
                         .Where(static file => string.Equals(Path.GetExtension(file), ".ps1", StringComparison.OrdinalIgnoreCase))
-                        .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase));
+                        .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(static file => file, StringComparer.Ordinal));
             }
             catch
             {

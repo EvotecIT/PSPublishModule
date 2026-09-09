@@ -4,6 +4,53 @@ namespace PowerForge.Tests;
 
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CollectModuleReleaseAssets_RejectsSplitScriptLayout(bool externalModule)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        string scriptRoot = Path.Combine(root, "script");
+        string externalRoot = Path.Combine(root, "external");
+        string archiveRoot = Path.Combine(root, "release");
+        try
+        {
+            Directory.CreateDirectory(scriptRoot);
+            Directory.CreateDirectory(externalRoot);
+            File.WriteAllText(Path.Combine(scriptRoot, "Invoke-Sample.ps1"), "'sample'");
+            File.WriteAllText(Path.Combine(externalRoot, "payload.txt"), "external payload");
+            ArtefactModuleEntry[] modules = externalModule
+                ? [new ArtefactModuleEntry("External", false, "1.0.0", externalRoot)]
+                : Array.Empty<ArtefactModuleEntry>();
+            ArtefactCopyEntry[] copiedItems = externalModule
+                ? Array.Empty<ArtefactCopyEntry>()
+                : [new ArtefactCopyEntry(externalRoot, externalRoot, isDirectory: true)];
+            var artefact = new ArtefactBuildResult(
+                ArtefactType.Script,
+                "release-script",
+                scriptRoot,
+                modules,
+                copiedItems,
+                Array.Empty<string>(),
+                "Invoke-Sample.ps1");
+            var method = typeof(ModulePipelineRunner).GetMethod(
+                "CollectModuleReleaseAssets",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+            var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+                method!.Invoke(null, new object?[] { new[] { artefact }, "release-script", archiveRoot }));
+
+            InvalidOperationException validation = Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("split layout", validation.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("outside its output root", validation.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(archiveRoot));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void CollectModuleReleaseAssets_RejectsNonPortableScriptPackedArchive()
     {

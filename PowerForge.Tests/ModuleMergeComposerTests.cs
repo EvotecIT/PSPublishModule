@@ -7,6 +7,31 @@ namespace PowerForge.Tests;
 public sealed class ModuleMergeComposerTests
 {
     [Fact]
+    public void ResolveScriptFiles_OrdersCaseDistinctPathsWithOrdinalTieBreaker()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparisonForPath(root.FullName) != StringComparison.Ordinal)
+                return;
+
+            string publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public")).FullName;
+            File.WriteAllText(Path.Combine(publicRoot, "foo.ps1"), "'lower'");
+            File.WriteAllText(Path.Combine(publicRoot, "Foo.ps1"), "'upper'");
+
+            string[] files = ModuleMergeComposer.ResolveScriptFiles(
+                root.FullName,
+                new InformationConfiguration { IncludePS1 = ["Public"] });
+
+            Assert.Equal(new[] { "Foo.ps1", "foo.ps1" }, files.Select(Path.GetFileName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void BuildSources_ReportsOnlyFilesSuccessfullyIncorporated()
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));

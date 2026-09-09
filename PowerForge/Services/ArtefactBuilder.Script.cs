@@ -409,11 +409,13 @@ public sealed partial class ArtefactBuilder
         }
 
         var moduleContent = string.Join(newline, lines).TrimEnd('\r', '\n');
-        var modulePreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(moduleContent, out var body);
+        var moduleShebang = ExtractLeadingShebang(moduleContent, newline, out var moduleWithoutShebang);
+        var modulePreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(moduleWithoutShebang, out var body);
         var normalizedPreScript = string.IsNullOrWhiteSpace(preScriptMerge)
             ? string.Empty
             : NormalizeNewlines(preScriptMerge!.Trim(), newline);
-        var shebang = ExtractLeadingShebang(normalizedPreScript, newline, out var preScriptWithoutShebang);
+        var preScriptShebang = ExtractLeadingShebang(normalizedPreScript, newline, out var preScriptWithoutShebang);
+        var shebang = string.IsNullOrWhiteSpace(preScriptShebang) ? moduleShebang : preScriptShebang;
         var preScriptPreamble = ModuleMergeComposer.ExtractMergedScriptPreamble(
             preScriptWithoutShebang,
             out var preScriptBody);

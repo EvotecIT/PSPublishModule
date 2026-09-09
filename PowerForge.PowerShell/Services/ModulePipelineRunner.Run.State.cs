@@ -58,11 +58,13 @@ public sealed partial class ModulePipelineRunner
         public string? ProjectManifestSyncMessage { get; set; }
         public string? AuthorizedProjectManifestSha256 { get; set; }
         public string? AuthorizedStagingManifestSha256 { get; set; }
-        public bool PackageWithoutScriptFolders => !HasScriptsToProcess &&
-            (PowerShellCompilationResult is not null
+        public bool PackageWithoutScriptFolders => !HasScriptsToProcess && HasMergedRootModule;
+
+        public bool HasMergedRootModule =>
+            PowerShellCompilationResult is not null
                 ? !PowerShellCompilationResult.UsesPowerShellRuntimeFallback
                 : MergeExecution.MergedModule ||
-                  (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources));
+                  (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);
 
         private bool HasScriptsToProcess => BuildResult is not null &&
             ModuleManifestValueReader.ReadTopLevelStringOrArray(

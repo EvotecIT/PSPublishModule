@@ -96,6 +96,7 @@ public sealed partial class ModulePipelineRunner
         var outputRoot = Path.GetFullPath(artefact.OutputPath);
         if (!Directory.Exists(outputRoot))
             throw new DirectoryNotFoundException($"Script release artefact layout was not found: {outputRoot}");
+        ValidateScriptReleaseLayoutContainment(artefact, outputRoot);
 
         Directory.CreateDirectory(scriptArchiveRoot);
         var archiveName = Path.GetFileNameWithoutExtension(entryPointPath) + ".zip";
@@ -130,6 +131,33 @@ public sealed partial class ModulePipelineRunner
                 : Array.Empty<string>());
         ValidateModuleReleaseScriptArchive(archivePath, artefact.EntryPointRelativePath);
         return new[] { archivePath };
+    }
+
+    private static void ValidateScriptReleaseLayoutContainment(
+        ArtefactBuildResult artefact,
+        string outputRoot)
+    {
+        ArtefactModuleEntry? externalModule = artefact.Modules.FirstOrDefault(module =>
+            module is not null &&
+            !string.IsNullOrWhiteSpace(module.Path) &&
+            !IsSameOrChildPath(outputRoot, module.Path));
+        if (externalModule is not null)
+        {
+            throw new InvalidOperationException(
+                $"Script release artefact '{artefact.Id}' uses a split layout whose module '{externalModule.Name}' at '{Path.GetFullPath(externalModule.Path)}' is outside its output root '{outputRoot}'. " +
+                "Keep every released module within the Script artefact Path, or use ScriptPacked, so the release archive contains the complete payload.");
+        }
+
+        ArtefactCopyEntry? externalCopy = artefact.CopiedItems.FirstOrDefault(item =>
+            item is not null &&
+            !string.IsNullOrWhiteSpace(item.Destination) &&
+            !IsSameOrChildPath(outputRoot, item.Destination));
+        if (externalCopy is null)
+            return;
+
+        throw new InvalidOperationException(
+            $"Script release artefact '{artefact.Id}' uses a split layout whose copied destination '{Path.GetFullPath(externalCopy.Destination)}' is outside its output root '{outputRoot}'. " +
+            "Keep every released copy destination within the Script artefact Path, or use ScriptPacked, so the release archive contains the complete payload.");
     }
 
     private static void ValidateModuleReleaseScriptArchive(string archivePath, string? entryPointRelativePath)

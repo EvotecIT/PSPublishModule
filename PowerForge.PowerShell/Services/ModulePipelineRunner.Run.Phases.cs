@@ -110,7 +110,7 @@ public sealed partial class ModulePipelineRunner
                 ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
 
                 if (plan.Delivery.GenerateInstallCommand || plan.Delivery.GenerateUpdateCommand)
-                    UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.PackageWithoutScriptFolders);
+                    UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.HasMergedRootModule);
             }
 
             if (!IsReusingCompiledPowerShellModule(plan) && state.MergeExecution.MergedModule) {
@@ -728,7 +728,10 @@ public sealed partial class ModulePipelineRunner
         ExecuteActions(ModulePipelineActionStage.AfterTests, plan, session, state);
     }
 
-    internal void UpdateManifestForGeneratedDeliveryCommands(ModulePipelinePlan plan, ModuleBuildResult buildResult, bool packageWithoutScriptFolders)
+    internal void UpdateManifestForGeneratedDeliveryCommands(
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        bool synchronizeMergedRootModule)
     {
         var generator = new DeliveryCommandGenerator(_logger);
         var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery!);
@@ -746,7 +749,7 @@ public sealed partial class ModulePipelineRunner
                 _manifestMutator.TrySetManifestExports(buildResult.ManifestPath, functions.ToArray(), cmdlets: null, aliases: null);
             }
 
-            if (packageWithoutScriptFolders)
+            if (synchronizeMergedRootModule)
             {
                 var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
                 var conditionalExportDependencies = ResolveConditionalExportDependencies(
