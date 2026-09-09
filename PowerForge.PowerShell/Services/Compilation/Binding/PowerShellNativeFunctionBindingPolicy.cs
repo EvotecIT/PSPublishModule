@@ -69,10 +69,26 @@ internal static class PowerShellNativeFunctionBindingPolicy
 
     private static bool RequiresNativeBinding(FunctionDefinitionAst function)
         => FindNativePipelineOperator(function) is not null ||
+           function.Body.Find(static node => node is PipelineAst pipeline &&
+               PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline) && IsCapturedPipeline(pipeline),
+               searchNestedScriptBlocks: false) is not null ||
            PowerShellParameterSyntax.GetParameters(function.Body).Any(parameter => parameter.DefaultValue is not null and not ConstantExpressionAst and not StringConstantExpressionAst ||
             parameter.Attributes.OfType<AttributeAst>().Any(attribute =>
                 typeof(System.Management.Automation.ValidateArgumentsAttribute).IsAssignableFrom(attribute.TypeName.GetReflectionType() ?? typeof(object)) ||
                 parameter.StaticType == typeof(string) && attribute.TypeName.Name.Equals("Parameter", StringComparison.OrdinalIgnoreCase) &&
                 attribute.NamedArguments.Any(argument => argument.ArgumentName.Equals("ValueFromPipeline", StringComparison.OrdinalIgnoreCase) ||
                     argument.ArgumentName.Equals("ValueFromPipelineByPropertyName", StringComparison.OrdinalIgnoreCase))));
+
+    /// <summary>Identifies command results consumed by an expression or assignment in this invocation.</summary>
+    private static bool IsCapturedPipeline(PipelineAst pipeline)
+    {
+        for (var parent = pipeline.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is AssignmentStatementAst or ParenExpressionAst or ArrayExpressionAst or SubExpressionAst)
+                return true;
+            if (parent is ScriptBlockAst or FunctionDefinitionAst or NamedBlockAst)
+                return false;
+        }
+        return false;
+    }
 }

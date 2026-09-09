@@ -24,7 +24,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "$copy=@(" + pipeline + "); 'after'; return ,$copy"
         };
         var source = string.Join(Environment.NewLine, bodies.Select((body, index) =>
-            "function Read-NativePipelineCapture" + index + " { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Values,[switch]$Fail); " + body + " }"));
+            "function Read-NativePipelineCapture" + index + " { [CmdletBinding()] param([int]$Seed=1,[object]$Values,[switch]$Fail); " + body + " }"));
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativePipelineCaptures", PowerShellCompilationArtifactKind.BinaryModule,
