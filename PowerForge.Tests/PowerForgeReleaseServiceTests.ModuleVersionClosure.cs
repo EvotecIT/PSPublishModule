@@ -105,7 +105,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void ModuleArtifactProvenance_PreservesCaseDistinctScriptOutputsOnCaseSensitiveFileSystems()
+    public void ModuleArtifactProvenance_PreservesCaseDistinctEvidenceButRejectsCollidingReleaseArchives()
     {
         string root = CreateSandbox();
         try
@@ -144,15 +144,17 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             File.WriteAllText(lowerPath, "'lower-after'");
             File.WriteAllText(upperPath, "'upper-after'");
-            string[] produced = PowerForgeReleaseService.ResolveProducedModuleArtifacts(
-                Array.Empty<string>(),
-                baseline,
-                plan,
-                Path.Combine(root, "archives"));
+            string archiveRoot = Path.Combine(root, "archives");
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.ResolveProducedModuleArtifacts(
+                    Array.Empty<string>(),
+                    baseline,
+                    plan,
+                    archiveRoot));
 
-            Assert.Equal(2, produced.Length);
-            Assert.Contains(Path.Combine(root, "archives", "tool.zip"), produced, StringComparer.Ordinal);
-            Assert.Contains(Path.Combine(root, "archives", "Tool.zip"), produced, StringComparer.Ordinal);
+            Assert.Contains("archive", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("case-insensitive", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(archiveRoot));
         }
         finally
         {

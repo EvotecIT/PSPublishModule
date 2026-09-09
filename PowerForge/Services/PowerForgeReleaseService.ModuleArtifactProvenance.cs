@@ -3,6 +3,7 @@ namespace PowerForge;
 internal sealed partial class PowerForgeReleaseService
 {
     private static readonly StringComparer ModuleArtifactPathComparer = FrameworkCompatibility.PathComparer;
+    private static readonly StringComparer ModuleReleaseAssetPathComparer = StringComparer.OrdinalIgnoreCase;
 
     internal static IReadOnlyDictionary<string, ModuleArtifactSnapshot> CaptureModuleArtifactBaseline(
         IEnumerable<string>? configuredPaths,
@@ -19,6 +20,7 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeModuleReleasePlanSummary? plan = null,
         string? scriptArchiveRoot = null)
     {
+        ValidateReportedScriptLayouts(plan);
         var prior = baseline ?? new Dictionary<string, ModuleArtifactSnapshot>(ModuleArtifactPathComparer);
         string[] produced = EnumerateModuleArtifactFiles(configuredPaths, plan)
             .Select(static path => (Path: path, Snapshot: CaptureModuleArtifactSnapshot(path)))
@@ -89,10 +91,14 @@ internal sealed partial class PowerForgeReleaseService
         if (scriptOutputs.Length == 0 || producedPaths.Count == 0)
             return producedPaths.OrderBy(static path => path, ModuleArtifactPathComparer).ToArray();
 
-        var consumed = new HashSet<string>(ModuleArtifactPathComparer);
         var producedSet = new HashSet<string>(producedPaths, ModuleArtifactPathComparer);
-        var archives = new List<string>();
-        var archiveSources = new Dictionary<string, string>(ModuleArtifactPathComparer);
+        var portableProducedSet = new HashSet<string>(producedPaths, ModuleReleaseAssetPathComparer);
+        var candidates = new List<(
+            PowerForgeModuleArtefactOutputSummary Output,
+            string OutputRoot,
+            string EntryPointPath,
+            string[] LayoutFiles,
+            string ArchivePath)>();
         foreach (PowerForgeModuleArtefactOutputSummary output in scriptOutputs)
         {
             if (!TryResolveScriptLayout(output, out string? outputRoot, out string? entryPointPath))
@@ -120,45 +126,70 @@ internal sealed partial class PowerForgeReleaseService
 
             string archiveName = Path.GetFileNameWithoutExtension(entryPointPath) + ".zip";
             string archivePath = Path.GetFullPath(Path.Combine(fullArchiveRoot, archiveName));
-            bool collidesWithProducedAsset = producedSet.Contains(archivePath);
+            candidates.Add((output, outputRoot!, entryPointPath!, layoutFiles, archivePath));
+        }
+
+        var uniqueCandidates = new List<(
+            PowerForgeModuleArtefactOutputSummary Output,
+            string OutputRoot,
+            string EntryPointPath,
+            string[] LayoutFiles,
+            string ArchivePath)>();
+        var archiveSources = new Dictionary<string, (string ArchivePath, string Source)>(ModuleReleaseAssetPathComparer);
+        foreach (var candidate in candidates)
+        {
+            bool collidesWithProducedAsset = portableProducedSet.Contains(candidate.ArchivePath);
             bool collidesWithRecordedOutput = outputs.Any(other =>
                 other is not null &&
-                !ReferenceEquals(other, output) &&
-                ModuleArtefactOutputUsesPath(other, archivePath));
+                !ReferenceEquals(other, candidate.Output) &&
+                ModuleArtefactOutputUsesPath(other, candidate.ArchivePath, ModuleReleaseAssetPathComparer));
             if (collidesWithProducedAsset || collidesWithRecordedOutput)
             {
                 throw new InvalidOperationException(
-                    $"Script release archive '{archivePath}' collides with another produced or recorded artefact output. " +
-                    "Configure a unique Script entry-point name or release archive directory.");
+                    $"Script release archive '{candidate.ArchivePath}' collides with another produced or recorded artefact output " +
+                    "in the case-insensitive release asset namespace. Configure a unique Script entry-point name or release archive directory.");
             }
-            if (archiveSources.TryGetValue(archivePath, out string? existingSource) &&
-                !ModuleArtifactPathComparer.Equals(existingSource, outputRoot))
+
+            if (archiveSources.TryGetValue(candidate.ArchivePath, out var existing))
             {
+                if (ModuleArtifactPathComparer.Equals(existing.ArchivePath, candidate.ArchivePath) &&
+                    ModuleArtifactPathComparer.Equals(existing.Source, candidate.OutputRoot))
+                {
+                    continue;
+                }
+
                 throw new InvalidOperationException(
-                    $"Script release layouts '{existingSource}' and '{outputRoot}' resolve to the same archive '{archivePath}'. " +
+                    $"Script release layouts '{existing.Source}' and '{candidate.OutputRoot}' resolve to archives " +
+                    $"'{existing.ArchivePath}' and '{candidate.ArchivePath}' that collide in the case-insensitive release asset namespace. " +
                     "Configure unique script entry-point names.");
             }
 
-            archiveSources[archivePath] = outputRoot!;
+            archiveSources.Add(candidate.ArchivePath, (candidate.ArchivePath, candidate.OutputRoot));
+            uniqueCandidates.Add(candidate);
+        }
+
+        var consumed = new HashSet<string>(ModuleArtifactPathComparer);
+        var archives = new List<string>();
+        foreach (var candidate in uniqueCandidates)
+        {
             ArtefactBuilder.CreateDeterministicZipFromDirectoryContents(
-                outputRoot!,
-                archivePath,
-                ArtefactBuilder.ScriptStartsWithShebang(entryPointPath!)
-                    ? new[] { output.EntryPointRelativePath! }
+                candidate.OutputRoot,
+                candidate.ArchivePath,
+                ArtefactBuilder.ScriptStartsWithShebang(candidate.EntryPointPath)
+                    ? new[] { candidate.Output.EntryPointRelativePath! }
                     : Array.Empty<string>());
             if (!PowerShellScriptArchiveValidator.TryValidate(
-                    archivePath,
-                    output.EntryPointRelativePath,
+                    candidate.ArchivePath,
+                    candidate.Output.EntryPointRelativePath,
                     out string? validationError))
             {
                 throw new InvalidOperationException(
-                    $"Script release archive '{archivePath}' is not a valid portable release payload: {validationError}");
+                    $"Script release archive '{candidate.ArchivePath}' is not a valid portable release payload: {validationError}");
             }
-            output.ReleaseAssetPath = archivePath;
-            if (!archives.Contains(archivePath, ModuleArtifactPathComparer))
-                archives.Add(archivePath);
+            candidate.Output.ReleaseAssetPath = candidate.ArchivePath;
+            archives.Add(candidate.ArchivePath);
 
-            foreach (string layoutFile in layoutFiles.Where(producedSet.Contains))
+            foreach (string layoutFile in candidate.LayoutFiles.Where(producedSet.Contains))
             {
                 bool producedByAnotherArtefact = outputs.Any(other =>
                     other is not null &&
@@ -182,11 +213,36 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool ModuleArtefactOutputUsesPath(
         PowerForgeModuleArtefactOutputSummary output,
-        string path)
+        string path,
+        StringComparer comparer)
         => (!string.IsNullOrWhiteSpace(output.OutputPath) &&
-            ModuleArtifactPathComparer.Equals(Path.GetFullPath(output.OutputPath), path)) ||
+            comparer.Equals(Path.GetFullPath(output.OutputPath), path)) ||
            (!string.IsNullOrWhiteSpace(output.ReleaseAssetPath) &&
-            ModuleArtifactPathComparer.Equals(Path.GetFullPath(output.ReleaseAssetPath), path));
+            comparer.Equals(Path.GetFullPath(output.ReleaseAssetPath), path));
+
+    private static void ValidateReportedScriptLayouts(PowerForgeModuleReleasePlanSummary? plan)
+    {
+        foreach (PowerForgeModuleArtefactOutputSummary output in
+                 plan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>())
+        {
+            if (output is null ||
+                output.Type != ArtefactType.Script ||
+                TryResolveScriptLayout(output, out _, out _))
+            {
+                continue;
+            }
+
+            string outputRoot = string.IsNullOrWhiteSpace(output.OutputPath)
+                ? output.OutputRoot ?? "(missing output path)"
+                : output.OutputPath!;
+            string entryPoint = string.IsNullOrWhiteSpace(output.EntryPointRelativePath)
+                ? "(missing entry point)"
+                : output.EntryPointRelativePath!;
+            throw new InvalidOperationException(
+                $"Reported Script artefact output '{outputRoot}' does not contain its entry point '{entryPoint}'. " +
+                "A successful module build must leave the complete Script layout available for release packaging.");
+        }
+    }
 
     private static bool TryResolveScriptLayout(
         PowerForgeModuleArtefactOutputSummary output,
