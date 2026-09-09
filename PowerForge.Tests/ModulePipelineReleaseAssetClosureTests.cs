@@ -251,4 +251,60 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             try { Directory.Delete(Path.GetDirectoryName(archiveRoot)!, recursive: true); } catch { }
         }
     }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.Packed)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void CollectModuleReleaseAssets_RejectsSelectedScriptWhoseRootContainsAnotherReleaseOutput(
+        ArtefactType otherType)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        string archiveRoot = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "first"));
+            Directory.CreateDirectory(Path.Combine(root, "second"));
+            File.WriteAllText(Path.Combine(root, "first", "First.ps1"), "'first'");
+            File.WriteAllText(Path.Combine(root, "second", "Second.ps1"), "'second'");
+            var selected = new ArtefactBuildResult(
+                ArtefactType.Script,
+                "first",
+                root,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                Array.Empty<string>(),
+                "first/First.ps1");
+            string otherOutput = otherType == ArtefactType.Script
+                ? root
+                : Path.Combine(root, "unselected.zip");
+            if (otherType != ArtefactType.Script)
+                File.WriteAllText(otherOutput, "unselected artefact");
+            var unselected = new ArtefactBuildResult(
+                otherType,
+                "second",
+                otherOutput,
+                Array.Empty<ArtefactModuleEntry>(),
+                Array.Empty<ArtefactCopyEntry>(),
+                Array.Empty<string>(),
+                otherType is ArtefactType.Script or ArtefactType.ScriptPacked
+                    ? "second/Second.ps1"
+                    : null);
+            var method = typeof(ModulePipelineRunner).GetMethod(
+                "CollectModuleReleaseAssets",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+            var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+                method!.Invoke(null, new object?[] { new[] { selected, unselected }, "first", archiveRoot }));
+
+            InvalidOperationException validation = Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("share output root", validation.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(archiveRoot));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(archiveRoot, recursive: true); } catch { }
+        }
+    }
 }

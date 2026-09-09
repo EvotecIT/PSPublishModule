@@ -242,7 +242,10 @@ public sealed partial class ModulePipelineRunner
                                           ArtefactType.ScriptPacked)
             .ToArray();
         if (spec.UnifiedGitHubRelease)
-            return unifiedReleaseArtefacts;
+        {
+            ConfigurationArtefactSegment? first = unifiedReleaseArtefacts.FirstOrDefault();
+            return first is null ? Array.Empty<ConfigurationArtefactSegment>() : new[] { first };
+        }
 
         ConfigurationArtefactSegment[] directReleaseArtefacts = unifiedReleaseArtefacts
             .Where(static artefact => artefact.ArtefactType is ArtefactType.Packed or ArtefactType.ScriptPacked)

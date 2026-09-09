@@ -22,6 +22,7 @@ public sealed partial class ModulePipelineRunner
             return Array.Empty<string>();
 
         ArtefactBuildResult[] selected = SelectModuleReleaseArtefacts(releaseArtefacts, publishId);
+        ValidateSelectedScriptOutputOwnership(releaseArtefacts, selected);
         var scriptSourcesByArchive = new Dictionary<string, string>(PowerShellCompilationPathSafety.PathComparer);
         string[] selectedOutputPaths = selected
             .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
@@ -39,6 +40,26 @@ public sealed partial class ModulePipelineRunner
             .Select(static path => Path.GetFullPath(path))
             .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
+    }
+
+    private static void ValidateSelectedScriptOutputOwnership(
+        IReadOnlyList<ArtefactBuildResult> releaseArtefacts,
+        IReadOnlyList<ArtefactBuildResult> selected)
+    {
+        foreach (ArtefactBuildResult script in selected.Where(static artefact => artefact.Type == ArtefactType.Script))
+        {
+            string outputRoot = Path.GetFullPath(script.OutputPath);
+            ArtefactBuildResult? conflicting = releaseArtefacts.FirstOrDefault(other =>
+                !ReferenceEquals(other, script) &&
+                !string.IsNullOrWhiteSpace(other.OutputPath) &&
+                IsSameOrChildPath(outputRoot, Path.GetFullPath(other.OutputPath)));
+            if (conflicting is null)
+                continue;
+
+            throw new InvalidOperationException(
+                $"Selected Script artefact '{script.Id}' and artefact '{conflicting.Id}' share output root '{outputRoot}' or place another output inside it. " +
+                "Configure a unique Script Path so its complete release archive cannot include an unselected artefact.");
+        }
     }
 
     private static ArtefactBuildResult[] SelectModuleReleaseArtefacts(

@@ -251,6 +251,7 @@ public sealed partial class ArtefactBuilder
         string scriptPath,
         string requiredRoot,
         IReadOnlyList<RequiredModuleReference> requiredModules,
+        ScriptPackageDestinationNamespace packageNamespace,
         string projectRoot,
         string stagingPath,
         string moduleName,
@@ -314,6 +315,9 @@ public sealed partial class ArtefactBuilder
                 throw new InvalidOperationException(
                     $"Script artefact directory copy destination '{destination}' overlaps required module destination '{requiredModuleDestination}' and could erase or corrupt the bundled dependency.");
             }
+            ValidateScriptDirectoryCopyDestinationDoesNotReplacePackage(
+                destination,
+                packageNamespace);
         }
 
         foreach (var mapping in cfg.FilesOutput ?? Array.Empty<ArtefactCopyMapping>())
@@ -368,6 +372,22 @@ public sealed partial class ArtefactBuilder
             fileDestinations);
         ValidateScriptDirectoryCopyDestinationsDoNotOverlap(directoryDestinations);
         ValidateScriptFileCopyDestinationsDoNotConflict(directoryDestinations, fileDestinations);
+    }
+
+    private static void ValidateScriptDirectoryCopyDestinationDoesNotReplacePackage(
+        string destination,
+        ScriptPackageDestinationNamespace packageNamespace)
+    {
+        string? conflictingFile = packageNamespace.Files.FirstOrDefault(packagePath =>
+            ScriptPathsOverlap(packagePath, destination));
+        string? conflictingDirectory = packageNamespace.Directories.FirstOrDefault(packagePath =>
+            IsSameOrBelowPath(packagePath, destination));
+        string? conflictingPayload = conflictingFile ?? conflictingDirectory;
+        if (conflictingPayload is null)
+            return;
+
+        throw new InvalidOperationException(
+            $"Script artefact directory copy destination '{Path.GetFullPath(destination)}' conflicts with packaged payload destination '{conflictingPayload}' and would replace included content.");
     }
 
     private static void ValidateScriptDirectoryCopyDestinationSafety(

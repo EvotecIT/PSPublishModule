@@ -135,8 +135,20 @@ internal static class FrameworkCompatibility
         }
     }
 
-    private sealed class FileSystemAwarePathComparer : StringComparer
+    internal sealed class FileSystemAwarePathComparer : StringComparer
     {
+        private readonly Func<string, StringComparison> _comparisonResolver;
+
+        internal FileSystemAwarePathComparer()
+            : this(GetPathStringComparisonForPath)
+        {
+        }
+
+        internal FileSystemAwarePathComparer(Func<string, StringComparison> comparisonResolver)
+        {
+            _comparisonResolver = comparisonResolver ?? throw new ArgumentNullException(nameof(comparisonResolver));
+        }
+
         public override int Compare(string? x, string? y)
         {
             if (ReferenceEquals(x, y)) return 0;
@@ -155,11 +167,54 @@ internal static class FrameworkCompatibility
         public override int GetHashCode(string obj)
             => StringComparer.OrdinalIgnoreCase.GetHashCode(obj);
 
-        private static StringComparison ResolveComparison(string first, string second)
-            => GetPathStringComparisonForPath(first) == StringComparison.OrdinalIgnoreCase ||
-               GetPathStringComparisonForPath(second) == StringComparison.OrdinalIgnoreCase
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
+        private StringComparison ResolveComparison(string first, string second)
+        {
+            if (!string.Equals(first, second, StringComparison.OrdinalIgnoreCase))
+            {
+                return _comparisonResolver(first) == StringComparison.OrdinalIgnoreCase ||
+                       _comparisonResolver(second) == StringComparison.OrdinalIgnoreCase
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+            }
+
+            int componentStart = 0;
+            bool componentDiffersByCase = false;
+            for (int index = 0; index <= first.Length; index++)
+            {
+                bool atEnd = index == first.Length;
+                bool atSeparator = !atEnd &&
+                                   (first[index] == Path.DirectorySeparatorChar ||
+                                    first[index] == Path.AltDirectorySeparatorChar);
+                if (atEnd || atSeparator)
+                {
+                    if (componentDiffersByCase &&
+                        _comparisonResolver(ResolveComponentParent(first, componentStart)) == StringComparison.Ordinal)
+                    {
+                        return StringComparison.Ordinal;
+                    }
+
+                    componentStart = index + 1;
+                    componentDiffersByCase = false;
+                    continue;
+                }
+
+                if (first[index] != second[index])
+                    componentDiffersByCase = true;
+            }
+
+            return StringComparison.OrdinalIgnoreCase;
+        }
+
+        private static string ResolveComponentParent(string path, int componentStart)
+        {
+            if (componentStart > 0)
+                return path.Substring(0, componentStart);
+
+            if (!Path.IsPathRooted(path))
+                return Directory.GetCurrentDirectory();
+
+            return Path.GetPathRoot(Path.GetFullPath(path)) ?? Directory.GetCurrentDirectory();
+        }
     }
 
     public static string GetSha256Hex(X509Certificate2 certificate)
