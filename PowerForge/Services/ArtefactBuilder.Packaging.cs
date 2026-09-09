@@ -195,7 +195,10 @@ public sealed partial class ArtefactBuilder
             var fullPath = Path.GetFullPath(candidate);
             if (!fullPath.StartsWith(rootPrefix, comparison) || !File.Exists(fullPath))
                 throw new InvalidOperationException($"Finalized module payload file is missing or outside staging: '{fullPath}'.");
-            EnsureNoReparsePoints(root, fullPath);
+            EnsurePackageSourcePathDoesNotTraverseReparsePoints(
+                root,
+                fullPath,
+                "Finalized module payload");
             if (seen.Add(fullPath))
                 validated.Add(fullPath);
         }
@@ -205,21 +208,33 @@ public sealed partial class ArtefactBuilder
             .ToArray();
     }
 
-    private static void EnsureNoReparsePoints(string stagingRoot, string filePath)
+    private static void EnsurePackageSourcePathDoesNotTraverseReparsePoints(
+        string stagingRoot,
+        string sourcePath,
+        string description)
     {
-        var current = new FileInfo(filePath).Directory;
-        while (current is not null)
+        string root = Path.GetFullPath(stagingRoot);
+        string current = Path.GetFullPath(sourcePath);
+        while (true)
         {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidOperationException($"Finalized module payload does not permit symbolic links or junctions: '{filePath}'.");
-            if (Path.GetFullPath(current.FullName).Equals(
-                    Path.GetFullPath(stagingRoot),
-                    Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-                break;
-            current = current.Parent;
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{description} '{Path.GetFullPath(sourcePath)}' traverses a symbolic link or reparse point at '{current}'.");
+            }
+
+            if (string.Equals(current, root, GetPathComparison(current, root)))
+                return;
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || !IsSameOrBelowPath(parent, root))
+            {
+                throw new InvalidOperationException(
+                    $"{description} '{Path.GetFullPath(sourcePath)}' resolves outside staging root '{root}'.");
+            }
+
+            current = parent;
         }
-        if ((File.GetAttributes(filePath) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidOperationException($"Finalized module payload does not permit symbolic links or junctions: '{filePath}'.");
     }
 
     private static void CreatePackageDirectoryStructure(
@@ -227,28 +242,11 @@ public sealed partial class ArtefactBuilder
         string destinationModuleRoot,
         PackagingInformation include)
     {
-        foreach (var dirName in include.IncludeAll)
+        foreach (string sourceDirectory in EnumerateModulePackageDirectories(stagingRoot, include))
         {
-            if (string.IsNullOrWhiteSpace(dirName)) continue;
-            var sourceDir = ResolveContainedPackageDirectory(stagingRoot, dirName);
-            if (!Directory.Exists(sourceDir)) continue;
-            string relativePath = ComputeRelativePath(stagingRoot, sourceDir);
-            CreateDirectoryTree(
-                sourceDir,
-                ResolveContainedPackageDestination(destinationModuleRoot, relativePath),
-                Array.Empty<string>());
-        }
-
-        foreach (var dirName in include.IncludePS1)
-        {
-            if (string.IsNullOrWhiteSpace(dirName)) continue;
-            var sourceDir = ResolveContainedPackageDirectory(stagingRoot, dirName);
-            if (!Directory.Exists(sourceDir)) continue;
-            string relativePath = ComputeRelativePath(stagingRoot, sourceDir);
-            CreateDirectoryTree(
-                sourceDir,
-                ResolveContainedPackageDestination(destinationModuleRoot, relativePath),
-                include.ExcludeFromPackage ?? Array.Empty<string>());
+            string relativePath = ComputeRelativePath(stagingRoot, sourceDirectory);
+            Directory.CreateDirectory(
+                ResolveContainedPackageDestination(destinationModuleRoot, relativePath));
         }
     }
 
@@ -257,12 +255,8 @@ public sealed partial class ArtefactBuilder
         string destinationRoot,
         PackagingInformation include)
     {
-        foreach (string dirName in include.IncludeAll.Concat(include.IncludePS1))
+        foreach (string sourceDirectory in EnumerateModulePackageDirectories(stagingRoot, include))
         {
-            if (string.IsNullOrWhiteSpace(dirName))
-                continue;
-
-            string sourceDirectory = ResolveContainedPackageDirectory(stagingRoot, dirName);
             string relativePath = ComputeRelativePath(stagingRoot, sourceDirectory);
             _ = ResolveContainedPackageDestination(destinationRoot, relativePath);
         }
@@ -292,34 +286,71 @@ public sealed partial class ArtefactBuilder
         return destination;
     }
 
-    private static void CreateDirectoryTree(
-        string sourceRoot,
-        string destinationRoot,
-        string[] excludedDirectoryPatterns)
+    private static string[] EnumerateModulePackageDirectories(
+        string stagingRoot,
+        PackagingInformation include)
     {
-        Directory.CreateDirectory(destinationRoot);
-        var stack = new Stack<string>();
-        stack.Push(Path.GetFullPath(sourceRoot));
-        while (stack.Count > 0)
-        {
-            var current = stack.Pop();
-            foreach (var directory in Directory.EnumerateDirectories(current, "*", SearchOption.TopDirectoryOnly))
-            {
-                var name = Path.GetFileName(directory);
-                if (string.IsNullOrWhiteSpace(name) || WildcardAnyMatch(name, excludedDirectoryPatterns))
-                    continue;
+        string root = Path.GetFullPath(stagingRoot);
+        var directories = new List<string>();
+        var seen = new HashSet<string>(CreateCurrentFileSystemPathComparer());
 
-                var relativePath = ComputeRelativePath(sourceRoot, directory);
-                Directory.CreateDirectory(Path.Combine(destinationRoot, relativePath));
-                stack.Push(directory);
+        void AddDirectoryTree(string configuredPath, string[] excludedDirectoryPatterns)
+        {
+            if (string.IsNullOrWhiteSpace(configuredPath))
+                return;
+
+            string sourceRoot = ResolveContainedPackageDirectory(root, configuredPath);
+            if (!Directory.Exists(sourceRoot))
+                return;
+
+            EnsurePackageSourcePathDoesNotTraverseReparsePoints(
+                root,
+                sourceRoot,
+                "Module package source directory");
+            var pending = new Stack<string>();
+            pending.Push(sourceRoot);
+            while (pending.Count > 0)
+            {
+                string current = pending.Pop();
+                if (seen.Add(current))
+                    directories.Add(current);
+
+                foreach (string directory in Directory.EnumerateDirectories(
+                             current,
+                             "*",
+                             SearchOption.TopDirectoryOnly))
+                {
+                    string name = Path.GetFileName(directory);
+                    if (string.IsNullOrWhiteSpace(name) ||
+                        WildcardAnyMatch(name, excludedDirectoryPatterns))
+                    {
+                        continue;
+                    }
+
+                    EnsurePackageSourcePathDoesNotTraverseReparsePoints(
+                        root,
+                        directory,
+                        "Module package source directory");
+                    pending.Push(directory);
+                }
             }
         }
+
+        foreach (string directory in include.IncludeAll)
+            AddDirectoryTree(directory, Array.Empty<string>());
+        foreach (string directory in include.IncludePS1)
+            AddDirectoryTree(directory, include.ExcludeFromPackage ?? Array.Empty<string>());
+
+        return directories
+            .OrderBy(path => ComputeRelativePath(root, path), StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static string[] EnumerateModulePackageFiles(string stagingRoot, PackagingInformation include)
     {
         var src = Path.GetFullPath(stagingRoot);
         if (!Directory.Exists(src)) throw new DirectoryNotFoundException($"Staging directory not found: {src}");
+        EnsurePackageSourcePathDoesNotTraverseReparsePoints(src, src, "Module package staging root");
 
         var excludes = include.ExcludeFromPackage ?? Array.Empty<string>();
         var files = new List<string>();
@@ -337,6 +368,7 @@ public sealed partial class ArtefactBuilder
             var name = Path.GetFileName(file);
             if (string.IsNullOrWhiteSpace(name) || WildcardAnyMatch(name, excludes)) continue;
             if (!WildcardAnyMatch(name, include.IncludeRoot)) continue;
+            EnsurePackageSourcePathDoesNotTraverseReparsePoints(src, file, "Module package source file");
             AddFile(file);
         }
 
@@ -351,6 +383,7 @@ public sealed partial class ArtefactBuilder
                 include.ExcludeFromPackage ?? Array.Empty<string>(),
                 includeOnlyPs1: false,
                 excludeDirectories: false,
+                src,
                 AddFile);
         }
 
@@ -365,6 +398,7 @@ public sealed partial class ArtefactBuilder
                 include.ExcludeFromPackage ?? Array.Empty<string>(),
                 includeOnlyPs1: true,
                 excludeDirectories: true,
+                src,
                 AddFile);
         }
 
@@ -391,9 +425,14 @@ public sealed partial class ArtefactBuilder
         string[] excludeNamePatterns,
         bool includeOnlyPs1,
         bool excludeDirectories,
+        string stagingRoot,
         Action<string> addFile)
     {
         var sourceFull = Path.GetFullPath(sourceDir);
+        EnsurePackageSourcePathDoesNotTraverseReparsePoints(
+            stagingRoot,
+            sourceFull,
+            "Module package source directory");
 
         var stack = new Stack<string>();
         stack.Push(sourceFull);
@@ -407,6 +446,10 @@ public sealed partial class ArtefactBuilder
                 var name = Path.GetFileName(file);
                 if (string.IsNullOrWhiteSpace(name) || WildcardAnyMatch(name, excludeNamePatterns)) continue;
                 if (includeOnlyPs1 && !name.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase)) continue;
+                EnsurePackageSourcePathDoesNotTraverseReparsePoints(
+                    stagingRoot,
+                    file,
+                    "Module package source file");
                 addFile(file);
             }
 
@@ -415,6 +458,10 @@ public sealed partial class ArtefactBuilder
                 var name = Path.GetFileName(dir);
                 if (string.IsNullOrWhiteSpace(name)) continue;
                 if (excludeDirectories && WildcardAnyMatch(name, excludeNamePatterns)) continue;
+                EnsurePackageSourcePathDoesNotTraverseReparsePoints(
+                    stagingRoot,
+                    dir,
+                    "Module package source directory");
                 stack.Push(dir);
             }
         }

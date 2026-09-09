@@ -11,7 +11,6 @@ public sealed partial class ArtefactBuilder
         string stagingPath,
         string moduleName,
         string? preScriptMerge,
-        string scriptName,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders,
@@ -89,16 +88,6 @@ public sealed partial class ArtefactBuilder
             throw new InvalidOperationException(
                 "PreScriptMerge cannot be injected before a staged module parameter block. " +
                 "Merge the script-level parameters into one leading param block before building a Script or ScriptPacked artefact.");
-        }
-
-        var scriptSourcePath = Path.GetFullPath(Path.Combine(stagingPath, scriptName));
-        if (packageSourceFiles.Any(sourcePath => string.Equals(
-                Path.GetFullPath(sourcePath),
-                scriptSourcePath,
-                GetPathComparison(sourcePath, scriptSourcePath))))
-        {
-            throw new InvalidOperationException(
-                $"ScriptName '{scriptName}' conflicts with a packaged payload file. Choose an entry point name that does not replace included module content.");
         }
 
         return manifestRuntimePreamble;
@@ -667,7 +656,8 @@ public sealed partial class ArtefactBuilder
         string artefactRoot,
         string projectRoot,
         string stagingPath,
-        IReadOnlyList<RequiredModuleReference> requiredModules)
+        IReadOnlyList<RequiredModuleReference> requiredModules,
+        ScriptPackageDestinationNamespace packageNamespace)
     {
         if (cfg.RequiredModules.Enabled != true)
             return;
@@ -695,11 +685,22 @@ public sealed partial class ArtefactBuilder
                 "required module destination",
                 projectRoot,
                 stagingPath);
-            if (!IsSameOrBelowPath(scriptRoot, destination))
-                continue;
+            if (IsSameOrBelowPath(scriptRoot, destination))
+            {
+                throw new InvalidOperationException(
+                    $"Required module destination '{destination}' contains the generated script root '{Path.GetFullPath(scriptRoot)}' and would erase it.");
+            }
 
-            throw new InvalidOperationException(
-                $"Required module destination '{destination}' contains the generated script root '{Path.GetFullPath(scriptRoot)}' and would erase it.");
+            string? conflictingFile = packageNamespace.Files.FirstOrDefault(packagePath =>
+                ScriptPathsOverlap(packagePath, destination));
+            string? conflictingDirectory = packageNamespace.Directories.FirstOrDefault(packagePath =>
+                IsSameOrBelowPath(packagePath, destination));
+            string? conflictingPayload = conflictingFile ?? conflictingDirectory;
+            if (conflictingPayload is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Required module destination '{destination}' conflicts with packaged payload destination '{conflictingPayload}' and would replace included module content.");
+            }
         }
     }
 

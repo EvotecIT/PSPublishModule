@@ -1,11 +1,78 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace PowerForge;
 
 public sealed partial class ArtefactBuilder
 {
+    private sealed class ScriptPackageDestinationNamespace
+    {
+        internal ScriptPackageDestinationNamespace(string[] files, string[] directories)
+        {
+            Files = files;
+            Directories = directories;
+        }
+
+        internal string[] Files { get; }
+
+        internal string[] Directories { get; }
+    }
+
+    private static ScriptPackageDestinationNamespace ResolveScriptPackageDestinationNamespace(
+        string stagingPath,
+        string scriptRoot,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles)
+    {
+        string fullScriptRoot = Path.GetFullPath(scriptRoot);
+        string[] sourceFiles = ResolveModulePackageSourceFiles(
+            stagingPath,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
+        string[] destinationFiles = CreateModulePackageCopyPlan(
+                Path.GetFullPath(stagingPath),
+                fullScriptRoot,
+                sourceFiles)
+            .Select(static entry => entry.DestinationPath)
+            .ToArray();
+        string[] destinationDirectories = finalizedPayloadFiles is { Count: > 0 }
+            ? Array.Empty<string>()
+            : EnumerateModulePackageDirectories(
+                    stagingPath,
+                    ResolvePackagingInformation(information, delivery, includeScriptFolders))
+                .Select(sourceDirectory => Path.GetFullPath(Path.Combine(
+                    fullScriptRoot,
+                    ComputeRelativePath(stagingPath, sourceDirectory))))
+                .ToArray();
+
+        return new ScriptPackageDestinationNamespace(destinationFiles, destinationDirectories);
+    }
+
+    private static void ValidateScriptEntryPointDoesNotConflictWithPackage(
+        string scriptRoot,
+        string scriptName,
+        ScriptPackageDestinationNamespace packageNamespace)
+    {
+        string scriptPath = Path.GetFullPath(Path.Combine(scriptRoot, scriptName));
+        string? fileConflict = packageNamespace.Files.FirstOrDefault(destination =>
+            ScriptPathsOverlap(destination, scriptPath));
+        string? directoryConflict = packageNamespace.Directories.FirstOrDefault(destination =>
+            IsSameOrBelowPath(destination, scriptPath));
+        string? conflict = fileConflict ?? directoryConflict;
+        if (conflict is null)
+            return;
+
+        throw new InvalidOperationException(
+            $"ScriptName '{scriptName}' conflicts with packaged payload destination '{conflict}' on the output filesystem. " +
+            "Choose an entry point name that does not replace included module content.");
+    }
+
     private static void ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
         string scriptRoot,
         string projectRoot,

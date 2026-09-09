@@ -28,7 +28,6 @@ public sealed partial class ArtefactBuilder
             stagingPath,
             moduleName,
             cfg.PreScriptMerge,
-            scriptName,
             information,
             delivery,
             includeScriptFolders,
@@ -50,6 +49,14 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        ScriptPackageDestinationNamespace packageNamespace = ResolveScriptPackageDestinationNamespace(
+            stagingPath,
+            scriptRoot,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
+        ValidateScriptEntryPointDoesNotConflictWithPackage(scriptRoot, scriptName, packageNamespace);
         ValidateScriptBuildRootsDoNotOverlapStaging(
             stagingPath,
             outputRoot,
@@ -75,7 +82,8 @@ public sealed partial class ArtefactBuilder
             outputRoot,
             projectRoot,
             stagingPath,
-            filteredRequiredModules);
+            filteredRequiredModules,
+            packageNamespace);
         ValidateScriptCopyMappings(
             cfg,
             outputRoot,
@@ -164,7 +172,6 @@ public sealed partial class ArtefactBuilder
             stagingPath,
             moduleName,
             cfg.PreScriptMerge,
-            scriptName,
             information,
             delivery,
             includeScriptFolders,
@@ -187,6 +194,14 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease);
+        ScriptPackageDestinationNamespace packageNamespace = ResolveScriptPackageDestinationNamespace(
+            stagingPath,
+            scriptRoot,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles);
+        ValidateScriptEntryPointDoesNotConflictWithPackage(scriptRoot, scriptName, packageNamespace);
         ValidateScriptBuildRootsDoNotOverlapStaging(
             stagingPath,
             outputRoot,
@@ -212,7 +227,8 @@ public sealed partial class ArtefactBuilder
             tempRoot,
             projectRoot,
             stagingPath,
-            filteredRequiredModules);
+            filteredRequiredModules,
+            packageNamespace);
         ValidateScriptCopyMappings(
             cfg,
             tempRoot,
