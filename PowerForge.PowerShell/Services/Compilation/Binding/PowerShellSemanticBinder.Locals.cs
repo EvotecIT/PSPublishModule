@@ -25,11 +25,12 @@ internal sealed partial class PowerShellSemanticBinder
             var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
             if (variable is null) continue;
             var name = variable.VariablePath.UserPath;
-            if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(assignment, capabilities, out _) ||
+            if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(assignment, capabilities, out _) ||
                 name.Equals("null", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals(PowerShellBoundParametersPolicy.VariableName, StringComparison.OrdinalIgnoreCase))
+                name.Equals(PowerShellBoundParametersPolicy.VariableName, StringComparison.OrdinalIgnoreCase)))
                 continue;
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
@@ -87,6 +88,25 @@ internal sealed partial class PowerShellSemanticBinder
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/foreach/" + loop.Extent.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/" + name);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             locals.Add(new PowerShellBoundLocal(symbol, type));
+        }
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+        {
+            // A native mutation can read existing session storage or create a variable from
+            // a missing value. It does not require an assignment in this function first.
+            foreach (var unary in GetFunctionStatements(function.Body)
+                         .SelectMany(static statement => statement.FindAll(static node => node is UnaryExpressionAst
+                             { TokenKind: TokenKind.PlusPlus or TokenKind.PostfixPlusPlus or TokenKind.MinusMinus or TokenKind.PostfixMinusMinus },
+                             searchNestedScriptBlocks: false)).Cast<UnaryExpressionAst>())
+            {
+                if (excludedTailOffset.HasValue && unary.Extent.StartOffset >= excludedTailOffset.Value) continue;
+                if (PowerShellAssignmentTargetPolicy.FindDirectVariable(unary.Child) is not { } variable) continue;
+                var name = variable.VariablePath.UserPath;
+                if (symbols.ContainsKey(name)) continue;
+                var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
+                var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/local/" + name);
+                symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, PowerShellTypeFact.Unknown));
+                locals.Add(new PowerShellBoundLocal(symbol, PowerShellTypeFact.Unknown));
+            }
         }
         if (_runtimeFreeModule is not null) locals.AddRange(_runtimeFreeModule.Fields);
         return locals.ToArray();

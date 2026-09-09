@@ -49,8 +49,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeMutations", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(mutations.Length * 4, result.Manifest!.CompiledMethods);
-        Assert.Equal(mutations.Length * 4, result.Manifest.UnitDispositionLedger!.Entries.Count(unit => unit.UsesNativeFunctionBinding));
+        var mutationUnits = result.Manifest!.UnitDispositionLedger!.Entries
+            .Where(unit => unit.Name.StartsWith("Read-NativeMutation", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(mutations.Length * 4, mutationUnits.Length);
+        Assert.All(mutationUnits, unit =>
+        {
+            Assert.True(unit.UsesNativeFunctionBinding);
+            Assert.False(unit.RetainedHostedSource);
+        });
         const string probe = """
             $cases=@(
                 @{left=1;right=2},@{left=9;right=1},@{left=[int]::MaxValue;right=1},@{left=[long]::MaxValue;right=1},

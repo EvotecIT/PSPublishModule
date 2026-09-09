@@ -159,8 +159,16 @@ internal static class PowerShellLoweredRegionGraphBuilder
             }
             if (expression is PowerShellLoweredMutationExpression mutation)
             {
-                RecordFirst(writeOffsets, Symbol(mutation.Target), expression.Span.EndOffset);
-                RecordFirst(readOffsets, Symbol(mutation.Target), expression.Span.StartOffset);
+                var target = mutation.NativeTargetRead is { } nativeTarget
+                    ? "PowerShellSessionVariable:" + nativeTarget.Name.ToUpperInvariant() : Symbol(mutation.Target);
+                RecordFirst(writeOffsets, target, expression.Span.EndOffset);
+                if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
+                    RecordFirst(readOffsets, target, expression.Span.StartOffset);
+                if (mutation.NativeTargetRead is not null)
+                {
+                    RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
+                    RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+                }
             }
             if (expression is PowerShellLoweredInvocationExpression invocation)
             {
@@ -272,7 +280,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
             if (statement is PowerShellLoweredStatementErrorBoundary) result.Add("Error");
             if (statement is PowerShellLoweredCommandRegionStatement) result.Add("Success");
             if (statement is PowerShellLoweredReturnStatement { EmitsValue: true } ||
-                statement is PowerShellLoweredExpressionStatement { DiscardValue: false })
+                statement is PowerShellLoweredExpressionStatement { DiscardValue: false } valueStatement &&
+                valueStatement.Expression.ClrType != typeof(void))
                 result.Add("Success");
             if (statement is PowerShellLoweredStreamWriteStatement stream)
                 result.Add(stream.Kind.ToString());
@@ -300,7 +309,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
             .OfType<PowerShellLoweredConversionExpression>()
             .Any(static conversion => conversion.UsePowerShellLanguageRuntime || conversion.UseNativeConversion))
             result.Add("PowerShellLanguageRuntimeError");
-        if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(static expression => expression is PowerShellLoweredNativeVariableExpression) ||
+        if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(static expression => expression is PowerShellLoweredNativeVariableExpression
+                or PowerShellLoweredMutationExpression { NativeTargetRead: not null }) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement => statement is PowerShellLoweredNativeVariableAssignmentStatement))
             result.Add("PowerShellSessionStateError");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(CanThrowClr) ||

@@ -175,8 +175,10 @@ internal static class PowerShellLoweredTreeEnumerator
                 foreach (var part in interpolated.Parts)
                     if (part.Expression is not null) yield return part.Expression;
                 break;
-            case PowerShellLoweredMutationExpression { Value: not null } mutation:
-                yield return mutation.Value;
+            case PowerShellLoweredMutationExpression mutation:
+                if (mutation.NativeTargetRead is not null && mutation.Operation != PowerShellBoundMutationOperator.Assign)
+                    yield return mutation.NativeTargetRead;
+                if (mutation.Value is not null) yield return mutation.Value;
                 break;
             case PowerShellLoweredArrayExpression array:
                 foreach (var element in array.Elements) yield return element;
