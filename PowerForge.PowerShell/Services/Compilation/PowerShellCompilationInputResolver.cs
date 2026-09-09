@@ -284,7 +284,9 @@ public sealed class PowerShellCompilationInputResolver
                 .Concat(conventionalSources)
                 .Where(file => IsPowerShellSource(file))
                 .Where(file => !runtimeHookSet.Contains(file))
-                .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
+                // The root establishes the parser's document identity base for both explain and build.
+                .OrderBy(file => PowerShellCompilationPathSafety.PathComparer.Equals(file, sourcePath) ? 0 : 1)
+                .ThenBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             sourceFiles = (allowDynamicModuleRuntimeSources && resolvedMode != PowerShellCompilationMode.Strict
                     ? new[] { sourcePath }
