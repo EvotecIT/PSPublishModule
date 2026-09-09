@@ -47,6 +47,7 @@
     <None Update="Fixtures\PowerShellCompilationRandomWorkflow\Observe.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationRandomWorkflow\Cancellation.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationRegistryWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\PowerShellCompilationSavedStateWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationReservationWorkflow\*.psm1" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

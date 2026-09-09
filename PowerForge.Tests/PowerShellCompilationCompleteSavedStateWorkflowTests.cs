@@ -107,6 +107,28 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, item => item.Name == name);
             Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
             Assert.False(unit.RetainedHostedSource);
+            Assert.True(unit.UsesNativeFunctionBinding);
+            Assert.True(unit.RuntimeCommandRegions > 1);
+        }
+        if (fullModule)
+        {
+            var units = result.Manifest!.UnitDispositionLedger!.Entries;
+            Assert.Contains(units, unit => unit.RetainedHostedSource);
+            var plan = new PowerShellCompilationAnalyzer().Analyze(resolved, resolved.Mode, framework);
+            var explanation = PowerShellCompilationExplainShaper.CreateFinalExplanation(resolved, plan, framework);
+            var explainedUnits = explanation.Files.SelectMany(file => file.Units).ToArray();
+            Assert.Equal(units.Count, explainedUnits.Length);
+            foreach (var unit in units)
+            {
+                var explained = Assert.Single(explainedUnits, item => item.UnitId == unit.UnitId);
+                Assert.Equal(unit.ArtifactDisposition, explained.ArtifactDisposition);
+                Assert.Equal(unit.EmittedClrMethod, explained.Emitted);
+                Assert.Equal(unit.RetainedHostedSource, explained.RetainedHostedSource);
+                Assert.Equal(unit.UsesNativeFunctionBinding, explained.UsesNativeFunctionBinding);
+                Assert.Equal(unit.RuntimeCommandRegions, explained.RuntimeCommandRegions);
+                Assert.Equal(System.Text.Json.JsonSerializer.Serialize(unit.RegionGraph),
+                    System.Text.Json.JsonSerializer.Serialize(explained.RegionGraph));
+            }
         }
         var compiled = RunStatementErrorProbe(host, "$modulePath='" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
             fixture.RootPath, "saved-state-compiled");
@@ -121,5 +143,67 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 System.Text.Json.Nodes.JsonNode.Parse(pair.First), System.Text.Json.Nodes.JsonNode.Parse(pair.Second)),
                 "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second);
         Assert.Equal(original.StandardError, compiled.StandardError);
+        if (fullModule)
+        {
+            var lifecycle = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures",
+                "PowerShellCompilationSavedStateWorkflow", "Lifecycle.ps1"));
+            var originalLifecycle = RunStatementErrorProbe(host, "$modulePath='" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + lifecycle,
+                fixture.RootPath, "saved-state-original-lifecycle");
+            var compiledLifecycle = RunStatementErrorProbe(host, "$modulePath='" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + lifecycle,
+                fixture.RootPath, "saved-state-compiled-lifecycle");
+            Assert.True(originalLifecycle.ExitCode == 0, originalLifecycle.StandardOutput + originalLifecycle.StandardError);
+            Assert.True(compiledLifecycle.ExitCode == 0, compiledLifecycle.StandardOutput + compiledLifecycle.StandardError);
+            var expectedLifecycle = originalLifecycle.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var actualLifecycle = compiledLifecycle.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(8, expectedLifecycle.Length);
+            Assert.Equal(expectedLifecycle.Length, actualLifecycle.Length);
+            AssertSavedStateLifecycleObservations(expectedLifecycle, framework == "net472");
+            foreach (var pair in expectedLifecycle.Zip(actualLifecycle))
+                Assert.True(System.Text.Json.Nodes.JsonNode.DeepEquals(
+                    System.Text.Json.Nodes.JsonNode.Parse(pair.First), System.Text.Json.Nodes.JsonNode.Parse(pair.Second)),
+                    "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second);
+            Assert.Equal(originalLifecycle.StandardError, compiledLifecycle.StandardError);
+            Assert.True(string.IsNullOrWhiteSpace(originalLifecycle.StandardError), originalLifecycle.StandardError);
+        }
+    }
+
+    private static void AssertSavedStateLifecycleObservations(string[] records, bool windowsPowerShell)
+    {
+        var observations = records.Select(record => System.Text.Json.Nodes.JsonNode.Parse(record)!).ToArray();
+        foreach (var stage in new[] { "read", "convert" })
+        {
+            var stopped = Assert.Single(observations, node => node["stage"]!.GetValue<string>() == stage && node["phase"]!.GetValue<string>() == "stopped");
+            Assert.Equal("Stopped", stopped["status"]!.GetValue<string>());
+            Assert.Equal(stage == "read" ? 1 : 2, stopped["calls"]!.GetValue<int>());
+            Assert.Equal(stopped["calls"]!.GetValue<int>(), stopped["cleanups"]!.GetValue<int>());
+            Assert.Empty(stopped["errors"]!.AsArray());
+            Assert.Empty(stopped["records"]!.AsArray());
+            Assert.Equal("System.Management.Automation.MethodInvocationException", stopped["terminalError"]!["type"]!.GetValue<string>());
+            Assert.Equal("System.Management.Automation.PipelineStoppedException", stopped["terminalError"]!["inner"]!.GetValue<string>());
+            var expectedKeys = stage == "read"
+                ? new[] { "CN=first,DC=example,DC=test", "CN=second,DC=example,DC=test" }
+                : new[] { "CN=second,DC=example,DC=test", "first$@example.test" };
+            Assert.Equal(expectedKeys, stopped["snapshot"]!["keys"]!.AsArray().Select(value => value!.GetValue<string>()));
+            var reimported = Assert.Single(observations, node => node["stage"]!.GetValue<string>() == stage && node["phase"]!.GetValue<string>() == "reimport");
+            Assert.Empty(reimported["snapshot"]!["trace"]!.AsArray());
+            Assert.Empty(reimported["snapshot"]!["export"]!.AsObject());
+            Assert.Equal(new[] { "CN=first,DC=example,DC=test", "CN=second,DC=example,DC=test" },
+                reimported["snapshot"]!["keys"]!.AsArray().Select(value => value!.GetValue<string>()));
+            foreach (var phase in new[] { "reuse", "fresh-call" })
+            {
+                var invoked = Assert.Single(observations, node => node["stage"]!.GetValue<string>() == stage && node["phase"]!.GetValue<string>() == phase);
+                Assert.Empty(invoked["errors"]!.AsArray());
+                var output = Assert.Single(invoked["records"]!.AsArray())!;
+                Assert.True(output["samePending"]!.GetValue<bool>());
+                Assert.True(output["sameHistory"]!.GetValue<bool>());
+                // The pinned source treats partially converted keys differently on Windows PowerShell and PowerShell 7.
+                var expectedOutputKeys = stage == "convert" && phase == "reuse"
+                    ? windowsPowerShell ? new[] { "CN=second,DC=example,DC=test", "first$@example.test" } : new[] { "second$@example.test" }
+                    : new[] { "first$@example.test", "second$@example.test" };
+                Assert.Equal(expectedOutputKeys, output["keys"]!.AsArray().Select(value => value!.GetValue<string>()));
+                Assert.Equal(stage == "read" ? 1 : windowsPowerShell && phase == "reuse" ? 0 : 2, invoked["calls"]!.GetValue<int>());
+                Assert.Equal(invoked["calls"]!.GetValue<int>(), invoked["cleanups"]!.GetValue<int>());
+            }
+        }
     }
 }
