@@ -101,7 +101,7 @@ internal sealed class PowerShellBoundOptimizer
                 assignment.NormalizeNullString, assignment.IntegralSemantics, assignment.PreserveStatementErrors),
             PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellBoundModuleVariableAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
-            PowerShellBoundNativeVariableAssignmentStatement assignment => new PowerShellBoundNativeVariableAssignmentStatement(
+            PowerShellBoundNativeAssignmentStatement assignment => new PowerShellBoundNativeAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value), assignment.Operation, assignment.Target),
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
                 returned.Span, returned.Expression is null ? null : OptimizeExpression(returned.Expression), returned.EmitsValue),

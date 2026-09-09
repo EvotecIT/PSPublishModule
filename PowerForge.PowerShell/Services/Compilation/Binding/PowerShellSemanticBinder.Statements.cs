@@ -72,8 +72,23 @@ internal sealed partial class PowerShellSemanticBinder
             return nativeRegion;
         if (statement is AssignmentStatementAst assignment)
         {
-            if (assignment.Right is ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
+            if (assignment.Right is IfStatementAst or ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                NativeAssignmentReceiver(assignment.Left) is { } receiver &&
+                PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator) is { } memberOperation)
+            {
+                var memberValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
+                    targetFramework: targetFramework, capabilities: capabilities);
+                if (memberValue is null || memberValue.Type.ClrType == typeof(void)) return null;
+                return new PowerShellBoundNativeAssignmentStatement(
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent), receiver.VariablePath.UserPath,
+                    memberValue, memberOperation, new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text,
+                        document.Path, document.Text, PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
+                        assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset,
+                        MutatesReceiver: true, ReadVariables: assignment.Left.FindAll(static node => node is VariableExpressionAst, false)
+                            .Cast<VariableExpressionAst>().Select(static variable => variable.VariablePath.UserPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
+            }
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                 PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } nativeVariable)
             {
@@ -83,7 +98,7 @@ internal sealed partial class PowerShellSemanticBinder
                     var nativeValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
                         targetFramework: targetFramework, capabilities: capabilities);
                     if (nativeValue is null || nativeValue.Type.ClrType == typeof(void)) return null;
-                    return new PowerShellBoundNativeVariableAssignmentStatement(
+                    return new PowerShellBoundNativeAssignmentStatement(
                         PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeVariable.VariablePath.UserPath,
                         nativeValue, nativeOperation, new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text, document.Path,
                             document.Text, PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),

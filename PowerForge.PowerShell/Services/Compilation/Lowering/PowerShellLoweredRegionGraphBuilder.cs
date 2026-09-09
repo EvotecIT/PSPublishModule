@@ -195,13 +195,16 @@ internal static class PowerShellLoweredRegionGraphBuilder
         {
             switch (statement)
             {
-                case PowerShellLoweredNativeVariableAssignmentStatement assignment:
+                case PowerShellLoweredNativeAssignmentStatement assignment:
                     // Native assignment observes invocation-owned constraints and can invoke transformations.
                     RecordFirst(readOffsets, "PowerShellSessionState:*", statement.Span.StartOffset);
                     RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
-                    RecordFirst(writeOffsets, "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant(), statement.Span.EndOffset);
-                    if (assignment.Operation != PowerShellBoundMutationOperator.Assign)
+                    RecordFirst(writeOffsets, "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant() +
+                        (assignment.Target.MutatesReceiver ? ".*" : ""), statement.Span.EndOffset);
+                    if (assignment.Target.MutatesReceiver || assignment.Operation != PowerShellBoundMutationOperator.Assign)
                         RecordFirst(readOffsets, "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant(), statement.Span.StartOffset);
+                    foreach (var name in assignment.Target.ReadVariables ?? Array.Empty<string>())
+                        RecordFirst(readOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), statement.Span.StartOffset);
                     break;
                 case PowerShellLoweredAssignmentStatement assignment:
                     RecordFirst(writeOffsets, Symbol(assignment.Target), statement.Span.EndOffset);
@@ -311,7 +314,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
             result.Add("PowerShellLanguageRuntimeError");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(static expression => expression is PowerShellLoweredNativeVariableExpression
                 or PowerShellLoweredMutationExpression { NativeTargetRead: not null }) ||
-            PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement => statement is PowerShellLoweredNativeVariableAssignmentStatement))
+            PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement => statement is PowerShellLoweredNativeAssignmentStatement))
             result.Add("PowerShellSessionStateError");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(CanThrowClr) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>

@@ -18,7 +18,7 @@ public static class NativeDeclarationFixture
                     var current = index;
                     try
                     {
-                        var result = context.AssignVariableTarget(targets[index], operations[index],
+                        var result = context.AssignTarget(targets[index], operations[index],
                             () => context.CaptureCommandRegion(values[current], "declarations.psm1", 1, 1, false),
                             "declarations.psm1", 1, 1);
                         context.WriteValue("result=" + (result is null ? "null" : result.GetType().FullName + ":" + result));

@@ -36,6 +36,17 @@ internal static class PowerShellArraySemanticBinder
         var singlePureExpression = false;
         foreach (var statement in statements.Statements)
         {
+            if (statement is AssignmentStatementAst assignment)
+            {
+                var assigned = bindExpression(assignment, null);
+                if (assigned is null) return null;
+                var assignmentSpan = PowerShellSourceParser.GetSpan(document, assignment.Extent);
+                items.Add(new PowerShellBoundNativeCollectionItem(assignmentSpan,
+                    PowerShellSourceParser.GetSourceLines(document, assignmentSpan), assigned,
+                    PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(assignment, windowsPowerShell),
+                    false, false));
+                continue;
+            }
             if (statement is not PipelineAst pipeline)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501",

@@ -10,6 +10,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void NativeOutputCapture_PreservesRecordsAndAssignmentFailures(string framework, string host)
     {
         var loops = new[] {
+            ("ConditionalInnerBreak", "$result=if ($Limit) { foreach ($i in 1,2,3) { if ($i -eq 2) { break }; $i } }; \"captured=$result\""),
+            ("ConditionalInnerContinue", "$result=if ($Limit) { foreach ($i in 1,2,3) { if ($i -eq 2) { continue }; $i } }; \"captured=$result\""),
+            ("Conditional", "$result=if ($Limit) { 'first'; 'second' } else { 'empty' }; \"captured=$result\""),
+            ("ConditionalEmpty", "$result=if ($Limit) { $discard=1 }; \"captured=$result\""),
+            ("ConditionalNull", "$result=if ($Limit) { ,$null } else { $null }; \"captured=$result\""),
+            ("ConditionalFailure", "$result='before'; $result=if (1 / $Zero) { 'first' } else { 'second' }; \"captured=$result\""),
+            ("ConditionalPipeline", "$result=if ($Limit) { Write-Output 'first'; Write-Output 'second' }; \"captured=$result\"; Write-Output 'outside'"),
+            ("ConditionalTyped", "$Seed=if ($Limit) { '2'; '3' } else { '2' }; \"seed=$Seed\""),
             ("For", "$result=for ($i=0; $i -lt $Limit; $i++) { \"$i\" }; \"captured=$result\""),
             ("While", "$i=0; $result=while ($i -lt $Limit) { \"$i\"; $i++ }; \"captured=$result\""),
             ("DoWhile", "$i=0; $result=do { \"$i\"; $i++ } while ($i -lt $Limit); \"captured=$result\""),

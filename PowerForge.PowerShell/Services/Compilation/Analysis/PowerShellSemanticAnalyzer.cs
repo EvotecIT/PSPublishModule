@@ -353,7 +353,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         => statement switch
         {
             PowerShellBoundAssignmentStatement assignment => assignment.Value,
-            PowerShellBoundNativeVariableAssignmentStatement assignment => assignment.Value,
+            PowerShellBoundNativeAssignmentStatement assignment => assignment.Value,
             PowerShellBoundModuleVariableAssignmentStatement assignment => assignment.Value,
             PowerShellBoundReturnStatement returned => returned.Expression,
             PowerShellBoundExpressionStatement expression => expression.Expression,

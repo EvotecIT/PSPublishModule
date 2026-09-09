@@ -63,7 +63,10 @@ internal enum PowerShellBoundUnaryOperator
     Negate,
     LogicalNot,
     BitwiseNot,
-    NormalizeCommandArgument
+    NormalizeCommandArgument,
+    NativeIdentity,
+    NativeNegate,
+    NativeBitwiseNot
 }
 
 internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpression
@@ -137,7 +140,9 @@ internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression
         PowerShellBoundUnaryOperator operation,
         PowerShellBoundExpression operand,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown, operand.Effects, operand.Capabilities |
+        : base(span, type, PowerShellValueState.Unknown, operand.Effects |
+            (IsNative(operation) ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None), operand.Capabilities |
+            (IsNative(operation) ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
             (operation == PowerShellBoundUnaryOperator.NormalizeCommandArgument ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Operation = operation;
@@ -146,6 +151,9 @@ internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression
 
     internal PowerShellBoundUnaryOperator Operation { get; }
     internal PowerShellBoundExpression Operand { get; }
+
+    internal static bool IsNative(PowerShellBoundUnaryOperator operation)
+        => operation is PowerShellBoundUnaryOperator.NativeIdentity or PowerShellBoundUnaryOperator.NativeNegate or PowerShellBoundUnaryOperator.NativeBitwiseNot;
 }
 
 internal sealed class PowerShellBoundTypeTestExpression : PowerShellBoundExpression

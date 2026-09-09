@@ -43,7 +43,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             EmitNativeAssignmentLocation(target);
 
     private static string EmitNativeAssignmentStart(PowerShellNativeAssignmentTarget target, PowerShellBoundMutationOperator operation)
-        => "__nativeFunction.AssignVariableTarget(" + PowerShellCSharpLiteral.QuoteString(target.Text) + ", " +
+        => "__nativeFunction.AssignTarget(" + PowerShellCSharpLiteral.QuoteString(target.Text) + ", " +
             PowerShellCSharpLiteral.QuoteString(operation.ToString()) + ", ";
 
     private static string EmitNativeAssignmentLocation(PowerShellNativeAssignmentTarget target)

@@ -36,6 +36,19 @@ namespace PowerForge.Generated.Runtime
                 Expression.Dynamic(binder, typeof(object), value), value).Compile();
         }
 
+        /// <summary>Evaluates unary arithmetic with the invocation's native promotion and conversion rules.</summary>
+        public object? EvaluateUnary(ExpressionType operation, object? value)
+        {
+            EnsureActive();
+            if (operation is not (ExpressionType.UnaryPlus or ExpressionType.Negate or ExpressionType.OnesComplement))
+                throw new ArgumentOutOfRangeException(nameof(operation));
+            // PowerShell lowers authored unary +/- as binary arithmetic with Int32 zero;
+            // its unary DLR binder does not provide the same overflow or promotion rules.
+            if (operation != ExpressionType.OnesComplement)
+                return EvaluateBinary(operation == ExpressionType.UnaryPlus ? ExpressionType.Add : ExpressionType.Subtract, true, 0, value);
+            return MutationSites.GetOrAdd(operation, CreateMutationSite)(value);
+        }
+
         /// <summary>Evaluates one language operation while the native invocation owns scope and error handling.</summary>
         public object? EvaluateBinary(ExpressionType operation, bool ignoreCase, object? left, object? right)
         {

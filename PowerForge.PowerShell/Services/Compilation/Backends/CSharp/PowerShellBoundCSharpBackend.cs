@@ -229,7 +229,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     .Append(PowerShellCSharpLiteral.QuoteString(assignment.Name)).Append(", ")
                     .Append(EmitExpression(assignment.Value)).AppendLine(");");
                 return;
-            case PowerShellLoweredNativeVariableAssignmentStatement assignment:
+            case PowerShellLoweredNativeAssignmentStatement assignment:
                 builder.Append(prefix).Append(EmitNativeAssignmentTarget(assignment.Target,
                     assignment.Operation, assignment.Value)).AppendLine(";");
                 return;
@@ -796,20 +796,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellBoundBinaryOperator.NullOrderedGreaterThan or
             PowerShellBoundBinaryOperator.NullOrderedGreaterThanOrEqual;
 
-    private string EmitUnary(PowerShellLoweredUnaryExpression expression)
-    {
-        if (expression.Operation == PowerShellBoundUnaryOperator.NormalizeCommandArgument)
-            return $"global::PowerForge.Generated.Runtime.PowerShellNativeLanguageOperations.NormalizeCommandArgument({EmitExpression(expression.Operand)})";
-        var symbol = expression.Operation switch
-        {
-            PowerShellBoundUnaryOperator.Identity => "+",
-            PowerShellBoundUnaryOperator.Negate => "-",
-            PowerShellBoundUnaryOperator.LogicalNot => "!",
-            PowerShellBoundUnaryOperator.BitwiseNot => "~",
-            _ => throw new InvalidOperationException($"Lowered unary operator '{expression.Operation}' has no C# rendering owner.")
-        };
-        return $"({symbol}{EmitExpression(expression.Operand)})";
-    }
+
 
 }
 

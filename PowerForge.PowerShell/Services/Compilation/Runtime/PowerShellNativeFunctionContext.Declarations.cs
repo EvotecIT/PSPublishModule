@@ -10,9 +10,9 @@ namespace PowerForge.Generated.Runtime
     {
         private readonly Dictionary<string, NativeAstOperation> _assignments = new(StringComparer.Ordinal);
 
-        /// <summary>Applies an authored variable assignment and its constraints in the native invocation.</summary>
+        /// <summary>Applies an authored storage or receiver assignment in the native invocation.</summary>
         /// <remarks>The value producer runs at the native assignment's evaluation point, after any compound target read.</remarks>
-        public object? AssignVariableTarget(string target, string operation, Func<object?> value,
+        public object? AssignTarget(string target, string operation, Func<object?> value,
             string file, int line, int column, string? sourceDocument = null, int startOffset = -1, int endOffset = -1)
         {
             EnsureActive();
@@ -55,11 +55,11 @@ namespace PowerForge.Generated.Runtime
                     node.Extent.StartColumnNumber == column && (sourceDocument is null ||
                     node.Extent.StartOffset == startOffset && node.Extent.EndOffset == endOffset));
             if (targetAst is null)
-                throw new ArgumentException("The native assignment does not match its authored variable target.", nameof(target));
+                throw new ArgumentException("The native assignment does not match its authored target.", nameof(target));
             ExpressionAst variable = targetAst;
             while (variable is AttributedExpressionAst attributed) variable = attributed.Child;
-            if (variable is not VariableExpressionAst)
-                throw new ArgumentException("A native declaration requires a variable target.", nameof(target));
+            if (!IsNativeAssignmentAccess(variable))
+                throw new ArgumentException("The native assignment requires a qualified variable, member, or index target.", nameof(target));
 
             // Only the target reaches native compilation. The authored RHS remains compiled IR;
             // a harmless placeholder supplies the analysis container and is never emitted.
@@ -72,5 +72,14 @@ namespace PowerForge.Generated.Runtime
             native.Expressions.Add(Expression.Convert(result, typeof(object)));
             return native.Compile();
         }
+
+        private static bool IsNativeAssignmentAccess(ExpressionAst expression)
+            => expression switch
+            {
+                VariableExpressionAst => true,
+                MemberExpressionAst { Static: false, Member: StringConstantExpressionAst } member => IsNativeAssignmentAccess(member.Expression),
+                IndexExpressionAst { Index: ConstantExpressionAst or StringConstantExpressionAst or VariableExpressionAst } index => IsNativeAssignmentAccess(index.Target),
+                _ => false
+            };
     }
 }

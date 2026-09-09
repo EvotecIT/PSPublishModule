@@ -82,15 +82,33 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 'after'
                 return ,$Values
             }
+            function Get-ConditionalCapture {
+                [CmdletBinding()] param()
+                $Values=if ($true) { 1; 2 } else { 3 }
+                'after'
+                return ,$Values
+            }
+            function Get-ConditionalEmpty {
+                [CmdletBinding()] param()
+                $Values=if ($false) { 1 }
+                'after'
+                return ,$Values
+            }
+            function Get-ConditionalSingle {
+                [CmdletBinding()] param()
+                $Values=if ($false) { 1; 2 } elseif ($true) { 3 } else { 4 }
+                'after'
+                return ,$Values
+            }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.NestedOutputCapture", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(8, result.Manifest!.CompiledMethods);
+        Assert.Equal(11, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         const string probe = """
-            foreach ($name in 'Get-NestedCapture','Get-NullCapture','Get-FlowCapture','Get-CallCapture','Get-WhileCapture','Get-DoCapture','Get-SelfCapture') {
+            foreach ($name in 'Get-NestedCapture','Get-NullCapture','Get-FlowCapture','Get-CallCapture','Get-WhileCapture','Get-DoCapture','Get-SelfCapture','Get-ConditionalCapture','Get-ConditionalEmpty','Get-ConditionalSingle') {
                 $records=@(& $name)
                 [pscustomobject]@{name=$name;count=$records.Count;records=$records} | ConvertTo-Json -Depth 10 -Compress
             }

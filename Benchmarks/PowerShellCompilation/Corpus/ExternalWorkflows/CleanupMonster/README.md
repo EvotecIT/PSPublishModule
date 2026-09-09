@@ -7,3 +7,14 @@
 The complete function and its assigned script block use generated CLR bodies. PowerShell supplies native scope, invocation, and operator behavior; the ledger records six command boundaries, including one inside the child block. The nested graph keeps child invocation order separate from the parent. This is a Hybrid qualification, and it does not satisfy the M26 stateful module exit gate.
 
 `HashSet<T>` uses the shared target-compatible CLR type contract. Separate artifact checks cover native Hybrid comparer, aliasing and enumeration behavior, plus runtime-free construction and public set identity from C# consumers on .NET 8 and .NET 10. Script-block checks cover nested scope, escaped blocks, `GetNewClosure()`, error continuation, lifecycle clauses, downstream stop, and cancellation. Unsupported child bodies retain their owning function; these contracts do not enable runtime-free script blocks.
+
+The saved-state workflow uses two more unchanged files from the same commit:
+
+| File | SHA-256 |
+| --- | --- |
+| `Import-ComputersData.ps1` | `98bd6c47fd4adb1ee6b74901b8cc2330912786d24d03067356f4229a025b1324` |
+| `Convert-ListProcessed.ps1` | `443dc2a79c156d4b15c9e17dc85068113433096bef1805edb0daf9adaac06785` |
+
+`CompleteWorkflow_PinnedSavedStatePreservesConversionAndAliasing` imports the two-function closure and compares its original and generated Hybrid modules on PowerShell 5.1, 7.4.19, and 7.6.5. Both function bodies compile. Nine scenarios run twice and cover absent or empty state, legacy key conversion, already converted keys, existing properties, absent dates, read/conversion failures, and invalid history. Comparisons preserve output, diagnostics, ordered keys, repeat-call mutation, and shared object identity.
+
+The test replaces filesystem, clock, diagnostic, and distinguished-name providers inside an isolated module. All state stays in memory. This qualifies the saved-state closure; it does not yet qualify the complete CleanupMonster module's initialization, cancellation, removal/reimport, or multiple-region lifecycle.

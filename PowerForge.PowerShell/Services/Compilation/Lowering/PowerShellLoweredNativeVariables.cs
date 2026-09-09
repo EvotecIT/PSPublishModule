@@ -17,9 +17,9 @@ internal sealed class PowerShellLoweredNativeVariableExpression : PowerShellLowe
     internal bool DirectLocal { get; }
 }
 
-internal sealed class PowerShellLoweredNativeVariableAssignmentStatement : PowerShellLoweredStatement
+internal sealed class PowerShellLoweredNativeAssignmentStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredNativeVariableAssignmentStatement(SourceSpan span, string name, PowerShellLoweredExpression value,
+    internal PowerShellLoweredNativeAssignmentStatement(SourceSpan span, string name, PowerShellLoweredExpression value,
         PowerShellBoundMutationOperator operation, PowerShellNativeAssignmentTarget target) : base(span)
     {
         Name = name;

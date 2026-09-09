@@ -33,12 +33,19 @@ internal sealed partial class PowerShellSemanticBinder
                 "A return inside captured statement output requires an explicit enclosing-function transfer contract.", span));
             return null;
         }
-        // The assignment owns errors that escape the loop (including its condition
-        // and iterator). Handling them inside the collector would assign partial
+        if (usesNativeInvocation && PowerShellControlFlowBindingPolicy.HasLoopTransferLeavingCapture(assignment.Right))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2936",
+                "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.", span));
+            return null;
+        }
+        // The assignment owns errors that escape the captured statement (including
+        // conditions and iterators). Handling them inside the collector would assign partial
         // records after a failed RHS. Inner authored statements keep their boundaries.
-        var body = BindStatementCore(document, assignment.Right, symbols, functions, diagnostics, false, targetFramework, capabilities);
+        var body = BindStatementCore(document, assignment.Right, symbols, functions, diagnostics, false, targetFramework, capabilities,
+            allowNonTerminalSuccessOutput: true);
         if (body is null) return null;
-        // Binding a loop can merge assignments and declarations back into its enclosing
+        // Binding the body can merge assignments and declarations back into its enclosing
         // symbol table. The capture destination must still accept its collapsed result.
         if (!usesNativeInvocation && (target!.Type.ClrType != typeof(object) ||
             target.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Int32OrDouble))

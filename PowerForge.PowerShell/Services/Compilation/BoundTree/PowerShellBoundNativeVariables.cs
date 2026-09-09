@@ -23,9 +23,9 @@ internal sealed class PowerShellBoundNativeVariableExpression : PowerShellBoundE
 }
 
 /// <summary>Executes an assignment through invocation-owned storage and its existing constraints.</summary>
-internal sealed class PowerShellBoundNativeVariableAssignmentStatement : PowerShellBoundStatement
+internal sealed class PowerShellBoundNativeAssignmentStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundNativeVariableAssignmentStatement(SourceSpan span, string name, PowerShellBoundExpression value,
+    internal PowerShellBoundNativeAssignmentStatement(SourceSpan span, string name, PowerShellBoundExpression value,
         PowerShellBoundMutationOperator operation, PowerShellNativeAssignmentTarget target)
         : base(span, value.Effects | PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError,
             value.Capabilities | PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost |

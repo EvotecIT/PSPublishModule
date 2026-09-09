@@ -9,6 +9,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     [InlineData("foreach ($index in 1,2) { }; return \"index=$index\"")]
     [InlineData("[int[]]$script:Result=foreach ($item in 1,2) { $item }; return $script:Result")]
     [InlineData("$null += for ($i=0; $i -lt 2; $i++) { $i }; return 'done'")]
+    [InlineData("return -$Value")]
+    [InlineData("$receiver=@{Key=1}; $receiver.Key=$Value; return 'done'")]
+    [InlineData("$receiver=@{Key=1}; $receiver['Key']=$Value; return 'done'")]
+    [InlineData("$copy=@($assigned=$Value); return $copy")]
     public void NativeFunctionBinding_RemainsVisibleInBoundAndLoweredCapabilities(string body)
     {
         var document = PowerShellSourceParser.Parse(

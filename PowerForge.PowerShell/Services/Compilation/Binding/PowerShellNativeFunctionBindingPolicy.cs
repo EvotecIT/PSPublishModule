@@ -80,6 +80,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
                    TokenKind.Icontains or TokenKind.Ccontains or TokenKind.Inotcontains or TokenKind.Cnotcontains or
                    TokenKind.Iin or TokenKind.Cin or TokenKind.Inotin or TokenKind.Cnotin } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
+           function.Body.Find(static node => node is ArrayExpressionAst array &&
+               array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
+               searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is PipelineAst pipeline &&
                PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline) && IsCapturedPipeline(pipeline),
                searchNestedScriptBlocks: false) is not null ||

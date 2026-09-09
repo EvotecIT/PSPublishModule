@@ -483,6 +483,12 @@ internal static partial class PowerShellOperatorSemanticBinder
         var operand = bindOperand(syntax.Child);
         if (operand is null) return null;
         var type = operand.Type.ClrType;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && operation is "Plus" or "Minus" or "Bnot")
+            return Unary(span, operation switch {
+                "Plus" => PowerShellBoundUnaryOperator.NativeIdentity,
+                "Minus" => PowerShellBoundUnaryOperator.NativeNegate,
+                _ => PowerShellBoundUnaryOperator.NativeBitwiseNot
+            }, operand, typeof(object));
         if (operation == "Join" && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             return new PowerShellBoundStringJoinExpression(span, operand,
                 new PowerShellBoundLiteralExpression(span, string.Empty,

@@ -8,6 +8,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void NativeSubexpressions_PreserveValueCardinalityEffectsAndContinuation(string framework, string host)
     {
         var expressions = new[] {
+            "$($n=$Value)", "$($n=$Value; $n)", "@($n=$Value)", "@($n=$Value; $n)",
+            "$($n=[int]'invalid'; 'tail')", "@($n=[int]'invalid'; 'tail')",
             "$()", "$($null)", "$($Value)", "$(,$Value)", "$($Value; 'tail')", "$(@($Value))",
             "$($($Value))", "$($n++)", "$(($n++))", "$($n++; 'tail')", "$([void]1; $Value)",
             "$(Write-Output -NoEnumerate $Value)", "$('first'; Write-Error 'capture-fault'; 'last')",
@@ -70,8 +72,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                     }
                 }
             }
-            @(Read-Sub4 -Value (1,2) | Select-Object -First 2) | ConvertTo-Json -Compress
-            @(Read-Sub4 -Value 'later') | ConvertTo-Json -Depth 5 -Compress
+            @(Read-Sub10 -Value (1,2) | Select-Object -First 2) | ConvertTo-Json -Compress
+            @(Read-Sub10 -Value 'later') | ConvertTo-Json -Depth 5 -Compress
             """.Replace("FUNCTION_COUNT", expressions.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
         var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
             fixture.RootPath, "subexpression");
