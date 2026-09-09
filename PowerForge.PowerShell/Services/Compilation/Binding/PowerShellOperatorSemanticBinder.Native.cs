@@ -2,13 +2,12 @@ namespace PowerForge;
 
 internal static partial class PowerShellOperatorSemanticBinder
 {
-    /// <summary>Keeps dynamically typed native operands on the invocation's language-operation path.</summary>
+    /// <summary>Keeps native operands on the invocation's language-operation path, including literal arithmetic.</summary>
     private static PowerShellBoundExpression? BindNativeBinary(SourceSpan span, string operation,
         PowerShellBoundExpression left, PowerShellBoundExpression right, PowerShellCompilationCapability capabilities)
     {
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
-            left.Type.ClrType == typeof(void) || right.Type.ClrType == typeof(void) ||
-            left.Type.ClrType != typeof(object) && right.Type.ClrType != typeof(object)) return null;
+            left.Type.ClrType == typeof(void) || right.Type.ClrType == typeof(void)) return null;
         PowerShellBoundBinaryOperator? bound = operation switch
         {
             "Plus" => PowerShellBoundBinaryOperator.Add,

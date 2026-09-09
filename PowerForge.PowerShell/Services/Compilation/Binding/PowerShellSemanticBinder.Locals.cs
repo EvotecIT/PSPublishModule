@@ -81,7 +81,7 @@ internal sealed partial class PowerShellSemanticBinder
             var type = new PowerShellTypeFact(
                 elementType,
                 PowerShellTypeFactProvenance.Inferred,
-                enumerationKind is PowerShellForEachEnumerationKind.SystemArray or PowerShellForEachEnumerationKind.PowerShellEnumerable
+                enumerationKind is PowerShellForEachEnumerationKind.SystemArray or PowerShellForEachEnumerationKind.PowerShellEnumerable or PowerShellForEachEnumerationKind.NativeInvocation
                     ? "The generated PowerShell host preserves collection elements as object-valued foreach items."
                     : "The foreach collection provides one stable CLR element type.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/foreach/" + loop.Extent.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/" + name);

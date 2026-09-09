@@ -20,14 +20,19 @@ internal static class PowerShellNativeVariableAnalysis
     internal static string[] Analyze(FunctionDefinitionAst function)
     {
         var usesCmdletBinding = (bool)MetadataProvider.GetMethod("UsesCmdletBinding")!.Invoke(function.Body, null)!;
-        AnalyzeMethod.Invoke(null, new object[] { function.Body, false, usesCmdletBinding });
+        var analysis = (Tuple<Type, Dictionary<string, int>>)AnalyzeMethod.Invoke(null, new object[] { function.Body, false, usesCmdletBinding })!;
         var parameters = PowerShellParameterSyntax.GetParameters(function.Body)
             .Select(static parameter => parameter.Name.VariablePath.UserPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return function.Body.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: false)
+        var locals = function.Body.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: false)
             .Cast<VariableExpressionAst>().Where(IsDirectLocal)
             .Select(static variable => variable.VariablePath.UserPath)
             .Select(static name => name.StartsWith("local:", StringComparison.OrdinalIgnoreCase) ? name.Substring(6) : name)
-            .Where(name => !parameters.Contains(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            .Where(name => !parameters.Contains(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // Iterator storage can be implicit: a foreach statement need not contain
+        // an authored read of $foreach for native analysis to allocate its slot.
+        if (analysis.Item2.ContainsKey("foreach") && !parameters.Contains("foreach") &&
+            !locals.Contains("foreach", StringComparer.OrdinalIgnoreCase)) locals.Add("foreach");
+        return locals.ToArray();
     }
 
     internal static bool IsDirectLocal(VariableExpressionAst variable)

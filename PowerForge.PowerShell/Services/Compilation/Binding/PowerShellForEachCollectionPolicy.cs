@@ -6,6 +6,11 @@ internal static class PowerShellForEachCollectionPolicy
     internal static Type? GetElementType(Type? collectionType, PowerShellCompilationCapability capabilities,
         out PowerShellForEachEnumerationKind kind)
     {
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+        {
+            kind = PowerShellForEachEnumerationKind.NativeInvocation;
+            return typeof(object);
+        }
         kind = PowerShellForEachEnumerationKind.TypedArray;
         if (collectionType is null) return null;
         if (collectionType.IsArray && collectionType.GetArrayRank() == 1) return collectionType.GetElementType();

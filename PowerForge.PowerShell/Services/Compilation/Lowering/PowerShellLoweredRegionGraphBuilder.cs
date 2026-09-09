@@ -182,7 +182,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
                         RecordFirst(readOffsets, Symbol(argument.Symbol), statement.Span.StartOffset);
                     break;
                 case PowerShellLoweredOutputCaptureStatement capture:
-                    RecordFirst(writeOffsets, Symbol(capture.Target), statement.Span.EndOffset);
+                    if (capture.Target is not null) RecordFirst(writeOffsets, Symbol(capture.Target), statement.Span.EndOffset);
                     break;
                 case PowerShellLoweredCommandRegionStatement region:
                     if (region.NativeSourcePath is not null)
@@ -276,7 +276,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(CanThrowClr) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>
                 statement is PowerShellLoweredIndexAssignmentStatement or PowerShellLoweredClrMemberAssignmentStatement or
-                    PowerShellLoweredForEachStatement { EnumerationKind: PowerShellForEachEnumerationKind.PowerShellEnumerable } ||
+                    PowerShellLoweredForEachStatement { EnumerationKind: PowerShellForEachEnumerationKind.PowerShellEnumerable or PowerShellForEachEnumerationKind.NativeInvocation } ||
                 statement is PowerShellLoweredAssignmentStatement { Operation: not PowerShellBoundMutationOperator.Assign } assignment &&
                     !PowerShellLoweredPrimitiveErrorPolicy.IsNonThrowingNumericMutation(assignment.ClrType, assignment.IntegralSemantics)))
             result.Add("ClrException");

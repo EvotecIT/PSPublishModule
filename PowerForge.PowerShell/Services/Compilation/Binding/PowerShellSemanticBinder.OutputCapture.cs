@@ -11,16 +11,20 @@ internal sealed partial class PowerShellSemanticBinder
     {
         var span = PowerShellSourceParser.GetSpan(document, assignment.Extent);
         var usesNativeInvocation = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
+        var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, usesNativeInvocation);
+        var operation = PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator);
+        PowerShellSemanticSymbolBinding? target = null;
+        if (variable is not null) symbols.TryGetValue(variable.VariablePath.UserPath, out target);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
             !capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) ||
-            assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst variable ||
-            IsRuntimeOwnedScope(variable.VariablePath.UserPath) ||
-            !symbols.TryGetValue(variable.VariablePath.UserPath, out var target) ||
-            !usesNativeInvocation && (target.Type.Provenance != PowerShellTypeFactProvenance.Unknown && target.Type.ClrType != typeof(object) ||
+            variable is null || operation is null ||
+            !usesNativeInvocation && (assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst ||
+                IsRuntimeOwnedScope(variable.VariablePath.UserPath) || target is null ||
+                target.Type.Provenance != PowerShellTypeFactProvenance.Unknown && target.Type.ClrType != typeof(object) ||
                 target.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Int32OrDouble))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2930",
-                "Captured statement output requires an unconstrained local and a qualified command success-stream host.", span));
+                "Captured statement output requires a qualified command success-stream host and either a native variable target or an unconstrained local.", span));
             return null;
         }
         if (assignment.Right.FindAll(static node => node is ReturnStatementAst, false).Any())
@@ -36,7 +40,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (body is null) return null;
         // Binding a loop can merge assignments and declarations back into its enclosing
         // symbol table. The capture destination must still accept its collapsed result.
-        if (!usesNativeInvocation && (target.Type.ClrType != typeof(object) ||
+        if (!usesNativeInvocation && (target!.Type.ClrType != typeof(object) ||
             target.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Int32OrDouble))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2935",
@@ -50,9 +54,12 @@ internal sealed partial class PowerShellSemanticBinder
             return null;
         }
         if (usesNativeInvocation)
-            return new PowerShellBoundOutputCaptureStatement(span, target.Symbol,
-                new PowerShellBoundBlock(body.Span, new[] { body }), usesNativeInvocation: true);
-        target.Refine(new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred,
+            return new PowerShellBoundOutputCaptureStatement(span, target?.Symbol,
+                new PowerShellBoundBlock(body.Span, new[] { body }),
+                new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text, document.Path, document.Text,
+                    PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
+                    assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset), operation.Value);
+        target!.Refine(new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred,
             "Captured success output collapses to null, a single record, or an Object array."), PowerShellValueState.Unknown);
         target.SetModuleStateDerived(target.IsModuleStateDerived ||
             PowerShellSemanticAnalyzer.EnumerateStatements(new PowerShellBoundBlock(body.Span, new[] { body }))

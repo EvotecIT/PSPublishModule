@@ -39,8 +39,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitNativeAssignmentTarget(PowerShellNativeAssignmentTarget target,
         PowerShellBoundMutationOperator operation, PowerShellLoweredExpression value)
+        => EmitNativeAssignmentStart(target, operation) + "() => (object?)(" + EmitExpression(value) + ")" +
+            EmitNativeAssignmentLocation(target);
+
+    private static string EmitNativeAssignmentStart(PowerShellNativeAssignmentTarget target, PowerShellBoundMutationOperator operation)
         => "__nativeFunction.AssignVariableTarget(" + PowerShellCSharpLiteral.QuoteString(target.Text) + ", " +
-            PowerShellCSharpLiteral.QuoteString(operation.ToString()) + ", () => (object?)(" + EmitExpression(value) + "), " +
+            PowerShellCSharpLiteral.QuoteString(operation.ToString()) + ", ";
+
+    private static string EmitNativeAssignmentLocation(PowerShellNativeAssignmentTarget target)
+        => ", " +
             PowerShellCSharpLiteral.QuoteString(target.SourcePath) + ", " + target.Span.StartLine + ", " +
             target.Span.StartColumn + ", " + PowerShellCSharpLiteral.QuoteString(target.SourceDocument) + ", " +
             target.StartOffset + ", " + target.EndOffset + ")";

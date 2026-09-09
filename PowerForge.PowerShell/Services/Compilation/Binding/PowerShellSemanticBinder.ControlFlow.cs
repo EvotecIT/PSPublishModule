@@ -164,12 +164,13 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellCompilationCapability capabilities)
     {
         var variableSpan = PowerShellSourceParser.GetSpan(document, statement.Variable.Extent);
+        var nativeInvocation = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
         if (!symbols.TryGetValue(statement.Variable.VariablePath.UserPath, out var target))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${statement.Variable.VariablePath.UserPath}' has no function-scope semantic symbol.", variableSpan));
             return null;
         }
-        if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
+        if (!nativeInvocation && target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2305",
                 "A foreach target cannot overwrite a closed numeric local without preserving its Int32/Double element contract.", variableSpan));
@@ -177,7 +178,7 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var collection = BindExpression(document, statement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
         if (collection is null) return null;
-        if (PowerShellModuleStateOriginPolicy.IsDerived(collection))
+        if (!nativeInvocation && PowerShellModuleStateOriginPolicy.IsDerived(collection))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2304",
@@ -187,7 +188,7 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var collectionType = collection.Type.ClrType;
         var elementType = PowerShellForEachCollectionPolicy.GetElementType(collectionType, capabilities, out var enumerationKind);
-        if (elementType is null || elementType != target.Type.ClrType)
+        if (elementType is null || !nativeInvocation && elementType != target.Type.ClrType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2303",
@@ -211,6 +212,12 @@ internal sealed partial class PowerShellSemanticBinder
             collection,
             enumerationKind,
             body,
-            checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities));
+            checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities),
+            nativeBinding: nativeInvocation ? new PowerShellNativeForEachBinding(
+                new PowerShellNativeAssignmentTarget(statement.Variable.Extent.Text, document.Path, document.Text,
+                    variableSpan, statement.Variable.Extent.StartOffset, statement.Variable.Extent.EndOffset),
+                PowerShellSourceParser.GetSpan(document, statement.Condition.Extent),
+                PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Condition.Extent)),
+                PowerShellSourceParser.GetSourceLines(document, variableSpan)) : null);
     }
 }

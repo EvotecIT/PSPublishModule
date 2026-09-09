@@ -78,7 +78,7 @@ internal static class PowerShellBoundRegionOpportunitySelector
                 case PowerShellBoundCommandCaptureStatement capture:
                     yield return capture.Target;
                     break;
-                case PowerShellBoundOutputCaptureStatement capture:
+                case PowerShellBoundOutputCaptureStatement { Target: not null } capture:
                     yield return capture.Target;
                     break;
                 case PowerShellBoundForEachStatement loop:

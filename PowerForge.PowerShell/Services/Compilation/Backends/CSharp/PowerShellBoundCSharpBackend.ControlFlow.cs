@@ -55,6 +55,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var prefix = new string(' ', indent * 4);
         var collection = EmitExpression(loop.Collection);
+        if (loop.EnumerationKind == PowerShellForEachEnumerationKind.NativeInvocation)
+        {
+            EmitNativeForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            return;
+        }
         if (loop.EnumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable)
         {
             EmitPowerShellForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);

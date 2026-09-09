@@ -9,6 +9,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
+        if (capture.NativeTarget is not null)
+        {
+            // The native owner reads a compound destination before evaluating the
+            // compiled loop. Emitting directly into this builder preserves source maps.
+            builder.Append(prefix).Append(EmitNativeAssignmentStart(capture.NativeTarget, capture.Operation)).AppendLine("() =>");
+            builder.Append(prefix).AppendLine("{");
+            indent++;
+            prefix = new string(' ', indent * 4);
+        }
         var records = capture.RecordsTemporary;
         var previous = capture.SinkTemporary;
         builder.Append(prefix).Append("var ").Append(records).AppendLine(" = new global::System.Collections.Generic.List<object?>();");
@@ -30,15 +39,18 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (capture.UsesNativeInvocation)
             builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).Append("    ");
-        if (capture.UsesNativeInvocation)
-            builder.Append("__nativeFunction.SetVariable(").Append(PowerShellCSharpLiteral.QuoteString(capture.Target.Name)).Append(", ");
+        var value = capture.UsesNativeInvocation ? getTemporaryIdentifier("collapsedCapture") : null;
+        if (value is not null)
+            builder.Append("object? ").Append(value).Append(" = ");
         else
-            builder.Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target.Name)).Append(" = ");
+            builder.Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target!.Name)).Append(" = ");
         builder
             .Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
             .Append(records).Append("[0] : ").Append(records).Append(".ToArray()")
-            .AppendLine(capture.UsesNativeInvocation ? ");" : ";");
+            .AppendLine(";");
         builder.Append(prefix).Append("    ").Append(records).AppendLine(".Clear();");
+        if (value is not null)
+            builder.Append(prefix).Append("    return ").Append(value).AppendLine(";");
         builder.Append(prefix).AppendLine("}");
         // PowerShell discards assignment output for RuntimeException, but flushes
         // pending records when a raw CLR exception escapes (for example MoveNext).
@@ -51,5 +63,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).Append("    foreach (var ").Append(flushedRecord).Append(" in ").Append(records)
             .Append(") ").Append(previous).Append('(').Append(flushedRecord).AppendLine(");");
         builder.Append(prefix).AppendLine("}");
+        if (capture.NativeTarget is not null)
+            builder.Append(new string(' ', (indent - 1) * 4)).Append('}')
+                .Append(EmitNativeAssignmentLocation(capture.NativeTarget)).AppendLine(";");
     }
 }

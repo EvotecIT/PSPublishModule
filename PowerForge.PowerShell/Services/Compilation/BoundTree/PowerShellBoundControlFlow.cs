@@ -100,16 +100,22 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         PowerShellBoundBlock body,
         bool declareVariable = false,
         PowerShellBoundExpression? nullCollectionElement = null,
-        bool checkHostInterrupts = false)
+        bool checkHostInterrupts = false,
+        PowerShellNativeForEachBinding? nativeBinding = null)
         : base(
             span,
             PowerShellSemanticEffect.Mutation | collection.Effects | body.Effects | (nullCollectionElement?.Effects ?? PowerShellSemanticEffect.None) |
-                PowerShellLoopInterruptContract.Effects(checkHostInterrupts || enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable) |
-                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable ? PowerShellSemanticEffect.NonSuccessStream : PowerShellSemanticEffect.None),
+                PowerShellLoopInterruptContract.Effects(checkHostInterrupts || enumerationKind is PowerShellForEachEnumerationKind.PowerShellEnumerable or PowerShellForEachEnumerationKind.NativeInvocation) |
+                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable ? PowerShellSemanticEffect.NonSuccessStream : PowerShellSemanticEffect.None) |
+                (nativeBinding is not null ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
             collection.Capabilities | body.Capabilities | (nullCollectionElement?.Capabilities ?? PowerShellRequiredCapability.None) |
-                PowerShellLoopInterruptContract.Capabilities(checkHostInterrupts || enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable) |
-                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
+                PowerShellLoopInterruptContract.Capabilities(checkHostInterrupts || enumerationKind is PowerShellForEachEnumerationKind.PowerShellEnumerable or PowerShellForEachEnumerationKind.NativeInvocation) |
+                (enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
+                (nativeBinding is not null ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost |
+                    PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
+        if ((nativeBinding is not null) != (enumerationKind == PowerShellForEachEnumerationKind.NativeInvocation))
+            throw new ArgumentException("Native foreach enumeration requires its authored variable binding.");
         Variable = variable;
         ElementType = elementType;
         Collection = collection;
@@ -117,7 +123,8 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         Body = body;
         DeclareVariable = declareVariable;
         NullCollectionElement = nullCollectionElement;
-        CheckHostInterrupts = checkHostInterrupts || enumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable;
+        CheckHostInterrupts = checkHostInterrupts || enumerationKind is PowerShellForEachEnumerationKind.PowerShellEnumerable or PowerShellForEachEnumerationKind.NativeInvocation;
+        NativeBinding = nativeBinding;
     }
 
     internal PowerShellSymbolId Variable { get; }
@@ -128,6 +135,7 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
     internal bool DeclareVariable { get; }
     internal PowerShellBoundExpression? NullCollectionElement { get; }
     internal bool CheckHostInterrupts { get; }
+    internal PowerShellNativeForEachBinding? NativeBinding { get; }
 }
 
 internal sealed class PowerShellBoundSwitchClause

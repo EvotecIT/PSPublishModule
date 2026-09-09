@@ -5,7 +5,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool HasUnbridgedNativeStorage(PowerShellBoundBlock body)
     {
         var statements = PowerShellSemanticAnalyzer.EnumerateStatements(body).ToArray();
-        return statements.Any(static statement => statement is PowerShellBoundAssignmentStatement or PowerShellBoundForEachStatement or
+        return statements.Any(static statement => statement is PowerShellBoundAssignmentStatement or PowerShellBoundForEachStatement { NativeBinding: null } or
                    PowerShellBoundOutputCaptureStatement { UsesNativeInvocation: false } or PowerShellBoundCommandCaptureStatement) ||
                statements.SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                    .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)

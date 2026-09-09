@@ -6,5 +6,6 @@ internal enum PowerShellForEachEnumerationKind
     TypedArray,
     ScalarString,
     SystemArray,
-    PowerShellEnumerable
+    PowerShellEnumerable,
+    NativeInvocation
 }

@@ -28,7 +28,7 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
             if (statement is PowerShellBoundOutputCaptureStatement captureOutput)
             {
                 Analyze(captureOutput.Body, assigned, locals, diagnostics);
-                assigned.Add(captureOutput.Target.StableKey);
+                if (captureOutput.Target is not null) assigned.Add(captureOutput.Target.StableKey);
                 continue;
             }
             if (statement is PowerShellBoundStatementErrorBoundary boundary)
@@ -47,7 +47,7 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
                         primitive.InvocationKind, primitive.Type.ClrType, primitive.ParameterTypes);
                 Analyze(boundary.Body, preservesAssignment ? assigned : assigned.ToHashSet(StringComparer.Ordinal), locals, diagnostics);
                 if (boundary.Body.Statements.Length == 1 &&
-                    boundary.Body.Statements[0] is PowerShellBoundOutputCaptureStatement capture &&
+                    boundary.Body.Statements[0] is PowerShellBoundOutputCaptureStatement { Target: not null } capture &&
                     locals.TryGetValue(capture.Target.StableKey, out var captureType) &&
                     captureType.ClrType == typeof(object) &&
                     captureType.Provenance != PowerShellTypeFactProvenance.Explicit)

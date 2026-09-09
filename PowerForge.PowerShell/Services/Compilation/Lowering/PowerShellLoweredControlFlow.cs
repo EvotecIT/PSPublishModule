@@ -89,7 +89,8 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
         PowerShellLoweredStatement[] statements,
         bool declareVariable,
         PowerShellLoweredExpression? nullCollectionElement,
-        bool checkHostInterrupts)
+        bool checkHostInterrupts,
+        PowerShellNativeForEachBinding? nativeBinding = null)
         : base(span)
     {
         Variable = variable;
@@ -100,6 +101,7 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
         DeclareVariable = declareVariable;
         NullCollectionElement = nullCollectionElement;
         CheckHostInterrupts = checkHostInterrupts;
+        NativeBinding = nativeBinding;
     }
 
     internal PowerShellSymbolId Variable { get; }
@@ -110,6 +112,7 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
     internal bool DeclareVariable { get; }
     internal PowerShellLoweredExpression? NullCollectionElement { get; }
     internal bool CheckHostInterrupts { get; }
+    internal PowerShellNativeForEachBinding? NativeBinding { get; }
 }
 
 internal sealed class PowerShellLoweredSwitchClause

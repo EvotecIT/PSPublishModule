@@ -7,7 +7,7 @@ internal static class PowerShellBoundStatementRewriter
         => statement switch
         {
             PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
-                capture.Span, capture.Target, rewriteBlock(capture.Body), capture.UsesNativeInvocation),
+                capture.Span, capture.Target, rewriteBlock(capture.Body), capture.NativeTarget, capture.Operation),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
                 rewriteBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
             PowerShellBoundIfStatement conditional => new PowerShellBoundIfStatement(
@@ -20,7 +20,7 @@ internal static class PowerShellBoundStatementRewriter
                 loop.Span, loop.Initializer, loop.Condition, loop.Iterator, rewriteBlock(loop.Body), loop.CheckHostInterrupts),
             PowerShellBoundForEachStatement loop => new PowerShellBoundForEachStatement(
                 loop.Span, loop.Variable, loop.ElementType, loop.Collection, loop.EnumerationKind,
-                rewriteBlock(loop.Body), loop.DeclareVariable, loop.NullCollectionElement, loop.CheckHostInterrupts),
+                rewriteBlock(loop.Body), loop.DeclareVariable, loop.NullCollectionElement, loop.CheckHostInterrupts, loop.NativeBinding),
             PowerShellBoundSwitchStatement selection => new PowerShellBoundSwitchStatement(
                 selection.Span, selection.Value,
                 selection.Clauses.Select(clause => new PowerShellBoundSwitchClause(clause.Value, rewriteBlock(clause.Body))).ToArray(),

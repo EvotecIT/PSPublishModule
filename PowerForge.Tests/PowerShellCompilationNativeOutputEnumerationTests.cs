@@ -13,6 +13,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Read-NativeEnumeration { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); 'before'; $Value; 'after' }
             function Read-NativeCollectedEnumeration { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); $result=@($Value; 'tail'); return ,$result }
             function Read-NativeCapturedEnumeration { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); $result='prior'; $result=for ($i=0;$i -lt 1;$i++) { $Value; 'tail' }; return ,$result }
+            function Read-NativeForeachEnumeration { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); 'before'; foreach ($item in $Value) { $item }; 'after' }
+            function Read-NativeCapturedForeachEnumeration { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); $result='prior'; $result=foreach ($item in $Value) { $item; 'tail' }; return ,$result }
             function Read-NativeCatchEnumeration { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); try { $Value; 'try-tail' } catch { 'caught' } finally { 'finally' }; 'after' }
             function Read-NativeSingleEnumeration { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value); $result='prior'; $result=@($Value); return ,$result }
             """, ".psm1");
@@ -20,7 +22,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeEnumeration", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.CompiledMethods == 5, string.Join(Environment.NewLine,
+        Assert.True(result.Manifest!.CompiledMethods == 7, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
         const string probe = """
             Add-Type -TypeDefinition @'
@@ -55,7 +57,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Describe-Fault($fault) {
                 $fault.FullyQualifiedErrorId+':'+$fault.Exception.GetType().FullName+':'+$fault.InvocationInfo.ScriptLineNumber+':'+$fault.InvocationInfo.OffsetInLine
             }
-            foreach ($name in 'Read-NativeEnumeration','Read-NativeCollectedEnumeration','Read-NativeCapturedEnumeration','Read-NativeCatchEnumeration','Read-NativeSingleEnumeration') {
+            foreach ($name in 'Read-NativeEnumeration','Read-NativeCollectedEnumeration','Read-NativeCapturedEnumeration','Read-NativeCatchEnumeration','Read-NativeSingleEnumeration','Read-NativeForeachEnumeration','Read-NativeCapturedForeachEnumeration') {
                 foreach ($kind in 'enumerable','cursor') {
                     foreach ($failure in 'none','get','runtime-get','move','runtime-move','current','runtime-current','dispose','runtime-dispose') {
                         foreach ($action in 'Continue','SilentlyContinue','Ignore','Stop') {
@@ -81,7 +83,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         var expected = original.StandardOutput.Split('\n');
         var actual = compiled.StandardOutput.Split('\n');
-        Assert.Equal(5 * 2 * 9 * 4, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
+        Assert.Equal(7 * 2 * 9 * 4, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
         Assert.Equal(expected.Length, actual.Length);
         Assert.True(expected.SequenceEqual(actual), string.Join(Environment.NewLine, expected.Zip(actual)
             .Where(pair => pair.First != pair.Second).Take(8).Select(pair => "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second)));

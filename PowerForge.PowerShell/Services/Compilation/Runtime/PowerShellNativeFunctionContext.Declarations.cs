@@ -47,23 +47,25 @@ namespace PowerForge.Generated.Runtime
             var document = (ScriptBlockAst)PowerShellNativeFunctionHost.Invoke(_contract.ParseInputWithFile, null, parseArguments)!;
             var errors = (ParseError[])parseArguments[3];
             if (errors.Length != 0) throw new ArgumentException(errors[0].Message, nameof(target));
-            var assignment = document.FindAll(node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
-                .Cast<AssignmentStatementAst>().FirstOrDefault(node =>
-                    node.Left.Extent.Text == target && node.Left.Extent.StartLineNumber == line &&
-                    node.Left.Extent.StartColumnNumber == column && (sourceDocument is null ||
-                    node.Left.Extent.StartOffset == startOffset && node.Left.Extent.EndOffset == endOffset));
-            if (assignment is null)
+            var targetAst = document.FindAll(node => node is AssignmentStatementAst or ForEachStatementAst, searchNestedScriptBlocks: true)
+                .Select(node => node is AssignmentStatementAst assignment ? assignment.Left :
+                    token == TokenKind.Equals ? ((ForEachStatementAst)node).Variable : null)
+                .FirstOrDefault(node => node is not null &&
+                    node.Extent.Text == target && node.Extent.StartLineNumber == line &&
+                    node.Extent.StartColumnNumber == column && (sourceDocument is null ||
+                    node.Extent.StartOffset == startOffset && node.Extent.EndOffset == endOffset));
+            if (targetAst is null)
                 throw new ArgumentException("The native assignment does not match its authored variable target.", nameof(target));
-            ExpressionAst variable = assignment.Left;
+            ExpressionAst variable = targetAst;
             while (variable is AttributedExpressionAst attributed) variable = attributed.Child;
             if (variable is not VariableExpressionAst)
                 throw new ArgumentException("A native declaration requires a variable target.", nameof(target));
 
             // Only the target reaches native compilation. The authored RHS remains compiled IR;
             // a harmless placeholder supplies the analysis container and is never emitted.
-            var extent = assignment.Left.Extent;
+            var extent = targetAst.Extent;
             var placeholder = new CommandExpressionAst(extent, new ConstantExpressionAst(extent, null), null);
-            var detached = new AssignmentStatementAst(extent, (ExpressionAst)assignment.Left.Copy(), token, placeholder, extent);
+            var detached = new AssignmentStatementAst(extent, (ExpressionAst)targetAst.Copy(), token, placeholder, extent);
             var ast = new ScriptBlockAst(extent, null, new StatementBlockAst(extent, new[] { detached }, null), isFilter: false);
             var native = new NativeAstCompiler(this, ast, assignmentVariables: true);
             var result = (Expression)native.Invoke("ReduceAssignment", detached.Left, token, Expression.Invoke(native.RightHandSide))!;

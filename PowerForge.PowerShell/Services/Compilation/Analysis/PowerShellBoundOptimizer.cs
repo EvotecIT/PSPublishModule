@@ -93,7 +93,7 @@ internal sealed class PowerShellBoundOptimizer
         => statement switch
         {
             PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
-                capture.Span, capture.Target, OptimizeBlock(capture.Body), capture.UsesNativeInvocation),
+                capture.Span, capture.Target, OptimizeBlock(capture.Body), capture.NativeTarget, capture.Operation),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
                 OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(
@@ -121,7 +121,7 @@ internal sealed class PowerShellBoundOptimizer
                 loop.EnumerationKind,
                 OptimizeBlock(loop.Body),
                 loop.DeclareVariable,
-                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement), loop.CheckHostInterrupts),
+                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement), loop.CheckHostInterrupts, loop.NativeBinding),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
                 thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression),
                 thrown.PreserveStatementErrors, thrown.SourcePath, thrown.SourceText),

@@ -11,12 +11,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create("""
             function Invoke-NativeOutputStop { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value,[object]$Marker); try { $Value } finally { "cleanup=$Marker" } }
+            function Invoke-NativeForeachStop { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value,[object]$Marker); try { foreach ($item in $Value) { $item } } finally { "cleanup=$Marker" } }
+            function Invoke-NativeCapturedForeachStop { [CmdletBinding()] param([ValidateRange(1,9)][int]$Seed=1,[object]$Value,[object]$Marker); try { $result=foreach ($item in $Value) { Write-Output $item }; $result } finally { "cleanup=$Marker" } }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeOutputStopping", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.CompiledMethods == 1, string.Join(Environment.NewLine,
+        Assert.True(result.Manifest!.CompiledMethods == 3, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => cause.Message))));
         const string probe = """
             Add-Type -TypeDefinition @'
@@ -50,11 +52,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }
             }
             '@
+            foreach ($name in 'Invoke-NativeOutputStop','Invoke-NativeForeachStop','Invoke-NativeCapturedForeachStop') {
             $inputValue=[NativeOutputStopInput]::new(); $marker=$inputValue.GetMarker(); $ps=[powershell]::Create()
             try {
                 [void]$ps.AddCommand('Import-Module').AddParameter('Name',$modulePath)
                 [void]$ps.Invoke(); $ps.Commands.Clear()
-                [void]$ps.AddCommand('Invoke-NativeOutputStop').AddParameter('Value',$inputValue).AddParameter('Marker',$marker)
+                [void]$ps.AddCommand($name).AddParameter('Value',$inputValue).AddParameter('Marker',$marker)
                 $running=$ps.BeginInvoke()
                 if (-not $inputValue.Started.WaitOne(5000)) { throw "Native output did not reach enumeration. $($ps.Streams.Error)" }
                 $stop=$ps.BeginStop($null,$null)
@@ -65,14 +68,20 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 if (-not $stop.AsyncWaitHandle.WaitOne(5000)) { throw 'Native output did not stop.' }
                 $ps.EndStop($stop)
                 try { [void]$ps.EndInvoke($running) } catch [Management.Automation.PipelineStoppedException] {}
-                [pscustomobject]@{state=[string]$ps.InvocationStateInfo.State;disposed=$inputValue.Disposals;cleanups=$inputValue.Cleanups;
+                [pscustomobject]@{name=$name;state=[string]$ps.InvocationStateInfo.State;disposed=$inputValue.Disposals;cleanups=$inputValue.Cleanups;
                     errors=@($ps.Streams.Error | ForEach-Object FullyQualifiedErrorId)} | ConvertTo-Json -Compress
                 $ps.Commands.Clear(); $ps.Streams.Error.Clear(); $inputValue.Disposals=0; $inputValue.Cleanups=0
-                [void]$ps.AddCommand('Invoke-NativeOutputStop').AddParameter('Value',$inputValue).AddParameter('Marker',$marker)
+                [void]$ps.AddCommand($name).AddParameter('Value',$inputValue).AddParameter('Marker',$marker)
                 $records=@($ps.Invoke())
-                [pscustomobject]@{state=[string]$ps.InvocationStateInfo.State;disposed=$inputValue.Disposals;cleanups=$inputValue.Cleanups;records=$records;
+                [pscustomobject]@{name=$name;state=[string]$ps.InvocationStateInfo.State;disposed=$inputValue.Disposals;cleanups=$inputValue.Cleanups;records=$records;
+                    errors=@($ps.Streams.Error | ForEach-Object FullyQualifiedErrorId)} | ConvertTo-Json -Compress
+                $ps.Commands.Clear(); $ps.Streams.Error.Clear(); $inputValue.Disposals=0; $inputValue.Cleanups=0
+                [void]$ps.AddCommand($name).AddParameter('Value',$inputValue).AddParameter('Marker',$marker).AddCommand('Select-Object').AddParameter('First',1)
+                $records=@($ps.Invoke())
+                [pscustomobject]@{name=$name;firstOnly=$true;disposed=$inputValue.Disposals;cleanups=$inputValue.Cleanups;records=$records;
                     errors=@($ps.Streams.Error | ForEach-Object FullyQualifiedErrorId)} | ConvertTo-Json -Compress
             } finally { [void]$inputValue.Release.Set(); $ps.Dispose(); $inputValue.Started.Dispose(); $inputValue.Release.Dispose() }
+            }
             """;
         var original = RunStatementErrorProbe(host, "$modulePath='" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
             fixture.RootPath, "native-output-stop-probe");
@@ -84,6 +93,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardOutput + compiled.StandardError);
         Assert.Contains("\"state\":\"Stopped\",\"disposed\":1,\"cleanups\":1", original.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("\"state\":\"Completed\",\"disposed\":1,\"cleanups\":1", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal(9, original.StandardOutput.Split('\n').Count(line => !string.IsNullOrWhiteSpace(line)));
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
     }
 }

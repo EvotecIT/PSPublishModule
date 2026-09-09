@@ -277,7 +277,7 @@ internal sealed partial class PowerShellTypedLowerer
         {
             if (statement is PowerShellBoundOutputCaptureStatement capture)
             {
-                yield return (capture.Target.StableKey, capture.Span.StartOffset);
+                if (capture.Target is not null) yield return (capture.Target.StableKey, capture.Span.StartOffset);
                 foreach (var assignment in EnumerateAssignments(capture.Body)) yield return assignment;
             }
             if (statement is PowerShellBoundStatementErrorBoundary boundary)
@@ -338,7 +338,7 @@ internal sealed partial class PowerShellTypedLowerer
         {
             if (statement is PowerShellBoundOutputCaptureStatement capture)
             {
-                yield return (capture.Target.StableKey, capture.Span.StartOffset);
+                if (capture.Target is not null) yield return (capture.Target.StableKey, capture.Span.StartOffset);
                 foreach (var nested in EnumerateAssignments(capture.Body)) yield return nested;
             }
             if (statement is PowerShellBoundAssignmentStatement assignment) yield return (assignment.Target.StableKey, assignment.Span.StartOffset);
@@ -405,7 +405,7 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundOutputCaptureStatement capture => new PowerShellLoweredOutputCaptureStatement(
                 capture.Span, capture.Target,
                 LowerStatements(capture.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-                names.Allocate("pf_captured_records"), names.Allocate("pf_previous_output"), capture.UsesNativeInvocation),
+                names.Allocate("pf_captured_records"), names.Allocate("pf_previous_output"), capture.NativeTarget, capture.Operation),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellLoweredStatementErrorBoundary(
                 boundary.Span, LowerStatements(boundary.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error"), boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
@@ -570,7 +570,7 @@ internal sealed partial class PowerShellTypedLowerer
             loop.NullCollectionElement is null
                 ? null
                 : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities),
-            loop.CheckHostInterrupts);
+            loop.CheckHostInterrupts, loop.NativeBinding);
     }
 
     private static PowerShellLoweredStatement[] LowerStatements(

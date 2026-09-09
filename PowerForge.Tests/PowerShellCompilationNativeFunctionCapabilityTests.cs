@@ -6,6 +6,9 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     [InlineData("return 'ready'")]
     [InlineData("return \"value=$Value\"")]
     [InlineData("$copy=@('first'; 'second'); return \"value=$copy\"")]
+    [InlineData("foreach ($index in 1,2) { }; return \"index=$index\"")]
+    [InlineData("[int[]]$script:Result=foreach ($item in 1,2) { $item }; return $script:Result")]
+    [InlineData("$null += for ($i=0; $i -lt 2; $i++) { $i }; return 'done'")]
     public void NativeFunctionBinding_RemainsVisibleInBoundAndLoweredCapabilities(string body)
     {
         var document = PowerShellSourceParser.Parse(
@@ -38,20 +41,6 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
 
         Assert.Empty(result.PromotedRegions);
-    }
-
-    [Theory]
-    [InlineData("foreach ($index in 1,2) { }")]
-    public void NativeFunctionBinding_DoesNotUseClrLoopStorageForNativeReads(string loop)
-    {
-        var document = PowerShellSourceParser.Parse(
-            "function Read-Native { param([ValidateRange(1,9)][int]$Value) " + loop + " return \"index=$index\" }",
-            TestPath("native-loop-storage.psm1"));
-        var result = new PowerShellSemanticCompilationPipeline().Compile(
-            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
-
-        Assert.Empty(result.Emitted.Methods);
-        Assert.Contains(result.Emitted.Diagnostics, static diagnostic => diagnostic.Code == "PSL1014");
     }
 
     [Theory]
