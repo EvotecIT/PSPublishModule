@@ -75,7 +75,6 @@ public sealed partial class ArtefactBuilder
 
     private static void ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
         string scriptRoot,
-        string projectRoot,
         string stagingPath,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
@@ -95,25 +94,28 @@ public sealed partial class ArtefactBuilder
             ValidateScriptDestinationDoesNotTraverseReparsePoint(
                 destination,
                 fullScriptRoot,
-                "module package destination",
-                projectRoot,
-                stagingPath);
+                "module package destination");
         }
     }
 
-    private static void ValidateScriptDestinationDoesNotTraverseReparsePoint(
+    /// <summary>
+    /// Rejects existing reparse-point components from a destination through its trusted boundary,
+    /// or through the filesystem root when no validated boundary contains the destination.
+    /// </summary>
+    internal static void ValidateScriptDestinationDoesNotTraverseReparsePoint(
         string destination,
-        string boundary,
-        string description,
-        string projectRoot,
-        string stagingPath)
+        string? trustedBoundary,
+        string description)
     {
-        string fullDestination = Path.GetFullPath(destination)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        string fullBoundary = Path.GetFullPath(boundary)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!IsSameOrBelowPath(fullDestination, fullBoundary))
-            return;
+        string fullDestination = NormalizeScriptValidationPath(destination);
+        string? fullTrustedBoundary = string.IsNullOrWhiteSpace(trustedBoundary)
+            ? null
+            : NormalizeScriptValidationPath(trustedBoundary!);
+        if (fullTrustedBoundary is not null &&
+            !IsSameOrBelowPath(fullDestination, fullTrustedBoundary))
+        {
+            fullTrustedBoundary = null;
+        }
 
         string current = fullDestination;
         while (true)
@@ -122,18 +124,8 @@ public sealed partial class ArtefactBuilder
             {
                 if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                 {
-                    // A shared outer alias (for example macOS /var) keeps every protected path in
-                    // the same lexical namespace. An unshared ancestor can redirect only the output
-                    // boundary and bypass the project/staging overlap checks.
-                    bool isSharedAncestorOutsideBoundary =
-                        !IsSameOrBelowPath(current, fullBoundary) &&
-                        IsSameOrBelowPath(projectRoot, current) &&
-                        IsSameOrBelowPath(stagingPath, current);
-                    if (!isSharedAncestorOutsideBoundary)
-                    {
-                        throw new InvalidOperationException(
-                            $"Script artefact {description} '{fullDestination}' traverses a symbolic link or reparse point at '{current}'.");
-                    }
+                    throw new InvalidOperationException(
+                        $"Script artefact {description} '{fullDestination}' traverses a symbolic link or reparse point at '{current}'.");
                 }
             }
             catch (FileNotFoundException)
@@ -144,6 +136,13 @@ public sealed partial class ArtefactBuilder
             {
                 // Non-existing path components are created only after this preflight succeeds.
             }
+
+            if (fullTrustedBoundary is not null &&
+                string.Equals(current, fullTrustedBoundary, GetPathComparison(current, fullTrustedBoundary)))
+            {
+                return;
+            }
+
             string? parent = Path.GetDirectoryName(current);
             if (string.IsNullOrWhiteSpace(parent) ||
                 string.Equals(parent, current, GetPathComparison(parent, current)))
@@ -153,5 +152,125 @@ public sealed partial class ArtefactBuilder
 
             current = parent;
         }
+    }
+
+    private static string NormalizeScriptValidationPath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string pathRoot = Path.GetPathRoot(fullPath) ?? string.Empty;
+        return fullPath.Length > pathRoot.Length
+            ? fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            : fullPath;
+    }
+
+    private static void ValidateScriptBuildRootsDoNotOverlapStaging(
+        string stagingPath,
+        string outputRoot,
+        string projectRoot,
+        string scriptRoot,
+        string? requiredModulesRoot,
+        string? temporaryBuildRoot,
+        bool rejectOutputRootContainingProject)
+    {
+        string fullOutputRoot = Path.GetFullPath(outputRoot);
+        string fullProjectRoot = Path.GetFullPath(projectRoot);
+        if (rejectOutputRootContainingProject && IsSameOrBelowPath(fullProjectRoot, fullOutputRoot))
+        {
+            throw new InvalidOperationException(
+                $"Script artefact output root '{fullOutputRoot}' contains project root '{fullProjectRoot}'. " +
+                "Use a dedicated artefact directory inside the project so output cleanup cannot modify project sources.");
+        }
+
+        string fullStagingPath = Path.GetFullPath(stagingPath);
+        foreach ((string Label, string Path) candidate in new[]
+                 {
+                     ("output root", outputRoot),
+                     ("generated script root", scriptRoot),
+                     ("required modules root", requiredModulesRoot ?? string.Empty)
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(candidate.Path))
+                continue;
+
+            string fullCandidate = Path.GetFullPath(candidate.Path);
+            if (!IsSameOrBelowPath(fullStagingPath, fullCandidate) &&
+                !IsSameOrBelowPath(fullCandidate, fullStagingPath))
+            {
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"Script artefact {candidate.Label} '{fullCandidate}' overlaps staging source '{fullStagingPath}'. " +
+                "Keep staging and artefact destination trees separate.");
+        }
+
+        string fullScriptRoot = Path.GetFullPath(scriptRoot);
+        if (!string.Equals(
+                fullScriptRoot,
+                fullOutputRoot,
+                GetPathComparison(fullScriptRoot, fullOutputRoot)) &&
+            IsSameOrBelowPath(fullOutputRoot, fullScriptRoot))
+        {
+            throw new InvalidOperationException(
+                $"Script artefact generated script root '{fullScriptRoot}' contains output root '{fullOutputRoot}' and would erase the output tree while preparing the script layout. " +
+                "Keep the generated script root equal to or inside the artefact output root.");
+        }
+
+        if (ScriptPathsOverlap(fullScriptRoot, fullProjectRoot) &&
+            !IsSameOrBelowPath(fullScriptRoot, fullOutputRoot))
+        {
+            throw new InvalidOperationException(
+                $"Script artefact generated script root '{fullScriptRoot}' overlaps project root '{fullProjectRoot}' and would erase or modify project sources.");
+        }
+
+        ValidateScriptDestinationDoesNotTraverseReparsePoint(
+            fullOutputRoot,
+            ResolveTrustedSystemTemporaryBoundary(fullOutputRoot),
+            "output root");
+        string? fullTemporaryBuildRoot = null;
+        if (!string.IsNullOrWhiteSpace(temporaryBuildRoot))
+        {
+            fullTemporaryBuildRoot = Path.GetFullPath(temporaryBuildRoot!);
+            ValidateScriptDestinationDoesNotTraverseReparsePoint(
+                fullTemporaryBuildRoot,
+                ResolveTrustedSystemTemporaryBoundary(fullTemporaryBuildRoot),
+                "temporary build root");
+        }
+        ValidateScriptDestinationDoesNotTraverseReparsePoint(
+            fullScriptRoot,
+            ResolveTrustedScriptDestinationBoundary(fullScriptRoot, fullOutputRoot, fullTemporaryBuildRoot),
+            "generated script root");
+        if (!string.IsNullOrWhiteSpace(requiredModulesRoot))
+        {
+            string fullRequiredModulesRoot = Path.GetFullPath(requiredModulesRoot!);
+            ValidateScriptDestinationDoesNotTraverseReparsePoint(
+                fullRequiredModulesRoot,
+                ResolveTrustedScriptDestinationBoundary(fullRequiredModulesRoot, fullOutputRoot, fullTemporaryBuildRoot),
+                "required modules root");
+        }
+    }
+
+    private static string? ResolveTrustedScriptDestinationBoundary(
+        string destination,
+        string outputRoot,
+        string? temporaryBuildRoot)
+    {
+        if (IsSameOrBelowPath(destination, outputRoot))
+            return outputRoot;
+        if (!string.IsNullOrWhiteSpace(temporaryBuildRoot) &&
+            IsSameOrBelowPath(destination, temporaryBuildRoot!))
+        {
+            return temporaryBuildRoot;
+        }
+
+        return ResolveTrustedSystemTemporaryBoundary(destination);
+    }
+
+    private static string? ResolveTrustedSystemTemporaryBoundary(string destination)
+    {
+        string systemTemporaryRoot = Path.GetFullPath(Path.GetTempPath());
+        return IsSameOrBelowPath(destination, systemTemporaryRoot)
+            ? systemTemporaryRoot
+            : null;
     }
 }

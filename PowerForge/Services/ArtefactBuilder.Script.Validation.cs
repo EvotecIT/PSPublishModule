@@ -297,6 +297,7 @@ public sealed partial class ArtefactBuilder
             directoryDestinations.Add(destination);
             ValidateScriptDirectoryCopyDestinationSafety(
                 destination,
+                destinationRoot,
                 outputRootToClear,
                 projectRoot,
                 stagingPath);
@@ -343,6 +344,7 @@ public sealed partial class ArtefactBuilder
             fileDestinations.Add(destination);
             ValidateScriptFileCopyDestinationSafety(
                 destination,
+                destinationRoot,
                 outputRootToClear,
                 projectRoot,
                 stagingPath);
@@ -370,6 +372,7 @@ public sealed partial class ArtefactBuilder
 
     private static void ValidateScriptDirectoryCopyDestinationSafety(
         string destination,
+        string trustedDestinationRoot,
         string outputRoot,
         string projectRoot,
         string stagingPath)
@@ -378,10 +381,10 @@ public sealed partial class ArtefactBuilder
         string fullProjectRoot = Path.GetFullPath(projectRoot);
         ValidateScriptDestinationDoesNotTraverseReparsePoint(
             fullDestination,
-            outputRoot,
-            "directory copy destination",
-            projectRoot,
-            stagingPath);
+            IsSameOrBelowPath(fullDestination, trustedDestinationRoot)
+                ? trustedDestinationRoot
+                : ResolveTrustedSystemTemporaryBoundary(fullDestination),
+            "directory copy destination");
         if (IsSameOrBelowPath(fullProjectRoot, fullDestination))
         {
             throw new InvalidOperationException(
@@ -404,6 +407,7 @@ public sealed partial class ArtefactBuilder
 
     private static void ValidateScriptFileCopyDestinationSafety(
         string destination,
+        string trustedDestinationRoot,
         string outputRoot,
         string projectRoot,
         string stagingPath)
@@ -412,10 +416,10 @@ public sealed partial class ArtefactBuilder
         string fullProjectRoot = Path.GetFullPath(projectRoot);
         ValidateScriptDestinationDoesNotTraverseReparsePoint(
             fullDestination,
-            outputRoot,
-            "file copy destination",
-            projectRoot,
-            stagingPath);
+            IsSameOrBelowPath(fullDestination, trustedDestinationRoot)
+                ? trustedDestinationRoot
+                : ResolveTrustedSystemTemporaryBoundary(fullDestination),
+            "file copy destination");
         if (IsSameOrBelowPath(fullDestination, fullProjectRoot) &&
             !IsSameOrBelowPath(fullDestination, outputRoot))
         {
@@ -485,79 +489,6 @@ public sealed partial class ArtefactBuilder
 
     private static bool ScriptPathsOverlap(string first, string second) =>
         IsSameOrBelowPath(first, second) || IsSameOrBelowPath(second, first);
-
-    private static void ValidateScriptBuildRootsDoNotOverlapStaging(
-        string stagingPath,
-        string outputRoot,
-        string projectRoot,
-        string scriptRoot,
-        string? requiredModulesRoot,
-        bool rejectOutputRootContainingProject)
-    {
-        string fullOutputRoot = Path.GetFullPath(outputRoot);
-        string fullProjectRoot = Path.GetFullPath(projectRoot);
-        if (rejectOutputRootContainingProject && IsSameOrBelowPath(fullProjectRoot, fullOutputRoot))
-        {
-            throw new InvalidOperationException(
-                $"Script artefact output root '{fullOutputRoot}' contains project root '{fullProjectRoot}'. " +
-                "Use a dedicated artefact directory inside the project so output cleanup cannot modify project sources.");
-        }
-
-        string fullStagingPath = Path.GetFullPath(stagingPath);
-        foreach ((string Label, string Path) candidate in new[]
-                 {
-                     ("output root", outputRoot),
-                     ("generated script root", scriptRoot),
-                     ("required modules root", requiredModulesRoot ?? string.Empty)
-                 })
-        {
-            if (string.IsNullOrWhiteSpace(candidate.Path))
-                continue;
-
-            string fullCandidate = Path.GetFullPath(candidate.Path);
-            if (!IsSameOrBelowPath(fullStagingPath, fullCandidate) &&
-                !IsSameOrBelowPath(fullCandidate, fullStagingPath))
-            {
-                continue;
-            }
-
-            throw new InvalidOperationException(
-                $"Script artefact {candidate.Label} '{fullCandidate}' overlaps staging source '{fullStagingPath}'. " +
-                "Keep staging and artefact destination trees separate.");
-        }
-
-        string fullScriptRoot = Path.GetFullPath(scriptRoot);
-        if (!string.Equals(
-                fullScriptRoot,
-                fullOutputRoot,
-                GetPathComparison(fullScriptRoot, fullOutputRoot)) &&
-            IsSameOrBelowPath(fullOutputRoot, fullScriptRoot))
-        {
-            throw new InvalidOperationException(
-                $"Script artefact generated script root '{fullScriptRoot}' contains output root '{fullOutputRoot}' and would erase the output tree while preparing the script layout. " +
-                "Keep the generated script root equal to or inside the artefact output root.");
-        }
-
-        if (ScriptPathsOverlap(fullScriptRoot, fullProjectRoot) &&
-            !IsSameOrBelowPath(fullScriptRoot, fullOutputRoot))
-        {
-            throw new InvalidOperationException(
-                $"Script artefact generated script root '{fullScriptRoot}' overlaps project root '{fullProjectRoot}' and would erase or modify project sources.");
-        }
-
-        ValidateScriptDestinationDoesNotTraverseReparsePoint(
-            fullOutputRoot,
-            fullOutputRoot,
-            "output root",
-            projectRoot,
-            stagingPath);
-        ValidateScriptDestinationDoesNotTraverseReparsePoint(
-            fullScriptRoot,
-            fullOutputRoot,
-            "generated script root",
-            projectRoot,
-            stagingPath);
-    }
 
     private static void ValidateScriptCopyMappingSource(
         string source,
@@ -694,9 +625,7 @@ public sealed partial class ArtefactBuilder
             ValidateScriptDestinationDoesNotTraverseReparsePoint(
                 destination,
                 requiredRoot,
-                "required module destination",
-                projectRoot,
-                stagingPath);
+                "required module destination");
             if (IsSameOrBelowPath(scriptRoot, destination))
             {
                 throw new InvalidOperationException(

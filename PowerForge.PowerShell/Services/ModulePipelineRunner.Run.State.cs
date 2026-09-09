@@ -38,7 +38,8 @@ public sealed partial class ModulePipelineRunner
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
         public Dictionary<string, string> FinalizedPackedArtefactHashes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
         public Dictionary<string, int> FinalizedPackedArtefactUnixModes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
-        public Dictionary<string, string[]> FinalizedPackedArtefactDirectoryInventories { get; } = new(PowerShellCompilationPathSafety.PathComparer);
+        public Dictionary<string, string[]> FinalizedScriptLayoutFileInventories { get; } = new(PowerShellCompilationPathSafety.PathComparer);
+        public Dictionary<string, string[]> FinalizedScriptLayoutDirectoryInventories { get; } = new(PowerShellCompilationPathSafety.PathComparer);
         public Dictionary<string, string> FinalizedModulePayloadHashes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
         public List<ModulePublishResult> PublishResults { get; } = new();
         public List<ProjectBuildHostExecutionResult> ProjectBuildResults { get; } = new();

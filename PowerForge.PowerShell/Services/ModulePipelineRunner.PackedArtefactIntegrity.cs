@@ -30,8 +30,13 @@ public sealed partial class ModulePipelineRunner
 
         foreach (string root in EnumerateFinalizedScriptLayoutRoots(artefact))
         {
-            state.FinalizedPackedArtefactDirectoryInventories[root] = Directory
+            state.FinalizedScriptLayoutFileInventories[root] = Directory
                 .EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                .Select(Path.GetFullPath)
+                .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer)
+                .ToArray();
+            state.FinalizedScriptLayoutDirectoryInventories[root] = Directory
+                .EnumerateDirectories(root, "*", SearchOption.AllDirectories)
                 .Select(Path.GetFullPath)
                 .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
@@ -52,22 +57,40 @@ public sealed partial class ModulePipelineRunner
                     "Artifact actions must not mutate signed release outputs after finalization.");
             }
         }
-        foreach (KeyValuePair<string, string[]> inventory in state.FinalizedPackedArtefactDirectoryInventories)
+        foreach (KeyValuePair<string, string[]> inventory in state.FinalizedScriptLayoutFileInventories)
         {
+            if (!Directory.Exists(inventory.Key))
+                ThrowFinalizedArtefactChanged(inventory.Key);
+
             var expectedPaths = new HashSet<string>(inventory.Value, PowerShellCompilationPathSafety.PathComparer);
-            string? unexpectedPath = Directory.Exists(inventory.Key)
-                ? Directory.EnumerateFiles(inventory.Key, "*", SearchOption.AllDirectories)
-                    .Select(Path.GetFullPath)
-                    .FirstOrDefault(path => !expectedPaths.Contains(path))
-                : null;
-            if (unexpectedPath is not null)
-            {
-                throw new InvalidOperationException(
-                    $"The finalized signed artefact or its evidence changed after signing: '{unexpectedPath}'. " +
-                    "Artifact actions must not mutate signed release outputs after finalization.");
-            }
+            var actualPaths = new HashSet<string>(
+                Directory.EnumerateFiles(inventory.Key, "*", SearchOption.AllDirectories).Select(Path.GetFullPath),
+                PowerShellCompilationPathSafety.PathComparer);
+            string? changedPath = actualPaths.FirstOrDefault(path => !expectedPaths.Contains(path)) ??
+                                  expectedPaths.FirstOrDefault(path => !actualPaths.Contains(path));
+            if (changedPath is not null)
+                ThrowFinalizedArtefactChanged(changedPath);
+        }
+        foreach (KeyValuePair<string, string[]> inventory in state.FinalizedScriptLayoutDirectoryInventories)
+        {
+            if (!Directory.Exists(inventory.Key))
+                ThrowFinalizedArtefactChanged(inventory.Key);
+
+            var expectedPaths = new HashSet<string>(inventory.Value, PowerShellCompilationPathSafety.PathComparer);
+            var actualPaths = new HashSet<string>(
+                Directory.EnumerateDirectories(inventory.Key, "*", SearchOption.AllDirectories).Select(Path.GetFullPath),
+                PowerShellCompilationPathSafety.PathComparer);
+            string? changedPath = actualPaths.FirstOrDefault(path => !expectedPaths.Contains(path)) ??
+                                  expectedPaths.FirstOrDefault(path => !actualPaths.Contains(path));
+            if (changedPath is not null)
+                ThrowFinalizedArtefactChanged(changedPath);
         }
     }
+
+    private static void ThrowFinalizedArtefactChanged(string path)
+        => throw new InvalidOperationException(
+            $"The finalized signed artefact or its evidence changed after signing: '{path}'. " +
+            "Artifact actions must not mutate signed release outputs after finalization.");
 
     private static int? ReadFinalizedArtefactUnixMode(string path)
     {

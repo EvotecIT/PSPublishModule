@@ -2,7 +2,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed class ArtefactBuilderScriptOutputSafetyTests
+public sealed partial class ArtefactBuilderScriptOutputSafetyTests
 {
     [Fact]
     public void Build_RejectsScriptRootThatContainsOutputRootBeforeCleanup()

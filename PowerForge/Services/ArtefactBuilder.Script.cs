@@ -63,10 +63,10 @@ public sealed partial class ArtefactBuilder
             projectRoot,
             scriptRoot,
             cfg.RequiredModules.Enabled == true ? requiredRoot : null,
+            temporaryBuildRoot: null,
             rejectOutputRootContainingProject: true);
         ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
             scriptRoot,
-            projectRoot,
             stagingPath,
             information,
             delivery,
@@ -208,10 +208,10 @@ public sealed partial class ArtefactBuilder
             projectRoot,
             scriptRoot,
             cfg.RequiredModules.Enabled == true ? requiredRoot : null,
+            tempRoot,
             rejectOutputRootContainingProject: cfg.DoNotClear != true);
         ValidateScriptPackageDestinationsDoNotTraverseReparsePoints(
             scriptRoot,
-            projectRoot,
             stagingPath,
             information,
             delivery,
