@@ -209,7 +209,7 @@ public sealed partial class DotNetRepositoryReleaseService
             {
                 if (spec.SignDependencyAssemblies)
                 {
-                    if (!TryPreparePackToolPublishOutputs(new[] { project }, spec, logger, out var preparationDuration, out var preparationError))
+                    if (!TryPreparePackToolPublishOutputs(new[] { project }, spec, outputPath, logger, out var preparationDuration, out var preparationError))
                     {
                         result.Duration += preparationDuration;
                         result.ErrorMessage = preparationError;
@@ -225,7 +225,15 @@ public sealed partial class DotNetRepositoryReleaseService
                 var signingPlan = BuildAssemblySigningPlan(
                     outputDirectories,
                     includePatterns,
-                    ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
+                    ResolvePackToolIntermediateAssemblyPaths(
+                        project.CsprojPath,
+                        csprojDir,
+                        configuration,
+                        project.ProjectName,
+                        logger,
+                        includePatterns,
+                        spec.SignDependencyAssemblies,
+                        outputPath));
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
                 {
                     var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
@@ -236,7 +244,15 @@ public sealed partial class DotNetRepositoryReleaseService
                         signingPlan = BuildAssemblySigningPlan(
                             outputDirectories,
                             includePatterns,
-                            ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
+                            ResolvePackToolIntermediateAssemblyPaths(
+                                project.CsprojPath,
+                                csprojDir,
+                                configuration,
+                                project.ProjectName,
+                                logger,
+                                includePatterns,
+                                includePreparedPublishOutput: false,
+                                outputPath));
                     }
                 }
                 resolveOutputWatch.Stop();
@@ -546,10 +562,12 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         string configuration,
         string projectName,
         ILogger logger,
-        IReadOnlyList<string> includePatterns)
+        IReadOnlyList<string> includePatterns,
+        bool includePreparedPublishOutput = false,
+        string? packageOutputPath = null)
     {
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var packProperties = CreatePackToolStagingGlobalProperties();
+        var packProperties = CreatePackToolStagingGlobalProperties(packageOutputPath);
         foreach (var targetFramework in ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger))
         {
             var packAsToolExitCode = RunDotnetMsBuildGetProperty(
@@ -594,6 +612,9 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
                 ? Path.GetFullPath(normalizedIntermediateOutputPath)
                 : Path.GetFullPath(Path.Combine(workingDirectory, normalizedIntermediateOutputPath));
             AddMatchingAssemblyPaths(files, resolvedDirectory, includePatterns, SearchOption.TopDirectoryOnly);
+
+            if (!includePreparedPublishOutput)
+                continue;
 
             var publishExitCode = RunDotnetMsBuildGetProperty(
                 csproj,

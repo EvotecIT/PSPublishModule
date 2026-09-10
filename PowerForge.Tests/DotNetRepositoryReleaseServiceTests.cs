@@ -941,11 +941,11 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 "    <ToolCommandName>sample-tool</ToolCommandName>"
             };
             if (usePackConditionedPublishDirectory)
-                projectLines.Add("    <PublishDir Condition=\"'$(_IsPacking)' == 'true' And '$(NoBuild)' == 'true' And '$(BuildProjectReferences)' == 'false'\">obj\\$(Configuration)\\$(TargetFramework)\\conditioned-publish\\</PublishDir>");
+                projectLines.Add("    <PublishDir Condition=\"'$(_IsPacking)' == 'true' And '$(NoBuild)' == 'true' And '$(BuildProjectReferences)' == 'false' And '$(PackageOutputPath)' != ''\">$(PackageOutputPath)\\conditioned-publish\\</PublishDir>");
             if (signDependencyAssemblies)
             {
                 var obsoletePublishDirectory = usePackConditionedPublishDirectory
-                    ? "obj\\$(Configuration)\\$(TargetFramework)\\conditioned-publish\\"
+                    ? "$(PackageOutputPath)\\conditioned-publish\\"
                     : "$(OutputPath)publish\\";
                 projectLines.Add($"    <ObsoletePublishDir>{obsoletePublishDirectory}</ObsoletePublishDir>");
             }
@@ -1080,6 +1080,40 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.False(result.Success);
             Assert.Contains("does not support RID-specific PackAsTool output", result.ErrorMessage, StringComparison.Ordinal);
             Assert.Equal(0, signingCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PackToolPathOverlapDetection_UsesActualFileSystemCaseSemantics()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var lowerCasePath = Directory.CreateDirectory(Path.Combine(root.FullName, "staging-a")).FullName;
+            var alternateCasePath = Path.Combine(root.FullName, "STAGING-A");
+            var isCaseInsensitive = Directory.Exists(alternateCasePath);
+
+            var success = DotNetRepositoryReleaseService.TryPackToolPathsOverlap(
+                lowerCasePath,
+                alternateCasePath,
+                out var overlap,
+                out var error);
+
+            Assert.True(success, error);
+            Assert.Equal(isCaseInsensitive, overlap);
+
+            success = DotNetRepositoryReleaseService.TryPackToolPathsOverlap(
+                lowerCasePath,
+                Path.Combine(lowerCasePath, "nested"),
+                out overlap,
+                out error);
+
+            Assert.True(success, error);
+            Assert.True(overlap);
         }
         finally
         {

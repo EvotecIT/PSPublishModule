@@ -11,6 +11,7 @@ public sealed partial class DotNetRepositoryReleaseService
     private static bool TryPreparePackToolPublishOutputs(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
+        string? packageOutputPath,
         ILogger logger,
         out TimeSpan duration,
         out string error)
@@ -18,7 +19,7 @@ public sealed partial class DotNetRepositoryReleaseService
         duration = TimeSpan.Zero;
         error = string.Empty;
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
-        var packProperties = CreatePackToolStagingGlobalProperties();
+        var packProperties = CreatePackToolStagingGlobalProperties(packageOutputPath);
         var plans = new List<PackToolPublishPlan>();
 
         foreach (var project in projects)
@@ -152,13 +153,18 @@ public sealed partial class DotNetRepositoryReleaseService
         return true;
     }
 
-    private static IReadOnlyDictionary<string, string> CreatePackToolStagingGlobalProperties()
-        => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    private static IReadOnlyDictionary<string, string> CreatePackToolStagingGlobalProperties(string? packageOutputPath = null)
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["_IsPacking"] = "true",
             ["NoBuild"] = "true",
             ["BuildProjectReferences"] = "false"
         };
+        if (!string.IsNullOrWhiteSpace(packageOutputPath))
+            properties["PackageOutputPath"] = Path.GetFullPath(packageOutputPath!);
+        return properties;
+    }
 
     private static bool TryReadPackToolProperty(
         DotNetRepositoryProjectResult project,
@@ -250,7 +256,7 @@ public sealed partial class DotNetRepositoryReleaseService
         out string error)
     {
         var allowedRoots = new List<string>();
-        foreach (var propertyName in new[] { "OutputPath", "IntermediateOutputPath", "ArtifactsPath" })
+        foreach (var propertyName in new[] { "OutputPath", "IntermediateOutputPath", "ArtifactsPath", "PackageOutputPath" })
         {
             if (!TryReadPackToolProperty(
                     project,
@@ -271,19 +277,30 @@ public sealed partial class DotNetRepositoryReleaseService
                 allowedRoots.Add(ResolveProjectPath(workingDirectory, value!));
         }
 
-        var containingRoot = allowedRoots
-            .Where(root => IsPathStrictlyWithin(publishDirectory, root))
-            .OrderByDescending(static root => root.Length)
-            .FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(containingRoot))
-        {
-            error = $"The pack-tool publish output for {project.ProjectName} must be contained by its evaluated output, intermediate, or artifacts directory before PowerForge can clean it: {publishDirectory}";
-            return false;
-        }
-
         if (!TryValidateNoReparsePoints(publishDirectory, out error))
         {
             error = $"The pack-tool publish output for {project.ProjectName} cannot be cleaned safely. {error}";
+            return false;
+        }
+
+        string? containingRoot = null;
+        foreach (var allowedRoot in allowedRoots.OrderByDescending(static root => root.Length))
+        {
+            if (!TryResolveFileSystemPathComparison(allowedRoot, out var comparison, out error))
+            {
+                error = $"The pack-tool publish output for {project.ProjectName} cannot be cleaned safely. {error}";
+                return false;
+            }
+
+            if (IsPathStrictlyWithin(publishDirectory, allowedRoot, comparison))
+            {
+                containingRoot = allowedRoot;
+                break;
+            }
+        }
+        if (string.IsNullOrWhiteSpace(containingRoot))
+        {
+            error = $"The pack-tool publish output for {project.ProjectName} must be contained by its evaluated output, intermediate, artifacts, or package output directory before PowerForge can clean it: {publishDirectory}";
             return false;
         }
 
@@ -301,8 +318,16 @@ public sealed partial class DotNetRepositoryReleaseService
             {
                 var left = plans[index];
                 var right = plans[siblingIndex];
-                if (!IsPathAtOrWithinPlatform(left.PublishDirectory, right.PublishDirectory) &&
-                    !IsPathAtOrWithinPlatform(right.PublishDirectory, left.PublishDirectory))
+                if (!TryPackToolPathsOverlap(
+                        left.PublishDirectory,
+                        right.PublishDirectory,
+                        out var overlap,
+                        out error))
+                {
+                    return false;
+                }
+
+                if (!overlap)
                 {
                     continue;
                 }
@@ -354,24 +379,103 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
-    private static bool IsPathStrictlyWithin(string path, string root)
+    private static bool IsPathStrictlyWithin(string path, string root, StringComparison comparison)
     {
         var normalizedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return !string.Equals(normalizedPath, normalizedRoot, PackToolPathComparison) &&
-               normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, PackToolPathComparison);
+        return !string.Equals(normalizedPath, normalizedRoot, comparison) &&
+               normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, comparison);
     }
 
-    private static bool IsPathAtOrWithinPlatform(string path, string root)
+    private static bool IsPathAtOrWithin(string path, string root, StringComparison comparison)
     {
         var normalizedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return string.Equals(normalizedPath, normalizedRoot, PackToolPathComparison) ||
-               normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, PackToolPathComparison);
+        return string.Equals(normalizedPath, normalizedRoot, comparison) ||
+               normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, comparison);
     }
 
-    private static StringComparison PackToolPathComparison
-        => Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    /// <summary>Determines whether two staging paths overlap using the case semantics of their actual filesystems.</summary>
+    internal static bool TryPackToolPathsOverlap(string left, string right, out bool overlap, out string error)
+    {
+        overlap = false;
+        if (!TryResolveFileSystemPathComparison(left, out var leftComparison, out error) ||
+            !TryResolveFileSystemPathComparison(right, out var rightComparison, out error))
+        {
+            return false;
+        }
+
+        overlap = IsPathAtOrWithin(left, right, leftComparison) ||
+                  IsPathAtOrWithin(right, left, leftComparison) ||
+                  IsPathAtOrWithin(left, right, rightComparison) ||
+                  IsPathAtOrWithin(right, left, rightComparison);
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool TryResolveFileSystemPathComparison(
+        string path,
+        out StringComparison comparison,
+        out string error)
+    {
+        comparison = StringComparison.Ordinal;
+        string? probePath = null;
+        try
+        {
+            var probeDirectory = Path.GetFullPath(path);
+            while (!Directory.Exists(probeDirectory))
+            {
+                var parent = Directory.GetParent(probeDirectory);
+                if (parent is null)
+                {
+                    error = $"Unable to find an existing directory for filesystem case-sensitivity validation: {path}";
+                    return false;
+                }
+
+                probeDirectory = parent.FullName;
+            }
+
+            var probeName = $".powerforge-case-probe-{Guid.NewGuid():N}-a";
+            probePath = Path.Combine(probeDirectory, probeName);
+            var alternatePath = Path.Combine(
+                probeDirectory,
+                probeName.Substring(0, probeName.Length - 1) + "A");
+            using (File.Open(probePath, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+            {
+                comparison = File.Exists(alternatePath)
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Unable to determine filesystem case sensitivity for {path}. {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(probePath))
+            {
+                try
+                {
+                    File.Delete(probePath);
+                }
+                catch
+                {
+                    // The staging cleanup remains fail-closed through the existence check below.
+                }
+            }
+        }
+
+        if (File.Exists(probePath))
+        {
+            error = $"Unable to remove the filesystem case-sensitivity probe for {path}: {probePath}";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
 
     private static string ResolveProjectPath(string workingDirectory, string value)
     {
