@@ -168,6 +168,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
     [Theory]
     [InlineData("Microsoft.NET.ILLink.Tasks", true)]
+    [InlineData("NETStandard.Library.Ref", true)]
     [InlineData("Package.Snapshot", false)]
     [Trait("Category", "DotNetPublishPrGate")]
     public void SdkEvidence_AutoReferencedBypassRequiresSdkOwnedPackageIdentity(
@@ -179,6 +180,67 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             BindingFlags.Static | BindingFlags.NonPublic)!;
 
         Assert.Equal(expected, Assert.IsType<bool>(method.Invoke(null, [packageId])));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SdkEvidence_TrustedAcquisitionRejectsPreseededShadowPackageRoot()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string packageRoot = Directory.CreateDirectory(
+                Path.Combine(root, "packages", "netstandard.library.ref", "2.1.0")).Parent!.Parent!.FullName;
+            File.WriteAllText(
+                Path.Combine(packageRoot, "netstandard.library.ref", "2.1.0", "netstandard.library.ref.2.1.0.nupkg"),
+                "shadow package");
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "TryPrimeSdkEvidencePackages",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+
+            object? result = method.Invoke(
+                null,
+                [
+                    root,
+                    packageRoot,
+                    "https://api.nuget.org/v3/index.json",
+                    Path.Combine(root, "NuGet.Config"),
+                    new[] { "NETStandard.Library.Ref|2.1.0" },
+                    "sdk-packages",
+                    root,
+                    null,
+                    true
+                ]);
+
+            Assert.False(Assert.IsType<bool>(result));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SdkEvidence_RejectsCommittedShadowPackageHash()
+    {
+        MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "HaveNoConflictingSdkPackageHashes",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        var committed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NETStandard.Library.Ref|2.1.0"] = "private-shadow-hash"
+        };
+        var trusted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NETStandard.Library.Ref|2.1.0"] = "nuget-org-hash"
+        };
+        object?[] arguments = [committed, trusted, null];
+
+        object? result = method.Invoke(null, arguments);
+
+        Assert.False(Assert.IsType<bool>(result));
+        Assert.Equal("NETStandard.Library.Ref|2.1.0", Assert.IsType<string>(arguments[2]));
     }
 
     [Fact]
