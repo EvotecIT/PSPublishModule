@@ -642,6 +642,85 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("3.0.76", true)]
+    [InlineData("3.0.75", false)]
+    public void Execute_CoordinatedVersions_ValidatesImmutablePackageVersionWithoutApplyingFloor(
+        string packageVersion,
+        bool expectedSuccess)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var moduleConfig = Path.Combine(root, "powerforge.json");
+            var manifestPath = Path.Combine(root, "Module", "PSPublishModule.psd1");
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+            File.WriteAllText(moduleConfig, """{ "SchemaVersion": 1, "Build": { "Name": "PSPublishModule", "SourcePath": "Module", "Version": "3.0.76" }, "Segments": [] }""");
+            File.WriteAllText(manifestPath, "@{ ModuleVersion = '3.0.76' }");
+
+            ProjectBuildHostRequest? capturedRequest = null;
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (packageRequest, _, configPath) =>
+                {
+                    capturedRequest = packageRequest;
+                    var execution = new ProjectBuildHostExecutionResult
+                    {
+                        ConfigPath = configPath,
+                        Success = true
+                    };
+                    execution.Result.Release = new DotNetRepositoryReleaseResult { ResolvedVersion = packageVersion };
+                    execution.Result.Release.ResolvedVersionsByProject["PowerForge"] = packageVersion;
+                    return execution;
+                },
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var releaseSpec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = ".",
+                    ConfigPath = "powerforge.json",
+                    ManifestPath = "Module/PSPublishModule.psd1",
+                    ModuleVersion = "3.0.76",
+                    SynchronizeVersionWithPackages = true,
+                    VersionPrimaryProject = "PowerForge"
+                },
+                Packages = new ProjectBuildConfiguration
+                {
+                    RootPath = ".",
+                    UpdateVersions = false
+                }
+            };
+            var releaseRequest = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                PlanOnly = true
+            };
+
+            if (expectedSuccess)
+            {
+                var result = service.Execute(releaseSpec, releaseRequest);
+                Assert.True(result.Success, result.ErrorMessage);
+                Assert.Equal("3.0.76", result.ModulePlan!.ModuleVersion);
+            }
+            else
+            {
+                var exception = Assert.Throws<InvalidOperationException>(() => service.Execute(releaseSpec, releaseRequest));
+                Assert.Contains("lower than the coordinated module version floor", exception.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            Assert.NotNull(capturedRequest);
+            Assert.Null(capturedRequest!.ReleaseVersionFloor);
+            Assert.Null(capturedRequest.ReleaseVersionFloorProject);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporter
     {
         public List<string> Events { get; } = new();

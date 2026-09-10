@@ -109,6 +109,7 @@ internal sealed partial class PowerForgeReleaseService
         bool suppressPublishing = false)
     {
         ApplyPackageRequestOverrides(packages, request, configurationOverride);
+        var canApplyReleaseVersionFloor = packages.UpdateVersions != false;
         var packageRequest = new ProjectBuildHostRequest
         {
             ConfigPath = configPath,
@@ -116,8 +117,8 @@ internal sealed partial class PowerForgeReleaseService
             PlanOnly = forcePlanOnly || request.PlanOnly || request.ValidateOnly ? true : null,
             PublishNuget = suppressPublishing ? false : request.PublishNuget,
             PublishGitHub = suppressPublishing || publishUnifiedGitHub ? false : request.PublishProjectGitHub,
-            ReleaseVersionFloor = releaseVersionFloor,
-            ReleaseVersionFloorProject = releaseVersionFloorProject,
+            ReleaseVersionFloor = canApplyReleaseVersionFloor ? releaseVersionFloor : null,
+            ReleaseVersionFloorProject = canApplyReleaseVersionFloor ? releaseVersionFloorProject : null,
             BuildSpecPrepared = preparedSpec => request.PackageBuildSpec = preparedSpec,
             RemotePublishAttempted = () => ValidatePostBuildSourceState(request),
             CancellationToken = request.CancellationToken
