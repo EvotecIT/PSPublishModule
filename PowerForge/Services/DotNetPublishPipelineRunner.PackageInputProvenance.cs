@@ -635,6 +635,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     sdkManagedPackageKeys,
                     effectiveGlobalProperties,
                     environmentVariables,
+                    committedPackageHashes,
                     archivePathsByPackageKey,
                     archives,
                     out sdkEvidenceFailureReason)
