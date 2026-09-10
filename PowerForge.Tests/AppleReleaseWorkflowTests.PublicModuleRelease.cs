@@ -415,7 +415,7 @@ public sealed partial class AppleReleaseWorkflowTests
         var command = $". '{escapedHelper}'; " +
                       $"$config = Get-Content -Raw -LiteralPath '{escapedConfig}' | ConvertFrom-Json; " +
                       $"$ids = @(Get-PowerForgeReleasePackageIds -ReleaseConfig $config -RepositoryRoot '{escapedRoot}'); " +
-                      "$expected = @('PowerForge','PowerForge.PowerShell','PowerForge.Build','PowerForge.Blazor','PowerForge.Web','PowerForge.Web.Build'); " +
+                      "$expected = @('PowerForge','PowerForge.PowerShell','PowerForge.PowerShell.ProviderSdk','PowerForge.PowerShell.Provider.Directory','PowerForge.PowerShell.Provider.Directory.Runtime','PowerForge.PowerShell.Provider.Management','PowerForge.PowerShell.Provider.Management.Runtime','PowerForge.Build','PowerForge.Blazor','PowerForge.Web','PowerForge.Web.Build'); " +
                       "if (Compare-Object $expected $ids) { throw \"Resolved package IDs differ: $($ids -join ', ')\" }";
 
         Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();
