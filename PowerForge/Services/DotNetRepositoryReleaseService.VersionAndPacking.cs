@@ -207,6 +207,18 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             try
             {
+                if (spec.SignDependencyAssemblies)
+                {
+                    if (!TryPreparePackToolPublishOutputs(new[] { project }, spec, logger, out var preparationDuration, out var preparationError))
+                    {
+                        result.Duration += preparationDuration;
+                        result.ErrorMessage = preparationError;
+                        return result;
+                    }
+
+                    result.Duration += preparationDuration;
+                }
+
                 var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
                 var resolveOutputWatch = Stopwatch.StartNew();
                 var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
@@ -350,7 +362,11 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
 #if NET472
         var args = new List<string> { "pack", csproj, "--configuration", configuration };
         if (noBuild)
+        {
             args.Add("--no-build");
+            args.Add("-p:_IsPacking=true");
+            args.Add("-p:BuildProjectReferences=false");
+        }
         if (!string.IsNullOrWhiteSpace(outputPath))
         {
             args.Add("-o");
@@ -368,7 +384,11 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         psi.ArgumentList.Add("--configuration");
         psi.ArgumentList.Add(configuration);
         if (noBuild)
+        {
             psi.ArgumentList.Add("--no-build");
+            psi.ArgumentList.Add("-p:_IsPacking=true");
+            psi.ArgumentList.Add("-p:BuildProjectReferences=false");
+        }
         if (!string.IsNullOrWhiteSpace(outputPath))
         {
             psi.ArgumentList.Add("-o");
@@ -529,6 +549,7 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         IReadOnlyList<string> includePatterns)
     {
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var packProperties = CreatePackToolStagingGlobalProperties();
         foreach (var targetFramework in ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger))
         {
             var packAsToolExitCode = RunDotnetMsBuildGetProperty(
@@ -536,6 +557,8 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
                 workingDirectory,
                 configuration,
                 targetFramework,
+                null,
+                packProperties,
                 "PackAsTool",
                 projectName,
                 logger,
@@ -551,6 +574,8 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
                 workingDirectory,
                 configuration,
                 targetFramework,
+                null,
+                packProperties,
                 "IntermediateOutputPath",
                 projectName,
                 logger,
@@ -568,17 +593,52 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
             var resolvedDirectory = Path.IsPathRooted(normalizedIntermediateOutputPath)
                 ? Path.GetFullPath(normalizedIntermediateOutputPath)
                 : Path.GetFullPath(Path.Combine(workingDirectory, normalizedIntermediateOutputPath));
-            if (!Directory.Exists(resolvedDirectory))
-                continue;
+            AddMatchingAssemblyPaths(files, resolvedDirectory, includePatterns, SearchOption.TopDirectoryOnly);
 
-            foreach (var includePattern in includePatterns.Where(static pattern => !string.IsNullOrWhiteSpace(pattern)))
+            var publishExitCode = RunDotnetMsBuildGetProperty(
+                csproj,
+                workingDirectory,
+                configuration,
+                targetFramework,
+                null,
+                packProperties,
+                "PublishDir",
+                projectName,
+                logger,
+                out var publishDirectory,
+                out stdErr,
+                out stdOut,
+                out duration);
+            if (publishExitCode != 0 || string.IsNullOrWhiteSpace(publishDirectory))
             {
-                foreach (var path in Directory.EnumerateFiles(resolvedDirectory, includePattern, SearchOption.TopDirectoryOnly))
-                    files.Add(Path.GetFullPath(path));
+                logger.Verbose($"{projectName}: unable to resolve the pack-tool publish output in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
+                continue;
             }
+
+            var normalizedPublishDirectory = publishDirectory!.Trim().Trim('"');
+            var resolvedPublishDirectory = Path.IsPathRooted(normalizedPublishDirectory)
+                ? Path.GetFullPath(normalizedPublishDirectory)
+                : Path.GetFullPath(Path.Combine(workingDirectory, normalizedPublishDirectory));
+            AddMatchingAssemblyPaths(files, resolvedPublishDirectory, includePatterns, SearchOption.AllDirectories);
         }
 
         return files.ToArray();
+    }
+
+    private static void AddMatchingAssemblyPaths(
+        HashSet<string> files,
+        string directory,
+        IReadOnlyList<string> includePatterns,
+        SearchOption searchOption)
+    {
+        if (!Directory.Exists(directory))
+            return;
+
+        foreach (var includePattern in includePatterns.Where(static pattern => !string.IsNullOrWhiteSpace(pattern)))
+        {
+            foreach (var path in Directory.EnumerateFiles(directory, includePattern, searchOption))
+                files.Add(Path.GetFullPath(path));
+        }
     }
 
     private static string[] ResolveConventionalBuildOutputDirectories(

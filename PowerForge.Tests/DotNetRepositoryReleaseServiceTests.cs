@@ -661,7 +661,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 .Single(target => string.Equals(target.Attribute("Name")?.Value, "PackSelected", StringComparison.Ordinal))
                 .Attribute("DependsOnTargets")?.Value);
             Assert.Equal(
-                $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D").Replace("$", "%24").Replace("@", "%40")};NoBuild=true;BuildProjectReferences=false",
+                $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D").Replace("$", "%24").Replace("@", "%40")};_IsPacking=true;NoBuild=true;BuildProjectReferences=false",
                 msbuildTasks[2].Attribute("Properties")?.Value);
         }
         finally
@@ -901,28 +901,74 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild)]
-    public void Execute_WithAssemblySigning_PreservesSignedPackToolAssembly(DotNetRepositoryPackStrategy packStrategy)
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, true, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, true, true)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true, true)]
+    public void Execute_WithAssemblySigning_PreservesSignedPackToolAssembly(
+        DotNetRepositoryPackStrategy packStrategy,
+        bool signDependencyAssemblies,
+        bool usePackConditionedPublishDirectory)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Tool"));
-            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Tool.csproj");
-            File.WriteAllText(projectPath, """
+            var dependencyDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Dependency"));
+            var dependencyProjectPath = Path.Combine(dependencyDirectory.FullName, "Sample.Dependency.csproj");
+            File.WriteAllText(dependencyProjectPath, """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <OutputType>Exe</OutputType>
                     <TargetFramework>net8.0</TargetFramework>
-                    <PackageId>Sample.Tool</PackageId>
-                    <VersionPrefix>1.0.0</VersionPrefix>
-                    <PackAsTool>true</PackAsTool>
-                    <ToolCommandName>sample-tool</ToolCommandName>
+                    <IsPackable>false</IsPackable>
                   </PropertyGroup>
                 </Project>
                 """);
-            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Program.cs"), "System.Console.WriteLine(\"sample\");");
+            File.WriteAllText(Path.Combine(dependencyDirectory.FullName, "Dependency.cs"), "namespace Sample.Dependency; public static class Dependency { public static string Value => \"sample\"; }");
+
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Tool"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Tool.csproj");
+            var projectLines = new List<string>
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <OutputType>Exe</OutputType>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Tool</PackageId>",
+                "    <VersionPrefix>1.0.0</VersionPrefix>",
+                "    <PackAsTool>true</PackAsTool>",
+                "    <ToolCommandName>sample-tool</ToolCommandName>"
+            };
+            if (usePackConditionedPublishDirectory)
+                projectLines.Add("    <PublishDir Condition=\"'$(_IsPacking)' == 'true' And '$(NoBuild)' == 'true' And '$(BuildProjectReferences)' == 'false'\">obj\\$(Configuration)\\$(TargetFramework)\\conditioned-publish\\</PublishDir>");
+            if (signDependencyAssemblies)
+            {
+                var obsoletePublishDirectory = usePackConditionedPublishDirectory
+                    ? "obj\\$(Configuration)\\$(TargetFramework)\\conditioned-publish\\"
+                    : "$(OutputPath)publish\\";
+                projectLines.Add($"    <ObsoletePublishDir>{obsoletePublishDirectory}</ObsoletePublishDir>");
+            }
+            projectLines.AddRange(new[]
+            {
+                "  </PropertyGroup>",
+                "  <ItemGroup>",
+                "    <ProjectReference Include=\"..\\Sample.Dependency\\Sample.Dependency.csproj\" />",
+                "  </ItemGroup>"
+            });
+            if (signDependencyAssemblies)
+            {
+                projectLines.AddRange(new[]
+                {
+                    "  <Target Name=\"SeedObsoletePublishDependency\" AfterTargets=\"Build\">",
+                    "    <MakeDir Directories=\"$(ObsoletePublishDir)\" />",
+                    "    <WriteLinesToFile File=\"$(ObsoletePublishDir)Obsolete.Dependency.dll\" Lines=\"obsolete\" Overwrite=\"true\" />",
+                    "  </Target>"
+                });
+            }
+            projectLines.Add("</Project>");
+            File.WriteAllText(projectPath, string.Join(Environment.NewLine, projectLines));
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Program.cs"), "System.Console.WriteLine(Sample.Dependency.Dependency.Value);");
 
             var marker = new byte[] { 0x49, 0x58, 0x53, 0x49, 0x47 };
             string[] signedPaths = Array.Empty<string>();
@@ -939,12 +985,15 @@ public sealed class DotNetRepositoryReleaseServiceTests
                     CreateReleaseZip = false,
                     CertificateThumbprint = "ABC123",
                     SignAssemblies = true,
+                    SignDependencyAssemblies = signDependencyAssemblies,
                     SignPackages = false
                 },
                 request =>
                 {
                     signedPaths = Assert.IsType<string[]>(request.FilePaths);
-                    foreach (var path in signedPaths.Where(path => path.EndsWith("Sample.Tool.dll", StringComparison.OrdinalIgnoreCase)))
+                    foreach (var path in signedPaths.Where(path =>
+                                 path.EndsWith("Sample.Tool.dll", StringComparison.OrdinalIgnoreCase) ||
+                                 path.EndsWith("Sample.Dependency.dll", StringComparison.OrdinalIgnoreCase)))
                     {
                         using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.None);
                         stream.Write(marker, 0, marker.Length);
@@ -954,14 +1003,83 @@ public sealed class DotNetRepositoryReleaseServiceTests
 
             Assert.True(result.Success, result.ErrorMessage);
             Assert.Contains(signedPaths, path => path.EndsWith(Path.Combine("obj", "Release", "net8.0", "Sample.Tool.dll"), StringComparison.OrdinalIgnoreCase));
+            if (signDependencyAssemblies)
+            {
+                var expectedPublishDirectory = usePackConditionedPublishDirectory ? "conditioned-publish" : "publish";
+                Assert.Contains(signedPaths, path => path.EndsWith(Path.Combine(expectedPublishDirectory, "Sample.Dependency.dll"), StringComparison.OrdinalIgnoreCase));
+            }
+            else
+                Assert.DoesNotContain(signedPaths, path => path.EndsWith("Sample.Dependency.dll", StringComparison.OrdinalIgnoreCase));
 
             var package = Assert.Single(Assert.Single(result.Projects, project => project.IsPackable).Packages);
             using var archive = ZipFile.OpenRead(package);
-            var entry = Assert.Single(archive.Entries, item => string.Equals(item.FullName, "tools/net8.0/any/Sample.Tool.dll", StringComparison.OrdinalIgnoreCase));
-            using var entryStream = entry.Open();
-            using var packagedAssembly = new MemoryStream();
-            entryStream.CopyTo(packagedAssembly);
-            Assert.Equal(marker, packagedAssembly.ToArray().TakeLast(marker.Length).ToArray());
+            Assert.DoesNotContain(archive.Entries, item => item.FullName.EndsWith("Obsolete.Dependency.dll", StringComparison.OrdinalIgnoreCase));
+            var signedEntryNames = signDependencyAssemblies
+                ? new[] { "Sample.Tool.dll", "Sample.Dependency.dll" }
+                : new[] { "Sample.Tool.dll" };
+            foreach (var entryName in signedEntryNames)
+            {
+                var entry = Assert.Single(archive.Entries, item => string.Equals(item.FullName, $"tools/net8.0/any/{entryName}", StringComparison.OrdinalIgnoreCase));
+                using var entryStream = entry.Open();
+                using var packagedAssembly = new MemoryStream();
+                entryStream.CopyTo(packagedAssembly);
+                Assert.Equal(marker, packagedAssembly.ToArray().TakeLast(marker.Length).ToArray());
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild)]
+    public void Execute_WithDependencyAssemblySigning_RejectsRidSpecificPackTool(
+        DotNetRepositoryPackStrategy packStrategy)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Tool"));
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Sample.Tool.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.Tool</PackageId>
+                    <VersionPrefix>1.0.0</VersionPrefix>
+                    <PackAsTool>true</PackAsTool>
+                    <ToolCommandName>sample-tool</ToolCommandName>
+                    <ToolPackageRuntimeIdentifiers>win-x64</ToolPackageRuntimeIdentifiers>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Program.cs"), "System.Console.WriteLine(\"sample\");");
+
+            var signingCalls = 0;
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                new DotNetRepositoryReleaseSpec
+                {
+                    RootPath = root.FullName,
+                    Configuration = "Release",
+                    OutputPath = Path.Combine(root.FullName, "packages"),
+                    Pack = true,
+                    PackStrategy = packStrategy,
+                    Publish = false,
+                    UpdateVersions = false,
+                    CreateReleaseZip = false,
+                    CertificateThumbprint = "ABC123",
+                    SignAssemblies = true,
+                    SignDependencyAssemblies = true,
+                    SignPackages = false
+                },
+                _ => signingCalls++,
+                _ => { });
+
+            Assert.False(result.Success);
+            Assert.Contains("does not support RID-specific PackAsTool output", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Equal(0, signingCalls);
         }
         finally
         {

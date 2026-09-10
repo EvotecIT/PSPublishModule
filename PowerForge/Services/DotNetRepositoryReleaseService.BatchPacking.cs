@@ -136,6 +136,18 @@ public sealed partial class DotNetRepositoryReleaseService
                     return result;
                 }
 
+                if (spec.SignDependencyAssemblies)
+                {
+                    if (!TryPreparePackToolPublishOutputs(projects, spec, logger, out var preparationDuration, out var preparationError))
+                    {
+                        result.Duration += preparationDuration;
+                        result.ErrorMessage = preparationError;
+                        return result;
+                    }
+
+                    result.Duration += preparationDuration;
+                }
+
                 var signing = SignBatchBuildOutputs(projects, spec, logger, signAssemblies!);
                 result.Duration += signing.Duration;
                 if (!signing.Success)
@@ -222,6 +234,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             buildProperties,
             $"PackageOutputPath={EscapeMsBuildPropertyValue(outputPath)}",
+            "_IsPacking=true",
             "NoBuild=true",
             "BuildProjectReferences=false"
         };
