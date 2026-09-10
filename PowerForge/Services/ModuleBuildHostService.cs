@@ -474,6 +474,11 @@ public sealed class ModuleBuildHostService
             "$buildScriptArguments = @{}"
         };
 
+        if (request.ReleaseCheckpoint)
+        {
+            arguments.Add("$PSDefaultParameterValues['Invoke-ModuleBuild:PowerForgeReleaseCheckpoint'] = $true");
+        }
+
         if (request.RequireReusableOutput)
         {
             arguments.Add("$requiredCheckpointParameters = @('NoDotnetBuild', 'StagingPath', 'ReuseStaging', 'IncludeProjectPackages', 'IncludeModulePublishing', 'SkipInstall')");

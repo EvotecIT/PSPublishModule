@@ -338,6 +338,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public SwitchParameter ReuseStaging { get; set; }
 
     /// <summary>Marks an internal build pass as the exact local checkpoint for deferred publication.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern, DontShow = true)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration, DontShow = true)]
     [Parameter(ParameterSetName = ParameterSetConfig, DontShow = true)]
     public SwitchParameter PowerForgeReleaseCheckpoint { get; set; }
 
