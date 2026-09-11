@@ -38,10 +38,20 @@ public sealed partial class ReleaseValidationService
         if (actual.Length != expected.Count || expected.Any(pair => actual.Count(item => string.Equals(item, pair, StringComparison.OrdinalIgnoreCase)) != 1))
             throw new InvalidOperationException("CLI manifest does not match the configured runtime/style matrix.");
         var paths = new HashSet<string>(FrameworkCompatibility.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        if (unified)
+        {
+            foreach (var artifact in artifacts)
+            {
+                var version = Text(artifact, "version");
+                if (string.IsNullOrWhiteSpace(version)) throw new InvalidOperationException("CLI artifact has no version.");
+                if (string.IsNullOrWhiteSpace(report.Version)) report.Version = version;
+                if (!string.Equals(version, report.Version, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("CLI artifact has an unexpected version.");
+            }
+            variables["Version"] = report.Version;
+        }
         foreach (var artifact in artifacts)
         {
-            if (unified && !string.IsNullOrEmpty(report.Version) && Text(artifact, "version") != report.Version)
-                throw new InvalidOperationException("CLI artifact has an unexpected version.");
             var declaredPath = Text(artifact, unified ? "stagedPath" : "zipPath");
             var directoryArtifact = false;
             if (!unified && string.IsNullOrWhiteSpace(declaredPath))
@@ -72,7 +82,7 @@ public sealed partial class ReleaseValidationService
             if (!all.Any(item => string.Equals(Text(item, "category"), "Metadata", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Tools-only release is missing build evidence.");
         }
-        if (unified && (spec.ToolsOnly || stagedAssets is not null))
+        if (unified && (spec.ToolsOnly || stagedAssets is not null || variables.ContainsKey("StagingRoot")))
         {
             if (!variables.TryGetValue("StagingRoot", out var stagingRoot))
                 throw new InvalidOperationException("Staged CLI validation requires a staging root.");

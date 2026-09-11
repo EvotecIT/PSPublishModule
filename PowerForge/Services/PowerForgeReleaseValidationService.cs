@@ -12,7 +12,7 @@ internal sealed class PowerForgeReleaseValidationService
     internal PowerForgeReleaseValidationService(ILogger logger, IProcessRunner? processRunner = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _processRunner = processRunner ?? new ProcessRunner(ownProcessTree: true);
+        _processRunner = new ReleaseValidationProcessRunner(processRunner);
     }
 
     internal PowerForgeReleaseValidationResult Run(PowerForgeReleaseValidationAction action,
@@ -64,7 +64,7 @@ internal sealed class PowerForgeReleaseValidationService
                 TimedOut = process.TimedOut
             };
         }
-        finally { Directory.Delete(contextDirectory, recursive: true); }
+        finally { ValidationDirectoryCleanup.TryDelete(contextDirectory, _logger.Warn); }
     }
 
     private PowerForgeReleaseValidationResult RunConfiguration(PowerForgeReleaseValidationAction action,
@@ -83,7 +83,6 @@ internal sealed class PowerForgeReleaseValidationService
             StagedAssets = context.StagedAssets.Length > 0 ? context.StagedAssets : null };
         if (spec.CliArtifacts is not null && !context.ModuleSelected && !context.PackagesSelected)
         {
-            spec.CliArtifacts.ToolsOnly = true;
             var versions = context.AssetEntries.Where(entry => entry.Category == PowerForgeReleaseAssetCategory.Tool &&
                     string.Equals(entry.Target, spec.CliArtifacts.Target, StringComparison.OrdinalIgnoreCase))
                 .Select(entry => entry.Version).Where(version => !string.IsNullOrWhiteSpace(version)).Distinct().ToArray();

@@ -11,25 +11,7 @@ public sealed partial class ReleaseValidationService
         public void Dispose()
         {
             // Only this unique, task-owned directory is removed; never follow links created by a probe.
-            DeleteTree(new DirectoryInfo(Root));
-        }
-        private static void DeleteTree(DirectoryInfo directory)
-        {
-            if (!directory.Exists) return;
-            if ((directory.Attributes & FileAttributes.ReparsePoint) == 0)
-            {
-                foreach (var entry in directory.GetFileSystemInfos())
-                {
-                    if (entry is DirectoryInfo child) DeleteTree(child);
-                    else
-                    {
-                        if ((entry.Attributes & FileAttributes.ReparsePoint) == 0)
-                            entry.Attributes &= ~FileAttributes.ReadOnly;
-                        entry.Delete();
-                    }
-                }
-            }
-            directory.Delete();
+            ValidationDirectoryCleanup.TryDelete(Root);
         }
     }
 

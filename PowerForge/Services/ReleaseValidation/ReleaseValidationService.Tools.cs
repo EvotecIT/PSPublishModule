@@ -8,7 +8,7 @@ public sealed partial class ReleaseValidationService
         if (string.IsNullOrWhiteSpace(spec.PackageId) || string.IsNullOrWhiteSpace(spec.CommandName) ||
             Path.GetFileName(spec.CommandName) != spec.CommandName || spec.CommandName.IndexOfAny(new[] { '/', '\\', ':' }) >= 0)
             throw new InvalidOperationException("Tool validation requires a package identity and a simple command name.");
-        var matches = Directory.GetFiles(Resolve(spec.PackageRoot, variables), "*.nupkg").Select(InspectPackage)
+        var matches = InspectPrimaryPackages(Resolve(spec.PackageRoot, variables))
             .Where(p => string.Equals(p.Id, spec.PackageId, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (matches.Length != 1) throw new InvalidOperationException($"Expected exactly one staged tool package '{spec.PackageId}'.");
         var package = matches[0];
@@ -51,13 +51,22 @@ public sealed partial class ReleaseValidationService
             {
                 var childEnvironment = new Dictionary<string, string?>(environment, StringComparer.OrdinalIgnoreCase);
                 foreach (var pair in command.Environment) childEnvironment[pair.Key] = pair.Value;
-                var localTool = manifestInstall && command.FileName == "{ToolPath}";
+                var localTool = manifestInstall && string.Equals(command.FileName, "{ToolPath}", StringComparison.OrdinalIgnoreCase);
+                var workingDirectory = command.WorkingDirectory ?? workspace.Root;
+                if (localTool && (command.Platforms.Length == 0 || command.Platforms.Contains(CurrentPlatform, StringComparer.OrdinalIgnoreCase)))
+                {
+                    // dotnet tool run discovers its manifest from the working directory; it has no manifest-path option.
+                    var resolvedDirectory = Resolve(workingDirectory, values).TrimEnd(Path.DirectorySeparatorChar);
+                    if (!string.Equals(resolvedDirectory, workspace.Root.TrimEnd(Path.DirectorySeparatorChar),
+                            FrameworkCompatibility.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        throw new InvalidOperationException($"{command.Name}: manifest tool probes must use the default working directory or {{WorkRoot}}. Disable IncludeManifestInstall for a tool-path-only probe with another working directory.");
+                }
                 await RunCommandAsync(new ReleaseCommandValidation
                 {
                     Name = command.Name + (manifestInstall ? " (manifest)" : " (tool path)"),
                     FileName = localTool ? "dotnet" : command.FileName,
                     Arguments = localTool ? new[] { "tool", "run", spec.CommandName, "--" }.Concat(command.Arguments).ToArray() : command.Arguments,
-                    WorkingDirectory = command.WorkingDirectory ?? workspace.Root, Environment = childEnvironment,
+                    WorkingDirectory = workingDirectory, Environment = childEnvironment,
                     TimeoutSeconds = command.TimeoutSeconds, ExpectedExitCode = command.ExpectedExitCode,
                     ExpectedOutput = command.ExpectedOutput, OutputContains = command.OutputContains,
                     OutputJsonKind = command.OutputJsonKind, MinimumJsonItems = command.MinimumJsonItems,

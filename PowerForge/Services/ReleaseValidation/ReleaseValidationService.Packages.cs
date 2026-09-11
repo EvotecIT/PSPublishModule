@@ -26,14 +26,18 @@ public sealed partial class ReleaseValidationService
         };
     }
 
+    private static IEnumerable<PackageInspection> InspectPrimaryPackages(string root)
+        => Directory.GetFiles(root, "*.nupkg")
+            .Where(path => !path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+            .Select(InspectPackage);
+
     private async Task<Dictionary<string, PackageInspection>> ValidatePackagesAsync(PackageSetValidation spec,
         Dictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
     {
         if (spec.Items.Length == 0) throw new InvalidOperationException("Package validation requires package contracts.");
         var root = Resolve(spec.Path, variables);
         variables["PackageRoot"] = root;
-        var actual = Directory.GetFiles(root, "*.nupkg").Where(path => !path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
-            .Select(InspectPackage).ToArray();
+        var actual = InspectPrimaryPackages(root).ToArray();
         var selected = new Dictionary<string, PackageInspection>(StringComparer.OrdinalIgnoreCase);
         foreach (var contract in spec.Items)
         {

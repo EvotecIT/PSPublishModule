@@ -40,7 +40,7 @@ public sealed class DotNetToolValidation
     public string PackageRoot { get; set; } = "{PackageRoot}";
     /// <summary>Installed tool command, without a platform extension.</summary>
     public string CommandName { get; set; } = string.Empty;
-    /// <summary>Test manifest-local installation in addition to --tool-path.</summary>
+    /// <summary>Test manifest-local installation in addition to --tool-path. Manifest {ToolPath} probes require the default working directory or {WorkRoot} so the isolated manifest is selected.</summary>
     public bool IncludeManifestInstall { get; set; }
     /// <summary>Commands with {ToolPath}, {WorkRoot}, {Version}, and {ProjectRoot} variables.</summary>
     public ReleaseCommandValidation[] Commands { get; set; } = Array.Empty<ReleaseCommandValidation>();

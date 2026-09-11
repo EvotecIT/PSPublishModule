@@ -9,7 +9,7 @@ public sealed partial class ReleaseValidationService
     private readonly IProcessRunner _processRunner;
     /// <summary>Creates a validator using the shared process runner.</summary>
     public ReleaseValidationService(IProcessRunner? processRunner = null)
-        => _processRunner = processRunner ?? new ProcessRunner(ownProcessTree: true);
+        => _processRunner = new ReleaseValidationProcessRunner(processRunner);
 
     /// <summary>Loads a JSON validation contract.</summary>
     public static ReleaseValidationSpec Load(string configPath)
@@ -87,7 +87,7 @@ public sealed partial class ReleaseValidationService
         cancellationToken.ThrowIfCancellationRequested();
         if (result.TimedOut || result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded ||
             (command.ExpectedExitCode.HasValue && result.ExitCode != command.ExpectedExitCode.Value))
-            throw new InvalidOperationException($"{command.Name} failed (exit {result.ExitCode}, timed out: {result.TimedOut}).\n{result.StdErr}\n{result.StdOut}");
+            throw new InvalidOperationException($"{command.Name} failed (exit {result.ExitCode}, timed out: {result.TimedOut}, output limit exceeded: {result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded}).\n{result.StdErr}\n{result.StdOut}");
         if (command.ExpectedOutput is not null && !string.Equals(result.StdOut.Trim(), Expand(command.ExpectedOutput, variables), StringComparison.Ordinal))
             throw new InvalidOperationException($"{command.Name}: standard output did not match the expected value.");
         foreach (var text in command.OutputContains)
