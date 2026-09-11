@@ -8,7 +8,7 @@ public sealed partial class ReleaseValidationService
         if (string.IsNullOrWhiteSpace(spec.PackageId) || string.IsNullOrWhiteSpace(spec.CommandName) ||
             Path.GetFileName(spec.CommandName) != spec.CommandName || spec.CommandName.IndexOfAny(new[] { '/', '\\', ':' }) >= 0)
             throw new InvalidOperationException("Tool validation requires a package identity and a simple command name.");
-        var matches = InspectPrimaryPackages(Resolve(spec.PackageRoot, variables))
+        var matches = InspectPrimaryPackages(Resolve(spec.PackageRoot, variables), cancellationToken)
             .Where(p => string.Equals(p.Id, spec.PackageId, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (matches.Length != 1) throw new InvalidOperationException($"Expected exactly one staged tool package '{spec.PackageId}'.");
         var package = matches[0];

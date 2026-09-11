@@ -68,7 +68,8 @@ internal sealed partial class PowerForgeReleaseService
             {
                 ConfigPath = result.ConfigPath,
                 ProjectRoot = ResolveValidationProjectRoot(result, configurationDirectory),
-                ResolvedVersion = resolvedVersion ?? result.ModulePlan?.ModuleVersion ?? string.Empty,
+                ResolvedVersion = resolvedVersion ?? ResolveModuleReleaseVersion(result.ModulePlan) ??
+                    ResolveUniqueAssetVersion(result.ReleaseAssetEntries.Where(asset => asset.Category == PowerForgeReleaseAssetCategory.Tool)) ?? string.Empty,
                 ReleaseManifestPath = result.ReleaseManifestPath,
                 ReleaseChecksumsPath = result.ReleaseChecksumsPath,
                 StagingRoot = ResolveConfiguredStageRoot(spec, request, configurationDirectory),

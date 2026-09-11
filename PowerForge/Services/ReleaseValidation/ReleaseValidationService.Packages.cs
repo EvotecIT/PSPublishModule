@@ -15,21 +15,31 @@ public sealed partial class ReleaseValidationService
         internal PackageDependencyGroup[] Dependencies { get; set; } = Array.Empty<PackageDependencyGroup>();
     }
 
-    private static PackageInspection InspectPackage(string path)
+    private static PackageInspection InspectPackage(string path, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var reader = new PackageArchiveReader(path);
         var identity = reader.GetIdentity();
-        return new PackageInspection
+        var package = new PackageInspection
         {
             Path = path, Id = identity.Id, Version = identity.Version.ToNormalizedString(),
             Files = reader.GetFiles().ToArray(), Dependencies = reader.GetPackageDependencies().ToArray()
         };
+        cancellationToken.ThrowIfCancellationRequested();
+        return package;
     }
 
-    private static IEnumerable<PackageInspection> InspectPrimaryPackages(string root)
-        => Directory.GetFiles(root, "*.nupkg")
-            .Where(path => !path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
-            .Select(InspectPackage);
+    private static IEnumerable<PackageInspection> InspectPrimaryPackages(string root, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var path in Directory.EnumerateFiles(root, "*.nupkg"))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+                yield return InspectPackage(path, cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
 
     private async Task<Dictionary<string, PackageInspection>> ValidatePackagesAsync(PackageSetValidation spec,
         Dictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
@@ -37,7 +47,7 @@ public sealed partial class ReleaseValidationService
         if (spec.Items.Length == 0) throw new InvalidOperationException("Package validation requires package contracts.");
         var root = Resolve(spec.Path, variables);
         variables["PackageRoot"] = root;
-        var actual = InspectPrimaryPackages(root).ToArray();
+        var actual = InspectPrimaryPackages(root, cancellationToken).ToArray();
         var selected = new Dictionary<string, PackageInspection>(StringComparer.OrdinalIgnoreCase);
         foreach (var contract in spec.Items)
         {
@@ -56,7 +66,7 @@ public sealed partial class ReleaseValidationService
             ValidateDependencies(package, contract);
             if (contract.SymbolEntries.Length > 0 || contract.ForbiddenSymbolEntries.Length > 0)
             {
-                var symbols = InspectPackage(Path.ChangeExtension(package.Path, ".snupkg"));
+                var symbols = InspectPackage(Path.ChangeExtension(package.Path, ".snupkg"), cancellationToken);
                 if (!string.Equals(symbols.Id, package.Id, StringComparison.OrdinalIgnoreCase) || symbols.Version != package.Version)
                     throw new InvalidOperationException($"Symbol package identity does not match '{package.Id}'.");
                 CheckEntries(package.Id + " symbols", symbols.Files, contract.SymbolEntries, contract.ForbiddenSymbolEntries);

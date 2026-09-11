@@ -123,15 +123,8 @@
         "OutputJsonKind": {
           "anyOf": [
             {
-              "enum": [
-                "Array",
-                "Object",
-                "String",
-                "Number",
-                "True",
-                "False",
-                "Null"
-              ]
+              "type": "string",
+              "pattern": "^([Aa][Rr][Rr][Aa][Yy]|[Oo][Bb][Jj][Ee][Cc][Tt]|[Ss][Tt][Rr][Ii][Nn][Gg]|[Nn][Uu][Mm][Bb][Ee][Rr]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[Nn][Uu][Ll][Ll])(?![\\s\\S])"
             },
             {
               "type": "null"
@@ -163,11 +156,8 @@
         "Platforms": {
           "type": "array",
           "items": {
-            "enum": [
-              "Windows",
-              "Linux",
-              "OSX"
-            ]
+            "type": "string",
+            "pattern": "^([Ww][Ii][Nn][Dd][Oo][Ww][Ss]|[Ll][Ii][Nn][Uu][Xx]|[Oo][Ss][Xx])(?![\\s\\S])"
           }
         }
       }

@@ -100,6 +100,8 @@ PowerForge supplies the selected release lanes and paths such as `{ModuleArchive
 
 JSON actions retain their own `ProjectRoot`, resolved relative to the validation file, just as standalone validation does. Script context uses the resolved root of the first executed module, package, tool, or Apple lane, falling back to the release configuration directory.
 
+The shared validation version includes the module's prerelease label. For a tools-only release whose tool artifacts share one version, PowerForge supplies that version to script context, `POWERFORGE_RELEASE_VERSION`, and JSON command `{Version}` variables. If tool targets have different versions, the shared version is empty; scripts can inspect each asset's version, and a `CliArtifacts` contract selects its named target's version.
+
 When `CliArtifacts.PublishConfigPath` names an input of the current release's publish plan, validation uses that plan's effective runtime/framework/style combinations, including release overrides. An unrelated publish configuration or an explicit matrix remains an independent requirement; standalone validation continues to use the configured matrix.
 
 Selecting the tools release lane does not prohibit its portable bundles, installers, or Store outputs. Set `CliArtifacts.ToolsOnly` explicitly only when the product contract permits tool and metadata entries alone. Standalone validation of a unified CLI manifest infers the version from the selected target and rejects missing or inconsistent artifact versions.
