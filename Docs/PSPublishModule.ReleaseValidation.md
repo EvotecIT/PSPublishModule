@@ -44,6 +44,8 @@ Paths in the contract are relative to `ProjectRoot`, which is relative to the JS
 
 Module signature `Include` patterns are alternatives: PowerForge verifies every file matched by any pattern. The selection must contain at least one file; empty or unmatched selections fail validation.
 
+On Unix, extracted module files and staged consumer inputs retain ordinary permission bits, including executable permissions; setuid, setgid, and sticky bits are not applied. Package, tool, and CLI artifact versions use NuGet version identity, so equivalent spellings such as `1.2.3` and `1.2.3.0` compare equal.
+
 ## Choose the checks that belong to the product
 
 - `Packages`: package identity, version, contents, symbol contents, dependency groups, runtime-only dependencies, and signatures.
@@ -52,6 +54,8 @@ Module signature `Include` patterns are alternatives: PowerForge verifies every 
 - `Tools`: install the exact local `.NET` tool package into an isolated tool directory, optionally also through a local manifest, and run commands using `{ToolPath}` and `{WorkRoot}`. The user's global tools and NuGet package cache are not used for these installations. With `IncludeManifestInstall`, `{ToolPath}` probes must leave `WorkingDirectory` unset or set it to `{WorkRoot}` so `dotnet tool run` selects the isolated manifest. Use tool-path-only validation when a probe requires another working directory.
 - `CliArtifacts`: compare a publish manifest with the runtime/framework/style matrix from `PublishConfigPath`, or with an explicit matrix. Staged checks also validate file existence, containment, and the supplied asset set. Unzipped outputs are checked through the declared executable or, when no executable is declared, a nonempty output directory.
 - `Commands`: run a product probe with structured arguments, an expected exit code, output assertions, and a timeout.
+
+CLI and module manifests read by validation, and validation/publish JSON configuration files, have a 16 MiB byte limit. Staged CLI payload and metadata paths must stay inside `StagingRoot` without traversing symbolic links or reparse points, including the staging root itself. This is a filesystem preflight, not protection against another process replacing files concurrently.
 
 ## Keep domain-specific interpretation local
 

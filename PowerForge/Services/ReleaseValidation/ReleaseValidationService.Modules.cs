@@ -29,13 +29,24 @@ public sealed partial class ReleaseValidationService
                     $"Module archive entry '{pair.Key}'", cancellationToken);
                 if (copied != pair.Value.Length)
                     throw new InvalidDataException($"Module archive entry '{pair.Key}' has an unexpected extracted length.");
+#if NET8_0_OR_GREATER
+                // Restore ordinary Unix permissions only: never apply setuid, setgid, or sticky bits.
+                var permissions = (pair.Value.ExternalAttributes >> 16) & 0x1ff;
+                if (!OperatingSystem.IsWindows() && permissions != 0)
+                    File.SetUnixFileMode(path, (UnixFileMode)permissions);
+#endif
             }
             if (!string.IsNullOrEmpty(spec.ArchiveRoot)) root = Within(root, spec.ArchiveRoot);
         }
         var manifest = Within(root, spec.Manifest);
-        var moduleVersion = ModuleManifestValueReader.ReadTopLevelString(manifest, "ModuleVersion");
+        var content = await DotNetPublishReleaseArtifactVerifier.ReadBoundedMetadataAsync(manifest, "Module manifest",
+            DotNetPublishReleaseArtifactVerifier.MaxManifestBytes, cancellationToken).ConfigureAwait(false);
+        using var manifestBytes = new MemoryStream(content, writable: false);
+        var manifestText = ModuleManifestValueReader.ReadPowerShellCompatibleText(manifestBytes);
+        cancellationToken.ThrowIfCancellationRequested();
+        var moduleVersion = ModuleManifestValueReader.ReadTopLevelStringFromText(manifestText, "ModuleVersion");
         if (string.IsNullOrWhiteSpace(moduleVersion)) throw new InvalidOperationException("Module manifest has no version.");
-        var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArray(manifest, "Prerelease");
+        var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "Prerelease");
         if (prerelease.Length > 1) throw new InvalidOperationException("Module manifest declares more than one prerelease label.");
         var moduleIdentity = PowerForgeReleaseArtifactVerifier.NormalizeModuleVersion(moduleVersion!, prerelease.SingleOrDefault());
         if (string.IsNullOrEmpty(report.Version)) report.Version = moduleIdentity;
@@ -44,9 +55,9 @@ public sealed partial class ReleaseValidationService
             throw new InvalidOperationException($"Module version {moduleIdentity} does not match {report.Version}.");
         variables["Version"] = report.Version;
         if (spec.ProcessorArchitecture is not null && !string.Equals(spec.ProcessorArchitecture,
-                ModuleManifestValueReader.ReadTopLevelString(manifest, "ProcessorArchitecture"), StringComparison.OrdinalIgnoreCase))
+                ModuleManifestValueReader.ReadTopLevelStringFromText(manifestText, "ProcessorArchitecture"), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Module processor architecture does not match the contract.");
-        var paths = Directory.GetFiles(root, "*", SearchOption.AllDirectories);
+        var paths = EnumerateValidationFiles(root, cancellationToken).ToArray();
         var files = paths.Select(path => DotNetPublishReleaseArtifactVerifier.GetRelativePath(root, path).Replace('\\', '/')).ToArray();
         CheckEntries("Module", files, spec.RequiredFiles, Array.Empty<string>());
         CheckEntries("Module assemblies", files, spec.VersionedAssemblies, Array.Empty<string>());

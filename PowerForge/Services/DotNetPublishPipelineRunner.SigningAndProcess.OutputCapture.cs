@@ -1,16 +1,13 @@
-using System.Diagnostics;
-
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
     private static void DrainRedirectedOutputReads(
-        Process process,
-        Task stdoutRead,
-        Task stderrRead,
+        RedirectedProcessOutput stdout,
+        RedirectedProcessOutput stderr,
         TimeSpan timeout)
     {
-        var reads = Task.WhenAll(stdoutRead, stderrRead);
+        var reads = Task.WhenAll(stdout.Completion, stderr.Completion);
         try
         {
             if (reads.Wait(timeout))
@@ -21,15 +18,11 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         }
 
-        if (!stdoutRead.IsCompleted)
-            process.StandardOutput.Dispose();
-        if (!stderrRead.IsCompleted)
-            process.StandardError.Dispose();
         try
         {
-            reads.Wait(TimeSpan.FromMilliseconds(500));
+            Task.WhenAll(stdout.StopAsync(), stderr.StopAsync()).GetAwaiter().GetResult();
         }
-        catch (AggregateException)
+        catch (IOException)
         {
             // A disposed redirected stream can fault its outstanding read.
         }

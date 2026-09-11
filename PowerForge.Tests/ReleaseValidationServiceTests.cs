@@ -350,12 +350,31 @@ public sealed class ReleaseValidationServiceTests : IDisposable
         Package("Example", "1.2.3", "", "lib/net10.0/Example.dll");
         var source = Directory.CreateDirectory(Path.Combine(_root, "source")).FullName;
         File.WriteAllText(Path.Combine(source, "Smoke.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+        var helper = Path.Combine(source, "build-helper.sh");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.WriteAllText(helper, "#!/bin/sh\nprintf 'staged-helper-ok'\n");
+            File.SetUnixFileMode(helper, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.SetUser);
+        }
         Directory.CreateDirectory(Path.Combine(source, "obj"));
         File.WriteAllText(Path.Combine(source, "obj", "stale"), "old");
         string? workspace = null;
         var runner = new RecordingRunner((request, _) => {
             workspace = Path.GetDirectoryName(request.WorkingDirectory)!;
             Assert.False(Directory.Exists(Path.Combine(request.WorkingDirectory, "obj")));
+            if (!OperatingSystem.IsWindows())
+            {
+                var stagedHelper = Path.Combine(request.WorkingDirectory, "build-helper.sh");
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute, File.GetUnixFileMode(stagedHelper));
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(stagedHelper)
+                    { RedirectStandardOutput = true, UseShellExecute = false });
+                Assert.NotNull(process);
+                Assert.Equal("staged-helper-ok", process.StandardOutput.ReadToEnd());
+                Assert.True(process.WaitForExit(5000));
+                Assert.Equal(0, process.ExitCode);
+            }
             if (request.Arguments[0] == "restore") {
                 var config = XDocument.Load(Path.Combine(workspace, "NuGet.Config"));
                 var mapping = config.Root!.Element("packageSourceMapping")!.Elements("packageSource").First();

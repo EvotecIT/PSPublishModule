@@ -1,14 +1,18 @@
 using System.Text.Json;
+using NuGet.Versioning;
 
 namespace PowerForge;
 
 public sealed partial class ReleaseValidationService
 {
-    private static void ValidateCliArtifacts(CliArtifactValidation spec, Dictionary<string, string> variables,
-        ReleaseValidationReport report, string[]? stagedAssets, DotNetPublishPlan? publishPlan)
+    private static async Task ValidateCliArtifactsAsync(CliArtifactValidation spec, Dictionary<string, string> variables,
+        ReleaseValidationReport report, string[]? stagedAssets, DotNetPublishPlan? publishPlan, CancellationToken cancellationToken)
     {
         var manifestPath = Resolve(spec.ManifestPath, variables);
-        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        using var document = JsonDocument.Parse(await DotNetPublishReleaseArtifactVerifier.ReadBoundedTextAsync(
+            manifestPath, "CLI artifact manifest", DotNetPublishReleaseArtifactVerifier.MaxManifestBytes,
+            cancellationToken).ConfigureAwait(false));
+        cancellationToken.ThrowIfCancellationRequested();
         var unified = GetProperty(document.RootElement, "assetEntries", out var entries);
         if (!unified) entries = document.RootElement;
         if (entries.ValueKind != JsonValueKind.Array) throw new InvalidOperationException("CLI manifest must contain an artifact array.");
@@ -24,8 +28,10 @@ public sealed partial class ReleaseValidationService
             if (plan is null || !plan.ConfigurationInputPaths.Contains(path,
                     FrameworkCompatibility.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
             {
-                var configured = DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(path);
+                var configured = await DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputsAsync(
+                    path, cancellationToken).ConfigureAwait(false);
                 plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(configured.Configuration, configured.InputPaths.Last(), enforceRequiredEnvironmentVariables: false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             var target = plan.Targets.SingleOrDefault(item => string.Equals(item.Name, spec.Target, StringComparison.OrdinalIgnoreCase))
                 ?? throw new InvalidOperationException($"Publish configuration has no target '{spec.Target}'.");
@@ -48,16 +54,18 @@ public sealed partial class ReleaseValidationService
         {
             foreach (var artifact in artifacts)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var version = Text(artifact, "version");
                 if (string.IsNullOrWhiteSpace(version)) throw new InvalidOperationException("CLI artifact has no version.");
                 if (string.IsNullOrWhiteSpace(report.Version)) report.Version = version;
-                if (!string.Equals(version, report.Version, StringComparison.OrdinalIgnoreCase))
+                if (NuGetVersion.Parse(version) != NuGetVersion.Parse(report.Version))
                     throw new InvalidOperationException("CLI artifact has an unexpected version.");
             }
             variables["Version"] = report.Version;
         }
         foreach (var artifact in artifacts)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var declaredPath = Text(artifact, unified ? "stagedPath" : "zipPath");
             var directoryArtifact = false;
             if (!unified && string.IsNullOrWhiteSpace(declaredPath))
@@ -72,13 +80,13 @@ public sealed partial class ReleaseValidationService
             if (string.IsNullOrWhiteSpace(declaredPath))
                 throw new InvalidOperationException("CLI artifact does not declare an archive, executable, or output directory.");
             var path = Resolve(declaredPath, variables);
+            if (variables.TryGetValue("StagingRoot", out var stagingRoot) && unified)
+                ValidateStagedCliPath(Resolve(stagingRoot, variables), path);
             var exists = directoryArtifact
-                ? Directory.Exists(path) && Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Any(file => new FileInfo(file).Length > 0)
+                ? Directory.Exists(path) && EnumerateValidationFiles(path, cancellationToken).Any(file => new FileInfo(file).Length > 0)
                 : File.Exists(path) && new FileInfo(path).Length > 0;
             if (!paths.Add(path) || !exists)
                 throw new InvalidOperationException($"CLI artifact is duplicated, missing, or empty: {path}");
-            if (variables.TryGetValue("StagingRoot", out var stagingRoot) && unified)
-                Within(stagingRoot, DotNetPublishReleaseArtifactVerifier.GetRelativePath(stagingRoot, path));
         }
         if (spec.ToolsOnly)
         {
@@ -95,8 +103,9 @@ public sealed partial class ReleaseValidationService
             var manifestPaths = new HashSet<string>(paths.Comparer);
             foreach (var entry in all)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var path = Resolve(Text(entry, "stagedPath"), variables);
-                Within(stagingRoot, DotNetPublishReleaseArtifactVerifier.GetRelativePath(stagingRoot, path));
+                ValidateStagedCliPath(Resolve(stagingRoot, variables), path);
                 if (!manifestPaths.Add(path) || !File.Exists(path) || new FileInfo(path).Length == 0)
                     throw new InvalidOperationException($"Staged release evidence is duplicated, missing, or empty: {path}");
             }
@@ -104,7 +113,17 @@ public sealed partial class ReleaseValidationService
                 !manifestPaths.SetEquals(stagedAssets.Select(path => Resolve(path, variables)))))
                 throw new InvalidOperationException("The staged asset set does not match the release manifest.");
         }
+        cancellationToken.ThrowIfCancellationRequested();
         report.Checks.Add($"CLI {spec.Target}: {artifacts.Length} artifacts");
+    }
+
+    private static void ValidateStagedCliPath(string stagingRoot, string path)
+    {
+        var root = Path.GetFullPath(stagingRoot);
+        Within(root, path);
+        var volumeRoot = Path.GetPathRoot(root)!;
+        if (root.Length > volumeRoot.Length) root = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        FileSystemPathSafety.RejectReparsePoints(path, root, "Staged CLI artifact");
     }
 
     private static bool GetProperty(JsonElement element, string name, out JsonElement value)

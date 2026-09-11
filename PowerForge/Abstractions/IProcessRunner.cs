@@ -200,9 +200,11 @@ public sealed class ProcessRunRequest
     public int MaxCapturedOutputCharacters { get; set; } = int.MaxValue;
 
     /// <summary>Optional callback invoked for each captured standard-output line.</summary>
+    /// <remarks>Callbacks must return promptly. Shutdown waits for in-flight callbacks before returning captured output.</remarks>
     public Action<string>? OutputLineReceived { get; }
 
     /// <summary>Optional callback invoked for each captured standard-error line.</summary>
+    /// <remarks>Callbacks must return promptly. Shutdown waits for in-flight callbacks before returning captured output.</remarks>
     public Action<string>? ErrorLineReceived { get; }
 
     internal void SetCompletionBoundary(Action<ProcessRunResult> completionBoundary)
@@ -443,61 +445,82 @@ public sealed partial class ProcessRunner : IProcessRunner
             return failedStart;
         }
 
-        var stdoutCapture = request.CaptureOutput
-            ? RedirectedProcessOutput.Start(process.StandardOutput, request.MaxCapturedOutputCharacters, request.OutputLineReceived)
-            : new RedirectedProcessOutput();
-        var stderrCapture = request.CaptureError
-            ? RedirectedProcessOutput.Start(process.StandardError, request.MaxCapturedOutputCharacters, request.ErrorLineReceived)
-            : new RedirectedProcessOutput();
+        var stdoutCapture = new RedirectedProcessOutput();
+        var stderrCapture = new RedirectedProcessOutput();
         var timedOut = false;
-
+        var exitCode = 0;
+        var readyForResult = false;
         try
         {
-            var remainingTimeout = request.Timeout;
-            if (request.Timeout > TimeSpan.Zero && request.Timeout != Timeout.InfiniteTimeSpan)
+            stdoutCapture = request.CaptureOutput
+                ? RedirectedProcessOutput.Start(process.StandardOutput, request.MaxCapturedOutputCharacters, request.OutputLineReceived)
+                : new RedirectedProcessOutput();
+            stderrCapture = request.CaptureError
+                ? RedirectedProcessOutput.Start(process.StandardError, request.MaxCapturedOutputCharacters, request.ErrorLineReceived)
+                : new RedirectedProcessOutput();
+
+            try
             {
-                remainingTimeout = request.Timeout - stopwatch.Elapsed;
-                if (remainingTimeout <= TimeSpan.Zero)
-                    throw new OperationCanceledException();
+                var remainingTimeout = request.Timeout;
+                if (request.Timeout > TimeSpan.Zero && request.Timeout != Timeout.InfiniteTimeSpan)
+                {
+                    remainingTimeout = request.Timeout - stopwatch.Elapsed;
+                    if (remainingTimeout <= TimeSpan.Zero)
+                        throw new OperationCanceledException();
+                }
+                await WaitForExitAsync(process, remainingTimeout, cancellationToken).ConfigureAwait(false);
             }
-            await WaitForExitAsync(process, remainingTimeout, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            timedOut = !cancellationToken.IsCancellationRequested;
-            TryKill(process);
-        }
+            catch (OperationCanceledException)
+            {
+                timedOut = !cancellationToken.IsCancellationRequested;
+                TryKill(process);
+            }
 
-        try
-        {
-            if (!process.HasExited)
-                process.WaitForExit(5000);
-        }
-        catch
-        {
-            // Best-effort wait only.
-        }
+            try
+            {
+                if (!process.HasExited)
+                    process.WaitForExit(5000);
+            }
+            catch
+            {
+                // Best-effort wait only.
+            }
 
-        // Bind producer-owned filesystem output at the first observable process-exit
-        // boundary. Stream drainage happens afterward so a blocked or inherited pipe
-        // cannot create an unmonitored post-exit replacement window.
-        var exitCode = timedOut ? 124 : cancellationToken.IsCancellationRequested ? 130 : SafeGetExitCode(process);
-        var boundaryResult = new ProcessRunResult(
-            exitCode,
-            string.Empty,
-            timedOut ? "Timeout" : string.Empty,
-            process.StartInfo.FileName ?? request.FileName,
-            stopwatch.Elapsed,
-            timedOut);
-        request.InvokeCompletionBoundary(boundaryResult);
+            // Bind producer-owned filesystem output at the first observable process-exit
+            // boundary. Stream drainage happens afterward so a blocked or inherited pipe
+            // cannot create an unmonitored post-exit replacement window.
+            exitCode = timedOut ? 124 : cancellationToken.IsCancellationRequested ? 130 : SafeGetExitCode(process);
+            var boundaryResult = new ProcessRunResult(
+                exitCode,
+                string.Empty,
+                timedOut ? "Timeout" : string.Empty,
+                process.StartInfo.FileName ?? request.FileName,
+                stopwatch.Elapsed,
+                timedOut);
+            request.InvokeCompletionBoundary(boundaryResult);
 
-        if (!await WaitForOutputDrainAsync(stdoutCapture.Completion, stderrCapture.Completion, request.Timeout, stopwatch.Elapsed,
-            cancellationToken).ConfigureAwait(false))
+            if (!await WaitForOutputDrainAsync(stdoutCapture.Completion, stderrCapture.Completion, request.Timeout, stopwatch.Elapsed,
+                cancellationToken).ConfigureAwait(false))
+            {
+                timedOut = !cancellationToken.IsCancellationRequested;
+                exitCode = timedOut ? 124 : 130;
+                TryKill(process);
+            }
+
+            readyForResult = true;
+        }
+        finally
         {
-            timedOut = !cancellationToken.IsCancellationRequested;
-            exitCode = timedOut ? 124 : 130;
-            TryKill(process);
-            CloseCapturedStreams(process, request);
+            if (!readyForResult) TryKill(process);
+            try
+            {
+                await Task.WhenAll(stdoutCapture.StopAsync(), stderrCapture.StopAsync()).ConfigureAwait(false);
+            }
+            catch when (!readyForResult)
+            {
+                // Both readers have been joined. Preserve the original start/boundary
+                // exception if shutdown also faults.
+            }
         }
 
         var stdout = stdoutCapture.Snapshot();

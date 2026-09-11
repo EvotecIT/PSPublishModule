@@ -24,11 +24,4 @@ public sealed partial class ProcessRunner
         return completed == drain && !cancellationToken.IsCancellationRequested;
     }
 
-    private static void CloseCapturedStreams(ProcessExecution process, ProcessRunRequest request)
-    {
-        try { if (request.CaptureOutput) process.StandardOutput.Dispose(); }
-        catch (IOException) { }
-        try { if (request.CaptureError) process.StandardError.Dispose(); }
-        catch (IOException) { }
-    }
 }

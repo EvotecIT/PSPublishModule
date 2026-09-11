@@ -290,9 +290,16 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         ReadConfiguredPublishSpecWithInputs(configurationPath).Configuration;
 
     internal static DotNetPublishConfiguredSpec ReadConfiguredPublishSpecWithInputs(string configurationPath)
+        => ReadConfiguredPublishSpecWithInputsAsync(configurationPath).GetAwaiter().GetResult();
+
+    /// <summary>Loads the direct or referenced publish configuration using bounded cancellable metadata reads.</summary>
+    internal static async Task<DotNetPublishConfiguredSpec> ReadConfiguredPublishSpecWithInputsAsync(
+        string configurationPath, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         configurationPath = RequireFile(configurationPath, nameof(configurationPath));
-        var json = ReadBoundedText(configurationPath, "PowerForge release configuration", MaxConfigurationBytes);
+        var json = await ReadBoundedTextAsync(configurationPath, "PowerForge release configuration",
+            MaxConfigurationBytes, cancellationToken).ConfigureAwait(false);
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions
         {
             CommentHandling = JsonCommentHandling.Skip,
@@ -324,10 +331,10 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
                 ? configuredPath
                 : Path.Combine(root, configuredPath));
             path = RequireFile(path, "Tools.DotNetPublishConfigPath");
-            var externalJson = ReadBoundedText(
+            var externalJson = await ReadBoundedTextAsync(
                 path,
                 "Referenced PowerForge dotnet-publish configuration",
-                MaxConfigurationBytes);
+                MaxConfigurationBytes, cancellationToken).ConfigureAwait(false);
             configuration = JsonSerializer.Deserialize(externalJson, DotNetPublishConfigurationJsonContext.Default.DotNetPublishSpec)
                 ?? throw Invalid("Referenced PowerForge dotnet-publish configuration could not be deserialized.");
             inputPaths.Add(path);
@@ -335,12 +342,31 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
 
         if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
             configuration.Profile = tools.DotNetPublishProfile!.Trim();
+        cancellationToken.ThrowIfCancellationRequested();
         return new DotNetPublishConfiguredSpec(configuration, inputPaths.ToArray());
     }
 
     private static string ReadBoundedText(string path, string label, long maximumBytes)
+        => ReadBoundedTextAsync(path, label, maximumBytes).GetAwaiter().GetResult();
+
+    /// <summary>Reads bounded BOM-aware release metadata, honoring cancellation between asynchronous reads.</summary>
+    internal static async Task<string> ReadBoundedTextAsync(string path, string label, long maximumBytes,
+        CancellationToken cancellationToken = default)
     {
-        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var content = await ReadBoundedMetadataAsync(path, label, maximumBytes, cancellationToken).ConfigureAwait(false);
+        using var bytes = new MemoryStream(content, writable: false);
+        using var reader = new StreamReader(bytes, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var text = reader.ReadToEnd();
+        cancellationToken.ThrowIfCancellationRequested();
+        return text;
+    }
+
+    /// <summary>Reads at most the allowed release metadata bytes, leaving format-specific decoding to its owner.</summary>
+    internal static async Task<byte[]> ReadBoundedMetadataAsync(string path, string label, long maximumBytes,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
         if (input.Length > maximumBytes)
             throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
 
@@ -349,7 +375,8 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         long total = 0;
         while (true)
         {
-            int read = input.Read(buffer, 0, buffer.Length);
+            cancellationToken.ThrowIfCancellationRequested();
+            int read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
             if (read == 0)
                 break;
             total = checked(total + read);
@@ -358,9 +385,8 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             bytes.Write(buffer, 0, read);
         }
 
-        bytes.Position = 0;
-        using var reader = new StreamReader(bytes, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return reader.ReadToEnd();
+        cancellationToken.ThrowIfCancellationRequested();
+        return bytes.ToArray();
     }
 
     private static void ValidatePackage(
@@ -517,6 +543,18 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         using var input = File.OpenRead(path);
         using var hash = SHA256.Create();
         return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", string.Empty);
+    }
+
+    internal static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+        using var hash = SHA256.Create();
+        using var sink = new CryptoStream(Stream.Null, hash, CryptoStreamMode.Write);
+        await input.CopyToAsync(sink, 81920, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        sink.FlushFinalBlock();
+        return BitConverter.ToString(hash.Hash!).Replace("-", string.Empty);
     }
 
     private static JsonElement[] FilterEntries(JsonElement[] entries, string propertyName, string? selector)

@@ -24,22 +24,24 @@ public sealed partial class ReleaseValidationService
         return path;
     }
 
-    private static void CopyProject(string source, string destination)
+    private static async Task CopyProjectAsync(string source, string destination, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var directory = new DirectoryInfo(source);
         if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
             throw new InvalidOperationException($"Linked project directory is not supported: {source}");
         Directory.CreateDirectory(destination);
-        foreach (var entry in directory.GetFileSystemInfos())
+        foreach (var entry in directory.EnumerateFileSystemInfos())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidOperationException($"Linked project input is not supported: {entry.FullName}");
             if (entry is DirectoryInfo child)
             {
                 if (child.Name is "bin" or "obj" or ".git") continue;
-                CopyProject(child.FullName, Path.Combine(destination, child.Name));
+                await CopyProjectAsync(child.FullName, Path.Combine(destination, child.Name), cancellationToken).ConfigureAwait(false);
             }
-            else File.Copy(entry.FullName, Path.Combine(destination, entry.Name));
+            else await CopyValidationFileAsync(entry.FullName, Path.Combine(destination, entry.Name), cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -68,11 +70,13 @@ public sealed partial class ReleaseValidationService
         if (packages.Count == 0) throw new InvalidOperationException("Package consumers require a declared package set.");
         using var workspace = new ValidationWorkspace();
         var projectRoot = Path.Combine(workspace.Root, "project");
-        CopyProject(Resolve(spec.SourceDirectory, variables), projectRoot);
+        await CopyProjectAsync(Resolve(spec.SourceDirectory, variables), projectRoot, cancellationToken).ConfigureAwait(false);
         var project = Within(projectRoot, spec.ProjectFile);
         if (!File.Exists(project)) throw new InvalidOperationException($"Smoke project does not exist: {project}");
         var feed = Directory.CreateDirectory(Path.Combine(workspace.Root, "feed")).FullName;
-        foreach (var package in packages.Values) File.Copy(package.Path, Path.Combine(feed, Path.GetFileName(package.Path)));
+        foreach (var package in packages.Values)
+            await CopyValidationFileAsync(package.Path, Path.Combine(feed, Path.GetFileName(package.Path)), cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         var config = WriteValidationNuGetConfig(workspace.Root, feed, packages.Keys, spec.DependencySources);
         var cache = Path.Combine(workspace.Root, "packages");
         var values = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase) { ["WorkRoot"] = workspace.Root };
@@ -85,11 +89,14 @@ public sealed partial class ReleaseValidationService
         }, values, report, cancellationToken).ConfigureAwait(false);
         foreach (var package in packages.Values)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var id = package.Id.ToLowerInvariant();
             var version = package.Version.ToLowerInvariant();
             var restored = Path.Combine(cache, id, version, id + "." + version + ".nupkg");
             var staged = Path.Combine(feed, Path.GetFileName(package.Path));
-            if (!File.Exists(restored) || DotNetPublishReleaseArtifactVerifier.ComputeSha256(restored) != DotNetPublishReleaseArtifactVerifier.ComputeSha256(staged))
+            if (!File.Exists(restored) ||
+                await DotNetPublishReleaseArtifactVerifier.ComputeSha256Async(restored, cancellationToken).ConfigureAwait(false) !=
+                await DotNetPublishReleaseArtifactVerifier.ComputeSha256Async(staged, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException($"Consumer did not restore the exact staged '{package.Id}' package.");
         }
         var frameworks = spec.Frameworks.Concat(FrameworkCompatibility.IsWindows() ? spec.WindowsFrameworks : Array.Empty<string>()).Distinct().ToArray();

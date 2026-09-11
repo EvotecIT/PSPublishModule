@@ -1021,17 +1021,25 @@ public sealed partial class DotNetPublishPipelineRunner
             p);
         if (timeout.HasValue && timeout.Value > TimeSpan.Zero && timeout.Value != Timeout.InfiniteTimeSpan)
         {
-            var stdoutCapture = RedirectedProcessOutput.Start(p.StandardOutput);
-            var stderrCapture = RedirectedProcessOutput.Start(p.StandardError);
-            Task stdoutRead = stdoutCapture.Completion;
-            Task stderrRead = stderrCapture.Completion;
-
-            var timeoutMs = ToTimeoutMilliseconds(timeout.Value);
-            bool exited = p.WaitForExit(timeoutMs);
-            if (!exited)
-                TryKillProcessTree(p);
-
-            DrainRedirectedOutputReads(p, stdoutRead, stderrRead, TimeSpan.FromMilliseconds(500));
+            var stdoutCapture = new RedirectedProcessOutput();
+            var stderrCapture = new RedirectedProcessOutput();
+            var exited = false;
+            var completed = false;
+            try
+            {
+                stdoutCapture = RedirectedProcessOutput.Start(p.StandardOutput);
+                stderrCapture = RedirectedProcessOutput.Start(p.StandardError);
+                exited = p.WaitForExit(ToTimeoutMilliseconds(timeout.Value));
+                if (!exited) TryKillProcessTree(p);
+                DrainRedirectedOutputReads(stdoutCapture, stderrCapture, TimeSpan.FromMilliseconds(500));
+                completed = true;
+            }
+            finally
+            {
+                if (!completed) TryKillProcessTree(p);
+                try { Task.WhenAll(stdoutCapture.StopAsync(), stderrCapture.StopAsync()).GetAwaiter().GetResult(); }
+                catch when (!completed) { /* Preserve the original failure after both readers finish. */ }
+            }
             string timedStdout = stdoutCapture.Snapshot();
             string timedStderr = stderrCapture.Snapshot();
             if (!exited)

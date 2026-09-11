@@ -13,7 +13,9 @@ public sealed partial class ReleaseValidationService
 
     /// <summary>Loads a JSON validation contract.</summary>
     public static ReleaseValidationSpec Load(string configPath)
-        => JsonSerializer.Deserialize(File.ReadAllText(configPath), ReleaseValidationJsonContext.Default.ReleaseValidationSpec)
+        => JsonSerializer.Deserialize(DotNetPublishReleaseArtifactVerifier.ReadBoundedTextAsync(configPath,
+                "Release validation configuration", DotNetPublishReleaseArtifactVerifier.MaxConfigurationBytes).GetAwaiter().GetResult(),
+                ReleaseValidationJsonContext.Default.ReleaseValidationSpec)
             ?? throw new InvalidOperationException("Validation configuration is empty.");
 
     /// <summary>Serializes the same typed contract produced by the PowerShell DSL.</summary>
@@ -45,7 +47,9 @@ public sealed partial class ReleaseValidationService
                 : await ValidatePackagesAsync(spec.Packages, variables, report, cancellationToken).ConfigureAwait(false);
             foreach (var module in spec.Modules)
                 await ValidateModuleAsync(module, variables, report, cancellationToken).ConfigureAwait(false);
-            if (spec.CliArtifacts is not null) ValidateCliArtifacts(spec.CliArtifacts, variables, report, request.StagedAssets, request.PublishPlan);
+            if (spec.CliArtifacts is not null)
+                await ValidateCliArtifactsAsync(spec.CliArtifacts, variables, report, request.StagedAssets,
+                    request.PublishPlan, cancellationToken).ConfigureAwait(false);
             foreach (var consumer in spec.Consumers)
                 await ValidateConsumerAsync(consumer, packages, variables, report, cancellationToken).ConfigureAwait(false);
             foreach (var tool in spec.Tools)

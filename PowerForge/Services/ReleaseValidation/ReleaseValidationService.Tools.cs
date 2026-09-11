@@ -1,3 +1,5 @@
+using NuGet.Versioning;
+
 namespace PowerForge;
 
 public sealed partial class ReleaseValidationService
@@ -12,15 +14,17 @@ public sealed partial class ReleaseValidationService
             .Where(p => string.Equals(p.Id, spec.PackageId, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (matches.Length != 1) throw new InvalidOperationException($"Expected exactly one staged tool package '{spec.PackageId}'.");
         var package = matches[0];
-        if (!string.IsNullOrEmpty(report.Version) && !string.Equals(report.Version, package.Version, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(report.Version) && NuGetVersion.Parse(report.Version) != NuGetVersion.Parse(package.Version))
             throw new InvalidOperationException($"Tool package version {package.Version} does not match {report.Version}.");
         if (string.IsNullOrEmpty(report.Version)) report.Version = package.Version;
         variables["Version"] = report.Version;
         foreach (var manifestInstall in spec.IncludeManifestInstall ? new[] { false, true } : new[] { false })
         {
+            cancellationToken.ThrowIfCancellationRequested();
             using var workspace = new ValidationWorkspace();
             var feed = Directory.CreateDirectory(Path.Combine(workspace.Root, "feed")).FullName;
-            File.Copy(package.Path, Path.Combine(feed, Path.GetFileName(package.Path)));
+            await CopyValidationFileAsync(package.Path, Path.Combine(feed, Path.GetFileName(package.Path)), cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             var config = WriteValidationNuGetConfig(workspace.Root, feed, new[] { package.Id }, Array.Empty<string>());
             var toolRoot = Path.Combine(workspace.Root, "tools");
             var environment = new Dictionary<string, string?>

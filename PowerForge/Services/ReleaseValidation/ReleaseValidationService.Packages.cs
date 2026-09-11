@@ -67,7 +67,8 @@ public sealed partial class ReleaseValidationService
             if (contract.SymbolEntries.Length > 0 || contract.ForbiddenSymbolEntries.Length > 0)
             {
                 var symbols = InspectPackage(Path.ChangeExtension(package.Path, ".snupkg"), cancellationToken);
-                if (!string.Equals(symbols.Id, package.Id, StringComparison.OrdinalIgnoreCase) || symbols.Version != package.Version)
+                if (!string.Equals(symbols.Id, package.Id, StringComparison.OrdinalIgnoreCase) ||
+                    NuGetVersion.Parse(symbols.Version) != NuGetVersion.Parse(package.Version))
                     throw new InvalidOperationException($"Symbol package identity does not match '{package.Id}'.");
                 CheckEntries(package.Id + " symbols", symbols.Files, contract.SymbolEntries, contract.ForbiddenSymbolEntries);
             }
