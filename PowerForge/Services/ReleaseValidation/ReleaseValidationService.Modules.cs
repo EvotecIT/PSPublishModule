@@ -32,10 +32,13 @@ public sealed partial class ReleaseValidationService
         var manifest = Within(root, spec.Manifest);
         var moduleVersion = ModuleManifestValueReader.ReadTopLevelString(manifest, "ModuleVersion");
         if (string.IsNullOrWhiteSpace(moduleVersion)) throw new InvalidOperationException("Module manifest has no version.");
-        if (string.IsNullOrEmpty(report.Version)) report.Version = moduleVersion!;
+        var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArray(manifest, "Prerelease");
+        if (prerelease.Length > 1) throw new InvalidOperationException("Module manifest declares more than one prerelease label.");
+        var moduleIdentity = PowerForgeReleaseArtifactVerifier.NormalizeModuleVersion(moduleVersion!, prerelease.SingleOrDefault());
+        if (string.IsNullOrEmpty(report.Version)) report.Version = moduleIdentity;
         var expectedVersion = NuGetVersion.Parse(report.Version).Version;
-        if (NuGetVersion.Parse(moduleVersion!).Version != expectedVersion)
-            throw new InvalidOperationException($"Module version {moduleVersion} does not match {report.Version}.");
+        if (!string.Equals(moduleIdentity, PowerForgeReleaseArtifactVerifier.NormalizeModuleVersionText(report.Version), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Module version {moduleIdentity} does not match {report.Version}.");
         variables["Version"] = report.Version;
         if (spec.ProcessorArchitecture is not null && !string.Equals(spec.ProcessorArchitecture,
                 ModuleManifestValueReader.ReadTopLevelString(manifest, "ProcessorArchitecture"), StringComparison.OrdinalIgnoreCase))

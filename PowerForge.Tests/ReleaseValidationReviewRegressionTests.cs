@@ -111,7 +111,7 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var run = new ProcessRunner().RunAsync(request);
+            var run = new ProcessRunner(ownProcessTree: true).RunAsync(request);
             await exited.Task.WaitAsync(TimeSpan.FromSeconds(2));
             var result = await run.WaitAsync(TimeSpan.FromSeconds(3));
 
@@ -119,6 +119,7 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
             Assert.False(result.Succeeded);
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(3), $"Drain took {stopwatch.Elapsed}.");
             Assert.True(File.Exists(pidFile));
+            await OwnedProcessLifetimeTests.AssertChildStoppedAsync(pidFile);
         }
         finally { await KillChildAsync(pidFile); }
     }
@@ -145,13 +146,14 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
             }
             else
             {
-                var result = await new ProcessRunner().RunAsync(ShellRequest(pidFile, TimeSpan.FromSeconds(20)), cancellation.Token)
+                var result = await new ProcessRunner(ownProcessTree: true).RunAsync(ShellRequest(pidFile, TimeSpan.FromSeconds(20)), cancellation.Token)
                     .WaitAsync(TimeSpan.FromSeconds(3));
                 Assert.True(cancellation.IsCancellationRequested);
                 Assert.False(result.TimedOut);
             }
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(3), $"Cancellation took {stopwatch.Elapsed}.");
             Assert.True(File.Exists(pidFile));
+            await OwnedProcessLifetimeTests.AssertChildStoppedAsync(pidFile);
         }
         finally { await KillChildAsync(pidFile); }
     }

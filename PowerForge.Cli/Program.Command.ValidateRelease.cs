@@ -12,7 +12,7 @@ internal static partial class Program
         try
         {
             var config = TryGetOptionValue(args, "--config");
-            if (string.IsNullOrWhiteSpace(config)) { logger.Error(usage); return 2; }
+            if (string.IsNullOrWhiteSpace(config)) return WriteReleaseError(IsJsonOutput(args), "validate-release", 2, usage, logger);
             var request = new ReleaseValidationRequest
             {
                 ProjectRoot = TryGetOptionValue(args, "--project-root"), Version = TryGetOptionValue(args, "--version")
@@ -34,8 +34,8 @@ internal static partial class Program
             }
             return report.Success ? 0 : 1;
         }
-        catch (OperationCanceledException) { logger.Error("Release validation canceled."); return 130; }
-        catch (Exception exception) { logger.Error(exception.Message); return 1; }
+        catch (OperationCanceledException) { return WriteReleaseError(IsJsonOutput(args), "validate-release", 130, "Release validation canceled.", logger); }
+        catch (Exception exception) { return WriteReleaseError(IsJsonOutput(args), "validate-release", 1, exception.Message, logger); }
         finally { Console.CancelKeyPress -= handler; }
     }
 }

@@ -391,6 +391,17 @@ public interface IProcessRunner
 /// </summary>
 public sealed partial class ProcessRunner : IProcessRunner
 {
+    private readonly bool _ownProcessTree;
+
+    /// <summary>Creates a general-purpose runner without terminating detached background work after successful completion.</summary>
+    public ProcessRunner() { }
+
+    /// <summary>Creates a runner that can own a probe's descendants independently of its original process.</summary>
+    /// <param name="ownProcessTree">Use a Windows job or Linux/macOS process group established before child code executes.
+    /// Descendants remaining in that scope are terminated before the runner returns, including after parent exit.
+    /// Unix programs that deliberately create another session/group are outside this cooperative lifecycle scope.</param>
+    public ProcessRunner(bool ownProcessTree) => _ownProcessTree = ownProcessTree;
+
     /// <inheritdoc />
     public async Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
     {
@@ -404,9 +415,7 @@ public sealed partial class ProcessRunner : IProcessRunner
             throw new ArgumentOutOfRangeException(nameof(request), "The captured-output character limit must be positive.");
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var process = new Process {
-            StartInfo = BuildStartInfo(request)
-        };
+        using var process = ProcessExecution.Create(BuildStartInfo(request), _ownProcessTree);
 
         request.InvokePreStartBoundary();
         var stopwatch = Stopwatch.StartNew();
@@ -434,12 +443,12 @@ public sealed partial class ProcessRunner : IProcessRunner
             return failedStart;
         }
 
-        var stdoutTask = request.CaptureOutput
-            ? ReadOutputAsync(process.StandardOutput, request.OutputLineReceived, request.MaxCapturedOutputCharacters)
-            : Task.FromResult(CapturedOutput.Empty);
-        var stderrTask = request.CaptureError
-            ? ReadOutputAsync(process.StandardError, request.ErrorLineReceived, request.MaxCapturedOutputCharacters)
-            : Task.FromResult(CapturedOutput.Empty);
+        var stdoutCapture = request.CaptureOutput
+            ? RedirectedProcessOutput.Start(process.StandardOutput, request.MaxCapturedOutputCharacters, request.OutputLineReceived)
+            : new RedirectedProcessOutput();
+        var stderrCapture = request.CaptureError
+            ? RedirectedProcessOutput.Start(process.StandardError, request.MaxCapturedOutputCharacters, request.ErrorLineReceived)
+            : new RedirectedProcessOutput();
         var timedOut = false;
 
         try
@@ -472,7 +481,7 @@ public sealed partial class ProcessRunner : IProcessRunner
         // Bind producer-owned filesystem output at the first observable process-exit
         // boundary. Stream drainage happens afterward so a blocked or inherited pipe
         // cannot create an unmonitored post-exit replacement window.
-        var exitCode = timedOut ? 124 : SafeGetExitCode(process);
+        var exitCode = timedOut ? 124 : cancellationToken.IsCancellationRequested ? 130 : SafeGetExitCode(process);
         var boundaryResult = new ProcessRunResult(
             exitCode,
             string.Empty,
@@ -482,72 +491,32 @@ public sealed partial class ProcessRunner : IProcessRunner
             timedOut);
         request.InvokeCompletionBoundary(boundaryResult);
 
-        if (!await WaitForOutputDrainAsync(stdoutTask, stderrTask, request.Timeout, stopwatch.Elapsed,
+        if (!await WaitForOutputDrainAsync(stdoutCapture.Completion, stderrCapture.Completion, request.Timeout, stopwatch.Elapsed,
             cancellationToken).ConfigureAwait(false))
         {
             timedOut = !cancellationToken.IsCancellationRequested;
-            if (timedOut) exitCode = 124;
+            exitCode = timedOut ? 124 : 130;
             TryKill(process);
             CloseCapturedStreams(process, request);
         }
 
-        var stdout = request.CaptureOutput && stdoutTask.IsCompleted
-            ? await DrainAsync(stdoutTask).ConfigureAwait(false)
-            : CapturedOutput.Empty;
-        var stderr = request.CaptureError && stderrTask.IsCompleted
-            ? await DrainAsync(stderrTask).ConfigureAwait(false)
-            : CapturedOutput.Empty;
+        var stdout = stdoutCapture.Snapshot();
+        var stderr = stderrCapture.Snapshot();
         stopwatch.Stop();
 
-        if (timedOut && string.IsNullOrWhiteSpace(stderr.Value))
-            stderr = new CapturedOutput("Timeout", stderr.LimitExceeded);
+        if (timedOut && string.IsNullOrWhiteSpace(stderr)) stderr = "Timeout";
 
         var result = new ProcessRunResult(
             exitCode,
-            stdout.Value,
-            stderr.Value,
+            stdout,
+            stderr,
             process.StartInfo.FileName ?? request.FileName,
             stopwatch.Elapsed,
             timedOut,
-            stdout.LimitExceeded,
-            stderr.LimitExceeded);
+            stdoutCapture.LimitExceeded,
+            stderrCapture.LimitExceeded);
         request.InvokeCompletionBoundary(result);
         return result;
-    }
-
-    private static async Task<CapturedOutput> ReadOutputAsync(
-        StreamReader reader,
-        Action<string>? lineReceived,
-        int maximumCharacters)
-    {
-        if (lineReceived is null)
-        {
-            var directOutput = new StringBuilder(Math.Min(maximumCharacters, 4096));
-            var buffer = new char[4096];
-            var exceeded = false;
-            int read;
-            while ((read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
-            {
-                var remaining = maximumCharacters - directOutput.Length;
-                if (remaining > 0) directOutput.Append(buffer, 0, Math.Min(remaining, read));
-                if (read > remaining) exceeded = true;
-            }
-            return new CapturedOutput(directOutput.ToString(), exceeded);
-        }
-
-        var output = new StringBuilder();
-        var limitExceeded = false;
-        string? line;
-        while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
-        {
-            var retainedLine = line + Environment.NewLine;
-            var remaining = maximumCharacters - output.Length;
-            if (remaining > 0) output.Append(retainedLine, 0, Math.Min(remaining, retainedLine.Length));
-            if (retainedLine.Length > remaining) limitExceeded = true;
-            try { lineReceived(line); } catch { }
-        }
-
-        return new CapturedOutput(output.ToString(), limitExceeded);
     }
 
     private static ProcessStartInfo BuildStartInfo(ProcessRunRequest request)
@@ -590,7 +559,7 @@ public sealed partial class ProcessRunner : IProcessRunner
         return startInfo;
     }
 
-    private static async Task WaitForExitAsync(Process process, TimeSpan timeout, CancellationToken cancellationToken)
+    private static async Task WaitForExitAsync(ProcessExecution process, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (timeout > TimeSpan.Zero && timeout != Timeout.InfiniteTimeSpan)
@@ -603,33 +572,7 @@ public sealed partial class ProcessRunner : IProcessRunner
         }
     }
 
-    private static async Task<CapturedOutput> DrainAsync(Task<CapturedOutput> readTask)
-    {
-        try
-        {
-            return await readTask.ConfigureAwait(false);
-        }
-        catch
-        {
-            return CapturedOutput.Empty;
-        }
-    }
-
-    private sealed class CapturedOutput
-    {
-        internal static CapturedOutput Empty { get; } = new(string.Empty, false);
-
-        internal CapturedOutput(string value, bool limitExceeded)
-        {
-            Value = value;
-            LimitExceeded = limitExceeded;
-        }
-
-        internal string Value { get; }
-        internal bool LimitExceeded { get; }
-    }
-
-    private static int SafeGetExitCode(Process process)
+    private static int SafeGetExitCode(ProcessExecution process)
     {
         try
         {
@@ -641,7 +584,13 @@ public sealed partial class ProcessRunner : IProcessRunner
         }
     }
 
-    private static void TryKill(Process process)
+    private static void TryKill(ProcessExecution process)
+    {
+        try { process.KillTree(); }
+        catch { /* Best-effort termination; the owned scope also closes during disposal. */ }
+    }
+
+    internal static void TryKillManagedProcess(Process process)
     {
         try
         {

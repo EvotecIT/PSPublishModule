@@ -42,8 +42,24 @@ public sealed partial class ReleaseValidationService
         {
             if (unified && !string.IsNullOrEmpty(report.Version) && Text(artifact, "version") != report.Version)
                 throw new InvalidOperationException("CLI artifact has an unexpected version.");
-            var path = Resolve(Text(artifact, unified ? "stagedPath" : "zipPath"), variables);
-            if (!paths.Add(path) || !File.Exists(path) || new FileInfo(path).Length == 0)
+            var declaredPath = Text(artifact, unified ? "stagedPath" : "zipPath");
+            var directoryArtifact = false;
+            if (!unified && string.IsNullOrWhiteSpace(declaredPath))
+            {
+                declaredPath = Text(artifact, "exePath");
+                if (string.IsNullOrWhiteSpace(declaredPath))
+                {
+                    declaredPath = Text(artifact, "outputDir");
+                    directoryArtifact = true;
+                }
+            }
+            if (string.IsNullOrWhiteSpace(declaredPath))
+                throw new InvalidOperationException("CLI artifact does not declare an archive, executable, or output directory.");
+            var path = Resolve(declaredPath, variables);
+            var exists = directoryArtifact
+                ? Directory.Exists(path) && Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Any(file => new FileInfo(file).Length > 0)
+                : File.Exists(path) && new FileInfo(path).Length > 0;
+            if (!paths.Add(path) || !exists)
                 throw new InvalidOperationException($"CLI artifact is duplicated, missing, or empty: {path}");
             if (variables.TryGetValue("StagingRoot", out var stagingRoot) && unified)
                 Within(stagingRoot, DotNetPublishReleaseArtifactVerifier.GetRelativePath(stagingRoot, path));

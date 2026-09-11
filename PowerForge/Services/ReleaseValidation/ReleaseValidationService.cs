@@ -9,7 +9,7 @@ public sealed partial class ReleaseValidationService
     private readonly IProcessRunner _processRunner;
     /// <summary>Creates a validator using the shared process runner.</summary>
     public ReleaseValidationService(IProcessRunner? processRunner = null)
-        => _processRunner = processRunner ?? new ProcessRunner();
+        => _processRunner = processRunner ?? new ProcessRunner(ownProcessTree: true);
 
     /// <summary>Loads a JSON validation contract.</summary>
     public static ReleaseValidationSpec Load(string configPath)

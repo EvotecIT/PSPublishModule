@@ -4,8 +4,8 @@ namespace PowerForge;
 
 public sealed partial class ProcessRunner
 {
-    private static async Task<bool> WaitForOutputDrainAsync(Task<CapturedOutput> stdout,
-        Task<CapturedOutput> stderr, TimeSpan timeout, TimeSpan elapsed, CancellationToken cancellationToken)
+    private static async Task<bool> WaitForOutputDrainAsync(Task stdout,
+        Task stderr, TimeSpan timeout, TimeSpan elapsed, CancellationToken cancellationToken)
     {
         var drain = Task.WhenAll(stdout, stderr);
         // Readers may fault when cancellation closes the pipe after the main process exits.
@@ -24,7 +24,7 @@ public sealed partial class ProcessRunner
         return completed == drain && !cancellationToken.IsCancellationRequested;
     }
 
-    private static void CloseCapturedStreams(Process process, ProcessRunRequest request)
+    private static void CloseCapturedStreams(ProcessExecution process, ProcessRunRequest request)
     {
         try { if (request.CaptureOutput) process.StandardOutput.Dispose(); }
         catch (IOException) { }

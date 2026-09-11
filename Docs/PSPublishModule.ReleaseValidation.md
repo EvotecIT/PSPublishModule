@@ -45,10 +45,10 @@ Paths in the contract are relative to `ProjectRoot`, which is relative to the JS
 ## Choose the checks that belong to the product
 
 - `Packages`: package identity, version, contents, symbol contents, dependency groups, runtime-only dependencies, and signatures.
-- `Modules`: module ZIP or directory contents, manifest version and architecture, assembly versions, and optional Authenticode requirements. `ProbeScript` runs in each configured `Hosts` entry with `POWERFORGE_MODULE_PATH` and a disposable `POWERFORGE_TEST_ROOT`.
+- `Modules`: module ZIP or directory contents, full module identity including `PrivateData.PSData.Prerelease`, architecture, assembly versions, and optional Authenticode requirements. `ProbeScript` runs in each configured `Hosts` entry with `POWERFORGE_MODULE_PATH` and a disposable `POWERFORGE_TEST_ROOT`.
 - `Consumers`: copy a product-owned smoke project into a temporary workspace, restore the exact staged first-party package bytes, and run it for the selected frameworks. Other dependencies may come from `DependencySources`.
 - `Tools`: install the exact local `.NET` tool package into an isolated tool directory, optionally also through a local manifest, and run commands using `{ToolPath}` and `{WorkRoot}`. The user's global tools and NuGet package cache are not used for these installations.
-- `CliArtifacts`: compare a publish manifest with the runtime/framework/style matrix from `PublishConfigPath`, or with an explicit matrix. Staged checks also validate file existence, containment, and the supplied asset set.
+- `CliArtifacts`: compare a publish manifest with the runtime/framework/style matrix from `PublishConfigPath`, or with an explicit matrix. Staged checks also validate file existence, containment, and the supplied asset set. Unzipped outputs are checked through the declared executable or, when no executable is declared, a nonempty output directory.
 - `Commands`: run a product probe with structured arguments, an expected exit code, output assertions, and a timeout.
 
 ## Keep domain-specific interpretation local
@@ -67,6 +67,8 @@ if ($diagnostics.pendingWrites -gt 0) { throw 'The product has unfinished writes
 ```
 
 The expected exit code defaults to zero. Set `ExpectedExitCode = $null` only when the product intentionally interprets nonzero exit codes itself, such as a licensed feature being unavailable. Timeout, cancellation, and output limits still apply. The result exposes `ExitCode`, `StdOut`, and `StdErr` separately; ordering between the two streams is not guaranteed.
+
+Validation probes run in an owned Windows job or a process group on 64-bit Linux/macOS. PowerForge terminates remaining processes in that scope when a probe returns, times out, or is cancelled, even if the original process has already exited. Output captured before the boundary includes unfinished lines. On Unix, a program can deliberately leave the group by creating another group or session; process ownership is a cleanup mechanism, not a security sandbox.
 
 PowerShell can also author the complete contract with `New-ConfigurationReleaseValidation` inside `Invoke-ReleaseValidation -Settings { ... }`. Use `-JsonOnly -JsonPath` to export it without running probes.
 

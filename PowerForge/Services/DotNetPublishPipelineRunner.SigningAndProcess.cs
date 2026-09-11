@@ -1021,10 +1021,10 @@ public sealed partial class DotNetPublishPipelineRunner
             p);
         if (timeout.HasValue && timeout.Value > TimeSpan.Zero && timeout.Value != Timeout.InfiniteTimeSpan)
         {
-            var stdoutCapture = new RedirectedOutputCapture();
-            var stderrCapture = new RedirectedOutputCapture();
-            Task stdoutRead = StartRedirectedOutputReader(p.StandardOutput, stdoutCapture);
-            Task stderrRead = StartRedirectedOutputReader(p.StandardError, stderrCapture);
+            var stdoutCapture = RedirectedProcessOutput.Start(p.StandardOutput);
+            var stderrCapture = RedirectedProcessOutput.Start(p.StandardError);
+            Task stdoutRead = stdoutCapture.Completion;
+            Task stderrRead = stderrCapture.Completion;
 
             var timeoutMs = ToTimeoutMilliseconds(timeout.Value);
             bool exited = p.WaitForExit(timeoutMs);

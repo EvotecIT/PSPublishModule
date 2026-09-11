@@ -12,7 +12,7 @@ internal sealed class PowerForgeReleaseValidationService
     internal PowerForgeReleaseValidationService(ILogger logger, IProcessRunner? processRunner = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _processRunner = processRunner ?? new ProcessRunner();
+        _processRunner = processRunner ?? new ProcessRunner(ownProcessTree: true);
     }
 
     internal PowerForgeReleaseValidationResult Run(PowerForgeReleaseValidationAction action,
