@@ -1255,6 +1255,9 @@ internal sealed class PowerForgeReleaseValidationContext
 
     public bool ToolsSelected { get; set; } = true;
 
+    /// <summary>Whether base Tool artifacts, rather than only packaged outputs, were selected.</summary>
+    public bool ToolArtifactsSelected { get; set; } = true;
+
     /// <summary>The effective tool plan is shared in-process, not serialized into script context.</summary>
     internal DotNetPublishPlan? PublishPlan { get; set; }
 

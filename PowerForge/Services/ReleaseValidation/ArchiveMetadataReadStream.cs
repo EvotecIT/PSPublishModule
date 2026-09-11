@@ -22,43 +22,49 @@ internal sealed class ArchiveMetadataReadStream : Stream
     public override bool CanSeek => _inner.CanSeek;
     public override bool CanWrite => false;
     public override long Length => _inner.Length;
-    public override long Position { get => _inner.Position; set { CheckRead(0); _inner.Position = value; } }
+    public override long Position { get => _inner.Position; set { _cancellationToken.ThrowIfCancellationRequested(); _inner.Position = value; } }
 
-    private void CheckRead(int count)
+    private int LimitReadCount(int count)
     {
         _cancellationToken.ThrowIfCancellationRequested();
-        if (!_metadataComplete && count > _remaining)
+        // Permit one extra byte to distinguish a short read/EOF from an actual overflow.
+        return _metadataComplete ? count : (int)Math.Min(count, Math.Max(0, _remaining) + 1);
+    }
+
+    private void RecordRead(int read)
+    {
+        _cancellationToken.ThrowIfCancellationRequested();
+        if (!_metadataComplete) _remaining -= read;
+        if (!_metadataComplete && _remaining < 0)
             throw new InvalidDataException($"Archive metadata exceeds the {MaximumMetadataBytes} byte read limit.");
     }
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        CheckRead(count);
-        var read = _inner.Read(buffer, offset, count);
-        if (!_metadataComplete) _remaining -= read;
-        _cancellationToken.ThrowIfCancellationRequested();
+        if (buffer is null) throw new ArgumentNullException(nameof(buffer));
+        if (offset < 0 || count < 0 || offset > buffer.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
+        var read = _inner.Read(buffer, offset, LimitReadCount(count));
+        RecordRead(read);
         return read;
     }
 
 #if !NET472 && !NETSTANDARD2_0
     public override int Read(Span<byte> buffer)
     {
-        CheckRead(buffer.Length);
-        var read = _inner.Read(buffer);
-        if (!_metadataComplete) _remaining -= read;
-        _cancellationToken.ThrowIfCancellationRequested();
+        var read = _inner.Read(buffer.Slice(0, LimitReadCount(buffer.Length)));
+        RecordRead(read);
         return read;
     }
 #endif
 
     public override int ReadByte()
     {
-        CheckRead(1);
+        _cancellationToken.ThrowIfCancellationRequested();
         var value = _inner.ReadByte();
-        if (!_metadataComplete && value >= 0) _remaining--;
+        RecordRead(value >= 0 ? 1 : 0);
         return value;
     }
-    public override long Seek(long offset, SeekOrigin origin) { CheckRead(0); return _inner.Seek(offset, origin); }
+    public override long Seek(long offset, SeekOrigin origin) { _cancellationToken.ThrowIfCancellationRequested(); return _inner.Seek(offset, origin); }
     public override void Flush() { }
     public override void SetLength(long value) => throw new NotSupportedException();
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();

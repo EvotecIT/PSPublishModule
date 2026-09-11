@@ -71,7 +71,9 @@ public sealed partial class ReleaseValidationService
     public async Task<ProcessRunResult> RunCommandAsync(ReleaseCommandValidation command,
         IReadOnlyDictionary<string, string>? variables = null, CancellationToken cancellationToken = default)
     {
-        var values = variables ?? new Dictionary<string, string> { ["ProjectRoot"] = Environment.CurrentDirectory };
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["ProjectRoot"] = Environment.CurrentDirectory };
+        if (variables is not null)
+            foreach (var variable in variables) values[variable.Key] = variable.Value;
         return await RunCommandAsync(command, values, new ReleaseValidationReport(), cancellationToken).ConfigureAwait(false);
     }
 

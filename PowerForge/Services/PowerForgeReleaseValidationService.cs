@@ -80,7 +80,7 @@ internal sealed class PowerForgeReleaseValidationService
             spec.Consumers = Array.Empty<PackageConsumerValidation>();
             spec.Tools = Array.Empty<DotNetToolValidation>();
         }
-        if (!context.ToolsSelected) spec.CliArtifacts = null;
+        if (!context.ToolsSelected || !context.ToolArtifactsSelected) spec.CliArtifacts = null;
         // Keep JSON path semantics identical to standalone validation, including explicitly separate lane roots.
         var projectRoot = ResolvePath(Path.GetDirectoryName(path)!, spec.ProjectRoot);
         if (hadContracts && spec.SchemaVersion == 1 && !ReleaseValidationService.HasContracts(spec))

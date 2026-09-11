@@ -26,6 +26,7 @@ internal sealed partial class WindowsOwnedProcessExecution : OwnedProcessExecuti
 
     internal override void Start()
     {
+        var executable = ResolveExecutablePath();
         OpenPipes();
         _job = CreateJobObject(IntPtr.Zero, null);
         if (_job.IsInvalid) throw Error("CreateJobObject");
@@ -68,7 +69,7 @@ internal sealed partial class WindowsOwnedProcessExecution : OwnedProcessExecuti
             foreach (var argument in StartInfo.ArgumentList) commandLine.Append(' ').Append(ProcessRunner.QuoteArgument(argument));
 #endif
             const uint flags = 0x4 | 0x400 | 0x80000; // suspended, Unicode environment, extended startup info
-            if (!CreateProcess(null, commandLine, IntPtr.Zero, IntPtr.Zero, true,
+            if (!CreateProcess(executable, commandLine, IntPtr.Zero, IntPtr.Zero, true,
                 flags | (StartInfo.CreateNoWindow ? 0x08000000u : 0), environment, StartInfo.WorkingDirectory, ref startup, out information))
                 throw Error("CreateProcess");
             _process = new SafeFileHandle(information.Process, ownsHandle: true);

@@ -69,7 +69,9 @@ internal sealed partial class PowerForgeReleaseService
                 ConfigPath = result.ConfigPath,
                 ProjectRoot = ResolveValidationProjectRoot(result, configurationDirectory),
                 ResolvedVersion = resolvedVersion ?? ResolveModuleReleaseVersion(result.ModulePlan) ??
-                    ResolveUniqueAssetVersion(result.ReleaseAssetEntries.Where(asset => asset.Category == PowerForgeReleaseAssetCategory.Tool)) ?? string.Empty,
+                    ResolveUniqueAssetVersion(result.ReleaseAssetEntries.Where(asset => asset.Category is
+                        PowerForgeReleaseAssetCategory.Tool or PowerForgeReleaseAssetCategory.Portable or
+                        PowerForgeReleaseAssetCategory.Installer or PowerForgeReleaseAssetCategory.Store)) ?? string.Empty,
                 ReleaseManifestPath = result.ReleaseManifestPath,
                 ReleaseChecksumsPath = result.ReleaseChecksumsPath,
                 StagingRoot = ResolveConfiguredStageRoot(spec, request, configurationDirectory),
@@ -79,6 +81,7 @@ internal sealed partial class PowerForgeReleaseService
                 ModuleSelected = moduleSelected,
                 PackagesSelected = packagesSelected,
                 ToolsSelected = toolsSelected,
+                ToolArtifactsSelected = toolsSelected && ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool),
                 PublishPlan = toolsSelected ? result.DotNetToolPlan : null,
                 StagedAssets = result.ReleaseAssetEntries
                     .Where(static asset => !string.IsNullOrWhiteSpace(asset.StagedPath))

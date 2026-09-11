@@ -76,6 +76,8 @@ The expected exit code defaults to zero. Set `ExpectedExitCode = $null` only whe
 
 Command `Platforms` accepts `Windows`, `Linux`, and `OSX`, case-insensitively. An empty list runs on every platform. Unknown or empty names fail validation instead of silently skipping the probe.
 
+An overridden command `PATH` controls executable lookup on Windows and Unix; removing it disables bare-name lookup. Use an absolute executable path when no search path is wanted. Relative search entries use the command's working directory. The standalone C# `RunCommandAsync` API defaults `ProjectRoot` to the current directory and overlays caller variables case-insensitively without changing the caller's dictionary.
+
 Every validation process retains at most 1,048,576 characters per output stream. This includes product probes, package verification, tool installation, consumer restore/build commands, and staged PowerShell actions. Exceeding either limit fails validation even when the process exits successfully. Temporary-directory cleanup is best-effort and does not replace a probe's result or cancellation.
 
 Validation probes run in an owned Windows job or a process group on 64-bit Linux/macOS. PowerForge terminates remaining processes in that scope when a probe returns, times out, or is cancelled, even if the original process has already exited. Output captured before the boundary includes unfinished lines. On Unix, a program can deliberately leave the group by creating another group or session; process ownership is a cleanup mechanism, not a security sandbox.
@@ -108,7 +110,7 @@ The shared validation version includes the module's prerelease label. For a tool
 
 When `CliArtifacts.PublishConfigPath` names an input of the current release's publish plan, validation uses that plan's effective runtime/framework/style combinations, including release overrides. An unrelated publish configuration or an explicit matrix remains an independent requirement; standalone validation continues to use the configured matrix.
 
-Selecting the tools release lane does not prohibit its portable bundles, installers, or Store outputs. Set `CliArtifacts.ToolsOnly` explicitly only when the product contract permits tool and metadata entries alone. Standalone validation of a unified CLI manifest infers the version from the selected target and rejects missing or inconsistent artifact versions.
+Selecting the tools release lane does not prohibit its portable bundles, installers, or Store outputs. When `ToolOutputs` or `SkipToolOutputs` deselects the base `Tool` output, its `CliArtifacts` contract is skipped; additional product commands still run and receive the common version of the selected packaged outputs. Set `CliArtifacts.ToolsOnly` explicitly only when the product contract permits tool and metadata entries alone. Standalone validation of a unified CLI manifest infers the version from the selected target and rejects missing or inconsistent artifact versions.
 
 `ConfigPath` and the existing script-based `FilePath` are mutually exclusive. Script action options such as `Environment`, `WorkingDirectory`, and `PreferWindowsPowerShell` do not apply to a JSON action: declare each command's environment and directory, or a module's `Hosts`, in the validation contract.
 
