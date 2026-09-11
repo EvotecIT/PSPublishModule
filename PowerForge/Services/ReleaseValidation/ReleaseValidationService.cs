@@ -11,13 +11,6 @@ public sealed partial class ReleaseValidationService
     public ReleaseValidationService(IProcessRunner? processRunner = null)
         => _processRunner = new ReleaseValidationProcessRunner(processRunner);
 
-    /// <summary>Loads a JSON validation contract.</summary>
-    public static ReleaseValidationSpec Load(string configPath)
-        => JsonSerializer.Deserialize(DotNetPublishReleaseArtifactVerifier.ReadBoundedTextAsync(configPath,
-                "Release validation configuration", DotNetPublishReleaseArtifactVerifier.MaxConfigurationBytes).GetAwaiter().GetResult(),
-                ReleaseValidationJsonContext.Default.ReleaseValidationSpec)
-            ?? throw new InvalidOperationException("Validation configuration is empty.");
-
     /// <summary>Serializes the same typed contract produced by the PowerShell DSL.</summary>
     public static string Serialize(ReleaseValidationSpec spec)
         => JsonSerializer.Serialize(spec, ReleaseValidationJsonContext.Default.ReleaseValidationSpec);
@@ -41,6 +34,7 @@ public sealed partial class ReleaseValidationService
                 throw new InvalidOperationException("Release validation requires at least one artifact or command contract.");
             var basePath = configPath is null ? Environment.CurrentDirectory : Path.GetDirectoryName(Path.GetFullPath(configPath))!;
             var root = Path.GetFullPath(request.ProjectRoot ?? Path.Combine(basePath, spec.ProjectRoot));
+            ValidateVariableNames(request.Variables.Keys);
             var variables = new Dictionary<string, string>(request.Variables, StringComparer.OrdinalIgnoreCase)
             { ["ProjectRoot"] = root, ["Version"] = report.Version };
             var packages = spec.Packages is null ? new Dictionary<string, PackageInspection>(StringComparer.OrdinalIgnoreCase)
@@ -59,6 +53,7 @@ public sealed partial class ReleaseValidationService
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) { report.Errors.Add(ex.Message); }
+        cancellationToken.ThrowIfCancellationRequested();
         return report;
     }
 
@@ -71,37 +66,51 @@ public sealed partial class ReleaseValidationService
     public async Task<ProcessRunResult> RunCommandAsync(ReleaseCommandValidation command,
         IReadOnlyDictionary<string, string>? variables = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["ProjectRoot"] = Environment.CurrentDirectory };
         if (variables is not null)
+        {
+            ValidateVariableNames(variables.Keys);
             foreach (var variable in variables) values[variable.Key] = variable.Value;
+        }
+        values["ProjectRoot"] = Path.GetFullPath(values["ProjectRoot"]);
         return await RunCommandAsync(command, values, new ReleaseValidationReport(), cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ProcessRunResult> RunCommandAsync(ReleaseCommandValidation command,
-        IReadOnlyDictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken,
+        bool expandVariables = true)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var expectedJsonKind = ValidateCommandContract(command);
         if (!IsCommandApplicable(command))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             report.Checks.Add($"{command.Name}: not applicable on {CurrentPlatform}.");
             return new ProcessRunResult(0, string.Empty, string.Empty, command.FileName, TimeSpan.Zero, false);
         }
-        var workingDirectory = Resolve(command.WorkingDirectory ?? "{ProjectRoot}", variables);
-        var environment = command.Environment.ToDictionary(p => p.Key, p => p.Value is null ? null : Expand(p.Value, variables));
-        var executable = Expand(command.FileName, variables);
-        if (executable.IndexOfAny(new[] { '/', '\\' }) >= 0) executable = Resolve(executable, variables);
+        // Generated commands already carry literal paths; only user-authored templates are expanded.
+        string Value(string value) => expandVariables ? Expand(value, variables) : value;
+        var workingDirectory = NormalizePath(command.WorkingDirectory is null ? variables["ProjectRoot"] : Value(command.WorkingDirectory), variables);
+        var environment = command.Environment.ToDictionary(p => p.Key, p => p.Value is null ? null : Value(p.Value));
+        var executable = Value(command.FileName);
+        if (executable.IndexOfAny(new[] { '/', '\\' }) >= 0) executable = NormalizePath(executable, variables);
         var result = await _processRunner.RunAsync(new ProcessRunRequest(executable,
-            workingDirectory, command.Arguments.Select(a => Expand(a, variables)).ToArray(),
+            workingDirectory, command.Arguments.Select(Value).ToArray(),
             TimeSpan.FromSeconds(command.TimeoutSeconds), environment), cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         if (result.TimedOut || result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded ||
             (command.ExpectedExitCode.HasValue && result.ExitCode != command.ExpectedExitCode.Value))
             throw new InvalidOperationException($"{command.Name} failed (exit {result.ExitCode}, timed out: {result.TimedOut}, output limit exceeded: {result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded}).\n{result.StdErr}\n{result.StdOut}");
-        if (command.ExpectedOutput is not null && !string.Equals(result.StdOut.Trim(), Expand(command.ExpectedOutput, variables), StringComparison.Ordinal))
+        if (command.ExpectedOutput is not null && !string.Equals(result.StdOut.Trim(), Value(command.ExpectedOutput), StringComparison.Ordinal))
             throw new InvalidOperationException($"{command.Name}: standard output did not match the expected value.");
         foreach (var text in command.OutputContains)
-            if (result.StdOut.IndexOf(Expand(text, variables), StringComparison.Ordinal) < 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (result.StdOut.IndexOf(Value(text), StringComparison.Ordinal) < 0)
                 throw new InvalidOperationException($"{command.Name}: output did not contain '{text}'.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
         if (command.OutputJsonKind is not null || command.MinimumJsonItems.HasValue)
         {
             using var json = JsonDocument.Parse(result.StdOut);
@@ -113,10 +122,12 @@ public sealed partial class ReleaseValidationService
         }
         foreach (var file in command.NonEmptyFiles)
         {
-            var path = Resolve(file, variables);
+            cancellationToken.ThrowIfCancellationRequested();
+            var path = NormalizePath(Value(file), variables);
             if (!File.Exists(path) || new FileInfo(path).Length == 0)
                 throw new InvalidOperationException($"{command.Name}: expected nonempty file '{path}'.");
         }
+        cancellationToken.ThrowIfCancellationRequested();
         report.Checks.Add(command.Name);
         return result;
     }
@@ -156,13 +167,22 @@ public sealed partial class ReleaseValidationService
 
     private static string CurrentPlatform => FrameworkCompatibility.IsWindows() ? "Windows" :
         System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX) ? "OSX" : "Linux";
+    private const string VariableNamePattern = @"[A-Za-z_][A-Za-z0-9_]*";
+    private static void ValidateVariableNames(IEnumerable<string> names)
+    {
+        foreach (var name in names)
+            if (!Regex.IsMatch(name, "^" + VariableNamePattern + @"(?![\s\S])", RegexOptions.None, TimeSpan.FromSeconds(1)))
+                throw new InvalidOperationException($"Invalid validation variable name '{name}'. Use letters, digits, and underscores, starting with a letter or underscore.");
+    }
     private static string Expand(string value, IReadOnlyDictionary<string, string> variables)
-        => Regex.Replace(value, @"\{([A-Za-z][A-Za-z0-9]*)\}", match =>
+        => Regex.Replace(value, @"\{(" + VariableNamePattern + @")\}", match =>
             variables.TryGetValue(match.Groups[1].Value, out var replacement) ? replacement :
                 throw new InvalidOperationException($"Missing validation variable {match.Value}."), RegexOptions.None, TimeSpan.FromSeconds(1));
     private static string Resolve(string value, IReadOnlyDictionary<string, string> variables)
+        => NormalizePath(Expand(value, variables), variables);
+    private static string NormalizePath(string value, IReadOnlyDictionary<string, string> variables)
     {
-        var expanded = Expand(value, variables).Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        var expanded = value.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
         return Path.GetFullPath(Path.IsPathRooted(expanded) ? expanded : Path.Combine(variables["ProjectRoot"], expanded));
     }
     private static bool Matches(string value, string pattern)

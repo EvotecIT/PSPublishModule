@@ -24,6 +24,26 @@ internal sealed class PowerForgeReleaseValidationService
         if (string.IsNullOrWhiteSpace(action.FilePath) == string.IsNullOrWhiteSpace(action.ConfigPath))
             throw new InvalidOperationException("A staged-release validation action requires exactly one of FilePath or ConfigPath.");
         if (action.TimeoutSeconds <= 0) throw new InvalidOperationException("A staged-release validation action TimeoutSeconds must be greater than zero.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(action.TimeoutSeconds));
+        try
+        {
+            return RunAction(action, context, configurationDirectory, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout.IsCancellationRequested)
+        {
+            var path = ResolvePath(configurationDirectory, string.IsNullOrWhiteSpace(action.ConfigPath) ? action.FilePath : action.ConfigPath!);
+            return new PowerForgeReleaseValidationResult {
+                Name = string.IsNullOrWhiteSpace(action.Name) ? Path.GetFileNameWithoutExtension(path) : action.Name!.Trim(),
+                FilePath = path, ExitCode = -1, TimedOut = true
+            };
+        }
+    }
+
+    private PowerForgeReleaseValidationResult RunAction(PowerForgeReleaseValidationAction action,
+        PowerForgeReleaseValidationContext context, string configurationDirectory, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         var hasConfiguration = !string.IsNullOrWhiteSpace(action.ConfigPath);
         if (hasConfiguration && (action.Environment.Count > 0 || !string.IsNullOrWhiteSpace(action.WorkingDirectory) || action.PreferWindowsPowerShell))
             throw new InvalidOperationException("ConfigPath actions use the validation contract's command Environment, WorkingDirectory, and module Hosts; script process options cannot be applied to them.");
@@ -33,6 +53,7 @@ internal sealed class PowerForgeReleaseValidationService
         if (!Directory.Exists(workingDirectory)) throw new DirectoryNotFoundException(workingDirectory);
         var name = string.IsNullOrWhiteSpace(action.Name) ? Path.GetFileNameWithoutExtension(path) : action.Name!.Trim();
         _logger.Info($"Running staged-release validation '{name}'.");
+        cancellationToken.ThrowIfCancellationRequested();
         if (hasConfiguration) return RunConfiguration(action, context, path, name, cancellationToken);
 
         var contextDirectory = Path.Combine(Path.GetTempPath(), "PowerForge", "release-validation", Guid.NewGuid().ToString("N"));
@@ -71,7 +92,7 @@ internal sealed class PowerForgeReleaseValidationService
         PowerForgeReleaseValidationContext context, string path, string name, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var spec = ReleaseValidationService.Load(path);
+        var spec = ReleaseValidationService.LoadAsync(path, cancellationToken).GetAwaiter().GetResult();
         var hadContracts = ReleaseValidationService.HasContracts(spec);
         if (!context.ModuleSelected) spec.Modules = Array.Empty<ModuleArtifactValidation>();
         if (!context.PackagesSelected)
@@ -114,22 +135,13 @@ internal sealed class PowerForgeReleaseValidationService
                 !string.IsNullOrWhiteSpace(entry.StagedPath) && entry.StagedPath!.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
             .Select(entry => Path.GetDirectoryName(entry.StagedPath!)!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (packageRoots.Length == 1) request.Variables["PackageRoot"] = packageRoots[0];
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(action.TimeoutSeconds));
-        try
+        var report = new ReleaseValidationService(_processRunner).RunAsync(spec, path, request, cancellationToken).GetAwaiter().GetResult();
+        return new PowerForgeReleaseValidationResult
         {
-            var report = new ReleaseValidationService(_processRunner).RunAsync(spec, path, request, timeout.Token).GetAwaiter().GetResult();
-            return new PowerForgeReleaseValidationResult
-            {
-                Name = name, Succeeded = report.Success, ExitCode = report.Success ? 0 : 1,
-                Executable = "PowerForge", FilePath = path, WorkingDirectory = projectRoot,
-                StdOut = string.Join(Environment.NewLine, report.Checks), StdErr = string.Join(Environment.NewLine, report.Errors)
-            };
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return new PowerForgeReleaseValidationResult { Name = name, FilePath = path, ExitCode = -1, TimedOut = true };
-        }
+            Name = name, Succeeded = report.Success, ExitCode = report.Success ? 0 : 1,
+            Executable = "PowerForge", FilePath = path, WorkingDirectory = projectRoot,
+            StdOut = string.Join(Environment.NewLine, report.Checks), StdErr = string.Join(Environment.NewLine, report.Errors)
+        };
     }
 
     private static void SetVariable(ReleaseValidationRequest request, string name, string? value)

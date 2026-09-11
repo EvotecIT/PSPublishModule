@@ -40,7 +40,10 @@ public sealed class InvokeReleaseValidationCommand : AsyncPSCmdlet
     protected override async Task ProcessRecordAsync()
     {
         var configPath = ParameterSetName == "Config" ? SessionState.Path.GetUnresolvedProviderPathFromPSPath(ConfigPath) : null;
-        var spec = configPath is not null ? ReleaseValidationService.Load(configPath) : Configuration;
+        var currentDirectory = SessionState.Path.CurrentFileSystemLocation.Path;
+        var projectRoot = ProjectRoot is null ? null : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ProjectRoot);
+        var jsonPath = JsonPath is null ? null : SessionState.Path.GetUnresolvedProviderPathFromPSPath(JsonPath);
+        var spec = Configuration;
         if (ParameterSetName == "Settings")
         {
             var output = Settings.Invoke().Select(value => value.BaseObject).ToArray();
@@ -48,16 +51,16 @@ public sealed class InvokeReleaseValidationCommand : AsyncPSCmdlet
                 throw new ArgumentException("Settings must emit one release-validation configuration.");
             spec = configured;
         }
+        if (configPath is not null) spec = await ReleaseValidationService.LoadAsync(configPath, CancelToken);
         if (JsonOnly || JsonPath is not null)
         {
             var json = ReleaseValidationService.Serialize(spec);
-            if (JsonPath is not null) File.WriteAllText(SessionState.Path.GetUnresolvedProviderPathFromPSPath(JsonPath), json);
+            if (jsonPath is not null) File.WriteAllText(jsonPath, json);
             if (JsonOnly) { WriteObject(json); return; }
         }
         var request = new ReleaseValidationRequest
         {
-            ProjectRoot = ProjectRoot is null ? (configPath is null ? Path.GetFullPath(Path.Combine(SessionState.Path.CurrentFileSystemLocation.Path, spec.ProjectRoot)) : null)
-                : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ProjectRoot),
+            ProjectRoot = projectRoot ?? (configPath is null ? Path.GetFullPath(Path.Combine(currentDirectory, spec.ProjectRoot)) : null),
             Version = Version
         };
         foreach (DictionaryEntry entry in Variables) request.Variables[Convert.ToString(entry.Key)!] = Convert.ToString(entry.Value) ?? string.Empty;

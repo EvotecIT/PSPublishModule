@@ -13,7 +13,8 @@ internal static partial class Program
         {
             var (config, request) = ParseReleaseValidationArguments(args);
             if (string.IsNullOrWhiteSpace(config)) return WriteReleaseError(IsJsonOutput(args), "validate-release", 2, usage, logger);
-            var report = new ReleaseValidationService().RunAsync(ReleaseValidationService.Load(config!), config, request, cancellation.Token).GetAwaiter().GetResult();
+            var spec = ReleaseValidationService.LoadAsync(config!, cancellation.Token).GetAwaiter().GetResult();
+            var report = new ReleaseValidationService().RunAsync(spec, config, request, cancellation.Token).GetAwaiter().GetResult();
             if (IsJsonOutput(args)) Console.WriteLine(ReleaseValidationService.SerializeReport(report));
             else
             {

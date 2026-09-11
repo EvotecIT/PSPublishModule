@@ -84,13 +84,13 @@ public sealed partial class ReleaseValidationService
         var environment = new Dictionary<string, string?> { ["NUGET_PACKAGES"] = cache };
         // Mixed-version contracts leave version selection to the consumer's MSBuild project.
         // The restored archive hashes below still prove every selected staged version.
-        var versionArguments = sameVersion ? new[] { "-p:PackageVersion={Version}" } : Array.Empty<string>();
+        var versionArguments = sameVersion ? new[] { "-p:PackageVersion=" + report.Version } : Array.Empty<string>();
         await RunCommandAsync(new ReleaseCommandValidation
         {
             Name = "Restore package consumer", FileName = "dotnet", WorkingDirectory = projectRoot, TimeoutSeconds = 600,
             Arguments = new[] { "restore", project, "--configfile", config, "--packages", cache, "--no-http-cache", "-p:Configuration=Release", "--nologo" }.Concat(versionArguments).ToArray(),
             Environment = environment
-        }, values, report, cancellationToken).ConfigureAwait(false);
+        }, values, report, cancellationToken, expandVariables: false).ConfigureAwait(false);
         foreach (var package in packages.Values)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -109,8 +109,8 @@ public sealed partial class ReleaseValidationService
             await RunCommandAsync(new ReleaseCommandValidation
             {
                 Name = "Run package consumer " + framework, FileName = "dotnet", WorkingDirectory = projectRoot, TimeoutSeconds = 600,
-                Arguments = new[] { "run", "--project", project, "--framework", framework, "--configuration", "Release", "--no-restore", "--nologo" }.Concat(versionArguments).ToArray(),
+                Arguments = new[] { "run", "--project", project, "--framework", Expand(framework, values), "--configuration", "Release", "--no-restore", "--nologo" }.Concat(versionArguments).ToArray(),
                 Environment = environment
-            }, values, report, cancellationToken).ConfigureAwait(false);
+            }, values, report, cancellationToken, expandVariables: false).ConfigureAwait(false);
     }
 }

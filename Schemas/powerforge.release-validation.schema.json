@@ -429,7 +429,11 @@
           "type": "string"
         },
         "CommandName": {
-          "type": "string"
+          "type": "string",
+          "allOf": [
+            { "pattern": "\\S" },
+            { "not": { "pattern": "[/\\\\:]" } }
+          ]
         },
         "IncludeManifestInstall": {
           "type": "boolean"

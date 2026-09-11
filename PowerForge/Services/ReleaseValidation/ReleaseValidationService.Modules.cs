@@ -96,13 +96,14 @@ public sealed partial class ReleaseValidationService
             if (spec.Hosts.Length == 0) throw new InvalidOperationException("Module probes require at least one PowerShell host.");
             foreach (var host in spec.Hosts)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var probeRoot = Directory.CreateDirectory(Path.Combine(workspace.Root, Guid.NewGuid().ToString("N"))).FullName;
                 await RunCommandAsync(new ReleaseCommandValidation
                 {
-                    Name = "Module runtime " + host, FileName = host,
+                    Name = "Module runtime " + host, FileName = Expand(host, variables),
                     Arguments = new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", Resolve(spec.ProbeScript, variables) },
                     Environment = new Dictionary<string, string?> { ["POWERFORGE_MODULE_PATH"] = root, ["POWERFORGE_TEST_ROOT"] = probeRoot }
-                }, variables, report, cancellationToken).ConfigureAwait(false);
+                }, variables, report, cancellationToken, expandVariables: false).ConfigureAwait(false);
             }
         }
     }

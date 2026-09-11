@@ -11,6 +11,7 @@ public sealed class ReleaseValidationPostStagingTests : IDisposable
     [InlineData("default", true)]
     [InlineData("relative", true)]
     [InlineData("absolute", true)]
+    [InlineData("literal-braces", true)]
     [InlineData("outside", false)]
     [InlineData("missing", false)]
     [InlineData("unlisted", false)]
@@ -19,7 +20,7 @@ public sealed class ReleaseValidationPostStagingTests : IDisposable
         var config = Payload("release.json", "{}");
         var project = Payload("App.csproj", "<Project><PropertyGroup><Version>1.2.3</Version></PropertyGroup></Project>");
         var artifact = Payload("app.zip", "built CLI artifact");
-        var stage = Path.Combine(_root, "stage");
+        var stage = Path.Combine(_root, mode == "literal-braces" ? "{build_id}" : "stage");
         var validationPath = Payload("validation.json", ReleaseValidationService.Serialize(new() {
             CliArtifacts = new() { Target = "app", Runtimes = ["win-x64"], Frameworks = ["net10.0"], Styles = ["Portable"] }
         }));

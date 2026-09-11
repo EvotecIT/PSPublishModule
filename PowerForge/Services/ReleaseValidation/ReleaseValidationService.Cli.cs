@@ -85,9 +85,9 @@ public sealed partial class ReleaseValidationService
             }
             if (string.IsNullOrWhiteSpace(declaredPath))
                 throw new InvalidOperationException("CLI artifact does not declare an archive, executable, or output directory.");
-            var path = Resolve(declaredPath, variables);
+            var path = NormalizePath(declaredPath, variables);
             if (variables.TryGetValue("StagingRoot", out var stagingRoot) && unified)
-                ValidateStagedCliPath(Resolve(stagingRoot, variables), path);
+                ValidateStagedCliPath(NormalizePath(stagingRoot, variables), path);
             if (!directoryArtifact)
                 FileSystemPathSafety.RejectReparsePoints(path, Path.GetDirectoryName(path), "CLI artifact");
             var exists = directoryArtifact
@@ -119,13 +119,13 @@ public sealed partial class ReleaseValidationService
                 var declaredPath = EffectiveReleaseAssetPath(entry);
                 if (string.IsNullOrWhiteSpace(declaredPath))
                     throw new InvalidOperationException("Staged release evidence does not declare a path.");
-                var path = Resolve(declaredPath, variables);
-                ValidateStagedCliPath(Resolve(stagingRoot, variables), path);
+                var path = NormalizePath(declaredPath, variables);
+                ValidateStagedCliPath(NormalizePath(stagingRoot, variables), path);
                 if (!manifestPaths.Add(path) || !File.Exists(path) || new FileInfo(path).Length == 0)
                     throw new InvalidOperationException($"Staged release evidence is duplicated, missing, or empty: {path}");
             }
             if (stagedAssets is not null && (stagedAssets.Length != manifestPaths.Count ||
-                !manifestPaths.SetEquals(stagedAssets.Select(path => Resolve(path, variables)))))
+                !manifestPaths.SetEquals(stagedAssets.Select(path => NormalizePath(path, variables)))))
                 throw new InvalidOperationException("The staged asset set does not match the release manifest.");
         }
         cancellationToken.ThrowIfCancellationRequested();

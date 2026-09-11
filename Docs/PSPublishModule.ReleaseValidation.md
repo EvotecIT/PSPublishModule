@@ -78,6 +78,8 @@ Command `Platforms` accepts `Windows`, `Linux`, and `OSX`, case-insensitively. A
 
 An overridden command `PATH` controls executable lookup on Windows and Unix; removing it disables bare-name lookup. Use an absolute executable path when no search path is wanted. Relative search entries use the command's working directory. The standalone C# `RunCommandAsync` API defaults `ProjectRoot` to the current directory and overlays caller variables case-insensitively without changing the caller's dictionary.
 
+Variable names use ASCII letters, digits, and underscores, starting with a letter or underscore. For example, `Package_Root` expands in `{package_root}`. Unsupported variable names fail before validation starts; missing supported placeholders report an error. JSON object braces, such as in `{"count":2}`, are not placeholders.
+
 Every validation process retains at most 1,048,576 characters per output stream. This includes product probes, package verification, tool installation, consumer restore/build commands, and staged PowerShell actions. Exceeding either limit fails validation even when the process exits successfully. Temporary-directory cleanup is best-effort and does not replace a probe's result or cancellation.
 
 Validation probes run in an owned Windows job or a process group on 64-bit Linux/macOS. PowerForge terminates remaining processes in that scope when a probe returns, times out, or is cancelled, even if the original process has already exited. Output captured before the boundary includes unfinished lines. On Unix, a program can deliberately leave the group by creating another group or session; process ownership is a cleanup mechanism, not a security sandbox.
@@ -105,6 +107,8 @@ An existing unified release can invoke the same JSON contract before publication
 PowerForge supplies the selected release lanes and paths such as `{ModuleArchive}`, `{PackageRoot}`, `{ReleaseManifestPath}`, and `{StagingRoot}`. Unselected lanes are not validated. If selection removes every contract, the action reports a successful skip; an originally empty contract still fails. Additional `Commands` remain active regardless of lane selection. A tools-only run retains the CLI target's version instead of borrowing a module version.
 
 JSON actions retain their own `ProjectRoot`, resolved relative to the validation file, just as standalone validation does. Script context uses the resolved root of the first executed module, package, tool, or Apple lane, falling back to the release configuration directory.
+
+The action's `TimeoutSeconds` budget starts before preparation and configuration loading, and continues through artifact checks and probes. Caller cancellation stays distinct from an action timeout. C# callers can use `ReleaseValidationService.LoadAsync(path, cancellationToken)` for cancellable configuration loading; `Load(path)` remains available for synchronous callers.
 
 The shared validation version includes the module's prerelease label. For a tools-only release whose tool artifacts share one version, PowerForge supplies that version to script context, `POWERFORGE_RELEASE_VERSION`, and JSON command `{Version}` variables. If tool targets have different versions, the shared version is empty; scripts can inspect each asset's version, and a `CliArtifacts` contract selects its named target's version.
 
