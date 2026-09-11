@@ -70,7 +70,7 @@ public sealed partial class ReleaseValidationService
     private async Task<ProcessRunResult> RunCommandAsync(ReleaseCommandValidation command,
         IReadOnlyDictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
     {
-        if (command.Platforms.Length > 0 && !command.Platforms.Contains(CurrentPlatform, StringComparer.OrdinalIgnoreCase))
+        if (!IsCommandApplicable(command))
         {
             report.Checks.Add($"{command.Name}: not applicable on {CurrentPlatform}.");
             return new ProcessRunResult(0, string.Empty, string.Empty, command.FileName, TimeSpan.Zero, false);
@@ -111,6 +111,18 @@ public sealed partial class ReleaseValidationService
         }
         report.Checks.Add(command.Name);
         return result;
+    }
+
+    private static bool IsCommandApplicable(ReleaseCommandValidation command)
+    {
+        foreach (var platform in command.Platforms)
+        {
+            if (!string.Equals(platform, "Windows", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(platform, "Linux", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(platform, "OSX", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"{command.Name}: unknown platform '{platform}'. Use Windows, Linux, or OSX.");
+        }
+        return command.Platforms.Length == 0 || command.Platforms.Contains(CurrentPlatform, StringComparer.OrdinalIgnoreCase);
     }
 
     private static string CurrentPlatform => FrameworkCompatibility.IsWindows() ? "Windows" :

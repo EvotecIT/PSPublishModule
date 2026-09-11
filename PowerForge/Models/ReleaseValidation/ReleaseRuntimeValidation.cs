@@ -27,7 +27,7 @@ public sealed class ReleaseCommandValidation
     public string[] NonEmptyFiles { get; set; } = Array.Empty<string>();
     /// <summary>Child environment overrides.</summary>
     public Dictionary<string, string?> Environment { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    /// <summary>Optional supported platforms: Windows, Linux, OSX. Empty runs everywhere.</summary>
+    /// <summary>Optional supported platforms: Windows, Linux, OSX, matched case-insensitively. An empty list runs everywhere; unknown names are rejected.</summary>
     public string[] Platforms { get; set; } = Array.Empty<string>();
 }
 
@@ -87,7 +87,7 @@ public sealed class ModuleArtifactValidation
 /// <summary>Authenticode requirements for a file set.</summary>
 public sealed class PayloadSignatureValidation
 {
-    /// <summary>Relative file patterns to inspect.</summary>
+    /// <summary>Alternative relative file patterns to inspect. Their union must select at least one payload file.</summary>
     public string[] Include { get; set; } = new[] { "**/*.dll", "**/*.ps1", "**/*.psm1", "**/*.psd1" };
     /// <summary>Optional allowed signer certificate thumbprints.</summary>
     public string[] Thumbprints { get; set; } = Array.Empty<string>();

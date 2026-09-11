@@ -46,7 +46,6 @@ internal sealed partial class UnixOwnedProcessExecution : OwnedProcessExecution
 
     internal override void Start()
     {
-        using var arguments = new NativeStringArray(new[] { StartInfo.FileName }.Concat(ReadArguments()));
         using var environment = new NativeStringArray(StartInfo.EnvironmentVariables.Keys.Cast<string>()
             .Select(key => key + "=" + StartInfo.EnvironmentVariables[key]));
         OpenPipes();
@@ -64,10 +63,24 @@ internal sealed partial class UnixOwnedProcessExecution : OwnedProcessExecution
             Check(SpawnAttributesSetFlags(attributes, 2), "posix_spawnattr_setflags"); // POSIX_SPAWN_SETPGROUP
             Check(SpawnActionsInit(actions), "posix_spawn_file_actions_init");
             actionsReady = true;
-            Check(SpawnActionsChangeDirectory(actions, StartInfo.WorkingDirectory), "posix_spawn_file_actions_addchdir_np");
+            var executable = ResolveExecutablePath();
+            var command = new[] { StartInfo.FileName }.Concat(ReadArguments());
+            try
+            {
+                Check(SpawnActionsChangeDirectory(actions, StartInfo.WorkingDirectory), "posix_spawn_file_actions_addchdir_np");
+            }
+            catch (EntryPointNotFoundException) when (!_mac)
+            {
+                // Older glibc has no spawn chdir extension. POSIX sh changes only
+                // the child's directory, then exec retains the owned group leader.
+                // Values are positional arguments, never interpolated shell code.
+                command = CreateWorkingDirectoryFallback(new[] { executable }.Concat(ReadArguments()), StartInfo.WorkingDirectory);
+                executable = "/bin/sh";
+            }
+            using var arguments = new NativeStringArray(command);
             AddPipe(actions, OutputPipe, 1);
             AddPipe(actions, ErrorPipe, 2);
-            Check(Spawn(out var processId, ResolveExecutablePath(), actions, attributes, arguments.Pointer, environment.Pointer), "posix_spawnp");
+            Check(Spawn(out var processId, executable, actions, attributes, arguments.Pointer, environment.Pointer), "posix_spawnp");
             _id = processId;
         }
         finally
@@ -79,6 +92,11 @@ internal sealed partial class UnixOwnedProcessExecution : OwnedProcessExecution
             CloseChildPipeHandles();
         }
     }
+
+    /// <summary>Builds the POSIX-shell launch used when libc cannot set the child working directory.</summary>
+    internal static IEnumerable<string> CreateWorkingDirectoryFallback(IEnumerable<string> command, string workingDirectory)
+        => new[] { "/bin/sh", "-c", "cd -P \"$1\" || exit; shift; exec \"$@\"", "powerforge-owned-process", Path.Combine(Environment.CurrentDirectory, workingDirectory) }
+            .Concat(command);
 
     private IEnumerable<string> ReadArguments()
     {

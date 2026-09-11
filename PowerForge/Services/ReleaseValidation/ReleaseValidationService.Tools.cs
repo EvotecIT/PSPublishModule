@@ -53,7 +53,7 @@ public sealed partial class ReleaseValidationService
                 foreach (var pair in command.Environment) childEnvironment[pair.Key] = pair.Value;
                 var localTool = manifestInstall && string.Equals(command.FileName, "{ToolPath}", StringComparison.OrdinalIgnoreCase);
                 var workingDirectory = command.WorkingDirectory ?? workspace.Root;
-                if (localTool && (command.Platforms.Length == 0 || command.Platforms.Contains(CurrentPlatform, StringComparer.OrdinalIgnoreCase)))
+                if (localTool && IsCommandApplicable(command))
                 {
                     // dotnet tool run discovers its manifest from the working directory; it has no manifest-path option.
                     var resolvedDirectory = Resolve(workingDirectory, values).TrimEnd(Path.DirectorySeparatorChar);

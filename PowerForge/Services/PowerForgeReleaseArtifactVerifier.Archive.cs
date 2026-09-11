@@ -393,16 +393,22 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         return output.ToArray();
     }
 
-    private static void CopyBounded(Stream input, Stream output, long maximumBytes, string label)
+    /// <summary>Copies at most the allowed actual bytes, with cancellation checked between IO operations.</summary>
+    internal static long CopyBounded(Stream input, Stream output, long maximumBytes, string label,
+        CancellationToken cancellationToken = default)
     {
         var buffer = new byte[81920];
         long total = 0;
         int read;
-        while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+        while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            read = input.Read(buffer, 0, buffer.Length);
+            if (read == 0) return total;
             total = checked(total + read);
             if (total > maximumBytes)
                 throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
+            cancellationToken.ThrowIfCancellationRequested();
             output.Write(buffer, 0, read);
         }
     }

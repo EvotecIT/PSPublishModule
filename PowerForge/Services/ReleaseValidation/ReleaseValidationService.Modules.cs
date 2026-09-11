@@ -25,7 +25,10 @@ public sealed partial class ReleaseValidationService
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 using var source = pair.Value.Open();
                 using var destination = File.Create(path);
-                await source.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
+                var copied = PowerForgeReleaseArtifactVerifier.CopyBounded(source, destination, pair.Value.Length,
+                    $"Module archive entry '{pair.Key}'", cancellationToken);
+                if (copied != pair.Value.Length)
+                    throw new InvalidDataException($"Module archive entry '{pair.Key}' has an unexpected extracted length.");
             }
             if (!string.IsNullOrEmpty(spec.ArchiveRoot)) root = Within(root, spec.ArchiveRoot);
         }
@@ -59,11 +62,14 @@ public sealed partial class ReleaseValidationService
         }
         if (spec.Signatures is not null)
         {
+            var signedFiles = Enumerable.Range(0, paths.Length)
+                .Where(index => spec.Signatures.Include.Any(pattern => Matches(files[index], pattern))).ToArray();
+            if (signedFiles.Length == 0)
+                throw new InvalidOperationException("Module signature validation requires at least one matching payload file.");
             if (!FrameworkCompatibility.IsWindows()) throw new PlatformNotSupportedException("Authenticode validation requires Windows.");
-            CheckEntries("Signed module payload", files, spec.Signatures.Include, Array.Empty<string>());
-            for (var index = 0; index < paths.Length; index++)
+            foreach (var index in signedFiles)
             {
-                if (!spec.Signatures.Include.Any(pattern => Matches(files[index], pattern))) continue;
+                cancellationToken.ThrowIfCancellationRequested();
                 var signature = DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(paths[index]);
                 if (!signature.IsValid || (spec.Signatures.Thumbprints.Length > 0 &&
                     !spec.Signatures.Thumbprints.Any(value => string.Equals(value.Replace(" ", string.Empty), signature.Thumbprint, StringComparison.OrdinalIgnoreCase))))
