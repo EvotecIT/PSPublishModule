@@ -72,7 +72,7 @@ public sealed partial class ReleaseValidationService
         foreach (var artifact in artifacts)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var declaredPath = Text(artifact, unified ? "stagedPath" : "zipPath");
+            var declaredPath = unified ? EffectiveReleaseAssetPath(artifact) : Text(artifact, "zipPath");
             var directoryArtifact = false;
             if (!unified && string.IsNullOrWhiteSpace(declaredPath))
             {
@@ -116,7 +116,10 @@ public sealed partial class ReleaseValidationService
             foreach (var entry in all)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var path = Resolve(Text(entry, "stagedPath"), variables);
+                var declaredPath = EffectiveReleaseAssetPath(entry);
+                if (string.IsNullOrWhiteSpace(declaredPath))
+                    throw new InvalidOperationException("Staged release evidence does not declare a path.");
+                var path = Resolve(declaredPath, variables);
                 ValidateStagedCliPath(Resolve(stagingRoot, variables), path);
                 if (!manifestPaths.Add(path) || !File.Exists(path) || new FileInfo(path).Length == 0)
                     throw new InvalidOperationException($"Staged release evidence is duplicated, missing, or empty: {path}");
@@ -128,6 +131,11 @@ public sealed partial class ReleaseValidationService
         cancellationToken.ThrowIfCancellationRequested();
         report.Checks.Add($"CLI {spec.Target}: {artifacts.Length} artifacts");
     }
+
+    // Generated post-staging assets already live at Path; copied assets use StagedPath.
+    private static string EffectiveReleaseAssetPath(JsonElement entry)
+        => GetProperty(entry, "stagedPath", out var staged) && staged.ValueKind != JsonValueKind.Null
+            ? Text(entry, "stagedPath") : Text(entry, "path");
 
     private static void ValidateStagedCliPath(string stagingRoot, string path)
     {

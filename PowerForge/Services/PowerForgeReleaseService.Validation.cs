@@ -84,8 +84,7 @@ internal sealed partial class PowerForgeReleaseService
                 ToolArtifactsSelected = toolsSelected && ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool),
                 PublishPlan = toolsSelected ? result.DotNetToolPlan : null,
                 StagedAssets = result.ReleaseAssetEntries
-                    .Where(static asset => !string.IsNullOrWhiteSpace(asset.StagedPath))
-                    .Select(static asset => asset.StagedPath!)
+                    .Select(static asset => asset.StagedPath ?? asset.Path)
                     .Distinct(PathComparer)
                     .ToArray()
             };

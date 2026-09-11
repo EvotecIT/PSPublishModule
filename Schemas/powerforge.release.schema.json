@@ -109,6 +109,14 @@
               { "required": [ "FilePath" ], "not": { "required": [ "ConfigPath" ] } },
               { "required": [ "ConfigPath" ], "not": { "required": [ "FilePath" ] } }
             ],
+            "if": { "required": [ "ConfigPath" ] },
+            "then": {
+              "properties": {
+                "Environment": { "maxProperties": 0 },
+                "WorkingDirectory": { "not": { "type": "string", "pattern": "\\S" } },
+                "PreferWindowsPowerShell": { "const": false }
+              }
+            },
             "properties": {
               "Enabled": { "type": "boolean" },
               "Name": { "type": [ "string", "null" ] },
