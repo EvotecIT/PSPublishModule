@@ -48,8 +48,8 @@ On Unix, extracted module files and staged consumer inputs retain ordinary permi
 
 ## Choose the checks that belong to the product
 
-- `Packages`: package identity, version, contents, symbol contents, dependency groups, runtime-only dependencies, and signatures.
-- `Modules`: module ZIP or directory contents, full module identity including `PrivateData.PSData.Prerelease`, architecture, assembly versions, and optional Authenticode requirements. `ProbeScript` runs in each configured `Hosts` entry with `POWERFORGE_MODULE_PATH` and a disposable `POWERFORGE_TEST_ROOT`.
+- `Packages`: package identity, version, contents, symbol contents, dependency groups, runtime-only dependencies, and signatures. Primary and symbol archives are matched by their embedded NuGet identity, not their filenames. Consumer and tool feeds use canonical package filenames without renaming the input artifacts.
+- `Modules`: module ZIP or directory contents, full module identity including `PrivateData.PSData.Prerelease`, architecture, assembly versions, and optional Authenticode requirements. Each configured `Hosts` entry receives a fresh copy of the validated module through `POWERFORGE_MODULE_PATH` and a disposable `POWERFORGE_TEST_ROOT`, with its working directory set to the module copy. Directory inputs are copied before validation; probes shipped inside that directory run from the copy so their `PSScriptRoot` is isolated too. These copies isolate ordinary module and relative writes, not scripts that deliberately access external paths.
 - `Consumers`: copy a product-owned smoke project into a temporary workspace, restore the exact staged first-party package bytes, and run it for the selected frameworks. Other dependencies may come from `DependencySources`.
 - `Tools`: install the exact local `.NET` tool package into an isolated tool directory, optionally also through a local manifest, and run commands using `{ToolPath}` and `{WorkRoot}`. The user's global tools and NuGet package cache are not used for these installations. With `IncludeManifestInstall`, `{ToolPath}` probes must leave `WorkingDirectory` unset or set it to `{WorkRoot}` so `dotnet tool run` selects the isolated manifest. Use tool-path-only validation when a probe requires another working directory.
 - `CliArtifacts`: compare a publish manifest with the runtime/framework/style matrix from `PublishConfigPath`, or with an explicit matrix. Staged checks also validate file existence, containment, and the supplied asset set. Unzipped outputs are checked through the declared executable or, when no executable is declared, a nonempty output directory.
@@ -105,6 +105,8 @@ An existing unified release can invoke the same JSON contract before publication
 ```
 
 PowerForge supplies the selected release lanes and paths such as `{ModuleArchive}`, `{PackageRoot}`, `{ReleaseManifestPath}`, and `{StagingRoot}`. Unselected lanes are not validated. If selection removes every contract, the action reports a successful skip; an originally empty contract still fails. Additional `Commands` remain active regardless of lane selection. A tools-only run retains the CLI target's version instead of borrowing a module version.
+
+An explicit release target filter also skips a `CliArtifacts` contract whose target is absent from the effective selected tool plan. Targets retained by the planner as dependencies are still validated, and product commands remain active. Without an explicit target filter, a missing target remains an error.
 
 JSON actions retain their own `ProjectRoot`, resolved relative to the validation file, just as standalone validation does. Script context uses the resolved root of the first executed module, package, tool, or Apple lane, falling back to the release configuration directory.
 

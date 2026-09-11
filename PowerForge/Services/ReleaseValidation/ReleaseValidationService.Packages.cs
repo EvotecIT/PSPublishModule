@@ -32,9 +32,12 @@ public sealed partial class ReleaseValidationService
             PowerForgeReleaseArtifactVerifier.MaxArchiveMetadataBytes, "Package nuspec", cancellationToken);
         metadata.Position = 0;
         var manifest = new NuspecReader(metadata);
+        var id = manifest.GetId();
+        if (!PackageIdValidator.IsValidPackageId(id))
+            throw new InvalidDataException($"Package ID '{id}' is invalid.");
         var package = new PackageInspection
         {
-            Path = path, Id = manifest.GetId(), Version = manifest.GetVersion().ToNormalizedString(),
+            Path = path, Id = id, Version = manifest.GetVersion().ToNormalizedString(),
             Files = reader.GetFiles().ToArray(), Dependencies = manifest.GetDependencyGroups().ToArray()
         };
         cancellationToken.ThrowIfCancellationRequested();
@@ -42,14 +45,22 @@ public sealed partial class ReleaseValidationService
     }
 
     private static IEnumerable<PackageInspection> InspectPrimaryPackages(string root, CancellationToken cancellationToken)
+        => InspectPackages(root, symbols: false, cancellationToken);
+
+    // Flat-folder feeds need NuGet's canonical identity filename, not a caller's renamed artifact filename.
+    private static string PackageFeedPath(string feed, PackageInspection package)
+        => Within(feed, new PackagePathResolver(feed).GetPackageFileName(
+            new NuGet.Packaging.Core.PackageIdentity(package.Id, NuGetVersion.Parse(package.Version))));
+
+    private static IEnumerable<PackageInspection> InspectPackages(string root, bool symbols, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         FileSystemPathSafety.RejectReparsePoints(root, root, "Package directory");
         foreach (var path in Directory.EnumerateFiles(root))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) &&
-                !path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+            if (symbols ? path.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase) :
+                path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) && !path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
             {
                 FileSystemPathSafety.RejectReparsePoints(path, root, "Package input");
                 yield return InspectPackage(path, cancellationToken);
@@ -65,6 +76,8 @@ public sealed partial class ReleaseValidationService
         var root = Resolve(spec.Path, variables);
         variables["PackageRoot"] = root;
         var actual = InspectPrimaryPackages(root, cancellationToken).ToArray();
+        var symbolPackages = spec.Items.Any(contract => contract.SymbolEntries.Length > 0 || contract.ForbiddenSymbolEntries.Length > 0)
+            ? InspectPackages(root, symbols: true, cancellationToken).ToArray() : Array.Empty<PackageInspection>();
         var selected = new Dictionary<string, PackageInspection>(StringComparer.OrdinalIgnoreCase);
         foreach (var contract in spec.Items)
         {
@@ -83,10 +96,7 @@ public sealed partial class ReleaseValidationService
             ValidateDependencies(package, contract);
             if (contract.SymbolEntries.Length > 0 || contract.ForbiddenSymbolEntries.Length > 0)
             {
-                var symbols = InspectPackage(FindSymbolPackage(package.Path, cancellationToken), cancellationToken);
-                if (!string.Equals(symbols.Id, package.Id, StringComparison.OrdinalIgnoreCase) ||
-                    NuGetVersion.Parse(symbols.Version) != NuGetVersion.Parse(package.Version))
-                    throw new InvalidOperationException($"Symbol package identity does not match '{package.Id}'.");
+                var symbols = FindSymbolPackage(package, symbolPackages, cancellationToken);
                 CheckEntries(package.Id + " symbols", symbols.Files, contract.SymbolEntries, contract.ForbiddenSymbolEntries);
             }
             if (spec.VerifySignatures || spec.RequireAuthorSignature || spec.AuthorCertificateFingerprints.Length > 0)
@@ -104,21 +114,20 @@ public sealed partial class ReleaseValidationService
         return selected;
     }
 
-    private static string FindSymbolPackage(string packagePath, CancellationToken cancellationToken)
+    private static PackageInspection FindSymbolPackage(PackageInspection package, PackageInspection[] symbols, CancellationToken cancellationToken)
     {
-        var root = Path.GetDirectoryName(packagePath)!;
-        var expected = Path.GetFileNameWithoutExtension(packagePath) + ".snupkg";
-        string? match = null;
-        foreach (var path in Directory.EnumerateFiles(root))
+        var version = NuGetVersion.Parse(package.Version);
+        PackageInspection? match = null;
+        foreach (var candidate in symbols)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!string.Equals(Path.GetFileName(path), expected, StringComparison.OrdinalIgnoreCase)) continue;
-            if (match is not null) throw new InvalidOperationException($"Symbol package '{expected}' is ambiguous.");
-            FileSystemPathSafety.RejectReparsePoints(path, root, "Symbol package input");
-            match = path;
+            if (!string.Equals(candidate.Id, package.Id, StringComparison.OrdinalIgnoreCase) ||
+                NuGetVersion.Parse(candidate.Version) != version) continue;
+            if (match is not null) throw new InvalidOperationException($"Symbol package identity '{package.Id}/{package.Version}' is ambiguous.");
+            match = candidate;
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return match ?? throw new InvalidOperationException($"Symbol package '{expected}' is missing.");
+        return match ?? throw new InvalidOperationException($"Symbol package identity '{package.Id}/{package.Version}' is missing.");
     }
 
     private static void CheckEntries(string name, string[] files, string[] required, string[] forbidden)

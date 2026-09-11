@@ -73,16 +73,18 @@ public sealed class ReleaseValidationCommandPathTests : IDisposable
     {
         var root = Directory.CreateDirectory(Path.Combine(_root, "{build_id}")).FullName;
         File.WriteAllText(Path.Combine(root, "Example.psd1"), "@{ ModuleVersion = '1.2.3' }");
-        var script = Path.Combine(root, "probe.ps1");
+        var probeDirectory = Directory.CreateDirectory(Path.Combine(_root, "{probe_id}")).FullName;
+        var script = Path.Combine(probeDirectory, "probe.ps1");
         File.WriteAllText(script, "Write-Output probe");
         var runner = new Runner();
         var report = await new ReleaseValidationService(runner).RunAsync(new() { Modules = [new() {
-            Path = "{ProjectRoot}", Manifest = "Example.psd1", ProbeScript = "{ProjectRoot}/probe.ps1", Hosts = ["probe"]
-        }] }, request: new() { ProjectRoot = root });
+            Path = "{ProjectRoot}", Manifest = "Example.psd1", ProbeScript = "{ProbeRoot}/probe.ps1", Hosts = ["probe"]
+        }] }, request: new() { ProjectRoot = root, Variables = new() { ["ProbeRoot"] = probeDirectory } });
         Assert.True(report.Success, string.Join("; ", report.Errors));
         var observed = Assert.Single(runner.Requests);
         Assert.Equal(script, observed.Arguments.Last());
-        Assert.Equal(root, observed.EnvironmentVariables!["POWERFORGE_MODULE_PATH"]);
+        Assert.NotEqual(root, observed.EnvironmentVariables!["POWERFORGE_MODULE_PATH"]);
+        Assert.False(Directory.Exists(observed.EnvironmentVariables["POWERFORGE_MODULE_PATH"]));
         Assert.False(Directory.Exists(observed.EnvironmentVariables["POWERFORGE_TEST_ROOT"]));
     }
 

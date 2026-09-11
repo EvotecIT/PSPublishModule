@@ -25,22 +25,24 @@ public sealed partial class ReleaseValidationService
         return path;
     }
 
-    private static async Task CopyProjectAsync(string source, string destination, CancellationToken cancellationToken)
+    // Module payloads retain every directory; source consumers omit build and Git state.
+    private static async Task CopyValidationDirectoryAsync(string source, string destination, CancellationToken cancellationToken,
+        bool excludeBuildState = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var directory = new DirectoryInfo(source);
         if ((directory.Attributes & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidOperationException($"Linked project directory is not supported: {source}");
+            throw new InvalidOperationException($"Linked validation directory is not supported: {source}");
         Directory.CreateDirectory(destination);
         foreach (var entry in directory.EnumerateFileSystemInfos())
         {
             cancellationToken.ThrowIfCancellationRequested();
             if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidOperationException($"Linked project input is not supported: {entry.FullName}");
+                throw new InvalidOperationException($"Linked validation input is not supported: {entry.FullName}");
             if (entry is DirectoryInfo child)
             {
-                if (child.Name is "bin" or "obj" or ".git") continue;
-                await CopyProjectAsync(child.FullName, Path.Combine(destination, child.Name), cancellationToken).ConfigureAwait(false);
+                if (excludeBuildState && child.Name is ("bin" or "obj" or ".git")) continue;
+                await CopyValidationDirectoryAsync(child.FullName, Path.Combine(destination, child.Name), cancellationToken, excludeBuildState).ConfigureAwait(false);
             }
             else await CopyValidationFileAsync(entry.FullName, Path.Combine(destination, entry.Name), cancellationToken).ConfigureAwait(false);
         }
@@ -71,12 +73,12 @@ public sealed partial class ReleaseValidationService
         if (packages.Count == 0) throw new InvalidOperationException("Package consumers require a declared package set.");
         using var workspace = new ValidationWorkspace();
         var projectRoot = Path.Combine(workspace.Root, "project");
-        await CopyProjectAsync(Resolve(spec.SourceDirectory, variables), projectRoot, cancellationToken).ConfigureAwait(false);
+        await CopyValidationDirectoryAsync(Resolve(spec.SourceDirectory, variables), projectRoot, cancellationToken, excludeBuildState: true).ConfigureAwait(false);
         var project = Within(projectRoot, spec.ProjectFile);
         if (!File.Exists(project)) throw new InvalidOperationException($"Smoke project does not exist: {project}");
         var feed = Directory.CreateDirectory(Path.Combine(workspace.Root, "feed")).FullName;
         foreach (var package in packages.Values)
-            await CopyValidationFileAsync(package.Path, Path.Combine(feed, Path.GetFileName(package.Path)), cancellationToken).ConfigureAwait(false);
+            await CopyValidationFileAsync(package.Path, PackageFeedPath(feed, package), cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var config = WriteValidationNuGetConfig(workspace.Root, feed, packages.Keys, spec.DependencySources);
         var cache = Path.Combine(workspace.Root, "packages");
@@ -97,7 +99,7 @@ public sealed partial class ReleaseValidationService
             var id = package.Id.ToLowerInvariant();
             var version = package.Version.ToLowerInvariant();
             var restored = Path.Combine(cache, id, version, id + "." + version + ".nupkg");
-            var staged = Path.Combine(feed, Path.GetFileName(package.Path));
+            var staged = PackageFeedPath(feed, package);
             if (!File.Exists(restored) ||
                 await DotNetPublishReleaseArtifactVerifier.ComputeSha256Async(restored, cancellationToken).ConfigureAwait(false) !=
                 await DotNetPublishReleaseArtifactVerifier.ComputeSha256Async(staged, cancellationToken).ConfigureAwait(false))

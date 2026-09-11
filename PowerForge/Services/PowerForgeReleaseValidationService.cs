@@ -102,6 +102,13 @@ internal sealed class PowerForgeReleaseValidationService
             spec.Tools = Array.Empty<DotNetToolValidation>();
         }
         if (!context.ToolsSelected || !context.ToolArtifactsSelected) spec.CliArtifacts = null;
+        string? skippedTarget = null;
+        if (spec.CliArtifacts is not null && context.SelectedToolTargets is not null &&
+            !context.SelectedToolTargets.Contains(spec.CliArtifacts.Target, StringComparer.OrdinalIgnoreCase))
+        {
+            skippedTarget = $"Skipped: CLI target '{spec.CliArtifacts.Target}' was not selected for this release.";
+            spec.CliArtifacts = null;
+        }
         // Keep JSON path semantics identical to standalone validation, including explicitly separate lane roots.
         var projectRoot = ResolvePath(Path.GetDirectoryName(path)!, spec.ProjectRoot);
         if (hadContracts && spec.SchemaVersion == 1 && !ReleaseValidationService.HasContracts(spec))
@@ -110,7 +117,7 @@ internal sealed class PowerForgeReleaseValidationService
             return new PowerForgeReleaseValidationResult
             {
                 Name = name, Succeeded = true, ExitCode = 0, Executable = "PowerForge", FilePath = path,
-                WorkingDirectory = projectRoot, StdOut = "Skipped: validation contracts belong to unselected release lanes."
+                WorkingDirectory = projectRoot, StdOut = skippedTarget ?? "Skipped: validation contracts belong to unselected release lanes."
             };
         }
         var request = new ReleaseValidationRequest { Version = context.ResolvedVersion, PublishPlan = context.PublishPlan,
@@ -136,6 +143,7 @@ internal sealed class PowerForgeReleaseValidationService
             .Select(entry => Path.GetDirectoryName(entry.StagedPath!)!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (packageRoots.Length == 1) request.Variables["PackageRoot"] = packageRoots[0];
         var report = new ReleaseValidationService(_processRunner).RunAsync(spec, path, request, cancellationToken).GetAwaiter().GetResult();
+        if (skippedTarget is not null) report.Checks.Insert(0, skippedTarget);
         return new PowerForgeReleaseValidationResult
         {
             Name = name, Succeeded = report.Success, ExitCode = report.Success ? 0 : 1,

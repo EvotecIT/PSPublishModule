@@ -11,8 +11,13 @@ public sealed partial class ReleaseValidationService
     {
         using var workspace = new ValidationWorkspace();
         var input = Resolve(spec.Path, variables);
-        var root = input;
-        if (!Directory.Exists(input))
+        var directoryInput = Directory.Exists(input);
+        var root = Path.Combine(workspace.Root, "module");
+        if (directoryInput)
+        {
+            await CopyValidationDirectoryAsync(input, root, cancellationToken).ConfigureAwait(false);
+        }
+        else
         {
             root = Directory.CreateDirectory(Path.Combine(workspace.Root, "module")).FullName;
             using var archiveInput = new ArchiveMetadataReadStream(File.OpenRead(input), cancellationToken);
@@ -97,12 +102,25 @@ public sealed partial class ReleaseValidationService
             foreach (var host in spec.Hosts)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var probeRoot = Directory.CreateDirectory(Path.Combine(workspace.Root, Guid.NewGuid().ToString("N"))).FullName;
+                using var probeWorkspace = new ValidationWorkspace();
+                var probeRoot = probeWorkspace.Root;
+                var probeModule = Path.Combine(probeRoot, "module");
+                await CopyValidationDirectoryAsync(root, probeModule, cancellationToken).ConfigureAwait(false);
+                var script = Resolve(spec.ProbeScript, variables);
+                // A probe shipped inside a directory module must not expose the original through PSScriptRoot.
+                if (directoryInput)
+                {
+                    var relativeScript = DotNetPublishReleaseArtifactVerifier.GetRelativePath(input, script);
+                    if (!Path.IsPathRooted(relativeScript) && relativeScript != ".." &&
+                        !relativeScript.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                        script = Within(probeModule, relativeScript);
+                }
                 await RunCommandAsync(new ReleaseCommandValidation
                 {
                     Name = "Module runtime " + host, FileName = Expand(host, variables),
-                    Arguments = new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", Resolve(spec.ProbeScript, variables) },
-                    Environment = new Dictionary<string, string?> { ["POWERFORGE_MODULE_PATH"] = root, ["POWERFORGE_TEST_ROOT"] = probeRoot }
+                    WorkingDirectory = probeModule,
+                    Arguments = new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", script },
+                    Environment = new Dictionary<string, string?> { ["POWERFORGE_MODULE_PATH"] = probeModule, ["POWERFORGE_TEST_ROOT"] = probeRoot }
                 }, variables, report, cancellationToken, expandVariables: false).ConfigureAwait(false);
             }
         }

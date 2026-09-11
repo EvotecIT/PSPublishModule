@@ -8,6 +8,31 @@ public sealed class ReleaseValidationPackageBoundsTests : IDisposable
     public ReleaseValidationPackageBoundsTests() => Directory.CreateDirectory(_root);
 
     [Theory]
+    [InlineData("primary", "../outside")]
+    [InlineData("symbol", "../outside")]
+    [InlineData("tool", "../outside")]
+    [InlineData("primary", "..\\outside")]
+    [InlineData("symbol", "..\\outside")]
+    [InlineData("tool", "..\\outside")]
+    public async Task Unsafe_embedded_package_identity_is_rejected_before_feed_creation_or_probes(string lane, string id)
+    {
+        WritePackage(Path.Combine(_root, "renamed.nupkg"), lane == "symbol" ? "Example" : id, "1.2.3", null);
+        if (lane == "symbol") { WritePackage(Path.Combine(_root, "renamed.snupkg"), id, "1.2.3", null); }
+        var runner = new Runner();
+        var spec = lane == "tool"
+            ? new ReleaseValidationSpec { Tools = [new() { PackageRoot = _root, PackageId = id, CommandName = "example" }] }
+            : new ReleaseValidationSpec { Packages = new() { Path = _root, Items = [new() {
+                Id = lane == "symbol" ? "Example" : id, SymbolEntries = lane == "symbol" ? ["*.nuspec"] : []
+            }] } };
+        var report = await new ReleaseValidationService(runner).RunAsync(spec, request: new() { ProjectRoot = _root });
+        Assert.False(report.Success);
+        Assert.Contains("package ID", Assert.Single(report.Errors), StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(report.Checks);
+        Assert.Equal(0, runner.Calls);
+        Assert.All(Directory.GetFiles(_root), path => Assert.StartsWith("renamed.", Path.GetFileName(path)));
+    }
+
+    [Theory]
     [InlineData("primary-entries")]
     [InlineData("tool-entries")]
     [InlineData("symbol-entries")]
@@ -35,12 +60,17 @@ public sealed class ReleaseValidationPackageBoundsTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Distinct_package_versions_restore_and_run_without_a_global_version_override(bool releaseOnly)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Distinct_package_versions_restore_and_run_without_a_global_version_override(bool releaseOnly, bool renamed)
     {
         WritePackage(Path.Combine(_root, "First.1.2.3.nupkg"), "First", "1.2.3", null);
         WritePackage(Path.Combine(_root, "Second.2.3.4.nupkg"), "Second", "2.3.4", null);
+        if (renamed) {
+            File.Move(Path.Combine(_root, "First.1.2.3.nupkg"), Path.Combine(_root, "first-renamed.nupkg"));
+            File.Move(Path.Combine(_root, "Second.2.3.4.nupkg"), Path.Combine(_root, "second-renamed.NUPKG"));
+        }
         var source = Directory.CreateDirectory(Path.Combine(_root, "consumer")).FullName;
         File.WriteAllText(Path.Combine(source, "Probe.csproj"), """
             <Project Sdk="Microsoft.NET.Sdk">
@@ -69,7 +99,7 @@ public sealed class ReleaseValidationPackageBoundsTests : IDisposable
     private static void WritePackage(string path, string id, string version, string? variation)
     {
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
-        var metadata = zip.CreateEntry(id + ".nuspec", CompressionLevel.Optimal);
+        var metadata = zip.CreateEntry("fixture.nuspec", CompressionLevel.Optimal);
         using (var writer = new StreamWriter(metadata.Open())) {
             writer.Write($"<package><metadata><id>{id}</id><version>{version}</version><authors>Tests</authors><description>");
             if (variation?.EndsWith("metadata", StringComparison.Ordinal) == true) {

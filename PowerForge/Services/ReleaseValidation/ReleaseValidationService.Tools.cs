@@ -23,7 +23,7 @@ public sealed partial class ReleaseValidationService
             cancellationToken.ThrowIfCancellationRequested();
             using var workspace = new ValidationWorkspace();
             var feed = Directory.CreateDirectory(Path.Combine(workspace.Root, "feed")).FullName;
-            await CopyValidationFileAsync(package.Path, Path.Combine(feed, Path.GetFileName(package.Path)), cancellationToken).ConfigureAwait(false);
+            await CopyValidationFileAsync(package.Path, PackageFeedPath(feed, package), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var config = WriteValidationNuGetConfig(workspace.Root, feed, new[] { package.Id }, Array.Empty<string>());
             var toolRoot = Path.Combine(workspace.Root, "tools");

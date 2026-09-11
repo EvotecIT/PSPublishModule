@@ -1261,6 +1261,9 @@ internal sealed class PowerForgeReleaseValidationContext
     /// <summary>The effective tool plan is shared in-process, not serialized into script context.</summary>
     internal DotNetPublishPlan? PublishPlan { get; set; }
 
+    /// <summary>Effective tool target names after an explicit release target selection; null means no target filter.</summary>
+    internal string[]? SelectedToolTargets { get; set; }
+
     public string ContextPath { get; set; } = string.Empty;
 }
 

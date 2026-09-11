@@ -32,7 +32,7 @@ public sealed class ReleaseValidationToolNameSchemaTests : IDisposable
             new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid;
         var configPath = Path.Combine(_root, "validation.json");
         File.WriteAllText(configPath, document.ToJsonString());
-        using (var archive = ZipFile.Open(Path.Combine(_root, "Example.Tool.1.2.3.nupkg"), ZipArchiveMode.Create)) {
+        using (var archive = ZipFile.Open(Path.Combine(_root, "renamed-tool.nupkg"), ZipArchiveMode.Create)) {
             using var writer = new StreamWriter(archive.CreateEntry("Example.Tool.nuspec").Open());
             writer.Write("<package><metadata><id>Example.Tool</id><version>1.2.3</version><authors>Tests</authors><description>Fixture</description></metadata></package>");
         }
@@ -74,6 +74,12 @@ public sealed class ReleaseValidationToolNameSchemaTests : IDisposable
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            if (request.Arguments.Contains("install")) {
+                var arguments = request.Arguments.ToArray();
+                var config = System.Xml.Linq.XDocument.Load(arguments[Array.IndexOf(arguments, "--configfile") + 1]);
+                var feed = config.Root!.Element("packageSources")!.Elements("add").Single().Attribute("value")!.Value;
+                Assert.Equal("Example.Tool.1.2.3.nupkg", Path.GetFileName(Assert.Single(Directory.GetFiles(feed))));
+            }
             return Task.FromResult(new ProcessRunResult(0, "", "", request.FileName, TimeSpan.Zero, false));
         }
     }
