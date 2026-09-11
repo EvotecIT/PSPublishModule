@@ -3,6 +3,26 @@ namespace PowerForge;
 /// <summary>Filesystem preflight shared by artifact writers and validators; not a concurrent-mutation sandbox.</summary>
 internal static class FileSystemPathSafety
 {
+    /// <summary>Compares existing case-variant paths through OS identity without writing case probes.
+    /// Differently named hard links remain distinct pathnames; callers needing file uniqueness use physical identity.</summary>
+    internal static IEqualityComparer<string> ExistingPathComparer { get; } = new ExistingCaseAliasComparer();
+
+    private sealed class ExistingCaseAliasComparer : IEqualityComparer<string>
+    {
+        public bool Equals(string? first, string? second)
+        {
+            if (string.Equals(first, second, StringComparison.Ordinal)) return true;
+            if (first is null || second is null || !string.Equals(first, second, StringComparison.OrdinalIgnoreCase)) return false;
+            if (Directory.Exists(first) && Directory.Exists(second))
+                return ExistingFilePathIdentityResolver.ResolveDirectoryStatus(first).Identity ==
+                    ExistingFilePathIdentityResolver.ResolveDirectoryStatus(second).Identity;
+            return File.Exists(first) && File.Exists(second) &&
+                ExistingFilePathIdentityResolver.Resolve(first) == ExistingFilePathIdentityResolver.Resolve(second);
+        }
+
+        public int GetHashCode(string value) => StringComparer.OrdinalIgnoreCase.GetHashCode(value);
+    }
+
     /// <summary>Rejects existing link components through the inclusive trusted boundary (or filesystem root).
     /// Callers must establish lexical containment before supplying a boundary.</summary>
     internal static void RejectReparsePoints(string fullPath, string? trustedBoundary, string description)

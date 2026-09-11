@@ -11,20 +11,8 @@ internal static partial class Program
         Console.CancelKeyPress += handler;
         try
         {
-            var config = TryGetOptionValue(args, "--config");
+            var (config, request) = ParseReleaseValidationArguments(args);
             if (string.IsNullOrWhiteSpace(config)) return WriteReleaseError(IsJsonOutput(args), "validate-release", 2, usage, logger);
-            var request = new ReleaseValidationRequest
-            {
-                ProjectRoot = TryGetOptionValue(args, "--project-root"), Version = TryGetOptionValue(args, "--version")
-            };
-            for (var index = 1; index < args.Length; index++)
-            {
-                if (args[index] != "--variable") continue;
-                if (++index >= args.Length) throw new ArgumentException("--variable requires Name=Value.");
-                var separator = args[index].IndexOf('=');
-                if (separator <= 0) throw new ArgumentException("--variable requires Name=Value.");
-                request.Variables.Add(args[index].Substring(0, separator), args[index].Substring(separator + 1));
-            }
             var report = new ReleaseValidationService().RunAsync(ReleaseValidationService.Load(config!), config, request, cancellation.Token).GetAwaiter().GetResult();
             if (IsJsonOutput(args)) Console.WriteLine(ReleaseValidationService.SerializeReport(report));
             else
@@ -37,5 +25,41 @@ internal static partial class Program
         catch (OperationCanceledException) { return WriteReleaseError(IsJsonOutput(args), "validate-release", 130, "Release validation canceled.", logger); }
         catch (Exception exception) { return WriteReleaseError(IsJsonOutput(args), "validate-release", 1, exception.Message, logger); }
         finally { Console.CancelKeyPress -= handler; }
+    }
+
+    private static (string? Config, ReleaseValidationRequest Request) ParseReleaseValidationArguments(string[] args)
+    {
+        string? config = null;
+        var request = new ReleaseValidationRequest();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 1; index < args.Length; index++)
+        {
+            var option = args[index].ToLowerInvariant();
+            if (option is "--json" or "--output-json") continue;
+            if (option is not ("--config" or "--project-root" or "--version" or "--variable" or "--output"))
+                throw new ArgumentException($"Unknown validate-release option '{args[index]}'.");
+            if (option != "--variable" && !seen.Add(option))
+                throw new ArgumentException($"Duplicate validate-release option '{option}'.");
+            if (++index >= args.Length || string.IsNullOrWhiteSpace(args[index]) || args[index].StartsWith("-", StringComparison.Ordinal))
+                throw new ArgumentException($"Missing value for validate-release option '{option}'.");
+            var value = args[index];
+            switch (option)
+            {
+                case "--config": config = value; break;
+                case "--project-root": request.ProjectRoot = value; break;
+                case "--version": request.Version = value; break;
+                case "--output":
+                    if (!value.Equals("json", StringComparison.OrdinalIgnoreCase) && !value.Equals("text", StringComparison.OrdinalIgnoreCase))
+                        throw new ArgumentException("--output requires json or text.");
+                    break;
+                case "--variable":
+                    var separator = value.IndexOf('=');
+                    if (separator <= 0 || string.IsNullOrWhiteSpace(value.Substring(0, separator)))
+                        throw new ArgumentException("--variable requires Name=Value.");
+                    request.Variables.Add(value.Substring(0, separator), value.Substring(separator + 1));
+                    break;
+            }
+        }
+        return (config, request);
     }
 }

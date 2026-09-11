@@ -78,13 +78,12 @@ public sealed partial class ReleaseValidationService
     private async Task<ProcessRunResult> RunCommandAsync(ReleaseCommandValidation command,
         IReadOnlyDictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
     {
+        var expectedJsonKind = ValidateCommandContract(command);
         if (!IsCommandApplicable(command))
         {
             report.Checks.Add($"{command.Name}: not applicable on {CurrentPlatform}.");
             return new ProcessRunResult(0, string.Empty, string.Empty, command.FileName, TimeSpan.Zero, false);
         }
-        if (command.TimeoutSeconds <= 0 || string.IsNullOrWhiteSpace(command.FileName))
-            throw new InvalidOperationException($"{command.Name}: executable and positive timeout are required.");
         var workingDirectory = Resolve(command.WorkingDirectory ?? "{ProjectRoot}", variables);
         var environment = command.Environment.ToDictionary(p => p.Key, p => p.Value is null ? null : Expand(p.Value, variables));
         var executable = Expand(command.FileName, variables);
@@ -104,10 +103,9 @@ public sealed partial class ReleaseValidationService
         if (command.OutputJsonKind is not null || command.MinimumJsonItems.HasValue)
         {
             using var json = JsonDocument.Parse(result.StdOut);
-            if (command.OutputJsonKind is not null && (!Enum.TryParse<JsonValueKind>(command.OutputJsonKind, true, out var expectedKind) ||
-                expectedKind == JsonValueKind.Undefined || json.RootElement.ValueKind != expectedKind))
+            if (expectedJsonKind.HasValue && json.RootElement.ValueKind != expectedJsonKind.Value)
                 throw new InvalidOperationException($"{command.Name}: JSON output did not match kind '{command.OutputJsonKind}'.");
-            if (command.MinimumJsonItems.HasValue && (command.MinimumJsonItems < 0 || json.RootElement.ValueKind != JsonValueKind.Array ||
+            if (command.MinimumJsonItems.HasValue && (json.RootElement.ValueKind != JsonValueKind.Array ||
                 json.RootElement.GetArrayLength() < command.MinimumJsonItems.Value))
                 throw new InvalidOperationException($"{command.Name}: JSON output did not contain the required array items.");
         }
@@ -119,6 +117,27 @@ public sealed partial class ReleaseValidationService
         }
         report.Checks.Add(command.Name);
         return result;
+    }
+
+    private static JsonValueKind? ValidateCommandContract(ReleaseCommandValidation command)
+    {
+        if (command is null) throw new ArgumentNullException(nameof(command));
+        if (command.TimeoutSeconds <= 0 || string.IsNullOrWhiteSpace(command.FileName))
+            throw new InvalidOperationException($"{command.Name}: executable and positive timeout are required.");
+        if (command.Arguments is null || command.OutputContains is null || command.NonEmptyFiles is null ||
+            command.Platforms is null || command.Environment is null ||
+            command.Arguments.Concat(command.OutputContains).Concat(command.NonEmptyFiles).Any(value => value is null))
+            throw new InvalidOperationException($"{command.Name}: command collections and their string items must not be null.");
+        if (command.MinimumJsonItems < 0)
+            throw new InvalidOperationException($"{command.Name}: MinimumJsonItems must not be negative.");
+        if (command.OutputJsonKind is null) return null;
+        if (!Enum.TryParse<JsonValueKind>(command.OutputJsonKind, true, out var kind) ||
+            kind == JsonValueKind.Undefined || !Enum.IsDefined(typeof(JsonValueKind), kind) ||
+            !string.Equals(kind.ToString(), command.OutputJsonKind, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"{command.Name}: unknown JSON output kind '{command.OutputJsonKind}'.");
+        if (command.MinimumJsonItems.HasValue && kind != JsonValueKind.Array)
+            throw new InvalidOperationException($"{command.Name}: MinimumJsonItems requires Array output.");
+        return kind;
     }
 
     private static bool IsCommandApplicable(ReleaseCommandValidation command)

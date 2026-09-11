@@ -19,7 +19,8 @@ public sealed partial class ReleaseValidationService
     {
         var path = Path.GetFullPath(Path.Combine(root, relative.Replace('\\', Path.DirectorySeparatorChar)));
         var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!path.StartsWith(prefix, FrameworkCompatibility.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        if (path.Length <= prefix.Length ||
+            !FileSystemPathSafety.ExistingPathComparer.Equals(path.Substring(0, prefix.Length), prefix))
             throw new InvalidOperationException($"Path '{relative}' is outside '{root}'.");
         return path;
     }

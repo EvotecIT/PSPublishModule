@@ -8,6 +8,11 @@ public sealed partial class ReleaseValidationService
     private static async Task ValidateCliArtifactsAsync(CliArtifactValidation spec, Dictionary<string, string> variables,
         ReleaseValidationReport report, string[]? stagedAssets, DotNetPublishPlan? publishPlan, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(spec.Target))
+            throw new InvalidOperationException("CLI validation requires a nonempty target identity.");
+        if (spec.Runtimes is null || spec.Frameworks is null || spec.Styles is null ||
+            spec.Runtimes.Concat(spec.Frameworks).Concat(spec.Styles).Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException("CLI runtime, framework, and style identities must be nonempty strings.");
         var manifestPath = Resolve(spec.ManifestPath, variables);
         using var document = JsonDocument.Parse(await DotNetPublishReleaseArtifactVerifier.ReadBoundedTextAsync(
             manifestPath, "CLI artifact manifest", DotNetPublishReleaseArtifactVerifier.MaxManifestBytes,
@@ -26,7 +31,7 @@ public sealed partial class ReleaseValidationService
             var path = Resolve(spec.PublishConfigPath, variables);
             var plan = publishPlan;
             if (plan is null || !plan.ConfigurationInputPaths.Contains(path,
-                    FrameworkCompatibility.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+                    FileSystemPathSafety.ExistingPathComparer))
             {
                 var configured = await DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputsAsync(
                     path, cancellationToken).ConfigureAwait(false);
@@ -49,7 +54,8 @@ public sealed partial class ReleaseValidationService
             (includeFramework ? Text(item, "framework") + "/" : string.Empty) + Text(item, "style")).ToArray();
         if (actual.Length != expected.Count || expected.Any(pair => actual.Count(item => string.Equals(item, pair, StringComparison.OrdinalIgnoreCase)) != 1))
             throw new InvalidOperationException("CLI manifest does not match the configured runtime/style matrix.");
-        var paths = new HashSet<string>(FrameworkCompatibility.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var paths = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
+        var physicalArtifacts = new HashSet<string>(StringComparer.Ordinal);
         if (unified)
         {
             foreach (var artifact in artifacts)
@@ -82,11 +88,17 @@ public sealed partial class ReleaseValidationService
             var path = Resolve(declaredPath, variables);
             if (variables.TryGetValue("StagingRoot", out var stagingRoot) && unified)
                 ValidateStagedCliPath(Resolve(stagingRoot, variables), path);
+            if (!directoryArtifact)
+                FileSystemPathSafety.RejectReparsePoints(path, Path.GetDirectoryName(path), "CLI artifact");
             var exists = directoryArtifact
-                ? Directory.Exists(path) && EnumerateValidationFiles(path, cancellationToken).Any(file => new FileInfo(file).Length > 0)
+                ? Directory.Exists(path) && HasNonEmptyValidationFile(path, cancellationToken)
                 : File.Exists(path) && new FileInfo(path).Length > 0;
             if (!paths.Add(path) || !exists)
                 throw new InvalidOperationException($"CLI artifact is duplicated, missing, or empty: {path}");
+            var identity = directoryArtifact ? ExistingFilePathIdentityResolver.ResolveDirectoryStatus(path).Identity
+                : ExistingFilePathIdentityResolver.Resolve(path);
+            if (!physicalArtifacts.Add(identity))
+                throw new InvalidOperationException($"CLI artifact is duplicated: {path}");
         }
         if (spec.ToolsOnly)
         {

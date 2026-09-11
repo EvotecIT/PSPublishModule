@@ -38,7 +38,9 @@ public sealed partial class ReleaseValidationService
             }
             if (!string.IsNullOrEmpty(spec.ArchiveRoot)) root = Within(root, spec.ArchiveRoot);
         }
+        var paths = EnumerateValidationFiles(root, cancellationToken).ToArray();
         var manifest = Within(root, spec.Manifest);
+        FileSystemPathSafety.RejectReparsePoints(manifest, root, "Module manifest");
         var content = await DotNetPublishReleaseArtifactVerifier.ReadBoundedMetadataAsync(manifest, "Module manifest",
             DotNetPublishReleaseArtifactVerifier.MaxManifestBytes, cancellationToken).ConfigureAwait(false);
         using var manifestBytes = new MemoryStream(content, writable: false);
@@ -57,7 +59,6 @@ public sealed partial class ReleaseValidationService
         if (spec.ProcessorArchitecture is not null && !string.Equals(spec.ProcessorArchitecture,
                 ModuleManifestValueReader.ReadTopLevelStringFromText(manifestText, "ProcessorArchitecture"), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Module processor architecture does not match the contract.");
-        var paths = EnumerateValidationFiles(root, cancellationToken).ToArray();
         var files = paths.Select(path => DotNetPublishReleaseArtifactVerifier.GetRelativePath(root, path).Replace('\\', '/')).ToArray();
         CheckEntries("Module", files, spec.RequiredFiles, Array.Empty<string>());
         CheckEntries("Module assemblies", files, spec.VersionedAssemblies, Array.Empty<string>());

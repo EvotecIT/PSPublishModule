@@ -5,6 +5,14 @@
   "description": "Final-artifact and isolated runtime contracts. This operation validates without publishing.",
   "type": "object",
   "additionalProperties": false,
+  "anyOf": [
+    { "required": ["Packages"], "properties": { "Packages": { "type": "object" } } },
+    { "required": ["CliArtifacts"], "properties": { "CliArtifacts": { "type": "object" } } },
+    { "required": ["Modules"], "properties": { "Modules": { "minItems": 1 } } },
+    { "required": ["Tools"], "properties": { "Tools": { "minItems": 1 } } },
+    { "required": ["Consumers"], "properties": { "Consumers": { "minItems": 1 } } },
+    { "required": ["Commands"], "properties": { "Commands": { "minItems": 1 } } }
+  ],
   "properties": {
     "$schema": {
       "type": "string"
@@ -368,22 +376,23 @@
           ]
         },
         "Target": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "Runtimes": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string", "pattern": "\\S"
           }
         },
         "Frameworks": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "\\S" }
         },
         "Styles": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string", "pattern": "\\S"
           }
         },
         "ToolsOnly": {

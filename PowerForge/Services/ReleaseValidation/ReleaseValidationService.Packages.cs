@@ -32,11 +32,16 @@ public sealed partial class ReleaseValidationService
     private static IEnumerable<PackageInspection> InspectPrimaryPackages(string root, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        foreach (var path in Directory.EnumerateFiles(root, "*.nupkg"))
+        FileSystemPathSafety.RejectReparsePoints(root, root, "Package directory");
+        foreach (var path in Directory.EnumerateFiles(root))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+            if (path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) &&
+                !path.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase))
+            {
+                FileSystemPathSafety.RejectReparsePoints(path, root, "Package input");
                 yield return InspectPackage(path, cancellationToken);
+            }
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
@@ -66,7 +71,7 @@ public sealed partial class ReleaseValidationService
             ValidateDependencies(package, contract);
             if (contract.SymbolEntries.Length > 0 || contract.ForbiddenSymbolEntries.Length > 0)
             {
-                var symbols = InspectPackage(Path.ChangeExtension(package.Path, ".snupkg"), cancellationToken);
+                var symbols = InspectPackage(FindSymbolPackage(package.Path, cancellationToken), cancellationToken);
                 if (!string.Equals(symbols.Id, package.Id, StringComparison.OrdinalIgnoreCase) ||
                     NuGetVersion.Parse(symbols.Version) != NuGetVersion.Parse(package.Version))
                     throw new InvalidOperationException($"Symbol package identity does not match '{package.Id}'.");
@@ -85,6 +90,23 @@ public sealed partial class ReleaseValidationService
             throw new InvalidOperationException("The package directory contains undeclared packages: " +
                 string.Join(", ", actual.Where(p => !selected.ContainsKey(p.Id)).Select(p => p.Id)));
         return selected;
+    }
+
+    private static string FindSymbolPackage(string packagePath, CancellationToken cancellationToken)
+    {
+        var root = Path.GetDirectoryName(packagePath)!;
+        var expected = Path.GetFileNameWithoutExtension(packagePath) + ".snupkg";
+        string? match = null;
+        foreach (var path in Directory.EnumerateFiles(root))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.Equals(Path.GetFileName(path), expected, StringComparison.OrdinalIgnoreCase)) continue;
+            if (match is not null) throw new InvalidOperationException($"Symbol package '{expected}' is ambiguous.");
+            FileSystemPathSafety.RejectReparsePoints(path, root, "Symbol package input");
+            match = path;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return match ?? throw new InvalidOperationException($"Symbol package '{expected}' is missing.");
     }
 
     private static void CheckEntries(string name, string[] files, string[] required, string[] forbidden)

@@ -44,6 +44,7 @@ public sealed class ReleaseValidationSchemaCaseTests
     [InlineData("NULL", "null", true)]
     [InlineData("Undefined", "null", false)]
     [InlineData("Objects", "{}", false)]
+    [InlineData("2", "[]", false)]
     public async Task Json_kind_schema_and_runtime_agree_on_casing_and_unknown_names(string kind, string output, bool expectedValid)
     {
         var command = new ReleaseCommandValidation { Name = "JSON casing probe", FileName = "probe", OutputJsonKind = kind };
@@ -54,7 +55,7 @@ public sealed class ReleaseValidationSchemaCaseTests
             request: new() { ProjectRoot = Path.GetTempPath() });
 
         Assert.Equal(expectedValid, report.Success);
-        Assert.Equal(1, runner.Calls);
+        Assert.Equal(expectedValid ? 1 : 0, runner.Calls);
         if (expectedValid) Assert.Equal("JSON casing probe", Assert.Single(report.Checks));
         else { Assert.Single(report.Errors); Assert.Empty(report.Checks); }
     }
