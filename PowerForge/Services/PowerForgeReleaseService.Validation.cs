@@ -47,7 +47,10 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseRequest request,
         string configurationDirectory,
         PowerForgeReleaseResult result,
-        string? resolvedVersion)
+        string? resolvedVersion,
+        bool moduleSelected,
+        bool packagesSelected,
+        bool toolsSelected)
     {
         var actions = GetAfterStagingValidationActions(spec.Validation);
         if (actions.Length == 0)
@@ -64,7 +67,7 @@ internal sealed partial class PowerForgeReleaseService
             var context = new PowerForgeReleaseValidationContext
             {
                 ConfigPath = result.ConfigPath,
-                ProjectRoot = ResolveValidationProjectRoot(spec, configurationDirectory),
+                ProjectRoot = ResolveValidationProjectRoot(result, configurationDirectory),
                 ResolvedVersion = resolvedVersion ?? result.ModulePlan?.ModuleVersion ?? string.Empty,
                 ReleaseManifestPath = result.ReleaseManifestPath,
                 ReleaseChecksumsPath = result.ReleaseChecksumsPath,
@@ -72,10 +75,10 @@ internal sealed partial class PowerForgeReleaseService
                 ModuleStagingPath = result.ModulePlan?.StagingPath,
                 ReleaseAssets = result.ReleaseAssets.ToArray(),
                 AssetEntries = result.ReleaseAssetEntries.ToArray(),
-                ModuleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly,
-                PackagesSelected = !request.ToolsOnly && ((!request.ModuleOnly && spec.Packages is not null) ||
-                    (!request.PackagesOnly && spec.Module?.IncludesPackages == true)),
-                ToolsSelected = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly,
+                ModuleSelected = moduleSelected,
+                PackagesSelected = packagesSelected,
+                ToolsSelected = toolsSelected,
+                PublishPlan = toolsSelected ? result.DotNetToolPlan : null,
                 StagedAssets = result.ReleaseAssetEntries
                     .Where(static asset => !string.IsNullOrWhiteSpace(asset.StagedPath))
                     .Select(static asset => asset.StagedPath!)
@@ -171,10 +174,11 @@ internal sealed partial class PowerForgeReleaseService
         => GetAfterStagingValidationActions(spec.Validation).Length > 0;
 
     private static string ResolveValidationProjectRoot(
-        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseResult result,
         string configurationDirectory)
-        => ResolveValidationPath(configurationDirectory,
-            spec.Module?.RepositoryRoot ?? spec.Packages?.RootPath ?? spec.Tools?.ProjectRoot ?? ".");
+        => new[] { result.ModulePlan?.RepositoryRoot, result.Packages?.RootPath, result.DotNetToolPlan?.ProjectRoot,
+                result.ToolPlan?.ProjectRoot, result.AppleAppPlan?.ProjectRoot }
+            .FirstOrDefault(root => !string.IsNullOrWhiteSpace(root)) ?? configurationDirectory;
 
     private static string ResolveValidationPath(string baseDirectory, string path)
         => Path.GetFullPath(Path.IsPathRooted(path)

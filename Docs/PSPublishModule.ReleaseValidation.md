@@ -96,7 +96,11 @@ An existing unified release can invoke the same JSON contract before publication
 }
 ```
 
-PowerForge supplies the selected release lanes and paths such as `{ModuleArchive}`, `{PackageRoot}`, `{ReleaseManifestPath}`, and `{StagingRoot}`. Unselected lanes are not validated. A tools-only run retains the CLI target's version instead of borrowing a module version.
+PowerForge supplies the selected release lanes and paths such as `{ModuleArchive}`, `{PackageRoot}`, `{ReleaseManifestPath}`, and `{StagingRoot}`. Unselected lanes are not validated. If selection removes every contract, the action reports a successful skip; an originally empty contract still fails. Additional `Commands` remain active regardless of lane selection. A tools-only run retains the CLI target's version instead of borrowing a module version.
+
+JSON actions retain their own `ProjectRoot`, resolved relative to the validation file, just as standalone validation does. Script context uses the resolved root of the first executed module, package, tool, or Apple lane, falling back to the release configuration directory.
+
+When `CliArtifacts.PublishConfigPath` names an input of the current release's publish plan, validation uses that plan's effective runtime/framework/style combinations, including release overrides. An unrelated publish configuration or an explicit matrix remains an independent requirement; standalone validation continues to use the configured matrix.
 
 Selecting the tools release lane does not prohibit its portable bundles, installers, or Store outputs. Set `CliArtifacts.ToolsOnly` explicitly only when the product contract permits tool and metadata entries alone. Standalone validation of a unified CLI manifest infers the version from the selected target and rejects missing or inconsistent artifact versions.
 

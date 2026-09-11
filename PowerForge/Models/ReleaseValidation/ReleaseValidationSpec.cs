@@ -36,6 +36,9 @@ public sealed class ReleaseValidationRequest
     public Dictionary<string, string> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Optional authoritative staged asset list to compare with a unified CLI manifest.</summary>
     public string[]? StagedAssets { get; set; }
+
+    /// <summary>Release-owned effective publish plan, including execution-time matrix selection.</summary>
+    internal DotNetPublishPlan? PublishPlan { get; set; }
 }
 
 /// <summary>Artifact and runtime validation evidence.</summary>

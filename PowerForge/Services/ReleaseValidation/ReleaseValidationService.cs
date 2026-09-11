@@ -35,8 +35,7 @@ public sealed partial class ReleaseValidationService
         try
         {
             if (spec.SchemaVersion != 1) throw new InvalidOperationException("Unsupported release validation schema version.");
-            if (spec.Packages is null && spec.Modules.Length == 0 && spec.CliArtifacts is null &&
-                spec.Consumers.Length == 0 && spec.Tools.Length == 0 && spec.Commands.Length == 0)
+            if (!HasContracts(spec))
                 throw new InvalidOperationException("Release validation requires at least one artifact or command contract.");
             var basePath = configPath is null ? Environment.CurrentDirectory : Path.GetDirectoryName(Path.GetFullPath(configPath))!;
             var root = Path.GetFullPath(request.ProjectRoot ?? Path.Combine(basePath, spec.ProjectRoot));
@@ -46,7 +45,7 @@ public sealed partial class ReleaseValidationService
                 : await ValidatePackagesAsync(spec.Packages, variables, report, cancellationToken).ConfigureAwait(false);
             foreach (var module in spec.Modules)
                 await ValidateModuleAsync(module, variables, report, cancellationToken).ConfigureAwait(false);
-            if (spec.CliArtifacts is not null) ValidateCliArtifacts(spec.CliArtifacts, variables, report, request.StagedAssets);
+            if (spec.CliArtifacts is not null) ValidateCliArtifacts(spec.CliArtifacts, variables, report, request.StagedAssets, request.PublishPlan);
             foreach (var consumer in spec.Consumers)
                 await ValidateConsumerAsync(consumer, packages, variables, report, cancellationToken).ConfigureAwait(false);
             foreach (var tool in spec.Tools)
@@ -58,6 +57,11 @@ public sealed partial class ReleaseValidationService
         catch (Exception ex) { report.Errors.Add(ex.Message); }
         return report;
     }
+
+    /// <summary>Identifies whether any artifact or command contract remains after release-lane selection.</summary>
+    internal static bool HasContracts(ReleaseValidationSpec spec)
+        => spec.Packages is not null || spec.Modules.Length > 0 || spec.CliArtifacts is not null ||
+           spec.Consumers.Length > 0 || spec.Tools.Length > 0 || spec.Commands.Length > 0;
 
     /// <summary>Runs one command with the same bounded capture and assertions used by release contracts.</summary>
     public async Task<ProcessRunResult> RunCommandAsync(ReleaseCommandValidation command,

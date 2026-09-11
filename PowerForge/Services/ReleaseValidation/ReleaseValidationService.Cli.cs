@@ -4,7 +4,8 @@ namespace PowerForge;
 
 public sealed partial class ReleaseValidationService
 {
-    private static void ValidateCliArtifacts(CliArtifactValidation spec, Dictionary<string, string> variables, ReleaseValidationReport report, string[]? stagedAssets)
+    private static void ValidateCliArtifacts(CliArtifactValidation spec, Dictionary<string, string> variables,
+        ReleaseValidationReport report, string[]? stagedAssets, DotNetPublishPlan? publishPlan)
     {
         var manifestPath = Resolve(spec.ManifestPath, variables);
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
@@ -19,8 +20,13 @@ public sealed partial class ReleaseValidationService
         if (spec.PublishConfigPath is not null)
         {
             var path = Resolve(spec.PublishConfigPath, variables);
-            var configured = DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(path);
-            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(configured.Configuration, configured.InputPaths.Last(), enforceRequiredEnvironmentVariables: false);
+            var plan = publishPlan;
+            if (plan is null || !plan.ConfigurationInputPaths.Contains(path,
+                    FrameworkCompatibility.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+            {
+                var configured = DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(path);
+                plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(configured.Configuration, configured.InputPaths.Last(), enforceRequiredEnvironmentVariables: false);
+            }
             var target = plan.Targets.SingleOrDefault(item => string.Equals(item.Name, spec.Target, StringComparison.OrdinalIgnoreCase))
                 ?? throw new InvalidOperationException($"Publish configuration has no target '{spec.Target}'.");
             expected.AddRange(target.Combinations.Select(item => item.Runtime + "/" + item.Framework + "/" + item.Style));

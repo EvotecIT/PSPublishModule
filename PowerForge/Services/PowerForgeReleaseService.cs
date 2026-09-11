@@ -969,7 +969,10 @@ internal sealed partial class PowerForgeReleaseService
                     request,
                     configDirectory,
                     result,
-                    sharedReleaseVersion))
+                    sharedReleaseVersion,
+                    moduleSelected: runModule,
+                    packagesSelected: runPackages || result.ModulePlan?.IncludesProjectPackages == true,
+                    toolsSelected: willRunTools))
             {
                 return result;
             }

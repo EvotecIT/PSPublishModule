@@ -70,7 +70,9 @@ internal sealed class PowerForgeReleaseValidationService
     private PowerForgeReleaseValidationResult RunConfiguration(PowerForgeReleaseValidationAction action,
         PowerForgeReleaseValidationContext context, string path, string name, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var spec = ReleaseValidationService.Load(path);
+        var hadContracts = ReleaseValidationService.HasContracts(spec);
         if (!context.ModuleSelected) spec.Modules = Array.Empty<ModuleArtifactValidation>();
         if (!context.PackagesSelected)
         {
@@ -79,7 +81,18 @@ internal sealed class PowerForgeReleaseValidationService
             spec.Tools = Array.Empty<DotNetToolValidation>();
         }
         if (!context.ToolsSelected) spec.CliArtifacts = null;
-        var request = new ReleaseValidationRequest { ProjectRoot = context.ProjectRoot, Version = context.ResolvedVersion,
+        // Keep JSON path semantics identical to standalone validation, including explicitly separate lane roots.
+        var projectRoot = ResolvePath(Path.GetDirectoryName(path)!, spec.ProjectRoot);
+        if (hadContracts && spec.SchemaVersion == 1 && !ReleaseValidationService.HasContracts(spec))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return new PowerForgeReleaseValidationResult
+            {
+                Name = name, Succeeded = true, ExitCode = 0, Executable = "PowerForge", FilePath = path,
+                WorkingDirectory = projectRoot, StdOut = "Skipped: validation contracts belong to unselected release lanes."
+            };
+        }
+        var request = new ReleaseValidationRequest { Version = context.ResolvedVersion, PublishPlan = context.PublishPlan,
             StagedAssets = context.StagedAssets.Length > 0 ? context.StagedAssets : null };
         if (spec.CliArtifacts is not null && !context.ModuleSelected && !context.PackagesSelected)
         {
@@ -109,7 +122,7 @@ internal sealed class PowerForgeReleaseValidationService
             return new PowerForgeReleaseValidationResult
             {
                 Name = name, Succeeded = report.Success, ExitCode = report.Success ? 0 : 1,
-                Executable = "PowerForge", FilePath = path, WorkingDirectory = context.ProjectRoot,
+                Executable = "PowerForge", FilePath = path, WorkingDirectory = projectRoot,
                 StdOut = string.Join(Environment.NewLine, report.Checks), StdErr = string.Join(Environment.NewLine, report.Errors)
             };
         }
