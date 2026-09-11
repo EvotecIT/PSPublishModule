@@ -14,7 +14,6 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
 {
     internal const long MaxManifestBytes = 16L * 1024L * 1024L;
     internal const long MaxConfigurationBytes = 16L * 1024L * 1024L;
-    private static readonly JsonSerializerOptions ConfigurationJsonOptions = CreateConfigurationJsonOptions();
     private readonly Func<string, DotNetPublishMsiPackageMetadata> _readPackage;
     private readonly Func<string, AuthenticodeResult> _verifyAuthenticode;
 
@@ -299,16 +298,14 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             CommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true
         });
-        if (!TryGet(document.RootElement, "Tools", out _))
+        if (!TryGet(document.RootElement, "Tools", out var toolsElement))
         {
-            var direct = JsonSerializer.Deserialize<DotNetPublishSpec>(json, ConfigurationJsonOptions)
+            var direct = JsonSerializer.Deserialize(json, DotNetPublishConfigurationJsonContext.Default.DotNetPublishSpec)
                 ?? throw Invalid("PowerForge dotnet-publish configuration could not be deserialized.");
             return new DotNetPublishConfiguredSpec(direct, new[] { configurationPath });
         }
 
-        var release = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(json, ConfigurationJsonOptions)
-            ?? throw Invalid("PowerForge release configuration could not be deserialized.");
-        var tools = release.Tools
+        var tools = JsonSerializer.Deserialize(toolsElement.GetRawText(), DotNetPublishConfigurationJsonContext.Default.PowerForgeToolReleaseSpec)
             ?? throw Invalid("PowerForge release configuration does not define Tools.DotNetPublish.");
         if (tools.DotNetPublish is not null && !string.IsNullOrWhiteSpace(tools.DotNetPublishConfigPath))
             throw Invalid("Tools.DotNetPublish and Tools.DotNetPublishConfigPath are mutually exclusive.");
@@ -331,7 +328,7 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
                 path,
                 "Referenced PowerForge dotnet-publish configuration",
                 MaxConfigurationBytes);
-            configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(externalJson, ConfigurationJsonOptions)
+            configuration = JsonSerializer.Deserialize(externalJson, DotNetPublishConfigurationJsonContext.Default.DotNetPublishSpec)
                 ?? throw Invalid("Referenced PowerForge dotnet-publish configuration could not be deserialized.");
             inputPaths.Add(path);
         }
@@ -559,18 +556,6 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             return fullPath;
         return Uri.UnescapeDataString(relativeUri.ToString())
             .Replace('/', Path.DirectorySeparatorChar);
-    }
-
-    private static JsonSerializerOptions CreateConfigurationJsonOptions()
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
     }
 
     internal static string ResolveArtifactPath(string root, string relativePath, bool allowOutsideProjectRoot)

@@ -105,11 +105,15 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [ "FilePath" ],
+            "oneOf": [
+              { "required": [ "FilePath" ], "not": { "required": [ "ConfigPath" ] } },
+              { "required": [ "ConfigPath" ], "not": { "required": [ "FilePath" ] } }
+            ],
             "properties": {
               "Enabled": { "type": "boolean" },
               "Name": { "type": [ "string", "null" ] },
               "FilePath": { "type": "string", "minLength": 1 },
+              "ConfigPath": { "type": "string", "minLength": 1 },
               "WorkingDirectory": { "type": [ "string", "null" ] },
               "Environment": {
                 "type": "object",

@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.release-validation.schema.json",
+  "title": "PowerForge release validation",
+  "description": "Final-artifact and isolated runtime contracts. This operation validates without publishing.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "SchemaVersion": {
+      "const": 1,
+      "default": 1
+    },
+    "ProjectRoot": {
+      "type": "string"
+    },
+    "Packages": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/packages"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "Modules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/module"
+      }
+    },
+    "CliArtifacts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/cli"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "Tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    },
+    "Consumers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/consumer"
+      }
+    },
+    "Commands": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "FileName"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "FileName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "WorkingDirectory": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ExpectedExitCode": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": 0,
+          "description": "Null permits product-specific exit-code interpretation. Timeouts and output limits still fail."
+        },
+        "ExpectedOutput": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "OutputContains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "OutputJsonKind": {
+          "anyOf": [
+            {
+              "enum": [
+                "Array",
+                "Object",
+                "String",
+                "Number",
+                "True",
+                "False",
+                "Null"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "MinimumJsonItems": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "NonEmptyFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Environment": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "Platforms": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "Windows",
+              "Linux",
+              "OSX"
+            ]
+          }
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Id"
+      ],
+      "properties": {
+        "Id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "RequiredEntries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ForbiddenEntries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "SymbolEntries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ForbiddenSymbolEntries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "DependencyFrameworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "RequiredDependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ForbiddenDependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "RuntimeOnlyDependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "packages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Items"
+      ],
+      "properties": {
+        "Path": {
+          "type": "string"
+        },
+        "ExactSet": {
+          "type": "boolean"
+        },
+        "SameVersion": {
+          "type": "boolean"
+        },
+        "VerifySignatures": {
+          "type": "boolean"
+        },
+        "RequireAuthorSignature": {
+          "type": "boolean"
+        },
+        "AuthorCertificateFingerprints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/package"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "signatures": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Thumbprints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Path",
+        "Manifest"
+      ],
+      "properties": {
+        "Path": {
+          "type": "string"
+        },
+        "ArchiveRoot": {
+          "type": "string"
+        },
+        "Manifest": {
+          "type": "string"
+        },
+        "RequiredFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "VersionedAssemblies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ProcessorArchitecture": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ProbeScript": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Hosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Signatures": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/signatures"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "cli": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Target"
+      ],
+      "properties": {
+        "ManifestPath": {
+          "type": "string"
+        },
+        "PublishConfigPath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Target": {
+          "type": "string"
+        },
+        "Runtimes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Frameworks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "Styles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ToolsOnly": {
+          "type": "boolean"
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "PackageId",
+        "CommandName"
+      ],
+      "properties": {
+        "PackageId": {
+          "type": "string"
+        },
+        "PackageRoot": {
+          "type": "string"
+        },
+        "CommandName": {
+          "type": "string"
+        },
+        "IncludeManifestInstall": {
+          "type": "boolean"
+        },
+        "Commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        }
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "SourceDirectory",
+        "ProjectFile"
+      ],
+      "properties": {
+        "SourceDirectory": {
+          "type": "string"
+        },
+        "ProjectFile": {
+          "type": "string"
+        },
+        "Frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "WindowsFrameworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "DependencySources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

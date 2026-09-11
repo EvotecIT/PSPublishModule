@@ -20,11 +20,14 @@ internal sealed partial class PowerForgeReleaseService
 
         foreach (var action in actions)
         {
-            if (string.IsNullOrWhiteSpace(action.FilePath))
-                throw new InvalidOperationException("Validation.AfterStaging actions require FilePath.");
+            if (string.IsNullOrWhiteSpace(action.FilePath) == string.IsNullOrWhiteSpace(action.ConfigPath))
+                throw new InvalidOperationException("Validation.AfterStaging actions require exactly one of FilePath or ConfigPath.");
             if (action.TimeoutSeconds <= 0)
                 throw new InvalidOperationException("Validation.AfterStaging action TimeoutSeconds must be greater than zero.");
-            var scriptPath = ResolveValidationPath(configurationDirectory, action.FilePath);
+            if (!string.IsNullOrWhiteSpace(action.ConfigPath) &&
+                (action.Environment.Count > 0 || !string.IsNullOrWhiteSpace(action.WorkingDirectory) || action.PreferWindowsPowerShell))
+                throw new InvalidOperationException("ConfigPath actions use the validation contract's command Environment, WorkingDirectory, and module Hosts; script process options cannot be applied to them.");
+            var scriptPath = ResolveValidationPath(configurationDirectory, string.IsNullOrWhiteSpace(action.ConfigPath) ? action.FilePath : action.ConfigPath!);
             if (!File.Exists(scriptPath))
                 throw new FileNotFoundException($"Staged-release validation script was not found: {scriptPath}", scriptPath);
             if (!string.IsNullOrWhiteSpace(action.WorkingDirectory))
@@ -68,6 +71,11 @@ internal sealed partial class PowerForgeReleaseService
                 StagingRoot = ResolveConfiguredStageRoot(spec, request, configurationDirectory),
                 ModuleStagingPath = result.ModulePlan?.StagingPath,
                 ReleaseAssets = result.ReleaseAssets.ToArray(),
+                AssetEntries = result.ReleaseAssetEntries.ToArray(),
+                ModuleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly,
+                PackagesSelected = !request.ToolsOnly && ((!request.ModuleOnly && spec.Packages is not null) ||
+                    (!request.PackagesOnly && spec.Module?.IncludesPackages == true)),
+                ToolsSelected = spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly,
                 StagedAssets = result.ReleaseAssetEntries
                     .Where(static asset => !string.IsNullOrWhiteSpace(asset.StagedPath))
                     .Select(static asset => asset.StagedPath!)
@@ -165,9 +173,8 @@ internal sealed partial class PowerForgeReleaseService
     private static string ResolveValidationProjectRoot(
         PowerForgeReleaseSpec spec,
         string configurationDirectory)
-        => string.IsNullOrWhiteSpace(spec.Module?.RepositoryRoot)
-            ? configurationDirectory
-            : ResolveValidationPath(configurationDirectory, spec.Module!.RepositoryRoot!);
+        => ResolveValidationPath(configurationDirectory,
+            spec.Module?.RepositoryRoot ?? spec.Packages?.RootPath ?? spec.Tools?.ProjectRoot ?? ".");
 
     private static string ResolveValidationPath(string baseDirectory, string path)
         => Path.GetFullPath(Path.IsPathRooted(path)

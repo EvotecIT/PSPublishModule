@@ -5,7 +5,7 @@ namespace PowerForge;
 /// <summary>
 /// Reusable typed client for <c>dotnet nuget</c> operations.
 /// </summary>
-public sealed class DotNetNuGetClient
+public sealed partial class DotNetNuGetClient
 {
     private readonly IProcessRunner _processRunner;
     private readonly string _dotNetExecutable;

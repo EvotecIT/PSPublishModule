@@ -1204,6 +1204,9 @@ internal sealed class PowerForgeReleaseValidationAction
     /// <summary>PowerShell script path. Relative paths resolve from the release configuration directory.</summary>
     public string FilePath { get; set; } = string.Empty;
 
+    /// <summary>Shared release-validation JSON path, mutually exclusive with FilePath.</summary>
+    public string? ConfigPath { get; set; }
+
     /// <summary>Optional working directory. Relative paths resolve from the release configuration directory.</summary>
     public string? WorkingDirectory { get; set; }
 
@@ -1243,6 +1246,14 @@ internal sealed class PowerForgeReleaseValidationContext
     public string[] ReleaseAssets { get; set; } = Array.Empty<string>();
 
     public string[] StagedAssets { get; set; } = Array.Empty<string>();
+
+    public PowerForgeReleaseAssetEntry[] AssetEntries { get; set; } = Array.Empty<PowerForgeReleaseAssetEntry>();
+
+    public bool ModuleSelected { get; set; } = true;
+
+    public bool PackagesSelected { get; set; } = true;
+
+    public bool ToolsSelected { get; set; } = true;
 
     public string ContextPath { get; set; } = string.Empty;
 }

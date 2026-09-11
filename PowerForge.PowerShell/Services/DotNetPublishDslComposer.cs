@@ -123,6 +123,18 @@ internal static class DotNetPublishDslComposer
 
         foreach (var entry in source.Projects ?? Array.Empty<DotNetPublishProject>())
             AddProject(target, entry);
+
+        target.Bundles = target.Bundles.Concat(source.Bundles ?? Array.Empty<DotNetPublishBundle>()).ToArray();
+        target.StorePackages = target.StorePackages.Concat(source.StorePackages ?? Array.Empty<DotNetPublishStorePackage>()).ToArray();
+        target.Hooks = target.Hooks.Concat(source.Hooks ?? Array.Empty<DotNetPublishCommandHook>()).ToArray();
+        if (source.SigningProfiles is not null)
+        {
+            target.SigningProfiles ??= new Dictionary<string, DotNetPublishSignOptions>(StringComparer.OrdinalIgnoreCase);
+            foreach (var profile in source.SigningProfiles)
+            {
+                target.SigningProfiles[profile.Key] = profile.Value;
+            }
+        }
     }
 
     private static void AddTarget(DotNetPublishSpec spec, DotNetPublishTarget value)

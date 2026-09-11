@@ -389,7 +389,7 @@ public interface IProcessRunner
 /// <summary>
 /// Default implementation of <see cref="IProcessRunner"/>.
 /// </summary>
-public sealed class ProcessRunner : IProcessRunner
+public sealed partial class ProcessRunner : IProcessRunner
 {
     /// <inheritdoc />
     public async Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
@@ -402,6 +402,7 @@ public sealed class ProcessRunner : IProcessRunner
             throw new ArgumentException("Working directory is required.", nameof(request));
         if (request.MaxCapturedOutputCharacters <= 0)
             throw new ArgumentOutOfRangeException(nameof(request), "The captured-output character limit must be positive.");
+        cancellationToken.ThrowIfCancellationRequested();
 
         using var process = new Process {
             StartInfo = BuildStartInfo(request)
@@ -481,10 +482,19 @@ public sealed class ProcessRunner : IProcessRunner
             timedOut);
         request.InvokeCompletionBoundary(boundaryResult);
 
-        var stdout = request.CaptureOutput
+        if (!await WaitForOutputDrainAsync(stdoutTask, stderrTask, request.Timeout, stopwatch.Elapsed,
+            cancellationToken).ConfigureAwait(false))
+        {
+            timedOut = !cancellationToken.IsCancellationRequested;
+            if (timedOut) exitCode = 124;
+            TryKill(process);
+            CloseCapturedStreams(process, request);
+        }
+
+        var stdout = request.CaptureOutput && stdoutTask.IsCompleted
             ? await DrainAsync(stdoutTask).ConfigureAwait(false)
             : CapturedOutput.Empty;
-        var stderr = request.CaptureError
+        var stderr = request.CaptureError && stderrTask.IsCompleted
             ? await DrainAsync(stderrTask).ConfigureAwait(false)
             : CapturedOutput.Empty;
         stopwatch.Stop();
@@ -674,16 +684,4 @@ public sealed class ProcessRunner : IProcessRunner
         => Path.Combine(Environment.SystemDirectory, "taskkill.exe");
 #endif
 
-#if NET472
-    private static string QuoteArgument(string argument)
-    {
-        if (string.IsNullOrEmpty(argument))
-            return "\"\"";
-
-        if (argument.IndexOfAny(new[] { ' ', '"' }) >= 0)
-            return "\"" + argument.Replace("\"", "\\\"") + "\"";
-
-        return argument;
-    }
-#endif
 }

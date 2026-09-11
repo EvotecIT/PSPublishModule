@@ -122,6 +122,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 throw new ArgumentException($"Target.Publish.Framework is required for '{t.Name}' (or set Target.Publish.Frameworks/Matrix.Frameworks).", nameof(spec));
 
             var rids = NormalizeStrings(t.Publish.Runtimes);
+            var supportedRuntimes = NormalizeStrings(t.SupportedRuntimes);
+            if (rids.Length == 0) rids = supportedRuntimes;
             if (rids.Length == 0) rids = matrixDefaultRids;
             if (rids.Length == 0) rids = defaultsRids;
             if (rids.Length == 0)
@@ -134,6 +136,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 styles = new[] { t.Publish.Style };
 
             var combos = BuildPublishCombos(t.Name.Trim(), frameworks, rids, styles, spec.Matrix);
+            if (supportedRuntimes.Length > 0)
+            {
+                var unsupported = combos.Select(combo => combo.Runtime).Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Where(runtime => !supportedRuntimes.Contains(runtime, StringComparer.OrdinalIgnoreCase)).ToArray();
+                if (unsupported.Length > 0)
+                    throw new ArgumentException($"Target '{t.Name}' does not support runtime(s): {string.Join(", ", unsupported)}.", nameof(spec));
+            }
             if (combos.Length == 0)
                 throw new ArgumentException($"No publish combinations resolved for target '{t.Name}'. Check Matrix include/exclude filters.", nameof(spec));
 
@@ -1704,6 +1713,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ProjectId = t.ProjectId,
                 ProjectPath = t.ProjectPath,
                 Kind = t.Kind,
+                SupportedRuntimes = (t.SupportedRuntimes ?? Array.Empty<string>()).ToArray(),
                 Publish = new DotNetPublishPublishOptions
                 {
                     Style = t.Publish?.Style ?? DotNetPublishStyle.Portable,

@@ -6000,7 +6000,7 @@ internal sealed partial class PowerForgeReleaseService
         return !string.IsNullOrWhiteSpace(request.SignToolPath)
             || !string.IsNullOrWhiteSpace(request.SignThumbprint)
             || !string.IsNullOrWhiteSpace(request.SignSubjectName)
-            || request.SignTimeoutSeconds.HasValue
+            || request.SignTimeoutSeconds > 0
             || !string.IsNullOrWhiteSpace(request.SignTimestampUrl)
             || !string.IsNullOrWhiteSpace(request.SignDescription)
             || !string.IsNullOrWhiteSpace(request.SignUrl)
@@ -6033,8 +6033,8 @@ internal sealed partial class PowerForgeReleaseService
             sign.OnMissingTool = request.SignOnMissingTool.Value;
         if (request.SignOnFailure.HasValue)
             sign.OnSignFailure = request.SignOnFailure.Value;
-        if (request.SignTimeoutSeconds.HasValue)
-            sign.TimeoutSeconds = Math.Max(1, request.SignTimeoutSeconds.Value);
+        if (request.SignTimeoutSeconds > 0)
+            sign.TimeoutSeconds = request.SignTimeoutSeconds.Value;
         if (!string.IsNullOrWhiteSpace(request.SignTimestampUrl))
             sign.TimestampUrl = request.SignTimestampUrl!.Trim();
         if (!string.IsNullOrWhiteSpace(request.SignDescription))
