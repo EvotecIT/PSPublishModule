@@ -1,6 +1,7 @@
 using NuGet.Frameworks;
 using NuGet.Packaging;
 using NuGet.Versioning;
+using System.IO.Compression;
 
 namespace PowerForge;
 
@@ -18,12 +19,23 @@ public sealed partial class ReleaseValidationService
     private static PackageInspection InspectPackage(string path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        using var reader = new PackageArchiveReader(path);
-        var identity = reader.GetIdentity();
+        using var input = new ArchiveMetadataReadStream(File.OpenRead(path), cancellationToken);
+        using var archive = new ZipArchive(input, ZipArchiveMode.Read);
+        // The IO budget and cancellation apply while ZipArchive builds Entries, not
+        // only after its complete central-directory inventory has been allocated.
+        if (archive.Entries.Count > PowerForgeReleaseArtifactVerifier.MaxArchiveEntries)
+            throw new InvalidDataException($"Package archive exceeds the {PowerForgeReleaseArtifactVerifier.MaxArchiveEntries} entry limit.");
+        using var reader = new PackageArchiveReader(archive);
+        using var nuspec = reader.GetNuspec();
+        using var metadata = new MemoryStream();
+        PowerForgeReleaseArtifactVerifier.CopyBounded(nuspec, metadata,
+            PowerForgeReleaseArtifactVerifier.MaxArchiveMetadataBytes, "Package nuspec", cancellationToken);
+        metadata.Position = 0;
+        var manifest = new NuspecReader(metadata);
         var package = new PackageInspection
         {
-            Path = path, Id = identity.Id, Version = identity.Version.ToNormalizedString(),
-            Files = reader.GetFiles().ToArray(), Dependencies = reader.GetPackageDependencies().ToArray()
+            Path = path, Id = manifest.GetId(), Version = manifest.GetVersion().ToNormalizedString(),
+            Files = reader.GetFiles().ToArray(), Dependencies = manifest.GetDependencyGroups().ToArray()
         };
         cancellationToken.ThrowIfCancellationRequested();
         return package;

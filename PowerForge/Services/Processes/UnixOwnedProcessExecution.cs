@@ -111,25 +111,42 @@ internal sealed partial class UnixOwnedProcessExecution : OwnedProcessExecution
     {
         var file = StartInfo.FileName;
         if (Path.IsPathRooted(file)) return file;
+        var workingDirectory = Path.Combine(Environment.CurrentDirectory, StartInfo.WorkingDirectory);
+        if (file.IndexOf(Path.DirectorySeparatorChar) >= 0)
+            return Path.Combine(workingDirectory, file);
+        var childPath = StartInfo.EnvironmentVariables["PATH"];
+        var inheritedPath = childPath is not null && string.Equals(childPath, Environment.GetEnvironmentVariable("PATH"), StringComparison.Ordinal);
 #if !NET472
-        // Preserve Process.Start's Unix lookup roots before changing the child
-        // directory. In particular, a dotnet host can find itself outside PATH.
+        // Preserve the default .NET host lookup only for an inherited PATH.
+        // A configured/removed child PATH must not leak parent search roots.
         var hostDirectory = Path.GetDirectoryName(Environment.ProcessPath);
-        if (!string.IsNullOrEmpty(hostDirectory))
+        if (inheritedPath && !string.IsNullOrEmpty(hostDirectory))
         {
             var sibling = Path.Combine(hostDirectory, file);
-            if (File.Exists(sibling)) return sibling;
+            if (File.Exists(sibling) && Access(sibling, 1) == 0) return sibling;
         }
 #endif
         var current = Path.GetFullPath(file);
-        if (File.Exists(current)) return current;
-        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator))
+        if (inheritedPath && File.Exists(current) && Access(current, 1) == 0) return current;
+        foreach (var directory in childPath?.Split(Path.PathSeparator) ?? Array.Empty<string>())
         {
-            if (string.IsNullOrEmpty(directory)) continue;
-            var candidate = Path.GetFullPath(Path.Combine(directory, file));
-            if (File.Exists(candidate) && Access(candidate, 1) == 0) return candidate;
+            var candidate = Path.Combine(workingDirectory, directory, file);
+            var physicalPath = ResolvePhysicalSearchCandidate(candidate);
+            // Inspect the physical file, but preserve the selected spelling for
+            // scripts that dispatch or locate resources using their invocation path.
+            if (physicalPath is not null && File.Exists(physicalPath) && Access(candidate, 1) == 0) return candidate;
         }
         throw new Win32Exception(2, $"Executable '{file}' was not found.");
+    }
+
+    private static string? ResolvePhysicalSearchCandidate(string path)
+    {
+        // Let POSIX resolve symlinks and parent traversal in PATH entries. Lexical
+        // GetFullPath would select a different executable for "link/../probe".
+        var resolved = RealPath(path, IntPtr.Zero);
+        if (resolved == IntPtr.Zero) return null;
+        try { return Marshal.PtrToStringAnsi(resolved); }
+        finally { FreeNative(resolved); }
     }
 
     private static void AddPipe(IntPtr actions, AnonymousPipeServerStream? pipe, int destination)

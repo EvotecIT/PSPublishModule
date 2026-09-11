@@ -15,9 +15,11 @@ public sealed partial class ReleaseValidationService
         if (!Directory.Exists(input))
         {
             root = Directory.CreateDirectory(Path.Combine(workspace.Root, "module")).FullName;
-            using var archive = ZipFile.OpenRead(input);
+            using var archiveInput = new ArchiveMetadataReadStream(File.OpenRead(input), cancellationToken);
+            using var archive = new ZipArchive(archiveInput, ZipArchiveMode.Read);
             var entries = PowerForgeReleaseArtifactVerifier.ValidateArchiveEntries(archive);
             PowerForgeReleaseArtifactVerifier.ValidateModuleArchiveBounds(entries);
+            archiveInput.CompleteMetadataInspection();
             foreach (var pair in entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();

@@ -7,7 +7,8 @@ public sealed class PackageSetValidation
     public string Path { get; set; } = "{PackageRoot}";
     /// <summary>Require the directory to contain exactly the declared non-symbol packages.</summary>
     public bool ExactSet { get; set; } = true;
-    /// <summary>Require all declared packages to share the release version.</summary>
+    /// <summary>Require all declared packages to share the release version and pass it as PackageVersion to consumers.
+    /// When false, consumer projects select individual versions; validation still requires the exact staged archives.</summary>
     public bool SameVersion { get; set; } = true;
     /// <summary>Use NuGet to verify package signatures.</summary>
     public bool VerifySignatures { get; set; }

@@ -443,38 +443,14 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         if (matchingTargets.Length != 1 || matchingTargets[0].Publish is null)
             throw Invalid($"PowerForge configuration does not define the installer target '{targetName}'.");
 
-        var publish = matchingTargets[0].Publish;
-        var frameworks = NormalizeConfiguredStrings(publish.Frameworks);
-        if (frameworks.Length == 0 && !string.IsNullOrWhiteSpace(publish.Framework))
-            frameworks = new[] { publish.Framework.Trim() };
-        if (frameworks.Length == 0)
-            frameworks = NormalizeConfiguredStrings(configuration.Matrix?.Frameworks);
-
-        var runtimes = NormalizeConfiguredStrings(publish.Runtimes);
-        if (runtimes.Length == 0)
-            runtimes = NormalizeConfiguredStrings(configuration.Matrix?.Runtimes);
-        if (runtimes.Length == 0)
-            runtimes = NormalizeConfiguredStrings(configuration.DotNet.Runtimes);
-
-        var styles = (publish.Styles ?? Array.Empty<DotNetPublishStyle>()).Distinct().ToArray();
-        if (styles.Length == 0)
-            styles = (configuration.Matrix?.Styles ?? Array.Empty<DotNetPublishStyle>()).Distinct().ToArray();
-        if (styles.Length == 0)
-            styles = new[] { publish.Style };
-        if (frameworks.Length == 0 || runtimes.Length == 0)
-            throw Invalid($"PowerForge configuration does not resolve publish dimensions for installer target '{targetName}'.");
-
-        var combinations = (from framework in frameworks
-                            from runtime in runtimes
-                            from style in styles
-                            select new ExpectedCombination(targetName, runtime, framework, style.ToString()))
-            .ToArray();
-        var include = configuration.Matrix?.Include ?? Array.Empty<DotNetPublishMatrixRule>();
-        if (include.Length > 0)
-            combinations = combinations.Where(combination => include.Any(rule => RuleMatches(combination, rule))).ToArray();
-        var exclude = configuration.Matrix?.Exclude ?? Array.Empty<DotNetPublishMatrixRule>();
-        if (exclude.Length > 0)
-            combinations = combinations.Where(combination => !exclude.Any(rule => RuleMatches(combination, rule))).ToArray();
+        ExpectedCombination[] combinations;
+        try
+        {
+            combinations = DotNetPublishPipelineRunner.ResolveTargetCombinations(matchingTargets[0], configuration)
+                .Select(combo => new ExpectedCombination(targetName, combo.Runtime, combo.Framework, combo.Style.ToString()))
+                .ToArray();
+        }
+        catch (ArgumentException ex) { throw Invalid(ex.Message); }
 
         var installerRuntimes = NormalizeConfiguredStrings(installer.Runtimes);
         var installerFrameworks = NormalizeConfiguredStrings(installer.Frameworks);
@@ -497,16 +473,6 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private static bool RuleMatches(ExpectedCombination combination, DotNetPublishMatrixRule? rule)
-    {
-        if (rule is null)
-            return false;
-        var targets = NormalizeConfiguredStrings(rule.Targets);
-        return (targets.Length == 0 || targets.Any(pattern => DotNetPublishPipelineRunner.WildcardMatch(combination.Target, pattern))) &&
-               (string.IsNullOrWhiteSpace(rule.Runtime) || DotNetPublishPipelineRunner.WildcardMatch(combination.Runtime, rule.Runtime!.Trim())) &&
-               (string.IsNullOrWhiteSpace(rule.Framework) || DotNetPublishPipelineRunner.WildcardMatch(combination.Framework, rule.Framework!.Trim())) &&
-               (string.IsNullOrWhiteSpace(rule.Style) || DotNetPublishPipelineRunner.WildcardMatch(combination.Style, rule.Style!.Trim()));
-    }
 
     private static void ValidateEqual(string? expected, string? actual, string name)
     {

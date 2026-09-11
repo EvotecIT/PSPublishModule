@@ -66,7 +66,7 @@ public sealed partial class ReleaseValidationService
     }
 
     private async Task ValidateConsumerAsync(PackageConsumerValidation spec, Dictionary<string, PackageInspection> packages,
-        Dictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
+        bool sameVersion, Dictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
     {
         if (packages.Count == 0) throw new InvalidOperationException("Package consumers require a declared package set.");
         using var workspace = new ValidationWorkspace();
@@ -82,10 +82,13 @@ public sealed partial class ReleaseValidationService
         var cache = Path.Combine(workspace.Root, "packages");
         var values = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase) { ["WorkRoot"] = workspace.Root };
         var environment = new Dictionary<string, string?> { ["NUGET_PACKAGES"] = cache };
+        // Mixed-version contracts leave version selection to the consumer's MSBuild project.
+        // The restored archive hashes below still prove every selected staged version.
+        var versionArguments = sameVersion ? new[] { "-p:PackageVersion={Version}" } : Array.Empty<string>();
         await RunCommandAsync(new ReleaseCommandValidation
         {
             Name = "Restore package consumer", FileName = "dotnet", WorkingDirectory = projectRoot, TimeoutSeconds = 600,
-            Arguments = new[] { "restore", project, "--configfile", config, "--packages", cache, "--no-http-cache", "-p:PackageVersion={Version}", "--nologo" },
+            Arguments = new[] { "restore", project, "--configfile", config, "--packages", cache, "--no-http-cache", "-p:Configuration=Release", "--nologo" }.Concat(versionArguments).ToArray(),
             Environment = environment
         }, values, report, cancellationToken).ConfigureAwait(false);
         foreach (var package in packages.Values)
@@ -106,7 +109,7 @@ public sealed partial class ReleaseValidationService
             await RunCommandAsync(new ReleaseCommandValidation
             {
                 Name = "Run package consumer " + framework, FileName = "dotnet", WorkingDirectory = projectRoot, TimeoutSeconds = 600,
-                Arguments = new[] { "run", "--project", project, "--framework", framework, "--configuration", "Release", "--no-restore", "-p:PackageVersion={Version}", "--nologo" },
+                Arguments = new[] { "run", "--project", project, "--framework", framework, "--configuration", "Release", "--no-restore", "--nologo" }.Concat(versionArguments).ToArray(),
                 Environment = environment
             }, values, report, cancellationToken).ConfigureAwait(false);
     }

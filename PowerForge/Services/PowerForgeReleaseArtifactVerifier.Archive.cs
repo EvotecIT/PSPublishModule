@@ -6,7 +6,7 @@ namespace PowerForge;
 
 public sealed partial class PowerForgeReleaseArtifactVerifier
 {
-    private const long MaxArchiveMetadataBytes = 4L * 1024L * 1024L;
+    internal const long MaxArchiveMetadataBytes = 4L * 1024L * 1024L;
     private const long MaxModuleSignedEntryBytes = 512L * 1024L * 1024L;
     private const long MaxModuleSignedEntriesBytes = 2L * 1024L * 1024L * 1024L;
     internal const int MaxArchiveEntries = 65536;
@@ -36,8 +36,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string? expectedSubject,
         bool allowSubjectMatchedCertificateRotation)
     {
-        using ZipArchive archive = ZipFile.OpenRead(archivePath);
+        using var archiveInput = new ArchiveMetadataReadStream(File.OpenRead(archivePath));
+        using ZipArchive archive = new ZipArchive(archiveInput, ZipArchiveMode.Read);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
+        archiveInput.CompleteMetadataInspection();
         if (!entries.TryGetValue(PowerForgePortablePayloadInventory.InventoryFileName, out ZipArchiveEntry? inventoryEntry) ||
             !entries.TryGetValue(PowerForgePortablePayloadInventory.SignatureFileName, out ZipArchiveEntry? signatureEntry))
             throw Invalid("Portable archive is missing its publisher-signed payload inventory.");

@@ -51,7 +51,7 @@ public sealed partial class ReleaseValidationService
                 await ValidateCliArtifactsAsync(spec.CliArtifacts, variables, report, request.StagedAssets,
                     request.PublishPlan, cancellationToken).ConfigureAwait(false);
             foreach (var consumer in spec.Consumers)
-                await ValidateConsumerAsync(consumer, packages, variables, report, cancellationToken).ConfigureAwait(false);
+                await ValidateConsumerAsync(consumer, packages, spec.Packages?.SameVersion ?? true, variables, report, cancellationToken).ConfigureAwait(false);
             foreach (var tool in spec.Tools)
                 await ValidateToolAsync(tool, variables, report, cancellationToken).ConfigureAwait(false);
             foreach (var command in spec.Commands)

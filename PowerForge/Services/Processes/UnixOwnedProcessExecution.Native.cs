@@ -32,6 +32,10 @@ internal sealed partial class UnixOwnedProcessExecution
     private static extern int Kill(int processId, int signal);
     [DllImport("libc", EntryPoint = "access", CharSet = CharSet.Ansi)]
     private static extern int Access(string path, int mode);
+    [DllImport("libc", EntryPoint = "realpath", CharSet = CharSet.Ansi)]
+    private static extern IntPtr RealPath(string path, IntPtr resolvedPath);
+    [DllImport("libc", EntryPoint = "free")]
+    private static extern void FreeNative(IntPtr pointer);
     [DllImport("/usr/lib/libproc.dylib", EntryPoint = "proc_listpids", SetLastError = true)]
     private static extern int ListDarwinProcesses(uint type, uint group, [Out] int[] processes, int bytes);
 }
