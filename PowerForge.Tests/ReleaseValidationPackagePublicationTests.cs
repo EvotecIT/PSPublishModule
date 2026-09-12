@@ -15,6 +15,7 @@ public sealed class ReleaseValidationPackagePublicationTests : IDisposable
     [InlineData("script", false)]
     [InlineData("cancel", true)]
     [InlineData("publish-failure", true)]
+    [InlineData("delayed-mutation", true)]
     [InlineData("coordinated", true)]
     [InlineData("coordinated", false)]
     public void Package_publication_waits_for_real_staged_validation(string mode, bool validationSucceeds)
@@ -68,6 +69,11 @@ public sealed class ReleaseValidationPackagePublicationTests : IDisposable
                 Assert.NotEqual(package, staged.StagedPath);
                 Assert.Equal("validated package bytes", File.ReadAllText(staged.StagedPath!));
                 Assert.False(string.IsNullOrWhiteSpace(staged.StagedSha256));
+                if (mode == "delayed-mutation") {
+                    request.RemotePublishAttempted?.Invoke();
+                    File.AppendAllText(staged.StagedPath!, "changed between package pushes");
+                    request.RemotePublishAttempted?.Invoke();
+                }
                 if (mode == "publish-failure") {
                     return new() { Success = false, ErrorMessage = "Publication fixture failure" };
                 }
@@ -115,7 +121,7 @@ public sealed class ReleaseValidationPackagePublicationTests : IDisposable
         }
         var result = service.Execute(spec, request);
 
-        Assert.Equal(validationSucceeds && mode != "publish-failure", result.Success);
+        Assert.Equal(validationSucceeds && mode is not "publish-failure" and not "delayed-mutation", result.Success);
         Assert.Equal(validationSucceeds, Assert.Single(result.ReleaseValidations).Succeeded);
         var expectedOrder = new List<string>();
         if (coordinated) { expectedOrder.AddRange(["plan", "module"]); }
@@ -125,6 +131,8 @@ public sealed class ReleaseValidationPackagePublicationTests : IDisposable
         Assert.Equal((validationSucceeds ? 2 : 1) + (coordinated ? 1 : 0), requests.Count);
         if (mode == "publish-failure") {
             Assert.Equal("Publication fixture failure", result.ErrorMessage);
+        } else if (mode == "delayed-mutation") {
+            Assert.Contains("changed a release input", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         } else if (!validationSucceeds) {
             Assert.Contains("failed", result.ErrorMessage!, StringComparison.OrdinalIgnoreCase);
             Assert.Same(checkpoint, result.Packages);

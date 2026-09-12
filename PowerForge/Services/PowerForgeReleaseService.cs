@@ -896,23 +896,35 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
-        if (deferConfiguredAppleMutation &&
-            !ExecuteAppleReleasePlan(
-                applePlan!,
-                request,
-                result,
-                checkpointAppleApps: false,
-                expectedPlanSha256: deferredApplePlanSha256,
-                checkpointResults: deferredAppleCheckpointResults,
-                startProgress: !deferredAppleCheckpointStarted))
+        if (deferConfiguredAppleMutation)
         {
-            return result;
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.AppleApps) ||
+                !ExecuteAppleReleasePlan(
+                    applePlan!,
+                    request,
+                    result,
+                    checkpointAppleApps: false,
+                    expectedPlanSha256: deferredApplePlanSha256,
+                    checkpointResults: deferredAppleCheckpointResults,
+                    startProgress: !deferredAppleCheckpointStarted))
+            {
+                return result;
+            }
         }
 
-        if (runPackages && HasAfterStagingValidation(spec) && !request.PlanOnly && !request.ValidateOnly &&
-            !PublishValidatedPackageCheckpoint(spec, request, configPath, result))
+        if (runPackages && HasAfterStagingValidation(spec) && !request.PlanOnly && !request.ValidateOnly)
         {
-            return result;
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Packages) ||
+                !PublishValidatedPackageCheckpoint(spec, request, configPath, result))
+            {
+                return result;
+            }
         }
 
         if (deferredModulePublishRequest is not null &&
@@ -921,6 +933,14 @@ internal sealed partial class PowerForgeReleaseService
             !request.PlanOnly &&
             !request.ValidateOnly)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Packages))
+            {
+                return result;
+            }
+
             if (result.ModulePackagePlans.Length == 0)
             {
                 result.Success = false;
@@ -942,7 +962,11 @@ internal sealed partial class PowerForgeReleaseService
                         result.ModulePackagePlans,
                         result.ReleaseAssetEntries,
                         requireStagedAssets: HasAfterStagingValidation(spec),
-                        remotePublishAttempted: () => ValidatePostBuildSourceState(request),
+                        remotePublishAttempted: () =>
+                        {
+                            ValidatePostBuildSourceState(request);
+                            ValidateReleaseValidationIntegrity(result, request.CancellationToken);
+                        },
                         progress: null,
                         cancellationToken: request.CancellationToken);
                 request.Progress?.PhaseCompleted(
@@ -962,6 +986,14 @@ internal sealed partial class PowerForgeReleaseService
             !request.PlanOnly &&
             !request.ValidateOnly)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Module))
+            {
+                return result;
+            }
+
             ValidatePostBuildSourceState(request);
             request.Progress?.PhaseStarted(
                 PowerForgeReleaseProgressPhase.Module,
@@ -1023,6 +1055,14 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (publishUnifiedGitHub)
             {
+                if (!ValidateReleaseValidationIntegrityBeforePublication(
+                        request,
+                        result,
+                        PowerForgeReleaseProgressPhase.GitHub))
+                {
+                    return result;
+                }
+
                 ValidatePostBuildSourceState(request);
                 request.Progress?.PhaseStarted(
                     PowerForgeReleaseProgressPhase.GitHub,
@@ -1047,10 +1087,26 @@ internal sealed partial class PowerForgeReleaseService
                     PowerForgeReleaseProgressPhase.GitHub,
                     unifiedGitHubRelease.ReleaseUrl ?? "GitHub release published");
             }
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.GitHub))
+            {
+                return result;
+            }
+
             ValidatePostBuildSourceState(request);
             SubmitWingetOutputs(spec, request, configDirectory, result);
             if (result.Success && publishVirusTotalMonitor)
             {
+                if (!ValidateReleaseValidationIntegrityBeforePublication(
+                        request,
+                        result,
+                        PowerForgeReleaseProgressPhase.VirusTotal))
+                {
+                    return result;
+                }
+
                 ValidatePostBuildSourceState(request);
                 if (!TryPublishVirusTotalMonitor(spec, request, configDirectory, result, sharedReleaseVersion, virusTotalApiKey))
                     return result;

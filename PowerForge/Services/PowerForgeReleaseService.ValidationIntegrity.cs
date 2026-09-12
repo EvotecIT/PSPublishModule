@@ -3,7 +3,8 @@ namespace PowerForge;
 internal sealed partial class PowerForgeReleaseService
 {
     // Observe the release inputs, not the entire staging root: probes may create unrelated reports.
-    // This detects completed probe mutations; it is not a concurrent-mutation sandbox.
+    // The checkpoint is also revalidated immediately before remote publication so completed
+    // delayed validator writes are detected after the validator process exits.
     private static string[] GetValidationIntegrityPaths(PowerForgeReleaseResult result)
         => result.ReleaseAssetEntries.SelectMany(asset => new[] { asset.Path, asset.StagedPath })
             .Concat(result.ReleaseAssets)
@@ -15,11 +16,47 @@ internal sealed partial class PowerForgeReleaseService
                 .SelectMany(artifact => new[] { artifact.ZipPath, artifact.ExePath, artifact.OutputDir }
                     .Concat(artifact.OutputFiles ?? Array.Empty<string>())
                     .Concat(artifact.EvidencePaths ?? Array.Empty<string>())))
-            .Concat(new[] { result.ReleaseManifestPath, result.ReleaseChecksumsPath, result.ModulePlan?.StagingPath })
+            .Concat(GetDeferredModulePublicationIntegrityPaths(result.ModulePlan))
+            .Concat(new[] { result.ReleaseManifestPath, result.ReleaseChecksumsPath })
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => Path.GetFullPath(path!))
             .Distinct(PathComparer)
             .ToArray();
+
+    private static IEnumerable<string?> GetDeferredModulePublicationIntegrityPaths(
+        PowerForgeModuleReleasePlanSummary? plan)
+    {
+        if (plan is null)
+            yield break;
+
+        yield return plan.StagingPath;
+        yield return plan.ConfigPath;
+        yield return plan.ScriptPath;
+        yield return plan.ModulePath;
+
+        if (string.IsNullOrWhiteSpace(plan.ConfigPath) || !File.Exists(plan.ConfigPath))
+            yield break;
+
+        var context = new ModulePipelineConfigurationService().Load(plan.ConfigPath!);
+        foreach (var configPath in context.PackageConfigurationPaths)
+            yield return configPath;
+
+        foreach (var action in (context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
+                     .OfType<ConfigurationActionSegment>()
+                     .Where(static action => action.Configuration?.Enabled == true &&
+                                             !string.IsNullOrWhiteSpace(action.Configuration.FilePath)))
+        {
+            yield return PathValueResolver.Resolve(context.ProjectRoot, action.Configuration.FilePath!);
+        }
+
+        foreach (var publish in (context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
+                     .OfType<ConfigurationPublishSegment>()
+                     .Where(static publish => publish.Configuration?.Enabled == true &&
+                                              !string.IsNullOrWhiteSpace(publish.Configuration.ApiKeyFilePath)))
+        {
+            yield return publish.Configuration.ApiKeyFilePath;
+        }
+    }
 
     private static Dictionary<string, string> CaptureValidationIntegrity(string[] roots, CancellationToken token)
     {
@@ -66,4 +103,55 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException($"Release validation changed a release input: '{changed}'. Probes must leave release assets unchanged.");
         }
     }
+
+    private static ReleaseValidationIntegrityCheckpoint CaptureValidationIntegrityCheckpoint(
+        PowerForgeReleaseResult result,
+        CancellationToken token)
+    {
+        var paths = GetValidationIntegrityPaths(result);
+        return new ReleaseValidationIntegrityCheckpoint(paths, CaptureValidationIntegrity(paths, token));
+    }
+
+    internal static void ValidateReleaseValidationIntegrity(
+        PowerForgeReleaseResult result,
+        CancellationToken token)
+    {
+        var checkpoint = result.ReleaseValidationIntegrity;
+        if (checkpoint is null)
+            return;
+
+        ValidateIntegrityUnchanged(checkpoint.Paths, checkpoint.Hashes, token);
+    }
+
+    private static bool ValidateReleaseValidationIntegrityBeforePublication(
+        PowerForgeReleaseRequest request,
+        PowerForgeReleaseResult result,
+        PowerForgeReleaseProgressPhase phase)
+    {
+        try
+        {
+            ValidateReleaseValidationIntegrity(result, request.CancellationToken);
+            return true;
+        }
+        catch (Exception exception) when (!request.CancellationToken.IsCancellationRequested)
+        {
+            request.Progress?.PhaseFailed(phase, exception.Message);
+            result.Success = false;
+            result.ErrorMessage = exception.Message;
+            return false;
+        }
+    }
+}
+
+internal sealed class ReleaseValidationIntegrityCheckpoint
+{
+    internal ReleaseValidationIntegrityCheckpoint(string[] paths, Dictionary<string, string> hashes)
+    {
+        Paths = paths;
+        Hashes = hashes;
+    }
+
+    internal string[] Paths { get; }
+
+    internal Dictionary<string, string> Hashes { get; }
 }

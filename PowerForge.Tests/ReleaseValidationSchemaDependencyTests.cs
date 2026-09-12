@@ -71,6 +71,61 @@ public sealed class ReleaseValidationSchemaDependencyTests : IDisposable
         Assert.Equal("AfterStaging", request.EnvironmentVariables["POWERFORGE_RELEASE_STAGE"]);
     }
 
+    [Fact]
+    public void Disabled_action_bypasses_enabled_only_schema_and_runtime_requirements()
+    {
+        const string actionJson = "{\"Enabled\":false,\"ConfigPath\":\"missing.json\",\"Environment\":{\"bad=name\":\"bad\\u0000\"},\"WorkingDirectory\":\"missing\",\"TimeoutSeconds\":0,\"PreferWindowsPowerShell\":true}";
+        Assert.True(EvaluateAction(actionJson));
+        Assert.False(EvaluateAction("{}"));
+        Assert.False(EvaluateAction("{\"Enabled\":true}"));
+        var action = JsonSerializer.Deserialize<PowerForgeReleaseValidationAction>(actionJson)!;
+        var configPath = Write("release.json", "{}");
+        Write("workspace.validation.json", "{\"SchemaVersion\":1,\"ProjectRoot\":\".\",\"Steps\":[]}");
+
+        var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+            new PowerForgeReleaseSpec
+            {
+                WorkspaceValidation = new PowerForgeWorkspaceValidationOptions
+                {
+                    ConfigPath = "workspace.validation.json"
+                },
+                Validation = new() { AfterStaging = [action] }
+            },
+            new PowerForgeReleaseRequest { ConfigPath = configPath });
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Empty(result.ReleaseValidations);
+    }
+
+    [Theory]
+    [InlineData("{\"FilePath\":\"probe.ps1\",\"ConfigPath\":null}", true)]
+    [InlineData("{\"ConfigPath\":\"validation.json\",\"FilePath\":\"\"}", true)]
+    [InlineData("{\"FilePath\":\"probe.ps1\",\"ConfigPath\":\"validation.json\"}", false)]
+    [InlineData("{\"FilePath\":\"\",\"ConfigPath\":null}", false)]
+    public void Effective_action_paths_have_matching_schema_and_runtime_admission(string actionJson, bool expectedValid)
+    {
+        Write("probe.ps1", "'observed'");
+        Write("validation.json", "{\"Commands\":[{\"Name\":\"Config probe\",\"FileName\":\"probe\"}]}");
+        var action = JsonSerializer.Deserialize<PowerForgeReleaseValidationAction>(actionJson)!;
+        var runner = new Runner("observed");
+        var service = new PowerForgeReleaseValidationService(new NullLogger(), runner);
+
+        if (expectedValid)
+        {
+            var result = service.Run(action, new() { ProjectRoot = _root }, _root, CancellationToken.None);
+            Assert.True(result.Succeeded, result.StdErr);
+            Assert.Single(runner.Requests);
+        }
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                service.Run(action, new() { ProjectRoot = _root }, _root, CancellationToken.None));
+            Assert.Empty(runner.Requests);
+        }
+
+        Assert.Equal(expectedValid, EvaluateAction(actionJson));
+    }
+
     [Theory]
     [InlineData("\"Array\"", "1", "[1,2]", true)]
     [InlineData("\"aRrAy\"", "2", "[1,2]", true)]

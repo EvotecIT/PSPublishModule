@@ -13,7 +13,11 @@ internal sealed partial class PowerForgeReleaseService
                 ConfigPath = configPath,
                 PublicationCheckpoint = result.Packages ?? throw new InvalidOperationException("Package build checkpoint is missing."),
                 PublicationAssets = result.ReleaseAssetEntries,
-                RemotePublishAttempted = () => ValidatePostBuildSourceState(request),
+                RemotePublishAttempted = () =>
+                {
+                    ValidatePostBuildSourceState(request);
+                    ValidateReleaseValidationIntegrity(result, request.CancellationToken);
+                },
                 CancellationToken = request.CancellationToken
             }, spec.Packages!, configPath);
             request.CancellationToken.ThrowIfCancellationRequested();

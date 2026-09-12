@@ -62,8 +62,7 @@ internal sealed partial class PowerForgeReleaseService
             actions.Length,
             "Validating the complete staged release");
         var validationResults = new List<PowerForgeReleaseValidationResult>(actions.Length);
-        var integrityPaths = GetValidationIntegrityPaths(result);
-        Dictionary<string, string>? integrity = null;
+        ReleaseValidationIntegrityCheckpoint? integrity = null;
         foreach (var action in actions)
         {
             request.CancellationToken.ThrowIfCancellationRequested();
@@ -99,11 +98,11 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeReleaseValidationResult validation;
             try
             {
-                integrity ??= CaptureValidationIntegrity(integrityPaths, timeout.Token);
+                integrity ??= CaptureValidationIntegrityCheckpoint(result, timeout.Token);
                 validation = _runReleaseValidation(action, context, configurationDirectory, timeout.Token);
                 if (validation.Succeeded)
                 {
-                    ValidateIntegrityUnchanged(integrityPaths, integrity, timeout.Token);
+                    ValidateIntegrityUnchanged(integrity.Paths, integrity.Hashes, timeout.Token);
                 }
             }
             catch (Exception exception) when (!request.CancellationToken.IsCancellationRequested)
@@ -126,6 +125,8 @@ internal sealed partial class PowerForgeReleaseService
             result.ErrorMessage = detail;
             return false;
         }
+
+        result.ReleaseValidationIntegrity = integrity;
 
         request.Progress?.PhaseCompleted(
             PowerForgeReleaseProgressPhase.Validation,
@@ -157,6 +158,14 @@ internal sealed partial class PowerForgeReleaseService
     {
         if (spec.Tools is null || !(request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
             return true;
+
+        if (!ValidateReleaseValidationIntegrityBeforePublication(
+                request,
+                result,
+                PowerForgeReleaseProgressPhase.Tools))
+        {
+            return false;
+        }
 
         ValidatePostBuildSourceState(request);
         request.CancellationToken.ThrowIfCancellationRequested();

@@ -346,6 +346,8 @@ internal sealed class PowerForgeReleaseResult
     public PowerForgeReleaseValidationResult[] ReleaseValidations { get; set; } =
         Array.Empty<PowerForgeReleaseValidationResult>();
 
+    internal ReleaseValidationIntegrityCheckpoint? ReleaseValidationIntegrity { get; set; }
+
     public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleases { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
 
     public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleasePlans { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
