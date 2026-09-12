@@ -556,3 +556,34 @@ Example list template:
 - `partials/header.html` + `partials/footer.html`
 - `assets/app.css`
 - `critical.css`
+
+
+### Shared image viewer
+
+Enable the optional viewer in `site.json`:
+
+```json
+"MediaViewer": {
+  "Enabled": true,
+  "Selector": "[data-pf-media]"
+}
+```
+
+The builder publishes the viewer assets and adds them to the normal CSS and JavaScript asset output. Layouts must render `assets.css_html` and `assets.js_html`. Keep screenshot links usable without JavaScript:
+
+```html
+<a href="/images/workspace-light.png" data-pf-media
+   data-pf-media-group="workspace"
+   data-pf-media-caption="Document workspace"
+   data-pf-media-light="/images/workspace-light.png"
+   data-pf-media-dark="/images/workspace-dark.png">
+  <img src="/images/workspace-light.png" width="1440" height="960"
+       alt="Document workspace showing a report" loading="lazy" />
+</a>
+```
+
+A shared group enables previous/next navigation. Omit the group for a single image. Optional `data-pf-media-mobile` and `data-pf-media-desktop` attributes add explicit variants. `data-pf-media-src` overrides the full-size source. Sources must use HTTP, HTTPS, or a browser blob URL. Use separate assets for different appearances; the viewer preserves screenshot colors.
+
+The viewer supports fit, actual size, zoom, mouse dragging, touch scrolling, captions, background selection, keyboard navigation, Escape, and focus restoration. Modified clicks and download links keep their normal behavior. Set `data-pf-media="off"` to exclude an individual link. UI labels follow the page language for English, Polish, French, German, and Spanish; untranslated messages fall back to English.
+
+Style the chrome with `.pf-media-viewer` and `--pf-media-surface`, `--pf-media-text`, and `--pf-media-border`. Continue using the media shortcodes' width, height, fit, aspect ratio, and responsive source options for page thumbnails. Existing screenshot shortcode links can opt in with `Selector: ".pf-screenshot a"`; choose a selector that matches image links, not unrelated navigation.

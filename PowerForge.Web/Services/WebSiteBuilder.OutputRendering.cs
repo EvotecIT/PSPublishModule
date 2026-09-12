@@ -113,6 +113,11 @@ public static partial class WebSiteBuilder
         var assetBaseRoute = ResolveHtmlAssetBaseRoute(item.OutputPath);
         var cssHtml = RenderCssLinks(cssLinks, assetRegistry, assetBaseRoute, assetSlotUsage.UseCssSlot ? spec.Head : null);
         var jsHtml = RenderJsLinks(jsLinks, assetBaseRoute);
+        if (spec.MediaViewer?.Enabled == true)
+        {
+            cssHtml += RenderCssLinks(new[] { MediaViewerCssRoute }, null, assetBaseRoute);
+            jsHtml += RenderMediaViewerScript(spec.MediaViewer, assetBaseRoute);
+        }
         var pageTitle = ResolveSeoTitle(spec, item);
         var pageDescription = ResolveMetaDescription(spec, item);
         var descriptionMeta = string.IsNullOrWhiteSpace(pageDescription)

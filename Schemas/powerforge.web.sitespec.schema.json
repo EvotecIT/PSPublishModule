@@ -8,6 +8,14 @@
     "$schema": { "type": "string" },
     "SchemaVersion": { "type": "integer", "minimum": 1 },
     "Name": { "type": "string" },
+    "MediaViewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean", "default": false },
+        "Selector": { "type": "string", "minLength": 1, "default": "[data-pf-media]" }
+      }
+    },
     "Search": {
       "type": "object",
       "additionalProperties": false,
