@@ -71,6 +71,8 @@ public sealed partial class ReleaseValidationService
         bool sameVersion, Dictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
     {
         if (packages.Count == 0) throw new InvalidOperationException("Package consumers require a declared package set.");
+        if (string.IsNullOrWhiteSpace(spec.ProjectFile))
+            throw new InvalidOperationException("Package consumers require a nonblank project file path.");
         if (spec.Frameworks is null || spec.WindowsFrameworks is null ||
             spec.Frameworks.Concat(spec.WindowsFrameworks).Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("Package consumer frameworks must be nonempty strings.");

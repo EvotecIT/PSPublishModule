@@ -26,7 +26,7 @@ public sealed class ReleaseCommandValidation
     /// <summary>Files that must exist and contain data after execution.</summary>
     public string[] NonEmptyFiles { get; set; } = Array.Empty<string>();
     /// <summary>Child environment overrides.</summary>
-    public Dictionary<string, string?> Environment { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string?> Environment { get; set; } = new(StringComparer.Ordinal);
     /// <summary>Optional supported platforms: Windows, Linux, OSX, matched case-insensitively. An empty list runs everywhere; unknown names are rejected.</summary>
     public string[] Platforms { get; set; } = Array.Empty<string>();
 }

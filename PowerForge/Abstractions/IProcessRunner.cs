@@ -544,6 +544,9 @@ public sealed partial class ProcessRunner : IProcessRunner
 
     private static ProcessStartInfo BuildStartInfo(ProcessRunRequest request)
     {
+        if (request.FileName.IndexOf('\0') >= 0 || request.WorkingDirectory.IndexOf('\0') >= 0 ||
+            request.Arguments.Any(argument => argument is null || argument.IndexOf('\0') >= 0))
+            throw new ArgumentException("Process executable, working directory, and arguments cannot contain NUL or null entries.", nameof(request));
         var startInfo = new ProcessStartInfo {
             FileName = request.FileName,
             WorkingDirectory = request.WorkingDirectory,
@@ -562,6 +565,9 @@ public sealed partial class ProcessRunner : IProcessRunner
         {
             foreach (var variable in request.EnvironmentVariables)
             {
+                if (string.IsNullOrEmpty(variable.Key) || variable.Key.IndexOfAny(new[] { '=', '\0' }) >= 0 ||
+                    (variable.Value is not null && variable.Value.IndexOf('\0') >= 0))
+                    throw new ArgumentException("Process environment names must be nonempty and contain neither '=' nor NUL; values cannot contain NUL.", nameof(request));
                 if (variable.Value is null)
                 {
                     startInfo.EnvironmentVariables.Remove(variable.Key);

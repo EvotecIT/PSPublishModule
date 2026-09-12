@@ -72,7 +72,10 @@ public sealed class ReleaseValidationAdmissionSchemaTests : IDisposable
         var consumer = new JsonObject { ["SourceDirectory"] = "consumer", ["ProjectFile"] = "Smoke.csproj" };
         if (frameworks is not null) { consumer["Frameworks"] = JsonNode.Parse(frameworks); }
         if (windowsFrameworks is not null) { consumer["WindowsFrameworks"] = JsonNode.Parse(windowsFrameworks); }
-        var document = new JsonObject { ["Consumers"] = new JsonArray(consumer) };
+        var document = new JsonObject {
+            ["Packages"] = new JsonObject { ["Items"] = new JsonArray(new JsonObject { ["Id"] = "Example" }) },
+            ["Consumers"] = new JsonArray(consumer)
+        };
 
         var result = LoadSchema().Evaluate(document, new EvaluationOptions { OutputFormat = OutputFormat.List });
 
@@ -194,10 +197,135 @@ public sealed class ReleaseValidationAdmissionSchemaTests : IDisposable
         }
     }
 
-    private static JsonSchema LoadSchema()
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData(" \t\r\n", false)]
+    [InlineData("Smoke.csproj", true)]
+    public async Task Consumer_project_file_must_be_nonblank(string? projectFile, bool valid)
+    {
+        var document = new JsonObject {
+            ["Packages"] = new JsonObject { ["Path"] = _root,
+                ["Items"] = new JsonArray(new JsonObject { ["Id"] = "Example" }) },
+            ["Consumers"] = new JsonArray(new JsonObject { ["SourceDirectory"] = "not-copied",
+                ["ProjectFile"] = projectFile, ["Frameworks"] = new JsonArray("net10.0") })
+        };
+        Assert.Equal(valid, LoadSchema().Evaluate(document).IsValid);
+        if (valid) { return; } // Real valid consumer restore/run is covered by ReleaseValidationCommandPathTests.
+        using (var zip = ZipFile.Open(Path.Combine(_root, "Example.nupkg"), ZipArchiveMode.Create)) {
+            using var writer = new StreamWriter(zip.CreateEntry("Example.nuspec").Open());
+            writer.Write("<package><metadata><id>Example</id><version>1.2.3</version><authors>Tests</authors><description>Fixture</description></metadata></package>");
+        }
+        var runner = new Runner();
+        var report = await new ReleaseValidationService(runner).RunAsync(new() {
+            Packages = new() { Path = _root, Items = [new() { Id = "Example" }] },
+            Consumers = [new() { SourceDirectory = "not-copied", ProjectFile = projectFile!, Frameworks = ["net10.0"] }]
+        });
+        Assert.False(report.Success);
+        Assert.Contains("nonblank project file", Assert.Single(report.Errors));
+        Assert.Empty(runner.Requests);
+    }
+
+    [Theory]
+    [InlineData("missing", false)]
+    [InlineData("null", false)]
+    [InlineData("empty", false)]
+    [InlineData("declared", true)]
+    public async Task Consumers_require_a_declared_package_set_even_alongside_commands(string packages, bool valid)
+    {
+        var document = new JsonObject {
+            ["Consumers"] = new JsonArray(new JsonObject { ["SourceDirectory"] = "consumer",
+                ["ProjectFile"] = "Smoke.csproj", ["Frameworks"] = new JsonArray("net10.0") }),
+            ["Commands"] = new JsonArray(new JsonObject { ["FileName"] = "probe" })
+        };
+        if (packages != "missing") {
+            document["Packages"] = packages == "null" ? null : new JsonObject {
+                ["Items"] = packages == "empty" ? new JsonArray() : new JsonArray(new JsonObject { ["Id"] = "Example" }) };
+        }
+        Assert.Equal(valid, LoadSchema().Evaluate(document).IsValid);
+        if (packages is "missing" or "null") {
+            var report = await new ReleaseValidationService().RunAsync(new() {
+                Consumers = [new() { SourceDirectory = "consumer", ProjectFile = "Smoke.csproj", Frameworks = ["net10.0"] }]
+            });
+            Assert.Contains("declared package set", Assert.Single(report.Errors));
+        }
+        // An empty consumer list has no dependency on a package contract.
+        document.Remove("Packages");
+        document["Consumers"] = new JsonArray();
+        Assert.True(LoadSchema().Evaluate(document).IsValid);
+    }
+
+    [Theory]
+    [InlineData("", false)]
+    [InlineData(" \t\r\n", false)]
+    [InlineData(null, true)]
+    public async Task Optional_module_probe_is_null_or_a_nonblank_script(string? script, bool valid)
+    {
+        File.WriteAllText(Path.Combine(_root, "Example.psd1"), "@{ ModuleVersion = '1.2.3' }");
+        var module = new JsonObject { ["Path"] = _root, ["Manifest"] = "Example.psd1", ["ProbeScript"] = script };
+        Assert.Equal(valid, LoadSchema().Evaluate(new JsonObject { ["Modules"] = new JsonArray(module) }).IsValid);
+        var runner = new Runner();
+        var report = await new ReleaseValidationService(runner).RunAsync(new() {
+            Modules = [new() { Path = _root, Manifest = "Example.psd1", ProbeScript = script }]
+        });
+        Assert.Equal(valid, report.Success);
+        if (!valid) { Assert.Contains("nonblank script", Assert.Single(report.Errors)); }
+        Assert.Empty(runner.Requests);
+    }
+
+    [Theory]
+    [InlineData("", false)]
+    [InlineData(" \t\r\n", false)]
+    [InlineData(null, false)]
+    [InlineData("win-x64", true)]
+    public void Supported_runtime_entries_cannot_silently_remove_the_restriction(string? runtime, bool valid)
+    {
+        var document = new JsonObject { ["Targets"] = new JsonArray(new JsonObject {
+            ["Name"] = "app", ["ProjectPath"] = "App.csproj", ["SupportedRuntimes"] = new JsonArray(JsonValue.Create(runtime)),
+            ["Publish"] = new JsonObject { ["Framework"] = "net10.0" }
+        }) };
+        Assert.Equal(valid, LoadSchema("powerforge.dotnetpublish.schema.json").Evaluate(document).IsValid);
+        var target = new DotNetPublishTarget { Name = "app", SupportedRuntimes = [runtime!],
+            Publish = new() { Framework = "net10.0" } };
+        var spec = new DotNetPublishSpec { DotNet = new() { Runtimes = ["linux-x64"] } };
+        if (valid) {
+            Assert.Equal("win-x64", Assert.Single(DotNetPublishPipelineRunner.ResolveTargetCombinations(target, spec)).Runtime);
+        } else {
+            Assert.Contains("SupportedRuntimes", Assert.Throws<ArgumentException>(() =>
+                DotNetPublishPipelineRunner.ResolveTargetCombinations(target, spec)).Message);
+        }
+    }
+
+    [Theory]
+    [InlineData("", "value", false)]
+    [InlineData("bad=name", null, false)]
+    [InlineData("bad\0name", "value", false)]
+    [InlineData("GOOD", "value\0INJECTED=value", false)]
+    [InlineData("GOOD", "first=second\n日本語", true)]
+    [InlineData("GOOD", "", true)]
+    [InlineData("GOOD", null, true)]
+    public void Command_environment_schema_preserves_entry_boundaries(string name, string? value, bool valid)
+    {
+        var command = new JsonObject { ["FileName"] = "probe",
+            ["Environment"] = new JsonObject { [name] = value } };
+        Assert.Equal(valid, LoadSchema().Evaluate(new JsonObject { ["Commands"] = new JsonArray(command) }).IsValid);
+    }
+
+    [Theory]
+    [InlineData("FileName")]
+    [InlineData("WorkingDirectory")]
+    [InlineData("Arguments")]
+    public void Command_launch_fields_reject_NUL(string field)
+    {
+        var command = new JsonObject { ["FileName"] = "probe" };
+        command[field] = field == "Arguments" ? new JsonArray("value\0suffix") : JsonValue.Create("value\0suffix");
+        Assert.False(LoadSchema().Evaluate(new JsonObject { ["Commands"] = new JsonArray(command) }).IsValid);
+    }
+
+    private static JsonSchema LoadSchema(string schemaName = "powerforge.release-validation.schema.json")
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent) {
-            var path = Path.Combine(directory.FullName, "Schemas", "powerforge.release-validation.schema.json");
+            var path = Path.Combine(directory.FullName, "Schemas", schemaName);
             if (File.Exists(path)) { return JsonSchema.FromText(File.ReadAllText(path)); }
         }
         throw new InvalidOperationException("Release validation schema was not found above the test output directory.");

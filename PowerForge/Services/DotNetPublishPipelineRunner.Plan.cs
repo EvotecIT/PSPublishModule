@@ -1671,7 +1671,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ProjectId = t.ProjectId,
                 ProjectPath = t.ProjectPath,
                 Kind = t.Kind,
-                SupportedRuntimes = (t.SupportedRuntimes ?? Array.Empty<string>()).ToArray(),
+                // Preserve invalid input for the shared matrix admission check.
+                SupportedRuntimes = t.SupportedRuntimes?.ToArray()!,
                 Publish = new DotNetPublishPublishOptions
                 {
                     Style = t.Publish?.Style ?? DotNetPublishStyle.Portable,

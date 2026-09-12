@@ -61,7 +61,8 @@ public sealed partial class ReleaseValidationService
                     await RunCommandAsync(command, values, report, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
-                var childEnvironment = new Dictionary<string, string?>(environment, StringComparer.OrdinalIgnoreCase);
+                var childEnvironment = new Dictionary<string, string?>(environment,
+                    FrameworkCompatibility.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
                 foreach (var pair in command.Environment) childEnvironment[pair.Key] = pair.Value is null ? null : Expand(pair.Value, values);
                 var localTool = manifestInstall && string.Equals(command.FileName, "{ToolPath}", StringComparison.OrdinalIgnoreCase);
                 var workingDirectory = command.WorkingDirectory is null ? workspace.Root : Resolve(command.WorkingDirectory, values);

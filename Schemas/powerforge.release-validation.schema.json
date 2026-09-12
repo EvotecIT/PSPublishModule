@@ -5,6 +5,14 @@
   "description": "Final-artifact and isolated runtime contracts. This operation validates without publishing.",
   "type": "object",
   "additionalProperties": false,
+  "if": {
+    "required": ["Consumers"],
+    "properties": { "Consumers": { "minItems": 1 } }
+  },
+  "then": {
+    "required": ["Packages"],
+    "properties": { "Packages": { "type": "object" } }
+  },
   "anyOf": [
     { "required": ["Packages"], "properties": { "Packages": { "type": "object" } } },
     { "required": ["CliArtifacts"], "properties": { "CliArtifacts": { "type": "object" } } },
@@ -96,18 +104,21 @@
         },
         "FileName": {
           "type": "string",
-          "pattern": "\\S"
+          "pattern": "\\S",
+          "not": { "pattern": "\u0000" }
         },
         "Arguments": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "not": { "pattern": "\u0000" }
           }
         },
         "WorkingDirectory": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "not": { "pattern": "\u0000" }
             },
             {
               "type": "null"
@@ -168,11 +179,13 @@
         },
         "Environment": {
           "type": "object",
+          "propertyNames": { "minLength": 1, "not": { "pattern": "[=\u0000]" } },
           "additionalProperties": {
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "not": { "type": "string", "pattern": "\u0000" }
           }
         },
         "Platforms": {
@@ -357,7 +370,8 @@
         "ProbeScript": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "pattern": "\\S"
             },
             {
               "type": "null"
@@ -480,7 +494,8 @@
           "type": "string"
         },
         "ProjectFile": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "Frameworks": {
           "type": "array",

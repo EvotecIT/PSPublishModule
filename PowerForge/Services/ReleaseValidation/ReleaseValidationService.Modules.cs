@@ -13,6 +13,10 @@ public sealed partial class ReleaseValidationService
         {
             throw new InvalidOperationException("Module validation requires a nonblank manifest path.");
         }
+        if (spec.ProbeScript is not null && string.IsNullOrWhiteSpace(spec.ProbeScript))
+        {
+            throw new InvalidOperationException("Module probes require a nonblank script path.");
+        }
         if (spec.ProbeScript is not null && (spec.Hosts is null || spec.Hosts.Length == 0 ||
             spec.Hosts.Any(string.IsNullOrWhiteSpace)))
         {

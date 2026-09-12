@@ -1211,7 +1211,7 @@ internal sealed class PowerForgeReleaseValidationAction
     public string? WorkingDirectory { get; set; }
 
     /// <summary>Environment variable overrides passed to the validation process.</summary>
-    public Dictionary<string, string?> Environment { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string?> Environment { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>Timeout in seconds. Defaults to thirty minutes.</summary>
     public int TimeoutSeconds { get; set; } = 1800;

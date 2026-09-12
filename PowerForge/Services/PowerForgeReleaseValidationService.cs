@@ -63,16 +63,16 @@ internal sealed class PowerForgeReleaseValidationService
         try
         {
             File.WriteAllText(context.ContextPath, JsonSerializer.Serialize(context), new UTF8Encoding(false));
-            var environment = new Dictionary<string, string?>(action.Environment, StringComparer.OrdinalIgnoreCase)
-            {
-                ["POWERFORGE_CONTEXT"] = context.ContextPath,
-                ["POWERFORGE_RELEASE_STAGE"] = context.Stage,
-                ["POWERFORGE_RELEASE_VERSION"] = context.ResolvedVersion,
-                ["POWERFORGE_RELEASE_MANIFEST"] = context.ReleaseManifestPath,
-                ["POWERFORGE_RELEASE_CHECKSUMS"] = context.ReleaseChecksumsPath,
-                ["POWERFORGE_RELEASE_STAGING_ROOT"] = context.StagingRoot,
-                ["POWERFORGE_MODULE_STAGING_PATH"] = context.ModuleStagingPath
-            };
+            var environment = new Dictionary<string, string?>(
+                FrameworkCompatibility.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            foreach (var pair in action.Environment) environment[pair.Key] = pair.Value;
+            environment["POWERFORGE_CONTEXT"] = context.ContextPath;
+            environment["POWERFORGE_RELEASE_STAGE"] = context.Stage;
+            environment["POWERFORGE_RELEASE_VERSION"] = context.ResolvedVersion;
+            environment["POWERFORGE_RELEASE_MANIFEST"] = context.ReleaseManifestPath;
+            environment["POWERFORGE_RELEASE_CHECKSUMS"] = context.ReleaseChecksumsPath;
+            environment["POWERFORGE_RELEASE_STAGING_ROOT"] = context.StagingRoot;
+            environment["POWERFORGE_MODULE_STAGING_PATH"] = context.ModuleStagingPath;
             var executable = ResolvePowerShellExecutable(action.PreferWindowsPowerShell);
             var process = _processRunner.RunAsync(new ProcessRunRequest(executable, workingDirectory,
                 new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", path },

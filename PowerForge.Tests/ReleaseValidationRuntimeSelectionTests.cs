@@ -1,3 +1,6 @@
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+
 namespace PowerForge.Tests;
 
 public sealed class ReleaseValidationRuntimeSelectionTests : IDisposable
@@ -93,6 +96,49 @@ public sealed class ReleaseValidationRuntimeSelectionTests : IDisposable
         Assert.Equal(overrideDefaults ? replacementRoot : originalRoot, request.WorkspaceTestimoXRoot);
         Assert.Equal(123, defaults.SignTimeoutSeconds);
         Assert.Equal(originalRoot, defaults.WorkspaceTestimoXRoot);
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, " \t")]
+    [InlineData(true, " \t")]
+    public void Profile_selection_does_not_erase_invalid_supported_runtimes(bool throughProfile, string? runtime)
+    {
+        var spec = Spec();
+        spec.Targets[0].SupportedRuntimes = runtime is null ? null! : [runtime];
+        spec.DotNet.Runtimes = ["linux-x64"];
+        if (throughProfile) spec.Profiles = [new() { Name = "default", Default = true }];
+        var error = Assert.Throws<ArgumentException>(() => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+        Assert.Contains("SupportedRuntimes", error.Message);
+    }
+
+    [WindowsFact]
+    public void Public_target_DSL_rejects_invalid_restrictions_before_emitting_a_target()
+    {
+        var state = InitialSessionState.CreateDefault();
+        state.Commands.Add(new SessionStateCmdletEntry("New-ConfigurationDotNetTarget",
+            typeof(PSPublishModule.NewConfigurationDotNetTargetCommand), null));
+        using var runspace = RunspaceFactory.CreateRunspace(state);
+        runspace.Open();
+        foreach (var variant in new[] { "omitted", "empty", "valid", "null", "blank", "mixed" }) {
+            using var shell = PowerShell.Create();
+            shell.Runspace = runspace;
+            shell.AddCommand("New-ConfigurationDotNetTarget").AddParameter("Name", "app")
+                .AddParameter("ProjectPath", "App.csproj").AddParameter("Framework", "net10.0");
+            if (variant != "omitted") shell.AddParameter("SupportedRuntimes", variant switch {
+                "empty" => Array.Empty<string>(), "valid" => new[] { "win-x64" },
+                "blank" => new[] { " \t" }, "mixed" => new[] { "win-x64", " " }, _ => null
+            });
+            if (variant is "null" or "blank" or "mixed") {
+                var error = Assert.ThrowsAny<ParameterBindingException>(() => shell.Invoke());
+                Assert.Contains("SupportedRuntimes", error.Message);
+            } else {
+                var target = Assert.IsType<DotNetPublishTarget>(Assert.Single(shell.Invoke()).BaseObject);
+                Assert.False(shell.HadErrors);
+                Assert.Equal(variant == "valid" ? new[] { "win-x64" } : Array.Empty<string>(), target.SupportedRuntimes);
+            }
+        }
     }
 
     private DotNetPublishSpec Spec() => new() {

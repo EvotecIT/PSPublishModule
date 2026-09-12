@@ -25,6 +25,8 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new ArgumentException($"Target.Publish.Framework is required for '{t.Name}' (or set Target.Publish.Frameworks/Matrix.Frameworks).", nameof(spec));
 
         var rids = NormalizeStrings(t.Publish.Runtimes);
+        if (t.SupportedRuntimes is null || t.SupportedRuntimes.Any(string.IsNullOrWhiteSpace))
+            throw new ArgumentException($"Target '{t.Name}' SupportedRuntimes must contain only nonblank runtime names.", nameof(spec));
         var supportedRuntimes = NormalizeStrings(t.SupportedRuntimes);
         if (rids.Length == 0) rids = supportedRuntimes;
         if (rids.Length == 0) rids = matrixDefaultRids;

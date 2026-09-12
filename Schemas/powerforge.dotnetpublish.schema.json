@@ -831,7 +831,7 @@
         "ProjectId": { "type": ["string", "null"], "minLength": 1 },
         "ProjectPath": { "type": "string", "minLength": 1 },
         "Kind": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishTargetKind" }, { "type": "null" }] },
-        "SupportedRuntimes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "SupportedRuntimes": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
         "Publish": { "$ref": "#/$defs/DotNetPublishPublishOptions" }
       },
       "required": ["Name", "Publish"],
