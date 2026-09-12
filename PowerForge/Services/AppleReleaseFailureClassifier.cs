@@ -9,6 +9,7 @@ internal static class AppleReleaseFailureClassifier
 {
     private static readonly (Regex Pattern, string Category, string Code, string Action, bool Retryable)[] Rules =
     {
+        Rule("exact[- ]source|exact source commit|source trust|cannot be attested to the exact source", "source-trust", "APPLE_SOURCE_TRUST", "Remove untracked, host-dependent, or mutable build inputs; bind supported provenance to PowerForge-owned settings, then rerun Doctor from the exact source commit.", false),
         Rule("provisioning profile|requires a provisioning profile|No profiles for", "signing", "APPLE_PROVISIONING", "Refresh or select the matching provisioning profile and verify the bundle id, team, capabilities, and signing certificate.", false),
         Rule("certificate.*expired|expired.*certificate|No signing certificate", "signing", "APPLE_CERTIFICATE", "Renew or install the required Apple signing certificate and re-run Doctor before rebuilding.", false),
         Rule("ITMS-[0-9]+|Asset validation failed|Invalid Bundle", "validation", "APPLE_ASSET_VALIDATION", "Open the retained Xcode distribution log, correct the reported bundle, entitlement, metadata, or binary validation issue, then increment the build before uploading again.", false),

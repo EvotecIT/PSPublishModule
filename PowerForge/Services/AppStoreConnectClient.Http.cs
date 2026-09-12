@@ -74,11 +74,9 @@ public sealed partial class AppStoreConnectClient
     }
 
     private static bool IsTransientReadFailure(HttpStatusCode statusCode)
-        => (int)statusCode == 429
-            || statusCode is HttpStatusCode.InternalServerError
-            or HttpStatusCode.BadGateway
-            or HttpStatusCode.ServiceUnavailable
-            or HttpStatusCode.GatewayTimeout;
+        => statusCode == HttpStatusCode.Unauthorized
+            || (int)statusCode == 429
+            || (int)statusCode is >= 500 and <= 599;
 
     private readonly struct AppStoreConnectHttpResponse
     {

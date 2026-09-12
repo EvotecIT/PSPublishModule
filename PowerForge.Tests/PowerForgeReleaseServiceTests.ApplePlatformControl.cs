@@ -1016,6 +1016,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("No profiles for com.evotecit.casaray were found", "APPLE_PROVISIONING", "signing")]
     [InlineData("Asset validation failed ITMS-90161", "APPLE_ASSET_VALIDATION", "validation")]
     [InlineData("App Store Connect timed out with 503", "APPLE_TRANSIENT", "transient")]
+    [InlineData("Xcode build setting INFOPLIST_FILE contents contains an unapproved host or environment reference and cannot be bound to the exact source commit", "APPLE_SOURCE_TRUST", "source-trust")]
     public void AppleReleaseFailureClassifier_ProducesStableOperatorGuidance(
         string message,
         string expectedCode,

@@ -724,7 +724,7 @@ The reusable workflow boundary mirrors the human approval boundary:
 - `powerforge-apple-monitor.yml` runs scheduled `Doctor` on a trusted self-hosted macOS
   runner, reads its private `~/.appstoreconnect/env` profile only inside that action
   process, retains the compact receipt, and maintains one marker-owned GitHub incident
-  until errors and warnings are cleared. The profile and referenced `.p8` file must be
+  until monitored errors are cleared. The profile and referenced `.p8` file must be
   runner-owned regular files with one link, grant no group, other, or ACL access, and
   must not contain or traverse symbolic links. The monitor accepts only the exact
   default-branch commit that invoked it.
@@ -983,12 +983,23 @@ must be exact references to their canonical values. It requires the `.p8` file t
 that same private directory, validates an unencrypted PKCS#8 PEM shape, and keeps all
 values process-local. It accepts only the exact default-branch commit that invoked the
 workflow and executes only a `powerforge_ref` already merged into PSPublishModule's
-default branch, then retains the compact
-receipt and maintains one stable GitHub incident. Errors
-and warnings open the issue; a clean later run closes only incidents carrying the
-PowerForge monitor ownership marker, never an unrelated same-title issue. This catches upload/build
+default branch, then retains the compact receipt and maintains one stable GitHub
+incident. The default `continuous` readiness policy keeps release-timing attestations
+(review contact/demo details, age rating, price, and territory availability) in the
+retained receipt without making an ordinary scheduled health run fail. Pass
+`readiness_policy: strict` for a release-window monitor that should gate on those
+declarations too; direct `Doctor`, `Prepare`, and `Advance` release commands remain
+strict regardless. Non-retryable monitored errors open or reopen the marker-owned issue,
+every failing occurrence refreshes its run, source, and timestamp, and a healthy later
+run closes it. The workflow never adopts an unrelated same-title issue and deduplicates
+identical cross-target diagnostics before rendering. This catches upload/build
 state, review, metadata, screenshot, compliance, observability, and TestFlight feedback
 gaps without waiting for an Apple email.
+
+Read-only App Store Connect requests retry bounded `401 NOT_AUTHORIZED`, `429`, and
+transient server responses. Each attempt creates a fresh JWT. Persistent authentication
+failures still surface as `APPLE_AUTH`; exact-source validation failures surface
+separately as `APPLE_SOURCE_TRUST`.
 
 App Store Connect webhooks complement scheduled polling. `AppStoreConnectClient` can
 list, create, update, and ping webhooks, while `AppStoreConnectWebhookVerifier`
