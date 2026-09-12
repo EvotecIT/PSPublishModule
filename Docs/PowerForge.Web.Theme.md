@@ -582,7 +582,7 @@ The builder publishes the viewer assets and adds them to the normal CSS and Java
 </a>
 ```
 
-A shared group enables previous/next navigation. Omit the group for a single image. Optional `data-pf-media-mobile` and `data-pf-media-desktop` attributes add explicit variants. `data-pf-media-src` overrides the full-size source. Sources must use HTTP, HTTPS, or a browser blob URL. Use separate assets for different appearances; the viewer preserves screenshot colors.
+A shared group enables previous/next navigation. Omit the group for a single image. Optional `data-pf-media-mobile` and `data-pf-media-desktop` attributes add explicit variants. `data-pf-media-src` overrides the full-size source. Sources must resolve to HTTP or HTTPS URLs. Browser-local blob URLs are not intercepted by this static-site viewer. Use separate assets for different appearances; the viewer preserves screenshot colors.
 
 The viewer supports fit, actual size, zoom, mouse dragging, touch scrolling, captions, background selection, keyboard navigation, Escape, and focus restoration. Modified clicks and download links keep their normal behavior. Set `data-pf-media="off"` to exclude an individual link. UI labels follow the page language for English, Polish, French, German, and Spanish; untranslated messages fall back to English.
 

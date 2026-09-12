@@ -18,7 +18,7 @@ public static partial class WebAssetOptimizer
         OperatingSystem.IsWindows(),
         OperatingSystem.IsMacOS());
     private static readonly HttpClient RewriteDownloadClient = CreateRewriteDownloadClient();
-    private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex HtmlAttrRegex = new("""(?<prefix>(?<![\w:-])(?<attr>href|src|data-local-href|data-pf-media-(?:src|light|dark|mobile|desktop))\s*=\s*)(?<quote>['"])(?<url>.*?)\k<quote>""", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HtmlSrcSetAttrRegex = new("(?<attr>\\b(?:srcset|imagesrcset))\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StylesheetLinkRegex = new("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -466,7 +466,7 @@ public static partial class WebAssetOptimizer
                 return match.Value;
 
             var encoded = System.Web.HttpUtility.HtmlAttributeEncode(replaced) ?? string.Empty;
-            return $"{match.Groups["attr"].Value}=\"{encoded}\"";
+            return $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}{encoded}{match.Groups["quote"].Value}";
         });
     }
 
@@ -621,7 +621,7 @@ public static partial class WebAssetOptimizer
         {
             var url = match.Groups["url"].Value;
             var rewritten = RewriteUrlWithMap(url, map, documentBaseUri);
-            return rewritten == url ? match.Value : $"{match.Groups["attr"].Value}=\"{rewritten}\"";
+            return rewritten == url ? match.Value : $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}{rewritten}{match.Groups["quote"].Value}";
         });
 
         return HtmlSrcSetAttrRegex.Replace(rewrittenHtml, match =>

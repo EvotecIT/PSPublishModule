@@ -17,13 +17,33 @@
     if (!value) return null;
     try {
       const url = new URL(value, document.baseURI);
-      return /^(https?:|blob:)$/.test(url.protocol) ? url.href : null;
+      return /^https?:$/.test(url.protocol) ? url.href : null;
     } catch { return null; }
   };
   function source(item) {
     const image = item.querySelector('img');
     return safeSource(item.dataset.pfMediaSrc || item.getAttribute('href') || image?.currentSrc || image?.src);
   }
+  function eligible(item) {
+    return item && !dialog?.contains(item) && item.querySelector('img') && item.dataset.pfMedia !== 'off' && !item.hasAttribute('download') && source(item);
+  }
+  // Mark only the targets that this configured viewer can enhance. Keep dynamic
+  // galleries and attribute changes consistent with the delegated click handler.
+  function refreshTriggers() {
+    document.querySelectorAll('[data-pf-media-trigger]').forEach(item => {
+      if (!item.matches(selector) || !eligible(item)) item.removeAttribute('data-pf-media-trigger');
+    });
+    document.querySelectorAll(selector).forEach(item => {
+      if (eligible(item) && !item.hasAttribute('data-pf-media-trigger')) item.setAttribute('data-pf-media-trigger', '');
+    });
+  }
+  refreshTriggers();
+  let triggerRefreshPending = false;
+  new MutationObserver(records => {
+    if (triggerRefreshPending || !records.some(record => record.attributeName !== 'data-pf-media-trigger' && !dialog?.contains(record.target))) return;
+    triggerRefreshPending = true;
+    requestAnimationFrame(() => { triggerRefreshPending = false; refreshTriggers(); });
+  }).observe(document.documentElement, { childList:true, subtree:true, attributes:true });
   function button(label, text, action) {
     const result = document.createElement('button');
     result.type = 'button'; result.textContent = translate(text); result.setAttribute('aria-label', translate(label));
@@ -159,14 +179,15 @@
     load();
   }
   document.addEventListener('click', event => {
+    if (dialog?.contains(event.target)) return;
     if (styles && !styles.sheet) return;
     if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const item = event.target.closest?.(selector);
-    if (!item || !item.querySelector('img') || item.dataset.pfMedia === 'off' || item.hasAttribute('download') || !source(item)) return;
+    if (!eligible(item)) return;
     const group = item.dataset.pfMediaGroup || item.closest('[data-pf-media-group]')?.dataset.pfMediaGroup;
     items = group ? Array.from(document.querySelectorAll(selector)).filter(candidate =>
       (candidate.dataset.pfMediaGroup || candidate.closest('[data-pf-media-group]')?.dataset.pfMediaGroup) === group &&
-      candidate.dataset.pfMedia !== 'off' && !candidate.hasAttribute('download') && candidate.querySelector('img') && source(candidate)) : [item];
+      eligible(candidate)) : [item];
     event.preventDefault(); opener = item;
     if (!dialog) create();
     document.documentElement.classList.add('pf-media-open');
