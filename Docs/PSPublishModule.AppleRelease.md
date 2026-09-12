@@ -25,6 +25,12 @@ powerforge apple-deploy --platform iOS --profile Free
 powerforge apple-deploy --platform macOS --profile Plus
 ```
 
+Consumer repositories that require a source-bound local deployment can route
+`apple-deploy` through `scripts/Invoke-PinnedPowerForge.ps1`. The helper builds
+the CLI from one reviewed PSPublishModule commit and accepts any clean consumer
+branch for local deployment; publication commands continue to require a clean
+consumer `main` equal to `origin/main`.
+
 The iOS/iPadOS/watchOS device path runs `xcodebuild build`, installs with
 `xcrun devicectl`, and launches the selected profile. The macOS path builds the
 native or Mac Catalyst product, atomically replaces the app in `/Applications`,
