@@ -83,6 +83,8 @@ public sealed class SiteSpec
     public AssetPolicySpec? AssetPolicy { get; set; }
     /// <summary>Prism syntax highlighting configuration.</summary>
     public PrismSpec? Prism { get; set; }
+    /// <summary>Optional progressive image viewer for linked screenshots and galleries.</summary>
+    public MediaViewerSpec? MediaViewer { get; set; }
     /// <summary>Accessibility strings.</summary>
     public A11ySpec? A11y { get; set; }
     /// <summary>Rules for external links.</summary>

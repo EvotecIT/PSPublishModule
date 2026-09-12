@@ -60,6 +60,8 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
                             "src": "/assets/products/casaray/ipad-home.png",
                             "alt": "CasaRay dashboard on iPad",
                             "caption": "A complete home overview.",
+                            "light": " /assets/products/casaray/ipad-home.png ",
+                            "dark": "/assets/products/casaray/ipad-home-dark.png",
                             "width": 1200,
                             "height": 1600,
                             "role": "hero",
@@ -90,6 +92,8 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
             Assert.Contains("meta.project_kind: \"product\"", page, StringComparison.Ordinal);
             Assert.Contains("meta.product_presentation:", page, StringComparison.Ordinal);
             Assert.DoesNotContain("meta.product:", page, StringComparison.Ordinal);
+            Assert.Contains("light: \"/assets/products/casaray/ipad-home.png\"", page, StringComparison.Ordinal);
+            Assert.Contains("dark: \"/assets/products/casaray/ipad-home-dark.png\"", page, StringComparison.Ordinal);
             Assert.Contains("width: 1200", page, StringComparison.Ordinal);
             Assert.Contains("height: 1600", page, StringComparison.Ordinal);
             Assert.Contains("meta.software.application_category: \"UtilitiesApplication\"", page, StringComparison.Ordinal);
@@ -105,6 +109,24 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
             Assert.Equal(3, product.GetProperty("platforms").GetArrayLength());
             Assert.Equal("gallery", product.GetProperty("media")[1].GetProperty("role").GetString());
             Assert.Equal("contain", product.GetProperty("media")[1].GetProperty("fit").GetString());
+            Assert.Equal("/assets/products/casaray/ipad-home.png", product.GetProperty("media")[0].GetProperty("light").GetString());
+            Assert.Equal("/assets/products/casaray/ipad-home-dark.png", product.GetProperty("media")[0].GetProperty("dark").GetString());
+
+            string validCatalog = File.ReadAllText(catalogPath);
+            foreach (string field in new[] { "light", "dark" })
+            foreach (string source in new[] { "javascript:alert(1)", "http://cdn.example/image.png", "//cdn.example/image.png", "https://cdn.example/\\image.png", "https://cdn.example/\timage.png" })
+            {
+                var invalidCatalog = System.Text.Json.Nodes.JsonNode.Parse(validCatalog)!;
+                invalidCatalog["projects"]![0]!["product"]!["media"]![0]![field] = source;
+                File.WriteAllText(catalogPath, invalidCatalog.ToJsonString());
+                var invalidResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+                Assert.False(invalidResult.Success);
+                Assert.Contains("validation failed", invalidResult.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            }
+            var httpsCatalog = System.Text.Json.Nodes.JsonNode.Parse(validCatalog)!;
+            httpsCatalog["projects"]![0]!["product"]!["media"]![0]!["dark"] = "https://cdn.example/dark.png";
+            File.WriteAllText(catalogPath, httpsCatalog.ToJsonString());
+            Assert.True(WebPipelineRunner.RunPipeline(pipelinePath, logger: null).Success);
         }
         finally
         {

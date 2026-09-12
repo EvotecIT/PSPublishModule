@@ -113,6 +113,11 @@ public static partial class WebSiteBuilder
         var assetBaseRoute = ResolveHtmlAssetBaseRoute(item.OutputPath);
         var cssHtml = RenderCssLinks(cssLinks, assetRegistry, assetBaseRoute, assetSlotUsage.UseCssSlot ? spec.Head : null);
         var jsHtml = RenderJsLinks(jsLinks, assetBaseRoute);
+        if (spec.MediaViewer?.Enabled == true)
+        {
+            cssHtml += RenderMediaViewerStyles(assetBaseRoute);
+            jsHtml += RenderMediaViewerScript(spec.MediaViewer, assetBaseRoute);
+        }
         var pageTitle = ResolveSeoTitle(spec, item);
         var pageDescription = ResolveMetaDescription(spec, item);
         var descriptionMeta = string.IsNullOrWhiteSpace(pageDescription)
@@ -193,6 +198,7 @@ public static partial class WebSiteBuilder
         {
             var html = themeEngine.Render(themeTemplate, renderContext, partialResolver ?? (_ => null));
             html = RebaseSelectedLanguageRootHtml(spec, html);
+            if (spec.MediaViewer?.Enabled == true) html = WebMediaContentRenderer.Render(html);
             ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
             return html;
         }
@@ -225,7 +231,7 @@ public static partial class WebSiteBuilder
 </html>";
         fallbackHtml = RebaseSelectedLanguageRootHtml(spec, fallbackHtml);
         ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
-        return fallbackHtml;
+        return spec.MediaViewer?.Enabled == true ? WebMediaContentRenderer.Render(fallbackHtml) : fallbackHtml;
     }
 
     private static string RebaseSelectedLanguageRootHtml(SiteSpec spec, string html)
@@ -237,37 +243,21 @@ public static partial class WebSiteBuilder
         if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
             return html;
 
-        return RewriteQuotedHtmlAttribute(
-            RewriteQuotedHtmlAttribute(
-                RewriteQuotedHtmlAttribute(
-                    RewriteQuotedHtmlAttribute(
-                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value));
-    }
-
-    private static string RewriteQuotedHtmlAttribute(string html, string attributeName, Func<string, string> rewrite)
-    {
-        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
-            return html;
-
-        var pattern = $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?<quote>[""'])(?<value>[^""']*)(?<suffix>\k<quote>)";
-        return System.Text.RegularExpressions.Regex.Replace(
-            html,
-            pattern,
-            match =>
-            {
-                var value = match.Groups["value"].Value;
-                var rewritten = rewrite(value);
-                if (string.Equals(value, rewritten, StringComparison.Ordinal))
-                    return match.Value;
-
-                return match.Groups["prefix"].Value + match.Groups["quote"].Value + rewritten + match.Groups["suffix"].Value;
-            },
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
-            RegexTimeout);
+        var attributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "href", "src", "action", "formaction", "data-local-href",
+            "data-pf-media-src", "data-pf-media-light", "data-pf-media-dark",
+            "data-pf-media-mobile", "data-pf-media-desktop"
+        };
+        var language = ResolveEffectiveLanguageCode(ResolveLocalizationConfig(spec), buildContext.Language);
+        return WebHtmlAttributeRewriter.Rewrite(html, (attribute, value) =>
+        {
+            if (!attributes.Contains(attribute)) return value;
+            var firstSegment = value.Split(['/', '?', '#'], 2)[0];
+            return value.StartsWith("/", StringComparison.Ordinal) || IsAbsoluteHttpUrl(value) ||
+                   firstSegment.Equals(language, StringComparison.OrdinalIgnoreCase)
+                ? RebaseRouteForSelectedLanguageRootBuild(spec, value) : value;
+        });
     }
 
     private static void ReportSlowRenderTiming(

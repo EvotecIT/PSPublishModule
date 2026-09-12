@@ -169,6 +169,7 @@ public static partial class WebSiteBuilder
             CopyThemeAssets(spec, plan.RootPath, outDir);
             ReportProgress("copying static assets");
             CopyStaticAssets(spec, plan.RootPath, outDir);
+            EnsureMediaViewerAssets(spec, outDir);
             ReportProgress("rendering content");
             foreach (var item in renderItems)
             {
