@@ -46,8 +46,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (!string.Equals(signingEvidence.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase))
             throw Invalid($"Module signing evidence identifies '{signingEvidence.ModuleName}', expected '{moduleName}'.");
 
-        using ZipArchive archive = ZipFile.OpenRead(artifactPath);
+        using var archiveInput = new ArchiveMetadataReadStream(File.OpenRead(artifactPath));
+        using ZipArchive archive = new ZipArchive(archiveInput, ZipArchiveMode.Read);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
+        archiveInput.CompleteMetadataInspection();
         ValidateModuleArchiveBounds(entries);
         string[] manifestEntries = entries.Keys.Where(entry =>
                 string.Equals(Path.GetFileName(entry), moduleName + ".psd1", StringComparison.OrdinalIgnoreCase) &&

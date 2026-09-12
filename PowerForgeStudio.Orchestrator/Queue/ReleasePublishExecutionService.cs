@@ -145,6 +145,16 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         var repository = _catalogScanner.InspectRepository(queueItem.RootPath);
         var receipts = new List<ReleasePublishReceipt>();
+        var unifiedValidation = PrepareUnifiedReleaseValidation(
+            repository,
+            signingResult,
+            cancellationToken);
+        if (unifiedValidation.Failure is not null)
+        {
+            receipts.Add(unifiedValidation.Failure);
+            return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+        }
+        var validatedUnifiedRelease = unifiedValidation.Result;
         var unifiedOwnsGitHub = UnifiedReleaseOwnsGitHub(repository.UnifiedReleaseConfigPath);
         var unifiedPreflightFailure = PrepareUnifiedReleaseVirusTotalPreflight(
             repository,
@@ -158,6 +168,16 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
         {
+            var integrityFailure = ValidateUnifiedReleaseIntegrity(
+                repository,
+                validatedUnifiedRelease,
+                cancellationToken,
+                "Project package publication");
+            if (integrityFailure is not null)
+            {
+                receipts.Add(integrityFailure);
+                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+            }
             var projectReceipts = await ExecuteProjectPublishAsync(
                 repository,
                 signingResult,
@@ -173,6 +193,16 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
         {
+            var integrityFailure = ValidateUnifiedReleaseIntegrity(
+                repository,
+                validatedUnifiedRelease,
+                cancellationToken,
+                "Module publication");
+            if (integrityFailure is not null)
+            {
+                receipts.Add(integrityFailure);
+                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+            }
             var moduleReceipts = await ExecuteModulePublishAsync(
                 repository,
                 signingResult,
@@ -207,7 +237,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                 repository,
                 directModuleSpec,
                 signingResult,
-                cancellationToken);
+                cancellationToken,
+                validatedUnifiedRelease: null);
             receipts.AddRange(modulePackageReceipts);
             if (modulePackageReceipts.Any(static receipt =>
                     receipt.Status == ReleasePublishReceiptStatus.Failed))
@@ -221,11 +252,22 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
             var unifiedSpec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
             if (checkpointedModulePackagePlans.Length > 0)
             {
+                var integrityFailure = ValidateUnifiedReleaseIntegrity(
+                    repository,
+                    validatedUnifiedRelease,
+                    cancellationToken,
+                    "Module-owned package publication");
+                if (integrityFailure is not null)
+                {
+                    receipts.Add(integrityFailure);
+                    return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                }
                 var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
                     repository,
                     unifiedSpec,
                     signingResult,
-                    cancellationToken);
+                    cancellationToken,
+                    validatedUnifiedRelease);
                 receipts.AddRange(modulePackageReceipts);
                 if (modulePackageReceipts.Any(static receipt =>
                         receipt.Status == ReleasePublishReceiptStatus.Failed))
@@ -233,7 +275,21 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                     return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
                 }
             }
-            receipts.AddRange(await ExecuteUnifiedPublishAsync(repository, signingResult, cancellationToken));
+            var unifiedIntegrityFailure = ValidateUnifiedReleaseIntegrity(
+                repository,
+                validatedUnifiedRelease,
+                cancellationToken,
+                "Unified release publication");
+            if (unifiedIntegrityFailure is not null)
+            {
+                receipts.Add(unifiedIntegrityFailure);
+                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+            }
+            receipts.AddRange(await ExecuteUnifiedPublishAsync(
+                repository,
+                signingResult,
+                cancellationToken,
+                validatedUnifiedRelease));
         }
 
         if (receipts.Count == 0)

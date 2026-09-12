@@ -8,12 +8,16 @@ This quickstart is the practical entrypoint for the DotNet publish engine.
   - scaffolds a JSON config file on disk.
 - `Invoke-DotNetPublish`
   - validates, plans, runs, or exports config.
+- `Import-ConfigurationDotNetPublish`
+  - loads a typed JSON specification for use in `Invoke-DotNetPublish -Settings { ... }`, preserving bundles, hooks, Store packages, and signing profiles.
 - `New-ConfigurationDotNet*`
   - creates DSL objects used inside `-Settings { ... }`.
 
 This keeps responsibilities clear and avoids command mix-ups.
 
 ## Recommended Flow: JSON First
+
+For final package and runtime checks after building, see [Validate release artifacts](PSPublishModule.ReleaseValidation.md).
 
 1. Scaffold config:
 

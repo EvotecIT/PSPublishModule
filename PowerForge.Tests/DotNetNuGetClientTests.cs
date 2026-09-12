@@ -87,8 +87,11 @@ public sealed class DotNetNuGetClientTests
         Assert.False(request.SuppressCompanionSymbols);
     }
 
-    [Fact]
-    public async Task PushPackageAsync_StagesCompanionSymbolsUnderConfigurationDirectory()
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(true, 1)]
+    public async Task PushPackageAsync_StagesCompanionSymbolsUnderConfigurationDirectory(bool readOnly, int exitCode)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var configurationDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "repository"));
@@ -97,6 +100,11 @@ public sealed class DotNetNuGetClientTests
         var symbolPackagePath = Path.ChangeExtension(packagePath, ".snupkg");
         File.WriteAllText(packagePath, "primary");
         File.WriteAllText(symbolPackagePath, "symbols");
+        if (readOnly)
+        {
+            File.SetAttributes(packagePath, FileAttributes.ReadOnly);
+            File.SetAttributes(symbolPackagePath, FileAttributes.ReadOnly);
+        }
 
         ProcessRunRequest? captured = null;
         string? stagedPackagePath = null;
@@ -110,7 +118,7 @@ public sealed class DotNetNuGetClientTests
             pushedSource = responseFileLines[6];
             Assert.True(File.Exists(stagedPackagePath));
             Assert.True(File.Exists(Path.ChangeExtension(stagedPackagePath, ".snupkg")));
-            return new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            return new ProcessRunResult(exitCode, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
         });
         var client = new DotNetNuGetClient(
             processRunner,
@@ -127,7 +135,7 @@ public sealed class DotNetNuGetClientTests
                 timeout: null,
                 suppressCompanionSymbols: false));
 
-            Assert.True(result.Succeeded);
+            Assert.Equal(exitCode == 0, result.Succeeded);
             Assert.NotNull(captured);
             Assert.StartsWith(configurationDirectory.FullName, captured!.WorkingDirectory, StringComparison.OrdinalIgnoreCase);
             Assert.NotEqual(configurationDirectory.FullName, captured.WorkingDirectory);
@@ -136,9 +144,13 @@ public sealed class DotNetNuGetClientTests
             Assert.False(Directory.Exists(captured.WorkingDirectory));
             Assert.True(File.Exists(packagePath));
             Assert.True(File.Exists(symbolPackagePath));
+            Assert.Equal(readOnly, new FileInfo(packagePath).IsReadOnly);
+            Assert.Equal(readOnly, new FileInfo(symbolPackagePath).IsReadOnly);
         }
         finally
         {
+            File.SetAttributes(packagePath, FileAttributes.Normal);
+            File.SetAttributes(symbolPackagePath, FileAttributes.Normal);
             try { root.Delete(recursive: true); } catch { }
         }
     }

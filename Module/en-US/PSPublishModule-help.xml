@@ -12941,6 +12941,79 @@ Supply it when punctuation such as 1,234 would otherwise be ambiguous.</maml:par
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Import-ConfigurationDotNetPublish</command:name>
+      <command:verb>Import</command:verb>
+      <command:noun>ConfigurationDotNetPublish</command:noun>
+      <maml:description>
+        <maml:para>Imports a typed .NET publish configuration for use in the publish DSL.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Relative project roots are anchored to the defining configuration file, so the resulting specification can be used from another working directory.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Import-ConfigurationDotNetPublish</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="ConfigPath">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Publish JSON or unified release JSON containing the tools configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="ConfigPath">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Publish JSON or unified release JSON containing the tools configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.DotNetPublishSpec</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Customize a configured package build</maml:title>
+        <dev:code>$spec = Import-ConfigurationDotNetPublish -Path './Build/publish.json'; $spec.DotNet.Configuration = 'Debug'; Invoke-DotNetPublish -Settings { $spec }</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Import-ConfigurationProject</command:name>
       <command:verb>Import</command:verb>
       <command:noun>ConfigurationProject</command:noun>
@@ -26259,6 +26332,18 @@ and parent directories for standard release config file names.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignTimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Maximum signing process duration in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>SignTimestampUrl</maml:name>
           <maml:description>
             <maml:para>Optional signing timestamp URL override.</maml:para>
@@ -26394,6 +26479,7 @@ and parent directories for standard release config file names.</maml:para>
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -26634,6 +26720,18 @@ and parent directories for standard release config file names.</maml:para>
           <maml:name>WorkspaceProfile</maml:name>
           <maml:description>
             <maml:para>Optional workspace validation profile override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkspaceTestimoXRoot</maml:name>
+          <maml:description>
+            <maml:para>Optional TestimoX workspace root passed to shared workspace validation.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -27506,6 +27604,18 @@ this switch requires ConfirmAppleAction and is intended only for deliberate reco
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignTimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Maximum signing process duration in seconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>SignTimestampUrl</maml:name>
           <maml:description>
             <maml:para>Optional signing timestamp URL override.</maml:para>
@@ -27641,6 +27751,7 @@ this switch requires ConfirmAppleAction and is intended only for deliberate reco
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -27881,6 +27992,18 @@ this switch requires ConfirmAppleAction and is intended only for deliberate reco
           <maml:name>WorkspaceProfile</maml:name>
           <maml:description>
             <maml:para>Optional workspace validation profile override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkspaceTestimoXRoot</maml:name>
+          <maml:description>
+            <maml:para>Optional TestimoX workspace root passed to shared workspace validation.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -28766,6 +28889,18 @@ and parent directories for standard release config file names.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignTimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Maximum signing process duration in seconds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>SignTimestampUrl</maml:name>
         <maml:description>
           <maml:para>Optional signing timestamp URL override.</maml:para>
@@ -28901,6 +29036,7 @@ and parent directories for standard release config file names.</maml:para>
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -29141,6 +29277,18 @@ and parent directories for standard release config file names.</maml:para>
         <maml:name>WorkspaceProfile</maml:name>
         <maml:description>
           <maml:para>Optional workspace validation profile override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WorkspaceTestimoXRoot</maml:name>
+        <maml:description>
+          <maml:para>Optional TestimoX workspace root passed to shared workspace validation.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -30726,6 +30874,506 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
         <dev:code>Invoke-ProjectRelease -Project 'Value'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Invoke-ReleaseValidation</command:name>
+      <command:verb>Invoke</command:verb>
+      <command:noun>ReleaseValidation</command:noun>
+      <maml:description>
+        <maml:para>Validates final artifacts and runs isolated product smoke tests without publishing.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Configuration can come from JSON, a typed object, or a settings block using New-ConfigurationReleaseValidation.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="Config">
+        <maml:name>Invoke-ReleaseValidation</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ConfigPath</maml:name>
+          <maml:description>
+            <maml:para>Path to a release-validation JSON file.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JsonOnly</maml:name>
+          <maml:description>
+            <maml:para>Return JSON without executing validation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JsonPath</maml:name>
+          <maml:description>
+            <maml:para>Optional configuration export path. Relative paths use the current PowerShell directory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>Optional project-root override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Variables</maml:name>
+          <maml:description>
+            <maml:para>Named path and value substitutions used by the configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Version</maml:name>
+          <maml:description>
+            <maml:para>Expected artifact version; otherwise inferred from the package or module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Configuration">
+        <maml:name>Invoke-ReleaseValidation</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Configuration</maml:name>
+          <maml:description>
+            <maml:para>Typed validation configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ReleaseValidationSpec</command:parameterValue>
+          <dev:type>
+            <maml:name>ReleaseValidationSpec</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JsonOnly</maml:name>
+          <maml:description>
+            <maml:para>Return JSON without executing validation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JsonPath</maml:name>
+          <maml:description>
+            <maml:para>Optional configuration export path. Relative paths use the current PowerShell directory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>Optional project-root override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Variables</maml:name>
+          <maml:description>
+            <maml:para>Named path and value substitutions used by the configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Version</maml:name>
+          <maml:description>
+            <maml:para>Expected artifact version; otherwise inferred from the package or module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Settings">
+        <maml:name>Invoke-ReleaseValidation</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JsonOnly</maml:name>
+          <maml:description>
+            <maml:para>Return JSON without executing validation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JsonPath</maml:name>
+          <maml:description>
+            <maml:para>Optional configuration export path. Relative paths use the current PowerShell directory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>Optional project-root override.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Settings</maml:name>
+          <maml:description>
+            <maml:para>Block that emits one New-ConfigurationReleaseValidation object.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ScriptBlock</command:parameterValue>
+          <dev:type>
+            <maml:name>ScriptBlock</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Variables</maml:name>
+          <maml:description>
+            <maml:para>Named path and value substitutions used by the configuration.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Version</maml:name>
+          <maml:description>
+            <maml:para>Expected artifact version; otherwise inferred from the package or module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ConfigPath</maml:name>
+        <maml:description>
+          <maml:para>Path to a release-validation JSON file.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Configuration</maml:name>
+        <maml:description>
+          <maml:para>Typed validation configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ReleaseValidationSpec</command:parameterValue>
+        <dev:type>
+          <maml:name>ReleaseValidationSpec</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JsonOnly</maml:name>
+        <maml:description>
+          <maml:para>Return JSON without executing validation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JsonPath</maml:name>
+        <maml:description>
+          <maml:para>Optional configuration export path. Relative paths use the current PowerShell directory.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProjectRoot</maml:name>
+        <maml:description>
+          <maml:para>Optional project-root override.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Settings</maml:name>
+        <maml:description>
+          <maml:para>Block that emits one New-ConfigurationReleaseValidation object.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ScriptBlock</command:parameterValue>
+        <dev:type>
+          <maml:name>ScriptBlock</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Variables</maml:name>
+        <maml:description>
+          <maml:para>Named path and value substitutions used by the configuration.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Version</maml:name>
+        <maml:description>
+          <maml:para>Expected artifact version; otherwise inferred from the package or module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PowerForge.ReleaseValidationSpec</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ReleaseValidationReport</maml:name>
+        </dev:type>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Validate a local package set</maml:title>
+        <dev:code>Invoke-ReleaseValidation -ConfigPath './Build/validation.json' -Variables @{ PackageRoot = './Artifacts/packages' }</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Export a command contract as JSON</maml:title>
+        <dev:code>Invoke-ReleaseValidation -JsonOnly -Settings { New-ConfigurationReleaseValidation -Commands @{ Name = 'CLI help'; FileName = 'example'; Arguments = @('--help') } }</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Invoke-ValidationCommand</command:name>
+      <command:verb>Invoke</command:verb>
+      <command:noun>ValidationCommand</command:noun>
+      <maml:description>
+        <maml:para>Runs a bounded validation process and returns its captured output.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Use this for product-specific probes that must inspect structured process output. PowerForge owns timeout, cancellation, argument quoting, and expected-exit checks.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Invoke-ValidationCommand</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+          <maml:name>Command</maml:name>
+          <maml:description>
+            <maml:para>Executable, arguments, timeout, environment, and output expectations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ReleaseCommandValidation</command:parameterValue>
+          <dev:type>
+            <maml:name>ReleaseCommandValidation</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>Root for relative paths. Defaults to the current PowerShell filesystem location.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Variables</maml:name>
+          <maml:description>
+            <maml:para>Named substitutions for command arguments, environment, and paths.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="None">
+        <maml:name>Command</maml:name>
+        <maml:description>
+          <maml:para>Executable, arguments, timeout, environment, and output expectations.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ReleaseCommandValidation</command:parameterValue>
+        <dev:type>
+          <maml:name>ReleaseCommandValidation</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProjectRoot</maml:name>
+        <maml:description>
+          <maml:para>Root for relative paths. Defaults to the current PowerShell filesystem location.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Variables</maml:name>
+        <maml:description>
+          <maml:para>Named substitutions for command arguments, environment, and paths.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PowerForge.ReleaseCommandValidation</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ProcessRunResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Read product diagnostics as JSON</maml:title>
+        <dev:code>$result = Invoke-ValidationCommand -Command @{ FileName = './tool.exe'; Arguments = @('diagnostics', '--json'); OutputJsonKind = 'Object' }; $result.StdOut | ConvertFrom-Json</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -38636,6 +39284,487 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>New-ConfigurationDotNetDebian</command:name>
+      <command:verb>New</command:verb>
+      <command:noun>ConfigurationDotNetDebian</command:noun>
+      <maml:description>
+        <maml:para>Creates Debian desktop-package metadata for the DotNet publish DSL.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Creates Debian desktop-package metadata for the DotNet publish DSL.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>New-ConfigurationDotNetDebian</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Architecture</maml:name>
+          <maml:description>
+            <maml:para>Optional architecture override; otherwise inferred from the runtime identifier.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CommandName</maml:name>
+          <maml:description>
+            <maml:para>Command installed under /usr/bin.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Depends</maml:name>
+          <maml:description>
+            <maml:para>Optional Debian dependency expression.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Description</maml:name>
+          <maml:description>
+            <maml:para>Short package description.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DesktopCategories</maml:name>
+          <maml:description>
+            <maml:para>Optional freedesktop category list.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DesktopComment</maml:name>
+          <maml:description>
+            <maml:para>Optional desktop application comment.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DesktopName</maml:name>
+          <maml:description>
+            <maml:para>Optional desktop application name. Setting it enables a desktop entry.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Executable</maml:name>
+          <maml:description>
+            <maml:para>Executable path relative to the published payload root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IconPath</maml:name>
+          <maml:description>
+            <maml:para>Optional PNG icon path resolved from the project root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IconSize</maml:name>
+          <maml:description>
+            <maml:para>Icon size used in the hicolor theme path. Defaults to 256.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>InstallDirectoryName</maml:name>
+          <maml:description>
+            <maml:para>Directory name installed under /opt.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Maintainer</maml:name>
+          <maml:description>
+            <maml:para>Package maintainer identity.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MimeTypes</maml:name>
+          <maml:description>
+            <maml:para>Optional MIME type list.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PackageName</maml:name>
+          <maml:description>
+            <maml:para>Lower-case Debian package name.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Priority</maml:name>
+          <maml:description>
+            <maml:para>Debian priority. Defaults to optional.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Section</maml:name>
+          <maml:description>
+            <maml:para>Debian section. Defaults to utils.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>StartupWmClass</maml:name>
+          <maml:description>
+            <maml:para>Optional startup WM class.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Version</maml:name>
+          <maml:description>
+            <maml:para>Debian package version.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Architecture</maml:name>
+        <maml:description>
+          <maml:para>Optional architecture override; otherwise inferred from the runtime identifier.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CommandName</maml:name>
+        <maml:description>
+          <maml:para>Command installed under /usr/bin.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Depends</maml:name>
+        <maml:description>
+          <maml:para>Optional Debian dependency expression.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Description</maml:name>
+        <maml:description>
+          <maml:para>Short package description.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DesktopCategories</maml:name>
+        <maml:description>
+          <maml:para>Optional freedesktop category list.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DesktopComment</maml:name>
+        <maml:description>
+          <maml:para>Optional desktop application comment.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DesktopName</maml:name>
+        <maml:description>
+          <maml:para>Optional desktop application name. Setting it enables a desktop entry.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Executable</maml:name>
+        <maml:description>
+          <maml:para>Executable path relative to the published payload root.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IconPath</maml:name>
+        <maml:description>
+          <maml:para>Optional PNG icon path resolved from the project root.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IconSize</maml:name>
+        <maml:description>
+          <maml:para>Icon size used in the hicolor theme path. Defaults to 256.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>InstallDirectoryName</maml:name>
+        <maml:description>
+          <maml:para>Directory name installed under /opt.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Maintainer</maml:name>
+        <maml:description>
+          <maml:para>Package maintainer identity.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MimeTypes</maml:name>
+        <maml:description>
+          <maml:para>Optional MIME type list.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PackageName</maml:name>
+        <maml:description>
+          <maml:para>Lower-case Debian package name.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Priority</maml:name>
+        <maml:description>
+          <maml:para>Debian priority. Defaults to optional.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Section</maml:name>
+        <maml:description>
+          <maml:para>Debian section. Defaults to utils.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>StartupWmClass</maml:name>
+        <maml:description>
+          <maml:para>Optional startup WM class.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Version</maml:name>
+        <maml:description>
+          <maml:para>Debian package version.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.DotNetPublishDebianOptions</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Create Debian desktop-package metadata</maml:title>
+        <dev:code>New-ConfigurationDotNetDebian -PackageName 'sample-studio' -Version '1.0.0' -Maintainer 'Example &lt;support@example.com&gt;' -Description 'Sample document studio.' -Executable 'Sample.Studio' -CommandName 'sample-studio' -InstallDirectoryName 'sample-studio' -DesktopName 'Sample Studio' -DesktopCategories 'Office;Utility;' -IconPath 'Assets/Sample.Studio.png'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>New-ConfigurationDotNetInstaller</command:name>
       <command:verb>New</command:verb>
       <command:noun>ConfigurationDotNetInstaller</command:noun>
@@ -42234,6 +43363,7 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Unknown</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Cli</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Desktop</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Service</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Library</command:parameterValue>
           </command:parameterValueGroup>
@@ -42397,6 +43527,7 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -42417,12 +43548,25 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
             <maml:name>DotNetPublishStyle[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SupportedRuntimes</maml:name>
+          <maml:description>
+            <maml:para>Supported runtime identifiers. Used as the default target matrix and checked after runtime overrides.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -42559,6 +43703,7 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Unknown</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Cli</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Desktop</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Service</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Library</command:parameterValue>
         </command:parameterValueGroup>
@@ -42722,6 +43867,7 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -42742,12 +43888,25 @@ New-ConfigurationDotNetState -Enabled -Rules $rule -StoragePath 'Artifacts/DotNe
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>DotNetPublishStyle[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SupportedRuntimes</maml:name>
+        <maml:description>
+          <maml:para>Supported runtime identifiers. Used as the default target matrix and checked after runtime overrides.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -55040,6 +56199,250 @@ snapshot and protects it from changes through packaging.</maml:para>
       <command:example>
         <maml:title>Generate signed release provenance</maml:title>
         <dev:code>New-ConfigurationReleaseProtection -GenerateProvenance</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>New-ConfigurationReleaseValidation</command:name>
+      <command:verb>New</command:verb>
+      <command:noun>ConfigurationReleaseValidation</command:noun>
+      <maml:description>
+        <maml:para>Creates a reusable package and runtime validation configuration.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Use typed objects or PowerShell hashtables for product expectations. The same configuration can be executed directly or exported as JSON.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>New-ConfigurationReleaseValidation</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CliArtifacts</maml:name>
+          <maml:description>
+            <maml:para>CLI manifest and publish matrix expectations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">CliArtifactValidation</command:parameterValue>
+          <dev:type>
+            <maml:name>CliArtifactValidation</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Commands</maml:name>
+          <maml:description>
+            <maml:para>Additional product commands and output expectations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ReleaseCommandValidation[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ReleaseCommandValidation[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Consumers</maml:name>
+          <maml:description>
+            <maml:para>Product-owned projects to run against the staged packages.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PackageConsumerValidation[]</command:parameterValue>
+          <dev:type>
+            <maml:name>PackageConsumerValidation[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeSchema</maml:name>
+          <maml:description>
+            <maml:para>Include the shared JSON schema reference when exporting.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Modules</maml:name>
+          <maml:description>
+            <maml:para>Module archives or directories and optional product smoke scripts.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleArtifactValidation[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ModuleArtifactValidation[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Packages</maml:name>
+          <maml:description>
+            <maml:para>NuGet package identities, payloads, dependencies, and signing expectations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PackageSetValidation</command:parameterValue>
+          <dev:type>
+            <maml:name>PackageSetValidation</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>Root for relative input paths.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tools</maml:name>
+          <maml:description>
+            <maml:para>Local .NET tool package installation checks.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetToolValidation[]</command:parameterValue>
+          <dev:type>
+            <maml:name>DotNetToolValidation[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CliArtifacts</maml:name>
+        <maml:description>
+          <maml:para>CLI manifest and publish matrix expectations.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">CliArtifactValidation</command:parameterValue>
+        <dev:type>
+          <maml:name>CliArtifactValidation</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Commands</maml:name>
+        <maml:description>
+          <maml:para>Additional product commands and output expectations.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ReleaseCommandValidation[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ReleaseCommandValidation[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Consumers</maml:name>
+        <maml:description>
+          <maml:para>Product-owned projects to run against the staged packages.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PackageConsumerValidation[]</command:parameterValue>
+        <dev:type>
+          <maml:name>PackageConsumerValidation[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludeSchema</maml:name>
+        <maml:description>
+          <maml:para>Include the shared JSON schema reference when exporting.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Modules</maml:name>
+        <maml:description>
+          <maml:para>Module archives or directories and optional product smoke scripts.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleArtifactValidation[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ModuleArtifactValidation[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Packages</maml:name>
+        <maml:description>
+          <maml:para>NuGet package identities, payloads, dependencies, and signing expectations.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PackageSetValidation</command:parameterValue>
+        <dev:type>
+          <maml:name>PackageSetValidation</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProjectRoot</maml:name>
+        <maml:description>
+          <maml:para>Root for relative input paths.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Tools</maml:name>
+        <maml:description>
+          <maml:para>Local .NET tool package installation checks.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetToolValidation[]</command:parameterValue>
+        <dev:type>
+          <maml:name>DotNetToolValidation[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.ReleaseValidationSpec</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Check an installed tool from a local package feed</maml:title>
+        <dev:code>New-ConfigurationReleaseValidation -Tools @{&#xD;
+    PackageId = 'Example.Tool'; PackageRoot = 'Artifacts/packages'; CommandName = 'example'&#xD;
+    Commands = @(@{ Name = 'Version'; FileName = '{ToolPath}'; Arguments = @('--version'); ExpectedOutput = '{Version}' })&#xD;
+}</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

@@ -105,18 +105,52 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [ "FilePath" ],
             "properties": {
               "Enabled": { "type": "boolean" },
               "Name": { "type": [ "string", "null" ] },
-              "FilePath": { "type": "string", "minLength": 1 },
+              "FilePath": { "type": [ "string", "null" ] },
+              "ConfigPath": { "type": [ "string", "null" ] },
               "WorkingDirectory": { "type": [ "string", "null" ] },
               "Environment": {
                 "type": "object",
                 "additionalProperties": { "type": [ "string", "null" ] }
               },
-              "TimeoutSeconds": { "type": "integer", "minimum": 1 },
+              "TimeoutSeconds": { "type": "integer" },
               "PreferWindowsPowerShell": { "type": "boolean" }
+            },
+            "if": {
+              "required": [ "Enabled" ],
+              "properties": { "Enabled": { "const": false } }
+            },
+            "else": {
+              "properties": {
+                "Environment": {
+                  "propertyNames": { "minLength": 1, "not": { "pattern": "[=\u0000]" } },
+                  "additionalProperties": {
+                    "not": { "type": "string", "pattern": "\u0000" }
+                  }
+                },
+                "TimeoutSeconds": { "minimum": 1 }
+              },
+              "oneOf": [
+                {
+                  "required": [ "FilePath" ],
+                  "properties": {
+                    "FilePath": { "type": "string", "pattern": "\\S" },
+                    "ConfigPath": { "not": { "type": "string", "pattern": "\\S" } }
+                  }
+                },
+                {
+                  "required": [ "ConfigPath" ],
+                  "properties": {
+                    "ConfigPath": { "type": "string", "pattern": "\\S" },
+                    "FilePath": { "not": { "type": "string", "pattern": "\\S" } },
+                    "Environment": { "maxProperties": 0 },
+                    "WorkingDirectory": { "not": { "type": "string", "pattern": "\\S" } },
+                    "PreferWindowsPowerShell": { "const": false }
+                  }
+                }
+              ]
             }
           }
         }

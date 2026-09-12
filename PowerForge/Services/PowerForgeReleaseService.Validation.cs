@@ -2,6 +2,33 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    /// <summary>Runs deferred validation against the complete signed release checkpoint.</summary>
+    internal bool ValidateBuiltReleaseOutputs(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        PowerForgeReleaseResult result,
+        string? configDirectory = null,
+        string? resolvedVersion = null)
+    {
+        if (!HasAfterStagingValidation(spec) || result.ReleaseValidationIntegrity is not null)
+            return true;
+
+        var directory = configDirectory
+            ?? Path.GetDirectoryName(Path.GetFullPath(request.ConfigPath))
+            ?? Directory.GetCurrentDirectory();
+        ValidateReleaseValidationConfiguration(spec.Validation, spec.Outputs, request, directory);
+        var version = resolvedVersion ?? request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, result);
+        return ExecuteAfterStagingValidations(
+            spec,
+            request,
+            directory,
+            result,
+            version,
+            moduleSelected: result.ModulePlan is not null,
+            packagesSelected: result.Packages is not null || result.ModulePlan?.IncludesProjectPackages == true,
+            toolsSelected: result.DotNetToolPlan is not null || result.ToolPlan is not null);
+    }
+
     private static void ValidateReleaseValidationConfiguration(
         PowerForgeReleaseValidationOptions? validation,
         PowerForgeReleaseOutputsOptions outputs,
@@ -20,11 +47,15 @@ internal sealed partial class PowerForgeReleaseService
 
         foreach (var action in actions)
         {
-            if (string.IsNullOrWhiteSpace(action.FilePath))
-                throw new InvalidOperationException("Validation.AfterStaging actions require FilePath.");
+            if (string.IsNullOrWhiteSpace(action.FilePath) == string.IsNullOrWhiteSpace(action.ConfigPath))
+                throw new InvalidOperationException("Validation.AfterStaging actions require exactly one of FilePath or ConfigPath.");
             if (action.TimeoutSeconds <= 0)
                 throw new InvalidOperationException("Validation.AfterStaging action TimeoutSeconds must be greater than zero.");
-            var scriptPath = ResolveValidationPath(configurationDirectory, action.FilePath);
+            PowerForgeReleaseValidationService.ValidateActionEnvironment(action.Environment);
+            if (!string.IsNullOrWhiteSpace(action.ConfigPath) &&
+                (action.Environment.Count > 0 || !string.IsNullOrWhiteSpace(action.WorkingDirectory) || action.PreferWindowsPowerShell))
+                throw new InvalidOperationException("ConfigPath actions use the validation contract's command Environment, WorkingDirectory, and module Hosts; script process options cannot be applied to them.");
+            var scriptPath = ResolveValidationPath(configurationDirectory, string.IsNullOrWhiteSpace(action.ConfigPath) ? action.FilePath : action.ConfigPath!);
             if (!File.Exists(scriptPath))
                 throw new FileNotFoundException($"Staged-release validation script was not found: {scriptPath}", scriptPath);
             if (!string.IsNullOrWhiteSpace(action.WorkingDirectory))
@@ -44,7 +75,10 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseRequest request,
         string configurationDirectory,
         PowerForgeReleaseResult result,
-        string? resolvedVersion)
+        string? resolvedVersion,
+        bool moduleSelected,
+        bool packagesSelected,
+        bool toolsSelected)
     {
         var actions = GetAfterStagingValidationActions(spec.Validation);
         if (actions.Length == 0)
@@ -55,30 +89,58 @@ internal sealed partial class PowerForgeReleaseService
             actions.Length,
             "Validating the complete staged release");
         var validationResults = new List<PowerForgeReleaseValidationResult>(actions.Length);
+        ReleaseValidationIntegrityCheckpoint? integrity = null;
         foreach (var action in actions)
         {
             request.CancellationToken.ThrowIfCancellationRequested();
             var context = new PowerForgeReleaseValidationContext
             {
                 ConfigPath = result.ConfigPath,
-                ProjectRoot = ResolveValidationProjectRoot(spec, configurationDirectory),
-                ResolvedVersion = resolvedVersion ?? result.ModulePlan?.ModuleVersion ?? string.Empty,
+                ProjectRoot = ResolveValidationProjectRoot(result, configurationDirectory),
+                ResolvedVersion = resolvedVersion ?? ResolveModuleReleaseVersion(result.ModulePlan) ??
+                    ResolveUniqueAssetVersion(result.ReleaseAssetEntries.Where(asset => asset.Category is
+                        PowerForgeReleaseAssetCategory.Tool or PowerForgeReleaseAssetCategory.Portable or
+                        PowerForgeReleaseAssetCategory.Installer or PowerForgeReleaseAssetCategory.Store)) ?? string.Empty,
                 ReleaseManifestPath = result.ReleaseManifestPath,
                 ReleaseChecksumsPath = result.ReleaseChecksumsPath,
                 StagingRoot = ResolveConfiguredStageRoot(spec, request, configurationDirectory),
                 ModuleStagingPath = result.ModulePlan?.StagingPath,
                 ReleaseAssets = result.ReleaseAssets.ToArray(),
+                AssetEntries = result.ReleaseAssetEntries.ToArray(),
+                ModuleSelected = moduleSelected,
+                PackagesSelected = packagesSelected,
+                ToolsSelected = toolsSelected,
+                ToolArtifactsSelected = toolsSelected && ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool),
+                PublishPlan = toolsSelected ? result.DotNetToolPlan : null,
+                SelectedToolTargets = NormalizeStrings(request.Targets).Length == 0 ? null :
+                    result.DotNetToolPlan?.Targets.Select(target => target.Name).ToArray() ??
+                    result.ToolPlan?.Targets.Select(target => target.Name).ToArray(),
                 StagedAssets = result.ReleaseAssetEntries
-                    .Where(static asset => !string.IsNullOrWhiteSpace(asset.StagedPath))
-                    .Select(static asset => asset.StagedPath!)
+                    .Select(static asset => asset.StagedPath ?? asset.Path)
                     .Distinct(PathComparer)
                     .ToArray()
             };
-            var validation = _runReleaseValidation(
-                action,
-                context,
-                configurationDirectory,
-                request.CancellationToken);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(request.CancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(action.TimeoutSeconds));
+            PowerForgeReleaseValidationResult validation;
+            try
+            {
+                integrity ??= CaptureValidationIntegrityCheckpoint(result, timeout.Token);
+                validation = _runReleaseValidation(action, context, configurationDirectory, timeout.Token);
+                if (validation.Succeeded)
+                {
+                    ValidateIntegrityUnchanged(integrity.Paths, integrity.Hashes, timeout.Token);
+                }
+            }
+            catch (Exception exception) when (!request.CancellationToken.IsCancellationRequested)
+            {
+                validation = new PowerForgeReleaseValidationResult
+                {
+                    Name = action.Name ?? "Release validation", ExitCode = 1,
+                    StdErr = exception.Message, TimedOut = timeout.IsCancellationRequested
+                };
+            }
+            request.CancellationToken.ThrowIfCancellationRequested();
             validationResults.Add(validation);
             result.ReleaseValidations = validationResults.ToArray();
             if (validation.Succeeded)
@@ -90,6 +152,8 @@ internal sealed partial class PowerForgeReleaseService
             result.ErrorMessage = detail;
             return false;
         }
+
+        result.ReleaseValidationIntegrity = integrity;
 
         request.Progress?.PhaseCompleted(
             PowerForgeReleaseProgressPhase.Validation,
@@ -121,6 +185,14 @@ internal sealed partial class PowerForgeReleaseService
     {
         if (spec.Tools is null || !(request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
             return true;
+
+        if (!ValidateReleaseValidationIntegrityBeforePublication(
+                request,
+                result,
+                PowerForgeReleaseProgressPhase.Tools))
+        {
+            return false;
+        }
 
         ValidatePostBuildSourceState(request);
         request.CancellationToken.ThrowIfCancellationRequested();
@@ -163,11 +235,11 @@ internal sealed partial class PowerForgeReleaseService
         => GetAfterStagingValidationActions(spec.Validation).Length > 0;
 
     private static string ResolveValidationProjectRoot(
-        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseResult result,
         string configurationDirectory)
-        => string.IsNullOrWhiteSpace(spec.Module?.RepositoryRoot)
-            ? configurationDirectory
-            : ResolveValidationPath(configurationDirectory, spec.Module!.RepositoryRoot!);
+        => new[] { result.ModulePlan?.RepositoryRoot, result.Packages?.RootPath, result.DotNetToolPlan?.ProjectRoot,
+                result.ToolPlan?.ProjectRoot, result.AppleAppPlan?.ProjectRoot }
+            .FirstOrDefault(root => !string.IsNullOrWhiteSpace(root)) ?? configurationDirectory;
 
     private static string ResolveValidationPath(string baseDirectory, string path)
         => Path.GetFullPath(Path.IsPathRooted(path)

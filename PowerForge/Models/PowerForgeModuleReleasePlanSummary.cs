@@ -43,6 +43,10 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     public PowerForgeModuleArtefactOutputSummary[] ArtefactOutputs { get; set; } =
         Array.Empty<PowerForgeModuleArtefactOutputSummary>();
 
+    /// <summary>Resolved configuration inputs that may be consumed during deferred publication.</summary>
+    [JsonIgnore]
+    public string[] DeferredPublicationInputPaths { get; set; } = Array.Empty<string>();
+
     public bool NoSign { get; set; }
 
     public bool SkipInstall { get; set; }

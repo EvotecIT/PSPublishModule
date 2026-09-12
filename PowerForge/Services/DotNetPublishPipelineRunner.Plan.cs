@@ -77,14 +77,6 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var cfg = string.IsNullOrWhiteSpace(spec.DotNet.Configuration) ? "Release" : spec.DotNet.Configuration.Trim();
 
-        var defaultsRids = (spec.DotNet.Runtimes ?? Array.Empty<string>())
-            .Where(r => !string.IsNullOrWhiteSpace(r))
-            .Select(r => r.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var matrixDefaultRids = NormalizeStrings(spec.Matrix?.Runtimes);
-        var matrixDefaultFrameworks = NormalizeStrings(spec.Matrix?.Frameworks);
-        var matrixDefaultStyles = NormalizeStyles(spec.Matrix?.Styles);
         var projectCatalog = BuildProjectCatalog(spec.Projects, projectRoot);
 
         var msbuildProps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -110,42 +102,17 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!File.Exists(resolvedProjectPath))
                 throw new FileNotFoundException($"ProjectPath not found for '{t.Name}': {resolvedProjectPath}");
 
-            var frameworks = NormalizeStrings(t.Publish.Frameworks);
-            if (frameworks.Length == 0)
-            {
-                if (!string.IsNullOrWhiteSpace(t.Publish.Framework))
-                    frameworks = new[] { t.Publish.Framework.Trim() };
-                else if (matrixDefaultFrameworks.Length > 0)
-                    frameworks = matrixDefaultFrameworks;
-            }
-            if (frameworks.Length == 0)
-                throw new ArgumentException($"Target.Publish.Framework is required for '{t.Name}' (or set Target.Publish.Frameworks/Matrix.Frameworks).", nameof(spec));
+            var combos = ResolveTargetCombinations(t, spec);
 
-            var rids = NormalizeStrings(t.Publish.Runtimes);
-            if (rids.Length == 0) rids = matrixDefaultRids;
-            if (rids.Length == 0) rids = defaultsRids;
-            if (rids.Length == 0)
-                throw new ArgumentException($"No runtimes provided for target '{t.Name}'. Set Target.Publish.Runtimes, Matrix.Runtimes or DotNet.Runtimes.", nameof(spec));
-
-            var styles = NormalizeStyles(t.Publish.Styles);
-            if (styles.Length == 0 && matrixDefaultStyles.Length > 0)
-                styles = matrixDefaultStyles;
-            if (styles.Length == 0)
-                styles = new[] { t.Publish.Style };
-
-            var combos = BuildPublishCombos(t.Name.Trim(), frameworks, rids, styles, spec.Matrix);
-            if (combos.Length == 0)
-                throw new ArgumentException($"No publish combinations resolved for target '{t.Name}'. Check Matrix include/exclude filters.", nameof(spec));
-
-            frameworks = combos
+            var frameworks = combos
                 .Select(c => c.Framework)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            rids = combos
+            var rids = combos
                 .Select(c => c.Runtime)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            styles = combos
+            var styles = combos
                 .Select(c => c.Style)
                 .Distinct()
                 .ToArray();
@@ -1704,6 +1671,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ProjectId = t.ProjectId,
                 ProjectPath = t.ProjectPath,
                 Kind = t.Kind,
+                // Preserve invalid input for the shared matrix admission check.
+                SupportedRuntimes = t.SupportedRuntimes?.ToArray()!,
                 Publish = new DotNetPublishPublishOptions
                 {
                     Style = t.Publish?.Style ?? DotNetPublishStyle.Portable,
@@ -4066,72 +4035,6 @@ public sealed partial class DotNetPublishPipelineRunner
             out date);
     }
 
-    private static DotNetPublishTargetCombination[] BuildPublishCombos(
-        string targetName,
-        string[] frameworks,
-        string[] runtimes,
-        DotNetPublishStyle[] styles,
-        DotNetPublishMatrix? matrix)
-    {
-        var combos = new List<DotNetPublishTargetCombination>();
-        foreach (var framework in frameworks)
-        {
-            foreach (var runtime in runtimes)
-            {
-                foreach (var style in styles)
-                {
-                    combos.Add(new DotNetPublishTargetCombination
-                    {
-                        Framework = framework,
-                        Runtime = runtime,
-                        Style = style
-                    });
-                }
-            }
-        }
-
-        var include = matrix?.Include ?? Array.Empty<DotNetPublishMatrixRule>();
-        if (include.Length > 0)
-        {
-            combos = combos
-                .Where(c => include.Any(rule => RuleMatches(targetName, c, rule)))
-                .ToList();
-        }
-
-        var exclude = matrix?.Exclude ?? Array.Empty<DotNetPublishMatrixRule>();
-        if (exclude.Length > 0)
-        {
-            combos = combos
-                .Where(c => !exclude.Any(rule => RuleMatches(targetName, c, rule)))
-                .ToList();
-        }
-
-        return combos
-            .OrderBy(c => c.Framework, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(c => c.Runtime, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(c => c.Style.ToString(), StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static bool RuleMatches(string targetName, DotNetPublishTargetCombination combo, DotNetPublishMatrixRule? rule)
-    {
-        if (rule is null) return false;
-
-        var targetPatterns = NormalizeStrings(rule.Targets);
-        if (targetPatterns.Length > 0 && !targetPatterns.Any(p => WildcardMatch(targetName, p)))
-            return false;
-
-        if (!string.IsNullOrWhiteSpace(rule.Runtime) && !WildcardMatch(combo.Runtime, rule.Runtime!.Trim()))
-            return false;
-
-        if (!string.IsNullOrWhiteSpace(rule.Framework) && !WildcardMatch(combo.Framework, rule.Framework!.Trim()))
-            return false;
-
-        if (!string.IsNullOrWhiteSpace(rule.Style) && !WildcardMatch(combo.Style.ToString(), rule.Style!.Trim()))
-            return false;
-
-        return true;
-    }
 
     internal static bool WildcardMatch(string value, string pattern)
     {

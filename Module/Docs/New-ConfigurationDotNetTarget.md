@@ -11,7 +11,7 @@ Creates a DotNet publish target entry for DotNet publish DSL.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetTarget -Name <string> -Framework <string> [-ProjectId <string>] [-ProjectPath <string>] [-Kind <DotNetPublishTargetKind>] [-Frameworks <string[]>] [-Runtimes <string[]>] [-Style <DotNetPublishStyle>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-RenameTo <string>] [-ExecutableIdentity <string>] [-UseStaging <bool>] [-ClearOutput <bool>] [-Slim <bool>] [-KeepSymbols] [-KeepDocs] [-PruneReferences <bool>] [-Zip] [-ZipPath <string>] [-ZipNameTemplate <string>] [-ReadyToRun <Boolean>] [-Sign <DotNetPublishSignOptions>] [-Service <DotNetPublishServicePackageOptions>] [-State <DotNetPublishStatePreservationOptions>] [<CommonParameters>]
+New-ConfigurationDotNetTarget -Name <string> -Framework <string> [-ProjectId <string>] [-ProjectPath <string>] [-Kind <DotNetPublishTargetKind>] [-Frameworks <string[]>] [-Runtimes <string[]>] [-SupportedRuntimes <string[]>] [-Style <DotNetPublishStyle>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-RenameTo <string>] [-ExecutableIdentity <string>] [-UseStaging <bool>] [-ClearOutput <bool>] [-Slim <bool>] [-KeepSymbols] [-KeepDocs] [-PruneReferences <bool>] [-Zip] [-ZipPath <string>] [-ZipNameTemplate <string>] [-ReadyToRun <Boolean>] [-Sign <DotNetPublishSignOptions>] [-Service <DotNetPublishServicePackageOptions>] [-State <DotNetPublishStatePreservationOptions>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -355,6 +355,22 @@ Type: DotNetPublishStyle[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: Portable, PortableCompat, PortableSize, SelfContained, FrameworkDependent, AotSpeed, AotSize
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SupportedRuntimes
+Supported runtime identifiers. Used as the default target matrix and checked after runtime overrides.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

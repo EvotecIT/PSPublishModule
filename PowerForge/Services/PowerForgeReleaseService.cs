@@ -671,7 +671,8 @@ internal sealed partial class PowerForgeReleaseService
                 configPath,
                 request,
                 configurationOverride,
-                publishUnifiedGitHub);
+                publishUnifiedGitHub,
+                deferPublishing: HasAfterStagingValidation(spec));
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -818,7 +819,8 @@ internal sealed partial class PowerForgeReleaseService
                 configurationOverride,
                 publishUnifiedGitHub,
                 request.ResolvedReleaseVersion,
-                spec.Module!.VersionPrimaryProject);
+                spec.Module!.VersionPrimaryProject,
+                deferPublishing: HasAfterStagingValidation(spec));
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -832,128 +834,38 @@ internal sealed partial class PowerForgeReleaseService
                 PowerForgeReleaseProgressPhase.Packages,
                 $"Version {request.ResolvedReleaseVersion}");
         }
-        if (applePlan is not null)
+        var deferConfiguredAppleMutation = applePlan is not null &&
+                                           !request.PlanOnly &&
+                                           !request.ValidateOnly &&
+                                           !request.CheckpointAppleApps &&
+                                           !explicitAppleAction &&
+                                           HasAfterStagingValidation(spec) &&
+                                           HasConfiguredAppleRemoteMutation(applePlan);
+        PowerForgeAppleAppReleaseResult[]? deferredAppleCheckpointResults = null;
+        string? deferredApplePlanSha256 = null;
+        var deferredAppleCheckpointStarted = false;
+        if (deferConfiguredAppleMutation && applePlan!.Archive)
         {
-            if (!request.PlanOnly &&
-                !request.ValidateOnly &&
-                (!request.CheckpointAppleApps || applePlan.Archive))
-            {
-                request.Progress?.PhaseStarted(
-                    PowerForgeReleaseProgressPhase.AppleApps,
-                    applePlan.Apps.Length,
-                    $"{applePlan.Action}: {applePlan.Apps.Length} Apple target(s)");
-                if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedAppleProgress)
-                {
-                    detailedAppleProgress.ItemsPlanned(
-                        PowerForgeReleaseProgressPhase.AppleApps,
-                        applePlan.Apps.Select((app, index) => new PowerForgeReleaseProgressItem
-                        {
-                            Phase = PowerForgeReleaseProgressPhase.AppleApps,
-                            Key = "apple:" + app.Name,
-                            Title = app.Name,
-                            Kind = applePlan.Action.ToString(),
-                            Target = app.Platform.ToString(),
-                            CounterLabel = "Target",
-                            Position = index + 1,
-                            Total = applePlan.Apps.Length
-                        }).ToArray());
-                }
-                using var operationLock = AppleReleaseOperationLock.Acquire(applePlan.LockPath, applePlan.Action);
-                var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
-                PowerForgeAppleAppReleaseResult[] appleResults;
-                PowerForgeAppleVersionReceipt? appleVersioning = null;
-                var receiptJournalReady = !applePlan.Automation.WriteReceipt;
-                try
-                {
-                    VerifyExpectedAppleCheckpointArchives(applePlan);
-                    var approvedPlan = AssertApplePlanStillApproved(applePlan, request.AppleExpectedPlanSha256);
-                    PrepareAppleReceiptJournalForMutation(applePlan, request.AppleExpectedPlanSha256);
-                    receiptJournalReady = true;
-                    if (applePlan.Action == PowerForgeAppleReleaseAction.Version)
-                    {
-                        AppleReleaseSourceSnapshot.ValidateCurrentSourceIfRequired(applePlan);
-                        appleVersioning = SelectAppleVersion(
-                            applePlan,
-                            approvedPlan?.Versioning ?? throw new InvalidOperationException(
-                                "Apple Version execution requires one approved remote version observation."));
-                        appleResults = RunAppleVersion(applePlan);
-                    }
-                    else if (applePlan.Action == PowerForgeAppleReleaseAction.Ship &&
-                             approvedPlan?.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint)
-                    {
-                        AppleReleaseSourceSnapshot.ValidateCurrentSourceIfRequired(applePlan);
-                        appleVersioning = SelectAppleVersion(
-                            applePlan,
-                            approvedPlan.Versioning ?? throw new InvalidOperationException(
-                                "Apple Ship version checkpoint requires one approved version plan."));
-                        appleResults = RunAppleVersion(applePlan);
-                    }
-                    else if (request.CheckpointAppleApps)
-                    {
-                        appleResults = RunAppleArchiveCheckpoint(applePlan, out cleanup);
-                    }
-                    else if (applePlan.Action == PowerForgeAppleReleaseAction.Cleanup)
-                    {
-                        cleanup = _appleArtifactService.RemoveStaleArtifacts(
-                            applePlan,
-                            GetProtectedAppleRecoveryArtifactPaths(applePlan));
-                        appleResults = applePlan.Apps
-                            .Select(app => new PowerForgeAppleAppReleaseResult
-                            {
-                                Plan = app,
-                                Success = true
-                            })
-                            .ToArray();
-                    }
-                    else
-                    {
-                        appleResults = RunAppleRelease(applePlan, out cleanup);
-                    }
-                }
-                catch (Exception exception)
-                {
-                    appleResults = applePlan.Apps
-                        .Select(app => new PowerForgeAppleAppReleaseResult
-                        {
-                            Plan = app,
-                            Success = false,
-                            ErrorMessage = exception.Message,
-                            RemoteState = exception is AppleBuildProcessingException processing
-                                ? processing.State
-                                : null
-                        })
-                        .ToArray();
-                }
-                result.AppleApps = appleResults;
-                if (request.CheckpointAppleApps && appleResults.All(static app => app.Success))
-                    result.AppleReceipt = CreateApplePlanReceipt(applePlan, appleResults);
-                if (receiptJournalReady &&
-                    !request.CheckpointAppleApps &&
-                    (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
-                     HasAppleExecutionMutation(applePlan) ||
-                     appleResults.Any(static app => !app.Success)))
-                    result.AppleReceipt ??= CompleteAppleReleaseReceipt(applePlan, appleResults, cleanup, appleVersioning);
+            deferredAppleCheckpointStarted = true;
+            if (!BeginDeferredAppleArchiveCheckpoint(applePlan, request, result))
+                return result;
 
-                if (result.AppleReceipt is { Success: false } failedReceipt)
-                {
-                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.AppleApps, failedReceipt.ErrorMessage);
-                    result.Success = false;
-                    result.ErrorMessage = failedReceipt.ErrorMessage ?? "Apple release diagnostics failed.";
-                    return result;
-                }
-
-                var failure = appleResults.FirstOrDefault(entry => !entry.Success);
-                if (failure is not null)
-                {
-                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.AppleApps, failure.ErrorMessage);
-                    result.Success = false;
-                    result.ErrorMessage = failure.ErrorMessage ?? $"Apple app release failed for '{failure.Plan.Name}'.";
-                    return result;
-                }
-                request.Progress?.PhaseCompleted(
-                    PowerForgeReleaseProgressPhase.AppleApps,
-                    $"{applePlan.Action} completed for {applePlan.Apps.Length} target(s)");
-            }
+            deferredAppleCheckpointResults = result.AppleApps;
+            deferredApplePlanSha256 = result.AppleReceipt?.PlanSha256 ?? throw new InvalidOperationException(
+                "The deferred Apple archive checkpoint did not produce an exact approved plan SHA-256.");
+        }
+        if (applePlan is not null &&
+            !request.PlanOnly &&
+            !request.ValidateOnly &&
+            (!request.CheckpointAppleApps || applePlan.Archive) &&
+            !deferConfiguredAppleMutation &&
+            !ExecuteAppleReleasePlan(
+                applePlan,
+                request,
+                result,
+                checkpointAppleApps: request.CheckpointAppleApps || deferConfiguredAppleMutation))
+        {
+            return result;
         }
 
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
@@ -964,28 +876,79 @@ internal sealed partial class PowerForgeReleaseService
             GenerateWingetOutputs(spec, request, configDirectory, result);
             IncludeWingetOutputsInReleaseAssets(result);
             RewriteReleaseSummaryFiles(result);
-            if (!ExecuteAfterStagingValidations(
+            if (!request.DeferAfterStagingValidation &&
+                !ExecuteAfterStagingValidations(
                     spec,
                     request,
                     configDirectory,
                     result,
-                    sharedReleaseVersion))
+                    sharedReleaseVersion,
+                    moduleSelected: runModule,
+                    packagesSelected: runPackages || result.ModulePlan?.IncludesProjectPackages == true,
+                    toolsSelected: willRunTools))
+            {
+                if (deferredAppleCheckpointStarted)
+                {
+                    request.Progress?.PhaseFailed(
+                        PowerForgeReleaseProgressPhase.AppleApps,
+                        "Remote Apple mutation was blocked because staged-release validation failed.");
+                }
+                return result;
+            }
+        }
+
+        if (deferConfiguredAppleMutation)
+        {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.AppleApps) ||
+                !ExecuteAppleReleasePlan(
+                    applePlan!,
+                    request,
+                    result,
+                    checkpointAppleApps: false,
+                    expectedPlanSha256: deferredApplePlanSha256,
+                    checkpointResults: deferredAppleCheckpointResults,
+                    startProgress: !deferredAppleCheckpointStarted))
+            {
+                return result;
+            }
+        }
+
+        if (runPackages && HasAfterStagingValidation(spec) && !request.PlanOnly && !request.ValidateOnly)
+        {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Packages) ||
+                !PublishValidatedPackageCheckpoint(spec, request, configPath, result))
             {
                 return result;
             }
         }
 
         if (deferredModulePublishRequest is not null &&
-            request.PublishNuget != false &&
             result.ModulePlan?.IncludesProjectPackages == true &&
+            result.ModulePackagePlans.Any(checkpoint =>
+                (request.PublishNuget != false && checkpoint.PublishNuget) ||
+                (request.PublishProjectGitHub != false && checkpoint.PublishGitHub)) &&
             !request.PlanOnly &&
             !request.ValidateOnly)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Packages))
+            {
+                return result;
+            }
+
             if (result.ModulePackagePlans.Length == 0)
             {
                 result.Success = false;
                 result.ErrorMessage =
-                    "Deferred publication of module-owned NuGet packages requires Module.ConfigPath so PowerForge can publish the exact validated package checkpoint without rebuilding it.";
+                    "Deferred publication of module-owned packages requires Module.ConfigPath so PowerForge can publish the exact validated package checkpoint without rebuilding it.";
                 return result;
             }
 
@@ -996,13 +959,19 @@ internal sealed partial class PowerForgeReleaseService
             try
             {
                 result.ModulePackagePublications = new ModulePackageReleaseCheckpointService(logger: _logger)
-                    .PublishNuGet(
+                    .Publish(
                         configPath,
                         spec,
                         result.ModulePackagePlans,
                         result.ReleaseAssetEntries,
                         requireStagedAssets: HasAfterStagingValidation(spec),
-                        remotePublishAttempted: () => ValidatePostBuildSourceState(request),
+                        publishNuget: request.PublishNuget != false,
+                        publishGitHub: request.PublishProjectGitHub != false,
+                        remotePublishAttempted: () =>
+                        {
+                            ValidatePostBuildSourceState(request);
+                            ValidateReleaseValidationIntegrity(result, request.CancellationToken);
+                        },
                         progress: null,
                         cancellationToken: request.CancellationToken);
                 request.Progress?.PhaseCompleted(
@@ -1022,6 +991,14 @@ internal sealed partial class PowerForgeReleaseService
             !request.PlanOnly &&
             !request.ValidateOnly)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Module))
+            {
+                return result;
+            }
+
             ValidatePostBuildSourceState(request);
             request.Progress?.PhaseStarted(
                 PowerForgeReleaseProgressPhase.Module,
@@ -1083,6 +1060,14 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (publishUnifiedGitHub)
             {
+                if (!ValidateReleaseValidationIntegrityBeforePublication(
+                        request,
+                        result,
+                        PowerForgeReleaseProgressPhase.GitHub))
+                {
+                    return result;
+                }
+
                 ValidatePostBuildSourceState(request);
                 request.Progress?.PhaseStarted(
                     PowerForgeReleaseProgressPhase.GitHub,
@@ -1107,10 +1092,26 @@ internal sealed partial class PowerForgeReleaseService
                     PowerForgeReleaseProgressPhase.GitHub,
                     unifiedGitHubRelease.ReleaseUrl ?? "GitHub release published");
             }
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.GitHub))
+            {
+                return result;
+            }
+
             ValidatePostBuildSourceState(request);
             SubmitWingetOutputs(spec, request, configDirectory, result);
             if (result.Success && publishVirusTotalMonitor)
             {
+                if (!ValidateReleaseValidationIntegrityBeforePublication(
+                        request,
+                        result,
+                        PowerForgeReleaseProgressPhase.VirusTotal))
+                {
+                    return result;
+                }
+
                 ValidatePostBuildSourceState(request);
                 if (!TryPublishVirusTotalMonitor(spec, request, configDirectory, result, sharedReleaseVersion, virusTotalApiKey))
                     return result;
@@ -1220,8 +1221,18 @@ internal sealed partial class PowerForgeReleaseService
             request.ModulePublisherActive);
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
 
+        if (!ValidateBuiltReleaseOutputs(spec, request, builtResult, configDirectory, sharedReleaseVersion))
+            return builtResult;
+
         if (spec.AppleApps is not null)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.AppleApps))
+            {
+                return builtResult;
+            }
             request.CancellationToken.ThrowIfCancellationRequested();
             var appleResult = Execute(
                 spec,
@@ -1252,6 +1263,7 @@ internal sealed partial class PowerForgeReleaseService
                     PublishProjectGitHub = false,
                     PublishToolGitHub = false,
                     SubmitWinget = false,
+                    DeferAfterStagingValidation = true,
                     ResolvedReleaseVersion = sharedReleaseVersion,
                     CancellationToken = request.CancellationToken
                 });
@@ -1268,6 +1280,13 @@ internal sealed partial class PowerForgeReleaseService
 
         if (spec.Tools is not null && (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.Tools))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             request.CancellationToken.ThrowIfCancellationRequested();
             if (builtResult.DotNetToolPlan is not null && builtResult.DotNetTools is not null)
@@ -1301,6 +1320,13 @@ internal sealed partial class PowerForgeReleaseService
         var moduleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly;
         if (ShouldPublishUnifiedGitHub(spec, request, moduleSelected))
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.GitHub))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             request.CancellationToken.ThrowIfCancellationRequested();
             var unified = PublishUnifiedGitHubRelease(
@@ -1319,6 +1345,13 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        if (!ValidateReleaseValidationIntegrityBeforePublication(
+                request,
+                builtResult,
+                PowerForgeReleaseProgressPhase.Tools))
+        {
+            return builtResult;
+        }
         ValidatePostBuildSourceState(request);
         request.CancellationToken.ThrowIfCancellationRequested();
         SubmitWingetOutputs(spec, request, configDirectory, builtResult);
@@ -1328,6 +1361,13 @@ internal sealed partial class PowerForgeReleaseService
 
         if (publishVirusTotalMonitor)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.VirusTotal))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             if (!TryPublishVirusTotalMonitor(
                     spec,
@@ -1677,6 +1717,7 @@ internal sealed partial class PowerForgeReleaseService
                 moduleName,
                 buildRequest.ModuleVersion ?? moduleConfig?.Spec.Build.Version,
                 buildRequest.PreReleaseTag),
+            DeferredPublicationInputPaths = ResolveDeferredModulePublicationInputPaths(moduleConfig),
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,
@@ -6000,7 +6041,7 @@ internal sealed partial class PowerForgeReleaseService
         return !string.IsNullOrWhiteSpace(request.SignToolPath)
             || !string.IsNullOrWhiteSpace(request.SignThumbprint)
             || !string.IsNullOrWhiteSpace(request.SignSubjectName)
-            || request.SignTimeoutSeconds.HasValue
+            || request.SignTimeoutSeconds > 0
             || !string.IsNullOrWhiteSpace(request.SignTimestampUrl)
             || !string.IsNullOrWhiteSpace(request.SignDescription)
             || !string.IsNullOrWhiteSpace(request.SignUrl)
@@ -6033,8 +6074,8 @@ internal sealed partial class PowerForgeReleaseService
             sign.OnMissingTool = request.SignOnMissingTool.Value;
         if (request.SignOnFailure.HasValue)
             sign.OnSignFailure = request.SignOnFailure.Value;
-        if (request.SignTimeoutSeconds.HasValue)
-            sign.TimeoutSeconds = Math.Max(1, request.SignTimeoutSeconds.Value);
+        if (request.SignTimeoutSeconds > 0)
+            sign.TimeoutSeconds = request.SignTimeoutSeconds.Value;
         if (!string.IsNullOrWhiteSpace(request.SignTimestampUrl))
             sign.TimestampUrl = request.SignTimestampUrl!.Trim();
         if (!string.IsNullOrWhiteSpace(request.SignDescription))

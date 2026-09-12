@@ -10,7 +10,8 @@ public sealed partial class ReleasePublishExecutionService
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         PowerForgeReleaseSpec spec,
         ReleaseSigningExecutionResult signingResult,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        PowerForgeReleaseResult? validatedUnifiedRelease = null)
     {
         ValidateModulePublishCheckpoint(repository, signingResult);
         IReadOnlyList<ModulePackageReleaseLane> lanes;
@@ -38,7 +39,7 @@ public sealed partial class ReleasePublishExecutionService
                     FirstLine(ex.Message) ?? "Module-owned package configuration could not be restored.")
             ];
         }
-        var unified = ReadUnifiedReleaseCheckpoint(signingResult);
+        var unified = validatedUnifiedRelease ?? ReadUnifiedReleaseCheckpoint(signingResult);
         if (unified is null)
         {
             return [

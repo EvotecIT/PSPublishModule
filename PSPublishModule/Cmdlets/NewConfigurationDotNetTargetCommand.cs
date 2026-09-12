@@ -60,6 +60,12 @@ public sealed class NewConfigurationDotNetTargetCommand : PSCmdlet
     [Parameter]
     public string[]? Runtimes { get; set; }
 
+    /// <para>Supported runtime identifiers. Used as the default target matrix and checked after runtime overrides.</para>
+    [Parameter]
+    [ValidateNotNull]
+    [ValidatePattern(@"\S")]
+    public string[]? SupportedRuntimes { get; set; }
+
     /// <summary>
     /// Primary publish style.
     /// </summary>
@@ -182,6 +188,7 @@ public sealed class NewConfigurationDotNetTargetCommand : PSCmdlet
             ProjectId = NormalizeNullable(ProjectId),
             ProjectPath = string.IsNullOrWhiteSpace(ProjectPath) ? string.Empty : ProjectPath!.Trim(),
             Kind = Kind,
+            SupportedRuntimes = SupportedRuntimes?.ToArray() ?? Array.Empty<string>(),
             Publish = new DotNetPublishPublishOptions
             {
                 Framework = Framework.Trim(),

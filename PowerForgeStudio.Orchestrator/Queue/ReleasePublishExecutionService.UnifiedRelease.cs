@@ -198,7 +198,8 @@ public sealed partial class ReleasePublishExecutionService
     private async Task<IReadOnlyList<ReleasePublishReceipt>> ExecuteUnifiedPublishAsync(
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        PowerForgeReleaseResult? validatedUnifiedRelease = null)
     {
         var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(signingResult.SourceCheckpointStateJson);
         if (buildResult is null || string.IsNullOrWhiteSpace(buildResult.UnifiedReleaseStateJson))
@@ -214,8 +215,8 @@ public sealed partial class ReleasePublishExecutionService
                 repository.UnifiedReleaseConfigPath!,
                 buildResult.UnifiedReleaseConfigSha256);
             var spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
-            var builtReleaseResult = JsonSerializer.Deserialize<PowerForgeReleaseResult>(
-                    buildResult.UnifiedReleaseStateJson!)
+            var builtReleaseResult = validatedUnifiedRelease
+                ?? JsonSerializer.Deserialize<PowerForgeReleaseResult>(buildResult.UnifiedReleaseStateJson!)
                 ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
             ApplySignedCheckpointArtifacts(builtReleaseResult, signingResult);
             cancellationToken.ThrowIfCancellationRequested();
@@ -409,6 +410,98 @@ public sealed partial class ReleasePublishExecutionService
                 ReleasePublishReceiptStatus.Failed,
                 FirstLine(ex.Message) ?? "VirusTotal Monitor preflight failed.",
                 sourcePath: null);
+        }
+    }
+
+    private (PowerForgeReleaseResult? Result, ReleasePublishReceipt? Failure) PrepareUnifiedReleaseValidation(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        ReleaseSigningExecutionResult signingResult,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+            return (null, null);
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(
+                signingResult.SourceCheckpointStateJson);
+            if (buildResult is null || string.IsNullOrWhiteSpace(buildResult.UnifiedReleaseStateJson))
+                throw new InvalidOperationException("Unified release build state was not preserved through the signing checkpoint.");
+
+            UnifiedReleaseConfigFingerprint.Validate(
+                repository.UnifiedReleaseConfigPath!,
+                buildResult.UnifiedReleaseConfigSha256);
+            var spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
+            if (spec.Validation?.AfterStaging.Any(static action => action.Enabled) != true)
+                return (null, null);
+
+            var result = JsonSerializer.Deserialize<PowerForgeReleaseResult>(buildResult.UnifiedReleaseStateJson!)
+                ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
+            ApplySignedCheckpointArtifacts(result, signingResult);
+            var request = CreateUnifiedPublishRequest(
+                repository.UnifiedReleaseConfigPath!,
+                spec,
+                result,
+                cancellationToken);
+            if (!new PowerForgeReleaseService(new NullLogger()).ValidateBuiltReleaseOutputs(
+                    spec,
+                    request,
+                    result))
+            {
+                throw new InvalidOperationException(
+                    result.ErrorMessage ?? "After-staging release validation failed after signing.");
+            }
+
+            return (result, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return (
+                null,
+                FailedReceipt(
+                    repository.RootPath,
+                    repository.Name,
+                    "UnifiedRelease",
+                    "Validation",
+                    repository.UnifiedReleaseConfigPath,
+                    FirstLine(ex.Message) ?? "After-staging release validation failed after signing."));
+        }
+    }
+
+    private static ReleasePublishReceipt? ValidateUnifiedReleaseIntegrity(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        PowerForgeReleaseResult? validatedUnifiedRelease,
+        CancellationToken cancellationToken,
+        string operation)
+    {
+        if (validatedUnifiedRelease is null)
+            return null;
+
+        try
+        {
+            PowerForgeReleaseService.ValidateReleaseValidationIntegrity(
+                validatedUnifiedRelease,
+                cancellationToken);
+            return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return FailedReceipt(
+                repository.RootPath,
+                repository.Name,
+                "UnifiedRelease",
+                "Validation",
+                repository.UnifiedReleaseConfigPath,
+                $"{operation} was blocked: {FirstLine(ex.Message)}");
         }
     }
 

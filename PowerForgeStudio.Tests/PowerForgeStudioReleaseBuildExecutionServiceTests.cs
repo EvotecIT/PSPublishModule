@@ -373,6 +373,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
                 Assert.Equal(ConfigurationGateMode.Build, request.ModuleRunMode);
                 Assert.True(request.ModuleSkipInstall);
                 Assert.True(request.ModuleNoSign);
+                Assert.True(request.DeferAfterStagingValidation);
                 Assert.False(request.PublishNuget);
                 Assert.False(string.IsNullOrWhiteSpace(request.ModuleHostPath));
                 Assert.False(string.IsNullOrWhiteSpace(request.ModuleStagingPath));

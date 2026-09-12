@@ -5,7 +5,7 @@ namespace PowerForge;
 /// <summary>
 /// Reusable typed client for <c>dotnet nuget</c> operations.
 /// </summary>
-public sealed class DotNetNuGetClient
+public sealed partial class DotNetNuGetClient
 {
     private readonly IProcessRunner _processRunner;
     private readonly string _dotNetExecutable;
@@ -346,7 +346,12 @@ public sealed class DotNetNuGetClient
         try
         {
             if (Directory.Exists(path))
+            {
+                // This directory contains only this push's copies; snapshots can be read-only.
+                foreach (var file in new DirectoryInfo(path).EnumerateFiles())
+                    if (file.IsReadOnly) file.IsReadOnly = false;
                 Directory.Delete(path, recursive: true);
+            }
         }
         catch
         {

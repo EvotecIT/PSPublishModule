@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProjectBuildHostExecutionResult
 {
+    /// <summary>Resolved destinations retained only for deferred, same-run checkpoint publication.</summary>
+    internal ProjectBuildPublishHostConfiguration? DeferredPublicationConfiguration { get; set; }
     /// <summary>
     /// True when the requested operation completed successfully.
     /// </summary>
