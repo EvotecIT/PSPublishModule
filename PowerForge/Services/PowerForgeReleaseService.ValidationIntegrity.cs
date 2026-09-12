@@ -34,28 +34,29 @@ internal sealed partial class PowerForgeReleaseService
         yield return plan.ScriptPath;
         yield return plan.ModulePath;
 
-        if (string.IsNullOrWhiteSpace(plan.ConfigPath) || !File.Exists(plan.ConfigPath))
-            yield break;
+        foreach (var path in plan.DeferredPublicationInputPaths)
+            yield return path;
+    }
 
-        var context = new ModulePipelineConfigurationService().Load(plan.ConfigPath!);
-        foreach (var configPath in context.PackageConfigurationPaths)
-            yield return configPath;
+    private static string[] ResolveDeferredModulePublicationInputPaths(
+        ModulePipelineConfigurationContext? context)
+    {
+        if (context is null)
+            return Array.Empty<string>();
 
-        foreach (var action in (context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
-                     .OfType<ConfigurationActionSegment>()
-                     .Where(static action => action.Configuration?.Enabled == true &&
-                                             !string.IsNullOrWhiteSpace(action.Configuration.FilePath)))
-        {
-            yield return PathValueResolver.Resolve(context.ProjectRoot, action.Configuration.FilePath!);
-        }
-
-        foreach (var publish in (context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
-                     .OfType<ConfigurationPublishSegment>()
-                     .Where(static publish => publish.Configuration?.Enabled == true &&
-                                              !string.IsNullOrWhiteSpace(publish.Configuration.ApiKeyFilePath)))
-        {
-            yield return publish.Configuration.ApiKeyFilePath;
-        }
+        return context.PackageConfigurationPaths
+            .Concat((context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
+                .OfType<ConfigurationActionSegment>()
+                .Where(static action => action.Configuration?.Enabled == true &&
+                                        !string.IsNullOrWhiteSpace(action.Configuration.FilePath))
+                .Select(action => PathValueResolver.Resolve(context.ProjectRoot, action.Configuration!.FilePath!)))
+            .Concat((context.Spec.Segments ?? Array.Empty<IConfigurationSegment>())
+                .OfType<ConfigurationPublishSegment>()
+                .Where(static publish => publish.Configuration?.Enabled == true &&
+                                         !string.IsNullOrWhiteSpace(publish.Configuration.ApiKeyFilePath))
+                .Select(static publish => publish.Configuration!.ApiKeyFilePath!))
+            .Distinct(PathComparer)
+            .ToArray();
     }
 
     private static Dictionary<string, string> CaptureValidationIntegrity(string[] roots, CancellationToken token)

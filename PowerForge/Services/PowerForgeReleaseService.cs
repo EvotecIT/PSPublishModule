@@ -1673,6 +1673,7 @@ internal sealed partial class PowerForgeReleaseService
                 moduleName,
                 buildRequest.ModuleVersion ?? moduleConfig?.Spec.Build.Version,
                 buildRequest.PreReleaseTag),
+            DeferredPublicationInputPaths = ResolveDeferredModulePublicationInputPaths(moduleConfig),
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,

@@ -26,29 +26,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(apiKeyPath, "secret");
             File.WriteAllText(validationPath, "# validation");
             File.WriteAllText(releasePath, "{}");
-            File.WriteAllText(configPath, """
-                {
-                  "Build": { "Name": "SampleModule", "SourcePath": ".", "Version": "1.2.3" },
-                  "Segments": [
-                    {
-                      "Type": "Execute",
-                      "Configuration": {
-                        "Enabled": true,
-                        "At": "BeforePublish",
-                        "FilePath": "BeforePublish.ps1"
-                      }
-                    },
-                    {
-                      "Type": "GalleryNuget",
-                      "Configuration": {
-                        "Destination": "PowerShellGallery",
-                        "Enabled": true,
-                        "ApiKeyFilePath": "gallery.key"
-                      }
-                    }
-                  ]
-                }
-                """);
+            WriteDeferredModuleConfiguration(configPath);
 
             var targetPath = mutationTarget switch
             {
@@ -165,6 +143,96 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
         }
     }
+
+    [Fact]
+    public void Validation_integrity_reuses_module_configuration_discovery()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var configPath = Path.Combine(root, "powerforge.json");
+            var actionPath = Path.Combine(root, "BeforePublish.ps1");
+            var apiKeyPath = Path.Combine(root, "gallery.key");
+            var validationPath = Path.Combine(root, "Test-Release.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(actionPath, "# before publish");
+            File.WriteAllText(apiKeyPath, "secret");
+            File.WriteAllText(validationPath, "# validation");
+            File.WriteAllText(releasePath, "{}");
+            WriteDeferredModuleConfiguration(configPath);
+
+            var validationCalls = 0;
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                onModuleExecution: _ => File.WriteAllText(configPath, "{ invalid after module preparation"),
+                runReleaseValidation: (_, _, _, _) =>
+                {
+                    validationCalls++;
+                    return new PowerForgeReleaseValidationResult
+                    {
+                        Name = "sentinel",
+                        Succeeded = false,
+                        ExitCode = 23,
+                        StdErr = "validation reached"
+                    };
+                });
+            var spec = CreateReleaseSpec(root, Path.Combine(root, "unused.ps1"));
+            spec.Module!.ConfigPath = configPath;
+            spec.Module.ScriptPath = null;
+            spec.Validation = new PowerForgeReleaseValidationOptions
+            {
+                AfterStaging = [new() { Name = "release", FilePath = validationPath, TimeoutSeconds = 1 }]
+            };
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    ModuleVersion = "1.2.3",
+                    StageRoot = Path.Combine(root, "staged")
+                });
+
+            Assert.False(result.Success);
+            Assert.Equal(1, validationCalls);
+            Assert.Contains("validation reached", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains(actionPath, result.ModulePlan!.DeferredPublicationInputPaths, StringComparer.Ordinal);
+            Assert.Contains(apiKeyPath, result.ModulePlan.DeferredPublicationInputPaths, StringComparer.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static void WriteDeferredModuleConfiguration(string configPath)
+        => File.WriteAllText(configPath, """
+            {
+              "Build": { "Name": "SampleModule", "SourcePath": ".", "Version": "1.2.3" },
+              "Segments": [
+                {
+                  "Type": "Execute",
+                  "Configuration": {
+                    "Enabled": true,
+                    "At": "BeforePublish",
+                    "FilePath": "BeforePublish.ps1"
+                  }
+                },
+                {
+                  "Type": "GalleryNuget",
+                  "Configuration": {
+                    "Destination": "PowerShellGallery",
+                    "Enabled": true,
+                    "ApiKeyFilePath": "gallery.key"
+                  }
+                }
+              ]
+            }
+            """);
 
     private sealed class MutationAfterValidationProgress(string path) : IPowerForgeReleaseProgressReporter
     {
