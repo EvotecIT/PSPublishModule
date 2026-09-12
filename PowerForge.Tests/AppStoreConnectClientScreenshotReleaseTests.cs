@@ -203,7 +203,7 @@ public sealed partial class AppStoreConnectClientTests
             new SequenceResponse(HttpStatusCode.BadGateway, """{ "errors": [{ "code": "UPSTREAM_ERROR" }] }"""),
             new SequenceResponse(HttpStatusCode.ServiceUnavailable, """{ "errors": [{ "code": "UNAVAILABLE" }] }"""),
             new SequenceResponse(HttpStatusCode.InternalServerError, """{ "errors": [{ "code": "UNEXPECTED_ERROR" }] }"""),
-            new SequenceResponse(HttpStatusCode.GatewayTimeout, """{ "errors": [{ "code": "TIMEOUT" }] }"""));
+            new SequenceResponse((HttpStatusCode)507, """{ "errors": [{ "code": "INSUFFICIENT_STORAGE" }] }"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
         var delays = new List<TimeSpan>();
@@ -216,7 +216,10 @@ public sealed partial class AppStoreConnectClientTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => client.GetVersionsAsync("app-1", "1.4.0", ApplePlatform.iOS));
 
-        Assert.Contains("504 Gateway Timeout", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("507 Insufficient Storage", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            AppleReleaseFailureClassifier.Classify(exception.Message),
+            diagnostic => diagnostic.Code == "APPLE_TRANSIENT" && diagnostic.Retryable);
         Assert.Equal(5, handler.RequestUris.Count);
         Assert.Equal(
             new[]

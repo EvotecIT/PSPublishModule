@@ -5,6 +5,31 @@ namespace PowerForge.Tests;
 public sealed class AppleReleaseSourceTrustBuildSettingReferenceTests
 {
     [Fact]
+    public void Capture_MarksFailuresForStructuralClassification()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.AppleSourceTrustMarker",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService().Capture(
+                    root.FullName,
+                    Path.Combine(root.FullName, "powerforge.release.json")));
+
+            Assert.StartsWith("Apple source trust validation failed:", exception.Message, StringComparison.Ordinal);
+            Assert.Contains(
+                AppleReleaseFailureClassifier.Classify(exception.Message),
+                diagnostic => diagnostic.Code == "APPLE_SOURCE_TRUST");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void ValidateUnclassifiedBuildSettingReferences_AllowsStandardBuildProductsDirectory()
     {
         var exception = Record.Exception(() => ValidateReferences(

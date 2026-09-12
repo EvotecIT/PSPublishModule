@@ -1016,7 +1016,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("No profiles for com.evotecit.casaray were found", "APPLE_PROVISIONING", "signing")]
     [InlineData("Asset validation failed ITMS-90161", "APPLE_ASSET_VALIDATION", "validation")]
     [InlineData("App Store Connect timed out with 503", "APPLE_TRANSIENT", "transient")]
-    [InlineData("Xcode build setting INFOPLIST_FILE contents contains an unapproved host or environment reference and cannot be bound to the exact source commit", "APPLE_SOURCE_TRUST", "source-trust")]
+    [InlineData("App Store Connect request failed (507 Insufficient Storage).", "APPLE_TRANSIENT", "transient")]
+    [InlineData("Apple source trust validation failed: Xcode build setting INFOPLIST_FILE contains an unapproved host reference.", "APPLE_SOURCE_TRUST", "source-trust")]
     public void AppleReleaseFailureClassifier_ProducesStableOperatorGuidance(
         string message,
         string expectedCode,
@@ -1027,6 +1028,15 @@ public sealed partial class PowerForgeReleaseServiceTests
         Assert.Equal(expectedCode, diagnostic.Code);
         Assert.Equal(expectedCategory, diagnostic.Category);
         Assert.False(string.IsNullOrWhiteSpace(diagnostic.Action));
+    }
+
+    [Fact]
+    public void AppleReleaseFailureClassifier_DoesNotInferSourceTrustFromUnrelatedPaths()
+    {
+        var diagnostics = AppleReleaseFailureClassifier.Classify(
+            "Build output was written to /work/exact-source-app/source trust samples.");
+
+        Assert.DoesNotContain(diagnostics, item => item.Code == "APPLE_SOURCE_TRUST");
     }
 
     [Fact]
