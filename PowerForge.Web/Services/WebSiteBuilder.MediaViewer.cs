@@ -20,6 +20,12 @@ public static partial class WebSiteBuilder
         }
     }
 
+    private static string RenderMediaViewerStyles(string route)
+    {
+        var source = System.Web.HttpUtility.HtmlEncode(ResolveRouteRelativeAssetHref(MediaViewerCssRoute, route));
+        return $"<link rel=\"preload\" as=\"style\" href=\"{source}\" data-pf-media-styles />";
+    }
+
     private static string RenderMediaViewerScript(MediaViewerSpec spec, string route)
     {
         var source = System.Web.HttpUtility.HtmlEncode(ResolveRouteRelativeAssetHref(MediaViewerJsRoute, route));

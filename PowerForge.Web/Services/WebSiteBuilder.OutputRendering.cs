@@ -115,7 +115,7 @@ public static partial class WebSiteBuilder
         var jsHtml = RenderJsLinks(jsLinks, assetBaseRoute);
         if (spec.MediaViewer?.Enabled == true)
         {
-            cssHtml += RenderCssLinks(new[] { MediaViewerCssRoute }, null, assetBaseRoute);
+            cssHtml += RenderMediaViewerStyles(assetBaseRoute);
             jsHtml += RenderMediaViewerScript(spec.MediaViewer, assetBaseRoute);
         }
         var pageTitle = ResolveSeoTitle(spec, item);

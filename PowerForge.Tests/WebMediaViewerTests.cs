@@ -27,7 +27,12 @@ public class WebMediaViewerTests
             Assert.Equal(enabled, File.Exists(Path.Combine(output, "assets", "powerforge", "media-viewer.v1.js")));
             Assert.Equal(enabled, File.Exists(Path.Combine(output, "assets", "powerforge", "media-viewer.v1.css")));
             Assert.Contains("href=\"/sample.png\"", html);
-            if (enabled) Assert.Contains("data-pf-media-selector=\"a[data-pf-media=&quot;gallery&quot;]\"", html);
+            if (enabled)
+            {
+                Assert.Contains("data-pf-media-selector=\"a[data-pf-media=&quot;gallery&quot;]\"", html);
+                Assert.Contains("<link rel=\"preload\" as=\"style\"", html);
+                Assert.DoesNotContain("rel=\"stylesheet\" href=\"../../assets/powerforge/media-viewer", html);
+            }
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
