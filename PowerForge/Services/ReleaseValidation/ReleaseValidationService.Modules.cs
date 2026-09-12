@@ -24,6 +24,7 @@ public sealed partial class ReleaseValidationService
         }
         else
         {
+            FileSystemPathSafety.RequireRegularFile(input);
             root = Directory.CreateDirectory(Path.Combine(workspace.Root, "module")).FullName;
             using var archiveInput = new ArchiveMetadataReadStream(File.OpenRead(input), cancellationToken);
             using var archive = new ZipArchive(archiveInput, ZipArchiveMode.Read);

@@ -671,7 +671,8 @@ internal sealed partial class PowerForgeReleaseService
                 configPath,
                 request,
                 configurationOverride,
-                publishUnifiedGitHub);
+                publishUnifiedGitHub,
+                deferPublishing: HasAfterStagingValidation(spec));
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -818,7 +819,8 @@ internal sealed partial class PowerForgeReleaseService
                 configurationOverride,
                 publishUnifiedGitHub,
                 request.ResolvedReleaseVersion,
-                spec.Module!.VersionPrimaryProject);
+                spec.Module!.VersionPrimaryProject,
+                deferPublishing: HasAfterStagingValidation(spec));
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -976,6 +978,12 @@ internal sealed partial class PowerForgeReleaseService
             {
                 return result;
             }
+        }
+
+        if (runPackages && HasAfterStagingValidation(spec) && !request.PlanOnly && !request.ValidateOnly &&
+            !PublishValidatedPackageCheckpoint(spec, request, configPath, result))
+        {
+            return result;
         }
 
         if (deferredModulePublishRequest is not null &&

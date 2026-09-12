@@ -346,7 +346,12 @@ public sealed partial class DotNetNuGetClient
         try
         {
             if (Directory.Exists(path))
+            {
+                // This directory contains only this push's copies; snapshots can be read-only.
+                foreach (var file in new DirectoryInfo(path).EnumerateFiles())
+                    if (file.IsReadOnly) file.IsReadOnly = false;
                 Directory.Delete(path, recursive: true);
+            }
         }
         catch
         {

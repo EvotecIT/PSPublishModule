@@ -11,6 +11,11 @@ public sealed class ProjectBuildHostRequest
     internal bool CoordinatedReleaseCheckpointActive { get; set; }
     internal string? ReleaseVersionFloor { get; set; }
     internal string? ReleaseVersionFloorProject { get; set; }
+    /// <summary>Build the requested artifacts but retain publication for the outer release validation gate.</summary>
+    internal bool DeferPublishing { get; set; }
+    /// <summary>Publish this completed checkpoint without planning, versioning, or rebuilding.</summary>
+    internal ProjectBuildHostExecutionResult? PublicationCheckpoint { get; set; }
+    internal PowerForgeReleaseAssetEntry[] PublicationAssets { get; set; } = Array.Empty<PowerForgeReleaseAssetEntry>();
 
     /// <summary>
     /// Cancels active project build and package child processes.

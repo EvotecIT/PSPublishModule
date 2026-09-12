@@ -5,6 +5,7 @@ public sealed partial class ReleaseValidationService
     private static async Task CopyValidationFileAsync(string source, string destination, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        FileSystemPathSafety.RequireRegularFile(source);
         using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
         cancellationToken.ThrowIfCancellationRequested();
         using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true);

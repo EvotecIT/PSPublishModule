@@ -387,6 +387,10 @@
       "required": [
         "Target"
       ],
+      "anyOf": [
+        { "required": ["PublishConfigPath"], "properties": { "PublishConfigPath": { "type": "string", "pattern": "\\S" } } },
+        { "required": ["Runtimes", "Styles"], "properties": { "Runtimes": { "minItems": 1 }, "Styles": { "minItems": 1 } } }
+      ],
       "properties": {
         "ManifestPath": {
           "type": "string"
@@ -394,7 +398,7 @@
         "PublishConfigPath": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string", "pattern": "\\S"
             },
             {
               "type": "null"

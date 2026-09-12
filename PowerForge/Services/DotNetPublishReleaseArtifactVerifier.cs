@@ -366,6 +366,7 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        FileSystemPathSafety.RequireRegularFile(path, followSymbolicLinks: true);
         using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
         if (input.Length > maximumBytes)
             throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");

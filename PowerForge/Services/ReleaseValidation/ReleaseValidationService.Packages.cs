@@ -19,6 +19,7 @@ public sealed partial class ReleaseValidationService
     private static PackageInspection InspectPackage(string path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        FileSystemPathSafety.RequireRegularFile(path);
         using var input = new ArchiveMetadataReadStream(File.OpenRead(path), cancellationToken);
         using var archive = new ZipArchive(input, ZipArchiveMode.Read);
         // The IO budget and cancellation apply while ZipArchive builds Entries, not

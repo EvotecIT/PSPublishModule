@@ -120,8 +120,8 @@
             "properties": {
               "Enabled": { "type": "boolean" },
               "Name": { "type": [ "string", "null" ] },
-              "FilePath": { "type": "string", "minLength": 1 },
-              "ConfigPath": { "type": "string", "minLength": 1 },
+              "FilePath": { "type": "string", "pattern": "\\S" },
+              "ConfigPath": { "type": "string", "pattern": "\\S" },
               "WorkingDirectory": { "type": [ "string", "null" ] },
               "Environment": {
                 "type": "object",

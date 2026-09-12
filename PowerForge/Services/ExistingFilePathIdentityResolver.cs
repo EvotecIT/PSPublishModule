@@ -10,6 +10,19 @@ namespace PowerForge;
 /// </summary>
 internal static class ExistingFilePathIdentityResolver
 {
+    /// <summary>Inspects a Unix pathname without opening a FIFO/device; callers explicitly opt into following symbolic links.</summary>
+    internal static bool IsRegularUnixFile(string path, bool followSymbolicLinks = false)
+    {
+#if NET8_0_OR_GREATER
+        UnixFileStatus status;
+        if ((followSymbolicLinks ? SystemNativeStat(path, out status) : SystemNativeLStat(path, out status)) != 0)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        return (status.Mode & 0xF000) == 0x8000;
+#else
+        throw new PlatformNotSupportedException("Unix file type inspection is unavailable on this runtime.");
+#endif
+    }
+
     /// <summary>
     /// Returns an operating-system file identity that is shared by every symbolic-link or hard-link alias.
     /// </summary>
@@ -428,6 +441,16 @@ internal static class ExistingFilePathIdentityResolver
     [DllImport("System.Native", EntryPoint = "SystemNative_FStat", SetLastError = true)]
     private static extern int SystemNativeFStat(
         SafeFileHandle file,
+        out UnixFileStatus status);
+
+    [DllImport("System.Native", EntryPoint = "SystemNative_LStat", SetLastError = true)]
+    private static extern int SystemNativeLStat(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
+        out UnixFileStatus status);
+
+    [DllImport("System.Native", EntryPoint = "SystemNative_Stat", SetLastError = true)]
+    private static extern int SystemNativeStat(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
         out UnixFileStatus status);
 #endif
 }

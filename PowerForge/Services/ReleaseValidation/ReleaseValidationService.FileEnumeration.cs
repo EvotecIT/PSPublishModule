@@ -19,7 +19,11 @@ public sealed partial class ReleaseValidationService
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                     throw new InvalidOperationException($"Validation input '{path}' is a symbolic link or reparse point.");
                 if ((attributes & FileAttributes.Directory) != 0) directories.Push(path);
-                else yield return path;
+                else
+                {
+                    FileSystemPathSafety.RequireRegularFile(path);
+                    yield return path;
+                }
             }
         }
         cancellationToken.ThrowIfCancellationRequested();

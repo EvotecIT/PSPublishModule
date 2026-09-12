@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Host-facing service for planning or executing repository project builds from <c>project.build.json</c>.
 /// </summary>
-public sealed class ProjectBuildHostService
+public sealed partial class ProjectBuildHostService
 {
     private readonly ILogger _logger;
     private readonly Func<DotNetRepositoryReleaseSpec, DotNetRepositoryReleaseResult>? _executeRelease;
@@ -147,6 +147,8 @@ public sealed class ProjectBuildHostService
         string configDirectory,
         DateTimeOffset startedAt)
     {
+        if (request.PublicationCheckpoint is not null)
+            return PublishCheckpoint(request);
         var preparation = new ProjectBuildPreparationService().Prepare(
             config,
             configDirectory,
@@ -161,6 +163,20 @@ public sealed class ProjectBuildHostService
                 PublishGitHub = request.PublishGitHub
             });
         request.BuildSpecPrepared?.Invoke(preparation.Spec);
+        ProjectBuildPublishHostConfiguration? deferredPublication = null;
+        if (request.DeferPublishing && !preparation.PlanOnly && request.ExecuteBuild)
+        {
+            deferredPublication = ProjectBuildPublishHostService.CreateHostConfiguration(config, configPath, configDirectory);
+            deferredPublication.PublishNuget = preparation.PublishNuget;
+            deferredPublication.PublishGitHub = preparation.PublishGitHub;
+            if (preparation.PublishNuget)
+                deferredPublication.ValidatePublicationContext = DotNetRepositoryReleaseService.CapturePublicationDestination(preparation.Spec);
+            deferredPublication.PublicationSpec = preparation.Spec;
+            deferredPublication.PublishSource = preparation.Spec.PublishSource
+                ?? ProjectBuildPackageFeedResolver.GetDefaultPublishSource();
+            // Keep Pack/Build and resolved versions intact; suppress only remote operations.
+            preparation.Spec.Publish = false;
+        }
 
         var workflow = new ProjectBuildWorkflowService(
             _logger,
@@ -177,9 +193,11 @@ public sealed class ProjectBuildHostService
                 request.RemotePublishAttempted,
                 request.CoordinatedReleaseCheckpointActive,
                 request.Progress,
-                request.CancellationToken);
+                request.CancellationToken,
+                deferPublishing: deferredPublication is not null);
 
         return new ProjectBuildHostExecutionResult {
+            DeferredPublicationConfiguration = deferredPublication,
             Success = workflow.Result.Success,
             ErrorMessage = workflow.Result.ErrorMessage,
             ConfigPath = configPath,

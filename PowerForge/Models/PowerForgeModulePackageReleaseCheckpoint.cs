@@ -5,6 +5,9 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerForgeModulePackageReleaseCheckpoint
 {
+    /// <summary>Same-run resolved publication context; credentials are never serialized into the checkpoint.</summary>
+    internal ProjectBuildPublishHostConfiguration? PublicationConfiguration { get; set; }
+
     /// <summary>
     /// Stable segment key that uniquely identifies the package lane within the module recipe.
     /// </summary>

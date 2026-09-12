@@ -57,7 +57,7 @@ On Unix, extracted module files and staged consumer inputs retain ordinary permi
 - `CliArtifacts`: compare a publish manifest with the runtime/framework/style matrix from `PublishConfigPath`, or with an explicit matrix. Staged checks also validate file existence, containment, and the supplied asset set. Unzipped outputs are checked through the declared executable or, when no executable is declared, a nonempty output directory.
 - `Commands`: run a product probe with structured arguments, an expected exit code, output assertions, and a timeout.
 
-CLI and module manifests read by validation, and validation/publish JSON configuration files, have a 16 MiB byte limit. Staged CLI payload and metadata paths must stay inside `StagingRoot` without traversing symbolic links or reparse points, including the staging root itself. This is a filesystem preflight, not protection against another process replacing files concurrently.
+CLI and module manifests read by validation, and validation/publish JSON configuration files, have a 16 MiB byte limit. Validation directory inputs, package archives, and metadata readers reject Unix special files such as FIFOs before opening them, so a missing pipe writer cannot stall preparation. Staged CLI payload and metadata paths must stay inside `StagingRoot` without traversing symbolic links or reparse points, including the staging root itself. This is a filesystem preflight, not protection against another process replacing files concurrently.
 
 ## Keep domain-specific interpretation local
 
@@ -108,6 +108,8 @@ An existing unified release can invoke the same JSON contract before publication
 
 PowerForge supplies the selected release lanes and paths such as `{ModuleArchive}`, `{PackageRoot}`, `{ReleaseManifestPath}`, and `{StagingRoot}`. Unselected lanes are not validated. If selection removes every contract, the action reports a successful skip; an originally empty contract still fails. Additional `Commands` remain active regardless of lane selection. A tools-only run retains the CLI target's version instead of borrowing a module version.
 
+When an after-staging action is enabled, the standalone `Packages` lane builds without publishing. NuGet and project GitHub publication wait until every enabled action succeeds, then use the captured staged package, symbol, and release ZIP files without rebuilding or resolving versions again. A validation failure or cancellation prevents those publication steps. Existing publication choices and preflight checks remain in effect; build-only requests do not start publishing. Deferred NuGet publication uses the same all-package preflight and dependency ordering as an ordinary repository release, including blocking dependents when a selected dependency fails to publish. Same-run package checkpoints retain the resolved feed and repository context.
+
 An explicit release target filter also skips a `CliArtifacts` contract whose target is absent from the effective selected tool plan. Targets retained by the planner as dependencies are still validated, and product commands remain active. Without an explicit target filter, a missing target remains an error.
 
 JSON actions retain their own `ProjectRoot`, resolved relative to the validation file, just as standalone validation does. Script context uses the resolved root of the first executed module, package, tool, or Apple lane, falling back to the release configuration directory.
@@ -121,5 +123,7 @@ When `CliArtifacts.PublishConfigPath` names an input of the current release's pu
 Selecting the tools release lane does not prohibit its portable bundles, installers, or Store outputs. When `ToolOutputs` or `SkipToolOutputs` deselects the base `Tool` output, its `CliArtifacts` contract is skipped; additional product commands still run and receive the common version of the selected packaged outputs. Set `CliArtifacts.ToolsOnly` explicitly only when the product contract permits tool and metadata entries alone. Standalone validation of a unified CLI manifest infers the version from the selected target and rejects missing or inconsistent artifact versions.
 
 `ConfigPath` and the existing script-based `FilePath` are mutually exclusive. Script action options such as `Environment`, `WorkingDirectory`, and `PreferWindowsPowerShell` do not apply to a JSON action: declare each command's environment and directory, or a module's `Hosts`, in the validation contract.
+
+Named HTTP NuGet feeds are captured as concrete endpoints. Their existing named-source authentication stays in the repository's NuGet configuration; if validation changes that source or its credentials, publication fails before pushing rather than selecting a new destination or copying credentials into a temporary file.
 
 This validates artifacts and probe behavior. It does not prove that a package is publicly available, authorize publication, or deploy a running service.

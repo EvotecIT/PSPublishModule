@@ -3,6 +3,18 @@ namespace PowerForge;
 /// <summary>Filesystem preflight shared by artifact writers and validators; not a concurrent-mutation sandbox.</summary>
 internal static class FileSystemPathSafety
 {
+    /// <summary>Rejects special file inputs before a potentially blocking open; not a concurrent-replacement guard.</summary>
+    internal static void RequireRegularFile(string path, bool followSymbolicLinks = false)
+    {
+        var attributes = File.GetAttributes(path);
+        var regular = FrameworkCompatibility.IsWindows()
+            ? (attributes & (FileAttributes.Directory | FileAttributes.Device |
+                (followSymbolicLinks ? 0 : FileAttributes.ReparsePoint))) == 0
+            : ExistingFilePathIdentityResolver.IsRegularUnixFile(path, followSymbolicLinks);
+        if (!regular)
+            throw new InvalidOperationException($"Validation input must be a regular file: '{path}'.");
+    }
+
     /// <summary>Compares existing case-variant paths through OS identity without writing case probes.
     /// Differently named hard links remain distinct pathnames; callers needing file uniqueness use physical identity.</summary>
     internal static IEqualityComparer<string> ExistingPathComparer { get; } = new ExistingCaseAliasComparer();
