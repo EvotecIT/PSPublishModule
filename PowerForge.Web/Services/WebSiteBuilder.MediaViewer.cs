@@ -2,8 +2,8 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
-    private const string MediaViewerCssRoute = "/assets/powerforge/media-viewer.v1.css";
-    private const string MediaViewerJsRoute = "/assets/powerforge/media-viewer.v1.js";
+    private const string MediaViewerCssRoute = "assets/powerforge/media-viewer.v1.css";
+    private const string MediaViewerJsRoute = "assets/powerforge/media-viewer.v1.js";
 
     private static void EnsureMediaViewerAssets(SiteSpec spec, string outputRoot)
     {

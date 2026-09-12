@@ -242,15 +242,19 @@ public static partial class WebSiteBuilder
         if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
             return html;
 
-        return RewriteQuotedHtmlAttribute(
-            RewriteQuotedHtmlAttribute(
-                RewriteQuotedHtmlAttribute(
-                    RewriteQuotedHtmlAttribute(
-                        RewriteQuotedHtmlAttribute(html, "href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                        "src", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                    "action", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-                "formaction", value => RebaseRouteForSelectedLanguageRootBuild(spec, value)),
-            "data-local-href", value => RebaseRouteForSelectedLanguageRootBuild(spec, value));
+        foreach (var attribute in new[]
+        {
+            "href", "src", "action", "formaction", "data-local-href",
+            "data-pf-media-src", "data-pf-media-light", "data-pf-media-dark",
+            "data-pf-media-mobile", "data-pf-media-desktop"
+        })
+        {
+            html = RewriteQuotedHtmlAttribute(html, attribute,
+                value => value.StartsWith("/", StringComparison.Ordinal) || IsAbsoluteHttpUrl(value)
+                    ? RebaseRouteForSelectedLanguageRootBuild(spec, value)
+                    : value);
+        }
+        return html;
     }
 
     private static string RewriteQuotedHtmlAttribute(string html, string attributeName, Func<string, string> rewrite)
@@ -258,7 +262,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
             return html;
 
-        var pattern = $@"(?<prefix>\b{System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?<quote>[""'])(?<value>[^""']*)(?<suffix>\k<quote>)";
+        var pattern = $@"(?<prefix>(?<![\w:.-]){System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?<quote>[""'])(?<value>[^""']*)(?<suffix>\k<quote>)";
         return System.Text.RegularExpressions.Regex.Replace(
             html,
             pattern,
