@@ -80,6 +80,8 @@ internal static partial class WebPipelineRunner
                 media.Frame = (NormalizeOptionalString(media.Frame) ?? "auto").ToLowerInvariant();
                 media.Fit = (NormalizeOptionalString(media.Fit) ?? "contain").ToLowerInvariant();
                 media.Position = NormalizeOptionalString(media.Position);
+                media.Light = NormalizeOptionalString(media.Light);
+                media.Dark = NormalizeOptionalString(media.Dark);
                 return media;
             })
             .Where(static media => !string.IsNullOrWhiteSpace(media.Src))
@@ -297,6 +299,11 @@ internal static partial class WebPipelineRunner
                     heroCount++;
                 RequireProductValue(findings, slug, "missing-product-media-alt", media.Alt, $"Product media '{media.Src}' must define meaningful alt text.");
                 ValidateProductImageDimensions(findings, slug, $"product.media '{media.Src}'", media.Src, media.Width, media.Height);
+                foreach (var variant in new[] { media.Light, media.Dark })
+                {
+                    if (!string.IsNullOrWhiteSpace(variant) && !IsValidProjectLinkTarget(variant))
+                        findings.Add(ProjectCatalogFinding.Error("invalid-product-image-source", slug, $"Product media variant '{variant}' must be an absolute URL or root-relative route."));
+                }
                 ValidateProductMediaToken(findings, slug, "role", media.Role, AllowedProductMediaRoles, media.Src);
                 ValidateProductMediaToken(findings, slug, "frame", media.Frame, AllowedProductMediaFrames, media.Src);
                 ValidateProductMediaToken(findings, slug, "fit", media.Fit, AllowedProductMediaFits, media.Src);
@@ -434,6 +441,8 @@ internal static partial class WebPipelineRunner
                 AddNestedString(lines, 6, "frame", media.Frame);
                 AddNestedString(lines, 6, "fit", media.Fit);
                 AddNestedString(lines, 6, "position", media.Position);
+                AddNestedString(lines, 6, "light", media.Light);
+                AddNestedString(lines, 6, "dark", media.Dark);
             }
         }
 
@@ -583,6 +592,12 @@ internal static partial class WebPipelineRunner
 
     private sealed class ProductMediaData
     {
+        [JsonPropertyName("light")]
+        public string? Light { get; set; }
+
+        [JsonPropertyName("dark")]
+        public string? Dark { get; set; }
+
         [JsonPropertyName("src")]
         public string? Src { get; set; }
 
