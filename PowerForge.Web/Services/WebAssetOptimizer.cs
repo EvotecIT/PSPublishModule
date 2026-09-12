@@ -634,49 +634,16 @@ public static partial class WebAssetOptimizer
     {
         StringBuilder? rewritten = null;
         var copyFrom = 0;
-        var index = 0;
-        while (index < srcSet.Length)
+        foreach (var (urlStart, length) in WebSourceSetUrls.Ranges(srcSet))
         {
-            while (index < srcSet.Length && (char.IsWhiteSpace(srcSet[index]) || srcSet[index] == ','))
-                index++;
-            if (index >= srcSet.Length)
-                break;
-
-            var urlStart = index;
-            while (index < srcSet.Length && !char.IsWhiteSpace(srcSet[index]))
-                index++;
-
-            var urlEnd = index;
-            while (urlEnd > urlStart && srcSet[urlEnd - 1] == ',')
-                urlEnd--;
-            var candidateEndedWithComma = urlEnd < index;
-
-            if (urlEnd > urlStart)
+            var url = srcSet.Substring(urlStart, length);
+            var mapped = RewriteUrlWithMap(url, map, documentBaseUri);
+            if (!string.Equals(mapped, url, StringComparison.Ordinal))
             {
-                var url = srcSet[urlStart..urlEnd];
-                var mapped = RewriteUrlWithMap(url, map, documentBaseUri);
-                if (!string.Equals(mapped, url, StringComparison.Ordinal))
-                {
-                    rewritten ??= new StringBuilder(srcSet.Length + 32);
-                    rewritten.Append(srcSet, copyFrom, urlStart - copyFrom);
-                    rewritten.Append(mapped);
-                    copyFrom = urlEnd;
-                }
-            }
-
-            if (candidateEndedWithComma)
-                continue;
-
-            var parentheses = 0;
-            while (index < srcSet.Length)
-            {
-                var current = srcSet[index++];
-                if (current == '(')
-                    parentheses++;
-                else if (current == ')' && parentheses > 0)
-                    parentheses--;
-                else if (current == ',' && parentheses == 0)
-                    break;
+                rewritten ??= new StringBuilder(srcSet.Length + 32);
+                rewritten.Append(srcSet, copyFrom, urlStart - copyFrom);
+                rewritten.Append(mapped);
+                copyFrom = urlStart + length;
             }
         }
 

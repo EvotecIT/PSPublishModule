@@ -112,12 +112,21 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
             Assert.Equal("/assets/products/casaray/ipad-home.png", product.GetProperty("media")[0].GetProperty("light").GetString());
             Assert.Equal("/assets/products/casaray/ipad-home-dark.png", product.GetProperty("media")[0].GetProperty("dark").GetString());
 
-            var invalidCatalog = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(catalogPath))!;
-            invalidCatalog["projects"]![0]!["product"]!["media"]![0]!["dark"] = "javascript:alert(1)";
-            File.WriteAllText(catalogPath, invalidCatalog.ToJsonString());
-            var invalidResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
-            Assert.False(invalidResult.Success);
-            Assert.Contains("validation failed", invalidResult.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            string validCatalog = File.ReadAllText(catalogPath);
+            foreach (string field in new[] { "light", "dark" })
+            foreach (string source in new[] { "javascript:alert(1)", "http://cdn.example/image.png", "//cdn.example/image.png", "https://cdn.example/\\image.png", "https://cdn.example/\timage.png" })
+            {
+                var invalidCatalog = System.Text.Json.Nodes.JsonNode.Parse(validCatalog)!;
+                invalidCatalog["projects"]![0]!["product"]!["media"]![0]![field] = source;
+                File.WriteAllText(catalogPath, invalidCatalog.ToJsonString());
+                var invalidResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+                Assert.False(invalidResult.Success);
+                Assert.Contains("validation failed", invalidResult.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            }
+            var httpsCatalog = System.Text.Json.Nodes.JsonNode.Parse(validCatalog)!;
+            httpsCatalog["projects"]![0]!["product"]!["media"]![0]!["dark"] = "https://cdn.example/dark.png";
+            File.WriteAllText(catalogPath, httpsCatalog.ToJsonString());
+            Assert.True(WebPipelineRunner.RunPipeline(pipelinePath, logger: null).Success);
         }
         finally
         {

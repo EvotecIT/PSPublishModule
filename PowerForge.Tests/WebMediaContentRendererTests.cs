@@ -5,6 +5,42 @@ namespace PowerForge.Tests;
 
 public class WebMediaContentRendererTests
 {
+    [Theory]
+    [InlineData("PL", "Powiększ obraz", "Zobacz obrazy")]
+    [InlineData("FR-fr", "Agrandir l’image", "Voir les images")]
+    public void Content_NormalizesLanguageAndKeepsNestedCaptionsLocal(string language, string enlarge, string view)
+    {
+        string result = WebMediaContentRenderer.Render($"<html lang='{language}'><article data-pf-media-scope='content'><h2>Outer</h2><section data-pf-media-scope='content'><h3>Inner</h3><img src='/inner.png' alt='Inside'></section><img src='/a.png' alt='A'><img src='/b.png' alt='B'></article></html>");
+        var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
+        Assert.Equal("Outer · A", doc.DocumentNode.SelectSingleNode("//a[@href='/a.png']").GetAttributeValue("data-pf-media-caption", ""));
+        Assert.Equal("Inner · Inside", doc.DocumentNode.SelectSingleNode("//a[@href='/inner.png']").GetAttributeValue("data-pf-media-caption", ""));
+        Assert.Contains(enlarge, result);
+        Assert.Contains(view + " (2)", result);
+    }
+
+    [Theory]
+    [InlineData("<img srcset='/small.png 1x, /large.png 2x' alt='Responsive'>", "/small.png")]
+    [InlineData("<picture><source media='(max-width:600px)' srcset='/mobile.png 1x'><source srcset='/desktop.png 1x'><img alt='Responsive'></picture>", "/mobile.png")]
+    [InlineData("<img srcset='/crop.png?area=1,2,3,4 400w, /large.png 800w' alt='Responsive'>", "/crop.png?area=1,2,3,4")]
+    [InlineData("<img srcset='data:image/png;base64,AAAA 1x, /large.png 2x' alt='Responsive'>", "/large.png")]
+    public void Content_UsesSafeSourceSetFallbackAndPreservesMarkup(string markup, string fallback)
+    {
+        string result = WebMediaContentRenderer.Render($"<section data-pf-media-scope='content'>{markup}</section>");
+        var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
+        Assert.Equal(fallback, doc.DocumentNode.SelectSingleNode("//a[@data-pf-media]").GetAttributeValue("href", ""));
+        Assert.Contains(markup, result);
+        Assert.Equal(result, WebMediaContentRenderer.Render(result));
+    }
+
+    [Fact]
+    public void Previews_EnhanceSourceSetOnlyNavigationWithoutChangingDestination()
+    {
+        string result = WebMediaContentRenderer.Render("<section data-pf-media-scope='previews'><a href='/demo/'><img srcset='/demo.png 1x' alt='Demo'></a></section>");
+        var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
+        Assert.NotNull(doc.DocumentNode.SelectSingleNode("//a[@href='/demo/']/img"));
+        Assert.NotNull(doc.DocumentNode.SelectSingleNode("//a[@href='/demo.png'][@data-pf-media-for]"));
+    }
+
     [Fact]
     public void Content_PreservesPictureMarkupAndCreatesScopedLinks()
     {

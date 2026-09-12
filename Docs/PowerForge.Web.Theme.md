@@ -590,7 +590,7 @@ The main toolbar contains fit, actual size, zoom, and the original-image link. D
 
 Style the chrome with `.pf-media-viewer` and `--pf-media-surface`, `--pf-media-text`, `--pf-media-border`, and `--pf-media-stage`. Continue using the media shortcodes' width, height, fit, aspect ratio, and responsive source options for page thumbnails. Existing screenshot shortcode links can opt in with `Selector: ".pf-screenshot a"`; choose a selector that matches image links, not unrelated navigation.
 
-Product catalog media entries can declare optional `light` and `dark` image URLs alongside `src`, `width`, and `height`. The project-catalog task preserves these in generated product front matter. A product layout can bind them to `data-pf-media-light` and `data-pf-media-dark`; `src` remains the page thumbnail and fallback link. Theme variants should show the same view at matching dimensions.
+Product catalog media entries can declare optional `light` and `dark` image URLs alongside `src`, `width`, and `height`. These variant URLs must use HTTPS or a root-relative route, which also works on a local HTTP preview. The project-catalog task validates and preserves them in generated product front matter. A product layout can bind them to `data-pf-media-light` and `data-pf-media-dark`; `src` remains the page thumbnail and fallback link. Theme variants should show the same view at matching dimensions.
 
 For imported articles and other content with unlinked images, opt in a content container:
 
@@ -601,7 +601,7 @@ For imported articles and other content with unlinked images, opt in a content c
 </article>
 ```
 
-The build wraps eligible images in real image links, preserving the original image and responsive `picture` markup. Each container forms its own gallery, with a **View images** shortcut when it contains multiple images. Nested scopes form independent collections. `single` provides independent previews; `off` disables enhancement within the container. These explicit scopes work alongside a custom viewer selector.
+The build wraps eligible images in real image links, preserving the original image and responsive `picture` markup. For images without `src`, a safe URL from `srcset` or the surrounding `picture` supplies the fallback link; the viewer opens the source selected by the browser. Each container forms its own gallery, with a **View images** shortcut when it contains multiple images. Nested scopes form independent collections and captions use headings from their own scope. `single` provides independent previews; `off` disables enhancement within the container. These explicit scopes work alongside a custom viewer selector.
 
 Use `data-pf-media-scope="previews"` for demo or product cards whose images already link to another page. The build preserves those destinations and adds a separate **Enlarge image** action. Galleries include only currently visible entries, so filtered cards are excluded. **Show in page** closes the viewer and takes the reader to the selected image; **Back to page** returns focus to the original opening control.
 

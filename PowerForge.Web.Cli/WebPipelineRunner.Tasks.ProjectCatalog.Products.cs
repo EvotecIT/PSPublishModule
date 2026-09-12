@@ -301,8 +301,8 @@ internal static partial class WebPipelineRunner
                 ValidateProductImageDimensions(findings, slug, $"product.media '{media.Src}'", media.Src, media.Width, media.Height);
                 foreach (var variant in new[] { media.Light, media.Dark })
                 {
-                    if (!string.IsNullOrWhiteSpace(variant) && !IsValidProjectLinkTarget(variant))
-                        findings.Add(ProjectCatalogFinding.Error("invalid-product-image-source", slug, $"Product media variant '{variant}' must be an absolute URL or root-relative route."));
+                    if (!string.IsNullOrWhiteSpace(variant) && !IsValidProductViewerSource(variant))
+                        findings.Add(ProjectCatalogFinding.Error("invalid-product-image-source", slug, $"Product media variant '{variant}' must be an HTTPS URL or root-relative route."));
                 }
                 ValidateProductMediaToken(findings, slug, "role", media.Role, AllowedProductMediaRoles, media.Src);
                 ValidateProductMediaToken(findings, slug, "frame", media.Frame, AllowedProductMediaFrames, media.Src);
@@ -335,6 +335,10 @@ internal static partial class WebPipelineRunner
             findings.Add(ProjectCatalogFinding.Error("missing-product-website", slug, "Dedicated product projects must define externalUrl."));
         }
     }
+
+    private static bool IsValidProductViewerSource(string value) =>
+        !value.Any(char.IsControl) && !value.Contains('\\') && IsValidProjectLinkTarget(value) &&
+        (value.StartsWith('/') || Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps);
 
     private static void ValidateProductImageDimensions(
         List<ProjectCatalogFinding> findings,

@@ -13,7 +13,7 @@ internal static class WebMediaContentRenderer
         if (!html.Contains("data-pf-media-scope", StringComparison.OrdinalIgnoreCase)) return html;
         var document = HtmlParser.ParseWithHtmlAgilityPack(html);
         var edits = new List<(int Start, int Length, string Value)>();
-        var language = document.DocumentNode.SelectSingleNode("//html")?.GetAttributeValue("lang", "en").Split('-')[0];
+        var language = document.DocumentNode.SelectSingleNode("//html")?.GetAttributeValue("lang", "en").Trim().Split('-')[0].ToLowerInvariant();
         var labels = language switch {
             "pl" => ("Powiększ obraz", "Zobacz obrazy"),
             "fr" => ("Agrandir l’image", "Voir les images"),
@@ -36,7 +36,16 @@ internal static class WebMediaContentRenderer
                 if (image.AncestorsAndSelf().Any(node => node.GetAttributeValue("data-pf-media", "") == "off" ||
                     node.Attributes["hidden"] is not null || node.GetAttributeValue("aria-hidden", "") == "true" ||
                     node.Name is "button" or "pre" or "code" or "template")) continue;
-                string src = HttpUtility.HtmlDecode(image.GetAttributeValue("src", ""));
+                var target = image.ParentNode.Name == "picture" ? image.ParentNode : image;
+                string src = HttpUtility.HtmlDecode(image.GetAttributeValue("src", "")).Trim();
+                if (src.Length == 0)
+                {
+                    // Only a fallback link is chosen here; the browser still selects the displayed currentSrc.
+                    var sourceSets = new[] { image }.Concat(target == image ? Array.Empty<HtmlNode>() : target.Elements("source"));
+                    src = sourceSets.Select(node => HttpUtility.HtmlDecode(node.GetAttributeValue("srcset", "")))
+                        .SelectMany(value => WebSourceSetUrls.Ranges(value).Select(range => value.Substring(range.Start, range.Length)))
+                        .FirstOrDefault(SafeImageUrl) ?? "";
+                }
                 string alt = HttpUtility.HtmlDecode(image.GetAttributeValue("alt", "")).Trim();
                 if (alt.Length == 0 || !SafeImageUrl(src)) continue;
                 if (int.TryParse(image.GetAttributeValue("width", ""), out int width) && width < 96 ||
@@ -45,12 +54,13 @@ internal static class WebMediaContentRenderer
                 if (scope.GetAttributeValue("data-pf-media-exclude", "").Split('|').Contains(src, StringComparer.Ordinal)) continue;
                 var existing = image.Ancestors().FirstOrDefault(node => node.Name == "a");
                 if (existing is not null && (mode != "previews" || existing.Attributes["download"] is not null || existing.Attributes["data-pf-media"] is not null || existing.Descendants("img").Count() != 1)) continue;
-                var target = image.ParentNode.Name == "picture" ? image.ParentNode : image;
                 if (existing is null && target.ParentNode.Name == "p" && !string.IsNullOrWhiteSpace(HttpUtility.HtmlDecode(target.ParentNode.InnerText))) continue;
                 string id = "pf-content-image-" + sequence + "-" + entries.Count;
                 while (document.GetElementbyId(id) is not null) id += "-preview";
                 string caption = alt;
-                var heading = mode == "previews" ? null : scope.Descendants().LastOrDefault(node => node.OuterStartIndex < image.OuterStartIndex && node.Name is "h2" or "h3" or "h4");
+                var heading = mode == "previews" ? null : scope.Descendants().LastOrDefault(node =>
+                    node.OuterStartIndex < image.OuterStartIndex && node.Name is "h2" or "h3" or "h4" &&
+                    node.Ancestors().FirstOrDefault(parent => parent.Attributes["data-pf-media-scope"] is not null) == scope);
                 if (heading is not null) caption = HttpUtility.HtmlDecode(heading.InnerText).Trim() + " · " + alt;
                 string attributes = $" id=\"{id}\" data-pf-media data-pf-media-context data-pf-media-caption=\"{Encode(caption)}\"";
                 if (mode != "single") attributes += $" data-pf-media-group=\"{group}\"";
