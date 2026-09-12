@@ -11,6 +11,10 @@
   const translate = value => language < 0 ? value : translations[value]?.[language] || value;
   translations['Image preview. Use zoom controls and scroll to explore.'] = ['Podgląd obrazu. Użyj powiększenia i przewijania, aby obejrzeć szczegóły.', 'Aperçu de l’image. Utilisez le zoom et le défilement pour explorer.', 'Bildvorschau. Verwenden Sie Zoom und Bildlauf zum Erkunden.', 'Vista previa de la imagen. Utiliza el zoom y el desplazamiento para explorar.'];
   translations['Image could not be loaded. Use Open original to try the source.'] = ['Nie udało się wczytać obrazu. Wybierz Otwórz oryginał, aby sprawdzić źródło.', 'Impossible de charger l’image. Sélectionnez Ouvrir l’original pour essayer la source.', 'Das Bild konnte nicht geladen werden. Wählen Sie Original öffnen, um die Quelle aufzurufen.', 'No se pudo cargar la imagen. Selecciona Abrir original para acceder a la fuente.'];
+  translations['Back to page'] = ['Wróć do strony', 'Retour à la page', 'Zurück zur Seite', 'Volver a la página'];
+  translations['Image preview'] = ['Podgląd obrazu', 'Aperçu de l’image', 'Bildvorschau', 'Vista previa'];
+  translations['Image gallery'] = ['Galeria obrazów', 'Galerie d’images', 'Bildergalerie', 'Galería de imágenes'];
+  let title, navigation;
   let dialog, stage, canvas, picture, caption, status, announcement, errorMessage, count, previous, next, original, variant, thumbnails, zoomValue, fitButton, actualButton;
   let items = [], index = 0, opener, scale = 1, fitMode = true, drag;
   const safeSource = value => {
@@ -87,9 +91,9 @@
     dialog.setAttribute('aria-label', translate('Image viewer'));
     const header = document.createElement('div'); header.className = 'pf-media-viewer__header';
     const heading = document.createElement('div'); heading.className = 'pf-media-viewer__heading';
-    const title = document.createElement('span'); title.textContent = translate('Image viewer');
+    title = document.createElement('span'); title.textContent = translate('Image viewer');
     caption = document.createElement('p'); heading.append(title, caption);
-    const navigation = document.createElement('div'); navigation.className = 'pf-media-viewer__navigation';
+    navigation = document.createElement('div'); navigation.className = 'pf-media-viewer__navigation';
     const toolbar = document.createElement('div'); toolbar.className = 'pf-media-viewer__toolbar';
     const zoomControls = document.createElement('div'); zoomControls.className = 'pf-media-viewer__zoom';
     const appearance = document.createElement('div'); appearance.className = 'pf-media-viewer__appearance';
@@ -112,7 +116,7 @@
     variant.addEventListener('change', load);
     original = document.createElement('a'); original.textContent = translate('Open original');
     original.target = '_blank'; original.rel = 'noopener'; original.title = translate('Open original');
-    const close = button(translate('Close image viewer'), '✕', () => dialog.close()); close.className = 'pf-media-viewer__close';
+    const close = button('Back to page', 'Back to page', () => dialog.close()); close.className = 'pf-media-viewer__close';
     navigation.append(previous, count, next);
     header.append(heading, navigation, close);
     zoomControls.append(minus, zoomValue, plus, fit, actual);
@@ -138,8 +142,8 @@
     dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
     dialog.addEventListener('keydown', event => {
       if (event.target.closest('select, input, textarea') || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.key === 'ArrowLeft' && event.target !== stage) { event.preventDefault(); show(index - 1); }
-      if (event.key === 'ArrowRight' && event.target !== stage) { event.preventDefault(); show(index + 1); }
+      if (event.key === 'ArrowLeft' && items.length > 1 && event.target !== stage) { event.preventDefault(); show(index - 1); }
+      if (event.key === 'ArrowRight' && items.length > 1 && event.target !== stage) { event.preventDefault(); show(index + 1); }
       if (event.key === '+') { event.preventDefault(); zoom(scale * 1.4); }
       if (event.key === '-') { event.preventDefault(); zoom(scale / 1.4); }
     });
@@ -173,7 +177,7 @@
     zoomValue.textContent = `${Math.round(scale * 100)}%`;
     picture.style.width = `${Math.max(1, picture.naturalWidth * scale)}px`;
     picture.style.height = `${Math.max(1, picture.naturalHeight * scale)}px`;
-    status.textContent = `${index + 1} / ${items.length} · ${picture.naturalWidth} × ${picture.naturalHeight} · ${Math.round(scale * 100)}%`;
+    status.textContent = `${items.length > 1 ? `${index + 1} / ${items.length} · ` : ""}${picture.naturalWidth} × ${picture.naturalHeight} · ${Math.round(scale * 100)}%`;
   }
   function zoom(value) {
     if (picture.hidden || !picture.naturalWidth) return;
@@ -189,7 +193,7 @@
     if (!url) return;
     fitMode = true; picture.hidden = true; errorMessage.hidden = true; errorMessage.textContent = ''; stage.dataset.loading = 'true'; zoomValue.textContent = '—'; status.textContent = translate('Loading image…');
     picture.alt = item.querySelector('img')?.alt || item.getAttribute('aria-label') || '';
-    announcement.textContent = `${index + 1} / ${items.length}. ${picture.alt}${caption.textContent !== picture.alt ? '. ' + caption.textContent : ''}${variant.options.length > 1 ? '. ' + variant.selectedOptions[0].textContent : ''}`;
+    announcement.textContent = `${items.length > 1 ? `${index + 1} / ${items.length}. ` : ""}${picture.alt}${caption.textContent !== picture.alt ? '. ' + caption.textContent : ''}${variant.options.length > 1 ? '. ' + variant.selectedOptions[0].textContent : ''}`;
     original.href = url; picture.src = url; stage.scrollTo(0, 0);
   }
   function show(requested) {
@@ -225,7 +229,11 @@
     if (!dialog) create();
     document.documentElement.classList.add('pf-media-open');
     thumbnails.replaceChildren();
-    thumbnails.hidden = items.length < 2;
+    const single = items.length < 2;
+    dialog.dataset.mode = single ? 'single' : 'gallery';
+    title.textContent = translate(single ? 'Image preview' : 'Image gallery');
+    dialog.setAttribute('aria-label', title.textContent);
+    navigation.hidden = thumbnails.hidden = single;
     items.forEach((entry, position) => {
       const sourceImage = entry.querySelector('img');
       const thumbnail = button(`${position + 1} / ${items.length}. ${sourceImage.alt || ''}`, '', () => show(position));

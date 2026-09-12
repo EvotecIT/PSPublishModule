@@ -582,7 +582,9 @@ The builder publishes the viewer assets and adds them to the normal CSS and Java
 </a>
 ```
 
-A shared group enables previous/next navigation. Omit the group for a single image. Optional `data-pf-media-mobile` and `data-pf-media-desktop` attributes add explicit variants. `data-pf-media-src` overrides the full-size source. Sources must resolve to HTTP or HTTPS URLs. Browser-local blob URLs are not intercepted by this static-site viewer. Use separate assets for different appearances; the viewer preserves screenshot colors.
+Omit the group for an independent image preview. A single preview shows its caption and zoom controls, without navigation arrows, thumbnails, or a redundant image count. Back to page and Escape close the preview and restore focus to the image link without navigating away. Keep fallback image links in the same tab so browser Back also works when JavaScript is unavailable.
+
+Use a shared group only for related images, such as pages of one document or a product tour. Groups with multiple images show previous/next navigation and thumbnails; a group containing one image uses the single-preview presentation. Grid, masonry, strip, and stack describe the page layout and do not implicitly create a gallery. Assign a distinct group to each collection you want visitors to browse together. Optional `data-pf-media-mobile` and `data-pf-media-desktop` attributes add explicit variants. `data-pf-media-src` overrides the full-size source. Sources must resolve to HTTP or HTTPS URLs. Browser-local blob URLs are not intercepted by this static-site viewer. Use separate assets for different appearances; the viewer preserves screenshot colors.
 
 The viewer supports fit, actual size, zoom, mouse dragging, touch scrolling, captions, background selection, keyboard navigation, Escape, and focus restoration. Modified clicks and download links keep their normal behavior. Set `data-pf-media="off"` to exclude an individual link. UI labels follow the page language for English, Polish, French, German, and Spanish; untranslated messages fall back to English.
 
