@@ -242,41 +242,21 @@ public static partial class WebSiteBuilder
         if (buildContext is null || !buildContext.LanguageAsRoot || string.IsNullOrWhiteSpace(buildContext.Language))
             return html;
 
-        foreach (var attribute in new[]
+        var attributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "href", "src", "action", "formaction", "data-local-href",
             "data-pf-media-src", "data-pf-media-light", "data-pf-media-dark",
             "data-pf-media-mobile", "data-pf-media-desktop"
-        })
+        };
+        var language = ResolveEffectiveLanguageCode(ResolveLocalizationConfig(spec), buildContext.Language);
+        return WebHtmlAttributeRewriter.Rewrite(html, (attribute, value) =>
         {
-            html = RewriteQuotedHtmlAttribute(html, attribute,
-                value => value.StartsWith("/", StringComparison.Ordinal) || IsAbsoluteHttpUrl(value)
-                    ? RebaseRouteForSelectedLanguageRootBuild(spec, value)
-                    : value);
-        }
-        return html;
-    }
-
-    private static string RewriteQuotedHtmlAttribute(string html, string attributeName, Func<string, string> rewrite)
-    {
-        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(attributeName))
-            return html;
-
-        var pattern = $@"(?<prefix>(?<![\w:.-]){System.Text.RegularExpressions.Regex.Escape(attributeName)}\s*=\s*)(?<quote>[""'])(?<value>[^""']*)(?<suffix>\k<quote>)";
-        return System.Text.RegularExpressions.Regex.Replace(
-            html,
-            pattern,
-            match =>
-            {
-                var value = match.Groups["value"].Value;
-                var rewritten = rewrite(value);
-                if (string.Equals(value, rewritten, StringComparison.Ordinal))
-                    return match.Value;
-
-                return match.Groups["prefix"].Value + match.Groups["quote"].Value + rewritten + match.Groups["suffix"].Value;
-            },
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant,
-            RegexTimeout);
+            if (!attributes.Contains(attribute)) return value;
+            var firstSegment = value.Split(['/', '?', '#'], 2)[0];
+            return value.StartsWith("/", StringComparison.Ordinal) || IsAbsoluteHttpUrl(value) ||
+                   firstSegment.Equals(language, StringComparison.OrdinalIgnoreCase)
+                ? RebaseRouteForSelectedLanguageRootBuild(spec, value) : value;
+        });
     }
 
     private static void ReportSlowRenderTiming(

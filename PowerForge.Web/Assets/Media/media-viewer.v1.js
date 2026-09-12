@@ -27,23 +27,56 @@
   function eligible(item) {
     return item && !dialog?.contains(item) && item.querySelector('img') && item.dataset.pfMedia !== 'off' && !item.hasAttribute('download') && source(item);
   }
-  // Mark only the targets that this configured viewer can enhance. Keep dynamic
-  // galleries and attribute changes consistent with the delegated click handler.
-  function refreshTriggers() {
-    document.querySelectorAll('[data-pf-media-trigger]').forEach(item => {
-      if (!item.matches(selector) || !eligible(item)) item.removeAttribute('data-pf-media-trigger');
-    });
-    document.querySelectorAll(selector).forEach(item => {
-      if (eligible(item) && !item.hasAttribute('data-pf-media-trigger')) item.setAttribute('data-pf-media-trigger', '');
-    });
+  // Keep mutation work local to changed elements and newly inserted subtrees.
+  function refreshTrigger(item) {
+    if (!(item instanceof Element) || dialog?.contains(item)) return;
+    if (item.matches(selector) && eligible(item)) {
+      if (!item.hasAttribute('data-pf-media-trigger')) item.setAttribute('data-pf-media-trigger', '');
+    } else if (item.hasAttribute('data-pf-media-trigger')) item.removeAttribute('data-pf-media-trigger');
   }
-  refreshTriggers();
+  function refreshSubtree(root) {
+    refreshTrigger(root);
+    root.querySelectorAll(selector + ',[data-pf-media-trigger]').forEach(refreshTrigger);
+  }
+  refreshSubtree(document.documentElement);
+  const watchedAttributes = new Set(['href', 'src', 'srcset', 'data-pf-media', 'data-pf-media-src', 'download']);
+  // A custom selector may depend on attributes beyond the source/opt-out contract.
+  for (const match of selector.matchAll(/\[\s*([^\s~|^$*!=\]]+)/g)) watchedAttributes.add(match[1].toLowerCase());
+  if (selector.includes('.')) watchedAttributes.add('class');
+  if (selector.includes('#')) watchedAttributes.add('id');
+  if (selector.includes(':')) {
+    // Form/language state can affect pseudo-classes without an explicit [attribute].
+    for (const name of ['disabled', 'checked', 'selected', 'required', 'readonly', 'multiple',
+      'type', 'value', 'min', 'max', 'step', 'pattern', 'placeholder', 'lang', 'dir',
+      'open', 'hidden', 'inert', 'popover']) watchedAttributes.add(name);
+  }
+  // Relational selectors can change a target outside the mutation's own subtree.
+  const needsDocumentScope = selector.toLowerCase().includes(':has(') || selector.toLowerCase().includes(':scope') || /[+~]/.test(selector);
+  const pendingRoots = new Set();
+  const pendingElements = new Set();
   let triggerRefreshPending = false;
   new MutationObserver(records => {
-    if (triggerRefreshPending || !records.some(record => record.attributeName !== 'data-pf-media-trigger' && !dialog?.contains(record.target))) return;
+    for (const record of records) {
+      if (dialog?.contains(record.target)) continue;
+      if (needsDocumentScope) {
+        pendingRoots.add(document.documentElement);
+      } else if (record.type === 'attributes') {
+        // Include siblings for selectors such as .selected + a or :has(...).
+        pendingRoots.add(record.target.parentElement || record.target);
+      } else {
+        if (record.target instanceof Element) pendingRoots.add(record.target);
+      }
+      for (let node = record.target; node instanceof Element; node = node.parentElement) pendingElements.add(node);
+    }
+    if (triggerRefreshPending || (!pendingRoots.size && !pendingElements.size)) return;
     triggerRefreshPending = true;
-    requestAnimationFrame(() => { triggerRefreshPending = false; refreshTriggers(); });
-  }).observe(document.documentElement, { childList:true, subtree:true, attributes:true });
+    requestAnimationFrame(() => {
+      triggerRefreshPending = false;
+      for (const root of pendingRoots) if (root.isConnected) refreshSubtree(root);
+      for (const item of pendingElements) if (item.isConnected) refreshTrigger(item);
+      pendingRoots.clear(); pendingElements.clear();
+    });
+  }).observe(document.documentElement, { childList:true, subtree:true, attributes:true, attributeFilter:[...watchedAttributes] });
   function button(label, text, action) {
     const result = document.createElement('button');
     result.type = 'button'; result.textContent = translate(text); result.setAttribute('aria-label', translate(label));

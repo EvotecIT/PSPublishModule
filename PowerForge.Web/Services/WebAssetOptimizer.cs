@@ -18,8 +18,11 @@ public static partial class WebAssetOptimizer
         OperatingSystem.IsWindows(),
         OperatingSystem.IsMacOS());
     private static readonly HttpClient RewriteDownloadClient = CreateRewriteDownloadClient();
-    private static readonly Regex HtmlAttrRegex = new("""(?<prefix>(?<![\w:-])(?<attr>href|src|data-local-href|data-pf-media-(?:src|light|dark|mobile|desktop))\s*=\s*)(?<quote>['"])(?<url>.*?)\k<quote>""", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
-    private static readonly Regex HtmlSrcSetAttrRegex = new("(?<attr>\\b(?:srcset|imagesrcset))\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly HashSet<string> HtmlAssetAttributes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "href", "src", "data-local-href", "data-pf-media-src", "data-pf-media-light",
+        "data-pf-media-dark", "data-pf-media-mobile", "data-pf-media-desktop"
+    };
     private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StylesheetLinkRegex = new("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgTagRegex = new("<img\\b(?<attrs>[^>]*?)>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -455,18 +458,14 @@ public static partial class WebAssetOptimizer
     {
         if (rewrites.Length == 0) return html;
         var documentBaseUri = ResolveDocumentBaseUri(html, CreateSiteDocumentUri(relativeHtmlPath));
-        return HtmlAttrRegex.Replace(html, match =>
+        return WebHtmlAttributeRewriter.Rewrite(html, (attribute, url) =>
         {
-            var url = match.Groups["url"].Value;
+            if (!HtmlAssetAttributes.Contains(attribute)) return url;
             var decodedUrl = System.Web.HttpUtility.HtmlDecode(url);
-            if (IsCanonicalWebMcpRuntimeReference(decodedUrl, documentBaseUri))
-                return match.Value;
+            if (IsCanonicalWebMcpRuntimeReference(decodedUrl, documentBaseUri)) return url;
             var replaced = ApplyRewriteRules(decodedUrl, rewrites);
-            if (string.Equals(replaced, decodedUrl, StringComparison.Ordinal))
-                return match.Value;
-
-            var encoded = System.Web.HttpUtility.HtmlAttributeEncode(replaced) ?? string.Empty;
-            return $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}{encoded}{match.Groups["quote"].Value}";
+            return string.Equals(replaced, decodedUrl, StringComparison.Ordinal)
+                ? url : System.Web.HttpUtility.HtmlAttributeEncode(replaced) ?? string.Empty;
         });
     }
 
@@ -617,22 +616,14 @@ public static partial class WebAssetOptimizer
     {
         var documentUri = CreateSiteDocumentUri(relativeHtmlPath);
         var documentBaseUri = ResolveDocumentBaseUri(html, documentUri);
-        var rewrittenHtml = HtmlAttrRegex.Replace(html, match =>
+        return WebHtmlAttributeRewriter.Rewrite(html, (attribute, value) =>
         {
-            var url = match.Groups["url"].Value;
-            var rewritten = RewriteUrlWithMap(url, map, documentBaseUri);
-            return rewritten == url ? match.Value : $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}{rewritten}{match.Groups["quote"].Value}";
-        });
-
-        return HtmlSrcSetAttrRegex.Replace(rewrittenHtml, match =>
-        {
-            var value = match.Groups["value"].Value;
-            var rewritten = RewriteSrcSetWithMap(value, map, documentBaseUri);
-            if (string.Equals(rewritten, value, StringComparison.Ordinal))
-                return match.Value;
-
-            var quote = match.Groups["quote"].Value;
-            return $"{match.Groups["attr"].Value}={quote}{rewritten}{quote}";
+            if (HtmlAssetAttributes.Contains(attribute))
+                return RewriteUrlWithMap(value, map, documentBaseUri);
+            if (attribute.Equals("srcset", StringComparison.OrdinalIgnoreCase) ||
+                attribute.Equals("imagesrcset", StringComparison.OrdinalIgnoreCase))
+                return RewriteSrcSetWithMap(value, map, documentBaseUri);
+            return value;
         });
     }
 

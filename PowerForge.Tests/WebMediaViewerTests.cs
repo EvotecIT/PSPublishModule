@@ -88,6 +88,8 @@ public class WebMediaViewerTests
             markup += "\n<a data-pf-media-mobile=\"../mobile.png\" data-pf-media-desktop=\"//cdn.test/pl/desktop.png\" href=\"?view=1\">Relative</a>";
             foreach (var attribute in attributes.Select(value => "data-pf-media-" + value).Concat(new[] { "href", "src", "data-local-href" }))
                 markup += $"\n<a {attribute}=\"/pl/pl/image.png\">Nested language directory</a>";
+            markup += "\n<a href=\"pl/contact/?q=1#details\" data-pf-media-src=\"pl/image.png\"><img src=\"pl/image.png\"></a>";
+            markup += "\n<pre><code>href = 'pl/contact/'</code></pre><script>const src = 'pl/image.png';</script>";
             File.WriteAllText(Path.Combine(content, "index.md"), "---\ntitle: Media PL\n---\n" + markup);
             var spec = new SiteSpec
             {
@@ -112,6 +114,11 @@ public class WebMediaViewerTests
             Assert.Contains("href=\"?view=1\"", html);
             foreach (var attribute in attributes.Select(value => "data-pf-media-" + value).Concat(new[] { "href", "src", "data-local-href" }))
                 Assert.Contains($"{attribute}=\"/pl/image.png\"", html);
+            Assert.Contains("href=\"/contact/?q=1#details\"", html);
+            Assert.Contains("data-pf-media-src=\"/image.png\"", html);
+            Assert.Contains("src=\"/image.png\"", html);
+            Assert.Equal("href = 'pl/contact/'", HtmlTinkerX.HtmlParser.ParseWithAngleSharp(html).QuerySelector("code")!.TextContent);
+            Assert.Contains("const src = 'pl/image.png';", html);
             Assert.Contains("src=\"../assets/powerforge/media-viewer.v1.js\"", html);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
