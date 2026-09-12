@@ -20,7 +20,7 @@ public static partial class WebAssetOptimizer
     private static readonly HttpClient RewriteDownloadClient = CreateRewriteDownloadClient();
     private static readonly HashSet<string> HtmlAssetAttributes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "href", "src", "data-local-href", "data-pf-media-src", "data-pf-media-light",
+        "href", "xlink:href", "src", "data-local-href", "data-pf-media-src", "data-pf-media-light",
         "data-pf-media-dark", "data-pf-media-mobile", "data-pf-media-desktop"
     };
     private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
