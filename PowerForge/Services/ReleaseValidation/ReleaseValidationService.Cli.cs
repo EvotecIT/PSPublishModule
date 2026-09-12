@@ -6,7 +6,8 @@ namespace PowerForge;
 public sealed partial class ReleaseValidationService
 {
     private static async Task ValidateCliArtifactsAsync(CliArtifactValidation spec, Dictionary<string, string> variables,
-        ReleaseValidationReport report, string[]? stagedAssets, DotNetPublishPlan? publishPlan, CancellationToken cancellationToken)
+        ReleaseValidationReport report, string[]? stagedAssets, DotNetPublishPlan? publishPlan, bool inferCommonVersion,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(spec.Target))
             throw new InvalidOperationException("CLI validation requires a nonempty target identity.");
@@ -58,15 +59,17 @@ public sealed partial class ReleaseValidationService
         var physicalArtifacts = new HashSet<string>(StringComparer.Ordinal);
         if (unified)
         {
+            var targetVersion = report.Version;
             foreach (var artifact in artifacts)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var version = Text(artifact, "version");
                 if (string.IsNullOrWhiteSpace(version)) throw new InvalidOperationException("CLI artifact has no version.");
-                if (string.IsNullOrWhiteSpace(report.Version)) report.Version = version;
-                if (NuGetVersion.Parse(version) != NuGetVersion.Parse(report.Version))
+                if (string.IsNullOrWhiteSpace(targetVersion)) targetVersion = version;
+                if (NuGetVersion.Parse(version) != NuGetVersion.Parse(targetVersion))
                     throw new InvalidOperationException("CLI artifact has an unexpected version.");
             }
+            if (inferCommonVersion) report.Version = targetVersion;
             variables["Version"] = report.Version;
         }
         foreach (var artifact in artifacts)

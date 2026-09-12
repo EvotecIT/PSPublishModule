@@ -7,8 +7,13 @@ namespace PowerForge;
 public sealed partial class ReleaseValidationService
 {
     private async Task ValidateModuleAsync(ModuleArtifactValidation spec, Dictionary<string, string> variables,
-        ReleaseValidationReport report, CancellationToken cancellationToken)
+        ReleaseValidationReport report, bool inferCommonVersion, CancellationToken cancellationToken)
     {
+        if (spec.ProbeScript is not null && (spec.Hosts is null || spec.Hosts.Length == 0 ||
+            spec.Hosts.Any(string.IsNullOrWhiteSpace)))
+        {
+            throw new InvalidOperationException("Module probes require at least one nonblank PowerShell host, without blank entries.");
+        }
         using var workspace = new ValidationWorkspace();
         var input = Resolve(spec.Path, variables);
         var directoryInput = Directory.Exists(input);
@@ -58,11 +63,18 @@ public sealed partial class ReleaseValidationService
         var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "Prerelease");
         if (prerelease.Length > 1) throw new InvalidOperationException("Module manifest declares more than one prerelease label.");
         var moduleIdentity = PowerForgeReleaseArtifactVerifier.NormalizeModuleVersion(moduleVersion!, prerelease.SingleOrDefault());
-        if (string.IsNullOrEmpty(report.Version)) report.Version = moduleIdentity;
-        var expectedVersion = NuGetVersion.Parse(report.Version).Version;
-        if (!string.Equals(moduleIdentity, PowerForgeReleaseArtifactVerifier.NormalizeModuleVersionText(report.Version), StringComparison.OrdinalIgnoreCase))
+        if (inferCommonVersion && string.IsNullOrEmpty(report.Version)) report.Version = moduleIdentity;
+        var expectedVersion = NuGetVersion.Parse(moduleIdentity).Version;
+        if (!string.IsNullOrEmpty(report.Version) &&
+            !string.Equals(moduleIdentity, PowerForgeReleaseArtifactVerifier.NormalizeModuleVersionText(report.Version), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Module version {moduleIdentity} does not match {report.Version}.");
-        variables["Version"] = report.Version;
+        variables["Version"] = string.IsNullOrEmpty(report.Version) ? moduleIdentity : report.Version;
+        // Hosts may use the inspected module version. Resolve the whole set before copying or running any probe.
+        var hosts = spec.ProbeScript is null ? Array.Empty<string>() : spec.Hosts.Select(host => Expand(host, variables)).ToArray();
+        if (hosts.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new InvalidOperationException("Module probe hosts must expand to nonblank executable names or paths.");
+        }
         if (spec.ProcessorArchitecture is not null && !string.Equals(spec.ProcessorArchitecture,
                 ModuleManifestValueReader.ReadTopLevelStringFromText(manifestText, "ProcessorArchitecture"), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Module processor architecture does not match the contract.");
@@ -98,8 +110,7 @@ public sealed partial class ReleaseValidationService
         report.Checks.Add("Module " + Path.GetFileName(manifest));
         if (spec.ProbeScript is not null)
         {
-            if (spec.Hosts.Length == 0) throw new InvalidOperationException("Module probes require at least one PowerShell host.");
-            foreach (var host in spec.Hosts)
+            foreach (var host in hosts)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 using var probeWorkspace = new ValidationWorkspace();
@@ -117,7 +128,7 @@ public sealed partial class ReleaseValidationService
                 }
                 await RunCommandAsync(new ReleaseCommandValidation
                 {
-                    Name = "Module runtime " + host, FileName = Expand(host, variables),
+                    Name = "Module runtime " + host, FileName = host,
                     WorkingDirectory = probeModule,
                     Arguments = new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", script },
                     Environment = new Dictionary<string, string?> { ["POWERFORGE_MODULE_PATH"] = probeModule, ["POWERFORGE_TEST_ROOT"] = probeRoot }

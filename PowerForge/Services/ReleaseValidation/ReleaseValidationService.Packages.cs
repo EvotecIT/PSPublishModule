@@ -88,7 +88,7 @@ public sealed partial class ReleaseValidationService
             if (matches.Length != 1) throw new InvalidOperationException($"Expected exactly one '{contract.Id}' package; found {matches.Length}.");
             var package = matches[0];
             selected.Add(package.Id, package);
-            if (string.IsNullOrWhiteSpace(report.Version)) report.Version = package.Version;
+            if (spec.SameVersion && string.IsNullOrWhiteSpace(report.Version)) report.Version = package.Version;
             if (spec.SameVersion && NuGetVersion.Parse(report.Version) != NuGetVersion.Parse(package.Version))
                 throw new InvalidOperationException($"{package.Id} version {package.Version} does not match {report.Version}.");
             variables["Version"] = report.Version;

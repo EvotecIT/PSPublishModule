@@ -19,6 +19,7 @@ public sealed partial class ReleaseValidationClosureRegressionTests
         var package = lane is "tool" or "consumer" or "signature" ? Package("Example.Tool.1.2.3.nupkg") : null;
         var runner = new Runner((request, _) => {
             calls.Add(request);
+            if (lane == "tool") { ReleaseValidationToolInstallFixture.Complete(request, "example"); }
             if (lane == "consumer" && request.Arguments[0] == "restore") {
                 var cache = request.EnvironmentVariables!["NUGET_PACKAGES"]!;
                 var restored = Directory.CreateDirectory(Path.Combine(cache, "example.tool", "1.2.3")).FullName;

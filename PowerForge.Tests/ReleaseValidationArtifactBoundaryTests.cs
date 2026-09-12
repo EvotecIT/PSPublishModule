@@ -161,6 +161,7 @@ public sealed class ReleaseValidationArtifactBoundaryTests : IDisposable
         var report = await new ReleaseValidationService(new Runner(request => {
             calls.Add(request);
             Assert.Contains("1.2.3", request.Arguments);
+            ReleaseValidationToolInstallFixture.Complete(request, "example");
             return new(0, "installed", "", "dotnet", TimeSpan.Zero, false);
         })).RunAsync(new() { Tools = [new() { PackageRoot = _root, PackageId = "Example.Tool", CommandName = "example" }] },
             request: new() { ProjectRoot = _root, Version = expectedVersion });

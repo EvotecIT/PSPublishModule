@@ -38,7 +38,7 @@ public sealed class DotNetToolValidation
     public string PackageId { get; set; } = string.Empty;
     /// <summary>Local package directory.</summary>
     public string PackageRoot { get; set; } = "{PackageRoot}";
-    /// <summary>Installed tool command, without a platform extension.</summary>
+    /// <summary>Installed tool command, without a platform extension. Its installation is checked even when Commands is empty.</summary>
     public string CommandName { get; set; } = string.Empty;
     /// <summary>Test manifest-local installation in addition to --tool-path. Manifest {ToolPath} probes require the default working directory or {WorkRoot} so the isolated manifest is selected.</summary>
     public bool IncludeManifestInstall { get; set; }
@@ -78,7 +78,7 @@ public sealed class ModuleArtifactValidation
     public string? ProcessorArchitecture { get; set; }
     /// <summary>Optional product-owned script, executed with POWERFORGE_MODULE_PATH and POWERFORGE_TEST_ROOT.</summary>
     public string? ProbeScript { get; set; }
-    /// <summary>PowerShell hosts to run, using executable names or paths.</summary>
+    /// <summary>PowerShell hosts to run, using executable names or paths. A probe requires a nonempty list with no blank entries; unused when ProbeScript is null.</summary>
     public string[] Hosts { get; set; } = new[] { "pwsh" };
     /// <summary>Optional payload signature requirements.</summary>
     public PayloadSignatureValidation? Signatures { get; set; }

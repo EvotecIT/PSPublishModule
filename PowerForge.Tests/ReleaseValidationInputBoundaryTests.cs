@@ -160,6 +160,7 @@ public sealed class ReleaseValidationInputBoundaryTests : IDisposable
         internal int Calls { get; private set; }
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default) {
             Calls++;
+            ReleaseValidationToolInstallFixture.Complete(request, "example");
             return Task.FromResult(new ProcessRunResult(0, "ok", "", request.FileName, TimeSpan.Zero, false));
         }
     }

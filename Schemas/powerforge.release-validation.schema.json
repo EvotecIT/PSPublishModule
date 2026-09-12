@@ -96,7 +96,7 @@
         },
         "FileName": {
           "type": "string",
-          "minLength": 1
+          "pattern": "\\S"
         },
         "Arguments": {
           "type": "array",
@@ -193,7 +193,7 @@
       "properties": {
         "Id": {
           "type": "string",
-          "minLength": 1
+          "pattern": "\\S"
         },
         "RequiredEntries": {
           "type": "array",
@@ -305,6 +305,18 @@
     "module": {
       "type": "object",
       "additionalProperties": false,
+      "if": {
+        "required": ["ProbeScript"],
+        "properties": { "ProbeScript": { "type": "string" } }
+      },
+      "then": {
+        "properties": {
+          "Hosts": {
+            "minItems": 1,
+            "items": { "type": "string", "pattern": "\\S" }
+          }
+        }
+      },
       "required": [
         "Path",
         "Manifest"
@@ -423,7 +435,8 @@
       ],
       "properties": {
         "PackageId": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "PackageRoot": {
           "type": "string"
@@ -453,6 +466,10 @@
         "SourceDirectory",
         "ProjectFile"
       ],
+      "anyOf": [
+        { "required": ["Frameworks"], "properties": { "Frameworks": { "minItems": 1 } } },
+        { "required": ["WindowsFrameworks"], "properties": { "WindowsFrameworks": { "minItems": 1 } } }
+      ],
       "properties": {
         "SourceDirectory": {
           "type": "string"
@@ -463,13 +480,15 @@
         "Frameworks": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "WindowsFrameworks": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "DependencySources": {

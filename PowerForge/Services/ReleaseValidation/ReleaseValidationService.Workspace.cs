@@ -71,6 +71,13 @@ public sealed partial class ReleaseValidationService
         bool sameVersion, Dictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
     {
         if (packages.Count == 0) throw new InvalidOperationException("Package consumers require a declared package set.");
+        if (spec.Frameworks is null || spec.WindowsFrameworks is null ||
+            spec.Frameworks.Concat(spec.WindowsFrameworks).Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException("Package consumer frameworks must be nonempty strings.");
+        var frameworks = spec.Frameworks.Concat(FrameworkCompatibility.IsWindows() ? spec.WindowsFrameworks : Array.Empty<string>())
+            .Select(framework => Expand(framework, variables)).Distinct().ToArray();
+        if (frameworks.Length == 0 || frameworks.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException("Package consumer requires at least one executable framework.");
         using var workspace = new ValidationWorkspace();
         var projectRoot = Path.Combine(workspace.Root, "project");
         await CopyValidationDirectoryAsync(Resolve(spec.SourceDirectory, variables), projectRoot, cancellationToken, excludeBuildState: true).ConfigureAwait(false);
@@ -105,13 +112,11 @@ public sealed partial class ReleaseValidationService
                 await DotNetPublishReleaseArtifactVerifier.ComputeSha256Async(staged, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException($"Consumer did not restore the exact staged '{package.Id}' package.");
         }
-        var frameworks = spec.Frameworks.Concat(FrameworkCompatibility.IsWindows() ? spec.WindowsFrameworks : Array.Empty<string>()).Distinct().ToArray();
-        if (frameworks.Length == 0) throw new InvalidOperationException("Package consumer requires at least one executable framework.");
         foreach (var framework in frameworks)
             await RunCommandAsync(new ReleaseCommandValidation
             {
                 Name = "Run package consumer " + framework, FileName = "dotnet", WorkingDirectory = projectRoot, TimeoutSeconds = 600,
-                Arguments = new[] { "run", "--project", project, "--framework", Expand(framework, values), "--configuration", "Release", "--no-restore", "--nologo" }.Concat(versionArguments).ToArray(),
+                Arguments = new[] { "run", "--project", project, "--framework", framework, "--configuration", "Release", "--no-restore", "--nologo" }.Concat(versionArguments).ToArray(),
                 Environment = environment
             }, values, report, cancellationToken, expandVariables: false).ConfigureAwait(false);
     }

@@ -36,7 +36,7 @@ public sealed class ReleaseValidationToolNameSchemaTests : IDisposable
             using var writer = new StreamWriter(archive.CreateEntry("Example.Tool.nuspec").Open());
             writer.Write("<package><metadata><id>Example.Tool</id><version>1.2.3</version><authors>Tests</authors><description>Fixture</description></metadata></package>");
         }
-        var runner = new Runner();
+        var runner = new Runner(commandName);
 
         var report = await new ReleaseValidationService(runner).RunAsync(
             ReleaseValidationService.Load(configPath), configPath, new() { ProjectRoot = _root });
@@ -68,12 +68,13 @@ public sealed class ReleaseValidationToolNameSchemaTests : IDisposable
         throw new InvalidOperationException("Release validation schema was not found above the test output directory.");
     }
 
-    private sealed class Runner : IProcessRunner
+    private sealed class Runner(string commandName) : IProcessRunner
     {
         internal List<ProcessRunRequest> Requests { get; } = [];
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            ReleaseValidationToolInstallFixture.Complete(request, commandName);
             if (request.Arguments.Contains("install")) {
                 var arguments = request.Arguments.ToArray();
                 var config = System.Xml.Linq.XDocument.Load(arguments[Array.IndexOf(arguments, "--configfile") + 1]);

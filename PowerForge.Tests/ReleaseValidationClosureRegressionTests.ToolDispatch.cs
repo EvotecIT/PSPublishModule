@@ -15,6 +15,7 @@ public sealed partial class ReleaseValidationClosureRegressionTests
         var calls = new List<ProcessRunRequest>();
         var runner = new Runner((request, _) => {
             calls.Add(request);
+            ReleaseValidationToolInstallFixture.Complete(request, "example");
             return Task.FromResult(Success());
         });
         var report = await new ReleaseValidationService(runner).RunAsync(new() {

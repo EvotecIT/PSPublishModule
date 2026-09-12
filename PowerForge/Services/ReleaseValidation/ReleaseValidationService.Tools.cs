@@ -5,7 +5,7 @@ namespace PowerForge;
 public sealed partial class ReleaseValidationService
 {
     private async Task ValidateToolAsync(DotNetToolValidation spec, Dictionary<string, string> variables,
-        ReleaseValidationReport report, CancellationToken cancellationToken)
+        ReleaseValidationReport report, bool inferCommonVersion, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(spec.PackageId) || string.IsNullOrWhiteSpace(spec.CommandName) ||
             Path.GetFileName(spec.CommandName) != spec.CommandName || spec.CommandName.IndexOfAny(new[] { '/', '\\', ':' }) >= 0)
@@ -16,7 +16,7 @@ public sealed partial class ReleaseValidationService
         var package = matches[0];
         if (!string.IsNullOrEmpty(report.Version) && NuGetVersion.Parse(report.Version) != NuGetVersion.Parse(package.Version))
             throw new InvalidOperationException($"Tool package version {package.Version} does not match {report.Version}.");
-        if (string.IsNullOrEmpty(report.Version)) report.Version = package.Version;
+        if (inferCommonVersion && string.IsNullOrEmpty(report.Version)) report.Version = package.Version;
         variables["Version"] = report.Version;
         foreach (var manifestInstall in spec.IncludeManifestInstall ? new[] { false, true } : new[] { false })
         {
@@ -51,6 +51,7 @@ public sealed partial class ReleaseValidationService
                 Name = "Install " + package.Id + (manifestInstall ? " (manifest)" : " (tool path)"), FileName = "dotnet",
                 WorkingDirectory = workspace.Root, Arguments = install.ToArray(), Environment = environment, TimeoutSeconds = 600
             }, values, report, cancellationToken, expandVariables: false).ConfigureAwait(false);
+            await ValidateInstalledToolAsync(spec, package.Version, workspace.Root, toolRoot, manifestInstall, cancellationToken).ConfigureAwait(false);
             foreach (var command in spec.Commands)
             {
                 cancellationToken.ThrowIfCancellationRequested();

@@ -30,7 +30,7 @@ public sealed class ReleaseValidationRequest
 {
     /// <summary>Optional project-root override.</summary>
     public string? ProjectRoot { get; set; }
-    /// <summary>Optional expected release version; otherwise obtained from the artifacts.</summary>
+    /// <summary>Optional expected release version; otherwise obtained from the artifacts unless Packages.SameVersion is false.</summary>
     public string? Version { get; set; }
     /// <summary>Named path/value overrides used by configuration tokens.</summary>
     public Dictionary<string, string> Variables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -46,7 +46,7 @@ public sealed class ReleaseValidationReport
 {
     /// <summary>Whether every selected check passed.</summary>
     public bool Success => Errors.Count == 0;
-    /// <summary>Resolved artifact version.</summary>
+    /// <summary>Release-wide artifact version; empty for a mixed-version run without a caller-supplied version.</summary>
     public string Version { get; set; } = string.Empty;
     /// <summary>Completed check descriptions.</summary>
     public List<string> Checks { get; } = new();

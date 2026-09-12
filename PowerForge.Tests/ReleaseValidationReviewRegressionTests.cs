@@ -24,6 +24,7 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
         var runner = new RecordingRunner(request =>
         {
             requests.Add(request);
+            ReleaseValidationToolInstallFixture.Complete(request, "example");
             return new(0, request.FileName == "probe" ? "1.2.3" : "", "", request.FileName, TimeSpan.Zero, false);
         });
 

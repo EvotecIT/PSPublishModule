@@ -39,15 +39,17 @@ public sealed partial class ReleaseValidationService
             { ["ProjectRoot"] = root, ["Version"] = report.Version };
             var packages = spec.Packages is null ? new Dictionary<string, PackageInspection>(StringComparer.OrdinalIgnoreCase)
                 : await ValidatePackagesAsync(spec.Packages, variables, report, cancellationToken).ConfigureAwait(false);
+            var inferCommonVersion = spec.Packages?.SameVersion ?? true;
             foreach (var module in spec.Modules)
-                await ValidateModuleAsync(module, variables, report, cancellationToken).ConfigureAwait(false);
+                await ValidateModuleAsync(module, inferCommonVersion ? variables : new(variables, StringComparer.OrdinalIgnoreCase),
+                    report, inferCommonVersion, cancellationToken).ConfigureAwait(false);
             if (spec.CliArtifacts is not null)
                 await ValidateCliArtifactsAsync(spec.CliArtifacts, variables, report, request.StagedAssets,
-                    request.PublishPlan, cancellationToken).ConfigureAwait(false);
+                    request.PublishPlan, inferCommonVersion, cancellationToken).ConfigureAwait(false);
             foreach (var consumer in spec.Consumers)
                 await ValidateConsumerAsync(consumer, packages, spec.Packages?.SameVersion ?? true, variables, report, cancellationToken).ConfigureAwait(false);
             foreach (var tool in spec.Tools)
-                await ValidateToolAsync(tool, variables, report, cancellationToken).ConfigureAwait(false);
+                await ValidateToolAsync(tool, variables, report, inferCommonVersion, cancellationToken).ConfigureAwait(false);
             foreach (var command in spec.Commands)
                 await RunCommandAsync(command, variables, report, cancellationToken).ConfigureAwait(false);
         }

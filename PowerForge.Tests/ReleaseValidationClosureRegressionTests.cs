@@ -63,6 +63,7 @@ public sealed partial class ReleaseValidationClosureRegressionTests : IDisposabl
             var selected = Assert.Single(Directory.GetFiles(feed));
             Assert.Equal(Path.GetFileName(primary), Path.GetFileName(selected));
             Assert.Equal(File.ReadAllBytes(primary), File.ReadAllBytes(selected));
+            ReleaseValidationToolInstallFixture.Complete(request, "example");
             Assert.Equal("Example.Tool", Assert.Single(config.Root.Element("packageSourceMapping")!.Elements("packageSource")).Element("package")!.Attribute("pattern")!.Value);
             return Task.FromResult(Success());
         });

@@ -317,6 +317,7 @@ public sealed class ReleaseValidationServiceTests : IDisposable
             Assert.Equal(Path.Combine(request.WorkingDirectory, "packages"), request.EnvironmentVariables!["NUGET_PACKAGES"]);
             Assert.Equal(request.WorkingDirectory, request.EnvironmentVariables["DOTNET_CLI_HOME"]);
             if (request.Arguments.Contains("install")) {
+                ReleaseValidationToolInstallFixture.Complete(request, "example");
                 Assert.Contains("1.2.3", request.Arguments);
                 var config = XDocument.Load(Path.Combine(request.WorkingDirectory, "NuGet.Config"));
                 var source = Assert.Single(config.Root!.Element("packageSources")!.Elements("add"));
