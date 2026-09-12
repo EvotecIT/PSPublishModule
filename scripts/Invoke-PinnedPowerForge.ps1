@@ -174,7 +174,7 @@ function Get-OptionValue {
 }
 
 function Assert-SafeArguments {
-    if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-screenshots', 'apple-governance', 'apple-review-details')) {
+    if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-deploy', 'apple-screenshots', 'apple-governance', 'apple-review-details')) {
         throw 'Pinned local operator accepts only Apple PowerForge commands.'
     }
     foreach ($forbidden in @('--key-path', '--key-id', '--issuer-id')) {
@@ -186,7 +186,7 @@ function Assert-SafeArguments {
         throw 'UploadExisting is forbidden at the pinned local operator boundary because existing archive bytes lack reviewed provenance.'
     }
     $config = Get-OptionValue -Option '--config'
-    $requiresConfig = $command -eq 'apple-release' -or
+    $requiresConfig = $command -in @('apple-release', 'apple-deploy') -or
         ($command -eq 'apple-screenshots' -and $operation -ne 'manifests') -or
         $command -eq 'apple-review-details' -or
         ($command -eq 'apple-governance' -and $operation -ne 'snapshot')
@@ -203,7 +203,7 @@ function Assert-SafeArguments {
             Assert-TrackedConsumerInput -Value $value -Option $option
         }
     }
-    if ($command -eq 'apple-release' -and $config) {
+    if ($command -in @('apple-release', 'apple-deploy') -and $config) {
         $script:validatedReleaseConfigPaths += Resolve-OptionPath -Value $config
     }
     $releaseConfig = Get-OptionValue -Option '--release-config'
@@ -580,7 +580,8 @@ try {
     Set-SafeGitEnvironment
     $script:gitPath = Resolve-FixedTool -Name git
     $toolHead = Assert-CleanRepository -Root $toolRoot -Name 'PSPublishModule source' -RequiredCommit $ExpectedCommit -ExpectedRepository 'EvotecIT/PSPublishModule'
-    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $requiredBranch -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck
+    $consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy') { $null } else { $requiredBranch }
+    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck
     Assert-NoReplaceRefs -Root $toolRoot -Name 'PSPublishModule source'
     Assert-NoReplaceRefs -Root $consumer -Name 'Consumer source'
     $scriptRelative = [IO.Path]::GetRelativePath($toolRoot, $PSCommandPath).Replace('\', '/')

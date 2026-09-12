@@ -19,10 +19,10 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
-    public async Task GetVersionsAsync_RetriesTransientServerFailureWithoutRetryingMutations()
+    public async Task GetVersionsAsync_RetriesAnyServerFailureWithoutRetryingMutations()
     {
         var handler = new SequenceHandler(
-            new SequenceResponse(HttpStatusCode.InternalServerError, """{ "errors": [{ "code": "UNEXPECTED_ERROR" }] }"""),
+            new SequenceResponse((HttpStatusCode)507, """{ "errors": [{ "code": "INSUFFICIENT_STORAGE" }] }"""),
             new SequenceResponse(HttpStatusCode.OK,
                 """
                 {
@@ -54,6 +54,81 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal(2, handler.RequestUris.Count);
         Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
         Assert.Equal(new[] { TimeSpan.FromSeconds(1) }, delays);
+    }
+
+    [Fact]
+    public async Task GetVersionsAsync_RetriesUnauthorizedReadWithFreshRequest()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.Unauthorized, """{ "errors": [{ "code": "NOT_AUTHORIZED" }] }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """
+                {
+                  "data": [
+                    {
+                      "id": "version-1",
+                      "type": "appStoreVersions",
+                      "attributes": {
+                        "versionString": "1.4.0",
+                        "appStoreState": "PREPARE_FOR_SUBMISSION",
+                        "platform": "IOS"
+                      }
+                    }
+                  ]
+                }
+                """));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var delays = new List<TimeSpan>();
+        client.TransientReadDelayAsync = (delay, _) =>
+        {
+            delays.Add(delay);
+            return Task.CompletedTask;
+        };
+
+        var versions = await client.GetVersionsAsync("app-1", "1.4.0", ApplePlatform.iOS);
+
+        Assert.Equal("version-1", Assert.Single(versions).Id);
+        Assert.Equal(2, handler.RequestUris.Count);
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+        Assert.Equal(new[] { TimeSpan.FromSeconds(1) }, delays);
+    }
+
+    [Fact]
+    public async Task GetVersionsAsync_StopsAfterBoundedUnauthorizedRetries()
+    {
+        var unauthorized = new SequenceResponse(
+            HttpStatusCode.Unauthorized,
+            """{ "errors": [{ "code": "NOT_AUTHORIZED" }] }""");
+        var handler = new SequenceHandler(
+            unauthorized,
+            unauthorized,
+            unauthorized,
+            unauthorized,
+            unauthorized);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var delays = new List<TimeSpan>();
+        client.TransientReadDelayAsync = (delay, _) =>
+        {
+            delays.Add(delay);
+            return Task.CompletedTask;
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.GetVersionsAsync("app-1", "1.4.0", ApplePlatform.iOS));
+
+        Assert.Contains("401 Unauthorized", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(5, handler.RequestUris.Count);
+        Assert.Equal(
+            new[]
+            {
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(4),
+                TimeSpan.FromSeconds(8)
+            },
+            delays);
     }
 
     [Fact]
@@ -128,7 +203,7 @@ public sealed partial class AppStoreConnectClientTests
             new SequenceResponse(HttpStatusCode.BadGateway, """{ "errors": [{ "code": "UPSTREAM_ERROR" }] }"""),
             new SequenceResponse(HttpStatusCode.ServiceUnavailable, """{ "errors": [{ "code": "UNAVAILABLE" }] }"""),
             new SequenceResponse(HttpStatusCode.InternalServerError, """{ "errors": [{ "code": "UNEXPECTED_ERROR" }] }"""),
-            new SequenceResponse(HttpStatusCode.GatewayTimeout, """{ "errors": [{ "code": "TIMEOUT" }] }"""));
+            new SequenceResponse((HttpStatusCode)507, """{ "errors": [{ "code": "INSUFFICIENT_STORAGE" }] }"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
         var delays = new List<TimeSpan>();
@@ -141,7 +216,10 @@ public sealed partial class AppStoreConnectClientTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => client.GetVersionsAsync("app-1", "1.4.0", ApplePlatform.iOS));
 
-        Assert.Contains("504 Gateway Timeout", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("507 Insufficient Storage", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            AppleReleaseFailureClassifier.Classify(exception.Message),
+            diagnostic => diagnostic.Code == "APPLE_TRANSIENT" && diagnostic.Retryable);
         Assert.Equal(5, handler.RequestUris.Count);
         Assert.Equal(
             new[]

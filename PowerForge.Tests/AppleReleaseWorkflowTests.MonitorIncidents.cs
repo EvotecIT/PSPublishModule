@@ -67,6 +67,74 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
+    public void ContinuousMonitorTreatsReleaseTimingAttestationsAsDeferred()
+    {
+        if (!CommandExists("pwsh")) return;
+
+        using var result = RunMonitorIncidentStep(
+            "failure",
+            "[{\"severity\":\"error\",\"category\":\"review\",\"code\":\"APPLE_REVIEW_DETAILS_MISSING\",\"summary\":\"Review details are incomplete.\",\"action\":\"Complete review details.\",\"retryable\":false}]",
+            "[[{\"number\":42,\"state\":\"open\",\"title\":\"Apple release monitor detected a failure\",\"body\":\"<!-- powerforge-apple-monitor-incident:v1 -->\"}]]",
+            readinessPolicy: "continuous");
+
+        result.Process.EnsureSuccess();
+        Assert.Contains("healthy=true", File.ReadAllText(result.OutputPath), StringComparison.Ordinal);
+        Assert.Contains("issue\tclose\t42", File.ReadAllText(result.GhLogPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StrictMonitorCreatesIncidentForReleaseTimingAttestation()
+    {
+        if (!CommandExists("pwsh")) return;
+
+        using var result = RunMonitorIncidentStep(
+            "failure",
+            "[{\"severity\":\"error\",\"category\":\"review\",\"code\":\"APPLE_REVIEW_DETAILS_MISSING\",\"summary\":\"Review details are incomplete.\",\"action\":\"Complete review details.\",\"retryable\":false}]",
+            "[[]]",
+            readinessPolicy: "strict");
+
+        result.Process.EnsureSuccess();
+        Assert.Contains("healthy=false", File.ReadAllText(result.OutputPath), StringComparison.Ordinal);
+        Assert.Contains("issue\tcreate", File.ReadAllText(result.GhLogPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MonitorReopensAndRefreshesItsStableClosedIncident()
+    {
+        if (!CommandExists("pwsh")) return;
+
+        using var result = RunMonitorIncidentStep(
+            "failure",
+            "[{\"severity\":\"error\",\"category\":\"configuration\",\"code\":\"APPLE_TEST_ACTIONABLE\",\"summary\":\"Configuration failed.\",\"action\":\"Repair configuration.\",\"retryable\":false}]",
+            "[[{\"number\":42,\"state\":\"closed\",\"title\":\"Apple release monitor detected a failure\",\"body\":\"<!-- powerforge-apple-monitor-incident:v1 --><!-- powerforge-apple-monitor-state:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\"}]]");
+
+        result.Process.EnsureSuccess();
+        var ghLog = File.ReadAllText(result.GhLogPath);
+        Assert.Contains("issue\treopen\t42", ghLog, StringComparison.Ordinal);
+        Assert.Contains("issue\tedit\t42", ghLog, StringComparison.Ordinal);
+        Assert.DoesNotContain("issue\tcreate", ghLog, StringComparison.Ordinal);
+        Assert.Matches(
+            @"Checked: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z",
+            ghLog);
+    }
+
+    [Fact]
+    public void MonitorDeduplicatesRepeatedTargetDiagnostics()
+    {
+        if (!CommandExists("pwsh")) return;
+
+        const string diagnostic = "{\"severity\":\"error\",\"category\":\"source-trust\",\"code\":\"APPLE_SOURCE_TRUST\",\"summary\":\"Unbound source input.\",\"action\":\"Bind the input.\",\"retryable\":false}";
+        using var result = RunMonitorIncidentStep(
+            "failure",
+            $"[{diagnostic},{diagnostic},{diagnostic}]",
+            "[[]]");
+
+        result.Process.EnsureSuccess();
+        var ghLog = File.ReadAllText(result.GhLogPath);
+        Assert.Equal(1, ghLog.Split("APPLE_SOURCE_TRUST", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
     public void MonitorIncidentStepClosesExistingIncidentOnlyAfterHealthyDoctorRun()
     {
         if (!CommandExists("pwsh")) return;
@@ -206,7 +274,8 @@ public sealed partial class AppleReleaseWorkflowTests
     private static MonitorIncidentStepResult RunMonitorIncidentStep(
         string doctorOutcome,
         string diagnostics,
-        string openIssuesJson)
+        string openIssuesJson,
+        string readinessPolicy = "continuous")
     {
         var root = FindRepoRoot();
         var sandbox = Path.Combine(root, ".test-temp", $"apple-monitor-incident-{Guid.NewGuid():N}");
@@ -236,6 +305,7 @@ public sealed partial class AppleReleaseWorkflowTests
             ["RECEIPT_PATH"] = Path.Combine(sandbox, "missing-receipt.json"),
             ["RUN_URL"] = "https://github.com/EvotecIT/Tactra/actions/runs/123",
             ["SOURCE_REF"] = new string('a', 40),
+            ["READINESS_POLICY"] = readinessPolicy,
             ["GITHUB_OUTPUT"] = outputPath,
             ["GH_FAKE_LOG"] = ghLogPath,
             ["GH_FAKE_OPEN_ISSUES"] = openIssuesJson
