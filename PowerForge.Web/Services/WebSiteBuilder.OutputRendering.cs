@@ -198,6 +198,7 @@ public static partial class WebSiteBuilder
         {
             var html = themeEngine.Render(themeTemplate, renderContext, partialResolver ?? (_ => null));
             html = RebaseSelectedLanguageRootHtml(spec, html);
+            if (spec.MediaViewer?.Enabled == true) html = WebMediaContentRenderer.Render(html);
             ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
             return html;
         }
@@ -230,7 +231,7 @@ public static partial class WebSiteBuilder
 </html>";
         fallbackHtml = RebaseSelectedLanguageRootHtml(spec, fallbackHtml);
         ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
-        return fallbackHtml;
+        return spec.MediaViewer?.Enabled == true ? WebMediaContentRenderer.Render(fallbackHtml) : fallbackHtml;
     }
 
     private static string RebaseSelectedLanguageRootHtml(SiteSpec spec, string html)

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   if (window.powerForgeMediaViewer || !window.HTMLDialogElement?.prototype.showModal) return;
-  const selector = document.currentScript?.dataset.pfMediaSelector || '[data-pf-media]';
+  const selector = (document.currentScript?.dataset.pfMediaSelector || '[data-pf-media]') + ',[data-pf-media-context]';
   try { document.querySelector(selector); } catch { return; }
   const styles = document.querySelector('link[data-pf-media-styles]');
   if (styles) styles.rel = 'stylesheet';
@@ -15,22 +15,39 @@
   translations['Image preview'] = ['Podgląd obrazu', 'Aperçu de l’image', 'Bildvorschau', 'Vista previa'];
   translations['Image gallery'] = ['Galeria obrazów', 'Galerie d’images', 'Bildergalerie', 'Galería de imágenes'];
   translations['Display settings'] = ['Ustawienia wyświetlania', 'Options d’affichage', 'Anzeigeoptionen', 'Opciones de visualización'];
-  let title, navigation, settings, variantField;
+  translations['Show in page'] = ['Pokaż na stronie', 'Voir dans la page', 'Auf der Seite zeigen', 'Ver en la página'];
+  let title, navigation, settings, variantField, contextButton, returnTarget;
   let dialog, stage, canvas, picture, caption, status, announcement, errorMessage, count, previous, next, original, variant, thumbnails, zoomValue, fitButton, actualButton;
   let items = [], index = 0, opener, scale = 1, fitMode = true, drag;
   const safeSource = value => {
     if (!value) return null;
     try {
       const url = new URL(value, document.baseURI);
-      return /^https?:$/.test(url.protocol) ? url.href : null;
+      return url.protocol === 'https:' || (url.protocol === 'http:' && location.protocol === 'http:' && url.origin === location.origin) ? url.href : null;
     } catch { return null; }
   };
   function source(item) {
-    const image = item.querySelector('img');
+    const image = imageFor(item);
     return safeSource(item.dataset.pfMediaSrc || item.getAttribute('href') || image?.currentSrc || image?.src);
   }
   function eligible(item) {
-    return item && !dialog?.contains(item) && item.querySelector('img') && item.dataset.pfMedia !== 'off' && !item.hasAttribute('download') && source(item);
+    return item && !dialog?.contains(item) && imageFor(item) && item.dataset.pfMedia !== 'off' && !item.hasAttribute('download') && source(item);
+  }
+  function imageFor(item) {
+    const image = item.querySelector('img') || document.getElementById(item.dataset.pfMediaFor || '');
+    return image instanceof HTMLImageElement ? image : null;
+  }
+  const groupFor = item => item.closest('[data-pf-media-group]')?.dataset.pfMediaGroup;
+  const visible = item => !item.closest('[hidden], [inert], [aria-hidden="true"]') && item.getClientRects().length > 0 && getComputedStyle(item).visibility === 'visible';
+  function refreshGroupLinks(root = document) {
+    const links = root.querySelectorAll('[data-pf-media-open-group]');
+    if (!links.length) return;
+    const candidates = Array.from(root.querySelectorAll(selector));
+    for (const link of links) {
+      const available = candidates.some(item => groupFor(item) === link.dataset.pfMediaOpenGroup && eligible(item) && visible(item));
+      const disabled = String(!available);
+      if (link.getAttribute('aria-disabled') !== disabled) link.setAttribute('aria-disabled', disabled);
+    }
   }
   // Keep mutation work local to changed elements and newly inserted subtrees.
   function refreshTrigger(item) {
@@ -44,7 +61,8 @@
     root.querySelectorAll(selector + ',[data-pf-media-trigger]').forEach(refreshTrigger);
   }
   refreshSubtree(document.documentElement);
-  const watchedAttributes = new Set(['href', 'src', 'srcset', 'data-pf-media', 'data-pf-media-src', 'download']);
+  refreshGroupLinks();
+  const watchedAttributes = new Set(['href', 'src', 'srcset', 'data-pf-media', 'data-pf-media-src', 'data-pf-media-for', 'id', 'download', 'hidden', 'inert', 'aria-hidden', 'class', 'style']);
   // A custom selector may depend on attributes beyond the source/opt-out contract.
   for (const match of selector.matchAll(/\[\s*([^\s~|^$*!=\]]+)/g)) watchedAttributes.add(match[1].toLowerCase());
   if (selector.includes('.')) watchedAttributes.add('class');
@@ -59,10 +77,14 @@
   const needsDocumentScope = selector.toLowerCase().includes(':has(') || selector.toLowerCase().includes(':scope') || /[+~]/.test(selector);
   const pendingRoots = new Set();
   const pendingElements = new Set();
+  const pendingGroupRoots = new Set();
   let triggerRefreshPending = false;
   new MutationObserver(records => {
     for (const record of records) {
       if (dialog?.contains(record.target)) continue;
+      const scope = record.target.closest?.('[data-pf-media-scope]');
+      if (scope) pendingGroupRoots.add(scope);
+      else if (record.target.querySelector?.('[data-pf-media-open-group]')) pendingGroupRoots.add(record.target);
       if (needsDocumentScope) {
         pendingRoots.add(document.documentElement);
       } else if (record.type === 'attributes') {
@@ -80,6 +102,8 @@
       for (const root of pendingRoots) if (root.isConnected) refreshSubtree(root);
       for (const item of pendingElements) if (item.isConnected) refreshTrigger(item);
       pendingRoots.clear(); pendingElements.clear();
+      for (const root of pendingGroupRoots) if (root.isConnected) refreshGroupLinks(root);
+      pendingGroupRoots.clear();
     });
   }).observe(document.documentElement, { childList:true, subtree:true, attributes:true, attributeFilter:[...watchedAttributes] });
   function button(label, text, action) {
@@ -94,6 +118,7 @@
       minus: 'M5 12h14', plus: 'M5 12h14M12 5v14',
       fit: 'M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4',
       external: 'M14 4h6v6m0-6L10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5',
+      context: 'M6 3h12v18H6zM9 7h6M9 11h6m-4 4 2 2 2-2',
       settings: 'M4 7h9m4 0h3M4 17h3m4 0h9M13 4v6M7 14v6'
     };
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -157,7 +182,11 @@
     backgroundField.append(background);
     variantField = document.createElement('label'); variantField.textContent = translate('Image variant'); variantField.append(variant);
     appearance.append(backgroundField, variantField);
-    const actions = document.createElement('div'); actions.className = 'pf-media-viewer__actions'; actions.append(settings, original);
+    contextButton = button('Show in page', 'Show in page', () => { returnTarget = items[index]; dialog.close(); });
+    contextButton.className = 'pf-media-viewer__context';
+    const contextLabel = document.createElement('span'); contextLabel.textContent = translate('Show in page');
+    contextButton.replaceChildren(icon('context'), contextLabel);
+    const actions = document.createElement('div'); actions.className = 'pf-media-viewer__actions'; actions.append(contextButton, settings, original);
     toolbar.append(zoomControls, actions);
     thumbnails = document.createElement('div'); thumbnails.className = 'pf-media-viewer__thumbnails';
     thumbnails.setAttribute('role', 'group'); thumbnails.setAttribute('aria-label', translate('Image viewer'));
@@ -194,7 +223,10 @@
     dialog.addEventListener('close', () => {
       document.documentElement.classList.remove('pf-media-open');
       picture.removeAttribute('src'); picture.hidden = true; original.removeAttribute('href');
-      settings.open = false; thumbnails.replaceChildren(); items = []; drag = null; opener?.focus({ preventScroll: true });
+      settings.open = false; thumbnails.replaceChildren(); items = []; drag = null;
+      const target = returnTarget || opener; target?.focus({ preventScroll: true });
+      if (returnTarget) returnTarget.scrollIntoView({ block: 'center', behavior: 'instant' });
+      returnTarget = null;
     });
     stage.addEventListener('pointerdown', event => {
       if (event.pointerType !== 'mouse' || event.button !== 0) return;
@@ -236,7 +268,7 @@
     const url = variant.value === 'original' ? source(item) : safeSource(item.dataset[variant.value]);
     if (!url) return;
     fitMode = true; picture.hidden = true; errorMessage.hidden = true; errorMessage.textContent = ''; stage.dataset.loading = 'true'; zoomValue.textContent = '—'; status.textContent = translate('Loading image…');
-    picture.alt = item.querySelector('img')?.alt || item.getAttribute('aria-label') || '';
+    picture.alt = imageFor(item)?.alt || item.getAttribute('aria-label') || '';
     announcement.textContent = `${items.length > 1 ? `${index + 1} / ${items.length}. ` : ""}${picture.alt}${caption.textContent !== picture.alt ? '. ' + caption.textContent : ''}${variant.options.length > 1 ? '. ' + variant.selectedOptions[0].textContent : ''}`;
     original.href = url; picture.src = url; stage.scrollTo(0, 0);
   }
@@ -246,7 +278,8 @@
     count.textContent = `${index + 1} / ${items.length}`;
     previous.disabled = next.disabled = items.length < 2;
     const item = items[index];
-    caption.textContent = item.dataset.pfMediaCaption || item.closest('figure')?.querySelector('figcaption')?.textContent || item.querySelector('img')?.alt || '';
+    caption.textContent = item.dataset.pfMediaCaption || item.closest('figure')?.querySelector('figcaption')?.textContent || imageFor(item)?.alt || '';
+    contextButton.hidden = !item.hasAttribute('data-pf-media-context');
     caption.title = caption.textContent;
     variant.replaceChildren(new Option(translate('Original'), 'original'));
     for (const [key, label] of [['pfMediaLight', translate('Light appearance')], ['pfMediaDark', translate('Dark appearance')], ['pfMediaMobile', translate('Mobile')], ['pfMediaDesktop', translate('Desktop')]]) {
@@ -263,13 +296,16 @@
     if (dialog?.contains(event.target)) return;
     if (styles && !styles.sheet) return;
     if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    const item = event.target.closest?.(selector);
+    const groupLink = event.target.closest?.('[data-pf-media-open-group]');
+    if (!groupLink && !eligible(event.target.closest?.(selector))) return;
+    const candidates = Array.from(document.querySelectorAll(selector));
+    const item = groupLink ? candidates.find(candidate => groupFor(candidate) === groupLink.dataset.pfMediaOpenGroup && eligible(candidate) && visible(candidate)) : event.target.closest?.(selector);
+    if (groupLink && !item) { event.preventDefault(); return; }
     if (!eligible(item)) return;
-    const group = item.dataset.pfMediaGroup || item.closest('[data-pf-media-group]')?.dataset.pfMediaGroup;
-    items = group ? Array.from(document.querySelectorAll(selector)).filter(candidate =>
-      (candidate.dataset.pfMediaGroup || candidate.closest('[data-pf-media-group]')?.dataset.pfMediaGroup) === group &&
-      eligible(candidate)) : [item];
-    event.preventDefault(); opener = item;
+    const group = groupFor(item);
+    items = group ? candidates.filter(candidate => groupFor(candidate) === group && eligible(candidate) && visible(candidate)) : [item];
+    if (!items.includes(item)) return;
+    event.preventDefault(); opener = groupLink || item;
     if (!dialog) create();
     document.documentElement.classList.add('pf-media-open');
     thumbnails.replaceChildren();
@@ -279,13 +315,13 @@
     dialog.setAttribute('aria-label', title.textContent);
     navigation.hidden = thumbnails.hidden = single;
     items.forEach((entry, position) => {
-      const sourceImage = entry.querySelector('img');
+      const sourceImage = imageFor(entry);
       const thumbnail = button(`${position + 1} / ${items.length}. ${sourceImage.alt || ''}`, '', () => show(position));
       const image = document.createElement('img'); image.alt = ''; image.loading = 'lazy';
       image.src = safeSource(sourceImage.currentSrc || sourceImage.src) || source(entry);
       thumbnail.append(image); thumbnails.append(thumbnail);
     });
-    sizeFrame(item.querySelector('img'));
+    sizeFrame(imageFor(item));
     dialog.showModal(); show(items.indexOf(item));
     dialog.querySelector('.pf-media-viewer__close').focus();
   });

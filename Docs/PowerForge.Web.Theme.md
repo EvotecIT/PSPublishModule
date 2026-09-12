@@ -584,10 +584,25 @@ The builder publishes the viewer assets and adds them to the normal CSS and Java
 
 Omit the group for an independent image preview. A single preview shows its caption and zoom controls, without navigation arrows, thumbnails, or a redundant image count. Back to page closes the preview and restores focus to the image link without navigating away. Escape closes an open Display settings panel first, then the preview. Keep fallback image links in the same tab so browser Back also works when JavaScript is unavailable.
 
-Use a shared group only for related images, such as pages of one document or a product tour. Groups with multiple images show previous/next navigation and thumbnails; a group containing one image uses the single-preview presentation. Grid, masonry, strip, and stack describe the page layout and do not implicitly create a gallery. Assign a distinct group to each collection you want visitors to browse together. Optional `data-pf-media-mobile` and `data-pf-media-desktop` attributes add explicit variants. `data-pf-media-src` overrides the full-size source. Sources must resolve to HTTP or HTTPS URLs. Browser-local blob URLs are not intercepted by this static-site viewer. Use separate assets for different appearances; the viewer preserves screenshot colors.
+Use a shared group only for related images, such as pages of one document or a product tour. Groups with multiple images show previous/next navigation and thumbnails; a group containing one image uses the single-preview presentation. Grid, masonry, strip, and stack describe the page layout and do not implicitly create a gallery. Assign a distinct group to each collection you want visitors to browse together. Optional `data-pf-media-mobile` and `data-pf-media-desktop` attributes add explicit variants. `data-pf-media-src` overrides the full-size source. Sources must resolve to HTTPS URLs, or same-origin HTTP URLs when the page itself uses HTTP. Other HTTP links keep their ordinary navigation behavior instead of opening a blocked mixed-content preview. Browser-local blob URLs are not intercepted by this static-site viewer. Use separate assets for different appearances; the viewer preserves screenshot colors.
 
 The main toolbar contains fit, actual size, zoom, and the original-image link. Display settings holds background selection, available appearance/device variants, and image dimensions. Single-image frames adapt to the source dimensions on desktop; compact screens use the full viewport. The viewer also supports mouse dragging, touch scrolling, captions, keyboard navigation, Escape, and focus restoration. Modified clicks and download links keep their normal behavior. Set `data-pf-media="off"` to exclude an individual link. UI labels follow the page language for English, Polish, French, German, and Spanish; untranslated messages fall back to English.
 
 Style the chrome with `.pf-media-viewer` and `--pf-media-surface`, `--pf-media-text`, `--pf-media-border`, and `--pf-media-stage`. Continue using the media shortcodes' width, height, fit, aspect ratio, and responsive source options for page thumbnails. Existing screenshot shortcode links can opt in with `Selector: ".pf-screenshot a"`; choose a selector that matches image links, not unrelated navigation.
 
 Product catalog media entries can declare optional `light` and `dark` image URLs alongside `src`, `width`, and `height`. The project-catalog task preserves these in generated product front matter. A product layout can bind them to `data-pf-media-light` and `data-pf-media-dark`; `src` remains the page thumbnail and fallback link. Theme variants should show the same view at matching dimensions.
+
+For imported articles and other content with unlinked images, opt in a content container:
+
+```html
+<article data-pf-media-scope="content">
+  <h2>Configure the workspace</h2>
+  <img src="/images/setup.png" alt="Workspace settings" width="960" height="640" />
+</article>
+```
+
+The build wraps eligible images in real image links, preserving the original image and responsive `picture` markup. Each container forms its own gallery, with a **View images** shortcut when it contains multiple images. Nested scopes form independent collections. `single` provides independent previews; `off` disables enhancement within the container. These explicit scopes work alongside a custom viewer selector.
+
+Use `data-pf-media-scope="previews"` for demo or product cards whose images already link to another page. The build preserves those destinations and adds a separate **Enlarge image** action. Galleries include only currently visible entries, so filtered cards are excluded. **Show in page** closes the viewer and takes the reader to the selected image; **Back to page** returns focus to the original opening control.
+
+Empty-alt images, small declared dimensions (under 96 pixels wide or 64 high), hidden content, images within prose, download links, and explicit `data-pf-media="off"` ancestors are excluded. Content mode preserves all existing links. For known placeholder assets, provide exact source URLs separated by `|` in `data-pf-media-exclude` on the scope. Place scopes around meaningful content, leaving navigation, branding, and decorative sections outside them.

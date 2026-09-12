@@ -77,8 +77,8 @@
   .pf-media-viewer__zoom-value { min-width:36px; }
   .pf-media-viewer__fit span { display:none; }
   .pf-media-viewer__actions { gap:0; }
-  .pf-media-viewer__original { width:44px; padding:10px; }
-  .pf-media-viewer__original span { display:none; }
+  .pf-media-viewer__original,.pf-media-viewer__context { width:44px; padding:10px; flex-shrink:0; }
+  .pf-media-viewer__original span,.pf-media-viewer__context span { display:none; }
   .pf-media-viewer__thumbnails { gap:6px; padding-bottom:10px; }
   .pf-media-viewer__thumbnails button { flex-basis:64px; width:64px; height:44px; padding:4px; }
   .pf-media-viewer__thumbnails img { max-height:34px; }
@@ -108,6 +108,14 @@
 [data-pf-media-trigger]::after { content:"↗"; position:absolute; right:14px; bottom:14px; display:grid; place-items:center; width:36px; height:36px; border:1px solid #ffffff55; border-radius:9px; background:#101827dd; color:#fff; font:20px/1 system-ui,sans-serif; box-shadow:0 4px 16px #0003; pointer-events:none; opacity:0; transition:opacity 140ms; }
 [data-pf-media-trigger]:hover::after,[data-pf-media-trigger]:focus-visible::after { opacity:1; }
 [data-pf-media-trigger]:focus-visible { outline:3px solid #73aaff; outline-offset:5px; }
+.pf-media-content-image { display:block; width:fit-content; max-width:100%; margin:1.5rem auto; }
+.pf-media-content-image img { max-width:100%; height:auto; }
+.pf-media-content-toolbar { display:flex; justify-content:flex-end; margin:0 0 1.5rem; padding:.25rem 0; }
+.pf-media-content-toolbar a,.pf-media-preview-action { display:inline-flex; align-items:center; justify-content:center; min-height:44px; gap:.5rem; padding:.6rem 1rem; border:1px solid color-mix(in srgb,currentColor 22%,transparent); border-radius:.65rem; font:inherit; font-size:.875rem; line-height:1.4; text-decoration:none; }
+.pf-media-preview-action { margin:.75rem 1rem 0; align-self:flex-start; justify-self:end; width:fit-content; }
+.pf-media-preview-action[data-pf-media-trigger]::after { display:none; }
+.pf-media-content-toolbar a:hover,.pf-media-preview-action:hover { background:color-mix(in srgb,currentColor 8%,transparent); }
+[data-pf-media-open-group][aria-disabled="true"] { opacity:.5; cursor:default; }
 @media(hover:none) { [data-pf-media-trigger]::after { opacity:1; } }
 
 .pf-media-viewer__stage[data-loading="true"]::before { content:""; position:absolute; left:calc(50% - 16px); top:calc(50% - 16px); width:32px; height:32px; border:2px solid #91baff33; border-top-color:var(--pf-media-accent, #91baff); border-radius:50%; animation:pf-media-spin .8s linear infinite; }
