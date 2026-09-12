@@ -267,6 +267,7 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ inputs.dotnet_version }}
+          global-json-file: ${{ hashFiles('global.json') != '' && 'global.json' || '' }}
 
       - name: Install requested .NET workloads
         if: ${{ inputs.dotnet_workloads != '' }}
