@@ -22,6 +22,10 @@ public sealed partial class ReleaseValidationService
         {
             throw new InvalidOperationException("Module probes require at least one nonblank PowerShell host, without blank entries.");
         }
+        ValidatePatterns("Module", nameof(spec.RequiredFiles), spec.RequiredFiles);
+        ValidatePatterns("Module", nameof(spec.VersionedAssemblies), spec.VersionedAssemblies);
+        if (spec.Signatures is not null)
+            ValidatePatterns("Module signatures", nameof(spec.Signatures.Include), spec.Signatures.Include, requireAny: true);
         using var workspace = new ValidationWorkspace();
         var input = Resolve(spec.Path, variables);
         var directoryInput = Directory.Exists(input);

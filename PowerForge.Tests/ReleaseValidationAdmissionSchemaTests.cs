@@ -95,6 +95,53 @@ public sealed class ReleaseValidationAdmissionSchemaTests : IDisposable
     }
 
     [Theory]
+    [InlineData("RequiredEntries")]
+    [InlineData("ForbiddenEntries")]
+    [InlineData("SymbolEntries")]
+    [InlineData("ForbiddenSymbolEntries")]
+    public async Task Package_entry_patterns_reject_blank_items_before_artifact_access(string property)
+    {
+        var package = new JsonObject { ["Id"] = "Example", [property] = new JsonArray(" ", "lib/**/*.dll") };
+        var document = new JsonObject { ["Packages"] = new JsonObject {
+            ["Path"] = "missing-packages", ["Items"] = new JsonArray(package) } };
+        Assert.False(LoadSchema().Evaluate(document).IsValid);
+
+        var contract = new PackageArtifactContract { Id = "Example" };
+        typeof(PackageArtifactContract).GetProperty(property)!.SetValue(contract, new[] { " ", "lib/**/*.dll" });
+        var report = await new ReleaseValidationService().RunAsync(new() {
+            Packages = new() { Path = "missing-packages", Items = [contract] }
+        }, request: new() { ProjectRoot = _root });
+
+        Assert.False(report.Success);
+        Assert.Contains(property, Assert.Single(report.Errors));
+        Assert.Empty(report.Checks);
+    }
+
+    [Theory]
+    [InlineData("RequiredFiles")]
+    [InlineData("VersionedAssemblies")]
+    [InlineData("SignatureInclude")]
+    public async Task Module_file_patterns_reject_blank_items_before_artifact_access(string property)
+    {
+        var module = new JsonObject { ["Path"] = "missing-module", ["Manifest"] = "Example.psd1" };
+        if (property == "SignatureInclude")
+            module["Signatures"] = new JsonObject { ["Include"] = new JsonArray("\t", "**/*.dll") };
+        else
+            module[property] = new JsonArray("\t", "**/*.dll");
+        Assert.False(LoadSchema().Evaluate(new JsonObject { ["Modules"] = new JsonArray(module) }).IsValid);
+
+        var contract = new ModuleArtifactValidation { Path = "missing-module", Manifest = "Example.psd1" };
+        if (property == "SignatureInclude") contract.Signatures = new() { Include = ["\t", "**/*.dll"] };
+        else typeof(ModuleArtifactValidation).GetProperty(property)!.SetValue(contract, new[] { "\t", "**/*.dll" });
+        var report = await new ReleaseValidationService().RunAsync(new() { Modules = [contract] },
+            request: new() { ProjectRoot = _root });
+
+        Assert.False(report.Success);
+        Assert.Contains(property == "SignatureInclude" ? "Include" : property, Assert.Single(report.Errors));
+        Assert.Empty(report.Checks);
+    }
+
+    [Theory]
     [InlineData("empty")]
     [InlineData("blank")]
     [InlineData("mixed")]

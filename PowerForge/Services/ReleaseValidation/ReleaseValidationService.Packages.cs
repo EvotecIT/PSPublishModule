@@ -74,6 +74,13 @@ public sealed partial class ReleaseValidationService
         Dictionary<string, string> variables, ReleaseValidationReport report, CancellationToken cancellationToken)
     {
         if (spec.Items.Length == 0) throw new InvalidOperationException("Package validation requires package contracts.");
+        foreach (var contract in spec.Items)
+        {
+            ValidatePatterns($"Package '{contract.Id}'", nameof(contract.RequiredEntries), contract.RequiredEntries);
+            ValidatePatterns($"Package '{contract.Id}'", nameof(contract.ForbiddenEntries), contract.ForbiddenEntries);
+            ValidatePatterns($"Package '{contract.Id}'", nameof(contract.SymbolEntries), contract.SymbolEntries);
+            ValidatePatterns($"Package '{contract.Id}'", nameof(contract.ForbiddenSymbolEntries), contract.ForbiddenSymbolEntries);
+        }
         var root = Resolve(spec.Path, variables);
         variables["PackageRoot"] = root;
         var actual = InspectPrimaryPackages(root, cancellationToken).ToArray();

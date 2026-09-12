@@ -193,4 +193,10 @@ public sealed partial class ReleaseValidationService
             .Replace(@"\*\*", ".*").Replace(@"\*", "[^/]*").Replace(@"\?", "[^/]");
         return Regex.IsMatch(value.Replace('\\', '/'), "^" + expression + "$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     }
+
+    private static void ValidatePatterns(string owner, string name, string[]? patterns, bool requireAny = false)
+    {
+        if (patterns is null || (requireAny && patterns.Length == 0) || patterns.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException($"{owner} {name} must contain {(requireAny ? "at least one nonblank pattern" : "only nonblank patterns")}.");
+    }
 }

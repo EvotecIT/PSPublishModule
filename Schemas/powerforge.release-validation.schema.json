@@ -211,25 +211,29 @@
         "RequiredEntries": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "ForbiddenEntries": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "SymbolEntries": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "ForbiddenSymbolEntries": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "DependencyFrameworks": {
@@ -304,7 +308,8 @@
           "minItems": 1,
           "description": "Alternative file patterns; their union must select at least one payload file.",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "Thumbprints": {
@@ -348,13 +353,15 @@
         "RequiredFiles": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "VersionedAssemblies": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "ProcessorArchitecture": {
