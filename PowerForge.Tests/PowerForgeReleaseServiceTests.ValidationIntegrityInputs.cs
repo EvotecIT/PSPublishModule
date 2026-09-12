@@ -8,6 +8,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("ModulePath")]
     [InlineData("BeforePublishAction")]
     [InlineData("PublishApiKeyFile")]
+    [InlineData("ReleaseConfig")]
     public void Execute_validation_cannot_change_a_deferred_module_publication_input(string mutationTarget)
     {
         var root = CreateSandbox();
@@ -35,6 +36,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 "ModulePath" => modulePath,
                 "BeforePublishAction" => actionPath,
                 "PublishApiKeyFile" => apiKeyPath,
+                "ReleaseConfig" => releasePath,
                 _ => throw new InvalidOperationException($"Unknown mutation target: {mutationTarget}")
             };
             var useScript = mutationTarget == "ScriptPath";

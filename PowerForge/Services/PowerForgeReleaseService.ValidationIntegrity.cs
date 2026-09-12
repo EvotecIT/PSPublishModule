@@ -6,7 +6,8 @@ internal sealed partial class PowerForgeReleaseService
     // The checkpoint is also revalidated immediately before remote publication so completed
     // delayed validator writes are detected after the validator process exits.
     private static string[] GetValidationIntegrityPaths(PowerForgeReleaseResult result)
-        => result.ReleaseAssetEntries.SelectMany(asset => new[] { asset.Path, asset.StagedPath })
+        => new[] { result.ConfigPath }
+            .Concat(result.ReleaseAssetEntries.SelectMany(asset => new[] { asset.Path, asset.StagedPath }))
             .Concat(result.ReleaseAssets)
             // Per-tool GitHub publication may regenerate configuration aliases and select
             // native installer or direct-output companions from the original publish result.
