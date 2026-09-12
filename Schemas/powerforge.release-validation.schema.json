@@ -408,7 +408,8 @@
       ],
       "properties": {
         "ManifestPath": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "PublishConfigPath": {
           "anyOf": [

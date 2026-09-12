@@ -11,6 +11,8 @@ public sealed partial class ReleaseValidationService
     {
         if (string.IsNullOrWhiteSpace(spec.Target))
             throw new InvalidOperationException("CLI validation requires a nonempty target identity.");
+        if (string.IsNullOrWhiteSpace(spec.ManifestPath))
+            throw new InvalidOperationException("CLI validation requires a nonblank manifest path.");
         if (spec.Runtimes is null || spec.Frameworks is null || spec.Styles is null ||
             spec.Runtimes.Concat(spec.Frameworks).Concat(spec.Styles).Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("CLI runtime, framework, and style identities must be nonempty strings.");

@@ -15,10 +15,13 @@ public sealed partial class ReleaseValidationService
         }
     }
 
-    private static string Within(string root, string relative)
+    private static string Within(string root, string relative, bool allowRoot = false)
     {
         var path = Path.GetFullPath(Path.Combine(root, relative.Replace('\\', Path.DirectorySeparatorChar)));
-        var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+        if (allowRoot && FileSystemPathSafety.ExistingPathComparer.Equals(
+                path.TrimEnd(Path.DirectorySeparatorChar), normalizedRoot)) return normalizedRoot;
+        var prefix = normalizedRoot + Path.DirectorySeparatorChar;
         if (path.Length <= prefix.Length ||
             !FileSystemPathSafety.ExistingPathComparer.Equals(path.Substring(0, prefix.Length), prefix))
             throw new InvalidOperationException($"Path '{relative}' is outside '{root}'.");

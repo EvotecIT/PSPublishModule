@@ -306,6 +306,42 @@ public sealed class ReleaseValidationServiceTests : IDisposable
         Assert.True(File.Exists(zip));
     }
 
+    [Theory]
+    [InlineData(".")]
+    [InlineData("./")]
+    public async Task Module_zip_accepts_an_explicit_archive_root(string archiveRoot)
+    {
+        var zip = Path.Combine(_root, "root-module.zip");
+        using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create)) {
+            WriteEntry(archive, "Example.psd1", "@{ ModuleVersion = '1.2.3' }");
+            WriteEntry(archive, "Example.psm1", "function Get-Example { 'ok' }");
+        }
+
+        var report = await Run(new ReleaseValidationSpec { Modules = [new() {
+            Path = zip, ArchiveRoot = archiveRoot, Manifest = "Example.psd1", RequiredFiles = ["*.psm1"]
+        }] });
+
+        Assert.True(report.Success, string.Join("\n", report.Errors));
+        Assert.Equal("1.2.3", report.Version);
+        Assert.Contains("Module Example.psd1", report.Checks);
+    }
+
+    [Fact]
+    public async Task Module_zip_archive_root_cannot_escape_the_extraction_directory()
+    {
+        var zip = Path.Combine(_root, "bounded-root-module.zip");
+        using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create)) {
+            WriteEntry(archive, "Example.psd1", "@{ ModuleVersion = '1.2.3' }");
+        }
+
+        var report = await Run(new ReleaseValidationSpec { Modules = [new() {
+            Path = zip, ArchiveRoot = "../", Manifest = "Example.psd1"
+        }] });
+
+        Assert.False(report.Success);
+        Assert.Contains("outside", Assert.Single(report.Errors));
+    }
+
     [Fact]
     public async Task Tool_path_and_manifest_installs_use_isolated_exact_feed_and_cleanup()
     {

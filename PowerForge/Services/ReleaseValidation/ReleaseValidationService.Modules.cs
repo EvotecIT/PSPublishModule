@@ -57,7 +57,7 @@ public sealed partial class ReleaseValidationService
                     File.SetUnixFileMode(path, (UnixFileMode)permissions);
 #endif
             }
-            if (!string.IsNullOrEmpty(spec.ArchiveRoot)) root = Within(root, spec.ArchiveRoot);
+            if (!string.IsNullOrEmpty(spec.ArchiveRoot)) root = Within(root, spec.ArchiveRoot, allowRoot: true);
         }
         var paths = EnumerateValidationFiles(root, cancellationToken).ToArray();
         var manifest = Within(root, spec.Manifest);

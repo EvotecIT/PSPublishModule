@@ -276,6 +276,28 @@ public sealed class ReleaseValidationAdmissionSchemaTests : IDisposable
     [Theory]
     [InlineData("", false)]
     [InlineData(" \t\r\n", false)]
+    [InlineData("manifest.json", true)]
+    public async Task Cli_manifest_path_is_nonblank_when_explicit(string manifestPath, bool valid)
+    {
+        var cli = new JsonObject {
+            ["ManifestPath"] = manifestPath,
+            ["Target"] = "app",
+            ["Runtimes"] = new JsonArray("linux-x64"),
+            ["Styles"] = new JsonArray("Portable")
+        };
+        Assert.Equal(valid, LoadSchema().Evaluate(new JsonObject { ["CliArtifacts"] = cli }).IsValid);
+        if (valid) { return; }
+
+        var report = await new ReleaseValidationService().RunAsync(new() { CliArtifacts = new() {
+            ManifestPath = manifestPath, Target = "app", Runtimes = ["linux-x64"], Styles = ["Portable"]
+        } });
+        Assert.False(report.Success);
+        Assert.Contains("nonblank manifest path", Assert.Single(report.Errors));
+    }
+
+    [Theory]
+    [InlineData("", false)]
+    [InlineData(" \t\r\n", false)]
     [InlineData(null, false)]
     [InlineData("win-x64", true)]
     public void Supported_runtime_entries_cannot_silently_remove_the_restriction(string? runtime, bool valid)
