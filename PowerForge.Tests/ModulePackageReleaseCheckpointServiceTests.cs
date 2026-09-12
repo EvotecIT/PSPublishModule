@@ -169,4 +169,123 @@ public sealed class ModulePackageReleaseCheckpointServiceTests
             try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Publish_replays_a_github_only_module_package_checkpoint()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var releaseZip = Path.Combine(root, "Sample.Library.1.2.3.zip");
+            File.WriteAllText(releaseZip, "checkpointed release archive");
+            var moduleConfig = Path.Combine(root, "powerforge.json");
+            File.WriteAllText(
+                moduleConfig,
+                """
+                {
+                  "Build": { "Name": "Sample", "SourcePath": "." },
+                  "Segments": [
+                    {
+                      "Type": "PackageBuild",
+                      "Configuration": {
+                        "RootPath": ".",
+                        "PublishNuget": false,
+                        "PublishGitHub": true
+                      }
+                    }
+                  ]
+                }
+                """);
+            var releaseConfig = Path.Combine(root, "release.json");
+            var spec = new PowerForgeReleaseSpec
+            {
+                Module = new PowerForgeModuleReleaseOptions
+                {
+                    RepositoryRoot = ".",
+                    ConfigPath = "powerforge.json",
+                    IncludesPackages = true
+                }
+            };
+            ProjectBuildGitHubPublishRequest? captured = null;
+            string? capturedReleaseZipContent = null;
+            var host = new ProjectBuildHostService(
+                new NullLogger(),
+                executeRelease: null,
+                publishGitHub: request =>
+                {
+                    captured = request;
+                    capturedReleaseZipContent = File.ReadAllText(
+                        Assert.Single(request.Release.Projects).ReleaseZipPath!);
+                    var summary = new ProjectBuildGitHubPublishSummary
+                    {
+                        Success = true
+                    };
+                    summary.Results.Add(new ProjectBuildGitHubResult
+                    {
+                        Success = true,
+                        ProjectName = "Sample.Library",
+                        TagName = "v1.2.3"
+                    });
+                    return summary;
+                },
+                validateGitHubPreflight: null);
+            var checkpoint = new PowerForgeModulePackageReleaseCheckpoint
+            {
+                Key = "PackageBuild:0",
+                Name = "Inline package build",
+                ConfigPath = moduleConfig,
+                PublishGitHub = true,
+                PublicationConfiguration = new ProjectBuildPublishHostConfiguration
+                {
+                    ConfigPath = moduleConfig,
+                    PublishGitHub = true,
+                    GitHubUsername = "EvotecIT",
+                    GitHubRepositoryName = "Sample",
+                    GitHubToken = "fixture-token"
+                },
+                Release = new DotNetRepositoryReleaseResult
+                {
+                    Success = true,
+                    ResolvedVersion = "1.2.3",
+                    Projects =
+                    [
+                        new DotNetRepositoryProjectResult
+                        {
+                            ProjectName = "Sample.Library",
+                            PackageId = "Sample.Library",
+                            IsPackable = true,
+                            NewVersion = "1.2.3",
+                            ReleaseZipPath = releaseZip
+                        }
+                    ]
+                }
+            };
+
+            var result = Assert.Single(new ModulePackageReleaseCheckpointService(host, new NullLogger()).Publish(
+                releaseConfig,
+                spec,
+                [checkpoint],
+                releaseAssets: null,
+                requireStagedAssets: false,
+                publishNuget: false,
+                publishGitHub: true,
+                remotePublishAttempted: null,
+                progress: null,
+                CancellationToken.None));
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Empty(result.PublishedPackages);
+            Assert.Equal("v1.2.3", Assert.Single(result.GitHubReleases).TagName);
+            Assert.Equal("checkpointed release archive", capturedReleaseZipContent);
+            Assert.Equal(Path.GetFileName(releaseZip), Path.GetFileName(Assert.Single(captured!.Release.Projects).ReleaseZipPath));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 }

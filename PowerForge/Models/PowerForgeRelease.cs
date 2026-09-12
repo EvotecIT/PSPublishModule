@@ -96,6 +96,11 @@ internal sealed class PowerForgeReleaseRequest
 
     internal bool ModulePublisherActive { get; set; }
 
+    /// <summary>
+    /// Defers after-staging validation until an external signing checkpoint has replaced the staged artifacts.
+    /// </summary>
+    internal bool DeferAfterStagingValidation { get; set; }
+
     /// <summary>Build Apple archives from a private detached exact-commit source worktree.</summary>
     internal bool RequireImmutableAppleSourceSnapshot { get; set; }
 

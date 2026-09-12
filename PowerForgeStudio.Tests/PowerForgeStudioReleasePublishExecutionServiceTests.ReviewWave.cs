@@ -209,7 +209,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                   "Packages": {
                     "RootPath": "..",
                     "PublishNuget": true,
-                    "PublishApiKey": "test-key",
+                    "PublishApiKeyEnvName": "POWERFORGE_TEST_NUGET_KEY",
                     "PublishFailFast": true
                   }
                 }
@@ -274,7 +274,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     return new PowerForgeReleaseResult { Success = true };
                 });
 
-            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            using var _ = new EnvironmentScope()
+                .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true")
+                .Set("POWERFORGE_TEST_NUGET_KEY", "test-key");
             var result = await service.ExecuteAsync(queueItem);
 
             Assert.False(result.Succeeded);

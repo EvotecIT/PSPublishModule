@@ -2,6 +2,33 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    /// <summary>Runs deferred validation against the complete signed release checkpoint.</summary>
+    internal bool ValidateBuiltReleaseOutputs(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        PowerForgeReleaseResult result,
+        string? configDirectory = null,
+        string? resolvedVersion = null)
+    {
+        if (!HasAfterStagingValidation(spec) || result.ReleaseValidationIntegrity is not null)
+            return true;
+
+        var directory = configDirectory
+            ?? Path.GetDirectoryName(Path.GetFullPath(request.ConfigPath))
+            ?? Directory.GetCurrentDirectory();
+        ValidateReleaseValidationConfiguration(spec.Validation, spec.Outputs, request, directory);
+        var version = resolvedVersion ?? request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, result);
+        return ExecuteAfterStagingValidations(
+            spec,
+            request,
+            directory,
+            result,
+            version,
+            moduleSelected: result.ModulePlan is not null,
+            packagesSelected: result.Packages is not null || result.ModulePlan?.IncludesProjectPackages == true,
+            toolsSelected: result.DotNetToolPlan is not null || result.ToolPlan is not null);
+    }
+
     private static void ValidateReleaseValidationConfiguration(
         PowerForgeReleaseValidationOptions? validation,
         PowerForgeReleaseOutputsOptions outputs,

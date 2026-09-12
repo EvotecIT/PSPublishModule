@@ -75,18 +75,20 @@ internal sealed class ModulePackageReleaseCheckpointService
         return checkpoints.ToArray();
     }
 
-    internal PowerForgeModulePackagePublicationResult[] PublishNuGet(
+    internal PowerForgeModulePackagePublicationResult[] Publish(
         string releaseConfigPath,
         PowerForgeReleaseSpec spec,
         IEnumerable<PowerForgeModulePackageReleaseCheckpoint>? checkpoints,
         IEnumerable<PowerForgeReleaseAssetEntry>? releaseAssets,
         bool requireStagedAssets,
+        bool publishNuget,
+        bool publishGitHub,
         Action? remotePublishAttempted,
         IProjectBuildProgressReporter? progress,
         CancellationToken cancellationToken)
     {
         var lanes = ResolveLanes(releaseConfigPath, spec)
-            .Where(static lane => lane.PublishNuget)
+            .Where(lane => (publishNuget && lane.PublishNuget) || (publishGitHub && lane.PublishGitHub))
             .ToArray();
         var publisher = new ProjectBuildPublishHostService(_logger);
         var publications = new List<PowerForgeModulePackagePublicationResult>(lanes.Length);
@@ -97,37 +99,49 @@ internal sealed class ModulePackageReleaseCheckpointService
             var configuration = checkpoint.PublicationConfiguration ?? (lane.Reference is not null
                 ? publisher.LoadConfiguration(lane.Reference, lane.ConfigPath)
                 : publisher.LoadConfiguration(lane.Inline!, lane.ResolutionConfigPath));
-            var stagedRelease = CreatePublicationRelease(
-                checkpoint.Release,
-                releaseAssets,
-                requireStagedAssets);
-            using var publicationSnapshot = ModulePackagePublicationSnapshot.Create(stagedRelease);
-            var release = publicationSnapshot.Release;
-            var publish = publisher.PublishNuGet(
-                configuration,
-                release,
-                repositoryRoot: ResolveRepositoryRoot(releaseConfigPath, spec),
-                remotePublishAttempted: () =>
+            configuration.PublishNuget = publishNuget && checkpoint.PublishNuget;
+            configuration.PublishGitHub = publishGitHub && checkpoint.PublishGitHub;
+            var publicationCheckpoint = new ProjectBuildHostExecutionResult
+            {
+                DeferredPublicationConfiguration = configuration,
+                Success = true,
+                ConfigPath = checkpoint.ConfigPath,
+                RootPath = ResolveRepositoryRoot(releaseConfigPath, spec),
+                Result = new ProjectBuildResult
                 {
-                    publicationSnapshot.ValidateUnchanged();
-                    remotePublishAttempted?.Invoke();
+                    Success = true,
+                    Release = checkpoint.Release
+                }
+            };
+            var publish = _projectBuildHostService.Execute(
+                new ProjectBuildHostRequest
+                {
+                    ConfigPath = checkpoint.ConfigPath,
+                    PublicationCheckpoint = publicationCheckpoint,
+                    PublicationAssets = (releaseAssets ?? Array.Empty<PowerForgeReleaseAssetEntry>()).ToArray(),
+                    RequireStagedPublicationAssets = requireStagedAssets,
+                    RemotePublishAttempted = remotePublishAttempted,
+                    Progress = progress,
+                    CancellationToken = cancellationToken
                 },
-                progress: progress,
-                cancellationToken: cancellationToken);
-            publicationSnapshot.ValidateUnchanged();
+                new ProjectBuildConfiguration(),
+                checkpoint.ConfigPath);
+            var release = publish.Result.Release
+                ?? throw new InvalidOperationException($"{lane.Name}: package publication did not preserve its release checkpoint.");
             var result = new PowerForgeModulePackagePublicationResult
             {
                 Name = checkpoint.Name,
                 Success = publish.Success,
                 ErrorMessage = publish.ErrorMessage,
                 PublishSource = release.PublishSource,
-                PublishedPackages = publicationSnapshot.ResolveOriginalPaths(release.PublishedPackages),
-                SkippedDuplicatePackages = publicationSnapshot.ResolveOriginalPaths(release.SkippedDuplicatePackages),
-                FailedPackages = publicationSnapshot.ResolveOriginalPaths(release.FailedPackages)
+                PublishedPackages = release.PublishedPackages.ToArray(),
+                SkippedDuplicatePackages = release.SkippedDuplicatePackages.ToArray(),
+                FailedPackages = release.FailedPackages.ToArray(),
+                GitHubReleases = publish.Result.GitHub.ToArray()
             };
             publications.Add(result);
             if (!result.Success)
-                throw new InvalidOperationException(result.ErrorMessage ?? $"NuGet publication failed for module package lane '{checkpoint.Name}'.");
+                throw new InvalidOperationException(result.ErrorMessage ?? $"Publication failed for module package lane '{checkpoint.Name}'.");
         }
 
         return publications.ToArray();

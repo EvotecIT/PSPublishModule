@@ -239,25 +239,29 @@
         "DependencyFrameworks": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "RequiredDependencies": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "ForbiddenDependencies": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         },
         "RuntimeOnlyDependencies": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "\\S"
           }
         }
       }

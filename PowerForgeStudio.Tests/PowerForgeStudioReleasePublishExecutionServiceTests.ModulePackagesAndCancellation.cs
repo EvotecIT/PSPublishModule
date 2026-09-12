@@ -30,7 +30,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     "RootPath": "..",
                     "PublishNuget": true,
                     "PublishGitHub": false,
-                    "PublishApiKey": "nested-key",
+                    "PublishApiKeyEnvName": "POWERFORGE_TEST_NUGET_KEY",
                     "PublishSource": "https://nested.example.test/v3/index.json"
                   }
                 }
@@ -106,7 +106,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 },
                 publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult { Success = true });
 
-            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            using var _ = new EnvironmentScope()
+                .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true")
+                .Set("POWERFORGE_TEST_NUGET_KEY", "nested-key");
             var result = await service.ExecuteAsync(queueItem);
 
             Assert.True(

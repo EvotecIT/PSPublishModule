@@ -14,7 +14,10 @@ public sealed partial class ProjectBuildHostService
         if (!configuration.PublishNuget && !configuration.PublishGitHub)
             return checkpoint;
         var release = ModulePackageReleaseCheckpointService.CreatePublicationRelease(
-            original, request.PublicationAssets, requireStagedAssets: true, includeReleaseZips: true);
+            original,
+            request.PublicationAssets,
+            request.RequireStagedPublicationAssets,
+            includeReleaseZips: true);
         using var snapshot = ModulePackagePublicationSnapshot.Create(release, includeReleaseZips: true);
         var publisher = new ProjectBuildPublishHostService(_logger, _publishGitHub);
         void BeforePublish()

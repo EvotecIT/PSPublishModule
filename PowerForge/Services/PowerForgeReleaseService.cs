@@ -876,7 +876,8 @@ internal sealed partial class PowerForgeReleaseService
             GenerateWingetOutputs(spec, request, configDirectory, result);
             IncludeWingetOutputsInReleaseAssets(result);
             RewriteReleaseSummaryFiles(result);
-            if (!ExecuteAfterStagingValidations(
+            if (!request.DeferAfterStagingValidation &&
+                !ExecuteAfterStagingValidations(
                     spec,
                     request,
                     configDirectory,
@@ -928,8 +929,10 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         if (deferredModulePublishRequest is not null &&
-            request.PublishNuget != false &&
             result.ModulePlan?.IncludesProjectPackages == true &&
+            result.ModulePackagePlans.Any(checkpoint =>
+                (request.PublishNuget != false && checkpoint.PublishNuget) ||
+                (request.PublishProjectGitHub != false && checkpoint.PublishGitHub)) &&
             !request.PlanOnly &&
             !request.ValidateOnly)
         {
@@ -945,7 +948,7 @@ internal sealed partial class PowerForgeReleaseService
             {
                 result.Success = false;
                 result.ErrorMessage =
-                    "Deferred publication of module-owned NuGet packages requires Module.ConfigPath so PowerForge can publish the exact validated package checkpoint without rebuilding it.";
+                    "Deferred publication of module-owned packages requires Module.ConfigPath so PowerForge can publish the exact validated package checkpoint without rebuilding it.";
                 return result;
             }
 
@@ -956,12 +959,14 @@ internal sealed partial class PowerForgeReleaseService
             try
             {
                 result.ModulePackagePublications = new ModulePackageReleaseCheckpointService(logger: _logger)
-                    .PublishNuGet(
+                    .Publish(
                         configPath,
                         spec,
                         result.ModulePackagePlans,
                         result.ReleaseAssetEntries,
                         requireStagedAssets: HasAfterStagingValidation(spec),
+                        publishNuget: request.PublishNuget != false,
+                        publishGitHub: request.PublishProjectGitHub != false,
                         remotePublishAttempted: () =>
                         {
                             ValidatePostBuildSourceState(request);
@@ -1216,8 +1221,18 @@ internal sealed partial class PowerForgeReleaseService
             request.ModulePublisherActive);
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
 
+        if (!ValidateBuiltReleaseOutputs(spec, request, builtResult, configDirectory, sharedReleaseVersion))
+            return builtResult;
+
         if (spec.AppleApps is not null)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.AppleApps))
+            {
+                return builtResult;
+            }
             request.CancellationToken.ThrowIfCancellationRequested();
             var appleResult = Execute(
                 spec,
@@ -1248,6 +1263,7 @@ internal sealed partial class PowerForgeReleaseService
                     PublishProjectGitHub = false,
                     PublishToolGitHub = false,
                     SubmitWinget = false,
+                    DeferAfterStagingValidation = true,
                     ResolvedReleaseVersion = sharedReleaseVersion,
                     CancellationToken = request.CancellationToken
                 });
@@ -1264,6 +1280,13 @@ internal sealed partial class PowerForgeReleaseService
 
         if (spec.Tools is not null && (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.Tools))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             request.CancellationToken.ThrowIfCancellationRequested();
             if (builtResult.DotNetToolPlan is not null && builtResult.DotNetTools is not null)
@@ -1297,6 +1320,13 @@ internal sealed partial class PowerForgeReleaseService
         var moduleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly;
         if (ShouldPublishUnifiedGitHub(spec, request, moduleSelected))
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.GitHub))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             request.CancellationToken.ThrowIfCancellationRequested();
             var unified = PublishUnifiedGitHubRelease(
@@ -1315,6 +1345,13 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        if (!ValidateReleaseValidationIntegrityBeforePublication(
+                request,
+                builtResult,
+                PowerForgeReleaseProgressPhase.Tools))
+        {
+            return builtResult;
+        }
         ValidatePostBuildSourceState(request);
         request.CancellationToken.ThrowIfCancellationRequested();
         SubmitWingetOutputs(spec, request, configDirectory, builtResult);
@@ -1324,6 +1361,13 @@ internal sealed partial class PowerForgeReleaseService
 
         if (publishVirusTotalMonitor)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.VirusTotal))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             if (!TryPublishVirusTotalMonitor(
                     spec,

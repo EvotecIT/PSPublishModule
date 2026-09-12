@@ -16,6 +16,8 @@ public sealed class ProjectBuildHostRequest
     /// <summary>Publish this completed checkpoint without planning, versioning, or rebuilding.</summary>
     internal ProjectBuildHostExecutionResult? PublicationCheckpoint { get; set; }
     internal PowerForgeReleaseAssetEntry[] PublicationAssets { get; set; } = Array.Empty<PowerForgeReleaseAssetEntry>();
+    /// <summary>Requires every checkpoint publication input to resolve to the validated staging set.</summary>
+    internal bool RequireStagedPublicationAssets { get; set; } = true;
 
     /// <summary>
     /// Cancels active project build and package child processes.

@@ -80,6 +80,10 @@ public sealed partial class ReleaseValidationService
             ValidatePatterns($"Package '{contract.Id}'", nameof(contract.ForbiddenEntries), contract.ForbiddenEntries);
             ValidatePatterns($"Package '{contract.Id}'", nameof(contract.SymbolEntries), contract.SymbolEntries);
             ValidatePatterns($"Package '{contract.Id}'", nameof(contract.ForbiddenSymbolEntries), contract.ForbiddenSymbolEntries);
+            ValidatePatterns($"Package '{contract.Id}'", nameof(contract.DependencyFrameworks), contract.DependencyFrameworks);
+            ValidatePatterns($"Package '{contract.Id}'", nameof(contract.RequiredDependencies), contract.RequiredDependencies);
+            ValidatePatterns($"Package '{contract.Id}'", nameof(contract.ForbiddenDependencies), contract.ForbiddenDependencies);
+            ValidatePatterns($"Package '{contract.Id}'", nameof(contract.RuntimeOnlyDependencies), contract.RuntimeOnlyDependencies);
         }
         var root = Resolve(spec.Path, variables);
         variables["PackageRoot"] = root;

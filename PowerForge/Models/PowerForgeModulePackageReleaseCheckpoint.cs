@@ -39,7 +39,7 @@ internal sealed class PowerForgeModulePackageReleaseCheckpoint
     public DotNetRepositoryReleaseResult Release { get; set; } = new();
 }
 
-/// <summary>Publication outcome for one module-owned NuGet package lane.</summary>
+/// <summary>Publication outcome for one module-owned package lane.</summary>
 internal sealed class PowerForgeModulePackagePublicationResult
 {
     public string Name { get; set; } = string.Empty;
@@ -55,4 +55,7 @@ internal sealed class PowerForgeModulePackagePublicationResult
     public string[] SkippedDuplicatePackages { get; set; } = Array.Empty<string>();
 
     public string[] FailedPackages { get; set; } = Array.Empty<string>();
+
+    /// <summary>GitHub releases published from this validated package checkpoint.</summary>
+    public ProjectBuildGitHubResult[] GitHubReleases { get; set; } = Array.Empty<ProjectBuildGitHubResult>();
 }

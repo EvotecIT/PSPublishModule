@@ -188,6 +188,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             ModuleRunMode = ConfigurationGateMode.Build,
             ModuleStagingPath = moduleStagingPath,
             CaptureModuleArtifactProvenance = true,
+            DeferAfterStagingValidation = true,
             ModuleNoSign = true,
             ModuleSkipInstall = true,
             EnableSigning = false,

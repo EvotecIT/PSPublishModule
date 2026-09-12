@@ -118,6 +118,29 @@ public sealed class ReleaseValidationAdmissionSchemaTests : IDisposable
     }
 
     [Theory]
+    [InlineData("DependencyFrameworks")]
+    [InlineData("RequiredDependencies")]
+    [InlineData("ForbiddenDependencies")]
+    [InlineData("RuntimeOnlyDependencies")]
+    public async Task Package_dependency_contracts_reject_blank_items_before_artifact_access(string property)
+    {
+        var package = new JsonObject { ["Id"] = "Example", [property] = new JsonArray(" ", "Example.Dependency") };
+        var document = new JsonObject { ["Packages"] = new JsonObject {
+            ["Path"] = "missing-packages", ["Items"] = new JsonArray(package) } };
+        Assert.False(LoadSchema().Evaluate(document).IsValid);
+
+        var contract = new PackageArtifactContract { Id = "Example" };
+        typeof(PackageArtifactContract).GetProperty(property)!.SetValue(contract, new[] { " ", "Example.Dependency" });
+        var report = await new ReleaseValidationService().RunAsync(new() {
+            Packages = new() { Path = "missing-packages", Items = [contract] }
+        }, request: new() { ProjectRoot = _root });
+
+        Assert.False(report.Success);
+        Assert.Contains(property, Assert.Single(report.Errors));
+        Assert.Empty(report.Checks);
+    }
+
+    [Theory]
     [InlineData("RequiredFiles")]
     [InlineData("VersionedAssemblies")]
     [InlineData("SignatureInclude")]

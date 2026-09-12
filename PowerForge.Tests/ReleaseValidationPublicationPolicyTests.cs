@@ -206,8 +206,9 @@ public sealed class ReleaseValidationPublicationPolicyTests : IDisposable
         Assert.Equal(moduleRoot, checkpoint.PublicationConfiguration.PublicationSpec.RootPath);
         WriteSources(Path.Combine(moduleRoot, "NuGet.Config"), redirectedFeed);
 
-        var result = Assert.Single(service.PublishNuGet(releaseConfig, spec, [checkpoint], releaseAssets: null,
-            requireStagedAssets: false, remotePublishAttempted: null, progress: null, CancellationToken.None));
+        var result = Assert.Single(service.Publish(releaseConfig, spec, [checkpoint], releaseAssets: null,
+            requireStagedAssets: false, publishNuget: true, publishGitHub: true,
+            remotePublishAttempted: null, progress: null, CancellationToken.None));
 
         Assert.True(result.Success, result.ErrorMessage);
         Assert.Equal(originalFeed, result.PublishSource);
