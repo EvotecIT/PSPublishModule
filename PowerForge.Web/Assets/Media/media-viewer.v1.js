@@ -14,7 +14,8 @@
   translations['Back to page'] = ['Wróć do strony', 'Retour à la page', 'Zurück zur Seite', 'Volver a la página'];
   translations['Image preview'] = ['Podgląd obrazu', 'Aperçu de l’image', 'Bildvorschau', 'Vista previa'];
   translations['Image gallery'] = ['Galeria obrazów', 'Galerie d’images', 'Bildergalerie', 'Galería de imágenes'];
-  let title, navigation;
+  translations['Display settings'] = ['Ustawienia wyświetlania', 'Options d’affichage', 'Anzeigeoptionen', 'Opciones de visualización'];
+  let title, navigation, settings, variantField;
   let dialog, stage, canvas, picture, caption, status, announcement, errorMessage, count, previous, next, original, variant, thumbnails, zoomValue, fitButton, actualButton;
   let items = [], index = 0, opener, scale = 1, fitMode = true, drag;
   const safeSource = value => {
@@ -86,6 +87,26 @@
     result.type = 'button'; result.textContent = translate(text); result.setAttribute('aria-label', translate(label));
     result.title = translate(label); result.addEventListener('click', action); return result;
   }
+  // Inline strokes keep controls consistent without an external icon dependency.
+  function icon(name) {
+    const paths = {
+      back: 'M19 12H5m6-6-6 6 6 6', next: 'M5 12h14m-6-6 6 6-6 6',
+      minus: 'M5 12h14', plus: 'M5 12h14M12 5v14',
+      fit: 'M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4',
+      external: 'M14 4h6v6m0-6L10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5',
+      settings: 'M4 7h9m4 0h3M4 17h3m4 0h9M13 4v6M7 14v6'
+    };
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.6'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+    const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', paths[name]); svg.append(path);
+    return svg;
+  }
+  function sizeFrame(image) {
+    dialog.style.setProperty('--pf-media-image-width', `${image.naturalWidth || 960}px`);
+    dialog.style.setProperty('--pf-media-image-height', `${image.naturalHeight || 640}px`);
+  }
   function create() {
     dialog = document.createElement('dialog'); dialog.className = 'pf-media-viewer';
     dialog.setAttribute('aria-label', translate('Image viewer'));
@@ -96,17 +117,25 @@
     navigation = document.createElement('div'); navigation.className = 'pf-media-viewer__navigation';
     const toolbar = document.createElement('div'); toolbar.className = 'pf-media-viewer__toolbar';
     const zoomControls = document.createElement('div'); zoomControls.className = 'pf-media-viewer__zoom';
+    settings = document.createElement('details'); settings.className = 'pf-media-viewer__settings';
+    const settingsToggle = document.createElement('summary'); settingsToggle.title = translate('Display settings');
+    settingsToggle.setAttribute('aria-label', translate('Display settings')); settingsToggle.append(icon('settings'));
     const appearance = document.createElement('div'); appearance.className = 'pf-media-viewer__appearance';
+    const settingsTitle = document.createElement('strong'); settingsTitle.textContent = translate('Display settings');
+    appearance.append(settingsTitle); settings.append(settingsToggle, appearance);
     previous = button(translate('Previous image'), '←', () => show(index - 1));
     next = button(translate('Next image'), '→', () => show(index + 1));
+    previous.replaceChildren(icon('back')); next.replaceChildren(icon('next'));
     count = document.createElement('span'); count.className = 'pf-media-viewer__count';
     const fit = button(translate('Fit image to window'), translate('Fit'), () => { fitMode = true; resize(); });
-    fitButton = fit;
+    fitButton = fit; fit.className = 'pf-media-viewer__fit';
+    const fitLabel = document.createElement('span'); fitLabel.textContent = translate('Fit'); fit.replaceChildren(icon('fit'), fitLabel);
     const actual = button(translate('Show image at actual size'), '1:1', () => zoom(1));
     actualButton = actual;
     zoomValue = document.createElement('span'); zoomValue.className = 'pf-media-viewer__zoom-value';
     const minus = button(translate('Zoom out'), '−', () => zoom(scale / 1.4));
     const plus = button(translate('Zoom in'), '+', () => zoom(scale * 1.4));
+    minus.replaceChildren(icon('minus')); plus.replaceChildren(icon('plus'));
     const background = document.createElement('select'); background.setAttribute('aria-label', translate('Image background'));
     for (const [value, label] of [['dark', translate('Dark')], ['light', translate('Light')], ['checkerboard', translate('Transparency')]]) {
       background.add(new Option(label, value));
@@ -114,14 +143,22 @@
     background.addEventListener('change', () => { stage.dataset.background = background.value; });
     variant = document.createElement('select'); variant.setAttribute('aria-label', translate('Image variant'));
     variant.addEventListener('change', load);
-    original = document.createElement('a'); original.textContent = translate('Open original');
+    original = document.createElement('a'); original.className = 'pf-media-viewer__original';
+    original.setAttribute('aria-label', translate('Open original'));
+    const originalLabel = document.createElement('span'); originalLabel.textContent = translate('Open original');
+    original.append(icon('external'), originalLabel);
     original.target = '_blank'; original.rel = 'noopener'; original.title = translate('Open original');
     const close = button('Back to page', 'Back to page', () => dialog.close()); close.className = 'pf-media-viewer__close';
+    close.prepend(icon('back'));
     navigation.append(previous, count, next);
     header.append(heading, navigation, close);
     zoomControls.append(minus, zoomValue, plus, fit, actual);
-    appearance.append(background, variant);
-    toolbar.append(zoomControls, appearance, original);
+    const backgroundField = document.createElement('label'); backgroundField.textContent = translate('Image background');
+    backgroundField.append(background);
+    variantField = document.createElement('label'); variantField.textContent = translate('Image variant'); variantField.append(variant);
+    appearance.append(backgroundField, variantField);
+    const actions = document.createElement('div'); actions.className = 'pf-media-viewer__actions'; actions.append(settings, original);
+    toolbar.append(zoomControls, actions);
     thumbnails = document.createElement('div'); thumbnails.className = 'pf-media-viewer__thumbnails';
     thumbnails.setAttribute('role', 'group'); thumbnails.setAttribute('aria-label', translate('Image viewer'));
     stage = document.createElement('div'); stage.className = 'pf-media-viewer__stage'; stage.tabIndex = 0;
@@ -130,7 +167,7 @@
     errorMessage.setAttribute('role', 'alert');
     canvas = document.createElement('div'); canvas.className = 'pf-media-viewer__canvas';
     picture = document.createElement('img'); picture.className = 'pf-media-viewer__image'; picture.draggable = false;
-    picture.addEventListener('load', () => { stage.dataset.loading = 'false'; picture.hidden = false; resize(); });
+    picture.addEventListener('load', () => { stage.dataset.loading = 'false'; picture.hidden = false; sizeFrame(picture); resize(); });
     picture.addEventListener('error', () => { stage.dataset.loading = 'false'; picture.hidden = true; status.textContent = ''; errorMessage.hidden = false; errorMessage.textContent = translate('Image could not be loaded. Use Open original to try the source.'); });
     canvas.append(picture, errorMessage); stage.append(canvas);
     const footer = document.createElement('div'); footer.className = 'pf-media-viewer__footer';
@@ -138,8 +175,15 @@
     status.className = 'pf-media-viewer__status'; status.setAttribute('role', 'status');
     announcement = document.createElement('p'); announcement.className = 'pf-media-viewer__announcement';
     announcement.setAttribute('role', 'status'); announcement.setAttribute('aria-atomic', 'true');
-    footer.append(thumbnails, toolbar, status, announcement); dialog.append(header, stage, footer); document.body.append(dialog);
-    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+    appearance.append(status);
+    footer.append(thumbnails, toolbar, announcement); dialog.append(header, stage, footer); document.body.append(dialog);
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog) dialog.close();
+      if (!settings.contains(event.target)) settings.open = false;
+    });
+    dialog.addEventListener('cancel', event => {
+      if (settings.open) { event.preventDefault(); settings.open = false; settingsToggle.focus(); }
+    });
     dialog.addEventListener('keydown', event => {
       if (event.target.closest('select, input, textarea') || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key === 'ArrowLeft' && items.length > 1 && event.target !== stage) { event.preventDefault(); show(index - 1); }
@@ -150,7 +194,7 @@
     dialog.addEventListener('close', () => {
       document.documentElement.classList.remove('pf-media-open');
       picture.removeAttribute('src'); picture.hidden = true; original.removeAttribute('href');
-      thumbnails.replaceChildren(); items = []; drag = null; opener?.focus({ preventScroll: true });
+      settings.open = false; thumbnails.replaceChildren(); items = []; drag = null; opener?.focus({ preventScroll: true });
     });
     stage.addEventListener('pointerdown', event => {
       if (event.pointerType !== 'mouse' || event.button !== 0) return;
@@ -208,7 +252,7 @@
     for (const [key, label] of [['pfMediaLight', translate('Light appearance')], ['pfMediaDark', translate('Dark appearance')], ['pfMediaMobile', translate('Mobile')], ['pfMediaDesktop', translate('Desktop')]]) {
       if (item.dataset[key] && safeSource(item.dataset[key])) variant.add(new Option(label, key));
     }
-    variant.hidden = variant.options.length === 1;
+    variantField.hidden = variant.hidden = variant.options.length === 1;
     Array.from(thumbnails.children).forEach((thumbnail, position) => thumbnail.setAttribute('aria-current', String(position === index)));
     const selected = thumbnails.children[index];
     if (selected && thumbnails.scrollWidth > thumbnails.clientWidth)
@@ -241,6 +285,7 @@
       image.src = safeSource(sourceImage.currentSrc || sourceImage.src) || source(entry);
       thumbnail.append(image); thumbnails.append(thumbnail);
     });
+    sizeFrame(item.querySelector('img'));
     dialog.showModal(); show(items.indexOf(item));
     dialog.querySelector('.pf-media-viewer__close').focus();
   });
