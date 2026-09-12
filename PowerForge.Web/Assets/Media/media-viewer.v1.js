@@ -28,7 +28,8 @@
   };
   function source(item) {
     const image = imageFor(item);
-    return safeSource(item.dataset.pfMediaSrc || item.getAttribute('href') || image?.currentSrc || image?.src);
+    const displayed = item.hasAttribute('data-pf-media-context') ? image?.currentSrc || image?.src : null;
+    return safeSource(item.dataset.pfMediaSrc || displayed || item.getAttribute('href') || image?.currentSrc || image?.src);
   }
   function eligible(item) {
     return item && !dialog?.contains(item) && imageFor(item) && item.dataset.pfMedia !== 'off' && !item.hasAttribute('download') && source(item);
