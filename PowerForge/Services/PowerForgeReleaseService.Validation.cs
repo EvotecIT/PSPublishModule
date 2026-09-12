@@ -24,6 +24,7 @@ internal sealed partial class PowerForgeReleaseService
                 throw new InvalidOperationException("Validation.AfterStaging actions require exactly one of FilePath or ConfigPath.");
             if (action.TimeoutSeconds <= 0)
                 throw new InvalidOperationException("Validation.AfterStaging action TimeoutSeconds must be greater than zero.");
+            PowerForgeReleaseValidationService.ValidateActionEnvironment(action.Environment);
             if (!string.IsNullOrWhiteSpace(action.ConfigPath) &&
                 (action.Environment.Count > 0 || !string.IsNullOrWhiteSpace(action.WorkingDirectory) || action.PreferWindowsPowerShell))
                 throw new InvalidOperationException("ConfigPath actions use the validation contract's command Environment, WorkingDirectory, and module Hosts; script process options cannot be applied to them.");

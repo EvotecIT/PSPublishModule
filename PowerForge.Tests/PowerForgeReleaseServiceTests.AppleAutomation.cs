@@ -537,7 +537,17 @@ public sealed partial class PowerForgeReleaseServiceTests
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
-            File.WriteAllText(Path.Combine(root, "metadata.json"), "{}");
+            File.WriteAllText(
+                Path.Combine(root, "metadata.json"),
+                """
+                {
+                  "appId": "6778025328",
+                  "versionString": "1.2.0",
+                  "platform": "iOS",
+                  "locale": "en-US",
+                  "metadata": {}
+                }
+                """);
             WriteScreenshotConfig(root, "screenshots.json", "6778025328", "1.2.0", "iOS", ".", qualityEnabled: false);
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.MetadataConfigPath = "metadata.json";
@@ -1566,7 +1576,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
         Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult>? submitAppleReview = null,
-        Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null)
+        Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null,
+        Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null)
         => new(
             new NullLogger(),
             executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
@@ -1591,7 +1602,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             notarizeAppleArtifact: notarizeAppleArtifact,
             planAppleGovernance: planAppleGovernance,
             submitAppleReview: submitAppleReview,
-            checkAppleReleaseReadiness: checkAppleReleaseReadiness);
+            checkAppleReleaseReadiness: checkAppleReleaseReadiness,
+            runReleaseValidation: runReleaseValidation);
 
     private static AppStoreConnectReleaseStateResult CreateReleaseState(
         AppStoreConnectReleaseStateRequest request,

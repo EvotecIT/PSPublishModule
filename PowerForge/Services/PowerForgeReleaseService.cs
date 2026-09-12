@@ -834,128 +834,38 @@ internal sealed partial class PowerForgeReleaseService
                 PowerForgeReleaseProgressPhase.Packages,
                 $"Version {request.ResolvedReleaseVersion}");
         }
-        if (applePlan is not null)
+        var deferConfiguredAppleMutation = applePlan is not null &&
+                                           !request.PlanOnly &&
+                                           !request.ValidateOnly &&
+                                           !request.CheckpointAppleApps &&
+                                           !explicitAppleAction &&
+                                           HasAfterStagingValidation(spec) &&
+                                           HasConfiguredAppleRemoteMutation(applePlan);
+        PowerForgeAppleAppReleaseResult[]? deferredAppleCheckpointResults = null;
+        string? deferredApplePlanSha256 = null;
+        var deferredAppleCheckpointStarted = false;
+        if (deferConfiguredAppleMutation && applePlan!.Archive)
         {
-            if (!request.PlanOnly &&
-                !request.ValidateOnly &&
-                (!request.CheckpointAppleApps || applePlan.Archive))
-            {
-                request.Progress?.PhaseStarted(
-                    PowerForgeReleaseProgressPhase.AppleApps,
-                    applePlan.Apps.Length,
-                    $"{applePlan.Action}: {applePlan.Apps.Length} Apple target(s)");
-                if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedAppleProgress)
-                {
-                    detailedAppleProgress.ItemsPlanned(
-                        PowerForgeReleaseProgressPhase.AppleApps,
-                        applePlan.Apps.Select((app, index) => new PowerForgeReleaseProgressItem
-                        {
-                            Phase = PowerForgeReleaseProgressPhase.AppleApps,
-                            Key = "apple:" + app.Name,
-                            Title = app.Name,
-                            Kind = applePlan.Action.ToString(),
-                            Target = app.Platform.ToString(),
-                            CounterLabel = "Target",
-                            Position = index + 1,
-                            Total = applePlan.Apps.Length
-                        }).ToArray());
-                }
-                using var operationLock = AppleReleaseOperationLock.Acquire(applePlan.LockPath, applePlan.Action);
-                var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
-                PowerForgeAppleAppReleaseResult[] appleResults;
-                PowerForgeAppleVersionReceipt? appleVersioning = null;
-                var receiptJournalReady = !applePlan.Automation.WriteReceipt;
-                try
-                {
-                    VerifyExpectedAppleCheckpointArchives(applePlan);
-                    var approvedPlan = AssertApplePlanStillApproved(applePlan, request.AppleExpectedPlanSha256);
-                    PrepareAppleReceiptJournalForMutation(applePlan, request.AppleExpectedPlanSha256);
-                    receiptJournalReady = true;
-                    if (applePlan.Action == PowerForgeAppleReleaseAction.Version)
-                    {
-                        AppleReleaseSourceSnapshot.ValidateCurrentSourceIfRequired(applePlan);
-                        appleVersioning = SelectAppleVersion(
-                            applePlan,
-                            approvedPlan?.Versioning ?? throw new InvalidOperationException(
-                                "Apple Version execution requires one approved remote version observation."));
-                        appleResults = RunAppleVersion(applePlan);
-                    }
-                    else if (applePlan.Action == PowerForgeAppleReleaseAction.Ship &&
-                             approvedPlan?.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint)
-                    {
-                        AppleReleaseSourceSnapshot.ValidateCurrentSourceIfRequired(applePlan);
-                        appleVersioning = SelectAppleVersion(
-                            applePlan,
-                            approvedPlan.Versioning ?? throw new InvalidOperationException(
-                                "Apple Ship version checkpoint requires one approved version plan."));
-                        appleResults = RunAppleVersion(applePlan);
-                    }
-                    else if (request.CheckpointAppleApps)
-                    {
-                        appleResults = RunAppleArchiveCheckpoint(applePlan, out cleanup);
-                    }
-                    else if (applePlan.Action == PowerForgeAppleReleaseAction.Cleanup)
-                    {
-                        cleanup = _appleArtifactService.RemoveStaleArtifacts(
-                            applePlan,
-                            GetProtectedAppleRecoveryArtifactPaths(applePlan));
-                        appleResults = applePlan.Apps
-                            .Select(app => new PowerForgeAppleAppReleaseResult
-                            {
-                                Plan = app,
-                                Success = true
-                            })
-                            .ToArray();
-                    }
-                    else
-                    {
-                        appleResults = RunAppleRelease(applePlan, out cleanup);
-                    }
-                }
-                catch (Exception exception)
-                {
-                    appleResults = applePlan.Apps
-                        .Select(app => new PowerForgeAppleAppReleaseResult
-                        {
-                            Plan = app,
-                            Success = false,
-                            ErrorMessage = exception.Message,
-                            RemoteState = exception is AppleBuildProcessingException processing
-                                ? processing.State
-                                : null
-                        })
-                        .ToArray();
-                }
-                result.AppleApps = appleResults;
-                if (request.CheckpointAppleApps && appleResults.All(static app => app.Success))
-                    result.AppleReceipt = CreateApplePlanReceipt(applePlan, appleResults);
-                if (receiptJournalReady &&
-                    !request.CheckpointAppleApps &&
-                    (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
-                     HasAppleExecutionMutation(applePlan) ||
-                     appleResults.Any(static app => !app.Success)))
-                    result.AppleReceipt ??= CompleteAppleReleaseReceipt(applePlan, appleResults, cleanup, appleVersioning);
+            deferredAppleCheckpointStarted = true;
+            if (!BeginDeferredAppleArchiveCheckpoint(applePlan, request, result))
+                return result;
 
-                if (result.AppleReceipt is { Success: false } failedReceipt)
-                {
-                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.AppleApps, failedReceipt.ErrorMessage);
-                    result.Success = false;
-                    result.ErrorMessage = failedReceipt.ErrorMessage ?? "Apple release diagnostics failed.";
-                    return result;
-                }
-
-                var failure = appleResults.FirstOrDefault(entry => !entry.Success);
-                if (failure is not null)
-                {
-                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.AppleApps, failure.ErrorMessage);
-                    result.Success = false;
-                    result.ErrorMessage = failure.ErrorMessage ?? $"Apple app release failed for '{failure.Plan.Name}'.";
-                    return result;
-                }
-                request.Progress?.PhaseCompleted(
-                    PowerForgeReleaseProgressPhase.AppleApps,
-                    $"{applePlan.Action} completed for {applePlan.Apps.Length} target(s)");
-            }
+            deferredAppleCheckpointResults = result.AppleApps;
+            deferredApplePlanSha256 = result.AppleReceipt?.PlanSha256 ?? throw new InvalidOperationException(
+                "The deferred Apple archive checkpoint did not produce an exact approved plan SHA-256.");
+        }
+        if (applePlan is not null &&
+            !request.PlanOnly &&
+            !request.ValidateOnly &&
+            (!request.CheckpointAppleApps || applePlan.Archive) &&
+            !deferConfiguredAppleMutation &&
+            !ExecuteAppleReleasePlan(
+                applePlan,
+                request,
+                result,
+                checkpointAppleApps: request.CheckpointAppleApps || deferConfiguredAppleMutation))
+        {
+            return result;
         }
 
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
@@ -976,8 +886,27 @@ internal sealed partial class PowerForgeReleaseService
                     packagesSelected: runPackages || result.ModulePlan?.IncludesProjectPackages == true,
                     toolsSelected: willRunTools))
             {
+                if (deferredAppleCheckpointStarted)
+                {
+                    request.Progress?.PhaseFailed(
+                        PowerForgeReleaseProgressPhase.AppleApps,
+                        "Remote Apple mutation was blocked because staged-release validation failed.");
+                }
                 return result;
             }
+        }
+
+        if (deferConfiguredAppleMutation &&
+            !ExecuteAppleReleasePlan(
+                applePlan!,
+                request,
+                result,
+                checkpointAppleApps: false,
+                expectedPlanSha256: deferredApplePlanSha256,
+                checkpointResults: deferredAppleCheckpointResults,
+                startProgress: !deferredAppleCheckpointStarted))
+        {
+            return result;
         }
 
         if (runPackages && HasAfterStagingValidation(spec) && !request.PlanOnly && !request.ValidateOnly &&

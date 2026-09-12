@@ -24,6 +24,7 @@ internal sealed class PowerForgeReleaseValidationService
         if (string.IsNullOrWhiteSpace(action.FilePath) == string.IsNullOrWhiteSpace(action.ConfigPath))
             throw new InvalidOperationException("A staged-release validation action requires exactly one of FilePath or ConfigPath.");
         if (action.TimeoutSeconds <= 0) throw new InvalidOperationException("A staged-release validation action TimeoutSeconds must be greater than zero.");
+        ValidateActionEnvironment(action.Environment);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(action.TimeoutSeconds));
         try
@@ -37,6 +38,19 @@ internal sealed class PowerForgeReleaseValidationService
                 Name = string.IsNullOrWhiteSpace(action.Name) ? Path.GetFileNameWithoutExtension(path) : action.Name!.Trim(),
                 FilePath = path, ExitCode = -1, TimedOut = true
             };
+        }
+    }
+
+    internal static void ValidateActionEnvironment(IReadOnlyDictionary<string, string?> environment)
+    {
+        foreach (var variable in environment)
+        {
+            if (string.IsNullOrEmpty(variable.Key) || variable.Key.IndexOfAny(new[] { '=', '\0' }) >= 0)
+                throw new InvalidOperationException(
+                    "Validation.AfterStaging environment variable names must be nonempty and contain neither '=' nor NUL.");
+            if (variable.Value is not null && variable.Value.IndexOf('\0') >= 0)
+                throw new InvalidOperationException(
+                    $"Validation.AfterStaging environment variable '{variable.Key}' cannot contain a NUL value.");
         }
     }
 

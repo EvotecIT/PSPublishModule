@@ -125,7 +125,11 @@
               "WorkingDirectory": { "type": [ "string", "null" ] },
               "Environment": {
                 "type": "object",
-                "additionalProperties": { "type": [ "string", "null" ] }
+                "propertyNames": { "minLength": 1, "not": { "pattern": "[=\u0000]" } },
+                "additionalProperties": {
+                  "type": [ "string", "null" ],
+                  "not": { "type": "string", "pattern": "\u0000" }
+                }
               },
               "TimeoutSeconds": { "type": "integer", "minimum": 1 },
               "PreferWindowsPowerShell": { "type": "boolean" }
