@@ -1,11 +1,24 @@
 using PowerForge;
+using PowerForge.Cli;
+using System.Text.Json;
 
 internal static partial class Program
 {
     private static int CommandValidateRelease(string[] args, ILogger logger)
     {
         const string usage = "Usage: powerforge validate-release --config <validation.json> [--project-root <path>] [--version <version>] [--variable <Name=Value>] [--output json]";
-        if (args.Any(value => value is "--help" or "-h")) { Console.WriteLine(usage); return 0; }
+        if (args.Any(value => value.Equals("--help", StringComparison.OrdinalIgnoreCase) || value.Equals("-h", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (IsJsonOutput(args)) {
+                WriteJson(new CliJsonEnvelope {
+                    SchemaVersion = OutputSchemaVersion, Command = "validate-release", Success = true, ExitCode = 0,
+                    Result = JsonSerializer.SerializeToElement(new { usage })
+                });
+            } else {
+                Console.WriteLine(usage);
+            }
+            return 0;
+        }
         using var cancellation = new CancellationTokenSource();
         ConsoleCancelEventHandler handler = (_, value) => { value.Cancel = true; cancellation.Cancel(); };
         Console.CancelKeyPress += handler;

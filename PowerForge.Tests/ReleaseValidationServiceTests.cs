@@ -397,7 +397,7 @@ public sealed class ReleaseValidationServiceTests : IDisposable
 
         var report = await Run(spec, runner);
 
-        Assert.Equal(!corruptRestoredPackage, report.Success);
+        Assert.True(report.Success == !corruptRestoredPackage, string.Join("; ", report.Errors));
         Assert.Equal(corruptRestoredPackage ? 1 : 2, runner.Requests.Count);
         if (corruptRestoredPackage) Assert.Contains("exact staged", Assert.Single(report.Errors));
         Assert.NotNull(workspace);

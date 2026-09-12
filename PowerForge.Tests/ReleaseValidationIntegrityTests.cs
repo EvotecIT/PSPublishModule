@@ -19,7 +19,10 @@ public sealed class ReleaseValidationIntegrityTests : IDisposable
     [InlineData("delete", true)]
     [InlineData("unchanged", true)]
     [InlineData("report", true)]
-    public void Successful_command_cannot_change_release_inputs_before_publication(string mutation, bool unified)
+    [InlineData("missing-probe", true)]
+    [InlineData("missing-probe", false)]
+    [InlineData("real-nonzero", false)]
+    public void Command_validation_must_run_and_preserve_release_inputs_before_publication(string mutation, bool unified)
     {
         var config = Payload("release.json", "{\"Tools\":{\"DotNetPublishConfigPath\":\"publish.json\"}}");
         var publishConfig = Payload("publish.json", "{}");
@@ -54,9 +57,21 @@ public sealed class ReleaseValidationIntegrityTests : IDisposable
                 Category = DotNetPublishArtefactCategory.Publish, Target = "app", Framework = "net10.0",
                 Runtime = "win-x64", Style = DotNetPublishStyle.Portable,
                 ZipPath = mutation == "alternate" ? alternate : artifact,
-                ExePath = mutation == "alternate" ? executable : null
+                ExePath = mutation is "alternate" or "missing-probe" or "real-nonzero" ? executable : null
             }, new() { Category = DotNetPublishArtefactCategory.Installer, Target = "app", OutputFiles = [nativeOutput] }] },
             runReleaseValidation: (action, context, directory, token) => {
+                if (mutation is "missing-probe" or "real-nonzero") {
+                    File.WriteAllText(validationPath, ReleaseValidationService.Serialize(new() {
+                        Commands = [new() {
+                            FileName = mutation == "missing-probe" ? Path.Combine(_root, "missing-executable") :
+                                OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sh",
+                            Arguments = mutation == "missing-probe" ? [] :
+                                OperatingSystem.IsWindows() ? ["/d", "/c", "exit 127"] : ["-c", "exit 127"],
+                            ExpectedExitCode = null
+                        }]
+                    }));
+                    return probeResult = new PowerForgeReleaseValidationService(new NullLogger()).Run(action, context, directory, token);
+                }
                 if (mutation == "real-staged") {
                     var path = Assert.Single(context.AssetEntries, entry => entry.Category == PowerForgeReleaseAssetCategory.Tool).StagedPath!;
                     var script = Payload("modify.ps1", $"[IO.File]::WriteAllText('{path.Replace("'", "''")}', 'modified')");
@@ -98,15 +113,23 @@ public sealed class ReleaseValidationIntegrityTests : IDisposable
             Validation = new() { AfterStaging = [new() { ConfigPath = validationPath }] }
         }, new() { ConfigPath = config, ToolsOnly = !unified, StageRoot = Path.Combine(_root, "stage") });
 
-        var valid = mutation is "unchanged" or "report";
+        var valid = mutation is "unchanged" or "report" or "real-nonzero";
         Assert.NotNull(probeResult);
-        Assert.True(probeResult.Succeeded, probeResult.StdErr);
+        if (mutation == "missing-probe") {
+            Assert.Contains("start failed: True", probeResult.StdErr, StringComparison.OrdinalIgnoreCase);
+        }
+        Assert.True(probeResult.Succeeded == (mutation != "missing-probe"), probeResult.StdErr);
         Assert.True(result.Success == valid, result.ErrorMessage);
-        Assert.Equal(mutation == "real-staged" ? 0 : 1, runner.Calls);
+        Assert.Equal(mutation is "real-staged" or "missing-probe" or "real-nonzero" ? 0 : 1, runner.Calls);
         Assert.Equal(valid, Assert.Single(result.ReleaseValidations).Succeeded);
         if (valid) {
             var publication = Assert.Single(published);
-            Assert.Contains(publication.AssetFilePaths, path => File.ReadAllBytes(path).SequenceEqual(originalBytes));
+            if (mutation == "real-nonzero") {
+                Assert.NotEmpty(publication.AssetFilePaths);
+                Assert.All(publication.AssetFilePaths, path => Assert.True(File.Exists(path)));
+            } else {
+                Assert.Contains(publication.AssetFilePaths, path => File.ReadAllBytes(path).SequenceEqual(originalBytes));
+            }
         } else {
             Assert.Empty(published);
             Assert.False(string.IsNullOrWhiteSpace(result.ErrorMessage));

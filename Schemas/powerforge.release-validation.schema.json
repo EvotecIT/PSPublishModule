@@ -135,7 +135,7 @@
             "null"
           ],
           "default": 0,
-          "description": "Null permits product-specific exit-code interpretation. Timeouts and output limits still fail."
+          "description": "Null permits product-specific interpretation of genuine child exit codes. Startup failures, timeouts, and output limits still fail."
         },
         "ExpectedOutput": {
           "anyOf": [

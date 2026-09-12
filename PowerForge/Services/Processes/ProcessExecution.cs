@@ -9,6 +9,7 @@ internal abstract class ProcessExecution : IDisposable
 {
     protected ProcessExecution(ProcessStartInfo startInfo) => StartInfo = startInfo;
     internal ProcessStartInfo StartInfo { get; }
+    internal bool RequireDirectStart { get; set; }
     internal abstract int Id { get; }
     internal abstract bool HasExited { get; }
     internal abstract int ExitCode { get; }

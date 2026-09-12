@@ -199,6 +199,9 @@ public sealed class ProcessRunRequest
     /// <summary>Maximum characters retained independently for standard output and standard error.</summary>
     public int MaxCapturedOutputCharacters { get; set; } = int.MaxValue;
 
+    /// <summary>Require the launcher to report failure to start the requested executable, without an intervening shell launcher.</summary>
+    public bool RequireDirectStart { get; set; }
+
     /// <summary>Optional callback invoked for each captured standard-output line.</summary>
     /// <remarks>Callbacks must return promptly. Shutdown waits for in-flight callbacks before returning captured output.</remarks>
     public Action<string>? OutputLineReceived { get; }
@@ -286,83 +289,6 @@ public sealed class ProcessRunRequest
     }
 }
 
-/// <summary>
-/// Result of executing an external process.
-/// </summary>
-public sealed class ProcessRunResult
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ProcessRunResult"/> class.
-    /// </summary>
-    /// <param name="exitCode">Process exit code.</param>
-    /// <param name="stdOut">Captured standard output.</param>
-    /// <param name="stdErr">Captured standard error.</param>
-    /// <param name="executable">Executable name or path used to launch the process.</param>
-    /// <param name="duration">Observed process duration.</param>
-    /// <param name="timedOut">Indicates whether the process timed out.</param>
-    /// <param name="standardOutputLimitExceeded">Whether retained standard output exceeded its configured character limit.</param>
-    /// <param name="standardErrorLimitExceeded">Whether retained standard error exceeded its configured character limit.</param>
-    public ProcessRunResult(
-        int exitCode,
-        string stdOut,
-        string stdErr,
-        string executable,
-        TimeSpan duration,
-        bool timedOut,
-        bool standardOutputLimitExceeded = false,
-        bool standardErrorLimitExceeded = false)
-    {
-        ExitCode = exitCode;
-        StdOut = stdOut;
-        StdErr = stdErr;
-        Executable = executable;
-        Duration = duration;
-        TimedOut = timedOut;
-        StandardOutputLimitExceeded = standardOutputLimitExceeded;
-        StandardErrorLimitExceeded = standardErrorLimitExceeded;
-    }
-
-    /// <summary>
-    /// Gets the process exit code.
-    /// </summary>
-    public int ExitCode { get; }
-
-    /// <summary>
-    /// Gets captured standard output.
-    /// </summary>
-    public string StdOut { get; }
-
-    /// <summary>
-    /// Gets captured standard error.
-    /// </summary>
-    public string StdErr { get; }
-
-    /// <summary>
-    /// Gets the executable name or path used to launch the process.
-    /// </summary>
-    public string Executable { get; }
-
-    /// <summary>
-    /// Gets the observed process duration.
-    /// </summary>
-    public TimeSpan Duration { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the process timed out.
-    /// </summary>
-    public bool TimedOut { get; }
-
-    /// <summary>Whether standard output exceeded the configured retained-character limit.</summary>
-    public bool StandardOutputLimitExceeded { get; }
-
-    /// <summary>Whether standard error exceeded the configured retained-character limit.</summary>
-    public bool StandardErrorLimitExceeded { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the process completed successfully.
-    /// </summary>
-    public bool Succeeded => ExitCode == 0 && !TimedOut && !StandardOutputLimitExceeded && !StandardErrorLimitExceeded;
-}
 
 /// <summary>
 /// Executes external processes with structured request/response contracts.
@@ -384,6 +310,8 @@ public interface IProcessRunner
     /// <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
     /// after the process exits and the final result is constructed, before returning from this method
     /// or performing any post-exit mutation of producer outputs.
+    /// Results for startup failures must set <see cref="ProcessRunResult.StartFailed"/> rather than
+    /// representing them only with a synthetic exit code.
     /// </remarks>
     Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default);
 }
@@ -418,6 +346,7 @@ public sealed partial class ProcessRunner : IProcessRunner
         cancellationToken.ThrowIfCancellationRequested();
 
         using var process = ProcessExecution.Create(BuildStartInfo(request), _ownProcessTree);
+        process.RequireDirectStart = request.RequireDirectStart;
 
         request.InvokePreStartBoundary();
         var stopwatch = Stopwatch.StartNew();
@@ -440,7 +369,7 @@ public sealed partial class ProcessRunner : IProcessRunner
                 boundaryTimedOut ? "Timeout" : ex.Message,
                 request.FileName,
                 stopwatch.Elapsed,
-                boundaryTimedOut);
+                boundaryTimedOut, standardOutputLimitExceeded: false, standardErrorLimitExceeded: false, startFailed: true);
             request.InvokeCompletionBoundary(failedStart);
             return failedStart;
         }

@@ -13,7 +13,7 @@ public sealed class ReleaseCommandValidation
     public string? WorkingDirectory { get; set; }
     /// <summary>Maximum runtime in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 300;
-    /// <summary>Expected process exit code; null leaves exit-code interpretation to a product probe. Timeouts and output limits still fail.</summary>
+    /// <summary>Expected process exit code; null leaves genuine child exit-code interpretation to a product probe. Startup failures, timeouts, and output limits still fail.</summary>
     public int? ExpectedExitCode { get; set; } = 0;
     /// <summary>Optional exact trimmed standard output.</summary>
     public string? ExpectedOutput { get; set; }

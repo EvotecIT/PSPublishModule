@@ -101,9 +101,9 @@ public sealed partial class ReleaseValidationService
             workingDirectory, command.Arguments.Select(Value).ToArray(),
             TimeSpan.FromSeconds(command.TimeoutSeconds), environment), cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if (result.TimedOut || result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded ||
+        if (result.StartFailed || result.TimedOut || result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded ||
             (command.ExpectedExitCode.HasValue && result.ExitCode != command.ExpectedExitCode.Value))
-            throw new InvalidOperationException($"{command.Name} failed (exit {result.ExitCode}, timed out: {result.TimedOut}, output limit exceeded: {result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded}).\n{result.StdErr}\n{result.StdOut}");
+            throw new InvalidOperationException($"{command.Name} failed (exit {result.ExitCode}, start failed: {result.StartFailed}, timed out: {result.TimedOut}, output limit exceeded: {result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded}).\n{result.StdErr}\n{result.StdOut}");
         if (command.ExpectedOutput is not null && !string.Equals(result.StdOut.Trim(), Value(command.ExpectedOutput), StringComparison.Ordinal))
             throw new InvalidOperationException($"{command.Name}: standard output did not match the expected value.");
         foreach (var text in command.OutputContains)

@@ -74,7 +74,7 @@ $diagnostics = $probe.StdOut | ConvertFrom-Json
 if ($diagnostics.pendingWrites -gt 0) { throw 'The product has unfinished writes.' }
 ```
 
-The expected exit code defaults to zero. Set `ExpectedExitCode = $null` only when the product intentionally interprets nonzero exit codes itself, such as a licensed feature being unavailable. Timeout, cancellation, and output limits still apply. The result exposes `ExitCode`, `StdOut`, and `StdErr` separately; ordering between the two streams is not guaranteed.
+The expected exit code defaults to zero. Set `ExpectedExitCode = $null` only when the product intentionally interprets nonzero exit codes itself, such as a licensed feature being unavailable. Startup failures, timeouts, cancellation, and output limits still fail validation. Disabling the exit-code check never permits a missing executable or an invalid working directory. The result exposes `ExitCode`, `StdOut`, and `StdErr` separately; ordering between the two streams is not guaranteed.
 
 Command `Platforms` accepts `Windows`, `Linux`, and `OSX`, case-insensitively. An empty list runs on every platform. Unknown or empty names fail validation instead of silently skipping the probe.
 
@@ -86,7 +86,7 @@ Every validation process retains at most 1,048,576 characters per output stream.
 
 Validation probes run in an owned Windows job or a process group on 64-bit Linux/macOS. PowerForge terminates remaining processes in that scope when a probe returns, times out, or is cancelled, even if the original process has already exited. Output captured before the boundary includes unfinished lines. On Unix, a program can deliberately leave the group by creating another group or session; process ownership is a cleanup mechanism, not a security sandbox.
 
-On Linux systems whose C library lacks the spawn working-directory extension, launch uses `/bin/sh` to change the child directory and replace itself with the probe. Arguments remain separate literal values, and the process-group identity is preserved. This fallback requires `/bin/sh` and follows that shell's standard environment initialization.
+On Linux, release validation requires the C library's `posix_spawn_file_actions_addchdir_np` extension. Hosts without it fail before starting a probe; upgrade libc or use a supported validation host. The general-purpose process runner retains its older-Linux shell fallback, but release validation cannot use it because a shell exit code does not prove that the requested executable started.
 
 PowerShell can also author the complete contract with `New-ConfigurationReleaseValidation` inside `Invoke-ReleaseValidation -Settings { ... }`. Use `-JsonOnly -JsonPath` to export it without running probes.
 

@@ -14,6 +14,7 @@ internal sealed partial class UnixOwnedProcessExecution : OwnedProcessExecution
     private bool _exited;
     private int _exitCode;
     private bool _terminationRequested;
+    internal Action<IntPtr, string>? ConfigureWorkingDirectory { get; set; }
     internal UnixOwnedProcessExecution(ProcessStartInfo startInfo) : base(startInfo)
     {
         if (IntPtr.Size != 8 || (!_mac && !RuntimeInformation.IsOSPlatform(OSPlatform.Linux)))
@@ -67,10 +68,13 @@ internal sealed partial class UnixOwnedProcessExecution : OwnedProcessExecution
             var command = new[] { StartInfo.FileName }.Concat(ReadArguments());
             try
             {
-                Check(SpawnActionsChangeDirectory(actions, StartInfo.WorkingDirectory), "posix_spawn_file_actions_addchdir_np");
+                if (ConfigureWorkingDirectory is not null) ConfigureWorkingDirectory(actions, StartInfo.WorkingDirectory);
+                else Check(SpawnActionsChangeDirectory(actions, StartInfo.WorkingDirectory), "posix_spawn_file_actions_addchdir_np");
             }
             catch (EntryPointNotFoundException) when (!_mac)
             {
+                if (RequireDirectStart)
+                    throw new PlatformNotSupportedException("Release validation requires libc support for posix_spawn_file_actions_addchdir_np to verify that the requested executable starts. Upgrade libc or run validation on a supported host.");
                 // Older glibc has no spawn chdir extension. POSIX sh changes only
                 // the child's directory, then exec retains the owned group leader.
                 // Values are positional arguments, never interpolated shell code.

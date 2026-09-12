@@ -12,6 +12,7 @@ internal sealed class ReleaseValidationProcessRunner : IProcessRunner
     public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
     {
         request.MaxCapturedOutputCharacters = Math.Min(request.MaxCapturedOutputCharacters, MaximumCapturedCharacters);
+        request.RequireDirectStart = true;
         return _inner.RunAsync(request, cancellationToken);
     }
 }

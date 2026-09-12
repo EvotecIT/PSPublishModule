@@ -8,6 +8,36 @@ public sealed class ReleaseValidationCliJsonRegressionTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "PowerForge.CliJsonRegression", Guid.NewGuid().ToString("N"));
     public ReleaseValidationCliJsonRegressionTests() => Directory.CreateDirectory(_root);
 
+    [Theory]
+    [InlineData("--help", "--output", true)]
+    [InlineData("--help", "--json", true)]
+    [InlineData("-h", "--output-json", true)]
+    [InlineData("--HELP", "--json", true)]
+    [InlineData("--help", "", false)]
+    [InlineData("-h", "--output", false)]
+    public async Task Help_honors_the_requested_output_format_without_loading_configuration(string help, string format, bool json)
+    {
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+        var cli = Path.Combine(FindRepository(), "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
+        var arguments = new List<string> { cli, "validate-release", help, "--config", Path.Combine(_root, "not-created.json") };
+        if (format.Length > 0) arguments.Add(format);
+        if (format == "--output") arguments.Add(json ? "json" : "text");
+        var result = await new ProcessRunner(ownProcessTree: true).RunAsync(
+            new("dotnet", _root, arguments, TimeSpan.FromSeconds(30)));
+        Assert.True(result.Succeeded, result.StdErr);
+        Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+        if (json) {
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.Equal(1, document.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("validate-release", document.RootElement.GetProperty("command").GetString());
+            Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+            Assert.Equal(0, document.RootElement.GetProperty("exitCode").GetInt32());
+            Assert.StartsWith("Usage: powerforge validate-release", document.RootElement.GetProperty("result").GetProperty("usage").GetString());
+        } else {
+            Assert.StartsWith("Usage: powerforge validate-release", result.StdOut);
+        }
+    }
+
     [ReleaseValidationLinuxFact]
     public async Task Json_output_reports_caller_cancellation_with_exit_130()
     {
