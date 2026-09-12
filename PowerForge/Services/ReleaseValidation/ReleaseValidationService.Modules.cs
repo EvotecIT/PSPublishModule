@@ -9,6 +9,10 @@ public sealed partial class ReleaseValidationService
     private async Task ValidateModuleAsync(ModuleArtifactValidation spec, Dictionary<string, string> variables,
         ReleaseValidationReport report, bool inferCommonVersion, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(spec.Manifest))
+        {
+            throw new InvalidOperationException("Module validation requires a nonblank manifest path.");
+        }
         if (spec.ProbeScript is not null && (spec.Hosts is null || spec.Hosts.Length == 0 ||
             spec.Hosts.Any(string.IsNullOrWhiteSpace)))
         {

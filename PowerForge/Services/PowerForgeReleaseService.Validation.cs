@@ -61,6 +61,8 @@ internal sealed partial class PowerForgeReleaseService
             actions.Length,
             "Validating the complete staged release");
         var validationResults = new List<PowerForgeReleaseValidationResult>(actions.Length);
+        var integrityPaths = GetValidationIntegrityPaths(result);
+        Dictionary<string, string>? integrity = null;
         foreach (var action in actions)
         {
             request.CancellationToken.ThrowIfCancellationRequested();
@@ -91,11 +93,27 @@ internal sealed partial class PowerForgeReleaseService
                     .Distinct(PathComparer)
                     .ToArray()
             };
-            var validation = _runReleaseValidation(
-                action,
-                context,
-                configurationDirectory,
-                request.CancellationToken);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(request.CancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(action.TimeoutSeconds));
+            PowerForgeReleaseValidationResult validation;
+            try
+            {
+                integrity ??= CaptureValidationIntegrity(integrityPaths, timeout.Token);
+                validation = _runReleaseValidation(action, context, configurationDirectory, timeout.Token);
+                if (validation.Succeeded)
+                {
+                    ValidateIntegrityUnchanged(integrityPaths, integrity, timeout.Token);
+                }
+            }
+            catch (Exception exception) when (!request.CancellationToken.IsCancellationRequested)
+            {
+                validation = new PowerForgeReleaseValidationResult
+                {
+                    Name = action.Name ?? "Release validation", ExitCode = 1,
+                    StdErr = exception.Message, TimedOut = timeout.IsCancellationRequested
+                };
+            }
+            request.CancellationToken.ThrowIfCancellationRequested();
             validationResults.Add(validation);
             result.ReleaseValidations = validationResults.ToArray();
             if (validation.Succeeded)

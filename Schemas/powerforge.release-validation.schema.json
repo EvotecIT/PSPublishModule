@@ -329,7 +329,8 @@
           "type": "string"
         },
         "Manifest": {
-          "type": "string"
+          "type": "string",
+          "pattern": "\\S"
         },
         "RequiredFiles": {
           "type": "array",

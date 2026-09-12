@@ -132,6 +132,24 @@ public sealed class ReleaseValidationMatrixAdmissionTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData(" \t\r\n", false)]
+    [InlineData("Fixture.psd1", true)]
+    public async Task Module_manifest_admission_matches_runtime(string? manifest, bool valid)
+    {
+        File.WriteAllText(Path.Combine(_root, "Fixture.psd1"), "@{ ModuleVersion = '1.2.3' }");
+        var module = new JsonObject { ["Path"] = _root, ["Manifest"] = manifest };
+        Assert.Equal(valid, Evaluate("powerforge.release-validation.schema.json",
+            new JsonObject { ["Modules"] = new JsonArray(module) }));
+        var report = await new ReleaseValidationService().RunAsync(new() {
+            Modules = [new() { Path = _root, Manifest = manifest! }]
+        });
+        Assert.Equal(valid, report.Success);
+        if (!valid) { Assert.Contains("nonblank manifest", Assert.Single(report.Errors)); }
+    }
+
     private static void AddJson(JsonObject target, string property, string? json)
     {
         if (json is not null) { target[property] = JsonNode.Parse(json); }

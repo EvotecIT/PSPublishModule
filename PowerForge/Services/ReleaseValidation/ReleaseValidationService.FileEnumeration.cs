@@ -3,7 +3,7 @@ namespace PowerForge;
 public sealed partial class ReleaseValidationService
 {
     // Enumerate one directory at a time so cancellation also applies to large trees of empty directories.
-    private static IEnumerable<string> EnumerateValidationFiles(string root, CancellationToken cancellationToken)
+    internal static IEnumerable<string> EnumerateValidationFiles(string root, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         FileSystemPathSafety.RejectReparsePoints(root, root, "Validation directory");
