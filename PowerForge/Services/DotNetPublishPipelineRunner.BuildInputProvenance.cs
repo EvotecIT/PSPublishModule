@@ -447,6 +447,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             string evaluationKey = entry.Key;
             ProjectEvaluationRequest request = entry.Value;
+            string? graphFailureReason = null;
             // Only release roots are publish surfaces. Referenced projects are rebuilt and
             // attested through the frozen graph using their own project-reference context.
             if (!request.IsEvaluationScopeRoot)
@@ -458,12 +459,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluationsByEvaluation,
                     pathMapsByEvaluation,
                     out ControlledPublishGraphNode[] graphNodes,
-                    out string[] graphEvaluationKeys))
+                    out string[] graphEvaluationKeys,
+                    out graphFailureReason))
             {
                 if (!string.IsNullOrWhiteSpace(request.TargetFramework))
                 {
                     projectDirectories = directories.ToArray();
-                    failureReason = $"MSBuild input evaluation failed: the frozen project-reference graph could not be resolved for '{request.ProjectPath}' ({request.TargetFramework}).";
+                    failureReason = $"MSBuild input evaluation failed: the frozen project-reference graph could not be resolved for '{request.ProjectPath}' ({request.TargetFramework})" +
+                        (string.IsNullOrWhiteSpace(graphFailureReason) ? "." : $": {graphFailureReason}");
                     return false;
                 }
                 continue;
@@ -618,17 +621,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
 
             ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
+            evaluationsByEvaluation.TryGetValue(
+                request.BuildVisitKey(),
+                out EvaluatedProjectInputs? parentEvaluation);
             if (!TryResolveProjectEvaluationKey(
                     referencedProject,
                     request.TargetFramework,
+                    parentEvaluation?.TargetPlatformVersion,
                     requestsByEvaluation,
                     evaluationsByEvaluation,
                     out string referencedProjectKey) &&
-                (!evaluationsByEvaluation.TryGetValue(
-                     request.BuildVisitKey(),
-                     out EvaluatedProjectInputs? parentEvaluation) ||
+                (parentEvaluation is null ||
                  !TryResolveGeneratedProjectReferenceEvaluationKey(
                      request,
+                     parentEvaluation.TargetPlatformVersion,
                      output.ProjectReference,
                      parentEvaluation.ProjectReferences,
                      requestsByEvaluation,
@@ -1021,6 +1027,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-verbosity:quiet",
             "-getProperty:TargetFramework",
             "-getProperty:TargetFrameworks",
+            "-getProperty:TargetPlatformVersion",
             "-getProperty:MSBuildAllProjects",
             "-getProperty:BaseOutputPath",
             "-getProperty:OutputPath",
@@ -1545,6 +1552,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 sourceInputs.ToArray(),
                 references.Values.ToArray(),
                 targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray(),
+                ReadItemText(properties, "TargetPlatformVersion"),
                 outputRoots.ToArray(),
                 expectedOutputPaths.ToArray(),
                 intermediateRoot,

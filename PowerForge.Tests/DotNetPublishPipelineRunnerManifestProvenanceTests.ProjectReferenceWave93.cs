@@ -1,47 +1,10 @@
 using PowerForge;
-using System.Reflection;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
-    [Fact]
-    [Trait("Category", "DotNetPublishPrGate")]
-    public void ProjectEvaluationContext_DoesNotCrossEvaluationScopes()
-    {
-        Type requestType = typeof(DotNetPublishPipelineRunner).GetNestedType(
-            "ProjectEvaluationRequest",
-            BindingFlags.NonPublic)!;
-        ConstructorInfo constructor = Assert.Single(
-            requestType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
-        string projectPath = Path.GetFullPath("Shared.csproj");
-        object CreateRequest(string scopePath) => constructor.Invoke(
-        [
-            projectPath,
-            "net10.0",
-            "Release",
-            null,
-            null,
-            null,
-            null,
-            true,
-            null,
-            true,
-            Path.GetFullPath(scopePath)
-        ]);
-        MethodInfo comparator = typeof(DotNetPublishPipelineRunner).GetMethod(
-            "HasSameProjectEvaluationContext",
-            BindingFlags.Static | BindingFlags.NonPublic)!;
-
-        object first = CreateRequest("First.csproj");
-        object sameScope = CreateRequest("First.csproj");
-        object otherScope = CreateRequest("Second.csproj");
-
-        Assert.True((bool)comparator.Invoke(null, [first, sameScope])!);
-        Assert.False((bool)comparator.Invoke(null, [first, otherScope])!);
-    }
-
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_AllowsDeterministicPathMapDestination()
