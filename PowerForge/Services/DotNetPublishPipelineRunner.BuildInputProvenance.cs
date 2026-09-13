@@ -446,6 +446,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             string evaluationKey = entry.Key;
             ProjectEvaluationRequest request = entry.Value;
+            string? graphFailureReason = null;
             // Only release roots are publish surfaces. Referenced projects are rebuilt and
             // attested through the frozen graph using their own project-reference context.
             if (!rootProjectPaths.Contains(Path.GetFullPath(request.ProjectPath)))
@@ -457,12 +458,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluationsByEvaluation,
                     pathMapsByEvaluation,
                     out ControlledPublishGraphNode[] graphNodes,
-                    out string[] graphEvaluationKeys))
+                    out string[] graphEvaluationKeys,
+                    out graphFailureReason))
             {
                 if (!string.IsNullOrWhiteSpace(request.TargetFramework))
                 {
                     projectDirectories = directories.ToArray();
-                    failureReason = $"MSBuild input evaluation failed: the frozen project-reference graph could not be resolved for '{request.ProjectPath}' ({request.TargetFramework}).";
+                    failureReason = $"MSBuild input evaluation failed: the frozen project-reference graph could not be resolved for '{request.ProjectPath}' ({request.TargetFramework})" +
+                        (string.IsNullOrWhiteSpace(graphFailureReason) ? "." : $": {graphFailureReason}");
                     return false;
                 }
                 continue;

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using NuGet.Frameworks;
 
 namespace PowerForge;
 
@@ -321,15 +322,19 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, EvaluatedProjectInputs> evaluationsByEvaluation,
         IReadOnlyDictionary<string, string?> pathMapsByEvaluation,
         out ControlledPublishGraphNode[] graphNodes,
-        out string[] graphEvaluationKeys)
+        out string[] graphEvaluationKeys,
+        out string? failureReason)
     {
         var states = new Dictionary<string, int>(StringComparer.Ordinal);
         var orderedKeys = new List<string>();
+        string? graphFailureReason = null;
+        failureReason = null;
         string rootKey = rootRequest.BuildVisitKey();
         if (!Visit(rootKey))
         {
             graphNodes = Array.Empty<ControlledPublishGraphNode>();
             graphEvaluationKeys = Array.Empty<string>();
+            failureReason = graphFailureReason;
             return false;
         }
 
@@ -352,7 +357,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 return state == 2;
             if (!requestsByEvaluation.TryGetValue(key, out ProjectEvaluationRequest? request) ||
                 !evaluationsByEvaluation.TryGetValue(key, out EvaluatedProjectInputs? evaluation))
+            {
+                graphFailureReason = "an evaluated project node was missing from the frozen graph";
                 return false;
+            }
 
             states[key] = 1;
             foreach (EvaluatedProjectReference reference in evaluation.ProjectReferences)
@@ -366,9 +374,15 @@ public sealed partial class DotNetPublishPipelineRunner
                         requestsByEvaluation,
                         evaluationsByEvaluation,
                         out string childKey))
+                {
+                    graphFailureReason = $"the reference from '{request.ProjectPath}' ({request.TargetFramework ?? "unspecified"}) to '{childRequest.ProjectPath}' ({childRequest.TargetFramework ?? "unspecified"}) did not match one frozen evaluation";
                     return false;
+                }
                 if (states.TryGetValue(childKey, out int childState) && childState == 1)
+                {
+                    graphFailureReason = $"the reference from '{request.ProjectPath}' to '{childRequest.ProjectPath}' formed a cycle in the frozen graph";
                     return false;
+                }
                 if (!Visit(childKey))
                     return false;
             }
@@ -395,30 +409,70 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (!string.IsNullOrWhiteSpace(inheritedTargetFramework))
         {
-            ProjectEvaluationRequest inherited = candidate.ForProject(
-                candidate.ProjectPath,
-                inheritedTargetFramework);
-            string inheritedKey = inherited.BuildVisitKey();
-            if (requestsByEvaluation.ContainsKey(inheritedKey) &&
-                evaluationsByEvaluation.ContainsKey(inheritedKey))
+            string outerKey = candidate.BuildVisitKey();
+            if (evaluationsByEvaluation.TryGetValue(
+                    outerKey,
+                    out EvaluatedProjectInputs? outerEvaluation))
             {
-                key = inheritedKey;
-                return true;
+                HashSet<string> declaredFrameworks = outerEvaluation.TargetFrameworks
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                string[] matchingKeys = requestsByEvaluation
+                    .Where(entry =>
+                        evaluationsByEvaluation.ContainsKey(entry.Key) &&
+                        !string.IsNullOrWhiteSpace(entry.Value.TargetFramework) &&
+                        declaredFrameworks.Contains(entry.Value.TargetFramework) &&
+                        HasSameProjectEvaluationContext(candidate, entry.Value))
+                    .Select(entry => entry.Key)
+                    .ToArray();
+                if (TrySelectNearestProjectEvaluationKey(
+                        inheritedTargetFramework,
+                        matchingKeys,
+                        requestsByEvaluation,
+                        out string inheritedKey))
+                {
+                    key = inheritedKey;
+                    return true;
+                }
             }
         }
         if (requestsByEvaluation.ContainsKey(key) && evaluationsByEvaluation.ContainsKey(key))
             return true;
+        return false;
+    }
 
-        string[] matches = requestsByEvaluation
-            .Where(entry =>
-                evaluationsByEvaluation.ContainsKey(entry.Key) &&
-                !string.IsNullOrWhiteSpace(entry.Value.TargetFramework) &&
-                HasSameProjectEvaluationContext(candidate, entry.Value))
-            .Select(entry => entry.Key)
-            .ToArray();
-        if (matches.Length != 1)
+    private static bool TrySelectNearestProjectEvaluationKey(
+        string inheritedTargetFramework,
+        IReadOnlyCollection<string> candidateKeys,
+        IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
+        out string key)
+    {
+        key = string.Empty;
+        NuGetFramework requested = NuGetFramework.ParseFolder(inheritedTargetFramework);
+        if (requested.IsUnsupported)
             return false;
-        key = matches[0];
+
+        (string Key, NuGetFramework Framework)[] candidates = candidateKeys
+            .Select(candidateKey => (
+                Key: candidateKey,
+                Framework: NuGetFramework.ParseFolder(
+                    requestsByEvaluation[candidateKey].TargetFramework!)))
+            .Where(candidate => !candidate.Framework.IsUnsupported)
+            .ToArray();
+        NuGetFramework? nearest = new FrameworkReducer().GetNearest(
+            requested,
+            candidates.Select(candidate => candidate.Framework));
+        if (nearest is null)
+            return false;
+
+        string[] nearestKeys = candidates
+            .Where(candidate => candidate.Framework.Equals(nearest))
+            .Select(candidate => candidate.Key)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (nearestKeys.Length != 1)
+            return false;
+
+        key = nearestKeys[0];
         return true;
     }
 
