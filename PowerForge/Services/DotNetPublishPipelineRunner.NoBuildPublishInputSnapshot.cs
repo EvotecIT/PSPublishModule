@@ -238,6 +238,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal void ValidateUnchanged()
         {
+#if NET8_0_OR_GREATER
+            _macOsMonitor?.Synchronize();
+#endif
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
@@ -252,6 +255,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         $"A proven no-build publish snapshot changed while dotnet publish was running: {entry.Key}.");
                 }
             }
+#if NET8_0_OR_GREATER
+            _macOsMonitor?.Synchronize();
+#endif
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace PowerForge;
@@ -33,6 +34,8 @@ internal sealed class MacOsVnodeMutationMonitor : IDisposable
     private readonly Action<string> _recordChange;
     private readonly Thread _thread;
     private int _disposed;
+    private long _requestedSynchronization;
+    private long _completedSynchronization;
 
     internal MacOsVnodeMutationMonitor(
         IReadOnlyDictionary<string, FileStream> leasedFiles,
@@ -96,6 +99,21 @@ internal sealed class MacOsVnodeMutationMonitor : IDisposable
         _ = Close(_queueDescriptor);
     }
 
+    internal void Synchronize()
+    {
+        long requested = Interlocked.Increment(ref _requestedSynchronization);
+        var stopwatch = Stopwatch.StartNew();
+        while (Volatile.Read(ref _completedSynchronization) < requested)
+        {
+            if (!_thread.IsAlive || stopwatch.Elapsed >= TimeSpan.FromSeconds(2))
+            {
+                _recordChange("the macOS vnode monitor could not establish a validation boundary");
+                return;
+            }
+            Thread.Sleep(1);
+        }
+    }
+
     private void Monitor()
     {
         var timeout = new NativeTimespec
@@ -112,6 +130,9 @@ internal sealed class MacOsVnodeMutationMonitor : IDisposable
                 out NativeKevent observed,
                 1,
                 ref timeout);
+            Volatile.Write(
+                ref _completedSynchronization,
+                Volatile.Read(ref _requestedSynchronization));
             if (count == 0)
                 continue;
             if (count < 0)

@@ -37,7 +37,6 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             _ = File.ReadAllBytes(snapshotPath);
             File.Copy(snapshotPath, Path.Combine(root, "published.runtimeconfig.json"));
-            Thread.Sleep(500);
 
             snapshot.ValidateUnchanged();
         }
@@ -80,7 +79,6 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllBytes(snapshotPath, bytes);
             File.SetLastWriteTimeUtc(snapshotPath, lastWriteTimeUtc);
             File.SetUnixFileMode(snapshotPath, unixFileMode);
-            Thread.Sleep(500);
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
                 snapshot.ValidateUnchanged);
