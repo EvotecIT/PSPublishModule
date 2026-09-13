@@ -57,8 +57,13 @@ if ($env:POWERFORGE_CLOUDFLARE_DRY_RUN -eq 'true') {
 }
 $arguments += @('--output', 'json')
 
-$jsonOutput = [object[]] @(dotnet @arguments)
-$cliExitCode = $LASTEXITCODE
+Push-Location $engineRoot
+try {
+    $jsonOutput = [object[]] @(dotnet @arguments)
+    $cliExitCode = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
 $jsonText = $jsonOutput -join [Environment]::NewLine
 if ($cliExitCode -ne 0) {
     if (-not [string]::IsNullOrWhiteSpace($jsonText)) {

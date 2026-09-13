@@ -184,15 +184,20 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     Assert-LastExitCode 'Verifying the capture host identity'
 
     $project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
-    dotnet build $project -c Release -f net10.0 --nologo
-    Assert-LastExitCode 'Building the pinned PowerForge capture CLI'
-    $cli = Join-Path $engineRoot 'PowerForge.Web.Cli/bin/Release/net10.0/PowerForge.Web.Cli.dll'
-    if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
-        throw "PowerForge capture CLI was not produced: $cli"
-    }
+    Push-Location $engineRoot
+    try {
+        dotnet build $project -c Release -f net10.0 --nologo
+        Assert-LastExitCode 'Building the pinned PowerForge capture CLI'
+        $cli = Join-Path $engineRoot 'PowerForge.Web.Cli/bin/Release/net10.0/PowerForge.Web.Cli.dll'
+        if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
+            throw "PowerForge capture CLI was not produced: $cli"
+        }
 
-    dotnet $cli server capture --manifest $captureManifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
-    $captureExitCode = $LASTEXITCODE
+        dotnet $cli server capture --manifest $captureManifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
+        $captureExitCode = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
     if ($captureExitCode -ne 0) {
         Write-CaptureFailureDiagnostic -CaptureRoot $captureRoot
         throw "Capturing and encrypting server recovery state failed with exit code $captureExitCode."

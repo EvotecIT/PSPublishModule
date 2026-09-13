@@ -40,6 +40,8 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.DoesNotContain("ssh ", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Invoke-WebRequest", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Invoke-RestMethod", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("$startInfo.WorkingDirectory = $WorkingDirectory", script, StringComparison.Ordinal);
+        Assert.Contains("-WorkingDirectory $engineRoot", script, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -525,6 +525,7 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("'cache-policy'", script, StringComparison.Ordinal);
         Assert.Contains("--base-path", script, StringComparison.Ordinal);
         Assert.Contains("site-config must identify a file inside the caller repository", script, StringComparison.Ordinal);
+        Assert.Contains("Push-Location $engineRoot", script, StringComparison.Ordinal);
         Assert.True(script.Split('\n').Length < 100, "The action entrypoint should remain a bounded adapter over the CLI.");
     }
 

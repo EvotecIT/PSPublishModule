@@ -98,6 +98,7 @@ public sealed class GitHubContentActionTests
         Assert.Contains("--restrict-output-root $workspace", action, StringComparison.Ordinal);
         Assert.Contains("changed-paths-json", action, StringComparison.Ordinal);
         Assert.Contains("GITHUB_TOKEN: ${{ inputs['github-token'] }}", action, StringComparison.Ordinal);
+        Assert.Contains("Push-Location $repoRoot", action, StringComparison.Ordinal);
     }
 
     [Fact]
