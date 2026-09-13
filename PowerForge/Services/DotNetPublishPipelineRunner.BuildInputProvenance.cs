@@ -1228,7 +1228,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 failureReason = $"SDK-managed package '{package.PackageKey}' produced conflicting verified evidence across the root project";
                                 return false;
                             }
-                            knownSdkManagedPackageEvidence.TryAdd(package.PackageKey, package);
+                            if (!knownSdkManagedPackageEvidence.ContainsKey(package.PackageKey))
+                                knownSdkManagedPackageEvidence[package.PackageKey] = package;
                         }
                     }
                 }

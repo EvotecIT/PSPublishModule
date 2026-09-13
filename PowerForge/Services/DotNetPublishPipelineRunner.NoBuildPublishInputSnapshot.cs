@@ -61,7 +61,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(input => noBuildInPublish || input.IsPackageBacked)
             .ToArray();
 
-    private static string BuildPublishEvaluationRequestKey(
+    internal static string BuildPublishEvaluationRequestKey(
         DotNetPublishPlan plan,
         DotNetPublishTargetPlan target,
         string framework,
@@ -78,13 +78,25 @@ public sealed partial class DotNetPublishPipelineRunner
             plan,
             target,
             combination);
+        IReadOnlyDictionary<string, string>? sdkPackageEvidenceGlobalProperties =
+            style == DotNetPublishStyle.SelfContained
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PublishSingleFile"] = "true"
+                }
+                : null;
         return new ProjectEvaluationRequest(
                 Path.GetFullPath(target.ProjectPath),
                 framework,
                 plan.Configuration,
                 properties,
                 plan.EnvironmentVariables,
-                plan.ControlledBuildEnvironmentVariableNames)
+                plan.ControlledBuildEnvironmentVariableNames,
+                plan.TrustedBuildPackages,
+                sdkPackageEvidenceGlobalProperties: sdkPackageEvidenceGlobalProperties,
+                requiresPrebuiltProjectReferenceOutputProof:
+                    RequiresPrebuiltProjectReferenceOutputProof(plan, target, combination),
+                evaluationScopeRootPath: target.ProjectPath)
             .BuildVisitKey();
     }
 

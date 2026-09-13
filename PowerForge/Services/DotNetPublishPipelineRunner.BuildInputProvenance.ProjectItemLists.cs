@@ -483,7 +483,15 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasSameProjectEvaluationContext(
         ProjectEvaluationRequest left,
         ProjectEvaluationRequest right)
-        => NormalizeProjectReferenceIdentityPath(left.ProjectPath).Equals(
+        => string.Equals(
+               left.EvaluationScopeRootPath is null
+                   ? null
+                   : NormalizeProjectReferenceIdentityPath(left.EvaluationScopeRootPath),
+               right.EvaluationScopeRootPath is null
+                   ? null
+                   : NormalizeProjectReferenceIdentityPath(right.EvaluationScopeRootPath),
+               StringComparison.Ordinal) &&
+           NormalizeProjectReferenceIdentityPath(left.ProjectPath).Equals(
                NormalizeProjectReferenceIdentityPath(right.ProjectPath),
                StringComparison.Ordinal) &&
            string.Equals(left.Configuration, right.Configuration, StringComparison.Ordinal) &&

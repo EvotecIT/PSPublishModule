@@ -485,9 +485,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(Path.GetFullPath)
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray();
-            _lockedPackageHashes = new Dictionary<string, string>(lockedPackageHashes, StringComparer.OrdinalIgnoreCase);
+            _lockedPackageHashes = lockedPackageHashes.ToDictionary(
+                package => package.Key,
+                package => package.Value,
+                StringComparer.OrdinalIgnoreCase);
             _archives = archives;
-            _archivePathsByPackageKey = new Dictionary<string, string>(archivePathsByPackageKey, StringComparer.OrdinalIgnoreCase);
+            _archivePathsByPackageKey = archivePathsByPackageKey.ToDictionary(
+                package => package.Key,
+                package => package.Value,
+                StringComparer.OrdinalIgnoreCase);
             _sdkManagedArchivePaths = new HashSet<string>(
                 sdkManagedPackageKeys.Where(archivePathsByPackageKey.ContainsKey)
                     .Select(packageKey => archivePathsByPackageKey[packageKey]),
@@ -521,10 +527,22 @@ public sealed partial class DotNetPublishPipelineRunner
             return true;
         }
 
-        internal readonly record struct VerifiedSdkManagedPackageEvidence(
-            string PackageKey,
-            string ContentHash,
-            string ArchivePath);
+        internal readonly struct VerifiedSdkManagedPackageEvidence
+        {
+            public VerifiedSdkManagedPackageEvidence(
+                string packageKey,
+                string contentHash,
+                string archivePath)
+            {
+                PackageKey = packageKey;
+                ContentHash = contentHash;
+                ArchivePath = archivePath;
+            }
+
+            public string PackageKey { get; }
+            public string ContentHash { get; }
+            public string ArchivePath { get; }
+        }
 
         internal static bool TryCreate(
             string projectPath,
