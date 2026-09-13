@@ -194,7 +194,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             return publishInputFiles
                 .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Where(path => !snapshottedPaths.Contains(Path.GetFullPath(path)))
+                .Where(path => !noBuildInPublish || !snapshottedPaths.Contains(Path.GetFullPath(path)))
                 .Concat(inputs
                     .Select(input => input.FullPath)
                     .Where(path => !snapshottedPaths.Contains(Path.GetFullPath(path))))

@@ -145,6 +145,31 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void PublishProvenanceLease_GuardsSnapshottedPackageInputsWhenPublishBuilds()
+    {
+        string projectPath = Path.GetFullPath("App.csproj");
+        string packageInputPath = Path.GetFullPath("package.dll");
+        var packageOutput = new DotNetPublishPipelineRunner.NoBuildPublishInput(
+            "evaluation",
+            packageInputPath,
+            "package.dll",
+            new Dictionary<string, string>(),
+            "BB",
+            isPackageBacked: true);
+
+        string[] guardedPaths = DotNetPublishPipelineRunner.PublishProvenanceLease.BuildGuardedPaths(
+            [projectPath, packageInputPath],
+            [packageOutput],
+            noBuildInPublish: false);
+
+        StringComparer comparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        Assert.Contains(projectPath, guardedPaths, comparer);
+        Assert.Contains(packageInputPath, guardedPaths, comparer);
+    }
+
+    [Fact]
     public void NoBuildPublishSnapshot_PreservesOriginalSourceBasename()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

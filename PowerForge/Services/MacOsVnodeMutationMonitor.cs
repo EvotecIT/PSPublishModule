@@ -130,11 +130,6 @@ internal sealed class MacOsVnodeMutationMonitor : IDisposable
                 out NativeKevent observed,
                 1,
                 ref timeout);
-            Volatile.Write(
-                ref _completedSynchronization,
-                Volatile.Read(ref _requestedSynchronization));
-            if (count == 0)
-                continue;
             if (count < 0)
             {
                 int error = Marshal.GetLastWin32Error();
@@ -142,21 +137,62 @@ internal sealed class MacOsVnodeMutationMonitor : IDisposable
                     _recordChange($"the macOS vnode monitor failed with error {error}");
                 return;
             }
-            ulong descriptor = observed.Ident.ToUInt64();
-            string path = _pathsByDescriptor.TryGetValue(descriptor, out string? knownPath)
-                ? knownPath
-                : $"file descriptor {descriptor}";
-            if ((observed.Flags & EventError) != 0)
-            {
-                _recordChange($"the macOS vnode monitor reported error {observed.Data.ToInt64()} for '{path}'");
+            if (count > 0 && !ProcessObservedEvent(observed))
                 return;
-            }
-            if ((observed.FilterFlags & MutationNotes) != 0)
-            {
-                _recordChange(
-                    $"macOS vnode mutation 0x{observed.FilterFlags:X8} for '{path}'");
-            }
+            if (!CompleteRequestedSynchronization())
+                return;
         }
+    }
+
+    private bool CompleteRequestedSynchronization()
+    {
+        long requested = Volatile.Read(ref _requestedSynchronization);
+        if (requested <= Volatile.Read(ref _completedSynchronization))
+            return true;
+
+        var noWait = new NativeTimespec();
+        while (Volatile.Read(ref _disposed) == 0)
+        {
+            int count = ReadKevent(
+                _queueDescriptor,
+                IntPtr.Zero,
+                0,
+                out NativeKevent observed,
+                1,
+                ref noWait);
+            if (count == 0)
+                break;
+            if (count < 0)
+            {
+                int error = Marshal.GetLastWin32Error();
+                _recordChange($"the macOS vnode monitor failed while establishing a validation boundary with error {error}");
+                return false;
+            }
+            if (!ProcessObservedEvent(observed))
+                return false;
+        }
+
+        Volatile.Write(ref _completedSynchronization, requested);
+        return true;
+    }
+
+    private bool ProcessObservedEvent(NativeKevent observed)
+    {
+        ulong descriptor = observed.Ident.ToUInt64();
+        string path = _pathsByDescriptor.TryGetValue(descriptor, out string? knownPath)
+            ? knownPath
+            : $"file descriptor {descriptor}";
+        if ((observed.Flags & EventError) != 0)
+        {
+            _recordChange($"the macOS vnode monitor reported error {observed.Data.ToInt64()} for '{path}'");
+            return false;
+        }
+        if ((observed.FilterFlags & MutationNotes) != 0)
+        {
+            _recordChange(
+                $"macOS vnode mutation 0x{observed.FilterFlags:X8} for '{path}'");
+        }
+        return true;
     }
 
     [StructLayout(LayoutKind.Sequential)]
