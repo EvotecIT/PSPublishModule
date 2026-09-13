@@ -744,6 +744,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool RequiresSdkPackageEvidence { get; }
         internal IReadOnlyDictionary<string, string> SdkPackageEvidenceGlobalProperties { get; }
         internal bool RequiresPrebuiltProjectReferenceOutputProof { get; }
+        internal bool DisablesTargetFrameworkInheritance { get; private set; }
         internal bool DisablesProjectReferenceBuilds
             => GlobalProperties.TryGetValue("BuildProjectReferences", out string? value) &&
                bool.TryParse(value.Trim(), out bool buildProjectReferences) &&
@@ -780,7 +781,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ControlledBuildEnvironmentVariableNames);
 
         internal ProjectEvaluationRequest ForProject(string projectPath, string? targetFramework)
-            => new(
+        {
+            var request = new ProjectEvaluationRequest(
                 Path.GetFullPath(projectPath),
                 targetFramework,
                 Configuration,
@@ -791,6 +793,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 RequiresSdkPackageEvidence,
                 SdkPackageEvidenceGlobalProperties,
                 RequiresPrebuiltProjectReferenceOutputProof);
+            request.DisablesTargetFrameworkInheritance = DisablesTargetFrameworkInheritance;
+            return request;
+        }
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
         {
@@ -823,7 +828,7 @@ public sealed partial class DotNetPublishPipelineRunner
                           TargetFramework!));
             properties.Remove("Configuration");
             properties.Remove("TargetFramework");
-            return new ProjectEvaluationRequest(
+            var request = new ProjectEvaluationRequest(
                 Path.GetFullPath(projectReference.ProjectPath),
                 targetFramework,
                 configuration,
@@ -834,6 +839,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 requiresSdkPackageEvidence: true,
                 sdkPackageEvidenceGlobalProperties: SdkPackageEvidenceGlobalProperties,
                 requiresPrebuiltProjectReferenceOutputProof: RequiresPrebuiltProjectReferenceOutputProof);
+            request.DisablesTargetFrameworkInheritance =
+                undefinesTargetFramework || projectReference.TargetFramework is not null;
+            return request;
         }
 
         internal string BuildVisitKey()
@@ -884,6 +892,10 @@ public sealed partial class DotNetPublishPipelineRunner
             AppendProjectReferenceKeySegment(
                 key,
                 RequiresPrebuiltProjectReferenceOutputProof ? "Required" : "NotRequired");
+            AppendProjectReferenceKeySegment(key, "TargetFrameworkInheritance");
+            AppendProjectReferenceKeySegment(
+                key,
+                DisablesTargetFrameworkInheritance ? "Disabled" : "Inherited");
             return key.ToString();
         }
     }
@@ -903,6 +915,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] sourceInputs,
             EvaluatedProjectReference[] projectReferences,
             string[] targetFrameworks,
+            string? targetPlatformVersion,
             string[] outputRoots,
             string[] expectedOutputPaths,
             string? intermediateRoot,
@@ -924,6 +937,7 @@ public sealed partial class DotNetPublishPipelineRunner
             SourceInputs = sourceInputs;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
+            TargetPlatformVersion = targetPlatformVersion;
             OutputRoots = outputRoots;
             ExpectedOutputPaths = expectedOutputPaths;
             IntermediateRoot = intermediateRoot;
@@ -946,6 +960,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string[] SourceInputs { get; }
         internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }
+        internal string? TargetPlatformVersion { get; }
         internal string[] OutputRoots { get; }
         internal string[] ExpectedOutputPaths { get; }
         internal string? IntermediateRoot { get; }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using NuGet.Frameworks;
 
 namespace PowerForge;
 
@@ -321,15 +322,19 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, EvaluatedProjectInputs> evaluationsByEvaluation,
         IReadOnlyDictionary<string, string?> pathMapsByEvaluation,
         out ControlledPublishGraphNode[] graphNodes,
-        out string[] graphEvaluationKeys)
+        out string[] graphEvaluationKeys,
+        out string? failureReason)
     {
         var states = new Dictionary<string, int>(StringComparer.Ordinal);
         var orderedKeys = new List<string>();
+        string? graphFailureReason = null;
+        failureReason = null;
         string rootKey = rootRequest.BuildVisitKey();
         if (!Visit(rootKey))
         {
             graphNodes = Array.Empty<ControlledPublishGraphNode>();
             graphEvaluationKeys = Array.Empty<string>();
+            failureReason = graphFailureReason;
             return false;
         }
 
@@ -352,9 +357,34 @@ public sealed partial class DotNetPublishPipelineRunner
                 return state == 2;
             if (!requestsByEvaluation.TryGetValue(key, out ProjectEvaluationRequest? request) ||
                 !evaluationsByEvaluation.TryGetValue(key, out EvaluatedProjectInputs? evaluation))
+            {
+                graphFailureReason = "an evaluated project node was missing from the frozen graph";
                 return false;
+            }
 
             states[key] = 1;
+            if (request.DisablesTargetFrameworkInheritance &&
+                string.IsNullOrEmpty(request.TargetFramework) &&
+                evaluation.TargetFrameworks.Length > 0)
+            {
+                foreach (string targetFramework in evaluation.TargetFrameworks)
+                {
+                    ProjectEvaluationRequest innerRequest = request.ForProject(
+                        request.ProjectPath,
+                        targetFramework);
+                    string innerKey = innerRequest.BuildVisitKey();
+                    if (!requestsByEvaluation.ContainsKey(innerKey) ||
+                        !evaluationsByEvaluation.ContainsKey(innerKey))
+                    {
+                        graphFailureReason = $"the explicitly framework-independent reference to '{request.ProjectPath}' did not match the frozen '{targetFramework}' evaluation";
+                        return false;
+                    }
+                    if (!Visit(innerKey))
+                        return false;
+                }
+                states[key] = 2;
+                return true;
+            }
             foreach (EvaluatedProjectReference reference in evaluation.ProjectReferences)
             {
                 if (!File.Exists(reference.ProjectPath))
@@ -363,12 +393,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryResolveProjectEvaluationKey(
                         childRequest,
                         request.TargetFramework,
+                        evaluation.TargetPlatformVersion,
                         requestsByEvaluation,
                         evaluationsByEvaluation,
                         out string childKey))
+                {
+                    graphFailureReason = $"the reference from '{request.ProjectPath}' ({request.TargetFramework ?? "unspecified"}) to '{childRequest.ProjectPath}' ({childRequest.TargetFramework ?? "unspecified"}) did not match one frozen evaluation";
                     return false;
+                }
                 if (states.TryGetValue(childKey, out int childState) && childState == 1)
+                {
+                    graphFailureReason = $"the reference from '{request.ProjectPath}' to '{childRequest.ProjectPath}' formed a cycle in the frozen graph";
                     return false;
+                }
                 if (!Visit(childKey))
                     return false;
             }
@@ -382,12 +419,14 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryResolveProjectEvaluationKey(
         ProjectEvaluationRequest candidate,
         string? inheritedTargetFramework,
+        string? inheritedTargetPlatformVersion,
         IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
         IReadOnlyDictionary<string, EvaluatedProjectInputs> evaluationsByEvaluation,
         out string key)
     {
         key = candidate.BuildVisitKey();
-        if (!string.IsNullOrWhiteSpace(candidate.TargetFramework))
+        if (candidate.TargetFramework is not null ||
+            candidate.DisablesTargetFrameworkInheritance)
         {
             return requestsByEvaluation.ContainsKey(key) &&
                    evaluationsByEvaluation.ContainsKey(key);
@@ -395,35 +434,87 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (!string.IsNullOrWhiteSpace(inheritedTargetFramework))
         {
-            ProjectEvaluationRequest inherited = candidate.ForProject(
-                candidate.ProjectPath,
-                inheritedTargetFramework);
-            string inheritedKey = inherited.BuildVisitKey();
-            if (requestsByEvaluation.ContainsKey(inheritedKey) &&
-                evaluationsByEvaluation.ContainsKey(inheritedKey))
+            string outerKey = candidate.BuildVisitKey();
+            if (evaluationsByEvaluation.TryGetValue(
+                    outerKey,
+                    out EvaluatedProjectInputs? outerEvaluation))
             {
-                key = inheritedKey;
-                return true;
+                string[] matchingKeys = outerEvaluation.TargetFrameworks
+                    .Where(targetFramework => !string.IsNullOrWhiteSpace(targetFramework))
+                    .Select(targetFramework => candidate
+                        .ForProject(candidate.ProjectPath, targetFramework)
+                        .BuildVisitKey())
+                    .Where(candidateKey =>
+                        requestsByEvaluation.ContainsKey(candidateKey) &&
+                        evaluationsByEvaluation.ContainsKey(candidateKey))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                if (TrySelectNearestProjectEvaluationKey(
+                        inheritedTargetFramework!,
+                        inheritedTargetPlatformVersion,
+                        matchingKeys,
+                        requestsByEvaluation,
+                        out string inheritedKey))
+                {
+                    key = inheritedKey;
+                    return true;
+                }
             }
         }
         if (requestsByEvaluation.ContainsKey(key) && evaluationsByEvaluation.ContainsKey(key))
             return true;
+        return false;
+    }
 
-        string[] matches = requestsByEvaluation
-            .Where(entry =>
-                evaluationsByEvaluation.ContainsKey(entry.Key) &&
-                !string.IsNullOrWhiteSpace(entry.Value.TargetFramework) &&
-                HasSameProjectEvaluationContext(candidate, entry.Value))
-            .Select(entry => entry.Key)
-            .ToArray();
-        if (matches.Length != 1)
+    private static bool TrySelectNearestProjectEvaluationKey(
+        string inheritedTargetFramework,
+        string? inheritedTargetPlatformVersion,
+        IReadOnlyCollection<string> candidateKeys,
+        IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
+        out string key)
+    {
+        key = string.Empty;
+        NuGetFramework requested = NuGetFramework.ParseFolder(inheritedTargetFramework);
+        if (requested.IsUnsupported)
             return false;
-        key = matches[0];
+        if (requested.HasPlatform &&
+            Version.TryParse(inheritedTargetPlatformVersion, out Version? platformVersion))
+        {
+            requested = new NuGetFramework(
+                requested.Framework,
+                requested.Version,
+                requested.Platform,
+                platformVersion);
+        }
+
+        (string Key, NuGetFramework Framework)[] candidates = candidateKeys
+            .Select(candidateKey => (
+                Key: candidateKey,
+                Framework: NuGetFramework.ParseFolder(
+                    requestsByEvaluation[candidateKey].TargetFramework!)))
+            .Where(candidate => !candidate.Framework.IsUnsupported)
+            .ToArray();
+        NuGetFramework? nearest = new FrameworkReducer().GetNearest(
+            requested,
+            candidates.Select(candidate => candidate.Framework));
+        if (nearest is null)
+            return false;
+
+        string[] nearestKeys = candidates
+            .Where(candidate => candidate.Framework.Equals(nearest))
+            .Select(candidate => candidate.Key)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (nearestKeys.Length != 1)
+            return false;
+
+        key = nearestKeys[0];
         return true;
     }
 
     private static bool TryResolveGeneratedProjectReferenceEvaluationKey(
         ProjectEvaluationRequest parentRequest,
+        string? inheritedTargetPlatformVersion,
         EvaluatedProjectReference generatedReference,
         IReadOnlyCollection<EvaluatedProjectReference> resolvedReferences,
         IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
@@ -440,6 +531,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryResolveProjectEvaluationKey(
                         candidate,
                         parentRequest.TargetFramework,
+                        inheritedTargetPlatformVersion,
                         requestsByEvaluation,
                         evaluationsByEvaluation,
                         out string candidateKey))
@@ -479,30 +571,6 @@ public sealed partial class DotNetPublishPipelineRunner
         key = matches[0];
         return true;
     }
-
-    private static bool HasSameProjectEvaluationContext(
-        ProjectEvaluationRequest left,
-        ProjectEvaluationRequest right)
-        => NormalizeProjectReferenceIdentityPath(left.ProjectPath).Equals(
-               NormalizeProjectReferenceIdentityPath(right.ProjectPath),
-               StringComparison.Ordinal) &&
-           string.Equals(left.Configuration, right.Configuration, StringComparison.Ordinal) &&
-           HasSameProjectEvaluationProperties(left.GlobalProperties, right.GlobalProperties) &&
-           HasSameProjectEvaluationEnvironment(left.EnvironmentVariables, right.EnvironmentVariables);
-
-    private static bool HasSameProjectEvaluationProperties(
-        IReadOnlyDictionary<string, string> left,
-        IReadOnlyDictionary<string, string> right)
-        => left.Count == right.Count && left.All(property =>
-            right.TryGetValue(property.Key, out string? value) &&
-            string.Equals(property.Value, value, StringComparison.Ordinal));
-
-    private static bool HasSameProjectEvaluationEnvironment(
-        IReadOnlyDictionary<string, string?> left,
-        IReadOnlyDictionary<string, string?> right)
-        => left.Count == right.Count && left.All(variable =>
-            right.TryGetValue(variable.Key, out string? value) &&
-            string.Equals(variable.Value, value, StringComparison.Ordinal));
 
     private static bool ContainsPotentialPublishItemMutation(
         string projectPath,
