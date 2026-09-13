@@ -106,6 +106,7 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly List<FileStream> _leases;
         private readonly IReadOnlyDictionary<string, string> _expectedHashes;
         private readonly FileSystemWatcher _watcher;
+        private string? _changeDescription;
         private int _changed;
         private bool _disposed;
 
@@ -225,7 +226,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
-                    "A proven no-build publish snapshot was mutated while dotnet publish was running.");
+                    "A proven no-build publish snapshot was mutated while dotnet publish was running: " +
+                    (_changeDescription ?? "the filesystem watcher reported an unspecified change") + ".");
             }
             foreach (KeyValuePair<string, string> entry in _expectedHashes)
             {
@@ -242,7 +244,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
-                    "A proven no-build publish snapshot was mutated while dotnet publish was running.");
+                    "A proven no-build publish snapshot was mutated while dotnet publish was running: " +
+                    (_changeDescription ?? "the filesystem watcher reported an unspecified change") + ".");
             }
         }
 
@@ -259,13 +262,21 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         private void MarkChanged(object sender, FileSystemEventArgs args)
-            => Interlocked.Exchange(ref _changed, 1);
+            => RecordChange($"{args.ChangeType} '{args.FullPath}'");
 
         private void MarkChanged(object sender, RenamedEventArgs args)
-            => Interlocked.Exchange(ref _changed, 1);
+            => RecordChange($"renamed '{args.OldFullPath}' to '{args.FullPath}'");
 
         private void MarkChanged(object sender, ErrorEventArgs args)
-            => Interlocked.Exchange(ref _changed, 1);
+            => RecordChange(
+                "the filesystem watcher failed: " +
+                (args.GetException()?.Message ?? "its buffer overflowed"));
+
+        private void RecordChange(string description)
+        {
+            Interlocked.CompareExchange(ref _changeDescription, description, null);
+            Interlocked.Exchange(ref _changed, 1);
+        }
 
         private static string CopyAndHashSnapshot(
             string sourcePath,
