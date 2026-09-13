@@ -101,9 +101,26 @@ internal static class WebMediaContentRenderer
     }
 
     private static string Encode(string value) => HttpUtility.HtmlAttributeEncode(value);
-    private static int SourceEnd(HtmlNode node, string html) => node.EndNode != node && node.EndNode.OuterStartIndex >= 0
-        ? html.IndexOf('>', node.EndNode.OuterStartIndex) + 1
-        : node.OuterStartIndex + node.OuterLength;
+    private static int SourceEnd(HtmlNode node, string html)
+    {
+        if (node.Name == "img") return StartTagEnd(node, html);
+        return node.EndNode != node && node.EndNode.OuterStartIndex >= 0
+            ? StartTagEnd(node.EndNode, html)
+            : node.OuterStartIndex + node.OuterLength;
+    }
+
+    private static int StartTagEnd(HtmlNode node, string html)
+    {
+        char quote = '\0';
+        for (int index = node.OuterStartIndex; index >= 0 && index < html.Length; index++)
+        {
+            char current = html[index];
+            if (quote == '\0' && current is '\'' or '"') quote = current;
+            else if (current == quote) quote = '\0';
+            else if (quote == '\0' && current == '>') return index + 1;
+        }
+        return -1;
+    }
     private static bool ValidRange(HtmlNode node, string html) => node.OuterStartIndex >= 0 && SourceEnd(node, html) > node.OuterStartIndex && SourceEnd(node, html) <= html.Length;
     private static bool SafeImageUrl(string value) => value.Length > 0 && !value.StartsWith('#') &&
         !value.Any(char.IsControl) && !value.Contains('\\') &&
