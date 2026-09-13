@@ -903,6 +903,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] sourceInputs,
             EvaluatedProjectReference[] projectReferences,
             string[] targetFrameworks,
+            string? targetPlatformVersion,
             string[] outputRoots,
             string[] expectedOutputPaths,
             string? intermediateRoot,
@@ -924,6 +925,7 @@ public sealed partial class DotNetPublishPipelineRunner
             SourceInputs = sourceInputs;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
+            TargetPlatformVersion = targetPlatformVersion;
             OutputRoots = outputRoots;
             ExpectedOutputPaths = expectedOutputPaths;
             IntermediateRoot = intermediateRoot;
@@ -946,6 +948,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string[] SourceInputs { get; }
         internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }
+        internal string? TargetPlatformVersion { get; }
         internal string[] OutputRoots { get; }
         internal string[] ExpectedOutputPaths { get; }
         internal string? IntermediateRoot { get; }

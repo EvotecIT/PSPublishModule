@@ -371,6 +371,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryResolveProjectEvaluationKey(
                         childRequest,
                         request.TargetFramework,
+                        evaluation.TargetPlatformVersion,
                         requestsByEvaluation,
                         evaluationsByEvaluation,
                         out string childKey))
@@ -396,12 +397,13 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryResolveProjectEvaluationKey(
         ProjectEvaluationRequest candidate,
         string? inheritedTargetFramework,
+        string? inheritedTargetPlatformVersion,
         IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
         IReadOnlyDictionary<string, EvaluatedProjectInputs> evaluationsByEvaluation,
         out string key)
     {
         key = candidate.BuildVisitKey();
-        if (!string.IsNullOrWhiteSpace(candidate.TargetFramework))
+        if (candidate.TargetFramework is not null)
         {
             return requestsByEvaluation.ContainsKey(key) &&
                    evaluationsByEvaluation.ContainsKey(key);
@@ -414,18 +416,19 @@ public sealed partial class DotNetPublishPipelineRunner
                     outerKey,
                     out EvaluatedProjectInputs? outerEvaluation))
             {
-                HashSet<string> declaredFrameworks = outerEvaluation.TargetFrameworks
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                string[] matchingKeys = requestsByEvaluation
-                    .Where(entry =>
-                        evaluationsByEvaluation.ContainsKey(entry.Key) &&
-                        !string.IsNullOrWhiteSpace(entry.Value.TargetFramework) &&
-                        declaredFrameworks.Contains(entry.Value.TargetFramework) &&
-                        HasSameProjectEvaluationContext(candidate, entry.Value))
-                    .Select(entry => entry.Key)
+                string[] matchingKeys = outerEvaluation.TargetFrameworks
+                    .Where(targetFramework => !string.IsNullOrWhiteSpace(targetFramework))
+                    .Select(targetFramework => candidate
+                        .ForProject(candidate.ProjectPath, targetFramework)
+                        .BuildVisitKey())
+                    .Where(candidateKey =>
+                        requestsByEvaluation.ContainsKey(candidateKey) &&
+                        evaluationsByEvaluation.ContainsKey(candidateKey))
+                    .Distinct(StringComparer.Ordinal)
                     .ToArray();
                 if (TrySelectNearestProjectEvaluationKey(
-                        inheritedTargetFramework,
+                        inheritedTargetFramework!,
+                        inheritedTargetPlatformVersion,
                         matchingKeys,
                         requestsByEvaluation,
                         out string inheritedKey))
@@ -442,6 +445,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TrySelectNearestProjectEvaluationKey(
         string inheritedTargetFramework,
+        string? inheritedTargetPlatformVersion,
         IReadOnlyCollection<string> candidateKeys,
         IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
         out string key)
@@ -450,6 +454,15 @@ public sealed partial class DotNetPublishPipelineRunner
         NuGetFramework requested = NuGetFramework.ParseFolder(inheritedTargetFramework);
         if (requested.IsUnsupported)
             return false;
+        if (requested.HasPlatform &&
+            Version.TryParse(inheritedTargetPlatformVersion, out Version? platformVersion))
+        {
+            requested = new NuGetFramework(
+                requested.Framework,
+                requested.Version,
+                requested.Platform,
+                platformVersion);
+        }
 
         (string Key, NuGetFramework Framework)[] candidates = candidateKeys
             .Select(candidateKey => (
@@ -478,6 +491,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryResolveGeneratedProjectReferenceEvaluationKey(
         ProjectEvaluationRequest parentRequest,
+        string? inheritedTargetPlatformVersion,
         EvaluatedProjectReference generatedReference,
         IReadOnlyCollection<EvaluatedProjectReference> resolvedReferences,
         IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
@@ -494,6 +508,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryResolveProjectEvaluationKey(
                         candidate,
                         parentRequest.TargetFramework,
+                        inheritedTargetPlatformVersion,
                         requestsByEvaluation,
                         evaluationsByEvaluation,
                         out string candidateKey))
@@ -533,30 +548,6 @@ public sealed partial class DotNetPublishPipelineRunner
         key = matches[0];
         return true;
     }
-
-    private static bool HasSameProjectEvaluationContext(
-        ProjectEvaluationRequest left,
-        ProjectEvaluationRequest right)
-        => NormalizeProjectReferenceIdentityPath(left.ProjectPath).Equals(
-               NormalizeProjectReferenceIdentityPath(right.ProjectPath),
-               StringComparison.Ordinal) &&
-           string.Equals(left.Configuration, right.Configuration, StringComparison.Ordinal) &&
-           HasSameProjectEvaluationProperties(left.GlobalProperties, right.GlobalProperties) &&
-           HasSameProjectEvaluationEnvironment(left.EnvironmentVariables, right.EnvironmentVariables);
-
-    private static bool HasSameProjectEvaluationProperties(
-        IReadOnlyDictionary<string, string> left,
-        IReadOnlyDictionary<string, string> right)
-        => left.Count == right.Count && left.All(property =>
-            right.TryGetValue(property.Key, out string? value) &&
-            string.Equals(property.Value, value, StringComparison.Ordinal));
-
-    private static bool HasSameProjectEvaluationEnvironment(
-        IReadOnlyDictionary<string, string?> left,
-        IReadOnlyDictionary<string, string?> right)
-        => left.Count == right.Count && left.All(variable =>
-            right.TryGetValue(variable.Key, out string? value) &&
-            string.Equals(variable.Value, value, StringComparison.Ordinal));
 
     private static bool ContainsPotentialPublishItemMutation(
         string projectPath,

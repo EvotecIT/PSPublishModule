@@ -620,17 +620,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
 
             ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
+            evaluationsByEvaluation.TryGetValue(
+                request.BuildVisitKey(),
+                out EvaluatedProjectInputs? parentEvaluation);
             if (!TryResolveProjectEvaluationKey(
                     referencedProject,
                     request.TargetFramework,
+                    parentEvaluation?.TargetPlatformVersion,
                     requestsByEvaluation,
                     evaluationsByEvaluation,
                     out string referencedProjectKey) &&
-                (!evaluationsByEvaluation.TryGetValue(
-                     request.BuildVisitKey(),
-                     out EvaluatedProjectInputs? parentEvaluation) ||
+                (parentEvaluation is null ||
                  !TryResolveGeneratedProjectReferenceEvaluationKey(
                      request,
+                     parentEvaluation.TargetPlatformVersion,
                      output.ProjectReference,
                      parentEvaluation.ProjectReferences,
                      requestsByEvaluation,
@@ -1022,6 +1025,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-verbosity:quiet",
             "-getProperty:TargetFramework",
             "-getProperty:TargetFrameworks",
+            "-getProperty:TargetPlatformVersion",
             "-getProperty:MSBuildAllProjects",
             "-getProperty:BaseOutputPath",
             "-getProperty:OutputPath",
@@ -1522,6 +1526,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 sourceInputs.ToArray(),
                 references.Values.ToArray(),
                 targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray(),
+                ReadItemText(properties, "TargetPlatformVersion"),
                 outputRoots.ToArray(),
                 expectedOutputPaths.ToArray(),
                 intermediateRoot,
