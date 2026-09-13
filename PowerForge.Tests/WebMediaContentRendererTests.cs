@@ -58,6 +58,22 @@ public class WebMediaContentRendererTests
     }
 
     [Fact]
+    public void Content_WrapsMinifiedSelfClosingImagesWithoutCapturingFollowingContent()
+    {
+        const string image = "<img src=/deployment-health.png alt=\"Deployment > health\" loading=lazy decoding=async width=1180 height=640 />";
+        const string following = "<p>Following paragraph.</p><h2>Next heading</h2>";
+        string result = WebMediaContentRenderer.Render("<article data-pf-media-scope=\"content\">" + image + following + "</article>");
+
+        Assert.Contains(">" + image + "</a>" + following, result);
+        Assert.DoesNotContain("< />/>", result);
+        var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
+        var link = doc.DocumentNode.SelectSingleNode("//a[@data-pf-media]");
+        Assert.Single(link.Descendants("img"));
+        Assert.Empty(link.Descendants("p"));
+        Assert.NotNull(link.SelectSingleNode("following-sibling::p[normalize-space(.)='Following paragraph.']"));
+    }
+
+    [Fact]
     public void Previews_PreserveMultilineSelfClosingImageAnchorBoundaries()
     {
         const string anchor = "<a class=\"preview\" href=\"/demo.html\">\r\n  <img src=\"/demo.png\" alt=\"Demo\" />\r\n</a>";
