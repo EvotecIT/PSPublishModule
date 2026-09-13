@@ -70,13 +70,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void VerifiedPackageCatalog_InheritsOnlyPackageKeysVerifiedByChildLock()
+    public void VerifiedPackageCatalog_InheritsOnlyMissingSdkEvidenceWithoutPromotingLockedPackages()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
             string packageRoot = Directory.CreateDirectory(Path.Combine(root, "packages")).FullName;
             string sharedArchive = Path.Combine(packageRoot, "shared.nupkg");
+            string sharedAliasArchive = Path.Combine(packageRoot, "shared-alias.nupkg");
+            string sdkArchive = Path.Combine(packageRoot, "sdk.nupkg");
             Type runnerType = typeof(DotNetPublishPipelineRunner);
             Type catalogType = runnerType.GetNestedType(
                 "VerifiedPackageInputCatalog",
@@ -92,7 +94,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 object catalog = constructor.Invoke(
                 [
                     new[] { packageRoot },
-                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Shared.Package|1.0.0"] = "shared-hash"
+                    },
                     cache,
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
@@ -100,22 +105,106 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     },
                     Array.Empty<string>()
                 ]);
-                catalogType.GetMethod(
-                        "InheritSdkManagedPackageKeys",
-                        BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(catalog, [new[] { "Shared.Package|1.0.0", "Root.Only|1.0.0" }]);
+                Type evidenceType = catalogType.GetNestedType(
+                    "VerifiedSdkManagedPackageEvidence",
+                    BindingFlags.NonPublic)!;
+                Array evidence = Array.CreateInstance(evidenceType, 2);
+                evidence.SetValue(
+                    Activator.CreateInstance(evidenceType, "Shared.Package|1.0.0", "shared-hash", sharedAliasArchive),
+                    0);
+                evidence.SetValue(
+                    Activator.CreateInstance(evidenceType, "Sdk.Package|1.0.0", "sdk-hash", sdkArchive),
+                    1);
+                MethodInfo inherit = catalogType.GetMethod(
+                    "TryInheritSdkManagedPackageEvidence",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                object?[] arguments = [evidence, null];
 
-                var inherited = Assert.IsAssignableFrom<IEnumerable<string>>(
+                Assert.True((bool)inherit.Invoke(catalog, arguments)!);
+                Assert.Null(arguments[1]);
+
+                var inherited = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
                     catalogType.GetProperty(
-                            "SdkManagedPackageKeys",
+                            "SdkManagedPackageEvidence",
                             BindingFlags.Instance | BindingFlags.NonPublic)!
                         .GetValue(catalog));
-                Assert.Equal("Shared.Package|1.0.0", Assert.Single(inherited));
+                object inheritedPackage = Assert.Single(inherited.Cast<object>());
+                Assert.Equal(
+                    "Sdk.Package|1.0.0",
+                    evidenceType.GetProperty("PackageKey")!.GetValue(inheritedPackage));
+
+                Array conflictingEvidence = Array.CreateInstance(evidenceType, 1);
+                conflictingEvidence.SetValue(
+                    Activator.CreateInstance(evidenceType, "Shared.Package|1.0.0", "different-hash", sharedArchive),
+                    0);
+                object?[] conflictingArguments = [conflictingEvidence, null];
+                Assert.False((bool)inherit.Invoke(catalog, conflictingArguments)!);
+                Assert.Contains("conflicted", Assert.IsType<string>(conflictingArguments[1]));
             }
             finally
             {
                 (cache as IDisposable)?.Dispose();
             }
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ProjectEvaluationRequest_IsolatesDependencyAndReleaseRootScopes()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string appProject = Path.Combine(root, "App", "App.csproj");
+            string libraryProject = Path.Combine(root, "Library", "Library.csproj");
+            Type requestType = typeof(DotNetPublishPipelineRunner).GetNestedType(
+                "ProjectEvaluationRequest",
+                BindingFlags.NonPublic)!;
+            ConstructorInfo constructor = Assert.Single(
+                requestType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
+            object CreateRequest(string projectPath) => constructor.Invoke(
+            [
+                projectPath,
+                "net10.0",
+                "Release",
+                null,
+                null,
+                null,
+                null,
+                true,
+                null,
+                true,
+                null
+            ]);
+            MethodInfo forScope = requestType.GetMethod(
+                "ForEvaluationScope",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            MethodInfo forProject = requestType.GetMethod(
+                "ForProject",
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: [typeof(string), typeof(string)],
+                modifiers: null)!;
+            MethodInfo buildVisitKey = requestType.GetMethod(
+                "BuildVisitKey",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            PropertyInfo isScopeRoot = requestType.GetProperty(
+                "IsEvaluationScopeRoot",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+            object appRoot = forScope.Invoke(CreateRequest(appProject), [appProject])!;
+            object libraryAsDependency = forProject.Invoke(appRoot, [libraryProject, "net10.0"])!;
+            object libraryAsRoot = forScope.Invoke(CreateRequest(libraryProject), [libraryProject])!;
+
+            Assert.False((bool)isScopeRoot.GetValue(libraryAsDependency)!);
+            Assert.True((bool)isScopeRoot.GetValue(libraryAsRoot)!);
+            Assert.NotEqual(
+                (string)buildVisitKey.Invoke(libraryAsDependency, null)!,
+                (string)buildVisitKey.Invoke(libraryAsRoot, null)!);
         }
         finally
         {

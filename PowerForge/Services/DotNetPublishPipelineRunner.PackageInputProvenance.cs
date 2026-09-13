@@ -458,17 +458,21 @@ public sealed partial class DotNetPublishPipelineRunner
     private sealed partial class VerifiedPackageInputCatalog
     {
         private readonly string[] _packageRoots;
-        private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
+        private readonly Dictionary<string, string> _lockedPackageHashes;
         private readonly VerifiedPackageArchiveCache _archives;
-        private readonly IReadOnlyDictionary<string, string> _archivePathsByPackageKey;
+        private readonly Dictionary<string, string> _archivePathsByPackageKey;
         private readonly HashSet<string> _sdkManagedArchivePaths;
         private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         private string? _sdkEvidenceFailureReason;
 
-        internal IEnumerable<string> SdkManagedPackageKeys => _archivePathsByPackageKey
-            .Where(package => _sdkManagedArchivePaths.Contains(Path.GetFullPath(package.Value)))
-            .Select(package => package.Key);
+        internal IEnumerable<VerifiedSdkManagedPackageEvidence> SdkManagedPackageEvidence =>
+            _archivePathsByPackageKey
+                .Where(package => _sdkManagedArchivePaths.Contains(Path.GetFullPath(package.Value)))
+                .Select(package => new VerifiedSdkManagedPackageEvidence(
+                    package.Key,
+                    _lockedPackageHashes[package.Key],
+                    package.Value));
 
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,
@@ -481,22 +485,46 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(Path.GetFullPath)
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray();
-            _lockedPackageHashes = lockedPackageHashes;
+            _lockedPackageHashes = new Dictionary<string, string>(lockedPackageHashes, StringComparer.OrdinalIgnoreCase);
             _archives = archives;
-            _archivePathsByPackageKey = archivePathsByPackageKey;
+            _archivePathsByPackageKey = new Dictionary<string, string>(archivePathsByPackageKey, StringComparer.OrdinalIgnoreCase);
             _sdkManagedArchivePaths = new HashSet<string>(
                 sdkManagedPackageKeys.Where(archivePathsByPackageKey.ContainsKey)
                     .Select(packageKey => archivePathsByPackageKey[packageKey]),
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
-        internal void InheritSdkManagedPackageKeys(IEnumerable<string> packageKeys)
+        internal bool TryInheritSdkManagedPackageEvidence(
+            IEnumerable<VerifiedSdkManagedPackageEvidence> packages,
+            out string? failureReason)
         {
-            _sdkManagedArchivePaths.UnionWith(
-                packageKeys
-                    .Where(_archivePathsByPackageKey.ContainsKey)
-                    .Select(packageKey => Path.GetFullPath(_archivePathsByPackageKey[packageKey])));
+            failureReason = null;
+            foreach (VerifiedSdkManagedPackageEvidence package in packages)
+            {
+                if (_lockedPackageHashes.TryGetValue(package.PackageKey, out string? existingHash))
+                {
+                    if (!string.Equals(existingHash, package.ContentHash, StringComparison.Ordinal))
+                    {
+                        failureReason = $"SDK-managed package '{package.PackageKey}' conflicted with the evaluated lock evidence";
+                        return false;
+                    }
+
+                    // Existing lock evidence belongs to this project. Keep its archive and
+                    // classification instead of promoting an ordinary dependency to SDK-managed.
+                    continue;
+                }
+
+                _lockedPackageHashes[package.PackageKey] = package.ContentHash;
+                _archivePathsByPackageKey[package.PackageKey] = package.ArchivePath;
+                _sdkManagedArchivePaths.Add(Path.GetFullPath(package.ArchivePath));
+            }
+            return true;
         }
+
+        internal readonly record struct VerifiedSdkManagedPackageEvidence(
+            string PackageKey,
+            string ContentHash,
+            string ArchivePath);
 
         internal static bool TryCreate(
             string projectPath,

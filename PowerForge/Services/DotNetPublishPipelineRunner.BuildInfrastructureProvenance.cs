@@ -703,7 +703,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyCollection<string>? trustedBuildPackages = null,
             bool requiresSdkPackageEvidence = true,
             IReadOnlyDictionary<string, string>? sdkPackageEvidenceGlobalProperties = null,
-            bool requiresPrebuiltProjectReferenceOutputProof = true)
+            bool requiresPrebuiltProjectReferenceOutputProof = true,
+            string? evaluationScopeRootPath = null)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
@@ -731,6 +732,9 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             SdkPackageEvidenceGlobalProperties = sdkEvidenceProperties;
             RequiresPrebuiltProjectReferenceOutputProof = requiresPrebuiltProjectReferenceOutputProof;
+            EvaluationScopeRootPath = string.IsNullOrWhiteSpace(evaluationScopeRootPath)
+                ? null
+                : Path.GetFullPath(evaluationScopeRootPath);
         }
 
         internal string ProjectPath { get; }
@@ -744,6 +748,12 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool RequiresSdkPackageEvidence { get; }
         internal IReadOnlyDictionary<string, string> SdkPackageEvidenceGlobalProperties { get; }
         internal bool RequiresPrebuiltProjectReferenceOutputProof { get; }
+        internal string? EvaluationScopeRootPath { get; }
+        internal bool IsEvaluationScopeRoot =>
+            EvaluationScopeRootPath is not null &&
+            NormalizeProjectReferenceIdentityPath(ProjectPath).Equals(
+                NormalizeProjectReferenceIdentityPath(EvaluationScopeRootPath),
+                StringComparison.Ordinal);
         internal bool DisablesProjectReferenceBuilds
             => GlobalProperties.TryGetValue("BuildProjectReferences", out string? value) &&
                bool.TryParse(value.Trim(), out bool buildProjectReferences) &&
@@ -790,7 +800,22 @@ public sealed partial class DotNetPublishPipelineRunner
                 TrustedBuildPackages,
                 RequiresSdkPackageEvidence,
                 SdkPackageEvidenceGlobalProperties,
-                RequiresPrebuiltProjectReferenceOutputProof);
+                RequiresPrebuiltProjectReferenceOutputProof,
+                EvaluationScopeRootPath);
+
+        internal ProjectEvaluationRequest ForEvaluationScope(string rootProjectPath)
+            => new(
+                ProjectPath,
+                TargetFramework,
+                Configuration,
+                GlobalProperties,
+                EnvironmentVariables,
+                ControlledBuildEnvironmentVariableNames,
+                TrustedBuildPackages,
+                RequiresSdkPackageEvidence,
+                SdkPackageEvidenceGlobalProperties,
+                RequiresPrebuiltProjectReferenceOutputProof,
+                rootProjectPath);
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
         {
@@ -833,12 +858,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 trustedBuildPackages: TrustedBuildPackages,
                 requiresSdkPackageEvidence: true,
                 sdkPackageEvidenceGlobalProperties: SdkPackageEvidenceGlobalProperties,
-                requiresPrebuiltProjectReferenceOutputProof: RequiresPrebuiltProjectReferenceOutputProof);
+                requiresPrebuiltProjectReferenceOutputProof: RequiresPrebuiltProjectReferenceOutputProof,
+                evaluationScopeRootPath: EvaluationScopeRootPath);
         }
 
         internal string BuildVisitKey()
         {
             var key = new System.Text.StringBuilder();
+            if (EvaluationScopeRootPath is not null)
+            {
+                AppendProjectReferenceKeySegment(key, "EvaluationScopeRoot");
+                AppendProjectReferenceKeySegment(
+                    key,
+                    NormalizeProjectReferenceIdentityPath(EvaluationScopeRootPath));
+            }
             AppendProjectReferenceKeySegment(key, "ProjectPath");
             AppendProjectReferenceKeySegment(key, NormalizeProjectReferenceIdentityPath(ProjectPath));
             AppendProjectReferenceKeySegment(key, "TargetFramework");
