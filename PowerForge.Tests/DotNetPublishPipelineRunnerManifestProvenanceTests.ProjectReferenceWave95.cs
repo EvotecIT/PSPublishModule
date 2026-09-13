@@ -73,7 +73,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "*",
                 SearchOption.AllDirectories));
 
+            DateTime lastWriteTimeUtc = File.GetLastWriteTimeUtc(snapshotPath);
+            UnixFileMode unixFileMode = File.GetUnixFileMode(snapshotPath);
+
             File.WriteAllText(snapshotPath, "mutated");
+            File.WriteAllBytes(snapshotPath, bytes);
+            File.SetLastWriteTimeUtc(snapshotPath, lastWriteTimeUtc);
+            File.SetUnixFileMode(snapshotPath, unixFileMode);
             Thread.Sleep(500);
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
