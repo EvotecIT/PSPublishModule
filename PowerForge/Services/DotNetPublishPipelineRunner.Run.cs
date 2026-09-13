@@ -178,8 +178,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                             publishStep: step);
                                     PublishProvenanceLease candidateLease = PublishProvenanceLease.Create(
                                         PublishProvenanceLease.BuildGuardedPaths(
-                                            initialProvenance.PublishInputFiles,
-                                            initialProvenance.NoBuildPublishInputs));
+                                            initialProvenance.PublishInputFiles));
                                     try
                                     {
                                         SourceProvenance confirmedProvenance =
@@ -188,8 +187,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                                 additionalGeneratedPaths: plannedPublishGeneratedPaths,
                                                 publishStep: step);
                                         candidateLease.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
-                                            confirmedProvenance.PublishInputFiles,
-                                            confirmedProvenance.NoBuildPublishInputs));
+                                            confirmedProvenance.PublishInputFiles));
                                         candidateLease.ValidateUnchanged();
                                         confirmedProvenance.ValidateCurrentSource();
                                         manifestProvenanceLease = candidateLease;

@@ -67,7 +67,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void PublishProvenanceLease_IncludesNoBuildPublishOutputs()
+    public void PublishProvenanceLease_LeavesSnapshottedNoBuildPublishOutputsWritable()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -85,14 +85,23 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(outputPath))));
 
             string[] guardedPaths = DotNetPublishPipelineRunner.PublishProvenanceLease.BuildGuardedPaths(
-                [projectPath],
-                [output]);
+                [projectPath]);
 
             StringComparer comparer = OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
             Assert.Contains(projectPath, guardedPaths, comparer);
-            Assert.Contains(outputPath, guardedPaths, comparer);
+            Assert.DoesNotContain(outputPath, guardedPaths, comparer);
+
+            using DotNetPublishPipelineRunner.PublishProvenanceLease lease =
+                DotNetPublishPipelineRunner.PublishProvenanceLease.Create(guardedPaths);
+            using DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot snapshot =
+                DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot.Create([output], null);
+
+            File.WriteAllText(outputPath, "regenerated-by-publish");
+
+            lease.ValidateUnchanged();
+            snapshot.ValidateUnchanged();
         }
         finally
         {
