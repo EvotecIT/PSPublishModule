@@ -11,12 +11,12 @@ Executes the unified repository release workflow from a JSON configuration.
 ## SYNTAX
 ### Config (Default)
 ```powershell
-Invoke-PowerForgeRelease [-ConfigPath <string>] [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleFramework <string>] [-ReleaseVersion <string>] [-ModuleRunMode <ConfigurationGateMode>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSkipInstall] [-ModuleSignModule] [-ModuleTimeoutSeconds <Int32>] [-ModuleCertificateThumbprint <string>] [-ModuleSignIncludeBinaries <bool>] [-ModuleSignIncludeInternals <bool>] [-ModuleSignIncludeExe <bool>] [-ModuleDiagnosticsBaselinePath <string>] [-ModuleGenerateDiagnosticsBaseline <bool>] [-ModuleUpdateDiagnosticsBaseline <bool>] [-ModuleFailOnNewDiagnostics <bool>] [-ModuleFailOnDiagnosticsSeverity <string>] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-AppleAction <PowerForgeAppleReleaseAction>] [-AppleVersion <string>] [-AppleSourceCommit <string>] [-AppleExpectedPlanSha256 <string>] [-AppleShipTestFlightTarget <string[]>] [-AppleShipAppStoreTarget <string[]>] [-AppleShipSyncScreenshots] [-ConfirmAppleAction] [-AdoptExistingAppleBuild] [-AppleResume] [-NoAppleResume] [-AppleWaitForProcessing] [-NoAppleWaitForProcessing] [-AppleProcessingTimeoutSeconds <Int32>] [-ApplePollIntervalSeconds <Int32>] [-AppleSummary] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-NoInteractive] [-SubmitWinget] [-SkipWingetSubmit] [-WingetSubmitMode <string>] [-WingetToolPath <string>] [-WingetTokenEnvName <string>] [-WingetTokenFilePath <string>] [-WingetPullRequestTitle <string>] [-WingetOpenBrowser] [-WingetReplace] [-WingetReplaceVersion <string>] [-WingetAllowInteractiveAuthentication] [-WingetTimeoutSeconds <Int32>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-PowerForgeRelease [-ConfigPath <string>] [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleFramework <string>] [-ReleaseVersion <string>] [-ModuleRunMode <ConfigurationGateMode>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSkipInstall] [-ModuleSignModule] [-ModuleTimeoutSeconds <Int32>] [-ModuleCertificateThumbprint <string>] [-ModuleSignIncludeBinaries <bool>] [-ModuleSignIncludeInternals <bool>] [-ModuleSignIncludeExe <bool>] [-ModuleDiagnosticsBaselinePath <string>] [-ModuleGenerateDiagnosticsBaseline <bool>] [-ModuleUpdateDiagnosticsBaseline <bool>] [-ModuleFailOnNewDiagnostics <bool>] [-ModuleFailOnDiagnosticsSeverity <string>] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceTestimoXRoot <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-AppleAction <PowerForgeAppleReleaseAction>] [-AppleVersion <string>] [-AppleSourceCommit <string>] [-AppleExpectedPlanSha256 <string>] [-AppleShipTestFlightTarget <string[]>] [-AppleShipAppStoreTarget <string[]>] [-AppleShipSyncScreenshots] [-ConfirmAppleAction] [-AdoptExistingAppleBuild] [-AppleResume] [-NoAppleResume] [-AppleWaitForProcessing] [-NoAppleWaitForProcessing] [-AppleProcessingTimeoutSeconds <Int32>] [-ApplePollIntervalSeconds <Int32>] [-AppleSummary] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimeoutSeconds <Int32>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-NoInteractive] [-SubmitWinget] [-SkipWingetSubmit] [-WingetSubmitMode <string>] [-WingetToolPath <string>] [-WingetTokenEnvName <string>] [-WingetTokenFilePath <string>] [-WingetPullRequestTitle <string>] [-WingetOpenBrowser] [-WingetReplace] [-WingetReplaceVersion <string>] [-WingetAllowInteractiveAuthentication] [-WingetTimeoutSeconds <Int32>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Project
 ```powershell
-Invoke-PowerForgeRelease -Project <ConfigurationProject> [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleFramework <string>] [-ReleaseVersion <string>] [-ModuleRunMode <ConfigurationGateMode>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSkipInstall] [-ModuleSignModule] [-ModuleTimeoutSeconds <Int32>] [-ModuleCertificateThumbprint <string>] [-ModuleSignIncludeBinaries <bool>] [-ModuleSignIncludeInternals <bool>] [-ModuleSignIncludeExe <bool>] [-ModuleDiagnosticsBaselinePath <string>] [-ModuleGenerateDiagnosticsBaseline <bool>] [-ModuleUpdateDiagnosticsBaseline <bool>] [-ModuleFailOnNewDiagnostics <bool>] [-ModuleFailOnDiagnosticsSeverity <string>] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-AppleAction <PowerForgeAppleReleaseAction>] [-AppleVersion <string>] [-AppleSourceCommit <string>] [-AppleExpectedPlanSha256 <string>] [-AppleShipTestFlightTarget <string[]>] [-AppleShipAppStoreTarget <string[]>] [-AppleShipSyncScreenshots] [-ConfirmAppleAction] [-AdoptExistingAppleBuild] [-AppleResume] [-NoAppleResume] [-AppleWaitForProcessing] [-NoAppleWaitForProcessing] [-AppleProcessingTimeoutSeconds <Int32>] [-ApplePollIntervalSeconds <Int32>] [-AppleSummary] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-NoInteractive] [-SubmitWinget] [-SkipWingetSubmit] [-WingetSubmitMode <string>] [-WingetToolPath <string>] [-WingetTokenEnvName <string>] [-WingetTokenFilePath <string>] [-WingetPullRequestTitle <string>] [-WingetOpenBrowser] [-WingetReplace] [-WingetReplaceVersion <string>] [-WingetAllowInteractiveAuthentication] [-WingetTimeoutSeconds <Int32>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-PowerForgeRelease -Project <ConfigurationProject> [-Plan] [-Validate] [-PackagesOnly] [-ModuleOnly] [-ToolsOnly] [-PublishNuget] [-PublishProjectGitHub] [-PublishToolGitHub] [-Configuration <string>] [-ModuleFramework <string>] [-ReleaseVersion <string>] [-ModuleRunMode <ConfigurationGateMode>] [-ModuleNoDotnetBuild] [-ModuleVersion <string>] [-ModulePreReleaseTag <string>] [-ModuleNoSign] [-ModuleSkipInstall] [-ModuleSignModule] [-ModuleTimeoutSeconds <Int32>] [-ModuleCertificateThumbprint <string>] [-ModuleSignIncludeBinaries <bool>] [-ModuleSignIncludeInternals <bool>] [-ModuleSignIncludeExe <bool>] [-ModuleDiagnosticsBaselinePath <string>] [-ModuleGenerateDiagnosticsBaseline <bool>] [-ModuleUpdateDiagnosticsBaseline <bool>] [-ModuleFailOnNewDiagnostics <bool>] [-ModuleFailOnDiagnosticsSeverity <string>] [-SkipWorkspaceValidation] [-WorkspaceConfigPath <string>] [-WorkspaceProfile <string>] [-WorkspaceTestimoXRoot <string>] [-WorkspaceEnableFeature <string[]>] [-WorkspaceDisableFeature <string[]>] [-SkipRestore] [-SkipBuild] [-Target <string[]>] [-AppleAction <PowerForgeAppleReleaseAction>] [-AppleVersion <string>] [-AppleSourceCommit <string>] [-AppleExpectedPlanSha256 <string>] [-AppleShipTestFlightTarget <string[]>] [-AppleShipAppStoreTarget <string[]>] [-AppleShipSyncScreenshots] [-ConfirmAppleAction] [-AdoptExistingAppleBuild] [-AppleResume] [-NoAppleResume] [-AppleWaitForProcessing] [-NoAppleWaitForProcessing] [-AppleProcessingTimeoutSeconds <Int32>] [-ApplePollIntervalSeconds <Int32>] [-AppleSummary] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-Flavors <string[]>] [-ToolOutput <string[]>] [-SkipToolOutput <string[]>] [-OutputRoot <string>] [-StageRoot <string>] [-ManifestJsonPath <string>] [-AllowOutputOutsideProjectRoot] [-AllowManifestOutsideProjectRoot] [-ChecksumsPath <string>] [-SkipReleaseChecksums] [-KeepSymbols] [-Sign] [-SignProfile <string>] [-SignToolPath <string>] [-SignThumbprint <string>] [-SignSubjectName <string>] [-SignOnMissingTool <DotNetPublishPolicyMode>] [-SignOnFailure <DotNetPublishPolicyMode>] [-SignTimeoutSeconds <Int32>] [-SignTimestampUrl <string>] [-SignDescription <string>] [-SignUrl <string>] [-SignCsp <string>] [-SignKeyContainer <string>] [-PackageSignThumbprint <string>] [-PackageSignStore <string>] [-PackageSignTimestampUrl <string>] [-InstallerProperty <string[]>] [-ExitCode] [-NoInteractive] [-SubmitWinget] [-SkipWingetSubmit] [-WingetSubmitMode <string>] [-WingetToolPath <string>] [-WingetTokenEnvName <string>] [-WingetTokenFilePath <string>] [-WingetPullRequestTitle <string>] [-WingetOpenBrowser] [-WingetReplace] [-WingetReplaceVersion <string>] [-WingetAllowInteractiveAuthentication] [-WingetTimeoutSeconds <Int32>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -1131,6 +1131,22 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -SignTimeoutSeconds
+Maximum signing process duration in seconds.
+
+```yaml
+Type: Int32
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -SignTimestampUrl
 Optional signing timestamp URL override.
 
@@ -1597,6 +1613,22 @@ Accept wildcard characters: False
 
 ### -WorkspaceProfile
 Optional workspace validation profile override.
+
+```yaml
+Type: String
+Parameter Sets: Config, Project
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -WorkspaceTestimoXRoot
+Optional TestimoX workspace root passed to shared workspace validation.
 
 ```yaml
 Type: String

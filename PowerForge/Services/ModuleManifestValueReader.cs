@@ -216,23 +216,35 @@ internal static class ModuleManifestValueReader
 
     internal static string ReadPowerShellCompatibleText(string path)
     {
+        using var stream = File.OpenRead(path);
+        return ReadPowerShellCompatibleText(stream);
+    }
+
+    /// <summary>Decodes a seekable manifest stream with the same BOM and legacy ANSI fallback as file reads.</summary>
+    internal static string ReadPowerShellCompatibleText(Stream stream)
+    {
+        var start = stream.Position;
         try
         {
             using var reader = new StreamReader(
-                path,
+                stream,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
-                detectEncodingFromByteOrderMarks: true);
+                detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
             return reader.ReadToEnd();
         }
         catch (DecoderFallbackException)
         {
+            stream.Position = start;
 #if NETFRAMEWORK
-            return File.ReadAllText(path, Encoding.Default);
+            var encoding = Encoding.Default;
 #else
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             var codePage = CultureInfo.CurrentCulture.TextInfo.ANSICodePage;
-            return File.ReadAllText(path, Encoding.GetEncoding(codePage));
+            var encoding = Encoding.GetEncoding(codePage);
 #endif
+            using var reader = new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true,
+                bufferSize: 1024, leaveOpen: true);
+            return reader.ReadToEnd();
         }
     }
 }

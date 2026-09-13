@@ -27,7 +27,8 @@ internal sealed class ProjectBuildOperationLock : IDisposable
         FileStream? stream = null;
         try
         {
-            stream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+            // Unix maps read-sharing to a shared flock; the workspace lease must be exclusive.
+            stream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             stream.SetLength(0);
             var payload = Encoding.UTF8.GetBytes(
                 $"pid={System.Diagnostics.Process.GetCurrentProcess().Id}{Environment.NewLine}" +

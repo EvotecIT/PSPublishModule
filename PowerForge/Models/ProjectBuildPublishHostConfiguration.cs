@@ -5,6 +5,11 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProjectBuildPublishHostConfiguration
 {
+    /// <summary>Same-run repository publication policy with the resolved destination and credential context.</summary>
+    internal DotNetRepositoryReleaseSpec? PublicationSpec { get; set; }
+    /// <summary>Rechecks a named remote source's authentication context without retaining or serializing credentials.</summary>
+    internal Action? ValidatePublicationContext { get; set; }
+
     /// <summary>Resolved configuration path.</summary>
     public string ConfigPath { get; set; } = string.Empty;
 

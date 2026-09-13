@@ -319,7 +319,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             path);
     }
 
-    private static string NormalizeModuleVersion(string version, string? prerelease = null)
+    /// <summary>Normalizes the numeric manifest version and its separate PSData prerelease label.</summary>
+    internal static string NormalizeModuleVersion(string version, string? prerelease = null)
     {
         string numeric = NormalizeVersion(version);
         string label = (prerelease ?? string.Empty).Trim();
@@ -340,7 +341,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             throw Invalid($"Release artifact version '{actual}' does not match expected version '{expected!.Trim()}'.");
     }
 
-    private static string NormalizeModuleVersionText(string value)
+    /// <summary>Normalizes a complete expected module identity without dropping the prerelease label.</summary>
+    internal static string NormalizeModuleVersionText(string value)
     {
         string text = DotNetPublishReleaseArtifactVerifier.RequireText(value, "artifact version");
         int separator = text.IndexOf('-');

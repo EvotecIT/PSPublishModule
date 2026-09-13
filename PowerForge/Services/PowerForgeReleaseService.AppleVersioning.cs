@@ -174,6 +174,37 @@ internal sealed partial class PowerForgeReleaseService
         return receipt;
     }
 
+    private PowerForgeAppleReleaseReceipt CreateAppleCheckpointedPlanReceipt(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleReleaseReceipt approvedReceipt,
+        IReadOnlyCollection<PowerForgeAppleAppReleaseResult> checkpointResults)
+    {
+        foreach (var app in plan.Apps)
+        {
+            var checkpoint = checkpointResults.Single(candidate =>
+                candidate.Plan.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase));
+            app.ExpectedArchiveSha256 = checkpoint.ArchiveSha256;
+            var target = approvedReceipt.Targets.Single(candidate =>
+                candidate.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase));
+            target.ArchivePath = string.IsNullOrWhiteSpace(checkpoint.ArchiveSha256)
+                ? null
+                : FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
+            target.ArchiveSha256 = checkpoint.ArchiveSha256;
+        }
+
+        plan.ApprovedMutationInputFilesSha256 = new Dictionary<string, string>(
+            approvedReceipt.MutationInputFiles,
+            StringComparer.Ordinal);
+        approvedReceipt.MutationInputsSha256 = ComputeAppleMutationInputsSha256(
+            plan,
+            approvedReceipt.MutationInputFiles);
+        approvedReceipt.CheckedAt = DateTimeOffset.UtcNow;
+        approvedReceipt.PlanSha256 = ComputeApplePlanSha256(approvedReceipt);
+        if (plan.Automation.WriteReceipt)
+            _appleReceiptStore.WritePlan(plan.ProjectRoot, plan.PlanReceiptPath, approvedReceipt);
+        return approvedReceipt;
+    }
+
     private PowerForgeAppleReleaseTargetReceipt CreateApplePlanTarget(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
@@ -431,6 +462,14 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        plan.ApprovedMutationInputFilesSha256 = new Dictionary<string, string>(files, StringComparer.Ordinal);
+        return (files, ComputeAppleMutationInputsSha256(plan, files));
+    }
+
+    private static string ComputeAppleMutationInputsSha256(
+        PowerForgeAppleReleasePlan plan,
+        IReadOnlyDictionary<string, string> files)
+    {
         var options = new
         {
             plan.Configuration,
@@ -521,8 +560,7 @@ internal sealed partial class PowerForgeReleaseService
             plan.AllowNonPendingDeveloperRelease,
             Files = files.OrderBy(static value => value.Key, StringComparer.Ordinal).ToArray()
         };
-        plan.ApprovedMutationInputFilesSha256 = new Dictionary<string, string>(files, StringComparer.Ordinal);
-        return (files, ComputeStableSha256(options));
+        return ComputeStableSha256(options);
     }
 
     private static void AddApplePlanInputFile(

@@ -185,7 +185,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                   "Packages": {
                     "RootPath": "..",
                     "PublishGitHub": true,
-                    "GitHubAccessToken": "test-token",
+                    "GitHubAccessTokenEnvName": "POWERFORGE_TEST_GITHUB_TOKEN",
                     "GitHubUsername": "EvotecIT",
                     "GitHubRepositoryName": "Sample"
                   }
@@ -244,7 +244,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 projectBuildHostService: projectHost,
                 projectBuildPublishHostService: publishHost);
 
-            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            using var _ = new EnvironmentScope()
+                .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true")
+                .Set("POWERFORGE_TEST_GITHUB_TOKEN", "test-token");
             var result = await service.ExecuteAsync(queueItem);
 
             Assert.True(

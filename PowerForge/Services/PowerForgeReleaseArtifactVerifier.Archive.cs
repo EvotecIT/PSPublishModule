@@ -6,7 +6,7 @@ namespace PowerForge;
 
 public sealed partial class PowerForgeReleaseArtifactVerifier
 {
-    private const long MaxArchiveMetadataBytes = 4L * 1024L * 1024L;
+    internal const long MaxArchiveMetadataBytes = 4L * 1024L * 1024L;
     private const long MaxModuleSignedEntryBytes = 512L * 1024L * 1024L;
     private const long MaxModuleSignedEntriesBytes = 2L * 1024L * 1024L * 1024L;
     internal const int MaxArchiveEntries = 65536;
@@ -36,8 +36,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string? expectedSubject,
         bool allowSubjectMatchedCertificateRotation)
     {
-        using ZipArchive archive = ZipFile.OpenRead(archivePath);
+        using var archiveInput = new ArchiveMetadataReadStream(File.OpenRead(archivePath));
+        using ZipArchive archive = new ZipArchive(archiveInput, ZipArchiveMode.Read);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
+        archiveInput.CompleteMetadataInspection();
         if (!entries.TryGetValue(PowerForgePortablePayloadInventory.InventoryFileName, out ZipArchiveEntry? inventoryEntry) ||
             !entries.TryGetValue(PowerForgePortablePayloadInventory.SignatureFileName, out ZipArchiveEntry? signatureEntry))
             throw Invalid("Portable archive is missing its publisher-signed payload inventory.");
@@ -393,16 +395,22 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         return output.ToArray();
     }
 
-    private static void CopyBounded(Stream input, Stream output, long maximumBytes, string label)
+    /// <summary>Copies at most the allowed actual bytes, with cancellation checked between IO operations.</summary>
+    internal static long CopyBounded(Stream input, Stream output, long maximumBytes, string label,
+        CancellationToken cancellationToken = default)
     {
         var buffer = new byte[81920];
         long total = 0;
         int read;
-        while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+        while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            read = input.Read(buffer, 0, buffer.Length);
+            if (read == 0) return total;
             total = checked(total + read);
             if (total > maximumBytes)
                 throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
+            cancellationToken.ThrowIfCancellationRequested();
             output.Write(buffer, 0, read);
         }
     }

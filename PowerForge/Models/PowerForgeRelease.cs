@@ -96,6 +96,11 @@ internal sealed class PowerForgeReleaseRequest
 
     internal bool ModulePublisherActive { get; set; }
 
+    /// <summary>
+    /// Defers after-staging validation until an external signing checkpoint has replaced the staged artifacts.
+    /// </summary>
+    internal bool DeferAfterStagingValidation { get; set; }
+
     /// <summary>Build Apple archives from a private detached exact-commit source worktree.</summary>
     internal bool RequireImmutableAppleSourceSnapshot { get; set; }
 
@@ -345,6 +350,8 @@ internal sealed class PowerForgeReleaseResult
 
     public PowerForgeReleaseValidationResult[] ReleaseValidations { get; set; } =
         Array.Empty<PowerForgeReleaseValidationResult>();
+
+    internal ReleaseValidationIntegrityCheckpoint? ReleaseValidationIntegrity { get; set; }
 
     public PowerForgeToolGitHubReleaseResult[] ToolGitHubReleases { get; set; } = Array.Empty<PowerForgeToolGitHubReleaseResult>();
 
@@ -1204,11 +1211,14 @@ internal sealed class PowerForgeReleaseValidationAction
     /// <summary>PowerShell script path. Relative paths resolve from the release configuration directory.</summary>
     public string FilePath { get; set; } = string.Empty;
 
+    /// <summary>Shared release-validation JSON path, mutually exclusive with FilePath.</summary>
+    public string? ConfigPath { get; set; }
+
     /// <summary>Optional working directory. Relative paths resolve from the release configuration directory.</summary>
     public string? WorkingDirectory { get; set; }
 
     /// <summary>Environment variable overrides passed to the validation process.</summary>
-    public Dictionary<string, string?> Environment { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string?> Environment { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>Timeout in seconds. Defaults to thirty minutes.</summary>
     public int TimeoutSeconds { get; set; } = 1800;
@@ -1243,6 +1253,23 @@ internal sealed class PowerForgeReleaseValidationContext
     public string[] ReleaseAssets { get; set; } = Array.Empty<string>();
 
     public string[] StagedAssets { get; set; } = Array.Empty<string>();
+
+    public PowerForgeReleaseAssetEntry[] AssetEntries { get; set; } = Array.Empty<PowerForgeReleaseAssetEntry>();
+
+    public bool ModuleSelected { get; set; } = true;
+
+    public bool PackagesSelected { get; set; } = true;
+
+    public bool ToolsSelected { get; set; } = true;
+
+    /// <summary>Whether base Tool artifacts, rather than only packaged outputs, were selected.</summary>
+    public bool ToolArtifactsSelected { get; set; } = true;
+
+    /// <summary>The effective tool plan is shared in-process, not serialized into script context.</summary>
+    internal DotNetPublishPlan? PublishPlan { get; set; }
+
+    /// <summary>Effective tool target names after an explicit release target selection; null means no target filter.</summary>
+    internal string[]? SelectedToolTargets { get; set; }
 
     public string ContextPath { get; set; } = string.Empty;
 }

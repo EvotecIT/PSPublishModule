@@ -243,6 +243,10 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public string? WorkspaceProfile { get; set; }
 
+    /// <para>Optional TestimoX workspace root passed to shared workspace validation.</para>
+    [Parameter]
+    public string? WorkspaceTestimoXRoot { get; set; }
+
     /// <summary>
     /// Optional workspace feature enable list override.
     /// </summary>
@@ -480,6 +484,11 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     /// </summary>
     [Parameter]
     public DotNetPublishPolicyMode? SignOnFailure { get; set; }
+
+    /// <para>Maximum signing process duration in seconds.</para>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int? SignTimeoutSeconds { get; set; }
 
     /// <summary>
     /// Optional signing timestamp URL override.
@@ -838,6 +847,8 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),
             WorkspaceConfigPath = NormalizeNullable(WorkspaceConfigPath),
             WorkspaceProfile = NormalizeNullable(WorkspaceProfile),
+            WorkspaceTestimoXRoot = NormalizeNullable(WorkspaceTestimoXRoot),
+            SignTimeoutSeconds = SignTimeoutSeconds,
             OutputRoot = NormalizeNullable(OutputRoot),
             StageRoot = NormalizeNullable(StageRoot),
             ManifestJsonPath = NormalizeNullable(ManifestJsonPath),

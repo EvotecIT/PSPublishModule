@@ -55,18 +55,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
         try
         {
-            var settingsRoot = Path.GetFullPath(searchRoot);
-            if (!Directory.Exists(settingsRoot))
-                settingsRoot = Path.GetDirectoryName(settingsRoot) ?? settingsRoot;
-
-            var settings = Settings.LoadDefaultSettings(settingsRoot);
-            configuredSource = new PackageSourceProvider(settings)
-                .LoadPackageSources()
-                .FirstOrDefault(source => string.Equals(
-                    source.Name,
-                    sourceName,
-                    StringComparison.OrdinalIgnoreCase))
-                ?.Source ?? string.Empty;
+            configuredSource = LoadNamedPublishSource(sourceName, searchRoot)?.Source ?? string.Empty;
             return !string.IsNullOrWhiteSpace(configuredSource);
         }
         catch
@@ -74,6 +63,15 @@ public sealed partial class DotNetRepositoryReleaseService
             // dotnet nuget push reports malformed or inaccessible configuration itself.
             return false;
         }
+    }
+
+    private static PackageSource? LoadNamedPublishSource(string sourceName, string searchRoot)
+    {
+        var settingsRoot = Path.GetFullPath(searchRoot);
+        if (!Directory.Exists(settingsRoot))
+            settingsRoot = Path.GetDirectoryName(settingsRoot) ?? settingsRoot;
+        return new PackageSourceProvider(Settings.LoadDefaultSettings(settingsRoot))
+            .LoadPackageSources().FirstOrDefault(source => string.Equals(source.Name, sourceName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

@@ -117,41 +117,7 @@ public sealed partial class ArtefactBuilder
             fullTrustedBoundary = null;
         }
 
-        string current = fullDestination;
-        while (true)
-        {
-            try
-            {
-                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Script artefact {description} '{fullDestination}' traverses a symbolic link or reparse point at '{current}'.");
-                }
-            }
-            catch (FileNotFoundException)
-            {
-                // Non-existing path components are created only after this preflight succeeds.
-            }
-            catch (DirectoryNotFoundException)
-            {
-                // Non-existing path components are created only after this preflight succeeds.
-            }
-
-            if (fullTrustedBoundary is not null &&
-                string.Equals(current, fullTrustedBoundary, GetPathComparison(current, fullTrustedBoundary)))
-            {
-                return;
-            }
-
-            string? parent = Path.GetDirectoryName(current);
-            if (string.IsNullOrWhiteSpace(parent) ||
-                string.Equals(parent, current, GetPathComparison(parent, current)))
-            {
-                return;
-            }
-
-            current = parent;
-        }
+        FileSystemPathSafety.RejectReparsePoints(fullDestination, fullTrustedBoundary, $"Script artefact {description}");
     }
 
     private static string NormalizeScriptValidationPath(string path)

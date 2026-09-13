@@ -76,6 +76,8 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public string? WorkspaceProfile { get; set; }
 
+    public string? WorkspaceTestimoXRoot { get; set; }
+
     public string[] WorkspaceEnableFeatures { get; set; } = System.Array.Empty<string>();
 
     public string[] WorkspaceDisableFeatures { get; set; } = System.Array.Empty<string>();
@@ -127,6 +129,8 @@ internal sealed class PowerForgeReleaseInvocationOptions
     public DotNetPublishPolicyMode? SignOnMissingTool { get; set; }
 
     public DotNetPublishPolicyMode? SignOnFailure { get; set; }
+
+    public int? SignTimeoutSeconds { get; set; }
 
     public string? SignTimestampUrl { get; set; }
 

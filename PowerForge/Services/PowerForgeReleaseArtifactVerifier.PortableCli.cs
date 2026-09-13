@@ -559,40 +559,18 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     private static void ValidatePortableDimensions(JsonElement entry, ExpectedPortable expected)
     {
         DotNetPublishTarget target = expected.Target;
-        DotNetPublishPublishOptions publish = target.Publish!;
         DotNetPublishSpec configuration = expected.Configuration;
         string framework = ReadString(entry, "Framework");
         string runtime = ReadString(entry, "Runtime");
         string style = ReadString(entry, "Style");
-        string[] frameworks = NormalizeConfiguredStrings(publish.Frameworks);
-        if (frameworks.Length == 0 && !string.IsNullOrWhiteSpace(publish.Framework))
-            frameworks = new[] { publish.Framework.Trim() };
-        if (frameworks.Length == 0)
-            frameworks = NormalizeConfiguredStrings(configuration.Matrix?.Frameworks);
-
-        string[] runtimes = NormalizeConfiguredStrings(publish.Runtimes);
-        if (runtimes.Length == 0)
-            runtimes = NormalizeConfiguredStrings(configuration.Matrix?.Runtimes);
-        if (runtimes.Length == 0)
-            runtimes = NormalizeConfiguredStrings(configuration.DotNet.Runtimes);
-
-        DotNetPublishStyle[] styles = (publish.Styles ?? Array.Empty<DotNetPublishStyle>()).Distinct().ToArray();
-        if (styles.Length == 0)
-            styles = (configuration.Matrix?.Styles ?? Array.Empty<DotNetPublishStyle>()).Distinct().ToArray();
-        if (styles.Length == 0)
-            styles = new[] { publish.Style };
-        if ((frameworks.Length > 0 && !frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase)) ||
-            (runtimes.Length > 0 && !runtimes.Contains(runtime, StringComparer.OrdinalIgnoreCase)) ||
-            !styles.Any(value => string.Equals(value.ToString(), style, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw Invalid("PowerForge manifest portable dimensions do not match the configured publish target.");
-        }
-
-        DotNetPublishMatrixRule[] include = configuration.Matrix?.Include ?? Array.Empty<DotNetPublishMatrixRule>();
-        DotNetPublishMatrixRule[] exclude = configuration.Matrix?.Exclude ?? Array.Empty<DotNetPublishMatrixRule>();
-        if ((include.Length > 0 && !include.Any(rule => RuleMatches(target.Name, runtime, framework, style, rule))) ||
-            exclude.Any(rule => RuleMatches(target.Name, runtime, framework, style, rule)))
-            throw Invalid("PowerForge manifest portable dimensions are excluded by the configured publish matrix.");
+        DotNetPublishTargetCombination[] combinations;
+        try { combinations = DotNetPublishPipelineRunner.ResolveTargetCombinations(target, configuration); }
+        catch (ArgumentException ex) { throw Invalid(ex.Message); }
+        if (!combinations.Any(combo =>
+            string.Equals(combo.Framework, framework, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(combo.Runtime, runtime, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(combo.Style.ToString(), style, StringComparison.OrdinalIgnoreCase)))
+            throw Invalid("PowerForge manifest portable dimensions do not match the configured publish target and matrix.");
 
         DotNetPublishBundle? bundle = expected.Bundle;
         if (bundle is null)
@@ -746,19 +724,4 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private static bool RuleMatches(
-        string target,
-        string runtime,
-        string framework,
-        string style,
-        DotNetPublishMatrixRule? rule)
-    {
-        if (rule is null)
-            return false;
-        string[] targets = NormalizeConfiguredStrings(rule.Targets);
-        return (targets.Length == 0 || targets.Any(pattern => DotNetPublishPipelineRunner.WildcardMatch(target, pattern))) &&
-               (string.IsNullOrWhiteSpace(rule.Runtime) || DotNetPublishPipelineRunner.WildcardMatch(runtime, rule.Runtime!.Trim())) &&
-               (string.IsNullOrWhiteSpace(rule.Framework) || DotNetPublishPipelineRunner.WildcardMatch(framework, rule.Framework!.Trim())) &&
-               (string.IsNullOrWhiteSpace(rule.Style) || DotNetPublishPipelineRunner.WildcardMatch(style, rule.Style!.Trim()));
-    }
 }

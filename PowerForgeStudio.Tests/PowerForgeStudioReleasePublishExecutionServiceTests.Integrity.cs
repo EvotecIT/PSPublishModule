@@ -114,6 +114,86 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         }
     }
 
+    [Fact]
+    public async Task ExecuteAsync_runs_after_staging_validation_after_signing_and_before_publication()
+    {
+        var repositoryRoot = CreateIntegrityRepository(
+            """
+            {
+              "GitHub": { "Publish": true, "Owner": "EvotecIT", "Repository": "ValidationRepo" },
+              "Outputs": { "Staging": { "RootPath": "../Staging" } },
+              "Validation": {
+                "AfterStaging": [
+                  { "Name": "Signed checkpoint", "ConfigPath": "validation.json" }
+                ]
+              }
+            }
+            """,
+            out var releaseConfig);
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(Path.GetDirectoryName(releaseConfig)!, "validation.json"),
+                """
+                {
+                  "Commands": [
+                    { "Name": "Signed artifact probe", "FileName": "powerforge-missing-validation-probe" }
+                  ]
+                }
+                """);
+            var assetPath = Path.Combine(repositoryRoot, "Artifacts", "ValidationRepo.zip");
+            Directory.CreateDirectory(Path.GetDirectoryName(assetPath)!);
+            File.WriteAllText(assetPath, "signed");
+            var queueItem = CreateIntegrityQueueItem(
+                repositoryRoot,
+                releaseConfig,
+                new PowerForgeReleaseResult
+                {
+                    Success = true,
+                    ConfigPath = releaseConfig,
+                    ReleaseAssets = [assetPath]
+                },
+                [
+                    ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
+                        repositoryRoot,
+                        "ValidationRepo",
+                        ReleaseBuildAdapterKind.ToolBuild.ToString(),
+                        assetPath,
+                        "File",
+                        ReleaseSigningReceiptStatus.Signed,
+                        "Signed.",
+                        DateTimeOffset.UtcNow))
+                ]);
+            var publishCalls = 0;
+            var service = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(),
+                new ModuleBuildHostService(),
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(),
+                new ProjectBuildPublishHostService(),
+                (request, _) => Task.FromResult(new DotNetNuGetPushResult(
+                    0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+                publishUnifiedRelease: (_, _) =>
+                {
+                    publishCalls++;
+                    return new PowerForgeReleaseResult { Success = true };
+                });
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(0, publishCalls);
+            var failure = Assert.Single(result.Receipts);
+            Assert.Equal("Validation", failure.TargetKind);
+            Assert.Contains("Signed checkpoint", failure.Summary, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
     private static string CreateIntegrityRepository(string releaseJson, out string releaseConfig)
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(
