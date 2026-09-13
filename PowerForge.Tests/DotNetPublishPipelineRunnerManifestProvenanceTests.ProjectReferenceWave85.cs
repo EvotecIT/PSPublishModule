@@ -85,7 +85,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(outputPath))));
 
             string[] guardedPaths = DotNetPublishPipelineRunner.PublishProvenanceLease.BuildGuardedPaths(
-                [projectPath]);
+                [projectPath, outputPath],
+                [output],
+                noBuildInPublish: true);
 
             StringComparer comparer = OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase
@@ -107,6 +109,39 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         {
             DeleteTestRepository(root);
         }
+    }
+
+    [Fact]
+    public void PublishProvenanceLease_GuardsUnsnapshottedPrebuiltOutputs()
+    {
+        string projectPath = Path.GetFullPath("App.csproj");
+        string generatedOutputPath = Path.GetFullPath("generated.dll");
+        string packageOutputPath = Path.GetFullPath("package.dll");
+        var generatedOutput = new DotNetPublishPipelineRunner.NoBuildPublishInput(
+            "evaluation",
+            generatedOutputPath,
+            "generated.dll",
+            new Dictionary<string, string>(),
+            "AA");
+        var packageOutput = new DotNetPublishPipelineRunner.NoBuildPublishInput(
+            "evaluation",
+            packageOutputPath,
+            "package.dll",
+            new Dictionary<string, string>(),
+            "BB",
+            isPackageBacked: true);
+
+        string[] guardedPaths = DotNetPublishPipelineRunner.PublishProvenanceLease.BuildGuardedPaths(
+            [projectPath],
+            [generatedOutput, packageOutput],
+            noBuildInPublish: false);
+
+        StringComparer comparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        Assert.Contains(projectPath, guardedPaths, comparer);
+        Assert.Contains(generatedOutputPath, guardedPaths, comparer);
+        Assert.DoesNotContain(packageOutputPath, guardedPaths, comparer);
     }
 
     [Fact]

@@ -469,7 +469,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     plannedPublishGeneratedPaths,
                     publishStep);
                 provenanceLease?.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
-                    signingProvenance.PublishInputFiles));
+                    signingProvenance.PublishInputFiles,
+                    signingProvenance.NoBuildPublishInputs,
+                    plan.NoBuildInPublish));
                 provenanceLease?.ValidateUnchanged();
                 string executable = ResolvePrimaryExecutable(
                     outputDir,
