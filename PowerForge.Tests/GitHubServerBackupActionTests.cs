@@ -17,6 +17,7 @@ public sealed class GitHubServerBackupActionTests
         Assert.Contains("StrictHostKeyChecking yes", script, StringComparison.Ordinal);
         Assert.Contains("IdentitiesOnly yes", script, StringComparison.Ordinal);
         Assert.DoesNotContain("ssh-keyscan", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Push-Location $engineRoot", script, StringComparison.Ordinal);
     }
 
     [Fact]

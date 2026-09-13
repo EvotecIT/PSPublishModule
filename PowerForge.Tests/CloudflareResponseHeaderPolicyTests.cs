@@ -500,6 +500,8 @@ public sealed class CloudflareResponseHeaderPolicyTests
         Assert.Contains("$cliExitCode = $LASTEXITCODE", script, StringComparison.Ordinal);
         Assert.Contains("Write-Host $jsonText", script, StringComparison.Ordinal);
         Assert.Contains("'site-policy'", script, StringComparison.Ordinal);
+        Assert.Contains("Push-Location $engineRoot", action, StringComparison.Ordinal);
+        Assert.Contains("Push-Location $engineRoot", script, StringComparison.Ordinal);
         Assert.True(script.Split('\n').Length < 100, "The action entrypoint should remain a bounded adapter over the CLI.");
     }
 

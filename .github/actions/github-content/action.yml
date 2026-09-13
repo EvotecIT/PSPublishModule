@@ -31,7 +31,12 @@ runs:
       run: |
         $repoRoot = (Resolve-Path (Join-Path $env:GITHUB_ACTION_PATH "../../..")).Path
         $project = Join-Path $repoRoot "PowerForge.Cli/PowerForge.Cli.csproj"
-        dotnet build $project -c Release --framework net10.0
+        Push-Location $repoRoot
+        try {
+          dotnet build $project -c Release --framework net10.0
+        } finally {
+          Pop-Location
+        }
       env:
         DOTNET_NOLOGO: true
         DOTNET_CLI_TELEMETRY_OPTOUT: 1
@@ -55,8 +60,13 @@ runs:
           throw "GitHub content config not found: $configPath"
         }
 
-        $jsonLines = & dotnet run --project $project -c Release --no-build --framework net10.0 -- github content sync --config $configPath --token-env GITHUB_TOKEN --restrict-output-root $workspace --output json
-        $exitCode = $LASTEXITCODE
+        Push-Location $repoRoot
+        try {
+          $jsonLines = & dotnet run --project $project -c Release --no-build --framework net10.0 -- github content sync --config $configPath --token-env GITHUB_TOKEN --restrict-output-root $workspace --output json
+          $exitCode = $LASTEXITCODE
+        } finally {
+          Pop-Location
+        }
         $json = $jsonLines -join [Environment]::NewLine
         if ([string]::IsNullOrWhiteSpace($json)) {
           throw "PowerForge returned no JSON result (exit code $exitCode)."

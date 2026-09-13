@@ -211,6 +211,7 @@ public sealed class CloudflareDnsRecordTests
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--token', $env:POWERFORGE_CLOUDFLARE_API_TOKEN", script, StringComparison.Ordinal);
         Assert.Contains("'dns-record'", script, StringComparison.Ordinal);
+        Assert.Contains("Push-Location $engineRoot", script, StringComparison.Ordinal);
         Assert.True(script.Split('\n').Length < 100, "The action entrypoint should remain a bounded adapter over the CLI.");
     }
 

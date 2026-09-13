@@ -32,6 +32,11 @@ public sealed class GitHubHousekeepingActionTests
         Assert.DoesNotContain("Invoke-PowerForgeHousekeeping.ps1", actionYaml, StringComparison.Ordinal);
         Assert.Contains("$dotnetArgs", actionYaml, StringComparison.Ordinal);
         Assert.Contains("Housekeeping config not found", actionYaml, StringComparison.Ordinal);
+        Assert.Contains("$callerRoot = (Get-Location).Path", actionYaml, StringComparison.Ordinal);
+        Assert.Contains("[IO.Path]::GetFullPath($configPath)", actionYaml, StringComparison.Ordinal);
+        Assert.Contains("Push-Location $repoRoot", actionYaml, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_GITHUB_HOUSEKEEPING_REPORT_PATH", actionYaml, StringComparison.Ordinal);
+        Assert.Contains("POWERFORGE_GITHUB_HOUSEKEEPING_SUMMARY_PATH", actionYaml, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()
