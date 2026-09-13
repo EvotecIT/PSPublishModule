@@ -154,6 +154,83 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ReadSourceProvenance_ExpandsExplicitlyUndefinedFrameworkToEveryInnerBuild()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "Library")).FullName;
+            string inputsDirectory = Directory.CreateDirectory(Path.Combine(root, "Inputs")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            string netEightInput = Path.Combine(inputsDirectory, "NetEightOnly.cs");
+            string netNineInput = Path.Combine(inputsDirectory, "NetNineOnly.cs");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      UndefineProperties="TargetFramework"
+                                      Targets="Build" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(libraryProject, """
+                <Project>
+                  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+                  <PropertyGroup><TargetFrameworks>net8.0;net9.0</TargetFrameworks></PropertyGroup>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+                    <Compile Include="../Inputs/NetEightOnly.cs" />
+                  </ItemGroup>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+                    <Compile Include="../Inputs/NetNineOnly.cs" />
+                  </ItemGroup>
+                  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+                  <Target Name="GetTargetPath" />
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"), "internal static class Program { private static void Main() { } }");
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.cs"), "public static class Library { }");
+            File.WriteAllText(netEightInput, "public static class NetEightOnly { }");
+            File.WriteAllText(netNineInput, "public static class NetNineOnly { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved undefined framework edge\"");
+            File.WriteAllText(netEightInput, "public static class NetEightOnly { public const int Changed = 1; }");
+            File.WriteAllText(netNineInput, "public static class NetNineOnly { public const int Changed = 1; }");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Targets = [CreateContextTarget("App", appProject, sign: true)]
+            };
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
+
+            Assert.True(
+                provenance.DirtyPaths.Any(path => path.Replace('\\', '/').EndsWith("Inputs/NetEightOnly.cs", StringComparison.Ordinal)),
+                string.Join(Environment.NewLine, provenance.DirtyReasons));
+            Assert.True(
+                provenance.DirtyPaths.Any(path => path.Replace('\\', '/').EndsWith("Inputs/NetNineOnly.cs", StringComparison.Ordinal)),
+                string.Join(Environment.NewLine, provenance.DirtyReasons));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
     private static DotNetPublishTargetPlan CreateContextTarget(
         string name,
         string projectPath,

@@ -363,6 +363,28 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             states[key] = 1;
+            if (request.DisablesTargetFrameworkInheritance &&
+                string.IsNullOrEmpty(request.TargetFramework) &&
+                evaluation.TargetFrameworks.Length > 0)
+            {
+                foreach (string targetFramework in evaluation.TargetFrameworks)
+                {
+                    ProjectEvaluationRequest innerRequest = request.ForProject(
+                        request.ProjectPath,
+                        targetFramework);
+                    string innerKey = innerRequest.BuildVisitKey();
+                    if (!requestsByEvaluation.ContainsKey(innerKey) ||
+                        !evaluationsByEvaluation.ContainsKey(innerKey))
+                    {
+                        graphFailureReason = $"the explicitly framework-independent reference to '{request.ProjectPath}' did not match the frozen '{targetFramework}' evaluation";
+                        return false;
+                    }
+                    if (!Visit(innerKey))
+                        return false;
+                }
+                states[key] = 2;
+                return true;
+            }
             foreach (EvaluatedProjectReference reference in evaluation.ProjectReferences)
             {
                 if (!File.Exists(reference.ProjectPath))
@@ -403,7 +425,8 @@ public sealed partial class DotNetPublishPipelineRunner
         out string key)
     {
         key = candidate.BuildVisitKey();
-        if (candidate.TargetFramework is not null)
+        if (candidate.TargetFramework is not null ||
+            candidate.DisablesTargetFrameworkInheritance)
         {
             return requestsByEvaluation.ContainsKey(key) &&
                    evaluationsByEvaluation.ContainsKey(key);
