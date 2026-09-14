@@ -601,6 +601,13 @@ Navigation lives in `site.json` under `Navigation`:
 - `Navigation.Footer` (columns + legal links)
 - `Navigation.Profiles` (path/layout/collection/project scoped overrides)
 
+If the header logo supplies the home link, set `Navigation.HomeLinkInBrand` to `true`.
+This lets the main menu focus on other destinations without producing the missing-Home
+verification warning. The default is `false`, which retains the explicit `/` menu-item
+check. This setting declares the theme's responsibility; it does not render a logo or
+prove that one exists. Render an accessible link to the appropriate localized homepage
+and include it in your rendered navigation checks. Other navigation checks remain enabled.
+
 Templates receive a computed `navigation` object with active states.
 
 Best practice (theme rendering):
