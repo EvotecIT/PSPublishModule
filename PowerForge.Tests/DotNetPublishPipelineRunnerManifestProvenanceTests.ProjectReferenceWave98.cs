@@ -117,4 +117,30 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             DeleteTestRepository(root);
         }
     }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("net8.0", false)]
+    [InlineData("net8.0;net10.0", true)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ControlledRestore_UsesOnlyDeclaredMultiTargetFrameworkMatrix(
+        string? declaredTargetFrameworks,
+        bool expectsMatrix)
+    {
+        var evaluatedProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (declaredTargetFrameworks is not null)
+            evaluatedProperties["TargetFrameworks"] = declaredTargetFrameworks;
+
+        string[] frameworks = DotNetPublishPipelineRunner.SelectControlledMultiFrameworkRestoreFrameworks(
+            evaluatedProperties);
+
+        Assert.Equal(expectsMatrix, frameworks.Length > 1);
+        if (expectsMatrix)
+        {
+            Assert.Equal(2, frameworks.Length);
+            Assert.Contains("net8.0", frameworks);
+            Assert.Contains("net10.0", frameworks);
+        }
+    }
 }

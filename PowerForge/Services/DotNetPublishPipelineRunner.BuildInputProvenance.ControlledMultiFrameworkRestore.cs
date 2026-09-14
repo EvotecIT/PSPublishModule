@@ -2,26 +2,21 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static Dictionary<string, ControlledPublishGraphNode[]> FindControlledMultiFrameworkProjects(
-        IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
+    internal static string[] SelectControlledMultiFrameworkRestoreFrameworks(
+        IReadOnlyDictionary<string, string> evaluatedProperties)
     {
-        StringComparer pathComparer = IsWindows()
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
-        return graphBuildNodes
-            .Where(node => !string.IsNullOrWhiteSpace(node.Request.TargetFramework))
-            .GroupBy(node => Path.GetFullPath(node.Request.ProjectPath), pathComparer)
-            .Select(group => new
-            {
-                ProjectPath = group.Key,
-                Nodes = group.ToArray(),
-                FrameworkCount = group
-                    .Select(node => node.Request.TargetFramework)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count()
-            })
-            .Where(group => group.FrameworkCount > 1)
-            .ToDictionary(group => group.ProjectPath, group => group.Nodes, pathComparer);
+        if (!evaluatedProperties.TryGetValue("TargetFrameworks", out string? declaredFrameworks) ||
+            string.IsNullOrWhiteSpace(declaredFrameworks))
+        {
+            return Array.Empty<string>();
+        }
+
+        string[] frameworks = declaredFrameworks
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return frameworks.Length > 1 ? frameworks : Array.Empty<string>();
     }
 
     private static bool TryRestoreControlledMultiFrameworkProject(

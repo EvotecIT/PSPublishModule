@@ -543,26 +543,19 @@ public sealed partial class DotNetPublishPipelineRunner
         out string? failureReason)
     {
         failureReason = null;
-        Dictionary<string, ControlledPublishGraphNode[]> multiFrameworkProjects =
-            FindControlledMultiFrameworkProjects(graphBuildNodes);
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string projectPath = Path.GetFullPath(node.Request.ProjectPath);
-            bool restoreWithFrameworkMatrix = multiFrameworkProjects.TryGetValue(
-                projectPath,
-                out ControlledPublishGraphNode[]? projectNodes);
+            string[] frameworks = SelectControlledMultiFrameworkRestoreFrameworks(
+                node.EvaluatedProperties);
+            bool restoreWithFrameworkMatrix = frameworks.Length > 1;
             if (restoreWithFrameworkMatrix)
             {
-                string[] frameworks = projectNodes!
-                    .Select(projectNode => projectNode.Request.TargetFramework)
-                    .Where(framework => !string.IsNullOrWhiteSpace(framework))
-                    .Select(framework => framework!.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
                 // Restore immediately before this node so each effective property context owns the
                 // assets file it consumes. Walking the frozen graph in postorder ensures every
-                // referenced node has already produced its controlled output.
+                // referenced node has already produced its controlled output. Use only the matrix
+                // declared by the evaluated project; globally retargeted single-target projects
+                // retain their concrete per-node restore.
                 if (!TryRestoreControlledMultiFrameworkProject(
                         projectPath,
                         node,
