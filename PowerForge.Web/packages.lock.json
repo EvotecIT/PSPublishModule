@@ -36,27 +36,27 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Direct",
-        "requested": "[14.16.0, )",
-        "resolved": "14.16.0",
-        "contentHash": "mV5igNia0VyUtRAmqUpI/ZBEL78+0A+JxPoOs7clwlZEvPCsvk+uF0hLl10zaFYmH5I8BaqVpI2+R+td1bbNrg==",
+        "requested": "[14.17.1, )",
+        "resolved": "14.17.1",
+        "contentHash": "qcRjhaQ6XueNp2ZUAXYcDrCWlWWlzw3VatXmhCKXDpG4MABGJJr5+o1KQqOe1EtSZaDS6hQNAh4nU8XjCENDiw==",
         "dependencies": {
-          "Magick.NET.Core": "14.16.0"
+          "Magick.NET.Core": "14.17.1"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.3.0, )",
-        "resolved": "3.3.0",
-        "contentHash": "ux0Jd99aEq4xRuSTQ18/a88bqT5/Ew4oPJ4ej/iGjDizrMFDrr5XcKbDFLtWiUDh3cCNuMjoUoyCnyMwGXXtFw==",
+        "requested": "[3.4.0, )",
+        "resolved": "3.4.0",
+        "contentHash": "slfuppYFOPTYGjKeg0yNjHEWujFYXlvBFsHPCIkRHprDa0ZVBeXsf+aVZqf0xTETdW/fHf9lAx6rqf5E84ro1w==",
         "dependencies": {
-          "OfficeIMO.Core": "3.3.0"
+          "OfficeIMO.Core": "3.4.0"
         }
       },
       "Scriban": {
         "type": "Direct",
-        "requested": "[7.2.7, )",
-        "resolved": "7.2.7",
-        "contentHash": "BrVsb+LAwY/3ePGNUW9K6k0ivSD4QmKCSJrUNCj1NVrATfEUqSKIosl/N38YZp4L00xmAi2F95itC878snptMg=="
+        "requested": "[7.4.0, )",
+        "resolved": "7.4.0",
+        "contentHash": "h5QYOAKw7F4ajVNxeScBsq0c7en6YWyKDSC4ZnZIlrkeJrl0ekHk1PlpqP5C4peqkt6NoXl9dlwK3pI4oDC5oA=="
       },
       "YamlDotNet": {
         "type": "Direct",
@@ -144,8 +144,8 @@
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.16.0",
-        "contentHash": "ddBX/Zb0sCsX4agqHdHeqUx+grfw8I7GFU+lgut3mtNl7roxbxemSQFGLIJXtzwPuAHxbaMtkXA+ijVl02EUhQ=="
+        "resolved": "14.17.1",
+        "contentHash": "4BBbU5l5DmdT9isSNGrIE/0VwAh29SoKMSDMiIvFBDqz6vQfG6EYBFJQOemdCH3xkMfesSzImOVPjnyMf/PIqA=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -211,8 +211,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.3.0",
-        "contentHash": "tI3yWESxTD5uG6wewJxHb1OdcZk3M6y5F9opE7kkCKaHVIE3j0/YxbyJViG71JmYmot8ad/Q3W3Jkfsp1CTlrQ=="
+        "resolved": "3.4.0",
+        "contentHash": "usa3QT805kWKRx2DFaHZggPJGdNixczQYof8VhbDRImJ2knOkPU3PQ7ewOG93UeQRn0eQa7PjI7KyKg/wyF7xw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
@@ -332,27 +332,27 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Direct",
-        "requested": "[14.16.0, )",
-        "resolved": "14.16.0",
-        "contentHash": "mV5igNia0VyUtRAmqUpI/ZBEL78+0A+JxPoOs7clwlZEvPCsvk+uF0hLl10zaFYmH5I8BaqVpI2+R+td1bbNrg==",
+        "requested": "[14.17.1, )",
+        "resolved": "14.17.1",
+        "contentHash": "qcRjhaQ6XueNp2ZUAXYcDrCWlWWlzw3VatXmhCKXDpG4MABGJJr5+o1KQqOe1EtSZaDS6hQNAh4nU8XjCENDiw==",
         "dependencies": {
-          "Magick.NET.Core": "14.16.0"
+          "Magick.NET.Core": "14.17.1"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.3.0, )",
-        "resolved": "3.3.0",
-        "contentHash": "ux0Jd99aEq4xRuSTQ18/a88bqT5/Ew4oPJ4ej/iGjDizrMFDrr5XcKbDFLtWiUDh3cCNuMjoUoyCnyMwGXXtFw==",
+        "requested": "[3.4.0, )",
+        "resolved": "3.4.0",
+        "contentHash": "slfuppYFOPTYGjKeg0yNjHEWujFYXlvBFsHPCIkRHprDa0ZVBeXsf+aVZqf0xTETdW/fHf9lAx6rqf5E84ro1w==",
         "dependencies": {
-          "OfficeIMO.Core": "3.3.0"
+          "OfficeIMO.Core": "3.4.0"
         }
       },
       "Scriban": {
         "type": "Direct",
-        "requested": "[7.2.7, )",
-        "resolved": "7.2.7",
-        "contentHash": "BrVsb+LAwY/3ePGNUW9K6k0ivSD4QmKCSJrUNCj1NVrATfEUqSKIosl/N38YZp4L00xmAi2F95itC878snptMg=="
+        "requested": "[7.4.0, )",
+        "resolved": "7.4.0",
+        "contentHash": "h5QYOAKw7F4ajVNxeScBsq0c7en6YWyKDSC4ZnZIlrkeJrl0ekHk1PlpqP5C4peqkt6NoXl9dlwK3pI4oDC5oA=="
       },
       "YamlDotNet": {
         "type": "Direct",
@@ -440,8 +440,8 @@
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.16.0",
-        "contentHash": "ddBX/Zb0sCsX4agqHdHeqUx+grfw8I7GFU+lgut3mtNl7roxbxemSQFGLIJXtzwPuAHxbaMtkXA+ijVl02EUhQ=="
+        "resolved": "14.17.1",
+        "contentHash": "4BBbU5l5DmdT9isSNGrIE/0VwAh29SoKMSDMiIvFBDqz6vQfG6EYBFJQOemdCH3xkMfesSzImOVPjnyMf/PIqA=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -514,8 +514,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.3.0",
-        "contentHash": "tI3yWESxTD5uG6wewJxHb1OdcZk3M6y5F9opE7kkCKaHVIE3j0/YxbyJViG71JmYmot8ad/Q3W3Jkfsp1CTlrQ=="
+        "resolved": "3.4.0",
+        "contentHash": "usa3QT805kWKRx2DFaHZggPJGdNixczQYof8VhbDRImJ2knOkPU3PQ7ewOG93UeQRn0eQa7PjI7KyKg/wyF7xw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",

@@ -34,11 +34,11 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.3.0, )",
-        "resolved": "3.3.0",
-        "contentHash": "ux0Jd99aEq4xRuSTQ18/a88bqT5/Ew4oPJ4ej/iGjDizrMFDrr5XcKbDFLtWiUDh3cCNuMjoUoyCnyMwGXXtFw==",
+        "requested": "[3.4.0, )",
+        "resolved": "3.4.0",
+        "contentHash": "slfuppYFOPTYGjKeg0yNjHEWujFYXlvBFsHPCIkRHprDa0ZVBeXsf+aVZqf0xTETdW/fHf9lAx6rqf5E84ro1w==",
         "dependencies": {
-          "OfficeIMO.Core": "3.3.0"
+          "OfficeIMO.Core": "3.4.0"
         }
       },
       "PowerShellStandard.Library": {
@@ -176,8 +176,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.3.0",
-        "contentHash": "tI3yWESxTD5uG6wewJxHb1OdcZk3M6y5F9opE7kkCKaHVIE3j0/YxbyJViG71JmYmot8ad/Q3W3Jkfsp1CTlrQ=="
+        "resolved": "3.4.0",
+        "contentHash": "usa3QT805kWKRx2DFaHZggPJGdNixczQYof8VhbDRImJ2knOkPU3PQ7ewOG93UeQRn0eQa7PjI7KyKg/wyF7xw=="
       },
       "Spectre.Console.Ansi": {
         "type": "Transitive",
@@ -319,7 +319,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.5.ReferenceAssemblies": "[1.1.0, )",
-          "PowerForge": "[3.0.139, )",
+          "PowerForge": "[3.0.142, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )",
           "System.Text.Json": "[10.0.11, )"
         }
@@ -344,11 +344,11 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.3.0, )",
-        "resolved": "3.3.0",
-        "contentHash": "ux0Jd99aEq4xRuSTQ18/a88bqT5/Ew4oPJ4ej/iGjDizrMFDrr5XcKbDFLtWiUDh3cCNuMjoUoyCnyMwGXXtFw==",
+        "requested": "[3.4.0, )",
+        "resolved": "3.4.0",
+        "contentHash": "slfuppYFOPTYGjKeg0yNjHEWujFYXlvBFsHPCIkRHprDa0ZVBeXsf+aVZqf0xTETdW/fHf9lAx6rqf5E84ro1w==",
         "dependencies": {
-          "OfficeIMO.Core": "3.3.0"
+          "OfficeIMO.Core": "3.4.0"
         }
       },
       "PowerShellStandard.Library": {
@@ -740,8 +740,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.3.0",
-        "contentHash": "tI3yWESxTD5uG6wewJxHb1OdcZk3M6y5F9opE7kkCKaHVIE3j0/YxbyJViG71JmYmot8ad/Q3W3Jkfsp1CTlrQ=="
+        "resolved": "3.4.0",
+        "contentHash": "usa3QT805kWKRx2DFaHZggPJGdNixczQYof8VhbDRImJ2knOkPU3PQ7ewOG93UeQRn0eQa7PjI7KyKg/wyF7xw=="
       },
       "runtime.android-arm.runtime.native.System.IO.Ports": {
         "type": "Transitive",
@@ -1128,7 +1128,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.5, )",
-          "PowerForge": "[3.0.139, )",
+          "PowerForge": "[3.0.142, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
         }
       }
@@ -1152,11 +1152,11 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.3.0, )",
-        "resolved": "3.3.0",
-        "contentHash": "ux0Jd99aEq4xRuSTQ18/a88bqT5/Ew4oPJ4ej/iGjDizrMFDrr5XcKbDFLtWiUDh3cCNuMjoUoyCnyMwGXXtFw==",
+        "requested": "[3.4.0, )",
+        "resolved": "3.4.0",
+        "contentHash": "slfuppYFOPTYGjKeg0yNjHEWujFYXlvBFsHPCIkRHprDa0ZVBeXsf+aVZqf0xTETdW/fHf9lAx6rqf5E84ro1w==",
         "dependencies": {
-          "OfficeIMO.Core": "3.3.0"
+          "OfficeIMO.Core": "3.4.0"
         }
       },
       "PowerShellStandard.Library": {
@@ -1529,8 +1529,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.3.0",
-        "contentHash": "tI3yWESxTD5uG6wewJxHb1OdcZk3M6y5F9opE7kkCKaHVIE3j0/YxbyJViG71JmYmot8ad/Q3W3Jkfsp1CTlrQ=="
+        "resolved": "3.4.0",
+        "contentHash": "usa3QT805kWKRx2DFaHZggPJGdNixczQYof8VhbDRImJ2knOkPU3PQ7ewOG93UeQRn0eQa7PjI7KyKg/wyF7xw=="
       },
       "runtime.linux-arm.runtime.native.System.IO.Ports": {
         "type": "Transitive",
@@ -1896,7 +1896,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.20, )",
-          "PowerForge": "[3.0.139, )",
+          "PowerForge": "[3.0.142, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
         }
       }
