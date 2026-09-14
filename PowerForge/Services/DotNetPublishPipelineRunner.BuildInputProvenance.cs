@@ -1012,11 +1012,10 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["PublishSingleFile"] = "true",
-                // Single-file publishing imports the linker targets even when the payload is not trimmed.
-                // Enable trimming only in the isolated restore graph so the SDK-owned linker package is
-                // independently downloaded and verified against the evaluated build input.
-                ["PublishTrimmed"] = "true"
+                // The real portable publish is single-file but not necessarily trimmed. The SDK derives
+                // its linker-pack requirement from the single-file analyzer without changing the
+                // consumer project's conditional restore graph.
+                ["PublishSingleFile"] = "true"
             };
         }
 

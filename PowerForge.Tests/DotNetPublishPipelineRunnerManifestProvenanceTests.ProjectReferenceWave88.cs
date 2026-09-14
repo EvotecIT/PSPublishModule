@@ -11,7 +11,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData(DotNetPublishStyle.PortableCompat)]
     [InlineData(DotNetPublishStyle.PortableSize)]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void BuildProjectEvaluationRequests_PreservesSingleFileSdkEvidenceForPortableStyles(
+    public void BuildProjectEvaluationRequests_UsesSingleFileSdkEvidenceWithoutSyntheticTrimming(
         DotNetPublishStyle style)
     {
         var plan = new DotNetPublishPlan
@@ -50,7 +50,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 .GetValue(request));
 
         Assert.Equal("true", properties["PublishSingleFile"]);
-        Assert.Equal("true", properties["PublishTrimmed"]);
+        Assert.DoesNotContain("PublishTrimmed", properties.Keys);
     }
 
     [Fact]

@@ -176,10 +176,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 failureReason = "controlled project evaluation properties could not be remapped.";
                 return false;
             }
-            // The graph nodes are restored and validated independently above. Rebuild the
-            // final root graph without recursive restore so referenced assembly identities
-            // match the real root prebuild as well as its portable PDB metadata.
-            arguments.Add("-p:BuildProjectReferences=true");
+            // The graph nodes are restored and validated independently above. Rebuild references
+            // when one project has one effective restore context so assembly identities and PDB
+            // metadata match the real root prebuild. Distinct contexts use their independently
+            // rebuilt outputs; rebuilding them through one shared assets path would conflate the
+            // contexts or leave one selected framework without restore data.
+            bool rebuildProjectReferences =
+                !HasDistinctControlledProjectRestoreContexts(graphBuildNodes);
+            arguments.Add("-p:BuildProjectReferences=" +
+                rebuildProjectReferences.ToString().ToLowerInvariant());
             arguments.Add("-p:RestoreRecursive=false");
             if (!TryBuildControlledPathMap(
                     controlledSourceRoot,
@@ -540,11 +545,60 @@ public sealed partial class DotNetPublishPipelineRunner
         failureReason = null;
         Dictionary<string, ControlledPublishGraphNode[]> multiFrameworkProjects =
             FindControlledMultiFrameworkProjects(graphBuildNodes);
+        var prebuiltNodes = new HashSet<ControlledPublishGraphNode>();
         foreach (KeyValuePair<string, ControlledPublishGraphNode[]> project in multiFrameworkProjects)
         {
-            if (!TryRestoreControlledMultiFrameworkProject(
-                    project.Key,
-                    project.Value,
+            string[] frameworks = project.Value
+                .Select(node => node.Request.TargetFramework)
+                .Where(framework => !string.IsNullOrWhiteSpace(framework))
+                .Select(framework => framework!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            foreach (ControlledPublishGraphNode[] contextNodes in
+                     GroupControlledProjectRestoreContexts(project.Value))
+            {
+                if (!TryRestoreControlledMultiFrameworkProject(
+                        project.Key,
+                        contextNodes[0],
+                        frameworks,
+                        originalGitRoot,
+                        controlledSourceRoot,
+                        controlledEnvironment,
+                        controlledNuGetConfig,
+                        offlinePackageSourceList,
+                        controlledOutputRoot,
+                        out failureReason))
+                {
+                    return false;
+                }
+                foreach (ControlledPublishGraphNode node in contextNodes)
+                {
+                    if (!TryBuildControlledPublishGraphNode(
+                            node,
+                            restore: false,
+                            originalGitRoot,
+                            controlledSourceRoot,
+                            controlledEnvironment,
+                            controlledNuGetConfig,
+                            offlinePackageSourceList,
+                            controlledOutputRoot,
+                            out failureReason))
+                    {
+                        return false;
+                    }
+                    prebuiltNodes.Add(node);
+                }
+            }
+        }
+
+        foreach (ControlledPublishGraphNode node in graphBuildNodes)
+        {
+            if (prebuiltNodes.Contains(node))
+                continue;
+            if (!TryBuildControlledPublishGraphNode(
+                    node,
+                    restore: true,
                     originalGitRoot,
                     controlledSourceRoot,
                     controlledEnvironment,
@@ -552,89 +606,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     offlinePackageSourceList,
                     controlledOutputRoot,
                     out failureReason))
-            {
                 return false;
-            }
-        }
-
-        foreach (ControlledPublishGraphNode node in graphBuildNodes)
-        {
-            string originalProjectPath = Path.GetFullPath(node.Request.ProjectPath);
-            if (!IsSameOrBelowBuildInputPath(originalProjectPath, originalGitRoot))
-            {
-                failureReason = $"project '{originalProjectPath}' is outside the controlled Git root.";
-                return false;
-            }
-            string controlledProjectPath = Path.GetFullPath(Path.Combine(
-                controlledSourceRoot,
-                FrameworkCompatibility.GetRelativePath(originalGitRoot, originalProjectPath)));
-            if (!IsSameOrBelowBuildInputPath(controlledProjectPath, controlledSourceRoot) ||
-                !File.Exists(controlledProjectPath))
-            {
-                failureReason = $"controlled project '{originalProjectPath}' is missing or outside the controlled checkout.";
-                return false;
-            }
-
-            var arguments = new List<string>
-            {
-                "msbuild",
-                controlledProjectPath,
-                "-nologo",
-                "-maxCpuCount:1",
-                "-nodeReuse:false",
-                "-verbosity:quiet",
-                "-target:Build"
-            };
-            if (!multiFrameworkProjects.ContainsKey(originalProjectPath))
-                arguments.Add("-restore");
-            if (!TryAppendControlledProjectEvaluationProperties(
-                    arguments,
-                    node.Request,
-                    originalGitRoot,
-                    controlledSourceRoot))
-            {
-                failureReason = $"properties for controlled project '{originalProjectPath}' could not be remapped.";
-                return false;
-            }
-            arguments.Add("-p:BuildProjectReferences=false");
-            arguments.Add("-p:RestoreRecursive=false");
-            if (!TryBuildControlledPathMap(
-                    controlledSourceRoot,
-                    originalGitRoot,
-                    node.PathMap,
-                    out string controlledPathMap))
-            {
-                failureReason = $"PathMap for controlled project '{originalProjectPath}' could not be constructed.";
-                return false;
-            }
-            arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
-            AppendControlledProofSafeguards(
-                arguments,
-                controlledNuGetConfig,
-                offlinePackageSourceList,
-                Path.Combine(controlledOutputRoot, "packages.lock.json"));
-
-            var process = RunControlledMsBuildEvaluationProcess(
-                Path.GetDirectoryName(controlledProjectPath)!,
-                arguments,
-                controlledEnvironment,
-                TimeSpan.FromMinutes(5),
-                controlledOutputRoot);
-            if (process.ExitCode != 0 || process.TimedOut)
-            {
-                string? detail = TailLines(
-                    string.IsNullOrWhiteSpace(process.StdErr) ? process.StdOut : process.StdErr,
-                    maxLines: 8,
-                    maxChars: 2000);
-                failureReason = process.TimedOut
-                    ? $"project '{originalProjectPath}' timed out."
-                    : $"project '{originalProjectPath}' exited with code {process.ExitCode}.";
-                if (!string.IsNullOrWhiteSpace(detail))
-                {
-                    failureReason += " " + detail!.Trim();
-                }
-                return false;
-            }
         }
         return true;
     }

@@ -5,9 +5,12 @@ namespace PowerForge.Tests;
 
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
-    [Fact]
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference()
+    public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(
+        bool distinctRestoreContexts)
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -21,7 +24,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string appProject = Path.Combine(appDirectory, "App.csproj");
             string bridgeProject = Path.Combine(bridgeDirectory, "Bridge.csproj");
             string sharedProject = Path.Combine(sharedDirectory, "Shared.csproj");
-            File.WriteAllText(appProject, """
+            string directContext = distinctRestoreContexts
+                ? " AdditionalProperties=\"Flavor=Direct\""
+                : string.Empty;
+            string bridgeContext = distinctRestoreContexts
+                ? " AdditionalProperties=\"Flavor=Bridge\""
+                : string.Empty;
+            File.WriteAllText(appProject, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
                     <OutputType>Exe</OutputType>
@@ -30,14 +39,14 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   </PropertyGroup>
                   <ItemGroup>
                     <ProjectReference Include="../Bridge/Bridge.csproj" />
-                    <ProjectReference Include="../Shared/Shared.csproj" />
+                    <ProjectReference Include="../Shared/Shared.csproj"{directContext} />
                   </ItemGroup>
                 </Project>
                 """);
-            File.WriteAllText(bridgeProject, """
+            File.WriteAllText(bridgeProject, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-                  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+                  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj"{bridgeContext} /></ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(sharedProject, """
