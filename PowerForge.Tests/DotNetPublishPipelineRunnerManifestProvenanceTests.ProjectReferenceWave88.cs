@@ -130,6 +130,45 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("UndefineProperties", "%(ProjectReference.UndefineProperties)")]
+    [InlineData("GlobalPropertiesToRemove", "%(ProjectReference.GlobalPropertiesToRemove)")]
+    [InlineData("UndefineProperties", "%( ProjectReference.UndefineProperties )")]
+    [InlineData("GlobalPropertiesToRemove", "%( ProjectReference.GlobalPropertiesToRemove )")]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ReadSourceProvenance_ResolvesQualifiedProjectReferenceRemovalSelfReference(
+        string metadataName,
+        string selfReference)
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
+            appProjectXml: $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      {metadataName}="{selfReference};Flavor" />
+                  </ItemGroup>
+                </Project>
+                """,
+            libraryProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(Flavor)' == ''">
+                    <Compile Include="../../inputs/Selected.cs" />
+                  </ItemGroup>
+                </Project>
+                """,
+            repositoryFiles: SelectedInput,
+            mutatedPath: "inputs/Selected.cs",
+            buildProperties: new Dictionary<string, string> { ["Flavor"] = "Parent" },
+            buildFramework: "net8.0");
+
+        AssertSelectedInputIsDirty(provenance);
+        Assert.DoesNotContain(
+            provenance.DirtyReasons,
+            reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
+    }
+
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
     public void PublishProvenanceLease_UsesOneLinuxWatcherForManyDirectories()
