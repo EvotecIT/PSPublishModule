@@ -691,6 +691,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var merged = new Dictionary<string, string>(plan.MsBuildProperties, StringComparer.OrdinalIgnoreCase);
 
+        // A global RuntimeIdentifiers list is a restore graph declaration. Concrete build and
+        // publish steps already carry one explicit RuntimeIdentifier and must not request every
+        // restore-only runtime pack again (notably for platform-specific desktop frameworks).
+        if (!string.IsNullOrWhiteSpace(runtime))
+            merged.Remove("RuntimeIdentifiers");
+
         if (target.Publish.MsBuildProperties is not null)
         {
             foreach (var kv in target.Publish.MsBuildProperties)

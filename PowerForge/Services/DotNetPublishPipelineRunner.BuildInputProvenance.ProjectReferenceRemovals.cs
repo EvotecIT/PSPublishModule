@@ -105,10 +105,13 @@ public sealed partial class DotNetPublishPipelineRunner
                                  assignment.DefiningProjectPath,
                                  assignment.Value))
                     {
-                        if (candidate.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
-                            candidate.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
-                            candidate.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
-                            !TryUnescapeMsBuildLiteral(candidate, out string? decoded))
+                        string effectiveCandidate = RemoveProjectReferenceMetadataSelfReference(
+                            candidate,
+                            metadataName);
+                        if (effectiveCandidate.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                            effectiveCandidate.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                            effectiveCandidate.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
+                            !TryUnescapeMsBuildLiteral(effectiveCandidate, out string? decoded))
                         {
                             return false;
                         }
@@ -172,6 +175,16 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static string RemoveProjectReferenceMetadataSelfReference(string value, string metadataName)
+    {
+        string marker = "%(" + metadataName + ")";
+        string result = value;
+        int index;
+        while ((index = result.IndexOf(marker, StringComparison.OrdinalIgnoreCase)) >= 0)
+            result = result.Remove(index, marker.Length);
+        return result;
     }
 
     private static bool HasUncertainProjectReferencePropertyRemoval(

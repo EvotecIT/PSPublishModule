@@ -538,6 +538,25 @@ public sealed partial class DotNetPublishPipelineRunner
         out string? failureReason)
     {
         failureReason = null;
+        Dictionary<string, ControlledPublishGraphNode[]> multiFrameworkProjects =
+            FindControlledMultiFrameworkProjects(graphBuildNodes);
+        foreach (KeyValuePair<string, ControlledPublishGraphNode[]> project in multiFrameworkProjects)
+        {
+            if (!TryRestoreControlledMultiFrameworkProject(
+                    project.Key,
+                    project.Value,
+                    originalGitRoot,
+                    controlledSourceRoot,
+                    controlledEnvironment,
+                    controlledNuGetConfig,
+                    offlinePackageSourceList,
+                    controlledOutputRoot,
+                    out failureReason))
+            {
+                return false;
+            }
+        }
+
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string originalProjectPath = Path.GetFullPath(node.Request.ProjectPath);
@@ -564,9 +583,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 "-maxCpuCount:1",
                 "-nodeReuse:false",
                 "-verbosity:quiet",
-                "-restore",
                 "-target:Build"
             };
+            if (!multiFrameworkProjects.ContainsKey(originalProjectPath))
+                arguments.Add("-restore");
             if (!TryAppendControlledProjectEvaluationProperties(
                     arguments,
                     node.Request,
