@@ -32,7 +32,7 @@ public static partial class WebSiteVerifier
             {
                 var hasHome = mainMenu.Items.Any(item =>
                     string.Equals(item.Url, "/", StringComparison.OrdinalIgnoreCase));
-                if (!hasHome)
+                if (!hasHome && !nav.HomeLinkInBrand)
                     warnings.Add("Navigation main menu does not contain '/'. Add a Home link to keep global navigation consistent.");
             }
         }

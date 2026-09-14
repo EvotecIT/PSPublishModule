@@ -5,6 +5,12 @@ public sealed class NavigationSpec
 {
     /// <summary>Whether to generate default auto-navigation when no menus are defined.</summary>
     public bool AutoDefaults { get; set; } = true;
+    /// <summary>
+    /// Whether the theme supplies the home link through its brand or logo instead of the main menu.
+    /// Defaults to false. The theme must render an accessible home link on each page.
+    /// </summary>
+    public bool HomeLinkInBrand { get; set; }
+
     /// <summary>Named menus to expose in templates.</summary>
     public MenuSpec[] Menus { get; set; } = Array.Empty<MenuSpec>();
 
