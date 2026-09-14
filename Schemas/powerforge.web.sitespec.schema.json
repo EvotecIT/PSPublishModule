@@ -1184,6 +1184,7 @@
       "properties": {
         "AutoDefaults": { "type": "boolean", "default": true },
         "HomeLinkInBrand": { "type": "boolean", "default": false, "description": "The theme supplies an accessible home link through its brand or logo instead of the main menu." },
+        "homeLinkInBrand": { "type": "boolean", "default": false, "description": "The theme supplies an accessible home link through its brand or logo instead of the main menu." },
         "Menus": {
           "type": "array",
           "items": { "$ref": "#/$defs/MenuSpec" }
