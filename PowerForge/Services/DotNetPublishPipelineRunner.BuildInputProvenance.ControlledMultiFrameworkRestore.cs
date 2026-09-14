@@ -12,7 +12,9 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         string[] frameworks = declaredFrameworks
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(framework => framework.Trim())
+            .Where(framework => framework.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
             .ToArray();
