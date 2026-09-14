@@ -97,6 +97,54 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.DoesNotContain("RuntimeIdentifiers", publish.Keys);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void RuntimeIdentifiersMatrix_FromPublishOverrideIsNotSentToConcretePublish(
+        bool styleSpecific)
+    {
+        const string runtimeMatrix = "linux-x64;win-x64;win-arm64";
+        var publish = new DotNetPublishPublishOptions();
+        if (styleSpecific)
+        {
+            publish.StyleOverrides = new Dictionary<string, DotNetPublishStyleOverride>(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                [DotNetPublishStyle.PortableCompat.ToString()] = new DotNetPublishStyleOverride
+                {
+                    MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["RuntimeIdentifiers"] = runtimeMatrix
+                    }
+                }
+            };
+        }
+        else
+        {
+            publish.MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["RuntimeIdentifiers"] = runtimeMatrix
+            };
+        }
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "desktop",
+            ProjectPath = "Desktop.csproj",
+            Publish = publish
+        };
+        var plan = new DotNetPublishPlan { Targets = [target] };
+
+        Dictionary<string, string> properties = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+            plan,
+            target,
+            "net10.0-windows",
+            "win-arm64",
+            DotNetPublishStyle.PortableCompat);
+
+        Assert.DoesNotContain("RuntimeIdentifiers", properties.Keys);
+    }
+
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_ResolvesLiteralProjectReferenceRemovalSelfReference()

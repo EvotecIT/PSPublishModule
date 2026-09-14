@@ -545,22 +545,27 @@ public sealed partial class DotNetPublishPipelineRunner
         failureReason = null;
         Dictionary<string, ControlledPublishGraphNode[]> multiFrameworkProjects =
             FindControlledMultiFrameworkProjects(graphBuildNodes);
-        var prebuiltNodes = new HashSet<ControlledPublishGraphNode>();
-        foreach (KeyValuePair<string, ControlledPublishGraphNode[]> project in multiFrameworkProjects)
+        foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
-            string[] frameworks = project.Value
-                .Select(node => node.Request.TargetFramework)
-                .Where(framework => !string.IsNullOrWhiteSpace(framework))
-                .Select(framework => framework!.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            foreach (ControlledPublishGraphNode[] contextNodes in
-                     GroupControlledProjectRestoreContexts(project.Value))
+            string projectPath = Path.GetFullPath(node.Request.ProjectPath);
+            bool restoreWithFrameworkMatrix = multiFrameworkProjects.TryGetValue(
+                projectPath,
+                out ControlledPublishGraphNode[]? projectNodes);
+            if (restoreWithFrameworkMatrix)
             {
+                string[] frameworks = projectNodes!
+                    .Select(projectNode => projectNode.Request.TargetFramework)
+                    .Where(framework => !string.IsNullOrWhiteSpace(framework))
+                    .Select(framework => framework!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                // Restore immediately before this node so each effective property context owns the
+                // assets file it consumes. Walking the frozen graph in postorder ensures every
+                // referenced node has already produced its controlled output.
                 if (!TryRestoreControlledMultiFrameworkProject(
-                        project.Key,
-                        contextNodes[0],
+                        projectPath,
+                        node,
                         frameworks,
                         originalGitRoot,
                         controlledSourceRoot,
@@ -572,33 +577,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     return false;
                 }
-                foreach (ControlledPublishGraphNode node in contextNodes)
-                {
-                    if (!TryBuildControlledPublishGraphNode(
-                            node,
-                            restore: false,
-                            originalGitRoot,
-                            controlledSourceRoot,
-                            controlledEnvironment,
-                            controlledNuGetConfig,
-                            offlinePackageSourceList,
-                            controlledOutputRoot,
-                            out failureReason))
-                    {
-                        return false;
-                    }
-                    prebuiltNodes.Add(node);
-                }
             }
-        }
-
-        foreach (ControlledPublishGraphNode node in graphBuildNodes)
-        {
-            if (prebuiltNodes.Contains(node))
-                continue;
             if (!TryBuildControlledPublishGraphNode(
                     node,
-                    restore: true,
+                    restore: !restoreWithFrameworkMatrix,
                     originalGitRoot,
                     controlledSourceRoot,
                     controlledEnvironment,

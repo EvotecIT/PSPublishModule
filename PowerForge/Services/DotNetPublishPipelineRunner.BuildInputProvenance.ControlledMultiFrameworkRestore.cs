@@ -92,13 +92,6 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
-    private static ControlledPublishGraphNode[][] GroupControlledProjectRestoreContexts(
-        IReadOnlyCollection<ControlledPublishGraphNode> nodes)
-        => nodes
-            .GroupBy(BuildControlledRestoreContextKey, StringComparer.Ordinal)
-            .Select(group => group.ToArray())
-            .ToArray();
-
     private static bool HasDistinctControlledProjectRestoreContexts(
         IReadOnlyCollection<ControlledPublishGraphNode> nodes)
     {

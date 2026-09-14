@@ -21,9 +21,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
             string bridgeDirectory = Directory.CreateDirectory(Path.Combine(root, "Bridge")).FullName;
             string sharedDirectory = Directory.CreateDirectory(Path.Combine(root, "Shared")).FullName;
+            string leafDirectory = Directory.CreateDirectory(Path.Combine(root, "Leaf")).FullName;
             string appProject = Path.Combine(appDirectory, "App.csproj");
             string bridgeProject = Path.Combine(bridgeDirectory, "Bridge.csproj");
             string sharedProject = Path.Combine(sharedDirectory, "Shared.csproj");
+            string leafProject = Path.Combine(leafDirectory, "Leaf.csproj");
             string directContext = distinctRestoreContexts
                 ? " AdditionalProperties=\"Flavor=Direct\""
                 : string.Empty;
@@ -52,6 +54,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(sharedProject, """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup>
+                  <ItemGroup><ProjectReference Include="../Leaf/Leaf.csproj" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(leafProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(appDirectory, "Program.cs"),
@@ -59,7 +67,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(Path.Combine(bridgeDirectory, "Bridge.cs"),
                 "public static class Bridge { public static int Value => Shared.Value; }");
             File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"),
-                "public static class Shared { public const int Value = 1; }");
+                "public static class Shared { public static int Value => Leaf.Value; }");
+            File.WriteAllText(Path.Combine(leafDirectory, "Leaf.cs"),
+                "public static class Leaf { public const int Value = 1; }");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
             RunDotNet(root,
                 $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false");
@@ -68,6 +78,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string revision = RunGit(root, "rev-parse HEAD").Trim();
             RunDotNet(root,
                 $"build \"{appProject}\" -c Release -f net10.0 -r linux-x64 --no-restore --nologo " +
+                "-m:1 -p:BuildInParallel=false " +
                 $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
                 "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
             var plan = new DotNetPublishPlan
