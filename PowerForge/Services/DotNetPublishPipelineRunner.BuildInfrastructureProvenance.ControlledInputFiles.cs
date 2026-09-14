@@ -204,7 +204,8 @@ public sealed partial class DotNetPublishPipelineRunner
                              entry.Value,
                              entry.BaseDirectory,
                              checkoutRoot)) ||
-                        !(ContainsRootedBuildValue(entry.Value, checkoutRoot) ||
+                        !((ContainsRootedBuildValue(entry.Value, checkoutRoot) &&
+                           !IsPathMapPropertyValue(entry.Node)) ||
                           ContainsEscapingRelativeBuildValue(
                               entry.Value,
                               entry.BaseDirectory,
@@ -300,6 +301,13 @@ public sealed partial class DotNetPublishPipelineRunner
 
         return !ContainsUncontrolledAmbientPropertyFunction(remaining);
     }
+
+    private static bool IsPathMapPropertyValue(XObject node)
+        => node is XText text &&
+           text.Parent is not null &&
+           text.Parent.Name.LocalName.Equals("PathMap", StringComparison.OrdinalIgnoreCase) &&
+           text.Parent.Parent is not null &&
+           text.Parent.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsDefinitelyInactiveControlledBuildValue(
         XObject node,

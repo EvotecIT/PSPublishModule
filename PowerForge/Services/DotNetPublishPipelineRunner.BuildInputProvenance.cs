@@ -318,9 +318,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 buildPlan,
                 buildStep)
             .ToArray();
-        HashSet<string> rootProjectPaths = roots
-            .Select(request => Path.GetFullPath(request.ProjectPath))
-            .ToHashSet(comparison);
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var directories = new HashSet<string>(comparison);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
@@ -336,7 +333,6 @@ public sealed partial class DotNetPublishPipelineRunner
         var evaluationsByEvaluation = new Dictionary<string, EvaluatedProjectInputs>(StringComparer.Ordinal);
         var trustedBuildInfrastructureRootsByEvaluation =
             new Dictionary<string, string[]>(StringComparer.Ordinal);
-        var sdkManagedPackageKeys = new HashSet<string>(comparison);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         var evaluatedPublishInputs = new List<(string EvaluationKey, EvaluatedPublishInput Input)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
@@ -353,8 +349,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach (ProjectEvaluationRequest root in roots)
         {
+            ProjectEvaluationRequest scopedRoot = root.ForEvaluationScope(root.ProjectPath);
+            var sdkManagedPackageEvidence = new Dictionary<
+                string,
+                VerifiedPackageInputCatalog.VerifiedSdkManagedPackageEvidence>(StringComparer.OrdinalIgnoreCase);
             if (ShouldRefreshLockedRestoreOutputs(buildPlan) &&
-                !TryRefreshLockedRestoreOutputs(root))
+                !TryRefreshLockedRestoreOutputs(scopedRoot))
             {
                 projectDirectories = roots
                     .Select(request => Path.GetDirectoryName(request.ProjectPath)!)
@@ -364,7 +364,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
 
-            var pending = new Queue<ProjectEvaluationRequest>(new[] { root });
+            var pending = new Queue<ProjectEvaluationRequest>(new[] { scopedRoot });
             while (pending.Count > 0)
             {
                 ProjectEvaluationRequest request = pending.Dequeue();
@@ -379,7 +379,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadEvaluatedProjectInputs(
                         request,
                         verifiedPackageArchives,
-                        sdkManagedPackageKeys,
+                        sdkManagedPackageEvidence,
+                        request.IsEvaluationScopeRoot,
                         out EvaluatedProjectInputs? evaluation,
                         out string? evaluationFailureReason) || evaluation is null)
                 {
@@ -449,7 +450,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string? graphFailureReason = null;
             // Only release roots are publish surfaces. Referenced projects are rebuilt and
             // attested through the frozen graph using their own project-reference context.
-            if (!rootProjectPaths.Contains(Path.GetFullPath(request.ProjectPath)))
+            if (!request.IsEvaluationScopeRoot)
                 continue;
             if (string.IsNullOrWhiteSpace(request.TargetFramework) ||
                 !TryReadFrozenProjectReferenceGraph(
@@ -1011,7 +1012,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageArchiveCache verifiedPackageArchives,
-        HashSet<string> knownSdkManagedPackageKeys,
+        Dictionary<string, VerifiedPackageInputCatalog.VerifiedSdkManagedPackageEvidence> knownSdkManagedPackageEvidence,
+        bool contributesSdkManagedPackageEvidence,
         out EvaluatedProjectInputs? evaluation,
         out string? failureReason)
     {
@@ -1212,10 +1214,31 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 if (verifiedPackages is not null)
                 {
-                    if (request.RequiresSdkPackageEvidence)
-                        knownSdkManagedPackageKeys.UnionWith(verifiedPackages.SdkManagedPackageKeys);
-                    else
-                        verifiedPackages.InheritSdkManagedPackageKeys(knownSdkManagedPackageKeys);
+                    if (!verifiedPackages.TryInheritSdkManagedPackageEvidence(
+                            knownSdkManagedPackageEvidence.Values,
+                            out string? inheritedSdkPackageFailureReason))
+                    {
+                        failureReason = "SDK-managed package evidence could not be inherited: " +
+                                        (inheritedSdkPackageFailureReason ?? "no additional detail is available");
+                        return false;
+                    }
+                    if (contributesSdkManagedPackageEvidence)
+                    {
+                        foreach (VerifiedPackageInputCatalog.VerifiedSdkManagedPackageEvidence package in
+                                 verifiedPackages.SdkManagedPackageEvidence)
+                        {
+                            if (knownSdkManagedPackageEvidence.TryGetValue(
+                                    package.PackageKey,
+                                    out VerifiedPackageInputCatalog.VerifiedSdkManagedPackageEvidence existing) &&
+                                !string.Equals(existing.ContentHash, package.ContentHash, StringComparison.Ordinal))
+                            {
+                                failureReason = $"SDK-managed package '{package.PackageKey}' produced conflicting verified evidence across the root project";
+                                return false;
+                            }
+                            if (!knownSdkManagedPackageEvidence.ContainsKey(package.PackageKey))
+                                knownSdkManagedPackageEvidence[package.PackageKey] = package;
+                        }
+                    }
                 }
                 trustedBuildInfrastructureRoots = ReadTrustedBuildInfrastructureRoots(
                     properties,
@@ -1257,9 +1280,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     request.ProjectPath,
                     importPaths));
                 if (verifiedPackages is not null &&
-                    !verifiedPackages.TrySetControlledBuildInputs(evaluatedImportPaths))
+                    !verifiedPackages.TrySetControlledBuildInputs(
+                        evaluatedImportPaths,
+                        out string? controlledPackageFailureReason))
                 {
-                    failureReason = "controlled package build inputs could not be verified";
+                    failureReason = "controlled package build inputs could not be verified: " +
+                                    (controlledPackageFailureReason ?? "no additional detail is available");
                     return false;
                 }
                 evaluatedProjectReferenceConditionProperties =

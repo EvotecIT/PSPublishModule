@@ -184,13 +184,20 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal static string[] BuildGuardedPaths(
             IEnumerable<string> publishInputFiles,
-            IEnumerable<NoBuildPublishInput> provenPublishInputs)
+            IEnumerable<NoBuildPublishInput> noBuildPublishInputs,
+            bool noBuildInPublish)
         {
-            IEnumerable<string> paths = publishInputFiles.Concat(
-                provenPublishInputs.Select(input => input.FullPath));
-
-            return paths
+            NoBuildPublishInput[] inputs = noBuildPublishInputs.ToArray();
+            var snapshottedPaths = new HashSet<string>(
+                SelectPublishInputSnapshotCandidates(noBuildInPublish, inputs)
+                    .Select(input => Path.GetFullPath(input.FullPath)),
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            return publishInputFiles
                 .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Where(path => !noBuildInPublish || !snapshottedPaths.Contains(Path.GetFullPath(path)))
+                .Concat(inputs
+                    .Select(input => input.FullPath)
+                    .Where(path => !snapshottedPaths.Contains(Path.GetFullPath(path))))
                 .Select(Path.GetFullPath)
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray();
