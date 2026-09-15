@@ -123,6 +123,10 @@ public sealed partial class ModulePipelineRunner
                     LegacyFlatHandling = plan.InstallLegacyFlatHandling,
                     PreserveVersions = plan.InstallPreserveVersions
                 };
+                var installPackageSigningResult = PrepareSignedInstallPackage(
+                    plan,
+                    installSpec,
+                    state.SigningResult);
                 state.InstallResult = pipeline.InstallFromStaging(installSpec);
                 foreach (var installedPath in state.InstallResult.InstalledPaths)
                 {
@@ -130,6 +134,18 @@ public sealed partial class ModulePipelineRunner
                         state.SigningResult,
                         buildResult.StagingPath,
                         installedPath);
+                    if (installPackageSigningResult is not null)
+                    {
+                        var deliveredInstallPackageSigningResult = CreateDeliveredSigningResult(
+                            installPackageSigningResult,
+                            installPackagePath,
+                            installedPath)
+                            ?? throw new InvalidOperationException(
+                                "The signed install manifest was not delivered byte-for-byte to the installed module.");
+                        deliveredSigningResult = deliveredSigningResult is null
+                            ? deliveredInstallPackageSigningResult
+                            : AggregateSigningResults(deliveredSigningResult, deliveredInstallPackageSigningResult);
+                    }
                     _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
                         installedPath,
                         plan.ModuleName,
