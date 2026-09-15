@@ -337,6 +337,12 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig, DontShow = true)]
     public SwitchParameter ReuseStaging { get; set; }
 
+    /// <summary>Marks an internal build pass as the exact local checkpoint for deferred publication.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern, DontShow = true)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration, DontShow = true)]
+    [Parameter(ParameterSetName = ParameterSetConfig, DontShow = true)]
+    public SwitchParameter PowerForgeReleaseCheckpoint { get; set; }
+
     /// <summary>Optional path to a .NET project (.csproj) to publish into the module.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
     public string? CsprojPath { get; set; }
@@ -507,6 +513,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             InputPath = Path,
             StagingPath = StagingPath,
             ReuseStaging = ReuseStaging.IsPresent,
+            ReleaseCheckpoint = PowerForgeReleaseCheckpoint.IsPresent,
             CsprojPath = CsprojPath,
             DotNetConfiguration = DotNetConfiguration,
             DotNetFramework = DotNetFramework,

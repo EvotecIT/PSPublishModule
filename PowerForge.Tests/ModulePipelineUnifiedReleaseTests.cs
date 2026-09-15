@@ -1417,7 +1417,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             }));
     }
 
-    private sealed class FakeHostedOperations :
+    private sealed partial class FakeHostedOperations :
         IModulePipelineHostedOperations,
         IModulePipelinePublishPreflightOperations
     {
@@ -1521,13 +1521,5 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             ModuleImportValidationTarget[] targets)
             => throw new InvalidOperationException("Import validation is not used in this test.");
 
-        public ModuleSigningResult SignModuleOutput(
-            string moduleName,
-            string rootPath,
-            string[] packageFilePaths,
-            string[] includePatterns,
-            string[] excludeSubstrings,
-            SigningOptionsConfiguration signing)
-            => throw new InvalidOperationException("Signing is not used in this test.");
     }
 }

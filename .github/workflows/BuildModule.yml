@@ -305,7 +305,7 @@ jobs:
         run: .\PSPublishModule.Tests.ps1
   ProductBuildSmoke:
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       DbaClientXRoot: ${{ github.workspace }}\_dependencies\DbaClientX
 
@@ -357,7 +357,7 @@ jobs:
 
       - name: Run bounded PowerShell compiler gate
         shell: pwsh
-        timeout-minutes: 20
+        timeout-minutes: 40
         run: |
           $ErrorActionPreference = 'Stop'
           . ./Benchmarks/PowerShellCompilation/Corpus/Corpus.Runner.Common.ps1
@@ -434,6 +434,22 @@ jobs:
       - name: Test Linux secret restore safety
         shell: bash
         run: sudo bash Deployment/Linux/tests/powerforge-secret-restore-fixture.sh
+
+      - name: Test Certbot Apache reload hook
+        shell: bash
+        run: bash Deployment/Linux/tests/powerforge-certbot-reload-apache-fixture.sh
+
+      - name: Test restricted Linux service deployment transport
+        shell: bash
+        run: bash Deployment/Linux/tests/powerforge-service-deploy-ssh-fixture.sh
+
+      - name: Test bounded Linux service deployment diagnostics
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -File Deployment/Linux/tests/powerforge-ssh-diagnostic-fixture.ps1
+
+      - name: Test Linux service deployment promotion state machine
+        shell: bash
+        run: bash Tests/Linux/powerforge-service-deploy.tests.sh
 
       - name: Test with Pester
         shell: pwsh

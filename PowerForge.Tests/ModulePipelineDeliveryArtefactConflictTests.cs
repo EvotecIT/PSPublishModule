@@ -90,6 +90,35 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
     }
 
     [Fact]
+    public void Plan_CaseDistinctDeliveryAndArtefactRoots_DoNotOverlapOnCaseSensitiveFileSystem()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.Ordinal)
+                return;
+
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+
+            var error = Record.Exception(() => runner.Plan(CreateSpec(
+                root.FullName,
+                moduleName,
+                deliveryInternalsPath: "Internals",
+                artefactPath: Path.Combine("internals", "Unpacked"),
+                requiredModulesPath: "Modules")));
+
+            Assert.Null(error);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_DeliveryInternalsPathUnset_UsesDefaultInternalsAndFailsFastOnOverlap()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -110,6 +139,43 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
 
             Assert.Contains("Delivery.InternalsPath 'Internals'", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("overlaps artefact output root for 'Unpacked'", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Plan_ScriptNestedLayoutOverlappingDeliverySource_FailsFast(bool overlapThroughModulesPath)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string deliveryRoot = Path.Combine(root.FullName, "Internals");
+            var runner = new ModulePipelineRunner(new NullLogger());
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                runner.Plan(CreateSpec(
+                    root.FullName,
+                    moduleName,
+                    deliveryInternalsPath: "Internals",
+                    artefactPath: Path.Combine("Artefacts", "Script"),
+                    requiredModulesPath: overlapThroughModulesPath ? null : deliveryRoot,
+                    requiredModulesEnabled: !overlapThroughModulesPath,
+                    artefactType: ArtefactType.Script,
+                    modulesPath: overlapThroughModulesPath ? deliveryRoot : null)));
+
+            Assert.Contains("Delivery configuration is unsafe", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                overlapThroughModulesPath ? "module copy root for 'Script'" : "required modules root for 'Script'",
+                ex.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(deliveryRoot, ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -171,6 +237,39 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
         }
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Unpacked)]
+    [InlineData(ArtefactType.Script)]
+    public void Plan_DisabledRequiredModulesAbsolutePathUsedAsMainModuleRootOverlappingDelivery_FailsFast(
+        ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string deliveryRoot = Path.Combine(root.FullName, "Internals");
+            var runner = new ModulePipelineRunner(new NullLogger());
+
+            var ex = Assert.Throws<InvalidOperationException>(() => runner.Plan(CreateSpec(
+                root.FullName,
+                moduleName,
+                deliveryInternalsPath: "Internals",
+                artefactPath: Path.Combine("Artefacts", artefactType.ToString()),
+                requiredModulesPath: deliveryRoot,
+                requiredModulesEnabled: false,
+                artefactType: artefactType)));
+
+            Assert.Contains("Delivery configuration is unsafe", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"module copy root for '{artefactType}'", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(deliveryRoot, ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec CreateSpec(
         string root,
         string moduleName,
@@ -178,7 +277,9 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
         string? artefactPath = null,
         string? requiredModulesPath = null,
         string[]? excludedDirectories = null,
-        bool? requiredModulesEnabled = null)
+        bool? requiredModulesEnabled = null,
+        ArtefactType artefactType = ArtefactType.Unpacked,
+        string? modulesPath = null)
     {
         var build = new ModuleBuildSpec
         {
@@ -210,7 +311,7 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
         {
             segments.Add(new ConfigurationArtefactSegment
             {
-                ArtefactType = ArtefactType.Unpacked,
+                ArtefactType = artefactType,
                 Configuration = new ArtefactConfiguration
                 {
                     Enabled = true,
@@ -218,7 +319,8 @@ public sealed class ModulePipelineDeliveryArtefactConflictTests
                     RequiredModules = new ArtefactRequiredModulesConfiguration
                     {
                         Enabled = requiredModulesEnabled,
-                        Path = requiredModulesPath
+                        Path = requiredModulesPath,
+                        ModulesPath = modulesPath
                     }
                 }
             });

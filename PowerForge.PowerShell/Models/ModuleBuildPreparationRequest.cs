@@ -24,6 +24,7 @@ internal sealed class ModuleBuildPreparationRequest
     public bool IncludeProjectPackages { get; set; } = true;
     public bool IncludeModulePublishing { get; set; } = true;
     public bool UnifiedGitHubRelease { get; set; }
+    public bool ReleaseCheckpoint { get; set; }
     public string? CertificateThumbprint { get; set; }
     public bool? SignIncludeBinaries { get; set; }
     public bool? SignIncludeInternals { get; set; }

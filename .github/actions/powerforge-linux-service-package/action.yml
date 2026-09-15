@@ -16,6 +16,10 @@ inputs:
     description: Number of days to retain the service artifact.
     required: false
     default: "7"
+  source-sha:
+    description: Optional exact caller commit to package. Defaults to the workflow commit.
+    required: false
+    default: ""
 
 outputs:
   artifact-name:
@@ -32,7 +36,8 @@ runs:
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         token: ${{ github.token }}
-        ref: ${{ github.sha }}
+        ref: ${{ inputs.source-sha || github.sha }}
+        fetch-depth: 0
         persist-credentials: false
 
     - name: Validate and package Linux service
@@ -42,7 +47,7 @@ runs:
         POWERFORGE_SERVICE_ROOT: ${{ inputs.service-root }}
         POWERFORGE_SERVICE_VALIDATION_SCRIPT: ${{ inputs.service-validation-script }}
         POWERFORGE_SOURCE_REPOSITORY: ${{ github.repository }}
-        POWERFORGE_SOURCE_SHA: ${{ github.sha }}
+        POWERFORGE_SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
       run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeLinuxServicePackage.ps1"'
 
     - name: Upload validated service artifact

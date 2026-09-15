@@ -462,6 +462,13 @@ public sealed partial class ModulePipelineRunner
 
         // Run delivery validation after refresh-only pruning so artefact overlap checks reflect
         // the operations that will actually execute for this plan.
+        ValidateSignedScriptArtefactLayouts(
+            signModule,
+            projectRoot,
+            moduleName,
+            resolved,
+            preRelease,
+            enabledArtefacts);
         ValidateDeliveryPathConflicts(
             projectRoot,
             moduleName,
@@ -550,6 +557,7 @@ public sealed partial class ModulePipelineRunner
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
+        plan.ReleaseCheckpoint = spec.ReleaseCheckpoint;
         ApplyReleaseSourceProtection(spec, plan, localVersioning, releaseProtection, gateMode);
         return plan;
     }

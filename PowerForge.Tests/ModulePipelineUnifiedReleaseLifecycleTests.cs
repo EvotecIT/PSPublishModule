@@ -28,6 +28,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var runner = CreateRunner(
                 hosted,
                 (_, _, _) => throw new InvalidOperationException("Package builds should not run."));
+            var progress = new PublishGateProgressReporter();
             var spec = new ModulePipelineSpec
             {
                 Build = new ModuleBuildSpec
@@ -63,10 +64,13 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 }
             };
 
-            var result = runner.Run(spec);
+            ModulePipelinePlan plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan, progress);
 
             Assert.Empty(events);
             Assert.Empty(result.ActionResults);
+            Assert.Contains("action:BeforePublish:01", progress.Skipped);
+            Assert.Contains("action:AfterPublish:01", progress.Skipped);
         }
         finally
         {
@@ -230,5 +234,18 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             try { root.Delete(recursive: true); } catch { }
             try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
         }
+    }
+
+    private sealed class PublishGateProgressReporter : IModulePipelineProgressReporterV2
+    {
+        internal List<string> Skipped { get; } = new();
+
+        public void StepStarting(ModulePipelineStep step) { }
+
+        public void StepCompleted(ModulePipelineStep step) { }
+
+        public void StepFailed(ModulePipelineStep step, Exception error) { }
+
+        public void StepSkipped(ModulePipelineStep step) => Skipped.Add(step.Key);
     }
 }

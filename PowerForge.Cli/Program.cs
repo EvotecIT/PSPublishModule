@@ -98,6 +98,8 @@ internal static partial class Program
             return CommandProject(filteredArgs, cli, logger);
         case "release":
             return CommandRelease(filteredArgs, cli, logger);
+        case "validate-release":
+            return CommandValidateRelease(filteredArgs, logger);
         case "apple-release":
             return CommandAppleRelease(filteredArgs, cli, logger);
         case "apple-deploy":

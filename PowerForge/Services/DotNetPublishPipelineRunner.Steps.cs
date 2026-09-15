@@ -470,7 +470,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     publishStep);
                 provenanceLease?.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
                     signingProvenance.PublishInputFiles,
-                    signingProvenance.NoBuildPublishInputs));
+                    signingProvenance.NoBuildPublishInputs,
+                    plan.NoBuildInPublish));
                 provenanceLease?.ValidateUnchanged();
                 string executable = ResolvePrimaryExecutable(
                     outputDir,
@@ -703,6 +704,13 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (var kv in styleOverride.MsBuildProperties)
                 merged[kv.Key] = kv.Value;
         }
+
+        // A RuntimeIdentifiers list from any configuration layer is a restore graph declaration.
+        // Concrete build and publish steps already carry one explicit RuntimeIdentifier and must
+        // not request every restore-only runtime pack again (notably for platform-specific desktop
+        // frameworks). Apply this after target/style overrides so they cannot reintroduce it.
+        if (!string.IsNullOrWhiteSpace(runtime))
+            merged.Remove("RuntimeIdentifiers");
 
         if (!string.IsNullOrWhiteSpace(plan.SourceRevision))
         {

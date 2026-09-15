@@ -99,8 +99,11 @@ public sealed class AppStoreConnectAppInfoMetadataSyncResult
     /// <summary>Matched editable resource, or one locked resource retained after convergence was proven.</summary>
     public AppStoreConnectAppInformationInfo AppInfo { get; set; } = new();
 
-    /// <summary>Localization before the metadata update.</summary>
-    public AppStoreConnectAppInfoLocalizationInfo Before { get; set; } = new();
+    /// <summary>Localization before the metadata update; null when this sync created it.</summary>
+    public AppStoreConnectAppInfoLocalizationInfo? Before { get; set; }
+
+    /// <summary>Whether this sync created a previously missing localization.</summary>
+    public bool CreatedLocalization { get; set; }
 
     /// <summary>Localization after the metadata update.</summary>
     public AppStoreConnectAppInfoLocalizationInfo After { get; set; } = new();

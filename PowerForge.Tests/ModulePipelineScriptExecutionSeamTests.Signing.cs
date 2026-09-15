@@ -6,6 +6,229 @@ namespace PowerForge.Tests;
 
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Run_SignedScriptArtefactSignsRewrittenScriptEntryPoint(ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            File.WriteAllText(
+                Path.Combine(root.FullName, moduleName + ".psm1"),
+                "function Get-TestModule { 'ok' }" + Environment.NewLine +
+                "# Export functions and aliases as required" + Environment.NewLine +
+                "Export-ModuleMember -Function Get-TestModule" + Environment.NewLine);
+            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", artefactType.ToString()));
+            var artefact = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments.Last());
+            artefact.ArtefactType = artefactType;
+            artefact.Configuration!.ScriptName = "Invoke-TestModule.ps1";
+
+            ModulePipelineResult result = runner.Run(spec, runner.Plan(spec));
+
+            Assert.Equal(2, hostedOperations.SignCalls);
+            string signedEntryPoint = Assert.Single(
+                hostedOperations.LastPackageFilePaths,
+                path => string.Equals(Path.GetExtension(path), ".ps1", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("Invoke-TestModule.ps1", Path.GetFileName(signedEntryPoint));
+            Assert.DoesNotContain(
+                hostedOperations.LastPackageFilePaths,
+                path => string.Equals(Path.GetExtension(path), ".psm1", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(artefactType, Assert.Single(result.ArtefactResults).Type);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_SignedScriptArtefactSignsPowerShellFilesAcrossCompleteOutputLayout()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string helperSource = Path.Combine(root.FullName, "helper.ps1");
+            File.WriteAllText(helperSource, "'helper'");
+            string outputRoot = Path.Combine(root.FullName, "Artefacts", "Script");
+            var hostedOperations = new FakeHostedOperations { AutoSuccessfulSigningResult = true };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(root.FullName, moduleName, outputRoot);
+            var artefact = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments.Last());
+            artefact.ArtefactType = ArtefactType.Script;
+            artefact.Configuration!.ScriptName = "Invoke-TestModule.ps1";
+            artefact.Configuration.DestinationFilesRelative = true;
+            artefact.Configuration.RequiredModules = new ArtefactRequiredModulesConfiguration
+            {
+                ModulesPath = "app"
+            };
+            artefact.Configuration.FilesOutput = new[]
+            {
+                new ArtefactCopyMapping
+                {
+                    Source = helperSource,
+                    Destination = Path.Combine("support", "helper.ps1")
+                }
+            };
+
+            _ = runner.Run(spec, runner.Plan(spec));
+
+            Assert.Equal(Path.GetFullPath(outputRoot), hostedOperations.SigningRootPaths.Last());
+            Assert.Contains(
+                hostedOperations.LastPackageFilePaths,
+                path => path.EndsWith(Path.Combine("app", "Invoke-TestModule.ps1"), StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(
+                hostedOperations.LastPackageFilePaths,
+                path => path.EndsWith(Path.Combine("support", "helper.ps1"), StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ModulePipelineActionStage.AfterArtefacts)]
+    [InlineData(ModulePipelineActionStage.BeforePublish)]
+    [InlineData(ModulePipelineActionStage.AfterPublish)]
+    [InlineData(ModulePipelineActionStage.BeforeInstall)]
+    [InlineData(ModulePipelineActionStage.AfterInstall)]
+    public void Run_SignedScriptPackedArtefactRejectsPostFinalizationMutation(
+        ModulePipelineActionStage stage)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                ActionStarted = (_, context) => File.AppendAllText(
+                    Assert.Single(context.ArtefactPaths),
+                    "mutated after script archive finalization")
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "ScriptPacked"));
+            var artefact = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments.Last());
+            artefact.ArtefactType = ArtefactType.ScriptPacked;
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationActionSegment
+                {
+                    Configuration = new ModulePipelineActionConfiguration
+                    {
+                        Name = "mutate finalized script archive",
+                        At = stage,
+                        InlineScript = "# executed through the test host"
+                    }
+                }
+            }).ToArray();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                runner.Run(spec, runner.Plan(spec)));
+
+            Assert.Contains("changed after signing", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ModulePipelineActionStage.AfterArtefacts)]
+    [InlineData(ModulePipelineActionStage.BeforePublish)]
+    [InlineData(ModulePipelineActionStage.AfterPublish)]
+    [InlineData(ModulePipelineActionStage.BeforeInstall)]
+    [InlineData(ModulePipelineActionStage.AfterInstall)]
+    public void Run_SignedScriptArtefactRejectsFileAddedAfterFinalization(ModulePipelineActionStage stage)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                ActionStarted = (_, context) => File.WriteAllText(
+                    Path.Combine(Assert.Single(context.ArtefactPaths), "added-after-signing.ps1"),
+                    "'unsigned'")
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", "Script"));
+            var artefact = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments.Last());
+            artefact.ArtefactType = ArtefactType.Script;
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationActionSegment
+                {
+                    Configuration = new ModulePipelineActionConfiguration
+                    {
+                        Name = "add unsigned script file",
+                        At = stage,
+                        InlineScript = "# executed through the test host"
+                    }
+                }
+            }).ToArray();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                runner.Run(spec, runner.Plan(spec)));
+
+            Assert.Contains("changed after signing", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("added-after-signing.ps1", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Plan_RejectsProvenanceEnabledScriptArtefactBeforePublication(ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var runner = CreateRunner(new FakeHostedOperations { AutoSuccessfulSigningResult = true });
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", artefactType.ToString()));
+            var artefact = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments.Last());
+            artefact.ArtefactType = artefactType;
+            EnableGitHubPublish(spec, moduleName);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec));
+
+            Assert.Contains("does not support Script or ScriptPacked", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Run_SignedPackedArtifactStripsPreexistingProvenanceWhenProtectionIsDisabled()
     {
@@ -84,6 +307,9 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     [Theory]
     [InlineData(ModulePipelineActionStage.AfterArtefacts)]
     [InlineData(ModulePipelineActionStage.BeforePublish)]
+    [InlineData(ModulePipelineActionStage.AfterPublish)]
+    [InlineData(ModulePipelineActionStage.BeforeInstall)]
+    [InlineData(ModulePipelineActionStage.AfterInstall)]
     public void Run_SignedPackedArtifactRejectsPostFinalizationActionMutation(ModulePipelineActionStage stage)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -1308,7 +1534,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         Assert.NotNull(method);
         string[] assets = Assert.IsType<string[]>(method!.Invoke(
             null,
-            new object?[] { new[] { artefact }, "release" }));
+            new object?[] { new[] { artefact }, "release", Path.Combine(root, "modules") }));
 
         Assert.Equal(new[] { Path.GetFullPath(archive), Path.GetFullPath(missingEvidence) }, assets);
         Assert.False(File.Exists(missingEvidence));

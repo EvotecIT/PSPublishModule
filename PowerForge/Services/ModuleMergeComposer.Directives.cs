@@ -22,6 +22,7 @@ internal static partial class ModuleMergeComposer
         {
             var line = lines[lineIndex] ?? string.Empty;
             var hasCode = state is PowerShellLexicalState.SingleQuotedString or PowerShellLexicalState.DoubleQuotedString;
+            var scanStart = 0;
 
             if (state is PowerShellLexicalState.SingleQuotedHereString or PowerShellLexicalState.DoubleQuotedHereString)
             {
@@ -30,15 +31,12 @@ internal static partial class ModuleMergeComposer
                 if (!trimmed.StartsWith(terminator, StringComparison.Ordinal))
                     continue;
 
-                var suffix = trimmed.Substring(terminator.Length);
-                if (suffix.Length > 0 && !string.IsNullOrWhiteSpace(suffix) && !suffix.TrimStart().StartsWith("#", StringComparison.Ordinal))
-                    continue;
-
                 state = PowerShellLexicalState.Normal;
-                continue;
+                hasCode = true;
+                scanStart = line.Length - trimmed.Length + terminator.Length;
             }
 
-            for (var characterIndex = 0; characterIndex < line.Length; characterIndex++)
+            for (var characterIndex = scanStart; characterIndex < line.Length; characterIndex++)
             {
                 var current = line[characterIndex];
                 var next = characterIndex + 1 < line.Length ? line[characterIndex + 1] : '\0';

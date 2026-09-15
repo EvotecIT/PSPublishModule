@@ -227,7 +227,6 @@ public sealed class PSPublishModuleManifestContractTests
         var projectWrapperScript = File.ReadAllText(Path.Combine(repoRoot, "Build", "Build-Project.ps1"));
         var releaseConfig = File.ReadAllText(Path.Combine(repoRoot, "Build", "release.json"));
         var moduleConfig = File.ReadAllText(Path.Combine(repoRoot, "powerforge.json"));
-        var publicReleaseWorkflow = File.ReadAllText(Path.Combine(repoRoot, ".github", "workflows", "pspublishmodule-public-release.yml"));
 
         Assert.Contains("$invokeParams.PublishNuget = $true", projectWrapperScript, StringComparison.Ordinal);
         Assert.Contains("$invokeParams.ModuleSignModule = $true", projectWrapperScript, StringComparison.Ordinal);
@@ -275,11 +274,6 @@ public sealed class PSPublishModuleManifestContractTests
         Assert.Contains("PowerForge.PowerShell.Provider.Directory.Runtime", powerForgeProjects);
         Assert.Contains("PowerForge.PowerShell.Provider.Management", powerForgeProjects);
         Assert.Contains("PowerForge.PowerShell.Provider.Management.Runtime", powerForgeProjects);
-        Assert.Contains("'PowerForge.PowerShell.ProviderSdk'", publicReleaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("'PowerForge.PowerShell.Provider.Directory'", publicReleaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("'PowerForge.PowerShell.Provider.Directory.Runtime'", publicReleaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("'PowerForge.PowerShell.Provider.Management'", publicReleaseWorkflow, StringComparison.Ordinal);
-        Assert.Contains("'PowerForge.PowerShell.Provider.Management.Runtime'", publicReleaseWorkflow, StringComparison.Ordinal);
         Assert.False(releaseRoot.GetProperty("Tools").GetProperty("GitHub").GetProperty("Publish").GetBoolean());
         var unifiedGitHub = releaseRoot.GetProperty("GitHub");
         Assert.True(unifiedGitHub.GetProperty("Publish").GetBoolean());

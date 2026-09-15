@@ -18,6 +18,7 @@ public sealed partial class ModulePipelineRunner
             manifestRequiredModules,
             manifestExternalModuleDependencies,
             preserveCompiledRootModule: IsReusingCompiledPowerShellModule(plan));
+
     }
 
     private void RefreshProjectManifestFromPlan(
@@ -122,11 +123,33 @@ public sealed partial class ModulePipelineRunner
         // Normalize ScriptsToProcess layout by rewriting the key once using the current value.
         // This cleans up historical insertion formatting artifacts (extra blank line before the key).
         _manifestMutator.TryRemoveTopLevelKey(manifestPath, "ScriptsToProcess");
-        _manifestMutator.TrySetTopLevelStringArray(manifestPath, "ScriptsToProcess", scriptsToProcess);
+        if (scriptsToProcess.Length > 0)
+            _manifestMutator.TrySetTopLevelStringArray(manifestPath, "ScriptsToProcess", scriptsToProcess);
 
         // Keep command/module hints in the in-memory plan only.
         // Persisting them into the PSD1 breaks downstream Import-Module consumers such as the documentation engine.
         _manifestMutator.TryRemoveTopLevelKey(manifestPath, "CommandModuleDependencies");
+    }
+
+    private static string? ResolveManifestScriptPath(string stagingPath, string path)
+    {
+        var normalized = (path ?? string.Empty)
+            .Trim()
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        if (normalized.Length == 0)
+            return null;
+
+        try
+        {
+            return Path.GetFullPath(Path.IsPathRooted(normalized)
+                ? normalized
+                : Path.Combine(stagingPath, normalized));
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private void SetOrRemoveTopLevelString(string manifestPath, string key, string? value, bool removeWhenEmpty)

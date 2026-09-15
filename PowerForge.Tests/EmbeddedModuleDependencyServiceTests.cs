@@ -41,6 +41,47 @@ public sealed class EmbeddedModuleDependencyServiceTests
     }
 
     [Fact]
+    public void Embed_ExcludesBuildHostInstallationMetadata()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "BuiltModule"));
+            var dependencyRoot = CreateModule(root.FullName, "Microsoft.Graph.Authentication", "2.25.0");
+            var receiptDirectory = Directory.CreateDirectory(Path.Combine(dependencyRoot, ".powerforge"));
+            File.WriteAllText(Path.Combine(receiptDirectory.FullName, "managed-module-receipt.json"), "{\"ModuleRoot\":\"C:\\\\Users\\\\Builder\"}");
+            File.WriteAllText(Path.Combine(dependencyRoot, "PSGetModuleInfo.xml"), "<Obj><S N=\"InstalledLocation\">C:\\Users\\Builder</S></Obj>");
+            File.WriteAllText(Path.Combine(dependencyRoot, "runtime.powerforge.json"), "{}");
+            var provider = new Provider(new InstalledModuleMetadata(
+                "Microsoft.Graph.Authentication",
+                "2.25.0",
+                guid: null,
+                moduleBasePath: dependencyRoot));
+
+            var service = new EmbeddedModuleDependencyService(new NullLogger());
+            service.Embed(
+                moduleRoot.FullName,
+                new[] { new RequiredModuleReference("Microsoft.Graph.Authentication", requiredVersion: "2.25.0") },
+                provider);
+
+            var embeddedRoot = Path.Combine(
+                moduleRoot.FullName,
+                "Internals",
+                "Modules",
+                "Microsoft.Graph.Authentication",
+                "2.25.0");
+            Assert.False(Directory.Exists(Path.Combine(embeddedRoot, ".powerforge")));
+            Assert.False(File.Exists(Path.Combine(embeddedRoot, "PSGetModuleInfo.xml")));
+            Assert.True(File.Exists(Path.Combine(embeddedRoot, "runtime.powerforge.json")));
+            Assert.True(File.Exists(Path.Combine(embeddedRoot, "Microsoft.Graph.Authentication.psd1")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Embed_PreservesDeclarationOrderInDependencyManifest()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

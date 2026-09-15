@@ -3,6 +3,78 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_can_defer_after_staging_validation_until_the_signed_checkpoint()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var validationPath = Path.Combine(root, "validation.json");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(
+                validationPath,
+                """
+                {
+                  "Commands": [
+                    { "Name": "Signed checkpoint", "FileName": "powerforge-missing-validation-probe" }
+                  ]
+                }
+                """);
+            var spec = new PowerForgeReleaseSpec
+            {
+                Tools = new PowerForgeToolReleaseSpec
+                {
+                    Targets = [new PowerForgeToolReleaseTarget { Name = "Fixture" }]
+                },
+                Outputs = new PowerForgeReleaseOutputsOptions
+                {
+                    Staging = new PowerForgeReleaseStagingOptions
+                    {
+                        RootPath = Path.Combine(root, "staging")
+                    }
+                },
+                Validation = new PowerForgeReleaseValidationOptions
+                {
+                    AfterStaging =
+                    [
+                        new PowerForgeReleaseValidationAction
+                        {
+                            Name = "Signed checkpoint",
+                            ConfigPath = validationPath
+                        }
+                    ]
+                }
+            };
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = releasePath,
+                ResolvedReleaseVersion = "1.2.3",
+                DeferAfterStagingValidation = true
+            };
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => new PowerForgeToolReleasePlan
+                {
+                    Targets = [new PowerForgeToolReleaseTargetPlan { Name = "Fixture" }]
+                },
+                runTools: _ => new PowerForgeToolReleaseResult { Success = true },
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var result = service.Execute(spec, request);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Empty(result.ReleaseValidations);
+            Assert.False(service.ValidateBuiltReleaseOutputs(spec, request, result));
+            Assert.Contains("Signed checkpoint", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ExplicitDisabledSigningOverridesConfiguredToolAndInstallerProfiles()
     {
         var root = CreateSandbox();

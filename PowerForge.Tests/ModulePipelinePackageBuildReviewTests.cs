@@ -308,6 +308,100 @@ public sealed partial class ModulePipelinePackageBuildTests
         }
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void Run_GateBuild_PreservesPackageCertificateOnlyForReleaseCheckpoint(
+        bool releaseCheckpoint,
+        bool expectCertificate)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var configPath = Path.Combine(root.FullName, "Build", "project.build.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            File.WriteAllText(
+                configPath,
+                """
+                {
+                  "RootPath": "Sources",
+                  "Build": true,
+                  "PublishNuget": true,
+                  "CertificateThumbprint": "ABC123"
+                }
+                """);
+
+            ProjectBuildConfiguration? capturedConfiguration = null;
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, path) =>
+                {
+                    capturedConfiguration = configuration;
+                    Assert.True(request.Build);
+                    Assert.False(request.PublishNuget);
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = path ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                ReleaseCheckpoint = releaseCheckpoint,
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration
+                        {
+                            Mode = ConfigurationGateMode.Build
+                        }
+                    },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            ConfigPath = Path.Combine("Build", "project.build.json")
+                        }
+                    }
+                ]
+            };
+
+            runner.Run(spec);
+
+            Assert.NotNull(capturedConfiguration);
+            Assert.Equal(
+                expectCertificate ? "ABC123" : null,
+                capturedConfiguration!.CertificateThumbprint);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Run_HonorsReleaseBuildOrderForPackageBuildPlacement()
     {

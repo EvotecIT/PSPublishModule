@@ -7,6 +7,216 @@ namespace PowerForge.Tests;
 
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
+    [Theory]
+    [InlineData(DotNetPublishStyle.PortableCompat)]
+    [InlineData(DotNetPublishStyle.PortableSize)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void BuildProjectEvaluationRequests_UsesSingleFileSdkEvidenceWithoutSyntheticTrimming(
+        DotNetPublishStyle style)
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Configuration = "Release",
+            Targets =
+            [
+                new DotNetPublishTargetPlan
+                {
+                    Name = "app",
+                    ProjectPath = Path.GetFullPath("App.csproj"),
+                    Publish = new DotNetPublishPublishOptions(),
+                    Combinations =
+                    [
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "linux-x64",
+                            Style = style
+                        }
+                    ]
+                }
+            ]
+        };
+        MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "BuildProjectEvaluationRequests",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var requests = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
+            method.Invoke(null, [Array.Empty<string>(), "Release", plan, null]));
+        object request = Assert.Single(requests.Cast<object>());
+        var properties = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+            request.GetType().GetProperty(
+                    "SdkPackageEvidenceGlobalProperties",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(request));
+
+        Assert.Equal("true", properties["PublishSingleFile"]);
+        Assert.DoesNotContain("PublishTrimmed", properties.Keys);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void RuntimeIdentifiersMatrix_IsRetainedForRestoreButNotConcretePublish()
+    {
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "desktop",
+            ProjectPath = "Desktop.csproj",
+            Publish = new DotNetPublishPublishOptions(),
+            Combinations =
+            [
+                new DotNetPublishTargetCombination
+                {
+                    Framework = "net10.0-windows",
+                    Runtime = "win-arm64",
+                    Style = DotNetPublishStyle.PortableCompat
+                }
+            ]
+        };
+        var plan = new DotNetPublishPlan
+        {
+            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["RuntimeIdentifiers"] = "linux-x64;win-x64;win-arm64"
+            },
+            Targets = [target]
+        };
+
+        Dictionary<string, string> restore = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            target.ProjectPath,
+            "win-arm64",
+            "net10.0-windows");
+        Dictionary<string, string> publish = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+            plan,
+            target,
+            "net10.0-windows",
+            "win-arm64",
+            DotNetPublishStyle.PortableCompat);
+
+        Assert.Equal("linux-x64;win-x64;win-arm64", restore["RuntimeIdentifiers"]);
+        Assert.DoesNotContain("RuntimeIdentifiers", publish.Keys);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void RuntimeIdentifiersMatrix_FromPublishOverrideIsNotSentToConcretePublish(
+        bool styleSpecific)
+    {
+        const string runtimeMatrix = "linux-x64;win-x64;win-arm64";
+        var publish = new DotNetPublishPublishOptions();
+        if (styleSpecific)
+        {
+            publish.StyleOverrides = new Dictionary<string, DotNetPublishStyleOverride>(
+                StringComparer.OrdinalIgnoreCase)
+            {
+                [DotNetPublishStyle.PortableCompat.ToString()] = new DotNetPublishStyleOverride
+                {
+                    MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["RuntimeIdentifiers"] = runtimeMatrix
+                    }
+                }
+            };
+        }
+        else
+        {
+            publish.MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["RuntimeIdentifiers"] = runtimeMatrix
+            };
+        }
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "desktop",
+            ProjectPath = "Desktop.csproj",
+            Publish = publish
+        };
+        var plan = new DotNetPublishPlan { Targets = [target] };
+
+        Dictionary<string, string> properties = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+            plan,
+            target,
+            "net10.0-windows",
+            "win-arm64",
+            DotNetPublishStyle.PortableCompat);
+
+        Assert.DoesNotContain("RuntimeIdentifiers", properties.Keys);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ReadSourceProvenance_ResolvesLiteralProjectReferenceRemovalSelfReference()
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
+            appProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      GlobalPropertiesToRemove="%(GlobalPropertiesToRemove);Flavor" />
+                  </ItemGroup>
+                </Project>
+                """,
+            libraryProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(Flavor)' == ''">
+                    <Compile Include="../../inputs/Selected.cs" />
+                  </ItemGroup>
+                </Project>
+                """,
+            repositoryFiles: SelectedInput,
+            mutatedPath: "inputs/Selected.cs",
+            buildProperties: new Dictionary<string, string> { ["Flavor"] = "Parent" },
+            buildFramework: "net8.0");
+
+        AssertSelectedInputIsDirty(provenance);
+        Assert.DoesNotContain(
+            provenance.DirtyReasons,
+            reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("UndefineProperties", "%(ProjectReference.UndefineProperties)")]
+    [InlineData("GlobalPropertiesToRemove", "%(ProjectReference.GlobalPropertiesToRemove)")]
+    [InlineData("UndefineProperties", "%( ProjectReference.UndefineProperties )")]
+    [InlineData("GlobalPropertiesToRemove", "%( ProjectReference.GlobalPropertiesToRemove )")]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ReadSourceProvenance_ResolvesQualifiedProjectReferenceRemovalSelfReference(
+        string metadataName,
+        string selfReference)
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
+            appProjectXml: $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      {metadataName}="{selfReference};Flavor" />
+                  </ItemGroup>
+                </Project>
+                """,
+            libraryProjectXml: """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup Condition="'$(Flavor)' == ''">
+                    <Compile Include="../../inputs/Selected.cs" />
+                  </ItemGroup>
+                </Project>
+                """,
+            repositoryFiles: SelectedInput,
+            mutatedPath: "inputs/Selected.cs",
+            buildProperties: new Dictionary<string, string> { ["Flavor"] = "Parent" },
+            buildFramework: "net8.0");
+
+        AssertSelectedInputIsDirty(provenance);
+        Assert.DoesNotContain(
+            provenance.DirtyReasons,
+            reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
+    }
+
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
     public void PublishProvenanceLease_UsesOneLinuxWatcherForManyDirectories()
@@ -70,13 +280,122 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void VerifiedPackageCatalog_InheritsOnlyPackageKeysVerifiedByChildLock()
+    public void LockedPackageHashes_SelectOnlyActiveFrameworkAndRuntimeSections()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string lockFile = Path.Combine(root, "packages.lock.json");
+            File.WriteAllText(lockFile, """
+                {
+                  "version": 2,
+                  "dependencies": {
+                    "net8.0": {
+                      "Microsoft.NET.ILLink.Tasks": {
+                        "type": "Direct",
+                        "resolved": "8.0.30",
+                        "contentHash": "net8-hash"
+                      }
+                    },
+                    "net10.0": {
+                      "Shared.Package": {
+                        "type": "Direct",
+                        "resolved": "1.0.0",
+                        "contentHash": "shared-hash"
+                      },
+                      "Microsoft.NET.ILLink.Tasks": {
+                        "type": "Direct",
+                        "resolved": "10.0.11",
+                        "contentHash": "net10-hash"
+                      }
+                    },
+                    "net10.0/linux-x64": {
+                      "Runtime.Package": {
+                        "type": "Transitive",
+                        "resolved": "2.0.0",
+                        "contentHash": "runtime-hash"
+                      }
+                    },
+                    "net10.0/win-x64": {
+                      "Windows.Package": {
+                        "type": "Transitive",
+                        "resolved": "3.0.0",
+                        "contentHash": "windows-hash"
+                      }
+                    },
+                    ".NETStandard,Version=v2.1": {
+                      "Standard.Package": {
+                        "type": "Direct",
+                        "resolved": "4.0.0",
+                        "contentHash": "standard-hash"
+                      }
+                    },
+                    "net10.0-windows7.0": {
+                      "Windows.Forms.Package": {
+                        "type": "Direct",
+                        "resolved": "5.0.0",
+                        "contentHash": "windows-forms-hash"
+                      }
+                    },
+                    "net10.0-windows7.0/win-x64": {
+                      "Windows.Runtime.Package": {
+                        "type": "Transitive",
+                        "resolved": "6.0.0",
+                        "contentHash": "windows-runtime-hash"
+                      }
+                    }
+                  }
+                }
+                """);
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetNestedType(
+                    "VerifiedPackageInputCatalog",
+                    BindingFlags.NonPublic)!
+                .GetMethod("TryReadLockedPackageHashes", BindingFlags.Static | BindingFlags.NonPublic)!;
+            object?[] arguments = [lockFile, "net10.0", "linux-x64", null];
+
+            Assert.True((bool)method.Invoke(null, arguments)!);
+            var hashes = Assert.IsType<Dictionary<string, string>>(arguments[3]);
+            Assert.Equal(3, hashes.Count);
+            Assert.Equal("shared-hash", hashes["Shared.Package|1.0.0"]);
+            Assert.Equal("net10-hash", hashes["Microsoft.NET.ILLink.Tasks|10.0.11"]);
+            Assert.Equal("runtime-hash", hashes["Runtime.Package|2.0.0"]);
+            Assert.DoesNotContain("Microsoft.NET.ILLink.Tasks|8.0.30", hashes.Keys);
+            Assert.DoesNotContain("Windows.Package|3.0.0", hashes.Keys);
+
+            object?[] standardArguments = [lockFile, "netstandard2.1", null, null];
+            Assert.True((bool)method.Invoke(null, standardArguments)!);
+            var standardHashes = Assert.IsType<Dictionary<string, string>>(standardArguments[3]);
+            Assert.Single(standardHashes);
+            Assert.Equal("standard-hash", standardHashes["Standard.Package|4.0.0"]);
+
+            object?[] windowsArguments = [lockFile, "net10.0-windows", "win-x64", null];
+            Assert.True((bool)method.Invoke(null, windowsArguments)!);
+            var windowsHashes = Assert.IsType<Dictionary<string, string>>(windowsArguments[3]);
+            Assert.Equal(2, windowsHashes.Count);
+            Assert.Equal("windows-forms-hash", windowsHashes["Windows.Forms.Package|5.0.0"]);
+            Assert.Equal("windows-runtime-hash", windowsHashes["Windows.Runtime.Package|6.0.0"]);
+
+            object?[] missingArguments = [lockFile, "net9.0", "linux-x64", null];
+            Assert.False((bool)method.Invoke(null, missingArguments)!);
+            Assert.Empty(Assert.IsType<Dictionary<string, string>>(missingArguments[3]));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void VerifiedPackageCatalog_InheritsOnlyMissingSdkEvidenceWithoutPromotingLockedPackages()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
             string packageRoot = Directory.CreateDirectory(Path.Combine(root, "packages")).FullName;
             string sharedArchive = Path.Combine(packageRoot, "shared.nupkg");
+            string sharedAliasArchive = Path.Combine(packageRoot, "shared-alias.nupkg");
+            string sdkArchive = Path.Combine(packageRoot, "sdk.nupkg");
             Type runnerType = typeof(DotNetPublishPipelineRunner);
             Type catalogType = runnerType.GetNestedType(
                 "VerifiedPackageInputCatalog",
@@ -92,7 +411,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 object catalog = constructor.Invoke(
                 [
                     new[] { packageRoot },
-                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Shared.Package|1.0.0"] = "shared-hash"
+                    },
                     cache,
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
@@ -100,22 +422,106 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     },
                     Array.Empty<string>()
                 ]);
-                catalogType.GetMethod(
-                        "InheritSdkManagedPackageKeys",
-                        BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(catalog, [new[] { "Shared.Package|1.0.0", "Root.Only|1.0.0" }]);
+                Type evidenceType = catalogType.GetNestedType(
+                    "VerifiedSdkManagedPackageEvidence",
+                    BindingFlags.NonPublic)!;
+                Array evidence = Array.CreateInstance(evidenceType, 2);
+                evidence.SetValue(
+                    Activator.CreateInstance(evidenceType, "Shared.Package|1.0.0", "shared-hash", sharedAliasArchive),
+                    0);
+                evidence.SetValue(
+                    Activator.CreateInstance(evidenceType, "Sdk.Package|1.0.0", "sdk-hash", sdkArchive),
+                    1);
+                MethodInfo inherit = catalogType.GetMethod(
+                    "TryInheritSdkManagedPackageEvidence",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                object?[] arguments = [evidence, null];
 
-                var inherited = Assert.IsAssignableFrom<IEnumerable<string>>(
+                Assert.True((bool)inherit.Invoke(catalog, arguments)!);
+                Assert.Null(arguments[1]);
+
+                var inherited = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
                     catalogType.GetProperty(
-                            "SdkManagedPackageKeys",
+                            "SdkManagedPackageEvidence",
                             BindingFlags.Instance | BindingFlags.NonPublic)!
                         .GetValue(catalog));
-                Assert.Equal("Shared.Package|1.0.0", Assert.Single(inherited));
+                object inheritedPackage = Assert.Single(inherited.Cast<object>());
+                Assert.Equal(
+                    "Sdk.Package|1.0.0",
+                    evidenceType.GetProperty("PackageKey")!.GetValue(inheritedPackage));
+
+                Array conflictingEvidence = Array.CreateInstance(evidenceType, 1);
+                conflictingEvidence.SetValue(
+                    Activator.CreateInstance(evidenceType, "Shared.Package|1.0.0", "different-hash", sharedArchive),
+                    0);
+                object?[] conflictingArguments = [conflictingEvidence, null];
+                Assert.False((bool)inherit.Invoke(catalog, conflictingArguments)!);
+                Assert.Contains("conflicted", Assert.IsType<string>(conflictingArguments[1]));
             }
             finally
             {
                 (cache as IDisposable)?.Dispose();
             }
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ProjectEvaluationRequest_IsolatesDependencyAndReleaseRootScopes()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string appProject = Path.Combine(root, "App", "App.csproj");
+            string libraryProject = Path.Combine(root, "Library", "Library.csproj");
+            Type requestType = typeof(DotNetPublishPipelineRunner).GetNestedType(
+                "ProjectEvaluationRequest",
+                BindingFlags.NonPublic)!;
+            ConstructorInfo constructor = Assert.Single(
+                requestType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
+            object CreateRequest(string projectPath) => constructor.Invoke(
+            [
+                projectPath,
+                "net10.0",
+                "Release",
+                null,
+                null,
+                null,
+                null,
+                true,
+                null,
+                true,
+                null
+            ]);
+            MethodInfo forScope = requestType.GetMethod(
+                "ForEvaluationScope",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            MethodInfo forProject = requestType.GetMethod(
+                "ForProject",
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: [typeof(string), typeof(string)],
+                modifiers: null)!;
+            MethodInfo buildVisitKey = requestType.GetMethod(
+                "BuildVisitKey",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            PropertyInfo isScopeRoot = requestType.GetProperty(
+                "IsEvaluationScopeRoot",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+            object appRoot = forScope.Invoke(CreateRequest(appProject), [appProject])!;
+            object libraryAsDependency = forProject.Invoke(appRoot, [libraryProject, "net10.0"])!;
+            object libraryAsRoot = forScope.Invoke(CreateRequest(libraryProject), [libraryProject])!;
+
+            Assert.False((bool)isScopeRoot.GetValue(libraryAsDependency)!);
+            Assert.True((bool)isScopeRoot.GetValue(libraryAsRoot)!);
+            Assert.NotEqual(
+                (string)buildVisitKey.Invoke(libraryAsDependency, null)!,
+                (string)buildVisitKey.Invoke(libraryAsRoot, null)!);
         }
         finally
         {

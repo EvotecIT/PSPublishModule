@@ -9,7 +9,7 @@ public sealed partial class AppleReleaseWorkflowTests
     private const string TestKeyId = "ABC123DEFG";
 
     [Fact]
-    public void PinnedLocalOperatorRequiresExactToolAndCleanMergedConsumerSources()
+    public void PinnedLocalOperatorRequiresExactToolAndCleanConsumerSources()
     {
         var root = FindRepoRoot();
         var script = Read(root, "scripts", "Invoke-PinnedPowerForge.ps1");
@@ -42,6 +42,9 @@ public sealed partial class AppleReleaseWorkflowTests
             script.IndexOf("Assert-CleanRepository -Root $toolRoot", StringComparison.Ordinal));
         Assert.Contains("run download $runId", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("requires an explicit --config", script, StringComparison.Ordinal);
+        Assert.Contains("'apple-deploy'", script, StringComparison.Ordinal);
+        Assert.Contains("$command -in @('apple-release', 'apple-deploy')", script, StringComparison.Ordinal);
+        Assert.Contains("$consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy')", script, StringComparison.Ordinal);
         Assert.Contains("'apple-review-details'", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-TrackedInputValidator -SourceCommit $consumerHead", script, StringComparison.Ordinal);
         Assert.Contains("Get-RedactedToolText -Text ($stdout.GetAwaiter().GetResult())", script, StringComparison.Ordinal);
@@ -57,7 +60,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("Capture provenance source commit", script, StringComparison.Ordinal);
         Assert.Contains("--apple-source-commit must match the exact consumer HEAD", evidence, StringComparison.Ordinal);
         Assert.Contains("Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead", script, StringComparison.Ordinal);
-        Assert.Contains("Get-AppleTargetResolutionArgumentList -Arguments $forwardedArgumentList", script, StringComparison.Ordinal);
+        Assert.Contains("Get-AppleTargetResolutionSnapshotArgumentList", script, StringComparison.Ordinal);
         Assert.Contains("Read-ResolvedAppleTargets -Path $resolutionOutput", script, StringComparison.Ordinal);
         Assert.Contains("-CaptureStandardOutputPath $resolutionOutput", script, StringComparison.Ordinal);
         Assert.True(
@@ -80,7 +83,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("-IncludeAppleCredentials", script, StringComparison.Ordinal);
         Assert.Contains("Assert-FixedAppleToolConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("$script:validatedReleaseConfigPaths", script, StringComparison.Ordinal);
-        Assert.Contains("if ($command -eq 'apple-release' -and $config)", script, StringComparison.Ordinal);
+        Assert.Contains("if ($command -in @('apple-release', 'apple-deploy') -and $config)", script, StringComparison.Ordinal);
         Assert.Contains("Get-OptionValue -Option '--release-config'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$script:validatedConfigPaths", script, StringComparison.Ordinal);
         Assert.Contains("/usr/bin/xcodebuild", script, StringComparison.Ordinal);

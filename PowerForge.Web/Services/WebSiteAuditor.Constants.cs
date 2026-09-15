@@ -11,7 +11,7 @@ public static partial class WebSiteAuditor
         "*.head.html",
         "**/*.head.html",
         "**/api-fragments/**",
-        "api-fragments/**"
+        "api-fragments/**",
+        "_powerforge/fragments/**"
     };
 }
-

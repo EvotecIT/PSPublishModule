@@ -25,6 +25,12 @@ powerforge apple-deploy --platform iOS --profile Free
 powerforge apple-deploy --platform macOS --profile Plus
 ```
 
+Consumer repositories that require a source-bound local deployment can route
+`apple-deploy` through `scripts/Invoke-PinnedPowerForge.ps1`. The helper builds
+the CLI from one reviewed PSPublishModule commit and accepts any clean consumer
+branch for local deployment; publication commands continue to require a clean
+consumer `main` equal to `origin/main`.
+
 The iOS/iPadOS/watchOS device path runs `xcodebuild build`, installs with
 `xcrun devicectl`, and launches the selected profile. The macOS path builds the
 native or Mac Catalyst product, atomically replaces the app in `/Applications`,
@@ -724,7 +730,7 @@ The reusable workflow boundary mirrors the human approval boundary:
 - `powerforge-apple-monitor.yml` runs scheduled `Doctor` on a trusted self-hosted macOS
   runner, reads its private `~/.appstoreconnect/env` profile only inside that action
   process, retains the compact receipt, and maintains one marker-owned GitHub incident
-  until errors and warnings are cleared. The profile and referenced `.p8` file must be
+  until monitored errors are cleared. The profile and referenced `.p8` file must be
   runner-owned regular files with one link, grant no group, other, or ACL access, and
   must not contain or traverse symbolic links. The monitor accepts only the exact
   default-branch commit that invoked it.
@@ -983,12 +989,23 @@ must be exact references to their canonical values. It requires the `.p8` file t
 that same private directory, validates an unencrypted PKCS#8 PEM shape, and keeps all
 values process-local. It accepts only the exact default-branch commit that invoked the
 workflow and executes only a `powerforge_ref` already merged into PSPublishModule's
-default branch, then retains the compact
-receipt and maintains one stable GitHub incident. Errors
-and warnings open the issue; a clean later run closes only incidents carrying the
-PowerForge monitor ownership marker, never an unrelated same-title issue. This catches upload/build
+default branch, then retains the compact receipt and maintains one stable GitHub
+incident. The default `continuous` readiness policy keeps release-timing attestations
+(review contact/demo details, age rating, price, and territory availability) in the
+retained receipt without making an ordinary scheduled health run fail. Pass
+`readiness_policy: strict` for a release-window monitor that should gate on those
+declarations too; direct `Doctor`, `Prepare`, and `Advance` release commands remain
+strict regardless. Non-retryable monitored errors open or reopen the marker-owned issue,
+every failing occurrence refreshes its run, source, and timestamp, and a healthy later
+run closes it. The workflow never adopts an unrelated same-title issue and deduplicates
+identical cross-target diagnostics before rendering. This catches upload/build
 state, review, metadata, screenshot, compliance, observability, and TestFlight feedback
 gaps without waiting for an Apple email.
+
+Read-only App Store Connect requests retry bounded `401 NOT_AUTHORIZED`, `429`, and
+transient server responses. Each attempt creates a fresh JWT. Persistent authentication
+failures still surface as `APPLE_AUTH`; exact-source validation failures surface
+separately as `APPLE_SOURCE_TRUST`.
 
 App Store Connect webhooks complement scheduled polling. `AppStoreConnectClient` can
 list, create, update, and ping webhooks, while `AppStoreConnectWebhookVerifier`
@@ -1062,6 +1079,75 @@ App Information-only runs do not require a version or build number because these
 to the app-level resource rather than an App Store version. Use one config per app and locale;
 the unified release applies every matching locale once per unique app id even when iOS and macOS
 targets share that app, and fails when a selected app has no matching config.
+
+## Multiple Listing Languages
+
+Use one version metadata file per app, platform, and locale. `AppleApps.MetadataConfigPaths`
+can include several languages for the same platform; preparation applies every matching
+file and rejects duplicate locales before remote release work. `UseReleaseVersion: true`
+binds each file to the selected marketing version. Explicit version IDs must agree across
+all metadata and screenshot mappings for a target.
+
+```json
+{
+  "AppleApps": {
+    "MetadataConfigPaths": [
+      "store/en-US/ios.json",
+      "store/pl/ios.json",
+      "store/en-US/macos.json",
+      "store/pl/macos.json"
+    ],
+    "AppInfoConfigPaths": [
+      "store/en-US/app-info.json",
+      "store/pl/app-info.json"
+    ]
+  }
+}
+```
+
+This fragment belongs alongside the app targets and credentials in the release config.
+App Information is shared across platform versions, so list each app/locale only once.
+Both sync services create a localization when it is missing. App Information creation
+requires a localized `name`; other supplied fields are sent with the create request.
+An existing localization is updated using its existing resource ID.
+
+An editable App Information resource can receive a new title or language while the previous
+live resource retains its released metadata. Locked resources still in review must already
+match, and a locked-only app cannot receive new or changed metadata. Create the next editable
+version before preparing those changes.
+
+For .NET callers, `AppStoreConnectReleasePreparationRequest.MetadataSpecs` accepts multiple
+locales alongside the existing single `MetadataSpec`. `MetadataResults` returns all results;
+`Metadata` retains the first result for single-locale callers. Each sync result reports
+`CreatedLocalization`; `Before` is null when there was no prior localization. These operations
+prepare metadata only; submission and public release remain separate, explicitly authorized
+actions.
+
+### Screenshot locales
+
+`AppleApps.ScreenshotConfigPaths` accepts one mapping per app, platform, and locale. A release can therefore select English and Polish screenshots for the same iOS version. Duplicate locale mappings for the same target are rejected. Screenshot folders and approval manifests remain relative to their own JSON file.
+
+Release preparation validates and snapshots every selected locale before the first remote mutation. For approved replacements, it compares the combined remote inventory before changing metadata or selecting a build, then rechecks each locale before replacing its screenshots. Each locale still needs its reviewed approval manifest and exact capture provenance.
+
+Direct .NET callers can supply `AppStoreConnectReleasePreparationRequest.ScreenshotMappings`, with a `Spec` and `BaseDirectory` for each locale. `ScreenshotSpec` and the request-level `BaseDirectory` remain supported for one locale. `ScreenshotResults` reports every synchronized locale; `Screenshots` retains the first result for existing callers.
+
+Readiness requests accept `ScreenshotSpecs` to check each locale's required display types. Combined readiness passes only when every configured locale passes, and screenshot set results identify their `Locale`. Missing localizations must be created by the version metadata synchronization before their screenshots can be uploaded.
+
+Metadata and screenshot coverage are independent. If `MetadataConfigPaths` lists 19 languages
+and `ScreenshotConfigPaths` maps only English screenshots, planning, preparation, and App Review
+submission check the metadata for all 19 languages. Screenshots are required only for the mapped
+English locale. No duplicate or relabeled screenshot mappings are needed for fallback languages.
+Readiness-only operations load the metadata locale configuration without synchronizing its text.
+The approved plan hashes every checked remote localization, so changing a secondary language's
+metadata invalidates that approval even when its screenshots fall back to English.
+
+Direct .NET callers can set `AppStoreConnectReleaseReadinessRequest.MetadataLocales` independently
+of `ScreenshotSpec` or `ScreenshotSpecs`. Metadata locales and screenshot mapping locales are
+checked together, with whitespace trimmed and duplicate locale identifiers checked once.
+Preparation also includes every locale from its applied `MetadataSpec` and `MetadataSpecs`.
+`Localizations` contains all found metadata records; a missing requested locale fails readiness.
+Without screenshot mappings, existing `RequiredScreenshotDisplayTypes` requirements still apply
+to `Locale` only. Set `RequireScreenshots = false` for a metadata-only check.
 
 ## Screenshot Upload Flow
 

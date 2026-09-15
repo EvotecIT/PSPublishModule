@@ -199,10 +199,15 @@ public sealed class ProcessRunRequest
     /// <summary>Maximum characters retained independently for standard output and standard error.</summary>
     public int MaxCapturedOutputCharacters { get; set; } = int.MaxValue;
 
+    /// <summary>Require the launcher to report failure to start the requested executable, without an intervening shell launcher.</summary>
+    public bool RequireDirectStart { get; set; }
+
     /// <summary>Optional callback invoked for each captured standard-output line.</summary>
+    /// <remarks>Callbacks must return promptly. Shutdown waits for in-flight callbacks before returning captured output.</remarks>
     public Action<string>? OutputLineReceived { get; }
 
     /// <summary>Optional callback invoked for each captured standard-error line.</summary>
+    /// <remarks>Callbacks must return promptly. Shutdown waits for in-flight callbacks before returning captured output.</remarks>
     public Action<string>? ErrorLineReceived { get; }
 
     internal void SetCompletionBoundary(Action<ProcessRunResult> completionBoundary)
@@ -284,83 +289,6 @@ public sealed class ProcessRunRequest
     }
 }
 
-/// <summary>
-/// Result of executing an external process.
-/// </summary>
-public sealed class ProcessRunResult
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ProcessRunResult"/> class.
-    /// </summary>
-    /// <param name="exitCode">Process exit code.</param>
-    /// <param name="stdOut">Captured standard output.</param>
-    /// <param name="stdErr">Captured standard error.</param>
-    /// <param name="executable">Executable name or path used to launch the process.</param>
-    /// <param name="duration">Observed process duration.</param>
-    /// <param name="timedOut">Indicates whether the process timed out.</param>
-    /// <param name="standardOutputLimitExceeded">Whether retained standard output exceeded its configured character limit.</param>
-    /// <param name="standardErrorLimitExceeded">Whether retained standard error exceeded its configured character limit.</param>
-    public ProcessRunResult(
-        int exitCode,
-        string stdOut,
-        string stdErr,
-        string executable,
-        TimeSpan duration,
-        bool timedOut,
-        bool standardOutputLimitExceeded = false,
-        bool standardErrorLimitExceeded = false)
-    {
-        ExitCode = exitCode;
-        StdOut = stdOut;
-        StdErr = stdErr;
-        Executable = executable;
-        Duration = duration;
-        TimedOut = timedOut;
-        StandardOutputLimitExceeded = standardOutputLimitExceeded;
-        StandardErrorLimitExceeded = standardErrorLimitExceeded;
-    }
-
-    /// <summary>
-    /// Gets the process exit code.
-    /// </summary>
-    public int ExitCode { get; }
-
-    /// <summary>
-    /// Gets captured standard output.
-    /// </summary>
-    public string StdOut { get; }
-
-    /// <summary>
-    /// Gets captured standard error.
-    /// </summary>
-    public string StdErr { get; }
-
-    /// <summary>
-    /// Gets the executable name or path used to launch the process.
-    /// </summary>
-    public string Executable { get; }
-
-    /// <summary>
-    /// Gets the observed process duration.
-    /// </summary>
-    public TimeSpan Duration { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the process timed out.
-    /// </summary>
-    public bool TimedOut { get; }
-
-    /// <summary>Whether standard output exceeded the configured retained-character limit.</summary>
-    public bool StandardOutputLimitExceeded { get; }
-
-    /// <summary>Whether standard error exceeded the configured retained-character limit.</summary>
-    public bool StandardErrorLimitExceeded { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the process completed successfully.
-    /// </summary>
-    public bool Succeeded => ExitCode == 0 && !TimedOut && !StandardOutputLimitExceeded && !StandardErrorLimitExceeded;
-}
 
 /// <summary>
 /// Executes external processes with structured request/response contracts.
@@ -382,6 +310,8 @@ public interface IProcessRunner
     /// <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
     /// after the process exits and the final result is constructed, before returning from this method
     /// or performing any post-exit mutation of producer outputs.
+    /// Results for startup failures must set <see cref="ProcessRunResult.StartFailed"/> rather than
+    /// representing them only with a synthetic exit code.
     /// </remarks>
     Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default);
 }
@@ -389,8 +319,19 @@ public interface IProcessRunner
 /// <summary>
 /// Default implementation of <see cref="IProcessRunner"/>.
 /// </summary>
-public sealed class ProcessRunner : IProcessRunner
+public sealed partial class ProcessRunner : IProcessRunner
 {
+    private readonly bool _ownProcessTree;
+
+    /// <summary>Creates a general-purpose runner without terminating detached background work after successful completion.</summary>
+    public ProcessRunner() { }
+
+    /// <summary>Creates a runner that can own a probe's descendants independently of its original process.</summary>
+    /// <param name="ownProcessTree">Use a Windows job or Linux/macOS process group established before child code executes.
+    /// Descendants remaining in that scope are terminated before the runner returns, including after parent exit.
+    /// Unix programs that deliberately create another session/group are outside this cooperative lifecycle scope.</param>
+    public ProcessRunner(bool ownProcessTree) => _ownProcessTree = ownProcessTree;
+
     /// <inheritdoc />
     public async Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
     {
@@ -402,10 +343,10 @@ public sealed class ProcessRunner : IProcessRunner
             throw new ArgumentException("Working directory is required.", nameof(request));
         if (request.MaxCapturedOutputCharacters <= 0)
             throw new ArgumentOutOfRangeException(nameof(request), "The captured-output character limit must be positive.");
+        cancellationToken.ThrowIfCancellationRequested();
 
-        using var process = new Process {
-            StartInfo = BuildStartInfo(request)
-        };
+        using var process = ProcessExecution.Create(BuildStartInfo(request), _ownProcessTree);
+        process.RequireDirectStart = request.RequireDirectStart;
 
         request.InvokePreStartBoundary();
         var stopwatch = Stopwatch.StartNew();
@@ -428,120 +369,113 @@ public sealed class ProcessRunner : IProcessRunner
                 boundaryTimedOut ? "Timeout" : ex.Message,
                 request.FileName,
                 stopwatch.Elapsed,
-                boundaryTimedOut);
+                boundaryTimedOut, standardOutputLimitExceeded: false, standardErrorLimitExceeded: false, startFailed: true);
             request.InvokeCompletionBoundary(failedStart);
             return failedStart;
         }
 
-        var stdoutTask = request.CaptureOutput
-            ? ReadOutputAsync(process.StandardOutput, request.OutputLineReceived, request.MaxCapturedOutputCharacters)
-            : Task.FromResult(CapturedOutput.Empty);
-        var stderrTask = request.CaptureError
-            ? ReadOutputAsync(process.StandardError, request.ErrorLineReceived, request.MaxCapturedOutputCharacters)
-            : Task.FromResult(CapturedOutput.Empty);
+        var stdoutCapture = new RedirectedProcessOutput();
+        var stderrCapture = new RedirectedProcessOutput();
         var timedOut = false;
-
+        var exitCode = 0;
+        var readyForResult = false;
         try
         {
-            var remainingTimeout = request.Timeout;
-            if (request.Timeout > TimeSpan.Zero && request.Timeout != Timeout.InfiniteTimeSpan)
+            stdoutCapture = request.CaptureOutput
+                ? RedirectedProcessOutput.Start(process.StandardOutput, request.MaxCapturedOutputCharacters, request.OutputLineReceived)
+                : new RedirectedProcessOutput();
+            stderrCapture = request.CaptureError
+                ? RedirectedProcessOutput.Start(process.StandardError, request.MaxCapturedOutputCharacters, request.ErrorLineReceived)
+                : new RedirectedProcessOutput();
+
+            try
             {
-                remainingTimeout = request.Timeout - stopwatch.Elapsed;
-                if (remainingTimeout <= TimeSpan.Zero)
-                    throw new OperationCanceledException();
+                var remainingTimeout = request.Timeout;
+                if (request.Timeout > TimeSpan.Zero && request.Timeout != Timeout.InfiniteTimeSpan)
+                {
+                    remainingTimeout = request.Timeout - stopwatch.Elapsed;
+                    if (remainingTimeout <= TimeSpan.Zero)
+                        throw new OperationCanceledException();
+                }
+                await WaitForExitAsync(process, remainingTimeout, cancellationToken).ConfigureAwait(false);
             }
-            await WaitForExitAsync(process, remainingTimeout, cancellationToken).ConfigureAwait(false);
+            catch (OperationCanceledException)
+            {
+                timedOut = !cancellationToken.IsCancellationRequested;
+                TryKill(process);
+            }
+
+            try
+            {
+                if (!process.HasExited)
+                    process.WaitForExit(5000);
+            }
+            catch
+            {
+                // Best-effort wait only.
+            }
+
+            // Bind producer-owned filesystem output at the first observable process-exit
+            // boundary. Stream drainage happens afterward so a blocked or inherited pipe
+            // cannot create an unmonitored post-exit replacement window.
+            exitCode = timedOut ? 124 : cancellationToken.IsCancellationRequested ? 130 : SafeGetExitCode(process);
+            var boundaryResult = new ProcessRunResult(
+                exitCode,
+                string.Empty,
+                timedOut ? "Timeout" : string.Empty,
+                process.StartInfo.FileName ?? request.FileName,
+                stopwatch.Elapsed,
+                timedOut);
+            request.InvokeCompletionBoundary(boundaryResult);
+
+            if (!await WaitForOutputDrainAsync(stdoutCapture.Completion, stderrCapture.Completion, request.Timeout, stopwatch.Elapsed,
+                cancellationToken).ConfigureAwait(false))
+            {
+                timedOut = !cancellationToken.IsCancellationRequested;
+                exitCode = timedOut ? 124 : 130;
+                TryKill(process);
+            }
+
+            readyForResult = true;
         }
-        catch (OperationCanceledException)
+        finally
         {
-            timedOut = !cancellationToken.IsCancellationRequested;
-            TryKill(process);
+            if (!readyForResult) TryKill(process);
+            try
+            {
+                await Task.WhenAll(stdoutCapture.StopAsync(), stderrCapture.StopAsync()).ConfigureAwait(false);
+            }
+            catch when (!readyForResult)
+            {
+                // Both readers have been joined. Preserve the original start/boundary
+                // exception if shutdown also faults.
+            }
         }
 
-        try
-        {
-            if (!process.HasExited)
-                process.WaitForExit(5000);
-        }
-        catch
-        {
-            // Best-effort wait only.
-        }
-
-        // Bind producer-owned filesystem output at the first observable process-exit
-        // boundary. Stream drainage happens afterward so a blocked or inherited pipe
-        // cannot create an unmonitored post-exit replacement window.
-        var exitCode = timedOut ? 124 : SafeGetExitCode(process);
-        var boundaryResult = new ProcessRunResult(
-            exitCode,
-            string.Empty,
-            timedOut ? "Timeout" : string.Empty,
-            process.StartInfo.FileName ?? request.FileName,
-            stopwatch.Elapsed,
-            timedOut);
-        request.InvokeCompletionBoundary(boundaryResult);
-
-        var stdout = request.CaptureOutput
-            ? await DrainAsync(stdoutTask).ConfigureAwait(false)
-            : CapturedOutput.Empty;
-        var stderr = request.CaptureError
-            ? await DrainAsync(stderrTask).ConfigureAwait(false)
-            : CapturedOutput.Empty;
+        var stdout = stdoutCapture.Snapshot();
+        var stderr = stderrCapture.Snapshot();
         stopwatch.Stop();
 
-        if (timedOut && string.IsNullOrWhiteSpace(stderr.Value))
-            stderr = new CapturedOutput("Timeout", stderr.LimitExceeded);
+        if (timedOut && string.IsNullOrWhiteSpace(stderr)) stderr = "Timeout";
 
         var result = new ProcessRunResult(
             exitCode,
-            stdout.Value,
-            stderr.Value,
+            stdout,
+            stderr,
             process.StartInfo.FileName ?? request.FileName,
             stopwatch.Elapsed,
             timedOut,
-            stdout.LimitExceeded,
-            stderr.LimitExceeded);
+            stdoutCapture.LimitExceeded,
+            stderrCapture.LimitExceeded);
         request.InvokeCompletionBoundary(result);
         return result;
     }
 
-    private static async Task<CapturedOutput> ReadOutputAsync(
-        StreamReader reader,
-        Action<string>? lineReceived,
-        int maximumCharacters)
-    {
-        if (lineReceived is null)
-        {
-            var directOutput = new StringBuilder(Math.Min(maximumCharacters, 4096));
-            var buffer = new char[4096];
-            var exceeded = false;
-            int read;
-            while ((read = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
-            {
-                var remaining = maximumCharacters - directOutput.Length;
-                if (remaining > 0) directOutput.Append(buffer, 0, Math.Min(remaining, read));
-                if (read > remaining) exceeded = true;
-            }
-            return new CapturedOutput(directOutput.ToString(), exceeded);
-        }
-
-        var output = new StringBuilder();
-        var limitExceeded = false;
-        string? line;
-        while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
-        {
-            var retainedLine = line + Environment.NewLine;
-            var remaining = maximumCharacters - output.Length;
-            if (remaining > 0) output.Append(retainedLine, 0, Math.Min(remaining, retainedLine.Length));
-            if (retainedLine.Length > remaining) limitExceeded = true;
-            try { lineReceived(line); } catch { }
-        }
-
-        return new CapturedOutput(output.ToString(), limitExceeded);
-    }
-
     private static ProcessStartInfo BuildStartInfo(ProcessRunRequest request)
     {
+        if (request.FileName.IndexOf('\0') >= 0 || request.WorkingDirectory.IndexOf('\0') >= 0 ||
+            request.Arguments.Any(argument => argument is null || argument.IndexOf('\0') >= 0))
+            throw new ArgumentException("Process executable, working directory, and arguments cannot contain NUL or null entries.", nameof(request));
         var startInfo = new ProcessStartInfo {
             FileName = request.FileName,
             WorkingDirectory = request.WorkingDirectory,
@@ -560,6 +494,9 @@ public sealed class ProcessRunner : IProcessRunner
         {
             foreach (var variable in request.EnvironmentVariables)
             {
+                if (string.IsNullOrEmpty(variable.Key) || variable.Key.IndexOfAny(new[] { '=', '\0' }) >= 0 ||
+                    (variable.Value is not null && variable.Value.IndexOf('\0') >= 0))
+                    throw new ArgumentException("Process environment names must be nonempty and contain neither '=' nor NUL; values cannot contain NUL.", nameof(request));
                 if (variable.Value is null)
                 {
                     startInfo.EnvironmentVariables.Remove(variable.Key);
@@ -580,7 +517,7 @@ public sealed class ProcessRunner : IProcessRunner
         return startInfo;
     }
 
-    private static async Task WaitForExitAsync(Process process, TimeSpan timeout, CancellationToken cancellationToken)
+    private static async Task WaitForExitAsync(ProcessExecution process, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (timeout > TimeSpan.Zero && timeout != Timeout.InfiniteTimeSpan)
@@ -593,33 +530,7 @@ public sealed class ProcessRunner : IProcessRunner
         }
     }
 
-    private static async Task<CapturedOutput> DrainAsync(Task<CapturedOutput> readTask)
-    {
-        try
-        {
-            return await readTask.ConfigureAwait(false);
-        }
-        catch
-        {
-            return CapturedOutput.Empty;
-        }
-    }
-
-    private sealed class CapturedOutput
-    {
-        internal static CapturedOutput Empty { get; } = new(string.Empty, false);
-
-        internal CapturedOutput(string value, bool limitExceeded)
-        {
-            Value = value;
-            LimitExceeded = limitExceeded;
-        }
-
-        internal string Value { get; }
-        internal bool LimitExceeded { get; }
-    }
-
-    private static int SafeGetExitCode(Process process)
+    private static int SafeGetExitCode(ProcessExecution process)
     {
         try
         {
@@ -631,7 +542,13 @@ public sealed class ProcessRunner : IProcessRunner
         }
     }
 
-    private static void TryKill(Process process)
+    private static void TryKill(ProcessExecution process)
+    {
+        try { process.KillTree(); }
+        catch { /* Best-effort termination; the owned scope also closes during disposal. */ }
+    }
+
+    internal static void TryKillManagedProcess(Process process)
     {
         try
         {
@@ -674,16 +591,4 @@ public sealed class ProcessRunner : IProcessRunner
         => Path.Combine(Environment.SystemDirectory, "taskkill.exe");
 #endif
 
-#if NET472
-    private static string QuoteArgument(string argument)
-    {
-        if (string.IsNullOrEmpty(argument))
-            return "\"\"";
-
-        if (argument.IndexOfAny(new[] { ' ', '"' }) >= 0)
-            return "\"" + argument.Replace("\"", "\\\"") + "\"";
-
-        return argument;
-    }
-#endif
 }

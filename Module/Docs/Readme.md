@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.135
+Help Version: 3.0.142
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -183,6 +183,9 @@ Reads version information from an Xcode project.
 ### [Import-BenchmarkResult](Import-BenchmarkResult.md)
 Imports BenchmarkDotNet or normalized benchmark artifacts into the common benchmark schema.
 
+### [Import-ConfigurationDotNetPublish](Import-ConfigurationDotNetPublish.md)
+Imports a typed .NET publish configuration for use in the publish DSL.
+
 ### [Import-ConfigurationProject](Import-ConfigurationProject.md)
 Imports a PowerShell-authored project release object from JSON.
 
@@ -254,6 +257,12 @@ Executes a repository-wide .NET build/release pipeline from a JSON configuration
 
 ### [Invoke-ProjectRelease](Invoke-ProjectRelease.md)
 Executes a PowerShell-authored project release object through the unified PowerForge release engine.
+
+### [Invoke-ReleaseValidation](Invoke-ReleaseValidation.md)
+Validates final artifacts and runs isolated product smoke tests without publishing.
+
+### [Invoke-ValidationCommand](Invoke-ValidationCommand.md)
+Runs a bounded validation process and returns its captured output.
 
 ### [Merge-BenchmarkEvidenceCatalog](Merge-BenchmarkEvidenceCatalog.md)
 Consolidates independently produced platform benchmark evidence bundles.
@@ -428,6 +437,9 @@ Creates repo-level release coordination settings for a module and package build.
 
 ### [New-ConfigurationReleaseProtection](New-ConfigurationReleaseProtection.md)
 Creates opt-in source-state and provenance protections for module releases.
+
+### [New-ConfigurationReleaseValidation](New-ConfigurationReleaseValidation.md)
+Creates a reusable package and runtime validation configuration.
 
 ### [New-ConfigurationTest](New-ConfigurationTest.md)
 Configures running Pester tests as part of the build.

@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text.Json;
 
 namespace PowerForge;
 
@@ -15,33 +13,35 @@ public sealed partial class ModulePipelineRunner
         if (plan.Artefacts is not { Length: > 0 })
             return;
 
-        var protectedPaths = CollectReleaseProtectedPaths(plan, state);
-        if (protectedPaths.Count == 0)
-            return;
-
         var conflicts = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddArtefactOutputPathConflicts(plan, conflicts);
 
-        foreach (var artefact in plan.Artefacts.Where(static item => item is not null))
+        var protectedPaths = CollectReleaseProtectedPaths(plan, state);
+
+        if (protectedPaths.Count > 0)
         {
-            var cfg = artefact.Configuration ?? new ArtefactConfiguration();
-            if (cfg.Enabled != true)
-                continue;
-
-            foreach (var destructivePath in CollectArtefactDestructivePaths(plan, artefact, cfg))
+            foreach (var artefact in plan.Artefacts.Where(static item => item is not null))
             {
-                foreach (var protectedPath in protectedPaths)
+                var cfg = artefact.Configuration ?? new ArtefactConfiguration();
+                if (cfg.Enabled != true)
+                    continue;
+
+                foreach (var destructivePath in CollectArtefactDestructivePaths(plan, artefact, cfg))
                 {
-                    if (!DoesDestructivePathAffectProtectedPath(destructivePath, protectedPath))
-                        continue;
+                    foreach (var protectedPath in protectedPaths)
+                    {
+                        if (!DoesDestructivePathAffectProtectedPath(destructivePath, protectedPath))
+                            continue;
 
-                    var key = $"{artefact.ArtefactType}|{destructivePath.Kind}|{destructivePath.Path}|{protectedPath.Path}";
-                    if (!seen.Add(key))
-                        continue;
+                        var key = $"{artefact.ArtefactType}|{destructivePath.Kind}|{destructivePath.Path}|{protectedPath.Path}";
+                        if (!seen.Add(key))
+                            continue;
 
-                    conflicts.Add(
-                        $"Artefact '{artefact.ArtefactType}' {destructivePath.Label} '{Path.GetFullPath(destructivePath.Path)}' would affect {protectedPath.Label} '{Path.GetFullPath(protectedPath.Path)}'. " +
-                        $"Use a dedicated artefact path such as '{GetDedicatedArtefactPathHint(artefact.ArtefactType)}' and keep release staging/project build outputs in separate subdirectories.");
+                        conflicts.Add(
+                            $"Artefact '{artefact.ArtefactType}' {destructivePath.Label} '{Path.GetFullPath(destructivePath.Path)}' would affect {protectedPath.Label} '{Path.GetFullPath(protectedPath.Path)}'. " +
+                            $"Use a dedicated artefact path such as '{GetDedicatedArtefactPathHint(artefact.ArtefactType)}' and keep release staging/project build outputs in separate subdirectories.");
+                    }
                 }
             }
         }
@@ -68,8 +68,9 @@ public sealed partial class ModulePipelineRunner
             plan.PreRelease,
             artefact.ArtefactType);
 
-        if (artefact.ArtefactType == ArtefactType.Unpacked)
+        if (artefact.ArtefactType == ArtefactType.Unpacked || artefact.ArtefactType == ArtefactType.Script)
         {
+            bool scriptArtefact = artefact.ArtefactType == ArtefactType.Script;
             var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
                 cfg,
                 outputRoot,
@@ -93,8 +94,8 @@ public sealed partial class ModulePipelineRunner
             }
 
             paths.Add(new ArtefactDestructivePath(
-                Path.Combine(modulesRoot, plan.ModuleName),
-                "main module copy root",
+                scriptArtefact ? modulesRoot : Path.Combine(modulesRoot, plan.ModuleName),
+                scriptArtefact ? "main script copy root" : "main module copy root",
                 ArtefactDestructivePathKind.DirectoryTree));
 
             if (cfg.RequiredModules.Enabled == true)
@@ -112,8 +113,9 @@ public sealed partial class ModulePipelineRunner
             return paths;
         }
 
-        if (artefact.ArtefactType == ArtefactType.Packed)
+        if (artefact.ArtefactType == ArtefactType.Packed || artefact.ArtefactType == ArtefactType.ScriptPacked)
         {
+            bool scriptArtefact = artefact.ArtefactType == ArtefactType.ScriptPacked;
             var packedRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", "validation", plan.ModuleName);
             var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForPacked(
                 cfg,
@@ -140,13 +142,13 @@ public sealed partial class ModulePipelineRunner
             }
 
             paths.Add(new ArtefactDestructivePath(
-                Path.Combine(outputRoot, ResolveArtefactFileNameForValidation(cfg, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease)),
+                Path.Combine(outputRoot, ArtefactLayoutPathResolver.ResolveArtefactFileName(cfg, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease)),
                 "zip output file",
                 ArtefactDestructivePathKind.ExactFile));
 
             paths.Add(new ArtefactDestructivePath(
-                Path.Combine(modulesRoot, plan.ModuleName),
-                "main packed module copy root",
+                scriptArtefact ? modulesRoot : Path.Combine(modulesRoot, plan.ModuleName),
+                scriptArtefact ? "main packed script copy root" : "main packed module copy root",
                 ArtefactDestructivePathKind.DirectoryTree));
 
             if (cfg.RequiredModules.Enabled == true)
@@ -261,21 +263,6 @@ public sealed partial class ModulePipelineRunner
         return Path.GetFullPath(raw);
     }
 
-    private static string ResolveArtefactFileNameForValidation(
-        ArtefactConfiguration cfg,
-        string moduleName,
-        string moduleVersion,
-        string? preRelease)
-    {
-        if (!string.IsNullOrWhiteSpace(cfg.ArtefactName))
-            return ModulePathTokenFormatter.ReplacePathTokens(cfg.ArtefactName!.Trim(), moduleName, moduleVersion, preRelease);
-
-        var tagWithPre = ModulePathTokenFormatter.ReplacePathTokens("<TagModuleVersionWithPreRelease>", moduleName, moduleVersion, preRelease);
-        return cfg.IncludeTagName == true
-            ? $"{moduleName}.{tagWithPre}.zip"
-            : $"{moduleName}.zip";
-    }
-
     private static bool IsDirectChildPath(string parentPath, string candidatePath)
     {
         var parent = Path.GetFullPath(parentPath)
@@ -283,7 +270,8 @@ public sealed partial class ModulePipelineRunner
         var candidateParent = Path.GetDirectoryName(Path.GetFullPath(candidatePath))
             ?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        return string.Equals(parent, candidateParent, StringComparison.OrdinalIgnoreCase);
+        return candidateParent is not null &&
+               string.Equals(parent, candidateParent, GetPathComparison(parent, candidateParent));
     }
 
     private static bool IsZipFilePath(string path)
@@ -355,25 +343,23 @@ public sealed partial class ModulePipelineRunner
         if (plan.Release?.Configuration is null)
             return null;
 
-        var moduleAssets = CollectModuleReleaseAssets(state.ArtefactResults, publishId);
-        var packageAssets = CollectPackageReleaseAssets(state.ProjectBuildResults);
-        var allAssets = moduleAssets.Concat(packageAssets).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var moduleVersion = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var releaseVersion = ResolveRequestedPackageReleaseVersion(plan, state) ?? moduleVersion;
-
         var stageRoot = ResolveReleaseStageRoot(plan, plan.Release.Configuration);
+        var releaseRoot = stageRoot ?? ResolveDefaultReleaseRoot(plan, state, publishId);
+        var scriptArchiveRoot = ResolveScriptReleaseArchiveRoot(plan, state, releaseRoot, stageRoot is not null);
+        var moduleAssets = CollectModuleReleaseAssets(
+            state.ArtefactResults,
+            publishId,
+            scriptArchiveRoot);
+        var packageAssets = CollectPackageReleaseAssets(state.ProjectBuildResults);
+        var allAssets = moduleAssets.Concat(packageAssets).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
         string[] finalAssets;
         if (string.IsNullOrWhiteSpace(stageRoot))
         {
-            string metadataRoot = Path.Combine(
-                plan.ProjectRoot,
-                "Artefacts",
-                "ReleaseMetadata",
-                plan.ModuleName,
-                moduleVersion);
             finalAssets = allAssets
-                .Concat(WriteReleaseMetadata(plan, metadataRoot, allAssets, releaseVersion))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Concat(WriteReleaseMetadata(plan, releaseRoot, allAssets, releaseVersion))
+                .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
         }
         else
@@ -502,218 +488,6 @@ public sealed partial class ModulePipelineRunner
     private static bool ShouldPublishUnifiedGitHubRelease(ModulePipelinePlan plan, PublishConfiguration publish)
         => plan.Release?.Configuration is not null &&
            publish.Destination == PublishDestination.GitHub;
-
-    private static string[] CollectModuleReleaseAssets(IEnumerable<ArtefactBuildResult> artefacts, string? publishId)
-    {
-        var packed = (artefacts ?? Array.Empty<ArtefactBuildResult>())
-            .Where(static artefact => artefact is not null && (artefact.Type == ArtefactType.Packed || artefact.Type == ArtefactType.ScriptPacked))
-            .ToArray();
-
-        if (packed.Length == 0)
-            return Array.Empty<string>();
-
-        ArtefactBuildResult[] selected;
-        if (string.IsNullOrWhiteSpace(publishId))
-        {
-            selected = new[] { packed[0] };
-        }
-        else
-        {
-            var idValue = publishId!.Trim();
-            selected = packed.Where(artefact => string.Equals(artefact.Id, idValue, StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (selected.Length == 0)
-            {
-                var available = packed
-                    .Select(static artefact => artefact.Id)
-                    .Where(static id => !string.IsNullOrWhiteSpace(id))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                var availableText = available.Length == 0 ? "(none)" : string.Join(", ", available);
-                throw new InvalidOperationException($"No packed artefacts matched ID '{publishId}'. Available IDs: {availableText}");
-            }
-        }
-
-        return selected
-            .SelectMany(static artefact => new[] { artefact.OutputPath }.Concat(artefact.EvidencePaths))
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Select(static path => Path.GetFullPath(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static string[] CollectPackageReleaseAssets(IEnumerable<ProjectBuildHostExecutionResult> projectBuildResults)
-    {
-        var assets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var result in projectBuildResults ?? Array.Empty<ProjectBuildHostExecutionResult>())
-        {
-            foreach (var package in result.Result?.Release?.Projects.SelectMany(static project =>
-                         project.Packages.Concat(project.SymbolPackages)) ?? Array.Empty<string>())
-                TryAddReleasePackageAsset(assets, package);
-        }
-
-        return assets.ToArray();
-    }
-
-    private static void TryAddReleasePackageAsset(HashSet<string> assets, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return;
-
-        var fullPath = Path.GetFullPath(path!.Trim().Trim('"'));
-        if (!File.Exists(fullPath))
-            return;
-
-        if (fullPath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) ||
-            fullPath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
-        {
-            assets.Add(fullPath);
-        }
-    }
-
-    private static string? ResolveReleaseStageRoot(ModulePipelinePlan plan, ReleaseConfiguration release)
-    {
-        if (string.IsNullOrWhiteSpace(release.StageRoot))
-            return null;
-
-        var formatted = ModulePathTokenFormatter.ReplacePathTokens(
-            release.StageRoot!,
-            plan.ModuleName,
-            plan.ResolvedVersion,
-            plan.PreRelease);
-
-        return PathValueResolver.Resolve(plan.ProjectRoot, formatted);
-    }
-
-    private static string[] StageUnifiedReleaseAssets(
-        ModulePipelinePlan plan,
-        string stageRoot,
-        IReadOnlyList<string> moduleAssets,
-        IReadOnlyList<string> packageAssets,
-        string releaseVersion)
-    {
-        var staged = new List<string>();
-        var stagedSourcesByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var asset in moduleAssets)
-            staged.Add(StageReleaseAsset(stageRoot, "modules", asset, stagedSourcesByPath));
-        foreach (var asset in packageAssets)
-            staged.Add(StageReleaseAsset(stageRoot, "nuget", asset, stagedSourcesByPath));
-
-        staged.AddRange(WriteReleaseMetadata(plan, stageRoot, staged, releaseVersion));
-        return staged.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-    }
-
-    private static string StageReleaseAsset(
-        string stageRoot,
-        string category,
-        string sourcePath,
-        Dictionary<string, string> stagedSourcesByPath)
-    {
-        var targetRoot = Path.Combine(stageRoot, category);
-        Directory.CreateDirectory(targetRoot);
-
-        var sourceFullPath = Path.GetFullPath(sourcePath);
-        var targetPath = Path.GetFullPath(Path.Combine(targetRoot, Path.GetFileName(sourcePath)));
-        if (stagedSourcesByPath.TryGetValue(targetPath, out var existingSource))
-        {
-            if (!PathsEqual(existingSource, sourceFullPath))
-                throw new InvalidOperationException(
-                    $"Release staging collision: '{existingSource}' and '{sourceFullPath}' both stage to '{targetPath}'. Rename one asset or configure unique output file names.");
-
-            return targetPath;
-        }
-
-        stagedSourcesByPath[targetPath] = sourceFullPath;
-        if (File.Exists(targetPath) && PathsEqual(targetPath, sourcePath))
-            return targetPath;
-
-        File.Copy(sourcePath, targetPath, overwrite: true);
-        return targetPath;
-    }
-
-    private static bool PathsEqual(string left, string right)
-        => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsPathBelow(string path, string root)
-    {
-        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string[] WriteReleaseMetadata(ModulePipelinePlan plan, string stageRoot, IReadOnlyList<string> stagedAssets, string releaseVersion)
-    {
-        var metadataRoot = Path.Combine(stageRoot, "metadata");
-        Directory.CreateDirectory(metadataRoot);
-
-        var assetEntries = stagedAssets
-            .Where(static path => File.Exists(path))
-            .Select(path => new
-            {
-                fileName = Path.GetFileName(path),
-                relativePath = ToSlashPath(ComputeRelativePath(stageRoot, path)),
-                length = new FileInfo(path).Length,
-                sha256 = ComputeSha256(path)
-            })
-            .OrderBy(static asset => asset.relativePath, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var duplicateAssetName = assetEntries
-            .GroupBy(static asset => asset.fileName, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicateAssetName is not null)
-        {
-            throw new InvalidOperationException(
-                $"Release assets contain multiple files named '{duplicateAssetName.Key}'. " +
-                "GitHub release assets require unique file names.");
-        }
-
-        var manifestPath = Path.Combine(metadataRoot, "release-manifest.json");
-        var moduleVersion = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
-        var manifest = new
-        {
-            moduleName = plan.ModuleName,
-            version = moduleVersion,
-            moduleVersion,
-            releaseVersion,
-            generatedAtUtc = DateTimeOffset.UtcNow,
-            assets = assetEntries
-        };
-
-        File.WriteAllText(
-            manifestPath,
-            JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
-
-        var checksumsPath = Path.Combine(metadataRoot, "SHA256SUMS.txt");
-        File.WriteAllLines(
-            checksumsPath,
-            assetEntries.Select(static asset => $"{asset.sha256} *{asset.fileName}"));
-
-        return new[] { manifestPath, checksumsPath };
-    }
-
-    private static string ComputeSha256(string path)
-    {
-        using var sha256 = SHA256.Create();
-        using var stream = File.OpenRead(path);
-        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
-    }
-
-    private static string ToSlashPath(string path)
-        => path.Replace(Path.DirectorySeparatorChar, '/');
-
-    private static string ComputeRelativePath(string baseDir, string fullPath)
-    {
-        var baseFull = AppendDirectorySeparatorChar(Path.GetFullPath(baseDir));
-        var full = Path.GetFullPath(fullPath);
-        var baseUri = new Uri(baseFull);
-        var pathUri = new Uri(full);
-        return Uri.UnescapeDataString(baseUri.MakeRelativeUri(pathUri).ToString())
-            .Replace('/', Path.DirectorySeparatorChar);
-    }
-
-    private static string AppendDirectorySeparatorChar(string path)
-        => path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
-            ? path
-            : path + Path.DirectorySeparatorChar;
 
     private readonly struct ArtefactDestructivePath
     {

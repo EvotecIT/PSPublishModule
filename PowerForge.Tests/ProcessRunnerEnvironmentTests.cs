@@ -4,8 +4,10 @@ namespace PowerForge.Tests;
 
 public sealed class ProcessRunnerEnvironmentTests
 {
-    [Fact]
-    public async Task RunAsync_exposes_started_process_before_external_work_boundary()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_exposes_started_process_before_external_work_boundary(bool ownProcessTree)
     {
         var order = new List<string>();
         var processId = 0;
@@ -21,15 +23,17 @@ public sealed class ProcessRunnerEnvironmentTests
         });
         request.SetStartBoundary(() => order.Add("start"));
 
-        var result = await new ProcessRunner().RunAsync(request);
+        var result = await new ProcessRunner(ownProcessTree).RunAsync(request);
 
         Assert.True(result.Succeeded, result.StdErr);
         Assert.True(processId > 0);
         Assert.Equal(new[] { "process", "start" }, order);
     }
 
-    [Fact]
-    public async Task RunAsync_fails_closed_when_started_process_boundary_rejects_launch()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_fails_closed_when_started_process_boundary_rejects_launch(bool ownProcessTree)
     {
         var request = new ProcessRunRequest(
             "dotnet",
@@ -38,7 +42,7 @@ public sealed class ProcessRunnerEnvironmentTests
             TimeSpan.FromSeconds(30));
         request.SetStartedProcessBoundary(_ => throw new InvalidOperationException("reject started process"));
 
-        var result = await new ProcessRunner().RunAsync(request);
+        var result = await new ProcessRunner(ownProcessTree).RunAsync(request);
 
         Assert.Equal(127, result.ExitCode);
         Assert.Contains("reject started process", result.StdErr, StringComparison.Ordinal);
@@ -93,8 +97,10 @@ public sealed class ProcessRunnerEnvironmentTests
         Assert.NotNull(method);
     }
 
-    [Fact]
-    public async Task RunAsync_can_start_from_an_explicit_environment_allowlist()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_can_start_from_an_explicit_environment_allowlist(bool ownProcessTree)
     {
         if (OperatingSystem.IsWindows()) return;
         const string variable = "POWERFORGE_TEST_UNAPPROVED_PARENT_VALUE";
@@ -102,7 +108,7 @@ public sealed class ProcessRunnerEnvironmentTests
         Environment.SetEnvironmentVariable(variable, "must-not-leak");
         try
         {
-            var result = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+            var result = await new ProcessRunner(ownProcessTree).RunAsync(new ProcessRunRequest(
                 "/usr/bin/env",
                 Path.GetTempPath(),
                 Array.Empty<string>(),

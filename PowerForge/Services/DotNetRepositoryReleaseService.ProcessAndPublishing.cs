@@ -313,7 +313,7 @@ public sealed partial class DotNetRepositoryReleaseService
             skipDuplicate,
             workingDirectory,
             timeout: null,
-            suppressCompanionSymbols));
+            suppressCompanionSymbols), ActiveCancellationToken.Value);
 
     internal static PackagePushResult PushPackage(DotNetNuGetPushRequest request)
         => PushPackage(request, CancellationToken.None);

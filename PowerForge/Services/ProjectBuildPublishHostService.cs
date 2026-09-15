@@ -7,6 +7,7 @@ public sealed class ProjectBuildPublishHostService
 {
     private readonly ILogger _logger;
     private readonly Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary>? _publishGitHub;
+    private readonly DotNetRepositoryReleaseService? _publishPackages;
 
     /// <summary>
     /// Creates a new host service using a null logger.
@@ -26,10 +27,12 @@ public sealed class ProjectBuildPublishHostService
 
     internal ProjectBuildPublishHostService(
         ILogger logger,
-        Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary>? publishGitHub)
+        Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary>? publishGitHub,
+        DotNetRepositoryReleaseService? publishPackages = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _publishGitHub = publishGitHub;
+        _publishPackages = publishPackages;
     }
 
     /// <summary>
@@ -87,7 +90,7 @@ public sealed class ProjectBuildPublishHostService
         return CreateHostConfiguration(config, resolvedConfigPath, configDirectory);
     }
 
-    private static ProjectBuildPublishHostConfiguration CreateHostConfiguration(
+    internal static ProjectBuildPublishHostConfiguration CreateHostConfiguration(
         ProjectBuildConfiguration config,
         string resolvedConfigPath,
         string configDirectory)
@@ -100,6 +103,18 @@ public sealed class ProjectBuildPublishHostService
             ? "Single"
             : config.GitHubReleaseMode!.Trim();
         return new ProjectBuildPublishHostConfiguration {
+            PublicationSpec = new DotNetRepositoryReleaseSpec {
+                RootPath = ProjectBuildSupportService.ResolveOptionalPath(config.RootPath, configDirectory) ?? configDirectory,
+                PublishSource = publishSource,
+                PublishApiKey = feed.PublishApiKey,
+                VersionSources = feed.VersionSources,
+                VersionSourceCredential = feed.VersionSourceCredential,
+                VersionSourceCredentials = feed.VersionSourceCredentials,
+                IncludePrerelease = config.IncludePrerelease,
+                IncludeSymbols = config.IncludeSymbols ?? false,
+                SkipDuplicate = config.SkipDuplicate ?? true,
+                PublishFailFast = config.PublishFailFast ?? true
+            },
             ConfigPath = resolvedConfigPath,
             PublishNuget = config.PublishNuget == true,
             PublishGitHub = config.PublishGitHub == true,
@@ -141,48 +156,24 @@ public sealed class ProjectBuildPublishHostService
         if (string.IsNullOrWhiteSpace(configuration.PublishApiKey))
             throw new InvalidOperationException("PublishApiKey is required when package NuGet publishing is enabled.");
 
-        var configDirectory = Path.GetDirectoryName(configuration.ConfigPath);
-        if (string.IsNullOrWhiteSpace(configDirectory))
-            throw new InvalidOperationException($"Unable to resolve the configuration directory for '{configuration.ConfigPath}'.");
-        var source = DotNetRepositoryReleaseService.ResolvePublishSource(
-            configuration.PublishSource,
-            string.IsNullOrWhiteSpace(repositoryRoot) ? configDirectory : repositoryRoot!,
-            nuGetConfigSearchRoot: configDirectory);
-        release.PublishSource = source;
-        var publishSymbolsSeparately = configuration.IncludeSymbols &&
-            DotNetRepositoryReleaseService.IsLocalPublishSource(source);
-        var packages = DotNetRepositoryReleaseService.GetPackagesForPublish(
-            release.Projects,
-            includeSymbolPackages: publishSymbolsSeparately);
-        if (packages.Length == 0)
-            throw new InvalidOperationException("The package release checkpoint contains no package artifacts to publish.");
-
-        _logger.Info($"Publishing {packages.Length} existing package(s) from the staged release checkpoint.");
-        var publish = new NuGetPackagePublishService(
-            _logger,
-            workingDirectory: configDirectory).ExecutePackages(
-            packages,
-            configuration.PublishApiKey!,
-            source,
-            configuration.SkipDuplicate,
-            configuration.PublishFailFast,
-            suppressCompanionSymbols: !configuration.IncludeSymbols || publishSymbolsSeparately,
-            remotePublishAttempted: remotePublishAttempted,
-            progress: progress,
-            cancellationToken: cancellationToken);
-
-        DotNetRepositoryReleaseService.ApplyPublishedNuGetArtifactOutcomes(
-            release,
-            publish,
-            publishSymbolsSeparately,
-            configuration.SkipDuplicate);
-        if (!publish.Success)
-        {
-            release.Success = false;
-            release.ErrorMessage = publish.ErrorMessage ?? "One or more packages failed to publish.";
-        }
-
-        return publish;
+        var policy = configuration.PublicationSpec ?? new DotNetRepositoryReleaseSpec {
+            RootPath = repositoryRoot ?? Path.GetDirectoryName(configuration.ConfigPath) ?? string.Empty,
+            PublishSource = configuration.PublishSource,
+            PublishApiKey = configuration.PublishApiKey,
+            IncludeSymbols = configuration.IncludeSymbols,
+            SkipDuplicate = configuration.SkipDuplicate,
+            PublishFailFast = configuration.PublishFailFast
+        };
+        var validateContext = configuration.ValidatePublicationContext
+            ?? DotNetRepositoryReleaseService.CapturePublicationDestination(policy);
+        validateContext?.Invoke();
+        policy.RemotePublishAttempted = () => {
+            cancellationToken.ThrowIfCancellationRequested();
+            validateContext?.Invoke();
+            remotePublishAttempted?.Invoke();
+        };
+        return (_publishPackages ?? new DotNetRepositoryReleaseService(_logger))
+            .PublishExistingPackages(policy, release, progress, cancellationToken);
     }
 
     /// <summary>

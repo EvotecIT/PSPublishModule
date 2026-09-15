@@ -58,6 +58,21 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private static void SkipActions(
+        ModulePipelineActionStage stage,
+        ModulePipelinePlan plan,
+        ModulePipelineExecutionSession session)
+    {
+        foreach (ConfigurationActionSegment action in
+                 (plan.Actions ?? Array.Empty<ConfigurationActionSegment>())
+                 .Where(action => action is not null &&
+                                  action.Configuration?.Enabled == true &&
+                                  action.Configuration.At == stage))
+        {
+            session.Skip(session.GetActionStep(action));
+        }
+    }
+
     private ModulePipelineActionContext BuildActionContext(
         ModulePipelineActionStage stage,
         ConfigurationActionSegment action,

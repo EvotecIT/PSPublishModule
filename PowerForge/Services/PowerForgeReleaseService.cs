@@ -270,7 +270,7 @@ internal sealed partial class PowerForgeReleaseService
                 "Apple target identity resolution requires an explicit validation-only summary run.");
         }
 
-        using var deferredModuleStaging = new DeferredModuleStagingDirectory(_logger);
+        using var temporaryReleaseDirectory = new TemporaryReleaseDirectory(_logger);
         request.CancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(request.ConfigPath))
@@ -535,7 +535,7 @@ internal sealed partial class PowerForgeReleaseService
             result.ModulePlan = module.Plan;
             result.ModuleAssets = module.ArtifactPaths;
             if (captureModuleArtifactProvenance)
-                moduleArtifactBaseline = CaptureModuleArtifactBaseline(result.ModuleAssets);
+                moduleArtifactBaseline = CaptureModuleArtifactBaseline(result.ModuleAssets, result.ModulePlan);
             var deferModulePublishing = ShouldDeferModulePublishing(
                 module.Request,
                 request,
@@ -549,7 +549,7 @@ internal sealed partial class PowerForgeReleaseService
                     !request.ValidateOnly &&
                     string.IsNullOrWhiteSpace(module.Request.StagingPath))
                 {
-                    module.Request.StagingPath = deferredModuleStaging.GetOrCreatePath();
+                    module.Request.StagingPath = temporaryReleaseDirectory.GetOrCreateSubdirectory("module-staging");
                     module.Plan.StagingPath = module.Request.StagingPath;
                 }
                 module.Request.RequireReusableOutput = module.Request.ScriptPath is not null;
@@ -558,11 +558,17 @@ internal sealed partial class PowerForgeReleaseService
 
             if (!request.PlanOnly && !request.ValidateOnly)
             {
-                var moduleResult = deferModulePublishing
+                var releaseCheckpointBuild =
+                    deferModulePublishing ||
+                    (module.Request.RunMode == ConfigurationGateMode.Build && module.Plan.IncludesProjectPackages);
+                var moduleResult = releaseCheckpointBuild
                     ? ExecuteModuleRequest(
                         module.Request,
                         ConfigurationGateMode.Build,
-                        includeModulePublishing: false,
+                        includeModulePublishing: deferModulePublishing
+                            ? false
+                            : module.Request.IncludeModulePublishing,
+                        releaseCheckpoint: true,
                         cancellationToken: request.CancellationToken)
                     : _executeModuleBuild(module.Request, request.CancellationToken);
                 result.Module = moduleResult;
@@ -577,7 +583,44 @@ internal sealed partial class PowerForgeReleaseService
                     return result;
                 }
 
-                UpdateResolvedModuleVersion(result.ModulePlan, result.ModuleAssets);
+                if (result.ModulePlan is not null && moduleResult.ArtefactOutputs.Length > 0)
+                    result.ModulePlan.ArtefactOutputs = moduleResult.ArtefactOutputs;
+
+                var resolvedVersionEvidence = result.ModuleAssets;
+                if (captureModuleArtifactProvenance)
+                {
+                    result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
+                        result.ModuleAssets,
+                        moduleArtifactBaseline,
+                        result.ModulePlan,
+                        ResolvePersistentModuleScriptArchiveRoot(result.ModulePlan, configDirectory));
+                    if (result.ModuleProducedAssets.Length > 0)
+                        resolvedVersionEvidence = result.ModuleProducedAssets;
+                }
+
+                UpdateResolvedModuleVersion(result.ModulePlan, resolvedVersionEvidence);
+                if (result.ModulePlan is not null)
+                {
+                    if (moduleResult.ArtefactOutputs.Length == 0)
+                    {
+                        result.ModulePlan.ArtefactOutputs = ResolveModuleArtefactOutputs(
+                            module.ConfigurationContext,
+                            result.ModulePlan.ModuleName,
+                            result.ModulePlan.ModuleVersion,
+                            result.ModulePlan.PreReleaseTag);
+                    }
+                    result.ModulePlan.PackedModuleRoots = ResolvePackedModuleRoots(
+                        module.ConfigurationContext,
+                        result.ModulePlan.ModuleName,
+                        result.ModulePlan.ModuleVersion,
+                        result.ModulePlan.PreReleaseTag);
+                }
+
+                if (deferredModulePublishRequest is not null && result.ModulePlan is not null)
+                {
+                    deferredModulePublishRequest.ModuleVersion = result.ModulePlan.ModuleVersion;
+                    deferredModulePublishRequest.PreReleaseTag = result.ModulePlan.PreReleaseTag;
+                }
                 result.ModuleAssets = ExpandModuleArtifactPaths(
                     result.ModuleAssets,
                     result.ModulePlan?.ModuleName,
@@ -585,12 +628,6 @@ internal sealed partial class PowerForgeReleaseService
                     result.ModulePlan?.PreReleaseTag);
                 if (result.ModulePlan is not null)
                     result.ModulePlan.ArtifactPaths = result.ModuleAssets;
-                if (captureModuleArtifactProvenance)
-                {
-                    result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
-                        result.ModuleAssets,
-                        moduleArtifactBaseline);
-                }
 
                 if (result.ModulePlan?.IncludesProjectPackages == true &&
                     module.Request.ConfigPath is not null)
@@ -634,7 +671,8 @@ internal sealed partial class PowerForgeReleaseService
                 configPath,
                 request,
                 configurationOverride,
-                publishUnifiedGitHub);
+                publishUnifiedGitHub,
+                deferPublishing: HasAfterStagingValidation(spec));
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -781,7 +819,8 @@ internal sealed partial class PowerForgeReleaseService
                 configurationOverride,
                 publishUnifiedGitHub,
                 request.ResolvedReleaseVersion,
-                spec.Module!.VersionPrimaryProject);
+                spec.Module!.VersionPrimaryProject,
+                deferPublishing: HasAfterStagingValidation(spec));
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -795,128 +834,38 @@ internal sealed partial class PowerForgeReleaseService
                 PowerForgeReleaseProgressPhase.Packages,
                 $"Version {request.ResolvedReleaseVersion}");
         }
-        if (applePlan is not null)
+        var deferConfiguredAppleMutation = applePlan is not null &&
+                                           !request.PlanOnly &&
+                                           !request.ValidateOnly &&
+                                           !request.CheckpointAppleApps &&
+                                           !explicitAppleAction &&
+                                           HasAfterStagingValidation(spec) &&
+                                           HasConfiguredAppleRemoteMutation(applePlan);
+        PowerForgeAppleAppReleaseResult[]? deferredAppleCheckpointResults = null;
+        string? deferredApplePlanSha256 = null;
+        var deferredAppleCheckpointStarted = false;
+        if (deferConfiguredAppleMutation && applePlan!.Archive)
         {
-            if (!request.PlanOnly &&
-                !request.ValidateOnly &&
-                (!request.CheckpointAppleApps || applePlan.Archive))
-            {
-                request.Progress?.PhaseStarted(
-                    PowerForgeReleaseProgressPhase.AppleApps,
-                    applePlan.Apps.Length,
-                    $"{applePlan.Action}: {applePlan.Apps.Length} Apple target(s)");
-                if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedAppleProgress)
-                {
-                    detailedAppleProgress.ItemsPlanned(
-                        PowerForgeReleaseProgressPhase.AppleApps,
-                        applePlan.Apps.Select((app, index) => new PowerForgeReleaseProgressItem
-                        {
-                            Phase = PowerForgeReleaseProgressPhase.AppleApps,
-                            Key = "apple:" + app.Name,
-                            Title = app.Name,
-                            Kind = applePlan.Action.ToString(),
-                            Target = app.Platform.ToString(),
-                            CounterLabel = "Target",
-                            Position = index + 1,
-                            Total = applePlan.Apps.Length
-                        }).ToArray());
-                }
-                using var operationLock = AppleReleaseOperationLock.Acquire(applePlan.LockPath, applePlan.Action);
-                var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
-                PowerForgeAppleAppReleaseResult[] appleResults;
-                PowerForgeAppleVersionReceipt? appleVersioning = null;
-                var receiptJournalReady = !applePlan.Automation.WriteReceipt;
-                try
-                {
-                    VerifyExpectedAppleCheckpointArchives(applePlan);
-                    var approvedPlan = AssertApplePlanStillApproved(applePlan, request.AppleExpectedPlanSha256);
-                    PrepareAppleReceiptJournalForMutation(applePlan, request.AppleExpectedPlanSha256);
-                    receiptJournalReady = true;
-                    if (applePlan.Action == PowerForgeAppleReleaseAction.Version)
-                    {
-                        AppleReleaseSourceSnapshot.ValidateCurrentSourceIfRequired(applePlan);
-                        appleVersioning = SelectAppleVersion(
-                            applePlan,
-                            approvedPlan?.Versioning ?? throw new InvalidOperationException(
-                                "Apple Version execution requires one approved remote version observation."));
-                        appleResults = RunAppleVersion(applePlan);
-                    }
-                    else if (applePlan.Action == PowerForgeAppleReleaseAction.Ship &&
-                             approvedPlan?.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint)
-                    {
-                        AppleReleaseSourceSnapshot.ValidateCurrentSourceIfRequired(applePlan);
-                        appleVersioning = SelectAppleVersion(
-                            applePlan,
-                            approvedPlan.Versioning ?? throw new InvalidOperationException(
-                                "Apple Ship version checkpoint requires one approved version plan."));
-                        appleResults = RunAppleVersion(applePlan);
-                    }
-                    else if (request.CheckpointAppleApps)
-                    {
-                        appleResults = RunAppleArchiveCheckpoint(applePlan, out cleanup);
-                    }
-                    else if (applePlan.Action == PowerForgeAppleReleaseAction.Cleanup)
-                    {
-                        cleanup = _appleArtifactService.RemoveStaleArtifacts(
-                            applePlan,
-                            GetProtectedAppleRecoveryArtifactPaths(applePlan));
-                        appleResults = applePlan.Apps
-                            .Select(app => new PowerForgeAppleAppReleaseResult
-                            {
-                                Plan = app,
-                                Success = true
-                            })
-                            .ToArray();
-                    }
-                    else
-                    {
-                        appleResults = RunAppleRelease(applePlan, out cleanup);
-                    }
-                }
-                catch (Exception exception)
-                {
-                    appleResults = applePlan.Apps
-                        .Select(app => new PowerForgeAppleAppReleaseResult
-                        {
-                            Plan = app,
-                            Success = false,
-                            ErrorMessage = exception.Message,
-                            RemoteState = exception is AppleBuildProcessingException processing
-                                ? processing.State
-                                : null
-                        })
-                        .ToArray();
-                }
-                result.AppleApps = appleResults;
-                if (request.CheckpointAppleApps && appleResults.All(static app => app.Success))
-                    result.AppleReceipt = CreateApplePlanReceipt(applePlan, appleResults);
-                if (receiptJournalReady &&
-                    !request.CheckpointAppleApps &&
-                    (applePlan.Action != PowerForgeAppleReleaseAction.Configured ||
-                     HasAppleExecutionMutation(applePlan) ||
-                     appleResults.Any(static app => !app.Success)))
-                    result.AppleReceipt ??= CompleteAppleReleaseReceipt(applePlan, appleResults, cleanup, appleVersioning);
+            deferredAppleCheckpointStarted = true;
+            if (!BeginDeferredAppleArchiveCheckpoint(applePlan, request, result))
+                return result;
 
-                if (result.AppleReceipt is { Success: false } failedReceipt)
-                {
-                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.AppleApps, failedReceipt.ErrorMessage);
-                    result.Success = false;
-                    result.ErrorMessage = failedReceipt.ErrorMessage ?? "Apple release diagnostics failed.";
-                    return result;
-                }
-
-                var failure = appleResults.FirstOrDefault(entry => !entry.Success);
-                if (failure is not null)
-                {
-                    request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.AppleApps, failure.ErrorMessage);
-                    result.Success = false;
-                    result.ErrorMessage = failure.ErrorMessage ?? $"Apple app release failed for '{failure.Plan.Name}'.";
-                    return result;
-                }
-                request.Progress?.PhaseCompleted(
-                    PowerForgeReleaseProgressPhase.AppleApps,
-                    $"{applePlan.Action} completed for {applePlan.Apps.Length} target(s)");
-            }
+            deferredAppleCheckpointResults = result.AppleApps;
+            deferredApplePlanSha256 = result.AppleReceipt?.PlanSha256 ?? throw new InvalidOperationException(
+                "The deferred Apple archive checkpoint did not produce an exact approved plan SHA-256.");
+        }
+        if (applePlan is not null &&
+            !request.PlanOnly &&
+            !request.ValidateOnly &&
+            (!request.CheckpointAppleApps || applePlan.Archive) &&
+            !deferConfiguredAppleMutation &&
+            !ExecuteAppleReleasePlan(
+                applePlan,
+                request,
+                result,
+                checkpointAppleApps: request.CheckpointAppleApps || deferConfiguredAppleMutation))
+        {
+            return result;
         }
 
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
@@ -927,28 +876,79 @@ internal sealed partial class PowerForgeReleaseService
             GenerateWingetOutputs(spec, request, configDirectory, result);
             IncludeWingetOutputsInReleaseAssets(result);
             RewriteReleaseSummaryFiles(result);
-            if (!ExecuteAfterStagingValidations(
+            if (!request.DeferAfterStagingValidation &&
+                !ExecuteAfterStagingValidations(
                     spec,
                     request,
                     configDirectory,
                     result,
-                    sharedReleaseVersion))
+                    sharedReleaseVersion,
+                    moduleSelected: runModule,
+                    packagesSelected: runPackages || result.ModulePlan?.IncludesProjectPackages == true,
+                    toolsSelected: willRunTools))
+            {
+                if (deferredAppleCheckpointStarted)
+                {
+                    request.Progress?.PhaseFailed(
+                        PowerForgeReleaseProgressPhase.AppleApps,
+                        "Remote Apple mutation was blocked because staged-release validation failed.");
+                }
+                return result;
+            }
+        }
+
+        if (deferConfiguredAppleMutation)
+        {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.AppleApps) ||
+                !ExecuteAppleReleasePlan(
+                    applePlan!,
+                    request,
+                    result,
+                    checkpointAppleApps: false,
+                    expectedPlanSha256: deferredApplePlanSha256,
+                    checkpointResults: deferredAppleCheckpointResults,
+                    startProgress: !deferredAppleCheckpointStarted))
+            {
+                return result;
+            }
+        }
+
+        if (runPackages && HasAfterStagingValidation(spec) && !request.PlanOnly && !request.ValidateOnly)
+        {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Packages) ||
+                !PublishValidatedPackageCheckpoint(spec, request, configPath, result))
             {
                 return result;
             }
         }
 
         if (deferredModulePublishRequest is not null &&
-            request.PublishNuget != false &&
             result.ModulePlan?.IncludesProjectPackages == true &&
+            result.ModulePackagePlans.Any(checkpoint =>
+                (request.PublishNuget != false && checkpoint.PublishNuget) ||
+                (request.PublishProjectGitHub != false && checkpoint.PublishGitHub)) &&
             !request.PlanOnly &&
             !request.ValidateOnly)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Packages))
+            {
+                return result;
+            }
+
             if (result.ModulePackagePlans.Length == 0)
             {
                 result.Success = false;
                 result.ErrorMessage =
-                    "Deferred publication of module-owned NuGet packages requires Module.ConfigPath so PowerForge can publish the exact validated package checkpoint without rebuilding it.";
+                    "Deferred publication of module-owned packages requires Module.ConfigPath so PowerForge can publish the exact validated package checkpoint without rebuilding it.";
                 return result;
             }
 
@@ -959,13 +959,19 @@ internal sealed partial class PowerForgeReleaseService
             try
             {
                 result.ModulePackagePublications = new ModulePackageReleaseCheckpointService(logger: _logger)
-                    .PublishNuGet(
+                    .Publish(
                         configPath,
                         spec,
                         result.ModulePackagePlans,
                         result.ReleaseAssetEntries,
                         requireStagedAssets: HasAfterStagingValidation(spec),
-                        remotePublishAttempted: () => ValidatePostBuildSourceState(request),
+                        publishNuget: request.PublishNuget != false,
+                        publishGitHub: request.PublishProjectGitHub != false,
+                        remotePublishAttempted: () =>
+                        {
+                            ValidatePostBuildSourceState(request);
+                            ValidateReleaseValidationIntegrity(result, request.CancellationToken);
+                        },
                         progress: null,
                         cancellationToken: request.CancellationToken);
                 request.Progress?.PhaseCompleted(
@@ -985,6 +991,14 @@ internal sealed partial class PowerForgeReleaseService
             !request.PlanOnly &&
             !request.ValidateOnly)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.Module))
+            {
+                return result;
+            }
+
             ValidatePostBuildSourceState(request);
             request.Progress?.PhaseStarted(
                 PowerForgeReleaseProgressPhase.Module,
@@ -1019,7 +1033,9 @@ internal sealed partial class PowerForgeReleaseService
             {
                 result.ModuleProducedAssets = ResolveProducedModuleArtifacts(
                     result.ModuleAssets,
-                    moduleArtifactBaseline);
+                    moduleArtifactBaseline,
+                    result.ModulePlan,
+                    ResolvePersistentModuleScriptArchiveRoot(result.ModulePlan, configDirectory));
             }
 
             request.Progress?.PhaseCompleted(
@@ -1044,6 +1060,14 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (publishUnifiedGitHub)
             {
+                if (!ValidateReleaseValidationIntegrityBeforePublication(
+                        request,
+                        result,
+                        PowerForgeReleaseProgressPhase.GitHub))
+                {
+                    return result;
+                }
+
                 ValidatePostBuildSourceState(request);
                 request.Progress?.PhaseStarted(
                     PowerForgeReleaseProgressPhase.GitHub,
@@ -1068,10 +1092,26 @@ internal sealed partial class PowerForgeReleaseService
                     PowerForgeReleaseProgressPhase.GitHub,
                     unifiedGitHubRelease.ReleaseUrl ?? "GitHub release published");
             }
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    result,
+                    PowerForgeReleaseProgressPhase.GitHub))
+            {
+                return result;
+            }
+
             ValidatePostBuildSourceState(request);
             SubmitWingetOutputs(spec, request, configDirectory, result);
             if (result.Success && publishVirusTotalMonitor)
             {
+                if (!ValidateReleaseValidationIntegrityBeforePublication(
+                        request,
+                        result,
+                        PowerForgeReleaseProgressPhase.VirusTotal))
+                {
+                    return result;
+                }
+
                 ValidatePostBuildSourceState(request);
                 if (!TryPublishVirusTotalMonitor(spec, request, configDirectory, result, sharedReleaseVersion, virusTotalApiKey))
                     return result;
@@ -1181,8 +1221,18 @@ internal sealed partial class PowerForgeReleaseService
             request.ModulePublisherActive);
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, builtResult);
 
+        if (!ValidateBuiltReleaseOutputs(spec, request, builtResult, configDirectory, sharedReleaseVersion))
+            return builtResult;
+
         if (spec.AppleApps is not null)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.AppleApps))
+            {
+                return builtResult;
+            }
             request.CancellationToken.ThrowIfCancellationRequested();
             var appleResult = Execute(
                 spec,
@@ -1213,6 +1263,7 @@ internal sealed partial class PowerForgeReleaseService
                     PublishProjectGitHub = false,
                     PublishToolGitHub = false,
                     SubmitWinget = false,
+                    DeferAfterStagingValidation = true,
                     ResolvedReleaseVersion = sharedReleaseVersion,
                     CancellationToken = request.CancellationToken
                 });
@@ -1229,6 +1280,13 @@ internal sealed partial class PowerForgeReleaseService
 
         if (spec.Tools is not null && (request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.Tools))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             request.CancellationToken.ThrowIfCancellationRequested();
             if (builtResult.DotNetToolPlan is not null && builtResult.DotNetTools is not null)
@@ -1262,6 +1320,13 @@ internal sealed partial class PowerForgeReleaseService
         var moduleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly;
         if (ShouldPublishUnifiedGitHub(spec, request, moduleSelected))
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.GitHub))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             request.CancellationToken.ThrowIfCancellationRequested();
             var unified = PublishUnifiedGitHubRelease(
@@ -1280,6 +1345,13 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        if (!ValidateReleaseValidationIntegrityBeforePublication(
+                request,
+                builtResult,
+                PowerForgeReleaseProgressPhase.Tools))
+        {
+            return builtResult;
+        }
         ValidatePostBuildSourceState(request);
         request.CancellationToken.ThrowIfCancellationRequested();
         SubmitWingetOutputs(spec, request, configDirectory, builtResult);
@@ -1289,6 +1361,13 @@ internal sealed partial class PowerForgeReleaseService
 
         if (publishVirusTotalMonitor)
         {
+            if (!ValidateReleaseValidationIntegrityBeforePublication(
+                    request,
+                    builtResult,
+                    PowerForgeReleaseProgressPhase.VirusTotal))
+            {
+                return builtResult;
+            }
             ValidatePostBuildSourceState(request);
             if (!TryPublishVirusTotalMonitor(
                     spec,
@@ -1478,7 +1557,11 @@ internal sealed partial class PowerForgeReleaseService
         return (service, spec, workspaceConfigPath, workspaceRequest, plan);
     }
 
-    private static (ModuleBuildHostBuildRequest Request, PowerForgeModuleReleasePlanSummary Plan, string[] ArtifactPaths) PrepareModuleRelease(
+    private static (
+        ModuleBuildHostBuildRequest Request,
+        PowerForgeModuleReleasePlanSummary Plan,
+        string[] ArtifactPaths,
+        ModulePipelineConfigurationContext? ConfigurationContext) PrepareModuleRelease(
         PowerForgeModuleReleaseOptions options,
         string releaseConfigPath,
         PowerForgeReleaseRequest request,
@@ -1581,7 +1664,7 @@ internal sealed partial class PowerForgeReleaseService
             NoDotnetBuild = noDotnetBuildOverride ?? false,
             NoDotnetBuildWasSpecified = noDotnetBuildOverride.HasValue,
             ModuleVersion = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
-                ? request.ModuleVersion ?? options.ModuleVersion
+                ? request.ModuleVersion ?? options.ModuleVersion ?? moduleConfig?.Spec.Build.Version
                 : PackageVersionUtility.GetNumericVersion(request.ResolvedReleaseVersion!),
             PreReleaseTag = string.IsNullOrWhiteSpace(request.ResolvedReleaseVersion)
                 ? request.ModulePreReleaseTag ?? options.PreReleaseTag
@@ -1629,6 +1712,12 @@ internal sealed partial class PowerForgeReleaseService
                 moduleName,
                 buildRequest.ModuleVersion,
                 buildRequest.PreReleaseTag),
+            ArtefactOutputs = ResolveModuleArtefactOutputs(
+                moduleConfig,
+                moduleName,
+                buildRequest.ModuleVersion ?? moduleConfig?.Spec.Build.Version,
+                buildRequest.PreReleaseTag),
+            DeferredPublicationInputPaths = ResolveDeferredModulePublicationInputPaths(moduleConfig),
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,
@@ -1637,7 +1726,7 @@ internal sealed partial class PowerForgeReleaseService
             ArtifactPaths = artifactPaths
         };
 
-        return (buildRequest, plan, artifactPaths);
+        return (buildRequest, plan, artifactPaths, moduleConfig);
     }
 
     private static string ExpandModulePath(string? path, string configuration, string framework)
@@ -2277,7 +2366,7 @@ internal sealed partial class PowerForgeReleaseService
         var screenshotSpecs = needsScreenshotSpecs
             ? LoadAppleScreenshotSpecs(plan)
             : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
-        var metadataSpecs = plan.SyncMetadata
+        var metadataSpecs = RequiresAppleMetadataSpecs(plan)
             ? LoadAppleMetadataSpecs(plan)
             : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
         var appInfoSpecs = plan.SyncAppInfo
@@ -2309,10 +2398,10 @@ internal sealed partial class PowerForgeReleaseService
         var valuesByApp = new Dictionary<PowerForgeAppleAppReleaseTargetPlan, (string MarketingVersion, string BuildNumber)>();
         var screenshotsByApp = new Dictionary<
             PowerForgeAppleAppReleaseTargetPlan,
-            (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)?>();
+            (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[]>();
         var metadataByApp = new Dictionary<
             PowerForgeAppleAppReleaseTargetPlan,
-            (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)?>();
+            (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[]>();
         var resumedByApp = new Dictionary<PowerForgeAppleAppReleaseTargetPlan, bool>();
         var governancePlansByAppId = new Dictionary<string, AppStoreConnectGovernancePlan>(StringComparer.OrdinalIgnoreCase);
         var preflightAttempted = new HashSet<PowerForgeAppleAppReleaseTargetPlan>();
@@ -2362,7 +2451,7 @@ internal sealed partial class PowerForgeReleaseService
             screenshotSpecs = needsScreenshotSpecs
                 ? LoadAppleScreenshotSpecs(plan)
                 : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
-            metadataSpecs = plan.SyncMetadata
+            metadataSpecs = RequiresAppleMetadataSpecs(plan)
                 ? LoadAppleMetadataSpecs(plan)
                 : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
             appInfoSpecs = plan.SyncAppInfo
@@ -2396,42 +2485,31 @@ internal sealed partial class PowerForgeReleaseService
                         valuesByApp[app] = (app.MarketingVersion!, app.BuildNumber!);
                 }
 
-                var matchingScreenshotSpec = app.DistributionRoute == AppleDistributionRoute.AppStore &&
+                var matchingScreenshotSpecs = app.DistributionRoute == AppleDistributionRoute.AppStore &&
                                              ShouldRunAppleShipAppStoreStep(plan, app) &&
-                                             (plan.SyncScreenshots ||
-                                              plan.CheckReleaseReadiness ||
+                                             (plan.SyncScreenshots || plan.CheckReleaseReadiness ||
                                               (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
-                    ? ResolveMatchingScreenshotSpec(
-                        screenshotSpecs,
-                        app,
-                        valuesByApp[app].MarketingVersion,
+                    ? ResolveMatchingScreenshotSpecs(screenshotSpecs, app, valuesByApp[app].MarketingVersion,
                         required: plan.SyncScreenshots || screenshotSpecs.Length > 0)
-                    : null;
-                if (matchingScreenshotSpec is not null)
-                {
-                    matchingScreenshotSpec = (
-                        BindScreenshotSpec(
-                            matchingScreenshotSpec.Value.Spec,
-                            app,
-                            valuesByApp[app].MarketingVersion),
-                        matchingScreenshotSpec.Value.ConfigPath);
-                }
-                screenshotsByApp[app] = matchingScreenshotSpec;
-                if (plan.SyncScreenshots && matchingScreenshotSpec is not null)
-                    ValidateAppleScreenshotPreflight(matchingScreenshotSpec.Value, plan.SourceCommit);
+                        .Select(value => (Spec: BindScreenshotSpec(value.Spec, app, valuesByApp[app].MarketingVersion), value.ConfigPath)).ToArray()
+                    : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
+                screenshotsByApp[app] = matchingScreenshotSpecs;
+                if (plan.SyncScreenshots)
+                    foreach (var configured in matchingScreenshotSpecs)
+                        ValidateAppleScreenshotPreflight(configured, plan.SourceCommit);
 
-                var matchingMetadataSpec = plan.SyncMetadata &&
+                var matchingMetadataSpecs = RequiresAppleMetadataSpecs(plan) &&
                                            ShouldRunAppleShipAppStoreStep(plan, app) &&
                                            app.DistributionRoute == AppleDistributionRoute.AppStore
-                    ? ResolveMatchingMetadataSpec(
+                    ? ResolveMatchingMetadataSpecs(
                         metadataSpecs,
                         app,
                         valuesByApp[app].MarketingVersion,
-                        required: true)
-                    : null;
-                metadataByApp[app] = matchingMetadataSpec;
-                if (matchingMetadataSpec is not null)
-                    ValidateAppleMetadataPreflight(matchingMetadataSpec.Value);
+                        required: plan.SyncMetadata || metadataSpecs.Length > 0)
+                    : Array.Empty<(AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)>();
+                metadataByApp[app] = matchingMetadataSpecs;
+                foreach (var matchingMetadataSpec in matchingMetadataSpecs)
+                    ValidateAppleMetadataPreflight(matchingMetadataSpec);
 
                 if (plan.CheckGovernance &&
                     UsesAppStoreConnect(app) &&
@@ -2749,8 +2827,8 @@ internal sealed partial class PowerForgeReleaseService
                 var distributionValues = needsVersionDistribution
                     ? valuesByApp[app]
                     : (MarketingVersion: string.Empty, BuildNumber: string.Empty);
-                var matchingScreenshotSpec = screenshotsByApp[app];
-                var matchingMetadataSpec = metadataByApp[app];
+                var matchingScreenshotSpecs = screenshotsByApp[app];
+                var matchingMetadataSpecs = metadataByApp[app];
                 result.Distribution = _prepareAppleDistribution(new AppStoreConnectReleasePreparationRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -2761,8 +2839,15 @@ internal sealed partial class PowerForgeReleaseService
                     CreateVersion = plan.PrepareDistribution,
                     SelectBuild = plan.PrepareDistribution && plan.SelectBuildForDistribution,
                     RequireValidBuild = !plan.AllowUnprocessedDistributionBuild,
-                    ScreenshotSpec = plan.SyncScreenshots ? matchingScreenshotSpec?.Spec : null,
-                    MetadataSpec = matchingMetadataSpec?.Spec,
+                    ScreenshotSpec = plan.SyncScreenshots && matchingScreenshotSpecs.Length == 1 ? matchingScreenshotSpecs[0].Spec : null,
+                    ScreenshotMappings = plan.SyncScreenshots && matchingScreenshotSpecs.Length > 1
+                        ? matchingScreenshotSpecs.Select(value => new AppStoreConnectReleaseScreenshotMapping
+                        {
+                            Spec = value.Spec,
+                            BaseDirectory = Path.GetDirectoryName(value.ConfigPath) ?? plan.ProjectRoot
+                        }).ToArray()
+                        : Array.Empty<AppStoreConnectReleaseScreenshotMapping>(),
+                    MetadataSpecs = plan.SyncMetadata ? matchingMetadataSpecs.Select(static value => value.Spec).ToArray() : Array.Empty<AppStoreConnectVersionMetadataSpec>(),
                     AppInfoMetadataSpecs = appInfoMetadataSpecs,
                     ReplaceScreenshots = plan.ReplaceScreenshots,
                     ExpectedSourceCommit = plan.SourceCommit,
@@ -2776,17 +2861,10 @@ internal sealed partial class PowerForgeReleaseService
                                 : StringComparer.Ordinal),
                     ExpectedScreenshotInventorySha256 = app.ExpectedScreenshotInventorySha256,
                     CheckReadiness = plan.CheckReleaseReadiness,
-                    ReadinessRequest = plan.CheckReleaseReadiness && matchingScreenshotSpec is not null
-                        ? new AppStoreConnectReleaseReadinessRequest
-                        {
-                            ScreenshotSpec = matchingScreenshotSpec.Value.Spec
-                        }
+                    ReadinessRequest = plan.CheckReleaseReadiness
+                        ? CreateAppleReadinessRequest(matchingMetadataSpecs, matchingScreenshotSpecs)
                         : null,
-                    BaseDirectory = matchingScreenshotSpec is null
-                        ? matchingMetadataSpec is null
-                            ? plan.ProjectRoot
-                            : Path.GetDirectoryName(matchingMetadataSpec.Value.ConfigPath) ?? plan.ProjectRoot
-                        : Path.GetDirectoryName(matchingScreenshotSpec.Value.ConfigPath) ?? plan.ProjectRoot
+                    BaseDirectory = matchingScreenshotSpecs.Length == 1 ? Path.GetDirectoryName(matchingScreenshotSpecs[0].ConfigPath) ?? plan.ProjectRoot : plan.ProjectRoot
                 });
                 if (appInfoMetadataSpecs.Length > 0)
                     ValidateAppleAppInfoMutationResults(appInfoMetadataSpecs, result.Distribution.AppInfoMetadataResults);
@@ -2836,9 +2914,9 @@ internal sealed partial class PowerForgeReleaseService
                 app.DistributionRoute == AppleDistributionRoute.AppStore)
             {
                 var reviewValues = valuesByApp[app];
-                var matchingScreenshotSpec = !plan.SkipReviewReadinessCheck
+                var matchingScreenshotSpecs = !plan.SkipReviewReadinessCheck
                     ? screenshotsByApp[app]
-                    : null;
+                    : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
                 result.ReviewSubmission = _submitAppleReview(new AppStoreConnectReviewSubmissionRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -2850,12 +2928,9 @@ internal sealed partial class PowerForgeReleaseService
                     RequireValidBuild = !plan.AllowUnprocessedReviewBuild,
                     CheckReadiness = !plan.SkipReviewReadinessCheck,
                     RequireReady = !plan.AllowReviewSubmissionWhenNotReady,
-                    ReadinessRequest = matchingScreenshotSpec is null
-                        ? null
-                        : new AppStoreConnectReleaseReadinessRequest
-                        {
-                            ScreenshotSpec = matchingScreenshotSpec.Value.Spec
-                        }
+                    ReadinessRequest = !plan.SkipReviewReadinessCheck
+                        ? CreateAppleReadinessRequest(metadataByApp[app], matchingScreenshotSpecs)
+                        : null
                 });
             }
 
@@ -3106,46 +3181,6 @@ internal sealed partial class PowerForgeReleaseService
         return (marketingVersion!.Trim(), buildNumber!.Trim());
     }
 
-    private static (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] LoadAppleScreenshotSpecs(PowerForgeAppleReleasePlan plan)
-    {
-        var paths = new List<string>();
-        if (!string.IsNullOrWhiteSpace(plan.ScreenshotConfigPath))
-            paths.Add(plan.ScreenshotConfigPath!);
-        paths.AddRange(plan.ScreenshotConfigPaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
-
-        return paths
-            .Distinct(FrameworkCompatibility.GetPathStringComparisonForPath(plan.ProjectRoot) == StringComparison.OrdinalIgnoreCase
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal)
-            .Select(path =>
-            {
-                var json = ReadApprovedMutationInputText(plan, path);
-                var spec = JsonSerializer.Deserialize<AppStoreConnectScreenshotSyncSpec>(json, CreateJsonOptions())
-                    ?? throw new InvalidOperationException($"Unable to deserialize screenshot sync config: {path}");
-                return (spec, path);
-            })
-            .ToArray();
-    }
-
-    private static (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[] LoadAppleMetadataSpecs(PowerForgeAppleReleasePlan plan)
-    {
-        var paths = new List<string>();
-        if (!string.IsNullOrWhiteSpace(plan.MetadataConfigPath))
-            paths.Add(plan.MetadataConfigPath!);
-        paths.AddRange(plan.MetadataConfigPaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
-
-        return paths
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(path =>
-            {
-                var json = ReadApprovedMutationInputText(plan, path);
-                var spec = JsonSerializer.Deserialize<AppStoreConnectVersionMetadataSpec>(json, CreateJsonOptions())
-                    ?? throw new InvalidOperationException($"Unable to deserialize App Store version metadata config: {path}");
-                return (spec, path);
-            })
-            .ToArray();
-    }
-
     private static Dictionary<string, AppStoreConnectGovernanceSpec> LoadAppleGovernanceSpecs(PowerForgeAppleReleasePlan plan)
     {
         var paths = new List<string>();
@@ -3165,123 +3200,6 @@ internal sealed partial class PowerForgeReleaseService
             result.Add(spec.AppId.Trim(), spec);
         }
         return result;
-    }
-
-    private static void ValidateAppleScreenshotPreflight(
-        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath) configured,
-        string? expectedSourceCommit)
-    {
-        var baseDirectory = Path.GetDirectoryName(configured.ConfigPath) ?? Directory.GetCurrentDirectory();
-        var validation = new AppStoreConnectScreenshotSyncConfigValidator()
-            .Validate(configured.Spec, baseDirectory, expectedSourceCommit: expectedSourceCommit);
-        if (validation.IsValid)
-            return;
-
-        var messages = validation.Messages
-            .Concat(validation.ScreenshotSets.SelectMany(static set => set.Messages))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-        throw new InvalidOperationException(
-            $"Screenshot preflight failed for '{configured.ConfigPath}': {string.Join(" ", messages)}");
-    }
-
-    private static void ValidateAppleMetadataPreflight(
-        (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath) configured)
-    {
-        if (string.IsNullOrWhiteSpace(configured.Spec.Locale))
-        {
-            throw new InvalidOperationException(
-                $"App Store version metadata config must declare Locale: {configured.ConfigPath}");
-        }
-        if (configured.Spec.Metadata is null)
-        {
-            throw new InvalidOperationException(
-                $"App Store version metadata config must declare a Metadata object: {configured.ConfigPath}");
-        }
-    }
-
-    private static (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)? ResolveMatchingScreenshotSpec(
-        (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] specs,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion,
-        bool required = false)
-    {
-        var matches = specs
-            .Where(candidate =>
-                ScreenshotSpecMatches(candidate.Spec, app, marketingVersion))
-            .ToArray();
-        if (matches.Length > 1)
-            throw new InvalidOperationException($"Multiple screenshot sync configs match Apple app '{app.Name}' version '{marketingVersion}' platform '{app.Platform}'.");
-        if (matches.Length == 0 && required)
-        {
-            throw new InvalidOperationException(
-                $"No screenshot sync config matches Apple app '{app.Name}' " +
-                $"(AppStoreConnectAppId '{app.AppStoreConnectAppId}', platform '{app.Platform}', version '{marketingVersion}').");
-        }
-
-        return matches.Length == 0 ? null : matches[0];
-    }
-
-    private static bool ScreenshotSpecMatches(
-        AppStoreConnectScreenshotSyncSpec spec,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion)
-    {
-        var appIdMatches = string.IsNullOrWhiteSpace(spec.AppId) ||
-                           string.Equals(spec.AppId.Trim(), app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase);
-        var specVersionString = string.IsNullOrWhiteSpace(spec.VersionString) ? null : spec.VersionString!.Trim();
-        var versionMatches = (spec.UseReleaseVersion && specVersionString is null) ||
-                             string.Equals(specVersionString, marketingVersion, StringComparison.OrdinalIgnoreCase);
-        return appIdMatches && versionMatches && spec.Platform == app.Platform;
-    }
-
-    private static AppStoreConnectScreenshotSyncSpec BindScreenshotSpec(
-        AppStoreConnectScreenshotSyncSpec source,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion)
-        => new()
-        {
-            AppId = app.AppStoreConnectAppId!,
-            VersionString = marketingVersion,
-            VersionId = null,
-            UseReleaseVersion = false,
-            Platform = app.Platform,
-            Locale = source.Locale,
-            ScreenshotSets = source.ScreenshotSets,
-            Quality = source.Quality
-        };
-
-    private static (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)? ResolveMatchingMetadataSpec(
-        (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[] specs,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion,
-        bool required = false)
-    {
-        var matches = specs
-            .Where(candidate => MetadataSpecMatches(candidate.Spec, app, marketingVersion))
-            .ToArray();
-        if (matches.Length > 1)
-            throw new InvalidOperationException($"Multiple App Store metadata configs match Apple app '{app.Name}' version '{marketingVersion}' platform '{app.Platform}'.");
-        if (matches.Length == 0 && required)
-        {
-            throw new InvalidOperationException(
-                $"No App Store metadata config matches Apple app '{app.Name}' " +
-                $"(AppStoreConnectAppId '{app.AppStoreConnectAppId}', platform '{app.Platform}', version '{marketingVersion}').");
-        }
-
-        return matches.Length == 0 ? null : matches[0];
-    }
-
-    private static bool MetadataSpecMatches(
-        AppStoreConnectVersionMetadataSpec spec,
-        PowerForgeAppleAppReleaseTargetPlan app,
-        string marketingVersion)
-    {
-        var appIdMatches = string.IsNullOrWhiteSpace(spec.AppId) ||
-                           string.Equals(spec.AppId.Trim(), app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase);
-        var specVersionString = string.IsNullOrWhiteSpace(spec.VersionString) ? null : spec.VersionString!.Trim();
-        var versionMatches = (spec.UseReleaseVersion && specVersionString is null) ||
-                             string.Equals(specVersionString, marketingVersion, StringComparison.OrdinalIgnoreCase);
-        return appIdMatches && versionMatches && spec.Platform == app.Platform;
     }
 
     private static string NormalizeAppleArchiveProjectPath(string projectPath, string appName)
@@ -5075,8 +4993,22 @@ internal sealed partial class PowerForgeReleaseService
 
         assets.AddRange(
             (result.ModuleAssets ?? Array.Empty<string>())
+            .Where(path => !IsScriptArtefactSourceReplacedByReleaseArchive(path, result.ModulePlan))
             .SelectMany(path => CreateModuleAssetEntries(
                 path,
+                result.ModulePlan,
+                result.ModuleProducedAssets)));
+
+        assets.AddRange(
+            (result.ModulePlan?.ArtefactOutputs ?? Array.Empty<PowerForgeModuleArtefactOutputSummary>())
+            .Where(static output => output is not null &&
+                                    output.Type == ArtefactType.Script &&
+                                    !string.IsNullOrWhiteSpace(output.ReleaseAssetPath))
+            .Select(static output => output.ReleaseAssetPath!)
+            .Where(path => File.Exists(path) &&
+                           ContainsProducedModuleArtifact(result.ModuleProducedAssets, path))
+            .Select(path => CreateModuleProducedAssetEntry(
+                Path.GetFullPath(path),
                 result.ModulePlan,
                 result.ModuleProducedAssets)));
 
@@ -5205,11 +5137,10 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(path))
             yield break;
 
-        var produced = producedArtifactPaths is null
-            ? null
-            : new HashSet<string>(
-                producedArtifactPaths.Select(Path.GetFullPath),
-                StringComparer.OrdinalIgnoreCase);
+        var produced = producedArtifactPaths?
+            .Where(static candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Select(Path.GetFullPath)
+            .ToArray();
 
         if (File.Exists(path))
         {
@@ -5221,14 +5152,40 @@ internal sealed partial class PowerForgeReleaseService
         if (!Directory.Exists(path))
             yield break;
 
-        foreach (var file in Directory
-            .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly)
-            .Where(file => IsModuleArtifactForResolvedVersion(file, plan))
+        StringComparer candidateComparer =
+            FrameworkCompatibility.GetPathStringComparisonForPath(path) == StringComparison.OrdinalIgnoreCase
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+        IEnumerable<string> candidateFiles = Directory
+            .EnumerateFiles(path, "*", SearchOption.TopDirectoryOnly);
+        if (produced is not null)
+        {
+            string fullDirectory = Path.GetFullPath(path)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            candidateFiles = candidateFiles.Concat(produced.Where(file =>
+                File.Exists(file) &&
+                IsModuleReleaseAssetBelowDirectory(file, fullDirectory)));
+        }
+
+        foreach (var file in candidateFiles
+            .Distinct(candidateComparer)
+            .Where(file => produced is not null
+                ? ContainsProducedModuleArtifact(produced, file) &&
+                  IsProducedModuleArtifactForResolvedVersion(file, plan)
+                : IsModuleArtifactForResolvedVersion(file, plan))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
         {
             var fullPath = Path.GetFullPath(file);
             yield return CreateModuleProducedAssetEntry(fullPath, plan, produced);
         }
+    }
+
+    private static bool IsModuleReleaseAssetBelowDirectory(string path, string directory)
+    {
+        string fullPath = Path.GetFullPath(path);
+        StringComparison comparison = ResolvePathComparison(fullPath, directory);
+        return fullPath.StartsWith(directory + Path.DirectorySeparatorChar, comparison) ||
+               fullPath.StartsWith(directory + Path.AltDirectorySeparatorChar, comparison);
     }
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> StageReleaseAssets(
@@ -5719,8 +5676,11 @@ internal sealed partial class PowerForgeReleaseService
                     result.Distribution.CreatedVersion,
                     result.Distribution.SelectedBuild,
                     result.Distribution.PreviousBuildId,
-                    ScreenshotSetCount = result.Distribution.Screenshots?.ScreenshotSets.Length ?? 0,
-                    MetadataUpdatedFields = result.Distribution.Metadata?.UpdatedFields ?? Array.Empty<string>(),
+                    ScreenshotSetCount = result.Distribution.ScreenshotResults.Length > 0
+                        ? result.Distribution.ScreenshotResults.Sum(static value => value.ScreenshotSets.Length)
+                        : result.Distribution.Screenshots?.ScreenshotSets.Length ?? 0,
+                    ScreenshotLocales = result.Distribution.ScreenshotResults.Select(static value => value.Localization.Locale).ToArray(),
+                    MetadataUpdatedFields = result.Distribution.MetadataResults.SelectMany(static value => value.UpdatedFields).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
                     AppInfoMetadataUpdatedFields = result.Distribution.AppInfoMetadataResults
                         .SelectMany(metadata => metadata.UpdatedFields)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -6081,7 +6041,7 @@ internal sealed partial class PowerForgeReleaseService
         return !string.IsNullOrWhiteSpace(request.SignToolPath)
             || !string.IsNullOrWhiteSpace(request.SignThumbprint)
             || !string.IsNullOrWhiteSpace(request.SignSubjectName)
-            || request.SignTimeoutSeconds.HasValue
+            || request.SignTimeoutSeconds > 0
             || !string.IsNullOrWhiteSpace(request.SignTimestampUrl)
             || !string.IsNullOrWhiteSpace(request.SignDescription)
             || !string.IsNullOrWhiteSpace(request.SignUrl)
@@ -6114,8 +6074,8 @@ internal sealed partial class PowerForgeReleaseService
             sign.OnMissingTool = request.SignOnMissingTool.Value;
         if (request.SignOnFailure.HasValue)
             sign.OnSignFailure = request.SignOnFailure.Value;
-        if (request.SignTimeoutSeconds.HasValue)
-            sign.TimeoutSeconds = Math.Max(1, request.SignTimeoutSeconds.Value);
+        if (request.SignTimeoutSeconds > 0)
+            sign.TimeoutSeconds = request.SignTimeoutSeconds.Value;
         if (!string.IsNullOrWhiteSpace(request.SignTimestampUrl))
             sign.TimestampUrl = request.SignTimestampUrl!.Trim();
         if (!string.IsNullOrWhiteSpace(request.SignDescription))

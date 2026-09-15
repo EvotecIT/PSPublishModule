@@ -318,9 +318,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 buildPlan,
                 buildStep)
             .ToArray();
-        HashSet<string> rootProjectPaths = roots
-            .Select(request => Path.GetFullPath(request.ProjectPath))
-            .ToHashSet(comparison);
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var directories = new HashSet<string>(comparison);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
@@ -336,7 +333,6 @@ public sealed partial class DotNetPublishPipelineRunner
         var evaluationsByEvaluation = new Dictionary<string, EvaluatedProjectInputs>(StringComparer.Ordinal);
         var trustedBuildInfrastructureRootsByEvaluation =
             new Dictionary<string, string[]>(StringComparer.Ordinal);
-        var sdkManagedPackageKeys = new HashSet<string>(comparison);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         var evaluatedPublishInputs = new List<(string EvaluationKey, EvaluatedPublishInput Input)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
@@ -353,8 +349,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach (ProjectEvaluationRequest root in roots)
         {
+            ProjectEvaluationRequest scopedRoot = root.ForEvaluationScope(root.ProjectPath);
+            var sdkManagedPackageEvidence = new Dictionary<
+                string,
+                VerifiedPackageInputCatalog.VerifiedSdkManagedPackageEvidence>(StringComparer.OrdinalIgnoreCase);
             if (ShouldRefreshLockedRestoreOutputs(buildPlan) &&
-                !TryRefreshLockedRestoreOutputs(root))
+                !TryRefreshLockedRestoreOutputs(scopedRoot))
             {
                 projectDirectories = roots
                     .Select(request => Path.GetDirectoryName(request.ProjectPath)!)
@@ -364,7 +364,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
 
-            var pending = new Queue<ProjectEvaluationRequest>(new[] { root });
+            var pending = new Queue<ProjectEvaluationRequest>(new[] { scopedRoot });
             while (pending.Count > 0)
             {
                 ProjectEvaluationRequest request = pending.Dequeue();
@@ -379,7 +379,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadEvaluatedProjectInputs(
                         request,
                         verifiedPackageArchives,
-                        sdkManagedPackageKeys,
+                        sdkManagedPackageEvidence,
+                        request.IsEvaluationScopeRoot,
                         out EvaluatedProjectInputs? evaluation,
                         out string? evaluationFailureReason) || evaluation is null)
                 {
@@ -446,9 +447,10 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             string evaluationKey = entry.Key;
             ProjectEvaluationRequest request = entry.Value;
+            string? graphFailureReason = null;
             // Only release roots are publish surfaces. Referenced projects are rebuilt and
             // attested through the frozen graph using their own project-reference context.
-            if (!rootProjectPaths.Contains(Path.GetFullPath(request.ProjectPath)))
+            if (!request.IsEvaluationScopeRoot)
                 continue;
             if (string.IsNullOrWhiteSpace(request.TargetFramework) ||
                 !TryReadFrozenProjectReferenceGraph(
@@ -457,12 +459,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluationsByEvaluation,
                     pathMapsByEvaluation,
                     out ControlledPublishGraphNode[] graphNodes,
-                    out string[] graphEvaluationKeys))
+                    out string[] graphEvaluationKeys,
+                    out graphFailureReason))
             {
                 if (!string.IsNullOrWhiteSpace(request.TargetFramework))
                 {
                     projectDirectories = directories.ToArray();
-                    failureReason = $"MSBuild input evaluation failed: the frozen project-reference graph could not be resolved for '{request.ProjectPath}' ({request.TargetFramework}).";
+                    failureReason = $"MSBuild input evaluation failed: the frozen project-reference graph could not be resolved for '{request.ProjectPath}' ({request.TargetFramework})" +
+                        (string.IsNullOrWhiteSpace(graphFailureReason) ? "." : $": {graphFailureReason}");
                     return false;
                 }
                 continue;
@@ -617,17 +621,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
 
             ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
+            evaluationsByEvaluation.TryGetValue(
+                request.BuildVisitKey(),
+                out EvaluatedProjectInputs? parentEvaluation);
             if (!TryResolveProjectEvaluationKey(
                     referencedProject,
                     request.TargetFramework,
+                    parentEvaluation?.TargetPlatformVersion,
                     requestsByEvaluation,
                     evaluationsByEvaluation,
                     out string referencedProjectKey) &&
-                (!evaluationsByEvaluation.TryGetValue(
-                     request.BuildVisitKey(),
-                     out EvaluatedProjectInputs? parentEvaluation) ||
+                (parentEvaluation is null ||
                  !TryResolveGeneratedProjectReferenceEvaluationKey(
                      request,
+                     parentEvaluation.TargetPlatformVersion,
                      output.ProjectReference,
                      parentEvaluation.ProjectReferences,
                      requestsByEvaluation,
@@ -867,12 +874,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         buildPlan!.EnvironmentVariables,
                         buildPlan.ControlledBuildEnvironmentVariableNames,
                         buildPlan.TrustedBuildPackages,
-                        sdkPackageEvidenceGlobalProperties: combination.Style == DotNetPublishStyle.SelfContained
-                            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                            {
-                                ["PublishSingleFile"] = "true"
-                            }
-                            : null,
+                        sdkPackageEvidenceGlobalProperties:
+                            BuildSdkPackageEvidenceProperties(combination.Style),
                         requiresPrebuiltProjectReferenceOutputProof:
                             RequiresPrebuiltProjectReferenceOutputProof(
                                 buildPlan,
@@ -1002,10 +1005,33 @@ public sealed partial class DotNetPublishPipelineRunner
         return properties;
     }
 
+    private static IReadOnlyDictionary<string, string>? BuildSdkPackageEvidenceProperties(
+        DotNetPublishStyle style)
+    {
+        if (IsPortableStyle(style))
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                // The real portable publish is single-file but not necessarily trimmed. The SDK derives
+                // its linker-pack requirement from the single-file analyzer without changing the
+                // consumer project's conditional restore graph.
+                ["PublishSingleFile"] = "true"
+            };
+        }
+
+        return style == DotNetPublishStyle.SelfContained
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PublishSingleFile"] = "true"
+            }
+            : null;
+    }
+
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageArchiveCache verifiedPackageArchives,
-        HashSet<string> knownSdkManagedPackageKeys,
+        Dictionary<string, VerifiedPackageInputCatalog.VerifiedSdkManagedPackageEvidence> knownSdkManagedPackageEvidence,
+        bool contributesSdkManagedPackageEvidence,
         out EvaluatedProjectInputs? evaluation,
         out string? failureReason)
     {
@@ -1019,6 +1045,8 @@ public sealed partial class DotNetPublishPipelineRunner
             "-verbosity:quiet",
             "-getProperty:TargetFramework",
             "-getProperty:TargetFrameworks",
+            "-getProperty:RuntimeIdentifier",
+            "-getProperty:TargetPlatformVersion",
             "-getProperty:MSBuildAllProjects",
             "-getProperty:BaseOutputPath",
             "-getProperty:OutputPath",
@@ -1205,10 +1233,31 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 if (verifiedPackages is not null)
                 {
-                    if (request.RequiresSdkPackageEvidence)
-                        knownSdkManagedPackageKeys.UnionWith(verifiedPackages.SdkManagedPackageKeys);
-                    else
-                        verifiedPackages.InheritSdkManagedPackageKeys(knownSdkManagedPackageKeys);
+                    if (!verifiedPackages.TryInheritSdkManagedPackageEvidence(
+                            knownSdkManagedPackageEvidence.Values,
+                            out string? inheritedSdkPackageFailureReason))
+                    {
+                        failureReason = "SDK-managed package evidence could not be inherited: " +
+                                        (inheritedSdkPackageFailureReason ?? "no additional detail is available");
+                        return false;
+                    }
+                    if (contributesSdkManagedPackageEvidence)
+                    {
+                        foreach (VerifiedPackageInputCatalog.VerifiedSdkManagedPackageEvidence package in
+                                 verifiedPackages.SdkManagedPackageEvidence)
+                        {
+                            if (knownSdkManagedPackageEvidence.TryGetValue(
+                                    package.PackageKey,
+                                    out VerifiedPackageInputCatalog.VerifiedSdkManagedPackageEvidence existing) &&
+                                !string.Equals(existing.ContentHash, package.ContentHash, StringComparison.Ordinal))
+                            {
+                                failureReason = $"SDK-managed package '{package.PackageKey}' produced conflicting verified evidence across the root project";
+                                return false;
+                            }
+                            if (!knownSdkManagedPackageEvidence.ContainsKey(package.PackageKey))
+                                knownSdkManagedPackageEvidence[package.PackageKey] = package;
+                        }
+                    }
                 }
                 trustedBuildInfrastructureRoots = ReadTrustedBuildInfrastructureRoots(
                     properties,
@@ -1250,9 +1299,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     request.ProjectPath,
                     importPaths));
                 if (verifiedPackages is not null &&
-                    !verifiedPackages.TrySetControlledBuildInputs(evaluatedImportPaths))
+                    !verifiedPackages.TrySetControlledBuildInputs(
+                        evaluatedImportPaths,
+                        out string? controlledPackageFailureReason))
                 {
-                    failureReason = "controlled package build inputs could not be verified";
+                    failureReason = "controlled package build inputs could not be verified: " +
+                                    (controlledPackageFailureReason ?? "no additional detail is available");
                     return false;
                 }
                 evaluatedProjectReferenceConditionProperties =
@@ -1519,6 +1571,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 sourceInputs.ToArray(),
                 references.Values.ToArray(),
                 targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray(),
+                ReadItemText(properties, "TargetPlatformVersion"),
                 outputRoots.ToArray(),
                 expectedOutputPaths.ToArray(),
                 intermediateRoot,

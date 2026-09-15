@@ -85,9 +85,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        internal bool TrySetControlledBuildInputs(IEnumerable<string> evaluatedInputs)
+        internal bool TrySetControlledBuildInputs(IEnumerable<string> evaluatedInputs, out string? failureReason)
         {
             _controlledBuildInputsByArchive.Clear();
+            failureReason = null;
             try
             {
                 foreach (string input in evaluatedInputs)
@@ -98,7 +99,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         if (!IsSameOrBelowBuildInputPath(fullInput, root))
                             continue;
                         if (!TryVerifyBelowRoot(fullInput, root))
+                        {
+                            failureReason = DescribePackageInputVerificationFailure(fullInput, root);
                             return false;
+                        }
 
                         string relative = FrameworkCompatibility.GetRelativePath(root, fullInput)
                             .Replace('\\', '/')
@@ -107,12 +111,16 @@ public sealed partial class DotNetPublishPipelineRunner
                             new[] { '/' },
                             StringSplitOptions.RemoveEmptyEntries);
                         if (segments.Length < 3 || segments.Any(segment => segment == ".."))
+                        {
+                            failureReason = "an evaluated package input path did not contain a package id, version, and archive entry";
                             return false;
+                        }
 
                         string packageKey = segments[0] + "|" + segments[1];
                         if (!_archivePathsByPackageKey.TryGetValue(packageKey, out string? archivePath) ||
                             string.IsNullOrWhiteSpace(archivePath))
                         {
+                            failureReason = $"package '{segments[0]} {segments[1]}' was imported by the build but was not present in the verified package catalog";
                             return false;
                         }
 
@@ -131,11 +139,34 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 return true;
             }
-            catch
+            catch (Exception exception)
             {
                 _controlledBuildInputsByArchive.Clear();
+                failureReason = $"{exception.GetType().Name} while matching evaluated package imports to verified archives";
                 return false;
             }
+        }
+
+        private string DescribePackageInputVerificationFailure(string fullInput, string root)
+        {
+            if (IsReparsePoint(root) || HasReparsePointBelowRoot(fullInput, root))
+                return $"package input '{Path.GetFileName(fullInput)}' traversed an unverified reparse point";
+
+            string relative = FrameworkCompatibility.GetRelativePath(root, fullInput)
+                .Replace('\\', '/')
+                .Trim('/');
+            string[] segments = relative.Split(
+                new[] { '/' },
+                StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length < 3 || segments.Any(segment => segment == ".."))
+                return $"package input '{Path.GetFileName(fullInput)}' escaped its evaluated package root";
+
+            string packageKey = segments[0] + "|" + segments[1];
+            if (!_lockedPackageHashes.ContainsKey(packageKey))
+                return $"package '{segments[0]} {segments[1]}' was imported by the build but was absent from the evaluated lock evidence";
+            if (!_archivePathsByPackageKey.ContainsKey(packageKey))
+                return $"package '{segments[0]} {segments[1]}' was imported by the build but had no verified archive";
+            return $"package input '{Path.GetFileName(fullInput)}' did not match its verified package archive";
         }
 
         internal bool TrySeedControlledPackageSource(

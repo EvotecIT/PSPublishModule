@@ -6,6 +6,7 @@ public sealed class AppleReleaseSourceTrustInfoPlistTests
 {
     [Theory]
     [InlineData("PRODUCT_BUNDLE_PACKAGE_TYPE")]
+    [InlineData("CONFIGURATION")]
     [InlineData("MACOSX_DEPLOYMENT_TARGET")]
     [InlineData("IPHONEOS_DEPLOYMENT_TARGET")]
     [InlineData("TVOS_DEPLOYMENT_TARGET")]

@@ -6,17 +6,20 @@ param(
     [Parameter(Mandatory)][string] $CallerRepository,
     [Parameter(Mandatory)][string] $EngineRepository,
     [Parameter(Mandatory)][string] $CaptureUser,
-    [Parameter(Mandatory)][string] $VisudoPath
+    [Parameter(Mandatory)][string] $VisudoPath,
+    [string] $ExternalRepositoryRoot
 )
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
+. "$PSScriptRoot/Invoke-PowerForgeAnonymousGit.ps1"
 
 $approvedPrivilegedCaptureCommands = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 $approvedPrivilegedCaptureCommands.Add('apachectl -S', '/usr/sbin/apachectl -S')
 $approvedPrivilegedCaptureCommands.Add('/usr/sbin/apachectl -S', '/usr/sbin/apachectl -S')
 $approvedPrivilegedCaptureCommands.Add('ufw status numbered', '/usr/sbin/ufw status numbered')
 $approvedPrivilegedCaptureCommands.Add('/usr/sbin/ufw status numbered', '/usr/sbin/ufw status numbered')
+$externalRepositoryRoots = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
 
 function Get-GitHubRepositorySlug {
     param(
@@ -65,6 +68,75 @@ function Assert-PathHasNoReparsePoint {
     }
 }
 
+function Resolve-ExternalRepositoryRoot {
+    param(
+        [Parameter(Mandatory)][pscustomobject] $Repository,
+        [Parameter(Mandatory)][string] $RepositorySlug,
+        [Parameter(Mandatory)][string] $RepositoryRef,
+        [Parameter(Mandatory)][string] $ValidationRoot
+    )
+
+    if ($RepositoryRef -notmatch '^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$') {
+        throw "External managed recovery source repository is not pinned to an exact commit: $RepositorySlug"
+    }
+    $canonicalUrl = "https://github.com/$RepositorySlug.git"
+    if (-not [string]::Equals(([string]$Repository.url).TrimEnd('/'), $canonicalUrl, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "External managed recovery sources require a credential-free HTTPS GitHub URL: $RepositorySlug"
+    }
+
+    $key = "$RepositorySlug@$($RepositoryRef.ToLowerInvariant())"
+    [string]$existingRoot = ''
+    if ($externalRepositoryRoots.TryGetValue($key, [ref]$existingRoot)) {
+        return $existingRoot
+    }
+
+    $root = [IO.Path]::GetFullPath($ValidationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $rootParent = [IO.Path]::GetDirectoryName($root)
+    if ([string]::IsNullOrWhiteSpace($rootParent) -or
+        -not (Test-Path -LiteralPath $rootParent -PathType Container)) {
+        throw 'External repository validation root must have an existing parent directory.'
+    }
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+        New-Item -ItemType Directory -Path $root | Out-Null
+    }
+    Assert-PathHasNoReparsePoint -Root $rootParent -Path $root
+
+    $safeSlug = $RepositorySlug.Replace('/', '-')
+    $checkout = Join-Path $root "$safeSlug-$($RepositoryRef.ToLowerInvariant())"
+    if (Test-Path -LiteralPath $checkout) {
+        throw "External repository validation checkout already exists: $RepositorySlug"
+    }
+    if (-not (Test-PowerForgePublicGitHubRepository -RepositorySlug $RepositorySlug -IsolationRoot $root)) {
+        throw "External managed recovery source repository is not publicly available at its pinned GitHub URL: $RepositorySlug"
+    }
+
+    $clone = Invoke-PowerForgeAnonymousGit -IsolationRoot $root -Arguments @(
+        'clone', '--quiet', '--no-checkout', '--filter=blob:none', '--', $canonicalUrl, $checkout
+    )
+    if ($clone.ExitCode -ne 0) {
+        throw "External managed recovery source repository is not publicly available at its pinned GitHub URL: $RepositorySlug"
+    }
+    $checkoutResult = Invoke-PowerForgeAnonymousGit -IsolationRoot $root -Arguments @(
+        '-c', 'core.hooksPath=/dev/null', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.process=',
+        '-C', $checkout, 'checkout', '--quiet', '--detach', $RepositoryRef
+    )
+    if ($checkoutResult.ExitCode -ne 0) {
+        throw "External managed recovery source revision is not available from its public repository: $RepositorySlug@$RepositoryRef"
+    }
+
+    $resolvedHead = Invoke-PowerForgeAnonymousGit -IsolationRoot $root -Arguments @(
+        '-C', $checkout, 'rev-parse', 'HEAD'
+    )
+    if ($resolvedHead.ExitCode -ne 0 -or $resolvedHead.Output.Count -ne 1 -or
+        -not [string]::Equals($resolvedHead.Output[0], $RepositoryRef, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "External managed recovery source checkout did not resolve the pinned revision: $RepositorySlug@$RepositoryRef"
+    }
+    $resolvedCheckout = [IO.Path]::GetFullPath($checkout).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    Assert-PathHasNoReparsePoint -Root $root -Path $resolvedCheckout
+    $externalRepositoryRoots.Add($key, $resolvedCheckout)
+    $resolvedCheckout
+}
+
 function Resolve-ManagedSourcePath {
     param(
         [Parameter(Mandatory)][pscustomobject] $Entry,
@@ -72,7 +144,8 @@ function Resolve-ManagedSourcePath {
         [Parameter(Mandatory)][string] $LocalWorkspace,
         [Parameter(Mandatory)][string] $LocalEngineRoot,
         [Parameter(Mandatory)][string] $LocalCallerRepository,
-        [Parameter(Mandatory)][string] $LocalEngineRepository
+        [Parameter(Mandatory)][string] $LocalEngineRepository,
+        [string] $ExternalValidationRoot
     )
 
     $source = [string]$Entry.source
@@ -107,6 +180,12 @@ function Resolve-ManagedSourcePath {
         $LocalEngineRoot
     } elseif ($matchesCallerRepository) {
         $LocalWorkspace
+    } elseif (-not [string]::IsNullOrWhiteSpace($ExternalValidationRoot)) {
+        Resolve-ExternalRepositoryRoot `
+            -Repository $repository `
+            -RepositorySlug $repositorySlug `
+            -RepositoryRef $repositoryRef `
+            -ValidationRoot $ExternalValidationRoot
     } else {
         throw "Managed recovery source repository is not available to credential-free validation: $repositorySlug"
     }
@@ -349,7 +428,8 @@ $resolvedEntries = foreach ($entry in $managedEntries) {
             -LocalWorkspace $Workspace `
             -LocalEngineRoot $EngineRoot `
             -LocalCallerRepository $CallerRepository `
-            -LocalEngineRepository $EngineRepository
+            -LocalEngineRepository $EngineRepository `
+            -ExternalValidationRoot $ExternalRepositoryRoot
         Target = $target
     }
 }

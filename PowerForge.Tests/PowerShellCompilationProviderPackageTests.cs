@@ -196,6 +196,23 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     }
 
     [Fact]
+    public void BuilderEmitsNuGetHostedLicenseUrlForOlderClients()
+    {
+        using var fixture = ProviderFixture.Create();
+        fixture.Manifest.LicenseExpression = "MIT OR Apache-2.0";
+        var packagePath = fixture.PackagePath("provider.nupkg");
+
+        fixture.BuildPackage("provider.nupkg");
+
+        using var archive = ZipFile.OpenRead(packagePath);
+        var entry = Assert.Single(archive.Entries, static item => item.Name.EndsWith(".nuspec", StringComparison.Ordinal));
+        using var reader = new StreamReader(entry.Open(), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var nuspec = reader.ReadToEnd();
+        Assert.Contains("<license type=\"expression\">MIT OR Apache-2.0</license>", nuspec, StringComparison.Ordinal);
+        Assert.Contains("<licenseUrl>https://licenses.nuget.org/MIT%20OR%20Apache-2.0</licenseUrl>", nuspec, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReaderRejectsPreviousProviderAbiInsteadOfInferringExternalOperationSemantics()
     {
         using var fixture = ProviderFixture.Create();

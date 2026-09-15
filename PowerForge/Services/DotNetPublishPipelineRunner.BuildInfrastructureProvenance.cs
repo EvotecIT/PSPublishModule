@@ -703,7 +703,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyCollection<string>? trustedBuildPackages = null,
             bool requiresSdkPackageEvidence = true,
             IReadOnlyDictionary<string, string>? sdkPackageEvidenceGlobalProperties = null,
-            bool requiresPrebuiltProjectReferenceOutputProof = true)
+            bool requiresPrebuiltProjectReferenceOutputProof = true,
+            string? evaluationScopeRootPath = null)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
@@ -731,6 +732,9 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             SdkPackageEvidenceGlobalProperties = sdkEvidenceProperties;
             RequiresPrebuiltProjectReferenceOutputProof = requiresPrebuiltProjectReferenceOutputProof;
+            EvaluationScopeRootPath = string.IsNullOrWhiteSpace(evaluationScopeRootPath)
+                ? null
+                : Path.GetFullPath(evaluationScopeRootPath);
         }
 
         internal string ProjectPath { get; }
@@ -744,6 +748,13 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool RequiresSdkPackageEvidence { get; }
         internal IReadOnlyDictionary<string, string> SdkPackageEvidenceGlobalProperties { get; }
         internal bool RequiresPrebuiltProjectReferenceOutputProof { get; }
+        internal string? EvaluationScopeRootPath { get; }
+        internal bool IsEvaluationScopeRoot =>
+            EvaluationScopeRootPath is not null &&
+            NormalizeProjectReferenceIdentityPath(ProjectPath).Equals(
+                NormalizeProjectReferenceIdentityPath(EvaluationScopeRootPath),
+                StringComparison.Ordinal);
+        internal bool DisablesTargetFrameworkInheritance { get; private set; }
         internal bool DisablesProjectReferenceBuilds
             => GlobalProperties.TryGetValue("BuildProjectReferences", out string? value) &&
                bool.TryParse(value.Trim(), out bool buildProjectReferences) &&
@@ -780,7 +791,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ControlledBuildEnvironmentVariableNames);
 
         internal ProjectEvaluationRequest ForProject(string projectPath, string? targetFramework)
-            => new(
+        {
+            var request = new ProjectEvaluationRequest(
                 Path.GetFullPath(projectPath),
                 targetFramework,
                 Configuration,
@@ -790,7 +802,29 @@ public sealed partial class DotNetPublishPipelineRunner
                 TrustedBuildPackages,
                 RequiresSdkPackageEvidence,
                 SdkPackageEvidenceGlobalProperties,
-                RequiresPrebuiltProjectReferenceOutputProof);
+                RequiresPrebuiltProjectReferenceOutputProof,
+                EvaluationScopeRootPath);
+            request.DisablesTargetFrameworkInheritance = DisablesTargetFrameworkInheritance;
+            return request;
+        }
+
+        internal ProjectEvaluationRequest ForEvaluationScope(string rootProjectPath)
+        {
+            var request = new ProjectEvaluationRequest(
+                ProjectPath,
+                TargetFramework,
+                Configuration,
+                GlobalProperties,
+                EnvironmentVariables,
+                ControlledBuildEnvironmentVariableNames,
+                TrustedBuildPackages,
+                RequiresSdkPackageEvidence,
+                SdkPackageEvidenceGlobalProperties,
+                RequiresPrebuiltProjectReferenceOutputProof,
+                rootProjectPath);
+            request.DisablesTargetFrameworkInheritance = DisablesTargetFrameworkInheritance;
+            return request;
+        }
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
         {
@@ -823,7 +857,7 @@ public sealed partial class DotNetPublishPipelineRunner
                           TargetFramework!));
             properties.Remove("Configuration");
             properties.Remove("TargetFramework");
-            return new ProjectEvaluationRequest(
+            var request = new ProjectEvaluationRequest(
                 Path.GetFullPath(projectReference.ProjectPath),
                 targetFramework,
                 configuration,
@@ -833,12 +867,23 @@ public sealed partial class DotNetPublishPipelineRunner
                 trustedBuildPackages: TrustedBuildPackages,
                 requiresSdkPackageEvidence: true,
                 sdkPackageEvidenceGlobalProperties: SdkPackageEvidenceGlobalProperties,
-                requiresPrebuiltProjectReferenceOutputProof: RequiresPrebuiltProjectReferenceOutputProof);
+                requiresPrebuiltProjectReferenceOutputProof: RequiresPrebuiltProjectReferenceOutputProof,
+                evaluationScopeRootPath: EvaluationScopeRootPath);
+            request.DisablesTargetFrameworkInheritance =
+                undefinesTargetFramework || projectReference.TargetFramework is not null;
+            return request;
         }
 
         internal string BuildVisitKey()
         {
             var key = new System.Text.StringBuilder();
+            if (EvaluationScopeRootPath is not null)
+            {
+                AppendProjectReferenceKeySegment(key, "EvaluationScopeRoot");
+                AppendProjectReferenceKeySegment(
+                    key,
+                    NormalizeProjectReferenceIdentityPath(EvaluationScopeRootPath));
+            }
             AppendProjectReferenceKeySegment(key, "ProjectPath");
             AppendProjectReferenceKeySegment(key, NormalizeProjectReferenceIdentityPath(ProjectPath));
             AppendProjectReferenceKeySegment(key, "TargetFramework");
@@ -884,6 +929,10 @@ public sealed partial class DotNetPublishPipelineRunner
             AppendProjectReferenceKeySegment(
                 key,
                 RequiresPrebuiltProjectReferenceOutputProof ? "Required" : "NotRequired");
+            AppendProjectReferenceKeySegment(key, "TargetFrameworkInheritance");
+            AppendProjectReferenceKeySegment(
+                key,
+                DisablesTargetFrameworkInheritance ? "Disabled" : "Inherited");
             return key.ToString();
         }
     }
@@ -903,6 +952,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string[] sourceInputs,
             EvaluatedProjectReference[] projectReferences,
             string[] targetFrameworks,
+            string? targetPlatformVersion,
             string[] outputRoots,
             string[] expectedOutputPaths,
             string? intermediateRoot,
@@ -924,6 +974,7 @@ public sealed partial class DotNetPublishPipelineRunner
             SourceInputs = sourceInputs;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
+            TargetPlatformVersion = targetPlatformVersion;
             OutputRoots = outputRoots;
             ExpectedOutputPaths = expectedOutputPaths;
             IntermediateRoot = intermediateRoot;
@@ -946,6 +997,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string[] SourceInputs { get; }
         internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }
+        internal string? TargetPlatformVersion { get; }
         internal string[] OutputRoots { get; }
         internal string[] ExpectedOutputPaths { get; }
         internal string? IntermediateRoot { get; }

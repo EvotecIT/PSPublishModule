@@ -4,18 +4,9 @@ using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
-internal static class ReleaseHubRenderer
+internal static partial class ReleaseHubRenderer
 {
     private const string DefaultDataPath = "release_hub";
-    private static readonly Regex HeadingWithIdRegex = new(
-        "<h(?<level>[1-6])(?<attrs>[^>]*)>(?<text>.*?)</h\\1>",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
-    private static readonly Regex IdAttributeRegex = new(
-        "\\sid\\s*=\\s*([\"'])(?<id>[^\"']+)\\1",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private static readonly Regex FragmentLinkRegex = new(
-        "(?<prefix><a\\b[^>]*\\bhref\\s*=\\s*)(?<quote>[\"'])#(?<target>[^\"'#]+)(\\k<quote>)(?<suffix>[^>]*>)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex HtmlTagRegex = new(
         "<[^>]+>",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.Singleline);
@@ -552,53 +543,6 @@ internal static class ReleaseHubRenderer
         return matches;
     }
 
-    private static string NamespaceReleaseBodyHtml(string html, string? releaseTag)
-    {
-        if (string.IsNullOrWhiteSpace(html))
-            return string.Empty;
-
-        var prefix = Slugify(releaseTag);
-        if (string.IsNullOrWhiteSpace(prefix))
-            return html;
-
-        var remappedHeadingIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var namespaced = HeadingWithIdRegex.Replace(html, match =>
-        {
-            var level = match.Groups["level"].Value;
-            var attrs = match.Groups["attrs"].Value;
-            var text = match.Groups["text"].Value;
-
-            var idMatch = IdAttributeRegex.Match(attrs);
-            var baseId = idMatch.Success
-                ? idMatch.Groups["id"].Value
-                : Slugify(Regex.Replace(text, "<.*?>", string.Empty));
-            if (string.IsNullOrWhiteSpace(baseId))
-                return match.Value;
-
-            var namespacedId = NamespaceFragment(prefix, baseId);
-            remappedHeadingIds[baseId] = namespacedId;
-            var attrsWithId = idMatch.Success
-                ? IdAttributeRegex.Replace(attrs, $" id=\"{namespacedId}\"", 1)
-                : (string.IsNullOrWhiteSpace(attrs) ? $" id=\"{namespacedId}\"" : $"{attrs} id=\"{namespacedId}\"");
-            return $"<h{level}{attrsWithId}>{text}</h{level}>";
-        });
-
-        if (remappedHeadingIds.Count == 0)
-            return namespaced;
-
-        return FragmentLinkRegex.Replace(namespaced, match =>
-        {
-            var target = match.Groups["target"].Value;
-            if (string.IsNullOrWhiteSpace(target))
-                return match.Value;
-
-            if (!remappedHeadingIds.TryGetValue(target, out var namespacedTarget))
-                return match.Value;
-
-            return $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}#{namespacedTarget}{match.Groups["quote"].Value}{match.Groups["suffix"].Value}";
-        });
-    }
-
     private static string PolishReleaseBodyHtml(string html)
     {
         if (string.IsNullOrWhiteSpace(html))
@@ -733,19 +677,6 @@ internal static class ReleaseHubRenderer
 
     private static string StripTags(string html)
         => string.IsNullOrWhiteSpace(html) ? string.Empty : HtmlTagRegex.Replace(html, string.Empty);
-
-    private static string NamespaceFragment(string prefix, string fragment)
-    {
-        var normalizedPrefix = Slugify(prefix);
-        var normalizedFragment = Slugify(fragment);
-        if (string.IsNullOrWhiteSpace(normalizedPrefix))
-            return normalizedFragment;
-        if (string.IsNullOrWhiteSpace(normalizedFragment))
-            return normalizedPrefix;
-        if (normalizedFragment.StartsWith(normalizedPrefix + "-", StringComparison.Ordinal))
-            return normalizedFragment;
-        return $"{normalizedPrefix}-{normalizedFragment}";
-    }
 
     private static string Slugify(string? value)
     {

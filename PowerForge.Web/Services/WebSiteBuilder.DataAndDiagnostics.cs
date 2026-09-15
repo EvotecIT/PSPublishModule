@@ -610,21 +610,22 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(html))
             return string.Empty;
 
-        var matches = TocHeaderRegex.Matches(html);
-        if (matches.Count == 0)
+        var headings = HtmlTinkerX.HtmlParser.ParseWithAngleSharp(html).QuerySelectorAll("h2[id], h3[id]")
+            .Where(heading => !string.IsNullOrWhiteSpace(heading.Id) && !string.IsNullOrWhiteSpace(heading.TextContent))
+            .ToArray();
+        if (headings.Length == 0)
             return string.Empty;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<nav class=\"pf-toc\">");
         sb.AppendLine("  <div class=\"pf-toc-title\">On this page</div>");
         sb.AppendLine("  <ul>");
-        foreach (Match match in matches)
+        foreach (var heading in headings)
         {
-            var level = match.Groups["level"].Value;
-            var text = StripTags(match.Groups["text"].Value).Trim();
-            if (string.IsNullOrWhiteSpace(text)) continue;
-            var slug = Slugify(text);
-            sb.AppendLine($"    <li class=\"pf-toc-l{level}\"><a href=\"#{slug}\">{System.Web.HttpUtility.HtmlEncode(text)}</a></li>");
+            var level = heading.LocalName[1];
+            var text = heading.TextContent.Trim();
+            var fragment = Uri.EscapeDataString(heading.Id!);
+            sb.AppendLine($"    <li class=\"pf-toc-l{level}\"><a href=\"#{fragment}\">{System.Web.HttpUtility.HtmlEncode(text)}</a></li>");
         }
         sb.AppendLine("  </ul>");
         sb.AppendLine("</nav>");
@@ -650,7 +651,7 @@ public static partial class WebSiteBuilder
 
     private static void WriteSearchIndex(SiteSpec spec, string outputRoot, IReadOnlyList<ContentItem> items)
     {
-        if (items.Count == 0) return;
+        if (items.Count == 0 && spec.Search?.ApiRoots.Length is not > 0) return;
 
         var entries = new List<SearchIndexEntry>();
         foreach (var item in items)
@@ -679,9 +680,15 @@ public static partial class WebSiteBuilder
                 Meta = BuildSearchMeta(item)
             });
         }
-        if (entries.Count == 0)
+        AppendApiSearchEntries(spec, outputRoot, entries);
+        if (entries.Count == 0 && spec.Search?.ApiRoots.Length is not > 0)
             return;
 
+        WriteSearchArtifacts(spec, outputRoot, entries);
+    }
+
+    private static void WriteSearchArtifacts(SiteSpec spec, string outputRoot, List<SearchIndexEntry> entries)
+    {
         entries = entries
             .OrderByDescending(static entry => entry.Weight)
             .ThenBy(static entry => entry.Title, StringComparer.OrdinalIgnoreCase)

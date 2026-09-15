@@ -32,8 +32,14 @@ public sealed class AppStoreConnectReleasePreparationRequest
     /// <summary>Optional screenshot sync configuration to run after the version exists.</summary>
     public AppStoreConnectScreenshotSyncSpec? ScreenshotSpec { get; set; }
 
+    /// <summary>Additional localized screenshot mappings, with their own path resolution roots.</summary>
+    public AppStoreConnectReleaseScreenshotMapping[] ScreenshotMappings { get; set; } = Array.Empty<AppStoreConnectReleaseScreenshotMapping>();
+
     /// <summary>Optional localized metadata sync configuration to run after the version exists.</summary>
     public AppStoreConnectVersionMetadataSpec? MetadataSpec { get; set; }
+
+    /// <summary>Additional localized version metadata configurations. Locale values must be unique across this array and MetadataSpec.</summary>
+    public AppStoreConnectVersionMetadataSpec[] MetadataSpecs { get; set; } = Array.Empty<AppStoreConnectVersionMetadataSpec>();
 
     /// <summary>App-level metadata sync configurations to apply once per app.</summary>
     public AppStoreConnectAppInfoMetadataSpec[] AppInfoMetadataSpecs { get; set; } = Array.Empty<AppStoreConnectAppInfoMetadataSpec>();
@@ -95,8 +101,14 @@ public sealed class AppStoreConnectReleasePreparationResult
     /// <summary>Screenshot sync result when screenshots were configured.</summary>
     public AppStoreConnectScreenshotSyncResult? Screenshots { get; set; }
 
-    /// <summary>Metadata sync result when metadata was configured.</summary>
+    /// <summary>Screenshot sync results for every configured locale, in configuration order.</summary>
+    public AppStoreConnectScreenshotSyncResult[] ScreenshotResults { get; set; } = Array.Empty<AppStoreConnectScreenshotSyncResult>();
+
+    /// <summary>First metadata sync result, retained for single-localization callers. MetadataResults contains every locale.</summary>
     public AppStoreConnectVersionMetadataSyncResult? Metadata { get; set; }
+
+    /// <summary>Version metadata sync results for every configured locale, in configuration order.</summary>
+    public AppStoreConnectVersionMetadataSyncResult[] MetadataResults { get; set; } = Array.Empty<AppStoreConnectVersionMetadataSyncResult>();
 
     /// <summary>App-level metadata sync results when App Information metadata was configured.</summary>
     public AppStoreConnectAppInfoMetadataSyncResult[] AppInfoMetadataResults { get; set; } = Array.Empty<AppStoreConnectAppInfoMetadataSyncResult>();
@@ -106,4 +118,14 @@ public sealed class AppStoreConnectReleasePreparationResult
 
     /// <summary>Preparation messages useful for release logs.</summary>
     public string[] Messages { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>A localized screenshot mapping and the directory owning its relative paths.</summary>
+public sealed class AppStoreConnectReleaseScreenshotMapping
+{
+    /// <summary>Localized screenshot configuration.</summary>
+    public AppStoreConnectScreenshotSyncSpec Spec { get; set; } = new();
+
+    /// <summary>Directory used to resolve screenshot and approval manifest paths.</summary>
+    public string BaseDirectory { get; set; } = Directory.GetCurrentDirectory();
 }

@@ -73,15 +73,28 @@ public sealed partial class ModulePipelineRunner
         ExecutePackageBuildsAfterModule(plan, session, state);
         ValidateRequestedReleaseVersion(plan, state);
 
-        ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
-        ValidateFinalizedModulePayloadIntegrity(state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
-        ExecutePublishOperations(plan, session, buildResult, state);
-        ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
+        var publishingEnabled = plan.GateMode is null or ConfigurationGateMode.Publish;
+        if (publishingEnabled)
+        {
+            ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
+            ValidateFinalizedModulePayloadIntegrity(state);
+            ValidateFinalizedPackedArtefactIntegrity(state);
+            ExecutePublishOperations(plan, session, buildResult, state);
+            ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
+            ValidateFinalizedModulePayloadIntegrity(state);
+            ValidateFinalizedPackedArtefactIntegrity(state);
+        }
+        else
+        {
+            SkipActions(ModulePipelineActionStage.BeforePublish, plan, session);
+            ExecutePublishOperations(plan, session, buildResult, state);
+            SkipActions(ModulePipelineActionStage.AfterPublish, plan, session);
+        }
         state.ReleaseCoordinationResult ??= PrepareUnifiedReleaseAssets(plan, state, publishId: null);
 
         ExecuteActions(ModulePipelineActionStage.BeforeInstall, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
+        ValidateFinalizedPackedArtefactIntegrity(state);
         if (plan.InstallEnabled)
         {
             session.Start(session.InstallStep);
@@ -140,5 +153,7 @@ public sealed partial class ModulePipelineRunner
             }
         }
         ExecuteActions(ModulePipelineActionStage.AfterInstall, plan, session, state);
+        ValidateFinalizedModulePayloadIntegrity(state);
+        ValidateFinalizedPackedArtefactIntegrity(state);
     }
 }

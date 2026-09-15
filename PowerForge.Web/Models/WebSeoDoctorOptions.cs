@@ -38,7 +38,7 @@ public sealed class WebSeoDoctorOptions
     public bool CheckSourceMarkdownImageAlt { get; set; }
     /// <summary>Optional source content root used by source Markdown checks.</summary>
     public string? ContentRoot { get; set; }
-    /// <summary>When true, detect duplicate title intent across pages.</summary>
+    /// <summary>When true, detect duplicate title intent across pages with the same declared document language, preserving region and script distinctions.</summary>
     public bool CheckDuplicateTitles { get; set; } = true;
     /// <summary>When true, detect orphan page candidates (zero inbound links).</summary>
     public bool CheckOrphanPages { get; set; } = true;
@@ -63,11 +63,11 @@ public sealed class WebSeoDoctorOptions
     /// <summary>When true, emit warning when no JSON-LD structured data blocks are present.</summary>
     public bool RequireStructuredData { get; set; }
 
-    /// <summary>Minimum recommended title length.</summary>
+    /// <summary>Minimum recommended title length. Halved for Japanese, Korean, and Chinese document languages.</summary>
     public int MinTitleLength { get; set; } = 30;
     /// <summary>Maximum recommended title length.</summary>
     public int MaxTitleLength { get; set; } = 60;
-    /// <summary>Minimum recommended meta description length.</summary>
+    /// <summary>Minimum recommended meta description length. Halved for Japanese, Korean, and Chinese document languages.</summary>
     public int MinDescriptionLength { get; set; } = 70;
     /// <summary>Maximum recommended meta description length.</summary>
     public int MaxDescriptionLength { get; set; } = 160;

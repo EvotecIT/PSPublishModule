@@ -28,6 +28,7 @@ internal sealed partial class PowerForgeReleaseService
         bool? skipInstall = null,
         bool? includeProjectPackages = null,
         bool? reuseStaging = null,
+        bool? releaseCheckpoint = null,
         CancellationToken cancellationToken = default)
     {
         var originalRunMode = request.RunMode;
@@ -37,6 +38,7 @@ internal sealed partial class PowerForgeReleaseService
         var originalSkipInstall = request.SkipInstall;
         var originalIncludeProjectPackages = request.IncludeProjectPackages;
         var originalReuseStaging = request.ReuseStaging;
+        var originalReleaseCheckpoint = request.ReleaseCheckpoint;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -53,6 +55,8 @@ internal sealed partial class PowerForgeReleaseService
                 request.IncludeProjectPackages = includeProjectPackages.Value;
             if (reuseStaging.HasValue)
                 request.ReuseStaging = reuseStaging.Value;
+            if (releaseCheckpoint.HasValue)
+                request.ReleaseCheckpoint = releaseCheckpoint.Value;
 
             return _executeModuleBuild(request, cancellationToken);
         }
@@ -65,31 +69,34 @@ internal sealed partial class PowerForgeReleaseService
             request.SkipInstall = originalSkipInstall;
             request.IncludeProjectPackages = originalIncludeProjectPackages;
             request.ReuseStaging = originalReuseStaging;
+            request.ReleaseCheckpoint = originalReleaseCheckpoint;
         }
     }
 
-    private sealed class DeferredModuleStagingDirectory : IDisposable
+    private sealed class TemporaryReleaseDirectory : IDisposable
     {
         private readonly ILogger _logger;
         private string? _path;
 
-        public DeferredModuleStagingDirectory(ILogger logger)
+        public TemporaryReleaseDirectory(ILogger logger)
         {
             _logger = logger;
         }
 
-        public string GetOrCreatePath()
+        public string GetOrCreateSubdirectory(string name)
         {
-            if (_path is not null)
-                return _path;
+            if (_path is null)
+            {
+                _path = Path.Combine(
+                    Path.GetTempPath(),
+                    "PowerForge",
+                    "unified-release",
+                    Guid.NewGuid().ToString("N"));
+            }
 
-            _path = Path.Combine(
-                Path.GetTempPath(),
-                "PowerForge",
-                "unified-release",
-                Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(_path);
-            return _path;
+            string path = Path.Combine(_path, name);
+            Directory.CreateDirectory(path);
+            return path;
         }
 
         public void Dispose()
@@ -104,7 +111,7 @@ internal sealed partial class PowerForgeReleaseService
             catch (Exception exception)
             {
                 _logger.Verbose(
-                    $"Unable to remove deferred module staging directory '{_path}': {exception.Message}");
+                    $"Unable to remove temporary release directory '{_path}': {exception.Message}");
             }
         }
     }

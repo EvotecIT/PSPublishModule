@@ -17,6 +17,9 @@ public sealed class DotNetPublishTarget
     /// <summary>Target kind (optional; affects heuristics like executable discovery).</summary>
     public DotNetPublishTargetKind Kind { get; set; } = DotNetPublishTargetKind.Unknown;
 
+    /// <summary>Optional supported runtime set. Supplies the default target matrix and rejects incompatible runtime overrides.</summary>
+    public string[] SupportedRuntimes { get; set; } = Array.Empty<string>();
+
     /// <summary>Publish options for this target.</summary>
     public DotNetPublishPublishOptions Publish { get; set; } = new();
 }

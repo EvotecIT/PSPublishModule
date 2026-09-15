@@ -14,7 +14,6 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
 {
     internal const long MaxManifestBytes = 16L * 1024L * 1024L;
     internal const long MaxConfigurationBytes = 16L * 1024L * 1024L;
-    private static readonly JsonSerializerOptions ConfigurationJsonOptions = CreateConfigurationJsonOptions();
     private readonly Func<string, DotNetPublishMsiPackageMetadata> _readPackage;
     private readonly Func<string, AuthenticodeResult> _verifyAuthenticode;
 
@@ -291,24 +290,29 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         ReadConfiguredPublishSpecWithInputs(configurationPath).Configuration;
 
     internal static DotNetPublishConfiguredSpec ReadConfiguredPublishSpecWithInputs(string configurationPath)
+        => ReadConfiguredPublishSpecWithInputsAsync(configurationPath).GetAwaiter().GetResult();
+
+    /// <summary>Loads the direct or referenced publish configuration using bounded cancellable metadata reads.</summary>
+    internal static async Task<DotNetPublishConfiguredSpec> ReadConfiguredPublishSpecWithInputsAsync(
+        string configurationPath, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         configurationPath = RequireFile(configurationPath, nameof(configurationPath));
-        var json = ReadBoundedText(configurationPath, "PowerForge release configuration", MaxConfigurationBytes);
+        var json = await ReadBoundedTextAsync(configurationPath, "PowerForge release configuration",
+            MaxConfigurationBytes, cancellationToken).ConfigureAwait(false);
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions
         {
             CommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true
         });
-        if (!TryGet(document.RootElement, "Tools", out _))
+        if (!TryGet(document.RootElement, "Tools", out var toolsElement))
         {
-            var direct = JsonSerializer.Deserialize<DotNetPublishSpec>(json, ConfigurationJsonOptions)
+            var direct = JsonSerializer.Deserialize(json, DotNetPublishConfigurationJsonContext.Default.DotNetPublishSpec)
                 ?? throw Invalid("PowerForge dotnet-publish configuration could not be deserialized.");
             return new DotNetPublishConfiguredSpec(direct, new[] { configurationPath });
         }
 
-        var release = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(json, ConfigurationJsonOptions)
-            ?? throw Invalid("PowerForge release configuration could not be deserialized.");
-        var tools = release.Tools
+        var tools = JsonSerializer.Deserialize(toolsElement.GetRawText(), DotNetPublishConfigurationJsonContext.Default.PowerForgeToolReleaseSpec)
             ?? throw Invalid("PowerForge release configuration does not define Tools.DotNetPublish.");
         if (tools.DotNetPublish is not null && !string.IsNullOrWhiteSpace(tools.DotNetPublishConfigPath))
             throw Invalid("Tools.DotNetPublish and Tools.DotNetPublishConfigPath are mutually exclusive.");
@@ -327,23 +331,43 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
                 ? configuredPath
                 : Path.Combine(root, configuredPath));
             path = RequireFile(path, "Tools.DotNetPublishConfigPath");
-            var externalJson = ReadBoundedText(
+            var externalJson = await ReadBoundedTextAsync(
                 path,
                 "Referenced PowerForge dotnet-publish configuration",
-                MaxConfigurationBytes);
-            configuration = JsonSerializer.Deserialize<DotNetPublishSpec>(externalJson, ConfigurationJsonOptions)
+                MaxConfigurationBytes, cancellationToken).ConfigureAwait(false);
+            configuration = JsonSerializer.Deserialize(externalJson, DotNetPublishConfigurationJsonContext.Default.DotNetPublishSpec)
                 ?? throw Invalid("Referenced PowerForge dotnet-publish configuration could not be deserialized.");
             inputPaths.Add(path);
         }
 
         if (!string.IsNullOrWhiteSpace(tools.DotNetPublishProfile))
             configuration.Profile = tools.DotNetPublishProfile!.Trim();
+        cancellationToken.ThrowIfCancellationRequested();
         return new DotNetPublishConfiguredSpec(configuration, inputPaths.ToArray());
     }
 
     private static string ReadBoundedText(string path, string label, long maximumBytes)
+        => ReadBoundedTextAsync(path, label, maximumBytes).GetAwaiter().GetResult();
+
+    /// <summary>Reads bounded BOM-aware release metadata, honoring cancellation between asynchronous reads.</summary>
+    internal static async Task<string> ReadBoundedTextAsync(string path, string label, long maximumBytes,
+        CancellationToken cancellationToken = default)
     {
-        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var content = await ReadBoundedMetadataAsync(path, label, maximumBytes, cancellationToken).ConfigureAwait(false);
+        using var bytes = new MemoryStream(content, writable: false);
+        using var reader = new StreamReader(bytes, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var text = reader.ReadToEnd();
+        cancellationToken.ThrowIfCancellationRequested();
+        return text;
+    }
+
+    /// <summary>Reads at most the allowed release metadata bytes, leaving format-specific decoding to its owner.</summary>
+    internal static async Task<byte[]> ReadBoundedMetadataAsync(string path, string label, long maximumBytes,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        FileSystemPathSafety.RequireRegularFile(path, followSymbolicLinks: true);
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
         if (input.Length > maximumBytes)
             throw Invalid($"{label} exceeds the {maximumBytes} byte limit.");
 
@@ -352,7 +376,8 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         long total = 0;
         while (true)
         {
-            int read = input.Read(buffer, 0, buffer.Length);
+            cancellationToken.ThrowIfCancellationRequested();
+            int read = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
             if (read == 0)
                 break;
             total = checked(total + read);
@@ -361,9 +386,8 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             bytes.Write(buffer, 0, read);
         }
 
-        bytes.Position = 0;
-        using var reader = new StreamReader(bytes, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return reader.ReadToEnd();
+        cancellationToken.ThrowIfCancellationRequested();
+        return bytes.ToArray();
     }
 
     private static void ValidatePackage(
@@ -420,38 +444,14 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         if (matchingTargets.Length != 1 || matchingTargets[0].Publish is null)
             throw Invalid($"PowerForge configuration does not define the installer target '{targetName}'.");
 
-        var publish = matchingTargets[0].Publish;
-        var frameworks = NormalizeConfiguredStrings(publish.Frameworks);
-        if (frameworks.Length == 0 && !string.IsNullOrWhiteSpace(publish.Framework))
-            frameworks = new[] { publish.Framework.Trim() };
-        if (frameworks.Length == 0)
-            frameworks = NormalizeConfiguredStrings(configuration.Matrix?.Frameworks);
-
-        var runtimes = NormalizeConfiguredStrings(publish.Runtimes);
-        if (runtimes.Length == 0)
-            runtimes = NormalizeConfiguredStrings(configuration.Matrix?.Runtimes);
-        if (runtimes.Length == 0)
-            runtimes = NormalizeConfiguredStrings(configuration.DotNet.Runtimes);
-
-        var styles = (publish.Styles ?? Array.Empty<DotNetPublishStyle>()).Distinct().ToArray();
-        if (styles.Length == 0)
-            styles = (configuration.Matrix?.Styles ?? Array.Empty<DotNetPublishStyle>()).Distinct().ToArray();
-        if (styles.Length == 0)
-            styles = new[] { publish.Style };
-        if (frameworks.Length == 0 || runtimes.Length == 0)
-            throw Invalid($"PowerForge configuration does not resolve publish dimensions for installer target '{targetName}'.");
-
-        var combinations = (from framework in frameworks
-                            from runtime in runtimes
-                            from style in styles
-                            select new ExpectedCombination(targetName, runtime, framework, style.ToString()))
-            .ToArray();
-        var include = configuration.Matrix?.Include ?? Array.Empty<DotNetPublishMatrixRule>();
-        if (include.Length > 0)
-            combinations = combinations.Where(combination => include.Any(rule => RuleMatches(combination, rule))).ToArray();
-        var exclude = configuration.Matrix?.Exclude ?? Array.Empty<DotNetPublishMatrixRule>();
-        if (exclude.Length > 0)
-            combinations = combinations.Where(combination => !exclude.Any(rule => RuleMatches(combination, rule))).ToArray();
+        ExpectedCombination[] combinations;
+        try
+        {
+            combinations = DotNetPublishPipelineRunner.ResolveTargetCombinations(matchingTargets[0], configuration)
+                .Select(combo => new ExpectedCombination(targetName, combo.Runtime, combo.Framework, combo.Style.ToString()))
+                .ToArray();
+        }
+        catch (ArgumentException ex) { throw Invalid(ex.Message); }
 
         var installerRuntimes = NormalizeConfiguredStrings(installer.Runtimes);
         var installerFrameworks = NormalizeConfiguredStrings(installer.Frameworks);
@@ -474,16 +474,6 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private static bool RuleMatches(ExpectedCombination combination, DotNetPublishMatrixRule? rule)
-    {
-        if (rule is null)
-            return false;
-        var targets = NormalizeConfiguredStrings(rule.Targets);
-        return (targets.Length == 0 || targets.Any(pattern => DotNetPublishPipelineRunner.WildcardMatch(combination.Target, pattern))) &&
-               (string.IsNullOrWhiteSpace(rule.Runtime) || DotNetPublishPipelineRunner.WildcardMatch(combination.Runtime, rule.Runtime!.Trim())) &&
-               (string.IsNullOrWhiteSpace(rule.Framework) || DotNetPublishPipelineRunner.WildcardMatch(combination.Framework, rule.Framework!.Trim())) &&
-               (string.IsNullOrWhiteSpace(rule.Style) || DotNetPublishPipelineRunner.WildcardMatch(combination.Style, rule.Style!.Trim()));
-    }
 
     private static void ValidateEqual(string? expected, string? actual, string name)
     {
@@ -520,6 +510,18 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
         using var input = File.OpenRead(path);
         using var hash = SHA256.Create();
         return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", string.Empty);
+    }
+
+    internal static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+        using var hash = SHA256.Create();
+        using var sink = new CryptoStream(Stream.Null, hash, CryptoStreamMode.Write);
+        await input.CopyToAsync(sink, 81920, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        sink.FlushFinalBlock();
+        return BitConverter.ToString(hash.Hash!).Replace("-", string.Empty);
     }
 
     private static JsonElement[] FilterEntries(JsonElement[] entries, string propertyName, string? selector)
@@ -559,18 +561,6 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             return fullPath;
         return Uri.UnescapeDataString(relativeUri.ToString())
             .Replace('/', Path.DirectorySeparatorChar);
-    }
-
-    private static JsonSerializerOptions CreateConfigurationJsonOptions()
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
     }
 
     internal static string ResolveArtifactPath(string root, string relativePath, bool allowOutsideProjectRoot)

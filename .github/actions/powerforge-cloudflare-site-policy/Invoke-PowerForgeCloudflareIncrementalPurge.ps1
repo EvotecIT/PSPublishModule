@@ -72,7 +72,13 @@ if ($fallbackReasons.Count -gt 0) {
     $arguments += @('--force-hostname-fallback-reason', ($fallbackReasons -join '; '))
 }
 
-dotnet @arguments
-if ($LASTEXITCODE -ne 0) {
-    throw "Applying the incremental Cloudflare purge failed with exit code $LASTEXITCODE."
+Push-Location $engineRoot
+try {
+    dotnet @arguments
+    $cliExitCode = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+if ($cliExitCode -ne 0) {
+    throw "Applying the incremental Cloudflare purge failed with exit code $cliExitCode."
 }

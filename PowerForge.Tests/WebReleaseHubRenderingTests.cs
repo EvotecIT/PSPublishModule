@@ -2,7 +2,7 @@ using PowerForge.Web;
 
 namespace PowerForge.Tests;
 
-public class WebReleaseHubRenderingTests
+public partial class WebReleaseHubRenderingTests
 {
     [Fact]
     public void Build_RendersPfReleaseHelpers_FromReleaseHubData()

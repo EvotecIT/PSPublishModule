@@ -6,6 +6,9 @@ LOCK_ROOT="${POWERFORGE_SERVICE_LOCK_ROOT:-/var/lock}"
 TRUSTED_STAGE_ROOT="${POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT:-/var/lib/powerforge/service-deployment-staging}"
 TRANSACTION_ROOT="${POWERFORGE_SERVICE_TRANSACTION_ROOT:-/var/lib/powerforge/service-deployment-state}"
 SYSTEMD_CONFIG_ROOT="${POWERFORGE_SYSTEMD_CONFIG_ROOT:-/etc/systemd/system}"
+MAX_DEPLOYMENT_PAYLOAD_BYTES=1073741824
+MAX_DEPLOYMENT_METADATA_BYTES=1048576
+MAX_RELEASE_ARCHIVE_ENTRIES=100000
 deployment_shell_pid="$BASHPID"
 service_id="" archive="" metadata=""
 promoted=0 previous_target="" release_dir="" candidate_link=""
@@ -558,6 +561,17 @@ metadata="$(realpath -e "$metadata")"
 [[ -f "$metadata" && ! -L "$metadata" ]] || fail 'Metadata must be a regular file, not a symlink.'
 [[ "$archive" == "$workflow_stage/artifact.tar" ]] || fail 'Artifact is outside the service staging path.'
 [[ "$metadata" == "$workflow_stage/deployment.json" ]] || fail 'Metadata is outside the service staging path.'
+archive_size="$(stat -c '%s' -- "$archive")"
+metadata_size="$(stat -c '%s' -- "$metadata")"
+archive_blocks="$(stat -c '%b' -- "$archive")"
+metadata_blocks="$(stat -c '%b' -- "$metadata")"
+(( archive_size > 0 && archive_size <= MAX_DEPLOYMENT_PAYLOAD_BYTES )) || fail 'Artifact is empty or exceeds the deployment size limit.'
+(( metadata_size > 0 && metadata_size <= MAX_DEPLOYMENT_METADATA_BYTES )) || fail 'Metadata is empty or exceeds the deployment size limit.'
+(( archive_size + metadata_size <= MAX_DEPLOYMENT_PAYLOAD_BYTES )) || fail 'Combined deployment payload exceeds 1 GiB.'
+(( archive_blocks * 512 >= archive_size )) || fail 'Sparse service artifacts are not supported.'
+(( metadata_blocks * 512 >= metadata_size )) || fail 'Sparse deployment metadata is not supported.'
+command -v file >/dev/null 2>&1 || fail 'The file utility is required to validate service artifacts.'
+[[ "$(file --brief --mime-type -- "$archive")" == application/x-tar ]] || fail 'Artifact must be an uncompressed tar archive.'
 if [[ -n "${SUDO_UID:-}" ]]; then
   [[ "$(stat -c '%u' "$archive")" -eq "$SUDO_UID" ]] || fail 'Artifact owner does not match the invoking deployment account.'
   [[ "$(stat -c '%u' "$metadata")" -eq "$SUDO_UID" ]] || fail 'Metadata owner does not match the invoking deployment account.'
@@ -582,15 +596,35 @@ run_attempt="$(json_string workflowRunAttempt)"
 [[ "$run_id" =~ ^[0-9]+$ && "$run_attempt" =~ ^[0-9]+$ ]] || fail 'Metadata workflow run identity is invalid.'
 actual_artifact_sha="$(sha256sum "$archive" | awk '{print $1}')"
 [[ "$actual_artifact_sha" == "$artifact_sha" ]] || fail 'Artifact checksum does not match deployment metadata.'
-while IFS= read -r entry; do
-  stripped="${entry#./}"
-  [[ "$entry" != /* ]] || fail "Archive contains an absolute path: $entry"
-  [[ "/${stripped}/" != *'/../'* ]] || fail "Archive contains path traversal: $entry"
-done < <(tar -tf "$archive")
-while IFS= read -r listing; do
-  entry_type="${listing:0:1}"
-  [[ "$entry_type" == '-' || "$entry_type" == 'd' ]] || fail 'Archive contains links or special files.'
-done < <(tar -tvf "$archive")
+if ! LC_ALL=C tar --list --quoting-style=escape --file "$archive" | (
+  archive_entry_count=0
+  while IFS= read -r entry; do
+    archive_entry_count=$((archive_entry_count + 1))
+    (( archive_entry_count <= MAX_RELEASE_ARCHIVE_ENTRIES )) || fail 'Archive contains too many members.'
+    stripped="${entry#./}"
+    [[ "$entry" != /* ]] || fail "Archive contains an absolute path: $entry"
+    [[ "/${stripped}/" != *'/../'* ]] || fail "Archive contains path traversal: $entry"
+  done
+); then
+  fail 'Unable to validate service artifact paths and member count.'
+fi
+if ! LC_ALL=C tar --list --verbose --numeric-owner --full-time --quoting-style=escape --file "$archive" | (
+  archive_entry_count=0
+  archive_logical_bytes=0
+  while IFS= read -r listing; do
+    read -r entry_mode _ entry_size _ _ _ <<<"$listing"
+    [[ "$entry_size" =~ ^[0-9]{1,10}$ ]] || fail 'Archive contains a member with an invalid logical size.'
+    entry_type="${entry_mode:0:1}"
+    [[ "$entry_type" == '-' || "$entry_type" == 'd' ]] || fail 'Archive contains links or special files.'
+    archive_entry_count=$((archive_entry_count + 1))
+    (( entry_size <= MAX_DEPLOYMENT_PAYLOAD_BYTES )) || fail 'Archive contains a member beyond the deployment size limit.'
+    (( archive_logical_bytes <= MAX_DEPLOYMENT_PAYLOAD_BYTES - entry_size )) || fail 'Archive expands beyond the deployment size limit.'
+    archive_logical_bytes=$((archive_logical_bytes + entry_size))
+    (( archive_entry_count <= MAX_RELEASE_ARCHIVE_ENTRIES )) || fail 'Archive contains too many members.'
+  done
+); then
+  fail 'Unable to validate service artifact members and expanded size.'
+fi
 release_id="$(date -u +%Y%m%d%H%M%S)-${run_id}-${run_attempt}-${source_sha:0:12}"
 release_dir="$resolved_release_root/$release_id"
 [[ ! -e "$release_dir" ]] || fail "Release already exists: $release_id"

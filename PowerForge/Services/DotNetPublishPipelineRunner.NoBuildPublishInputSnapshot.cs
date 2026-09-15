@@ -61,7 +61,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(input => noBuildInPublish || input.IsPackageBacked)
             .ToArray();
 
-    private static string BuildPublishEvaluationRequestKey(
+    internal static string BuildPublishEvaluationRequestKey(
         DotNetPublishPlan plan,
         DotNetPublishTargetPlan target,
         string framework,
@@ -78,13 +78,25 @@ public sealed partial class DotNetPublishPipelineRunner
             plan,
             target,
             combination);
+        IReadOnlyDictionary<string, string>? sdkPackageEvidenceGlobalProperties =
+            style == DotNetPublishStyle.SelfContained
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PublishSingleFile"] = "true"
+                }
+                : null;
         return new ProjectEvaluationRequest(
                 Path.GetFullPath(target.ProjectPath),
                 framework,
                 plan.Configuration,
                 properties,
                 plan.EnvironmentVariables,
-                plan.ControlledBuildEnvironmentVariableNames)
+                plan.ControlledBuildEnvironmentVariableNames,
+                plan.TrustedBuildPackages,
+                sdkPackageEvidenceGlobalProperties: sdkPackageEvidenceGlobalProperties,
+                requiresPrebuiltProjectReferenceOutputProof:
+                    RequiresPrebuiltProjectReferenceOutputProof(plan, target, combination),
+                evaluationScopeRootPath: target.ProjectPath)
             .BuildVisitKey();
     }
 
@@ -92,8 +104,12 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         private readonly string _root;
         private readonly List<FileStream> _leases;
-        private readonly IReadOnlyDictionary<string, string> _expectedHashes;
-        private readonly FileSystemWatcher _watcher;
+        private readonly IReadOnlyDictionary<string, SnapshotFileState> _expectedStates;
+        private readonly FileSystemWatcher? _watcher;
+#if NET8_0_OR_GREATER
+        private readonly MacOsVnodeMutationMonitor? _macOsMonitor;
+#endif
+        private string? _changeDescription;
         private int _changed;
         private bool _disposed;
 
@@ -101,14 +117,30 @@ public sealed partial class DotNetPublishPipelineRunner
             string root,
             string targetsPath,
             List<FileStream> leases,
-            IReadOnlyDictionary<string, string> expectedHashes,
-            FileSystemWatcher watcher)
+            IReadOnlyDictionary<string, SnapshotFileState> expectedStates,
+            IReadOnlyDictionary<string, FileStream> leasedFiles)
         {
             _root = root;
             TargetsPath = targetsPath;
             _leases = leases;
-            _expectedHashes = expectedHashes;
-            _watcher = watcher;
+            _expectedStates = expectedStates;
+#if NET8_0_OR_GREATER
+            if (OperatingSystem.IsMacOS())
+            {
+                _macOsMonitor = new MacOsVnodeMutationMonitor(leasedFiles, RecordChange);
+                return;
+            }
+#endif
+            _watcher = new FileSystemWatcher(root)
+            {
+                IncludeSubdirectories = true,
+                InternalBufferSize = 64 * 1024,
+                NotifyFilter = NotifyFilters.FileName |
+                               NotifyFilters.DirectoryName |
+                               NotifyFilters.LastWrite |
+                               NotifyFilters.Size |
+                               NotifyFilters.Security
+            };
             _watcher.Changed += MarkChanged;
             _watcher.Created += MarkChanged;
             _watcher.Deleted += MarkChanged;
@@ -128,7 +160,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 "powerforge-no-build-publish-" + Guid.NewGuid().ToString("N"));
             string inputRoot = Path.Combine(root, "inputs");
             var leases = new List<FileStream>();
-            var expectedHashes = new Dictionary<string, string>(
+            var leasedFiles = new Dictionary<string, FileStream>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var expectedStates = new Dictionary<string, SnapshotFileState>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             try
             {
@@ -163,13 +197,16 @@ public sealed partial class DotNetPublishPipelineRunner
                         input.FullPath,
                         snapshotPath,
                         input.UnixFileMode,
-                        leases);
+                        leases,
+                        leasedFiles);
                     if (!string.Equals(actualSha256, input.Sha256, StringComparison.OrdinalIgnoreCase))
                     {
                         throw new InvalidOperationException(
                             $"A no-build publish input changed after controlled proof: {input.FullPath}.");
                     }
-                    expectedHashes[snapshotPath] = actualSha256;
+                    expectedStates[snapshotPath] = SnapshotFileState.Capture(
+                        snapshotPath,
+                        actualSha256);
                     mappedInputs.Add((groupedInputs, snapshotPath));
                 }
 
@@ -181,23 +218,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     FileAccess.Read,
                     FileShare.Read);
                 leases.Add(targetsLease);
-                expectedHashes[targetsPath] = ComputeSha256Hex(File.ReadAllBytes(targetsPath));
-                var watcher = new FileSystemWatcher(root)
-                {
-                    IncludeSubdirectories = true,
-                    InternalBufferSize = 64 * 1024,
-                    NotifyFilter = NotifyFilters.FileName |
-                                   NotifyFilters.DirectoryName |
-                                   NotifyFilters.LastWrite |
-                                   NotifyFilters.Size |
-                                   NotifyFilters.Security
-                };
+                leasedFiles[targetsPath] = targetsLease;
+                expectedStates[targetsPath] = SnapshotFileState.Capture(targetsPath);
                 return new NoBuildPublishInputSnapshot(
                     root,
                     targetsPath,
                     leases,
-                    expectedHashes,
-                    watcher);
+                    expectedStates,
+                    leasedFiles);
             }
             catch
             {
@@ -210,27 +238,31 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal void ValidateUnchanged()
         {
+#if NET8_0_OR_GREATER
+            _macOsMonitor?.Synchronize();
+#endif
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
-                    "A proven no-build publish snapshot was mutated while dotnet publish was running.");
+                    "A proven no-build publish snapshot was mutated while dotnet publish was running: " +
+                    (_changeDescription ?? "the filesystem watcher reported an unspecified change") + ".");
             }
-            foreach (KeyValuePair<string, string> entry in _expectedHashes)
+            foreach (KeyValuePair<string, SnapshotFileState> entry in _expectedStates)
             {
-                if (!File.Exists(entry.Key) ||
-                    !string.Equals(
-                        ComputeSha256Hex(File.ReadAllBytes(entry.Key)),
-                        entry.Value,
-                        StringComparison.OrdinalIgnoreCase))
+                if (!entry.Value.Matches(entry.Key))
                 {
                     throw new InvalidOperationException(
                         $"A proven no-build publish snapshot changed while dotnet publish was running: {entry.Key}.");
                 }
             }
+#if NET8_0_OR_GREATER
+            _macOsMonitor?.Synchronize();
+#endif
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
-                    "A proven no-build publish snapshot was mutated while dotnet publish was running.");
+                    "A proven no-build publish snapshot was mutated while dotnet publish was running: " +
+                    (_changeDescription ?? "the filesystem watcher reported an unspecified change") + ".");
             }
         }
 
@@ -239,27 +271,104 @@ public sealed partial class DotNetPublishPipelineRunner
             if (_disposed)
                 return;
             _disposed = true;
-            _watcher.EnableRaisingEvents = false;
-            _watcher.Dispose();
+#if NET8_0_OR_GREATER
+            _macOsMonitor?.Dispose();
+#endif
+            if (_watcher is not null)
+            {
+                _watcher.EnableRaisingEvents = false;
+                _watcher.Dispose();
+            }
             foreach (FileStream lease in _leases)
                 lease.Dispose();
             TryDeleteSnapshotRoot(_root);
         }
 
         private void MarkChanged(object sender, FileSystemEventArgs args)
-            => Interlocked.Exchange(ref _changed, 1);
+            => RecordChange($"{args.ChangeType} '{args.FullPath}'");
 
         private void MarkChanged(object sender, RenamedEventArgs args)
-            => Interlocked.Exchange(ref _changed, 1);
+            => RecordChange($"renamed '{args.OldFullPath}' to '{args.FullPath}'");
 
         private void MarkChanged(object sender, ErrorEventArgs args)
-            => Interlocked.Exchange(ref _changed, 1);
+            => RecordChange(
+                "the filesystem watcher failed: " +
+                (args.GetException()?.Message ?? "its buffer overflowed"));
+
+        private void RecordChange(string description)
+        {
+            Interlocked.CompareExchange(ref _changeDescription, description, null);
+            Interlocked.Exchange(ref _changed, 1);
+        }
+
+        private sealed class SnapshotFileState
+        {
+            private SnapshotFileState(string sha256, long length, DateTime lastWriteTimeUtc, int? unixFileMode)
+            {
+                Sha256 = sha256;
+                Length = length;
+                LastWriteTimeUtc = lastWriteTimeUtc;
+                UnixFileMode = unixFileMode;
+            }
+
+            private string Sha256 { get; }
+
+            private long Length { get; }
+
+            private DateTime LastWriteTimeUtc { get; }
+
+            private int? UnixFileMode { get; }
+
+            internal static SnapshotFileState Capture(string path, string? sha256 = null)
+            {
+                var info = new FileInfo(path);
+                return new SnapshotFileState(
+                    sha256 ?? ComputeSha256Hex(File.ReadAllBytes(path)),
+                    info.Length,
+                    info.LastWriteTimeUtc,
+                    ReadUnixFileMode(path));
+            }
+
+            internal bool Matches(string path)
+            {
+                try
+                {
+                    var info = new FileInfo(path);
+                    return info.Exists &&
+                           info.Length == Length &&
+                           info.LastWriteTimeUtc == LastWriteTimeUtc &&
+                           ReadUnixFileMode(path) == UnixFileMode &&
+                           string.Equals(
+                               ComputeSha256Hex(File.ReadAllBytes(path)),
+                               Sha256,
+                               StringComparison.OrdinalIgnoreCase);
+                }
+                catch (IOException)
+                {
+                    return false;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return false;
+                }
+            }
+
+            private static int? ReadUnixFileMode(string path)
+            {
+#if NET8_0_OR_GREATER
+                return OperatingSystem.IsWindows() ? null : (int)File.GetUnixFileMode(path);
+#else
+                return null;
+#endif
+            }
+        }
 
         private static string CopyAndHashSnapshot(
             string sourcePath,
             string snapshotPath,
             int? expectedUnixFileMode,
-            ICollection<FileStream> leases)
+            ICollection<FileStream> leases,
+            IDictionary<string, FileStream> leasedFiles)
         {
             DateTime sourceLastWriteTimeUtc = File.GetLastWriteTimeUtc(sourcePath);
 #if NET8_0_OR_GREATER
@@ -309,11 +418,13 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!OperatingSystem.IsWindows() && sourceUnixFileMode.HasValue)
                 File.SetUnixFileMode(snapshotPath, sourceUnixFileMode.Value);
 #endif
-            leases.Add(new FileStream(
+            var lease = new FileStream(
                 snapshotPath,
                 FileMode.Open,
                 FileAccess.Read,
-                FileShare.Read));
+                FileShare.Read);
+            leases.Add(lease);
+            leasedFiles[snapshotPath] = lease;
             return ToUpperHex(hash.GetHashAndReset());
         }
 

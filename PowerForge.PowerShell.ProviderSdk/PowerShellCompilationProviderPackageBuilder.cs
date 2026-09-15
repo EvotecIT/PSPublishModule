@@ -268,7 +268,8 @@ public sealed class PowerShellCompilationProviderPackageBuilder
         var dependencies = string.Join(string.Empty, manifest.Dependencies
             .OrderBy(static dependency => dependency.PackageId, StringComparer.Ordinal)
             .Select(static dependency => $"<dependency id=\"{Xml(dependency.PackageId)}\" version=\"[{Xml(dependency.Version)}]\" />"));
-        return $"<?xml version=\"1.0\" encoding=\"utf-8\"?><package><metadata><id>{Xml(manifest.PackageId)}</id><version>{Xml(manifest.PackageVersion)}</version><authors>{Xml(manifest.Publisher)}</authors><description>PowerForge PowerShell compilation provider metadata.</description><license type=\"expression\">{Xml(manifest.LicenseExpression)}</license><dependencies><group targetFramework=\"net8.0\">{dependencies}</group></dependencies></metadata></package>";
+        var licenseUrl = "https://licenses.nuget.org/" + Uri.EscapeDataString(manifest.LicenseExpression);
+        return $"<?xml version=\"1.0\" encoding=\"utf-8\"?><package><metadata><id>{Xml(manifest.PackageId)}</id><version>{Xml(manifest.PackageVersion)}</version><authors>{Xml(manifest.Publisher)}</authors><description>PowerForge PowerShell compilation provider metadata.</description><license type=\"expression\">{Xml(manifest.LicenseExpression)}</license><licenseUrl>{Xml(licenseUrl)}</licenseUrl><dependencies><group targetFramework=\"net8.0\">{dependencies}</group></dependencies></metadata></package>";
     }
 
     private static string Xml(string value) => System.Security.SecurityElement.Escape(value) ?? string.Empty;

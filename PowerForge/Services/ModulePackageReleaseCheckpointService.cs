@@ -29,6 +29,7 @@ internal sealed class ModulePackageReleaseCheckpointService
         IReadOnlyList<ModulePackageReleaseLane> resolvedLanes)
     {
         var checkpoints = new List<PowerForgeModulePackageReleaseCheckpoint>();
+        var publisher = new ProjectBuildPublishHostService(_logger);
         foreach (var lane in resolvedLanes
                      .Where(static lane => lane.PublishNuget || lane.PublishGitHub))
         {
@@ -51,8 +52,17 @@ internal sealed class ModulePackageReleaseCheckpointService
                     $"{lane.Name}: package release plan could not be checkpointed. {execution.ErrorMessage}");
             }
 
+            var publicationConfiguration = lane.Reference is not null
+                ? publisher.LoadConfiguration(lane.Reference, lane.ConfigPath)
+                : publisher.LoadConfiguration(lane.Inline!, lane.ResolutionConfigPath);
+            var publicationSpec = publicationConfiguration.PublicationSpec!;
+            if (lane.PublishNuget)
+                publicationConfiguration.ValidatePublicationContext = DotNetRepositoryReleaseService.CapturePublicationDestination(publicationSpec);
+            publicationConfiguration.PublishSource = publicationSpec.PublishSource
+                ?? ProjectBuildPackageFeedResolver.GetDefaultPublishSource();
             checkpoints.Add(new PowerForgeModulePackageReleaseCheckpoint
             {
+                PublicationConfiguration = publicationConfiguration,
                 Key = lane.Key,
                 Name = lane.Name,
                 ConfigPath = Path.GetFullPath(lane.ConfigPath),
@@ -65,18 +75,20 @@ internal sealed class ModulePackageReleaseCheckpointService
         return checkpoints.ToArray();
     }
 
-    internal PowerForgeModulePackagePublicationResult[] PublishNuGet(
+    internal PowerForgeModulePackagePublicationResult[] Publish(
         string releaseConfigPath,
         PowerForgeReleaseSpec spec,
         IEnumerable<PowerForgeModulePackageReleaseCheckpoint>? checkpoints,
         IEnumerable<PowerForgeReleaseAssetEntry>? releaseAssets,
         bool requireStagedAssets,
+        bool publishNuget,
+        bool publishGitHub,
         Action? remotePublishAttempted,
         IProjectBuildProgressReporter? progress,
         CancellationToken cancellationToken)
     {
         var lanes = ResolveLanes(releaseConfigPath, spec)
-            .Where(static lane => lane.PublishNuget)
+            .Where(lane => (publishNuget && lane.PublishNuget) || (publishGitHub && lane.PublishGitHub))
             .ToArray();
         var publisher = new ProjectBuildPublishHostService(_logger);
         var publications = new List<PowerForgeModulePackagePublicationResult>(lanes.Length);
@@ -84,40 +96,52 @@ internal sealed class ModulePackageReleaseCheckpointService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var checkpoint = Restore(lane, checkpoints);
-            var configuration = lane.Reference is not null
+            var configuration = checkpoint.PublicationConfiguration ?? (lane.Reference is not null
                 ? publisher.LoadConfiguration(lane.Reference, lane.ConfigPath)
-                : publisher.LoadConfiguration(lane.Inline!, lane.ConfigPath);
-            var stagedRelease = CreatePublicationRelease(
-                checkpoint.Release,
-                releaseAssets,
-                requireStagedAssets);
-            using var publicationSnapshot = ModulePackagePublicationSnapshot.Create(stagedRelease);
-            var release = publicationSnapshot.Release;
-            var publish = publisher.PublishNuGet(
-                configuration,
-                release,
-                repositoryRoot: ResolveRepositoryRoot(releaseConfigPath, spec),
-                remotePublishAttempted: () =>
+                : publisher.LoadConfiguration(lane.Inline!, lane.ResolutionConfigPath));
+            configuration.PublishNuget = publishNuget && checkpoint.PublishNuget;
+            configuration.PublishGitHub = publishGitHub && checkpoint.PublishGitHub;
+            var publicationCheckpoint = new ProjectBuildHostExecutionResult
+            {
+                DeferredPublicationConfiguration = configuration,
+                Success = true,
+                ConfigPath = checkpoint.ConfigPath,
+                RootPath = ResolveRepositoryRoot(releaseConfigPath, spec),
+                Result = new ProjectBuildResult
                 {
-                    publicationSnapshot.ValidateUnchanged();
-                    remotePublishAttempted?.Invoke();
+                    Success = true,
+                    Release = checkpoint.Release
+                }
+            };
+            var publish = _projectBuildHostService.Execute(
+                new ProjectBuildHostRequest
+                {
+                    ConfigPath = checkpoint.ConfigPath,
+                    PublicationCheckpoint = publicationCheckpoint,
+                    PublicationAssets = (releaseAssets ?? Array.Empty<PowerForgeReleaseAssetEntry>()).ToArray(),
+                    RequireStagedPublicationAssets = requireStagedAssets,
+                    RemotePublishAttempted = remotePublishAttempted,
+                    Progress = progress,
+                    CancellationToken = cancellationToken
                 },
-                progress: progress,
-                cancellationToken: cancellationToken);
-            publicationSnapshot.ValidateUnchanged();
+                new ProjectBuildConfiguration(),
+                checkpoint.ConfigPath);
+            var release = publish.Result.Release
+                ?? throw new InvalidOperationException($"{lane.Name}: package publication did not preserve its release checkpoint.");
             var result = new PowerForgeModulePackagePublicationResult
             {
                 Name = checkpoint.Name,
                 Success = publish.Success,
                 ErrorMessage = publish.ErrorMessage,
                 PublishSource = release.PublishSource,
-                PublishedPackages = publicationSnapshot.ResolveOriginalPaths(release.PublishedPackages),
-                SkippedDuplicatePackages = publicationSnapshot.ResolveOriginalPaths(release.SkippedDuplicatePackages),
-                FailedPackages = publicationSnapshot.ResolveOriginalPaths(release.FailedPackages)
+                PublishedPackages = release.PublishedPackages.ToArray(),
+                SkippedDuplicatePackages = release.SkippedDuplicatePackages.ToArray(),
+                FailedPackages = release.FailedPackages.ToArray(),
+                GitHubReleases = publish.Result.GitHub.ToArray()
             };
             publications.Add(result);
             if (!result.Success)
-                throw new InvalidOperationException(result.ErrorMessage ?? $"NuGet publication failed for module package lane '{checkpoint.Name}'.");
+                throw new InvalidOperationException(result.ErrorMessage ?? $"Publication failed for module package lane '{checkpoint.Name}'.");
         }
 
         return publications.ToArray();
@@ -126,7 +150,8 @@ internal sealed class ModulePackageReleaseCheckpointService
     internal static DotNetRepositoryReleaseResult CreatePublicationRelease(
         DotNetRepositoryReleaseResult source,
         IEnumerable<PowerForgeReleaseAssetEntry>? releaseAssets,
-        bool requireStagedAssets)
+        bool requireStagedAssets,
+        bool includeReleaseZips = false)
     {
         if (source is null)
             throw new ArgumentNullException(nameof(source));
@@ -134,9 +159,9 @@ internal sealed class ModulePackageReleaseCheckpointService
             throw new InvalidOperationException(source.ErrorMessage ?? "The module package release checkpoint was not successful.");
 
         var stagedBySource = (releaseAssets ?? Array.Empty<PowerForgeReleaseAssetEntry>())
-            .Where(static asset =>
+            .Where(asset =>
                 asset.Category == PowerForgeReleaseAssetCategory.Package &&
-                asset.IsFinalPackageOutput &&
+                (includeReleaseZips || asset.IsFinalPackageOutput) &&
                 !string.IsNullOrWhiteSpace(asset.Path) &&
                 !string.IsNullOrWhiteSpace(asset.StagedPath))
             .GroupBy(asset => Path.GetFullPath(asset.Path), PathComparer)
@@ -163,7 +188,9 @@ internal sealed class ModulePackageReleaseCheckpointService
                 SymbolPackages = project.SymbolPackages
                     .Select(path => ResolvePublicationPackagePath(path, stagedBySource, requireStagedAssets))
                     .ToList(),
-                ReleaseZipPath = project.ReleaseZipPath,
+                ReleaseZipPath = includeReleaseZips && !string.IsNullOrWhiteSpace(project.ReleaseZipPath)
+                    ? ResolvePublicationPackagePath(project.ReleaseZipPath!, stagedBySource, requireStagedAssets)
+                    : project.ReleaseZipPath,
                 PackageBuildDuration = project.PackageBuildDuration,
                 ErrorMessage = project.ErrorMessage
             }).ToList()
@@ -342,7 +369,7 @@ internal sealed class ModulePackagePublicationSnapshot : IDisposable
 
     internal DotNetRepositoryReleaseResult Release { get; }
 
-    internal static ModulePackagePublicationSnapshot Create(DotNetRepositoryReleaseResult release)
+    internal static ModulePackagePublicationSnapshot Create(DotNetRepositoryReleaseResult release, bool includeReleaseZips = false)
     {
         if (release is null)
             throw new ArgumentNullException(nameof(release));
@@ -354,6 +381,7 @@ internal sealed class ModulePackagePublicationSnapshot : IDisposable
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(rootPath);
         var snapshotByOriginal = new Dictionary<string, string>(PathComparer);
+        var snapshotDirectoryByOriginal = new Dictionary<string, string>(PathComparer);
         var originalBySnapshot = new Dictionary<string, string>(PathComparer);
         var sha256BySnapshot = new Dictionary<string, string>(PathComparer);
         try
@@ -367,10 +395,14 @@ internal sealed class ModulePackagePublicationSnapshot : IDisposable
                     throw new FileNotFoundException($"The package publication input was not found: {originalPath}", originalPath);
 
                 var expectedSha256 = ComputeSha256(originalPath);
-                var snapshotPath = Path.Combine(
-                    rootPath,
-                    snapshotByOriginal.Count.ToString("D4"),
-                    Path.GetFileName(originalPath));
+                var originalDirectory = Path.GetDirectoryName(originalPath)!;
+                if (!snapshotDirectoryByOriginal.TryGetValue(originalDirectory, out var snapshotDirectory))
+                {
+                    snapshotDirectory = Path.Combine(rootPath, snapshotDirectoryByOriginal.Count.ToString("D4"));
+                    snapshotDirectoryByOriginal[originalDirectory] = snapshotDirectory;
+                }
+                // NuGet discovers companion symbol archives next to their primary package.
+                var snapshotPath = Path.Combine(snapshotDirectory, Path.GetFileName(originalPath));
                 Directory.CreateDirectory(Path.GetDirectoryName(snapshotPath)!);
                 File.Copy(originalPath, snapshotPath, overwrite: false);
                 var sourceSha256AfterCopy = ComputeSha256(originalPath);
@@ -393,6 +425,8 @@ internal sealed class ModulePackagePublicationSnapshot : IDisposable
             {
                 project.Packages = project.Packages.Select(Snapshot).ToList();
                 project.SymbolPackages = project.SymbolPackages.Select(Snapshot).ToList();
+                if (includeReleaseZips && !string.IsNullOrWhiteSpace(project.ReleaseZipPath))
+                    project.ReleaseZipPath = Snapshot(project.ReleaseZipPath!);
             }
 
             return new ModulePackagePublicationSnapshot(

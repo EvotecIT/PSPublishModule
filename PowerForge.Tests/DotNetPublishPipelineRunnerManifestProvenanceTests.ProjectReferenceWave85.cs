@@ -67,7 +67,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void PublishProvenanceLease_IncludesNoBuildPublishOutputs()
+    public void PublishProvenanceLease_LeavesSnapshottedNoBuildPublishOutputsWritable()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -85,19 +85,88 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(outputPath))));
 
             string[] guardedPaths = DotNetPublishPipelineRunner.PublishProvenanceLease.BuildGuardedPaths(
-                [projectPath],
-                [output]);
+                [projectPath, outputPath],
+                [output],
+                noBuildInPublish: true);
 
             StringComparer comparer = OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
             Assert.Contains(projectPath, guardedPaths, comparer);
-            Assert.Contains(outputPath, guardedPaths, comparer);
+            Assert.DoesNotContain(outputPath, guardedPaths, comparer);
+
+            using DotNetPublishPipelineRunner.PublishProvenanceLease lease =
+                DotNetPublishPipelineRunner.PublishProvenanceLease.Create(guardedPaths);
+            using DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot snapshot =
+                DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot.Create([output], null);
+
+            File.WriteAllText(outputPath, "regenerated-by-publish");
+
+            lease.ValidateUnchanged();
+            snapshot.ValidateUnchanged();
         }
         finally
         {
             DeleteTestRepository(root);
         }
+    }
+
+    [Fact]
+    public void PublishProvenanceLease_GuardsUnsnapshottedPrebuiltOutputs()
+    {
+        string projectPath = Path.GetFullPath("App.csproj");
+        string generatedOutputPath = Path.GetFullPath("generated.dll");
+        string packageOutputPath = Path.GetFullPath("package.dll");
+        var generatedOutput = new DotNetPublishPipelineRunner.NoBuildPublishInput(
+            "evaluation",
+            generatedOutputPath,
+            "generated.dll",
+            new Dictionary<string, string>(),
+            "AA");
+        var packageOutput = new DotNetPublishPipelineRunner.NoBuildPublishInput(
+            "evaluation",
+            packageOutputPath,
+            "package.dll",
+            new Dictionary<string, string>(),
+            "BB",
+            isPackageBacked: true);
+
+        string[] guardedPaths = DotNetPublishPipelineRunner.PublishProvenanceLease.BuildGuardedPaths(
+            [projectPath],
+            [generatedOutput, packageOutput],
+            noBuildInPublish: false);
+
+        StringComparer comparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        Assert.Contains(projectPath, guardedPaths, comparer);
+        Assert.Contains(generatedOutputPath, guardedPaths, comparer);
+        Assert.DoesNotContain(packageOutputPath, guardedPaths, comparer);
+    }
+
+    [Fact]
+    public void PublishProvenanceLease_GuardsSnapshottedPackageInputsWhenPublishBuilds()
+    {
+        string projectPath = Path.GetFullPath("App.csproj");
+        string packageInputPath = Path.GetFullPath("package.dll");
+        var packageOutput = new DotNetPublishPipelineRunner.NoBuildPublishInput(
+            "evaluation",
+            packageInputPath,
+            "package.dll",
+            new Dictionary<string, string>(),
+            "BB",
+            isPackageBacked: true);
+
+        string[] guardedPaths = DotNetPublishPipelineRunner.PublishProvenanceLease.BuildGuardedPaths(
+            [projectPath, packageInputPath],
+            [packageOutput],
+            noBuildInPublish: false);
+
+        StringComparer comparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        Assert.Contains(projectPath, guardedPaths, comparer);
+        Assert.Contains(packageInputPath, guardedPaths, comparer);
     }
 
     [Fact]

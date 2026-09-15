@@ -69,6 +69,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
                 CurrentPath = root.FullName,
                 ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
                 UnifiedGitHubRelease = true,
+                ReleaseCheckpoint = true,
                 SkipInstall = true,
                 StagingPath = Path.Combine(".powerforge", "approved-staging"),
                 DiagnosticsBaselinePath = baselinePath,
@@ -91,6 +92,7 @@ public sealed partial class ModuleBuildPreparationServiceTests
             Assert.True(prepared.PipelineSpec.Diagnostics.FailOnNewDiagnostics);
             Assert.Equal(BuildDiagnosticSeverity.Error, prepared.PipelineSpec.Diagnostics.FailOnSeverity);
             Assert.True(prepared.PipelineSpec.UnifiedGitHubRelease);
+            Assert.True(prepared.PipelineSpec.ReleaseCheckpoint);
             var publish = Assert.Single(prepared.PipelineSpec.Segments.OfType<ConfigurationPublishSegment>());
             Assert.Equal(PublishDestination.PowerShellGallery, publish.Configuration.Destination);
         }

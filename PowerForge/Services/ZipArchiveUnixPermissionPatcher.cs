@@ -3,7 +3,7 @@ using System.IO.Compression;
 namespace PowerForge;
 
 /// <summary>
-/// Applies Unix executable metadata directly to ZIP central-directory entries.
+/// Applies Unix permission metadata directly to ZIP central-directory entries.
 /// </summary>
 /// <remarks>
 /// <see cref="ZipArchiveEntry.ExternalAttributes"/> writes the mode bits, but some
@@ -17,7 +17,9 @@ internal static class ZipArchiveUnixPermissionPatcher
     private const uint Zip64EndOfCentralDirectorySignature = 0x06064B50;
     private const uint Zip64EndOfCentralDirectoryLocatorSignature = 0x07064B50;
     private const uint CentralDirectoryEntrySignature = 0x02014B50;
-    private const uint UnixExecutableExternalAttributes = 0x81ED0000;
+    private const int UnixRegularFileType = 0x8000;
+    private const int UnixPermissionMask = 0x0FFF;
+    private const int UnixExecutablePermissions = 0x01ED;
     private const byte UnixHostSystem = 3;
     private const int EndOfCentralDirectoryMinimumLength = 22;
     private const int MaximumZipCommentLength = ushort.MaxValue;
@@ -32,17 +34,43 @@ internal static class ZipArchiveUnixPermissionPatcher
         if (entryNames is null)
             throw new ArgumentNullException(nameof(entryNames));
 
-        var requestedNames = new HashSet<string>(
-            entryNames.Where(static name => !string.IsNullOrWhiteSpace(name)),
-            StringComparer.Ordinal);
-        if (requestedNames.Count == 0)
+        var entryModes = entryNames
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(static name => name, static _ => UnixExecutablePermissions, StringComparer.Ordinal);
+        ApplyUnixFilePermissions(archivePath, entryModes);
+    }
+
+    /// <summary>
+    /// Marks selected archive entries as Unix regular files with their source permission bits.
+    /// </summary>
+    internal static void ApplyUnixFilePermissions(
+        string archivePath,
+        IReadOnlyDictionary<string, int> entryModes)
+    {
+        if (string.IsNullOrWhiteSpace(archivePath))
+            throw new ArgumentException("Archive path is required.", nameof(archivePath));
+        if (entryModes is null)
+            throw new ArgumentNullException(nameof(entryModes));
+
+        var requestedAttributes = new Dictionary<string, uint>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, int> pair in entryModes)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key))
+                continue;
+            if ((pair.Value & ~UnixPermissionMask) != 0)
+                throw new ArgumentOutOfRangeException(nameof(entryModes), pair.Value, "Unix file mode must contain only permission and special-mode bits.");
+
+            requestedAttributes[pair.Key] = ((uint)(UnixRegularFileType | pair.Value)) << 16;
+        }
+        if (requestedAttributes.Count == 0)
             return;
 
-        var selectedIndexes = ResolveEntryIndexes(archivePath, requestedNames);
+        Dictionary<int, uint> selectedAttributes = ResolveEntryAttributes(archivePath, requestedAttributes);
         using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
         var directory = ReadCentralDirectory(stream);
-        if ((ulong)selectedIndexes.Max() >= directory.EntryCount)
-            throw new InvalidDataException($"ZIP central directory in '{archivePath}' does not contain the selected executable entry.");
+        if ((ulong)selectedAttributes.Keys.Max() >= directory.EntryCount)
+            throw new InvalidDataException($"ZIP central directory in '{archivePath}' does not contain the selected Unix-mode entry.");
 
         stream.Position = directory.Offset;
         for (ulong index = 0; index < directory.EntryCount; index++)
@@ -52,12 +80,12 @@ internal static class ZipArchiveUnixPermissionPatcher
             if (ReadUInt32(header, 0) != CentralDirectoryEntrySignature)
                 throw new InvalidDataException($"Invalid ZIP central-directory entry at offset {entryOffset} in '{archivePath}'.");
 
-            if (selectedIndexes.Contains((int)index))
+            if (selectedAttributes.TryGetValue((int)index, out uint externalAttributes))
             {
                 stream.Position = entryOffset + 5;
                 stream.WriteByte(UnixHostSystem);
                 stream.Position = entryOffset + 38;
-                WriteUInt32(stream, UnixExecutableExternalAttributes);
+                WriteUInt32(stream, externalAttributes);
             }
 
             var nameLength = ReadUInt16(header, 28);
@@ -67,34 +95,36 @@ internal static class ZipArchiveUnixPermissionPatcher
         }
     }
 
-    private static HashSet<int> ResolveEntryIndexes(string archivePath, HashSet<string> requestedNames)
+    private static Dictionary<int, uint> ResolveEntryAttributes(
+        string archivePath,
+        IReadOnlyDictionary<string, uint> requestedAttributes)
     {
-        var selectedIndexes = new HashSet<int>();
+        var selectedAttributes = new Dictionary<int, uint>();
         var foundNames = new HashSet<string>(StringComparer.Ordinal);
         using (var archive = ZipFile.OpenRead(archivePath))
         {
             for (var index = 0; index < archive.Entries.Count; index++)
             {
                 var entryName = archive.Entries[index].FullName;
-                if (requestedNames.Contains(entryName))
+                if (requestedAttributes.TryGetValue(entryName, out uint externalAttributes))
                 {
-                    selectedIndexes.Add(index);
+                    selectedAttributes[index] = externalAttributes;
                     foundNames.Add(entryName);
                 }
             }
         }
 
-        if (selectedIndexes.Count != requestedNames.Count)
+        if (foundNames.Count != requestedAttributes.Count)
         {
-            var missing = requestedNames
+            var missing = requestedAttributes.Keys
                 .Where(name => !foundNames.Contains(name))
                 .ToArray();
             throw new InvalidOperationException(
-                $"Executable entr{(missing.Length == 1 ? "y" : "ies")} '{string.Join("', '", missing)}' " +
+                $"Unix-mode entr{(missing.Length == 1 ? "y" : "ies")} '{string.Join("', '", missing)}' " +
                 $"{(missing.Length == 1 ? "was" : "were")} not found in archive '{archivePath}'.");
         }
 
-        return selectedIndexes;
+        return selectedAttributes;
     }
 
     private static CentralDirectoryLocation ReadCentralDirectory(FileStream stream)

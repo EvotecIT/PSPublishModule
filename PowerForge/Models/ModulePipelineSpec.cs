@@ -22,6 +22,12 @@ public sealed class ModulePipelineSpec
     public bool UnifiedGitHubRelease { get; set; }
 
     /// <summary>
+    /// Indicates that this build produces the exact local artifacts for a deferred release publication.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    internal bool ReleaseCheckpoint { get; set; }
+
+    /// <summary>
     /// Optional schema version for external tooling.
     /// </summary>
     public int SchemaVersion { get; set; } = 1;

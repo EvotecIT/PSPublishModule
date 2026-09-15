@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Made generated module-scoped AssemblyLoadContext loaders deterministic and removed machine-specific temporary build paths from their embedded debug metadata.
 - Added side-by-side portable modern binary payloads for PowerShell modules, allowing a .NET 8 baseline and newer targets such as .NET 10 to be packaged together, checked for a consistent command surface, and selected from packaged target metadata at runtime with a safe Standard fallback.
 - Preserved aliases declared by module scripts when binary cmdlet and alias exports are discovered during packaging.
 - Made installed-module binary conflict analysis opt-in during builds; explicit pipeline conflict validation remains available when installed-state inspection is required.

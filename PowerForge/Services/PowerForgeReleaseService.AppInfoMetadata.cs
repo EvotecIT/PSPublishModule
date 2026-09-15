@@ -17,7 +17,7 @@ internal sealed partial class PowerForgeReleaseService
         foreach (var spec in requested)
         {
             var result = observed.SingleOrDefault(value =>
-                string.Equals(value.After.Locale, spec.Locale, StringComparison.OrdinalIgnoreCase));
+                string.Equals(value.After.Locale, spec.Locale.Trim(), StringComparison.OrdinalIgnoreCase));
             if (result is null ||
                 string.IsNullOrWhiteSpace(result.AppInfo.Id) ||
                 string.IsNullOrWhiteSpace(result.After.Id))

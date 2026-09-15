@@ -167,7 +167,8 @@ public static partial class WebSitemapGenerator
         "*.head.html",
         "**/*.head.html",
         "api-fragments/**",
-        "**/api-fragments/**"
+        "**/api-fragments/**",
+        "_powerforge/fragments/**"
     };
 
     private static readonly string[] RobotsNoIndexNames = { "robots", "googlebot", "bingbot", "slurp" };

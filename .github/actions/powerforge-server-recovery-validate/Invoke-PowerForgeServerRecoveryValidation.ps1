@@ -37,7 +37,8 @@ function Assert-PathHasNoSymbolicLink {
 function Invoke-ProcessCapture {
     param(
         [Parameter(Mandatory)][string] $FileName,
-        [Parameter(Mandatory)][string[]] $Arguments
+        [Parameter(Mandatory)][string[]] $Arguments,
+        [string] $WorkingDirectory
     )
 
     $startInfo = [Diagnostics.ProcessStartInfo]::new($FileName)
@@ -45,6 +46,9 @@ function Invoke-ProcessCapture {
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+        $startInfo.WorkingDirectory = $WorkingDirectory
+    }
     foreach ($argument in $Arguments) {
         [void] $startInfo.ArgumentList.Add($argument)
     }
@@ -70,10 +74,11 @@ function Invoke-PowerForgeJson {
     param(
         [Parameter(Mandatory)][string] $CliPath,
         [Parameter(Mandatory)][string[]] $Arguments,
-        [Parameter(Mandatory)][string] $Operation
+        [Parameter(Mandatory)][string] $Operation,
+        [Parameter(Mandatory)][string] $WorkingDirectory
     )
 
-    $result = Invoke-ProcessCapture -FileName 'dotnet' -Arguments (@($CliPath) + $Arguments)
+    $result = Invoke-ProcessCapture -FileName 'dotnet' -Arguments (@($CliPath) + $Arguments) -WorkingDirectory $WorkingDirectory
     Assert-ProcessSucceeded -Result $result -Operation $Operation
     try {
         $envelope = $result.Stdout | ConvertFrom-Json -Depth 100
@@ -148,6 +153,7 @@ try {
     $artifactsRoot = Join-Path $validationRoot 'artifacts'
     $bootstrapRoot = Join-Path $validationRoot 'bootstrap'
     $restoreRoot = Join-Path $validationRoot 'restore-secrets'
+    $externalRepositoryRoot = Join-Path $validationRoot 'external-repositories'
 
     $manifestJson = Get-Content -LiteralPath $manifestPath -Raw
     $schemaPath = Join-Path $engineRoot 'Schemas/powerforge.web.serverrecovery.schema.json'
@@ -171,10 +177,11 @@ try {
         -CallerRepository $env:GITHUB_REPOSITORY `
         -EngineRepository $env:POWERFORGE_ENGINE_REPOSITORY `
         -CaptureUser $env:POWERFORGE_CAPTURE_USER `
-        -VisudoPath $visudoPath
+        -VisudoPath $visudoPath `
+        -ExternalRepositoryRoot $externalRepositoryRoot
 
     $project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
-    $build = Invoke-ProcessCapture -FileName 'dotnet' -Arguments @(
+    $build = Invoke-ProcessCapture -FileName 'dotnet' -WorkingDirectory $engineRoot -Arguments @(
         'build', $project, '-c', 'Release', '-f', 'net10.0', '--nologo', '--artifacts-path', $artifactsRoot
     )
     Assert-ProcessSucceeded -Result $build -Operation 'Building the pinned PowerForge recovery CLI'
@@ -182,7 +189,7 @@ try {
     if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
         throw "PowerForge recovery CLI was not produced: $cli"
     }
-    $bootstrap = Invoke-PowerForgeJson -CliPath $cli -Operation 'Generating the bootstrap plan' -Arguments @(
+    $bootstrap = Invoke-PowerForgeJson -CliPath $cli -WorkingDirectory $engineRoot -Operation 'Generating the bootstrap plan' -Arguments @(
         'server', 'bootstrap-plan', '--manifest', $manifestPath, '--out', $bootstrapRoot, '--output', 'json'
     )
     $bootstrapScript = Join-Path $bootstrapRoot 'bootstrap-plan.sh'
@@ -201,7 +208,7 @@ try {
     $secretCount = @($manifest.secrets).Count
     $encryptedCaptureCount = @($manifest.capture.encryptedFiles).Count
     if ($secretCount -gt 0 -or $encryptedCaptureCount -gt 0) {
-        $restore = Invoke-PowerForgeJson -CliPath $cli -Operation 'Generating the secret-restore plan' -Arguments @(
+        $restore = Invoke-PowerForgeJson -CliPath $cli -WorkingDirectory $engineRoot -Operation 'Generating the secret-restore plan' -Arguments @(
             'server', 'restore-secrets-plan', '--manifest', $manifestPath, '--out', $restoreRoot,
             '--archive', 'encrypted-secrets.tar.gz.age', '--output', 'json'
         )

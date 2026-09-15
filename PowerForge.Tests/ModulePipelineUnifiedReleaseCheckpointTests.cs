@@ -749,7 +749,6 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         string moduleName,
         bool useExplicitIds)
     {
-        var outputPath = Path.Combine(rootPath, "Artifacts", "Module");
         var artefacts = new[] { "Primary", "Secondary" }
             .Select(id => new ConfigurationArtefactSegment
             {
@@ -758,7 +757,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 {
                     ID = useExplicitIds ? id : null,
                     Enabled = true,
-                    Path = outputPath,
+                    Path = Path.Combine(rootPath, "Artifacts", "Module", id),
                     ArtefactName = $"{moduleName}.zip"
                 }
             })

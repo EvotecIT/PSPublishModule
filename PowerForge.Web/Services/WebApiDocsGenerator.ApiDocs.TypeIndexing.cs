@@ -194,7 +194,7 @@ public static partial class WebApiDocsGenerator
         return linked;
     }
 
-    private static string StripCrefTokens(string? text)
+    internal static string StripCrefTokens(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
         var cleaned = CrefTokenRegex.Replace(text, match =>

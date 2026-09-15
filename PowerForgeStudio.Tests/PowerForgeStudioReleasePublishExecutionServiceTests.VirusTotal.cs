@@ -26,6 +26,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 Path.Combine(root, "staging"));
 
             Assert.True(request.CaptureModuleArtifactProvenance);
+            Assert.True(request.DeferAfterStagingValidation);
         }
         finally
         {

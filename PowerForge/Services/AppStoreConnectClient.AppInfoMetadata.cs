@@ -94,6 +94,46 @@ public sealed partial class AppStoreConnectClient
         return ParseAppInfoLocalization(data);
     }
 
+    /// <summary>
+    /// Creates a localization under the specified App Information resource.
+    /// Only supplied metadata fields are sent; the locale identifies the new localization.
+    /// </summary>
+    public async Task<AppStoreConnectAppInfoLocalizationInfo> CreateAppInfoLocalizationAsync(
+        string parentId,
+        string locale,
+        AppStoreConnectAppInfoLocalizationUpdate metadata,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(parentId))
+            throw new ArgumentException("Parent resource id is required.", nameof(parentId));
+        if (string.IsNullOrWhiteSpace(locale))
+            throw new ArgumentException("Locale is required.", nameof(locale));
+        if (metadata is null)
+            throw new ArgumentNullException(nameof(metadata));
+        if (string.IsNullOrWhiteSpace(metadata.Name))
+            throw new ArgumentException("A localized app name is required to create App Information localization.", nameof(metadata));
+
+        var attributes = BuildAppInfoLocalizationAttributes(metadata);
+        attributes.Add("locale", locale.Trim());
+        var body = new
+        {
+            data = new
+            {
+                type = "appInfoLocalizations",
+                attributes,
+                relationships = new
+                {
+                    appInfo = new { data = new { type = "appInfos", id = parentId.Trim() } }
+                }
+            }
+        };
+        using var doc = await SendJsonAsync(HttpMethod.Post, "appInfoLocalizations", body, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+            throw new InvalidOperationException("App Store Connect API request returned no data.");
+        return ParseAppInfoLocalization(data);
+    }
+
     internal static string[] GetSuppliedAppInfoLocalizationFields(AppStoreConnectAppInfoLocalizationUpdate update)
         => BuildAppInfoLocalizationAttributes(update).Keys.ToArray();
 

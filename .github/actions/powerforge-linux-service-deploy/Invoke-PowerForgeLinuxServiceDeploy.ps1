@@ -3,6 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
+. "$PSScriptRoot/Invoke-PowerForgeSshTransport.ps1"
 
 function Assert-LastExitCode {
     param([Parameter(Mandatory)][string] $Operation)
@@ -53,14 +54,20 @@ $sshRoot = Join-Path $runnerTemp 'powerforge-service-deployment-ssh'
 $artifactPath = Join-Path $stageRoot 'artifact.tar'
 $packageMetadataPath = Join-Path $stageRoot 'package.json'
 $metadataPath = Join-Path $stageRoot 'deployment.json'
+$transportPath = Join-Path $stageRoot 'deployment-transport.tar'
 $keyPath = Join-Path $sshRoot 'id_ed25519'
 $knownHostsPath = Join-Path $sshRoot 'known_hosts'
-$remoteBase = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE)-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)"
-$handoffBase = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE)"
-$remoteLock = "/tmp/powerforge-service-$($env:POWERFORGE_DEPLOYMENT_SERVICE).lock"
 $target = "$($env:POWERFORGE_DEPLOYMENT_USER)@$($env:POWERFORGE_DEPLOYMENT_HOST)"
-$sshOptions = @('-i', $keyPath, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHostsPath")
-$remoteCreated = $false
+$sshOptions = @(
+    '-i', $keyPath,
+    '-o', 'IdentitiesOnly=yes',
+    '-o', 'BatchMode=yes',
+    '-o', 'StrictHostKeyChecking=yes',
+    '-o', 'ConnectTimeout=30',
+    '-o', 'ServerAliveInterval=15',
+    '-o', 'ServerAliveCountMax=4',
+    '-o', "UserKnownHostsFile=$knownHostsPath"
+)
 
 if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
     throw "Downloaded service artifact not found: $artifactPath"
@@ -105,6 +112,12 @@ try {
         artifactSha256     = $actualArtifactSha256
         deployedAtUtc      = [DateTimeOffset]::UtcNow.ToString('O')
     } | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding utf8NoBOM
+    tar --create --file $transportPath --directory $stageRoot -- artifact.tar deployment.json
+    Assert-LastExitCode 'Creating the restricted service deployment payload'
+    if (-not (Test-Path -LiteralPath $transportPath -PathType Leaf) -or
+        (Get-Item -LiteralPath $transportPath).Length -eq 0) {
+        throw 'The restricted service deployment payload is missing or empty.'
+    }
 
     Set-Content -LiteralPath $keyPath -Value $env:POWERFORGE_DEPLOYMENT_SSH_PRIVATE_KEY -Encoding utf8NoBOM
     Set-Content -LiteralPath $knownHostsPath -Value $env:POWERFORGE_DEPLOYMENT_SSH_KNOWN_HOSTS -Encoding utf8NoBOM
@@ -113,28 +126,14 @@ try {
     chmod 600 $keyPath $knownHostsPath
     Assert-LastExitCode 'Protecting the SSH credentials'
 
-    ssh @sshOptions -p $deploymentPort $target "rm -rf -- '$remoteBase' && install -d -m 0700 '$remoteBase'"
-    Assert-LastExitCode 'Creating the remote service staging directory'
-    $remoteCreated = $true
-
-    $scpArguments = @('-P', $deploymentPort) + $sshOptions + @($artifactPath, $metadataPath, "${target}:${remoteBase}/")
-    scp @scpArguments
-    Assert-LastExitCode 'Uploading the service deployment payload'
-
-    $handoffCommand = 'flock -w 900 ''{0}'' sh -c "rm -rf -- ''{1}'' && mv -- ''{2}'' ''{1}'' && sudo /usr/local/sbin/powerforge-service-deploy --service ''{3}''; status=\$?; rm -rf -- ''{1}''; exit \$status"' -f @(
-        $remoteLock,
-        $handoffBase,
-        $remoteBase,
-        $env:POWERFORGE_DEPLOYMENT_SERVICE
-    )
-    ssh @sshOptions -p $deploymentPort $target $handoffCommand
-    Assert-LastExitCode 'Promoting the service release'
+    Invoke-PowerForgeSshTransport `
+        -TransportPath $transportPath `
+        -Target $target `
+        -Port $deploymentPort `
+        -SshOptions $sshOptions `
+        -Service $env:POWERFORGE_DEPLOYMENT_SERVICE
 }
 finally {
-    if ($remoteCreated -and (Test-Path -LiteralPath $keyPath) -and (Test-Path -LiteralPath $knownHostsPath)) {
-        ssh @sshOptions -p $deploymentPort $target "rm -rf -- '$remoteBase'" 2>$null
-        $global:LASTEXITCODE = 0
-    }
     foreach ($path in @($stageRoot, $sshRoot)) {
         $resolvedPath = [IO.Path]::GetFullPath($path)
         if ($resolvedPath.StartsWith($runnerTemp + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal) -and

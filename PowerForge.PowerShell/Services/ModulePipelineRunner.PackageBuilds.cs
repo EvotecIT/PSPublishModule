@@ -783,7 +783,7 @@ public sealed partial class ModulePipelineRunner
             cfg.UseAsReleaseVersionSource);
         if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
             MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
-        ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode);
+        ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode, plan.ReleaseCheckpoint);
         var actions = ResolveEffectiveActions(configuration);
         var request = new ProjectBuildHostRequest
         {
@@ -846,7 +846,7 @@ public sealed partial class ModulePipelineRunner
             cfg.UseAsReleaseVersionSource);
         if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
             MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
-        ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode);
+        ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode, plan.ReleaseCheckpoint);
         var actions = ResolveEffectiveActions(projectBuildConfig);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         var request = new ProjectBuildHostRequest
@@ -887,12 +887,14 @@ public sealed partial class ModulePipelineRunner
     private static void ApplyProjectBuildGateDefaults(
         ProjectBuildConfiguration target,
         PackageBuildExecutionMode mode,
-        ConfigurationGateMode? gateMode)
+        ConfigurationGateMode? gateMode,
+        bool releaseCheckpoint)
     {
         if (gateMode == ConfigurationGateMode.Build &&
             mode is PackageBuildExecutionMode.DependencyBuild or PackageBuildExecutionMode.BuildOnly)
         {
-            target.CertificateThumbprint = null;
+            if (!releaseCheckpoint)
+                target.CertificateThumbprint = null;
         }
 
         if (gateMode == ConfigurationGateMode.Documentation &&

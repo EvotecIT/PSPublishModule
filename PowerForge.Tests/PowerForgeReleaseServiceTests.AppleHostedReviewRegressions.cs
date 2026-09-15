@@ -270,8 +270,11 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void ApprovedAppleMutationConfig_UsesCapturedBytesAfterSourceReplacement()
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public void ApprovedAppleMutationConfig_UsesCapturedBytesAfterSourceReplacement(bool syncMetadata, bool checkReadiness, bool submitForReview)
     {
         var root = CreateSandbox();
         try
@@ -284,7 +287,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             var plan = new PowerForgeAppleReleasePlan
             {
                 ProjectRoot = root,
-                SyncMetadata = true,
+                SyncMetadata = syncMetadata,
+                CheckReleaseReadiness = checkReadiness,
+                SubmitForReview = submitForReview,
                 MetadataConfigPath = metadataPath,
                 ApprovedMutationInputFilesSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
                 {

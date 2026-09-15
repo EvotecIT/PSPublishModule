@@ -77,6 +77,7 @@
       if (!url || seen[url]) return;
 
       var title = normalizeText(item.title);
+      var aliases = toArray(item.aliases).map(normalizeText);
       var haystack = normalizeText([
         item.title,
         item.description,
@@ -84,6 +85,7 @@
         item.searchText,
         item.collection,
         item.kind,
+        aliases.join(' '),
         toArray(item.tags).join(' '),
         toArray(item.categories).join(' ')
       ].join(' '));
@@ -91,6 +93,7 @@
 
       var score = 0;
       if (title === normalizedQuery) score += 120;
+      else if (aliases.indexOf(normalizedQuery) >= 0) score += 110;
       else if (title.indexOf(normalizedQuery) === 0) score += 80;
       else if (title.indexOf(normalizedQuery) >= 0) score += 50;
       if (haystack.indexOf(normalizedQuery) >= 0) score += 30;
@@ -302,6 +305,15 @@
   };
   api.normalizeText = normalizeText;
   api.searchEntries = searchEntries;
+  // The visible search UI shares the same index and ranking, with its own page size.
+  api.search = function (request) {
+    request = request || {};
+    return genericSearch({
+      query: boundedText(request.query, 200).trim(),
+      limit: boundedInteger(request.limit, 20, 1, 100),
+      signal: request.signal
+    });
+  };
   api.dispose = function () {
     if (registrationController) registrationController.abort();
     registrationController = null;

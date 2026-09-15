@@ -342,6 +342,38 @@ public class WebMarkdownRendererGfmTests
         Assert.Contains("aria-label=\"MIT license for jquery\"", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Build_TableOfContentsTargetsAssignedHeadingIds()
+    {
+        var html = BuildSinglePageSite("""
+            <h2>Privacy</h2>
+            <div id="privacy">Reserved target</div>
+            <h2>Privacy</h2>
+            <h2>隐私</h2>
+            <h3 id="Authored%23&amp;value">Terms &amp; conditions</h3>
+            """, configureRoot: root =>
+            {
+                var theme = Path.Combine(root, "themes", "t");
+                File.WriteAllText(Path.Combine(theme, "theme.json"),
+                    """{"name":"t","engine":"scriban","defaultLayout":"home"}""");
+                File.WriteAllText(Path.Combine(theme, "layouts", "home.html"),
+                    "<html><body>{{ content }}{{ toc }}</body></html>");
+            });
+        var document = HtmlTinkerX.HtmlParser.ParseWithAngleSharp(html);
+        var headings = document.QuerySelectorAll("h2, h3").ToArray();
+        var links = document.QuerySelectorAll(".pf-toc a").ToArray();
+
+        Assert.Equal(new[] { "privacy-2", "privacy-3", "隐私", "Authored%23&value" },
+            headings.Select(heading => heading.Id));
+        Assert.Equal(headings.Length, links.Length);
+        for (var index = 0; index < headings.Length; index++)
+        {
+            var target = Uri.UnescapeDataString(links[index].GetAttribute("href")![1..]);
+            Assert.Same(headings[index], document.GetElementById(target));
+            Assert.Equal(headings[index].TextContent, links[index].TextContent);
+        }
+    }
+
     private static string BuildSinglePageSite(string markdown, MarkdownSpec? markdownOptions = null, Action<string>? configureRoot = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-markdown-gfm-" + Guid.NewGuid().ToString("N"));

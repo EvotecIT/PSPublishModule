@@ -45,6 +45,44 @@ public sealed partial class AppStoreConnectClient
         return ParseVersionLocalization(data);
     }
 
+    /// <summary>
+    /// Creates a localization under the specified App Store version resource.
+    /// Only supplied metadata fields are sent; the locale identifies the new localization.
+    /// </summary>
+    public async Task<AppStoreConnectVersionLocalizationInfo> CreateVersionLocalizationAsync(
+        string parentId,
+        string locale,
+        AppStoreConnectVersionLocalizationUpdate metadata,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(parentId))
+            throw new ArgumentException("Parent resource id is required.", nameof(parentId));
+        if (string.IsNullOrWhiteSpace(locale))
+            throw new ArgumentException("Locale is required.", nameof(locale));
+        if (metadata is null)
+            throw new ArgumentNullException(nameof(metadata));
+
+        var attributes = BuildLocalizationAttributes(metadata);
+        attributes.Add("locale", locale.Trim());
+        var body = new
+        {
+            data = new
+            {
+                type = "appStoreVersionLocalizations",
+                attributes,
+                relationships = new
+                {
+                    appStoreVersion = new { data = new { type = "appStoreVersions", id = parentId.Trim() } }
+                }
+            }
+        };
+        using var doc = await SendJsonAsync(HttpMethod.Post, "appStoreVersionLocalizations", body, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("App Store Connect API request returned no response body.");
+        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+            throw new InvalidOperationException("App Store Connect API request returned no data.");
+        return ParseVersionLocalization(data);
+    }
+
     internal static string[] GetSuppliedLocalizationFields(AppStoreConnectVersionLocalizationUpdate update)
         => BuildLocalizationAttributes(update).Keys.ToArray();
 

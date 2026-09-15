@@ -20,7 +20,6 @@ public static partial class WebSiteBuilder
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-    private static readonly Regex TocHeaderRegex = new("<h(?<level>[2-3])[^>]*>(?<text>.*?)</h\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StripTagsRegex = new("<.*?>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex SnippetParagraphRegex = new("<p\\b[^>]*>(?<text>[\\s\\S]*?)</p>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HrefRegex = new("href\\s*=\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -170,6 +169,7 @@ public static partial class WebSiteBuilder
             CopyThemeAssets(spec, plan.RootPath, outDir);
             ReportProgress("copying static assets");
             CopyStaticAssets(spec, plan.RootPath, outDir);
+            EnsureMediaViewerAssets(spec, outDir);
             ReportProgress("rendering content");
             foreach (var item in renderItems)
             {
@@ -207,6 +207,7 @@ public static partial class WebSiteBuilder
                 }
             }
 
+            WriteTemplateExports(outDir, spec, plan.RootPath, renderItems, data, projectMap, menuSpecs);
             ReportProgress("writing navigation/search/diagnostic outputs");
             WriteSiteNavData(spec, outDir, menuSpecs);
             WriteSearchIndex(spec, outDir, renderItems);

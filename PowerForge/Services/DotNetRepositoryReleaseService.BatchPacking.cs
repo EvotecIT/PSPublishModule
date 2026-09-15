@@ -136,7 +136,19 @@ public sealed partial class DotNetRepositoryReleaseService
                     return result;
                 }
 
-                var signing = SignBatchBuildOutputs(projects, spec, logger, signAssemblies!);
+                if (spec.SignDependencyAssemblies)
+                {
+                    if (!TryPreparePackToolPublishOutputs(projects, spec, outputPath, logger, out var preparationDuration, out var preparationError))
+                    {
+                        result.Duration += preparationDuration;
+                        result.ErrorMessage = preparationError;
+                        return result;
+                    }
+
+                    result.Duration += preparationDuration;
+                }
+
+                var signing = SignBatchBuildOutputs(projects, spec, outputPath, logger, signAssemblies!);
                 result.Duration += signing.Duration;
                 if (!signing.Success)
                 {
@@ -222,6 +234,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             buildProperties,
             $"PackageOutputPath={EscapeMsBuildPropertyValue(outputPath)}",
+            "_IsPacking=true",
             "NoBuild=true",
             "BuildProjectReferences=false"
         };
@@ -278,6 +291,7 @@ public sealed partial class DotNetRepositoryReleaseService
     private static DotNetPackResult SignBatchBuildOutputs(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
+        string packageOutputPath,
         ILogger logger,
         Action<DotNetReleaseBuildAssemblySigningRequest> signAssemblies)
     {
@@ -298,7 +312,15 @@ public sealed partial class DotNetRepositoryReleaseService
                 var signingPlan = BuildAssemblySigningPlan(
                     outputDirectories,
                     includePatterns,
-                    ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
+                    ResolvePackToolIntermediateAssemblyPaths(
+                        project.CsprojPath,
+                        csprojDir,
+                        configuration,
+                        project.ProjectName,
+                        logger,
+                        includePatterns,
+                        spec.SignDependencyAssemblies,
+                        packageOutputPath));
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
                 {
                     var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
@@ -309,7 +331,15 @@ public sealed partial class DotNetRepositoryReleaseService
                         signingPlan = BuildAssemblySigningPlan(
                             outputDirectories,
                             includePatterns,
-                            ResolvePackToolIntermediateAssemblyPaths(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns));
+                            ResolvePackToolIntermediateAssemblyPaths(
+                                project.CsprojPath,
+                                csprojDir,
+                                configuration,
+                                project.ProjectName,
+                                logger,
+                                includePatterns,
+                                includePreparedPublishOutput: false,
+                                packageOutputPath));
                     }
                 }
                 logger.Info($"{project.ProjectName}: assembly signing include pattern(s): {string.Join(", ", includePatterns)}.");

@@ -1375,7 +1375,10 @@ public sealed partial class PowerForgeReleaseServiceTests
                     request.SkipInstall,
                     request.IncludeProjectPackages,
                     request.StagingPath,
-                    request.RequireReusableOutput));
+                    request.RequireReusableOutput,
+                    request.ModuleVersion,
+                    request.PreReleaseTag,
+                    request.ReleaseCheckpoint));
                 return new ModuleBuildHostExecutionResult { ExitCode = 0 };
             });
 
@@ -1408,5 +1411,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         bool SkipInstall,
         bool IncludeProjectPackages,
         string? StagingPath,
-        bool RequireReusableOutput);
+        bool RequireReusableOutput,
+        string? ModuleVersion,
+        string? PreReleaseTag,
+        bool ReleaseCheckpoint);
 }

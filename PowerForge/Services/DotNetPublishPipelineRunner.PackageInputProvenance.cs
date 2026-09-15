@@ -458,17 +458,21 @@ public sealed partial class DotNetPublishPipelineRunner
     private sealed partial class VerifiedPackageInputCatalog
     {
         private readonly string[] _packageRoots;
-        private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
+        private readonly Dictionary<string, string> _lockedPackageHashes;
         private readonly VerifiedPackageArchiveCache _archives;
-        private readonly IReadOnlyDictionary<string, string> _archivePathsByPackageKey;
+        private readonly Dictionary<string, string> _archivePathsByPackageKey;
         private readonly HashSet<string> _sdkManagedArchivePaths;
         private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         private string? _sdkEvidenceFailureReason;
 
-        internal IEnumerable<string> SdkManagedPackageKeys => _archivePathsByPackageKey
-            .Where(package => _sdkManagedArchivePaths.Contains(Path.GetFullPath(package.Value)))
-            .Select(package => package.Key);
+        internal IEnumerable<VerifiedSdkManagedPackageEvidence> SdkManagedPackageEvidence =>
+            _archivePathsByPackageKey
+                .Where(package => _sdkManagedArchivePaths.Contains(Path.GetFullPath(package.Value)))
+                .Select(package => new VerifiedSdkManagedPackageEvidence(
+                    package.Key,
+                    _lockedPackageHashes[package.Key],
+                    package.Value));
 
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,
@@ -481,21 +485,63 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(Path.GetFullPath)
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray();
-            _lockedPackageHashes = lockedPackageHashes;
+            _lockedPackageHashes = lockedPackageHashes.ToDictionary(
+                package => package.Key,
+                package => package.Value,
+                StringComparer.OrdinalIgnoreCase);
             _archives = archives;
-            _archivePathsByPackageKey = archivePathsByPackageKey;
+            _archivePathsByPackageKey = archivePathsByPackageKey.ToDictionary(
+                package => package.Key,
+                package => package.Value,
+                StringComparer.OrdinalIgnoreCase);
             _sdkManagedArchivePaths = new HashSet<string>(
                 sdkManagedPackageKeys.Where(archivePathsByPackageKey.ContainsKey)
                     .Select(packageKey => archivePathsByPackageKey[packageKey]),
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
-        internal void InheritSdkManagedPackageKeys(IEnumerable<string> packageKeys)
+        internal bool TryInheritSdkManagedPackageEvidence(
+            IEnumerable<VerifiedSdkManagedPackageEvidence> packages,
+            out string? failureReason)
         {
-            _sdkManagedArchivePaths.UnionWith(
-                packageKeys
-                    .Where(_archivePathsByPackageKey.ContainsKey)
-                    .Select(packageKey => Path.GetFullPath(_archivePathsByPackageKey[packageKey])));
+            failureReason = null;
+            foreach (VerifiedSdkManagedPackageEvidence package in packages)
+            {
+                if (_lockedPackageHashes.TryGetValue(package.PackageKey, out string? existingHash))
+                {
+                    if (!string.Equals(existingHash, package.ContentHash, StringComparison.Ordinal))
+                    {
+                        failureReason = $"SDK-managed package '{package.PackageKey}' conflicted with the evaluated lock evidence";
+                        return false;
+                    }
+
+                    // Existing lock evidence belongs to this project. Keep its archive and
+                    // classification instead of promoting an ordinary dependency to SDK-managed.
+                    continue;
+                }
+
+                _lockedPackageHashes[package.PackageKey] = package.ContentHash;
+                _archivePathsByPackageKey[package.PackageKey] = package.ArchivePath;
+                _sdkManagedArchivePaths.Add(Path.GetFullPath(package.ArchivePath));
+            }
+            return true;
+        }
+
+        internal readonly struct VerifiedSdkManagedPackageEvidence
+        {
+            public VerifiedSdkManagedPackageEvidence(
+                string packageKey,
+                string contentHash,
+                string archivePath)
+            {
+                PackageKey = packageKey;
+                ContentHash = contentHash;
+                ArchivePath = archivePath;
+            }
+
+            public string PackageKey { get; }
+            public string ContentHash { get; }
+            public string ArchivePath { get; }
         }
 
         internal static bool TryCreate(
@@ -586,6 +632,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
             bool hasCommittedLock = TryReadLockedPackageHashes(
                 lockFilePath,
+                ReadItemText(properties, "TargetFramework"),
+                ReadItemText(properties, "RuntimeIdentifier") ??
+                    ReadEffectiveProperty(effectiveGlobalProperties, "RuntimeIdentifier"),
                 out Dictionary<string, string> hashes);
             string? sdkPackageLockFile = ReadEvaluatedPath(
                 properties,
@@ -635,6 +684,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     sdkManagedPackageKeys,
                     effectiveGlobalProperties,
                     environmentVariables,
+                    committedPackageHashes,
                     archivePathsByPackageKey,
                     archives,
                     out sdkEvidenceFailureReason)
@@ -808,11 +858,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private static bool TryReadLockedPackageHashes(
             string lockFilePath,
+            string? targetFramework,
+            string? runtimeIdentifier,
             out Dictionary<string, string> hashes)
         {
             hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
+                if (string.IsNullOrWhiteSpace(targetFramework))
+                    return false;
+
                 using JsonDocument document = JsonDocument.Parse(File.ReadAllText(lockFilePath));
                 if (!document.RootElement.TryGetProperty("dependencies", out JsonElement frameworks) ||
                     frameworks.ValueKind != JsonValueKind.Object)
@@ -820,10 +875,29 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
 
+                if (!TrySelectLockedFrameworkName(
+                        frameworks,
+                        targetFramework!,
+                        out string? frameworkName))
+                {
+                    return false;
+                }
+                string? runtimeFrameworkName = string.IsNullOrWhiteSpace(runtimeIdentifier)
+                    ? null
+                    : frameworkName + "/" + runtimeIdentifier!.Trim();
+                bool foundFramework = false;
                 foreach (JsonProperty framework in frameworks.EnumerateObject())
                 {
-                    if (framework.Value.ValueKind != JsonValueKind.Object)
+                    if (!framework.Name.Equals(frameworkName, StringComparison.OrdinalIgnoreCase) &&
+                        (runtimeFrameworkName is null ||
+                         !framework.Name.Equals(runtimeFrameworkName, StringComparison.OrdinalIgnoreCase)))
+                    {
                         continue;
+                    }
+
+                    foundFramework = true;
+                    if (framework.Value.ValueKind != JsonValueKind.Object)
+                        return false;
                     foreach (JsonProperty package in framework.Value.EnumerateObject())
                     {
                         if (package.Value.ValueKind != JsonValueKind.Object ||
@@ -848,6 +922,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         }
                     }
                 }
+
+                if (!foundFramework)
+                    return false;
 
                 if (!TryReadPowerForgeRestorePackageHashes(
                         document.RootElement,
@@ -875,6 +952,75 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
         }
+
+        private static bool TrySelectLockedFrameworkName(
+            JsonElement frameworks,
+            string targetFramework,
+            out string? frameworkName)
+        {
+            frameworkName = null;
+            string requestedText = targetFramework.Trim();
+            string[] names = frameworks.EnumerateObject()
+                .Select(framework => framework.Name.Split('/')[0])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            string? exact = names.SingleOrDefault(name =>
+                name.Equals(requestedText, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null)
+            {
+                frameworkName = exact;
+                return true;
+            }
+
+            if (!TryParseLockedFramework(requestedText, out NuGetFramework? requested))
+                return false;
+            string[] compatible = names
+                .Where(name => TryParseLockedFramework(name, out NuGetFramework? candidate) &&
+                               IsSameLockedFramework(requested!, candidate!))
+                .ToArray();
+            if (compatible.Length != 1)
+                return false;
+
+            frameworkName = compatible[0];
+            return true;
+        }
+
+        private static bool TryParseLockedFramework(string value, out NuGetFramework? framework)
+        {
+            framework = NuGetFramework.ParseFolder(value);
+            if (!framework.IsUnsupported)
+                return true;
+
+            framework = NuGetFramework.Parse(value);
+            return !framework.IsUnsupported;
+        }
+
+        private static bool IsSameLockedFramework(
+            NuGetFramework requested,
+            NuGetFramework candidate)
+        {
+            if (!requested.Framework.Equals(candidate.Framework, StringComparison.OrdinalIgnoreCase) ||
+                requested.Version != candidate.Version ||
+                !requested.Profile.Equals(candidate.Profile, StringComparison.OrdinalIgnoreCase) ||
+                requested.HasPlatform != candidate.HasPlatform)
+            {
+                return false;
+            }
+            if (!requested.HasPlatform)
+                return true;
+            if (!requested.Platform.Equals(candidate.Platform, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return requested.PlatformVersion.Major <= 0 ||
+                   requested.PlatformVersion == candidate.PlatformVersion;
+        }
+
+        private static string? ReadEffectiveProperty(
+            IReadOnlyDictionary<string, string>? properties,
+            string name)
+            => properties is not null && properties.TryGetValue(name, out string? value)
+                ? value
+                : null;
 
         private static bool TryReadPowerForgeSdkPackageHashes(
             string lockFilePath,

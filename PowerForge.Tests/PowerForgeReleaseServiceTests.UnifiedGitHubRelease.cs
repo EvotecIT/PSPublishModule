@@ -163,6 +163,43 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void UnifiedGitHubRelease_ModuleVersionSourceUsesProducedPackagePrerelease()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var sourceManifestPath = Path.Combine(root, "Sample.psd1");
+            File.WriteAllText(
+                sourceManifestPath,
+                "@{ ModuleVersion = '1.2.X'; PrivateData = @{ PSData = @{ Prerelease = 'stale' } } }");
+            var packagePath = Path.Combine(root, "Sample.1.2.3-preview1.nupkg");
+            using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+            {
+                var entry = archive.CreateEntry("Sample.nuspec");
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write(
+                    "<package><metadata><id>Sample</id><version>1.2.3-preview1</version></metadata></package>");
+            }
+
+            var plan = new PowerForgeModuleReleasePlanSummary
+            {
+                ManifestPath = sourceManifestPath,
+                ModuleVersion = "1.2.X",
+                IncludesPackages = true
+            };
+
+            PowerForgeReleaseService.UpdateResolvedModuleVersion(plan, new[] { packagePath });
+
+            Assert.Equal("1.2.3", plan.ModuleVersion);
+            Assert.Equal("preview1", plan.PreReleaseTag);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void UnifiedGitHubRelease_AcceptsXInsidePrereleaseLabel()
     {
         var result = new PowerForgeReleaseResult

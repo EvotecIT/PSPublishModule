@@ -32,8 +32,10 @@ $engineRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_ACTION_PATH '../../.
 $project = Join-Path $engineRoot 'PowerForge.Web.Cli/PowerForge.Web.Cli.csproj'
 $cli = Join-Path $engineRoot 'PowerForge.Web.Cli/bin/Release/net10.0/PowerForge.Web.Cli.dll'
 
-dotnet build $project --configuration Release --framework net10.0 --nologo --verbosity minimal
-Assert-LastExitCode -Operation 'Building PowerForge.Web CLI'
+Push-Location $engineRoot
+try {
+    dotnet build $project --configuration Release --framework net10.0 --nologo --verbosity minimal
+    Assert-LastExitCode -Operation 'Building PowerForge.Web CLI'
 
 $arguments = @(
     $cli,
@@ -55,5 +57,8 @@ if ($env:POWERFORGE_CLOUDFLARE_DNS_DRY_RUN -eq 'true') {
     $arguments += '--dry-run'
 }
 
-dotnet @arguments
-Assert-LastExitCode -Operation 'Reconciling Cloudflare DNS record'
+    dotnet @arguments
+    Assert-LastExitCode -Operation 'Reconciling Cloudflare DNS record'
+} finally {
+    Pop-Location
+}

@@ -36,6 +36,11 @@ on:
         required: false
         default: Apple release monitor detected a failure
         type: string
+      readiness_policy:
+        description: Continuous ignores release-timing attestations; strict treats every Doctor error as incident-worthy.
+        required: false
+        default: continuous
+        type: string
 
 concurrency:
   group: powerforge-apple-monitor-${{ github.repository }}
@@ -57,6 +62,7 @@ jobs:
           CALLER_SHA: ${{ github.sha }}
           CALLER_REF: ${{ github.ref }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          READINESS_POLICY: ${{ inputs.readiness_policy }}
         run: |
           foreach ($entry in @{ source_ref = $env:SOURCE_REF; powerforge_ref = $env:POWERFORGE_REF }.GetEnumerator()) {
             if ($entry.Value -notmatch '^[0-9A-Fa-f]{40}$') { throw "$($entry.Key) must be an exact 40-character commit SHA." }
@@ -67,6 +73,9 @@ jobs:
           }
           if ($env:SOURCE_REF -ine $env:CALLER_SHA) {
             throw 'Runner-local Apple Doctor source_ref must equal the exact default-branch workflow commit.'
+          }
+          if ($env:READINESS_POLICY -notin @('continuous', 'strict')) {
+            throw "readiness_policy must be 'continuous' or 'strict'."
           }
 
       - name: Checkout exact monitored source
@@ -182,17 +191,33 @@ jobs:
           RECEIPT_PATH: ${{ steps.doctor.outputs.receipt-path }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SOURCE_REF: ${{ inputs.source_ref }}
+          READINESS_POLICY: ${{ inputs.readiness_policy }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $pagesJson = gh api --paginate --slurp "repos/$env:GH_REPO/issues?state=open&per_page=100"
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate all open repository issues.' }
+          $checkedAt = [DateTimeOffset]::UtcNow.ToString(
+            'yyyy-MM-ddTHH:mm:ssZ',
+            [Globalization.CultureInfo]::InvariantCulture)
+          $pagesJson = gh api --paginate --slurp "repos/$env:GH_REPO/issues?state=all&per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to enumerate all repository issues.' }
           $pages = @($pagesJson | ConvertFrom-Json -Depth 20)
-          $open = @($pages | ForEach-Object { @($_) } | Where-Object { $null -eq $_.pull_request })
+          $allIssues = @($pages | ForEach-Object { @($_) } | Where-Object { $null -eq $_.pull_request })
           $monitorMarker = '<!-- powerforge-apple-monitor-incident:v1 -->'
-          $issues = @($open | Where-Object {
+          $issues = @($allIssues | Where-Object {
             $_.title -eq $env:ISSUE_TITLE -and ([string] $_.body).Contains($monitorMarker)
           } | Sort-Object number)
+          $openIssues = @($issues | Where-Object { [string]::IsNullOrWhiteSpace([string] $_.state) -or $_.state -eq 'open' })
           $issue = $issues | Select-Object -First 1
+          $deferredReadinessCodes = @(
+            'APPLE_REVIEW_DETAILS_MISSING',
+            'APPLE_AGE_RATING_MISSING',
+            'APPLE_PRICE_SCHEDULE_MISSING',
+            'APPLE_AVAILABILITY_MISSING'
+          )
+          function Test-DeferredReadinessDiagnostic {
+            param([Parameter(Mandatory)] $Diagnostic)
+            return $env:READINESS_POLICY -eq 'continuous' -and
+              $deferredReadinessCodes -contains [string] $Diagnostic.code
+          }
           $structured = if ([string]::IsNullOrWhiteSpace($env:STRUCTURED_DIAGNOSTICS)) {
             @()
           } else {
@@ -202,14 +227,20 @@ jobs:
           # Doctor, failed tool build, or retryable remote error stays visible as a
           # red run but must not create or overwrite an Apple release incident.
           $errorDiagnostics = @($structured | Where-Object { $_.severity -eq 'error' })
-          $actionableErrors = @($errorDiagnostics | Where-Object { -not [bool] $_.retryable })
+          $monitoredErrors = @($errorDiagnostics | Where-Object { -not (Test-DeferredReadinessDiagnostic $_) })
+          $deferredReadinessErrors = @($errorDiagnostics | Where-Object { Test-DeferredReadinessDiagnostic $_ })
+          $actionableErrors = @($monitoredErrors | Where-Object { -not [bool] $_.retryable })
           $doctorCompleted = $env:DOCTOR_OUTCOME -in @('success', 'failure')
-          $workflowHealthy = $env:DOCTOR_OUTCOME -eq 'success' -and $errorDiagnostics.Count -eq 0
+          $onlyDeferredReadinessFailed = $env:DOCTOR_OUTCOME -eq 'failure' -and
+            $errorDiagnostics.Count -gt 0 -and
+            $deferredReadinessErrors.Count -eq $errorDiagnostics.Count
+          $workflowHealthy = $doctorCompleted -and $monitoredErrors.Count -eq 0 -and
+            ($env:DOCTOR_OUTCOME -eq 'success' -or $onlyDeferredReadinessFailed)
           $needsIncident = $doctorCompleted -and $actionableErrors.Count -gt 0
           $healthyOutput = $workflowHealthy.ToString().ToLowerInvariant()
           "healthy=$healthyOutput" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           if ($workflowHealthy) {
-            foreach ($openIssue in $issues) {
+            foreach ($openIssue in $openIssues) {
               gh issue close $openIssue.number --comment "Apple Doctor recovered on $env:RUN_URL."
               if ($LASTEXITCODE -ne 0) { throw "Unable to close recovered Apple incident #$($openIssue.number)." }
             }
@@ -228,7 +259,8 @@ jobs:
             $receiptDiagnostics = @($structured)
           }
           $receiptErrors = @($receiptDiagnostics | Where-Object { $_.severity -eq 'error' })
-          $actionableReceiptErrors = @($receiptErrors | Where-Object { -not [bool] $_.retryable })
+          $monitoredReceiptErrors = @($receiptErrors | Where-Object { -not (Test-DeferredReadinessDiagnostic $_) })
+          $actionableReceiptErrors = @($monitoredReceiptErrors | Where-Object { -not [bool] $_.retryable })
           $specificErrors = @($actionableReceiptErrors | Where-Object { $_.code -ne 'APPLE_UNKNOWN' })
           $incidentDiagnostics = if ($specificErrors.Count -gt 0) {
             $specificErrors
@@ -237,6 +269,11 @@ jobs:
           } else {
             $actionableErrors
           }
+          $incidentDiagnostics = @($incidentDiagnostics |
+            Group-Object -Property {
+              @($_.code, $_.severity, $_.summary, $_.action, [bool] $_.retryable) -join "`u{001f}"
+            } |
+            ForEach-Object { $_.Group | Select-Object -First 1 })
           $stateDiagnostics = @($incidentDiagnostics | ForEach-Object {
             [ordered]@{
               code = [string] $_.code
@@ -291,6 +328,8 @@ jobs:
             '',
             "Run: $env:RUN_URL",
             "Source: $env:SOURCE_REF",
+            "Checked: $checkedAt",
+            "Readiness policy: $env:READINESS_POLICY",
             '',
             '## Diagnostics',
             $diagnosticLines
@@ -299,15 +338,13 @@ jobs:
             gh issue create --title $env:ISSUE_TITLE --body $body
             if ($LASTEXITCODE -ne 0) { throw 'Unable to create the proactive Apple incident.' }
           } else {
-            $previousState = [regex]::Match(
-              [string] $issue.body,
-              '<!-- powerforge-apple-monitor-state:([0-9a-f]{64}) -->'
-            )
-            if (-not $previousState.Success -or $previousState.Groups[1].Value -ne $stateHash) {
-              gh issue edit $issue.number --body $body
-              if ($LASTEXITCODE -ne 0) { throw "Unable to update proactive Apple incident #$($issue.number)." }
+            if (-not [string]::IsNullOrWhiteSpace([string] $issue.state) -and $issue.state -ne 'open') {
+              gh issue reopen $issue.number
+              if ($LASTEXITCODE -ne 0) { throw "Unable to reopen proactive Apple incident #$($issue.number)." }
             }
-            foreach ($duplicate in @($issues | Select-Object -Skip 1)) {
+            gh issue edit $issue.number --body $body
+            if ($LASTEXITCODE -ne 0) { throw "Unable to refresh proactive Apple incident #$($issue.number)." }
+            foreach ($duplicate in @($openIssues | Where-Object { $_.number -ne $issue.number })) {
               gh issue close $duplicate.number --comment "Consolidated into #$($issue.number) by the Apple release monitor."
               if ($LASTEXITCODE -ne 0) { throw "Unable to close duplicate Apple incident #$($duplicate.number)." }
             }

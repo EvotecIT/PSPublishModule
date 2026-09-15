@@ -77,6 +77,7 @@ internal static class PowerForgeReleaseRequestMapper
         request.ModulePreReleaseTag = ChooseString(request.ModulePreReleaseTag, options.ModulePreReleaseTag);
         request.WorkspaceConfigPath = ChooseString(request.WorkspaceConfigPath, options.WorkspaceConfigPath);
         request.WorkspaceProfile = ChooseString(request.WorkspaceProfile, options.WorkspaceProfile);
+        request.WorkspaceTestimoXRoot = ChooseString(request.WorkspaceTestimoXRoot, options.WorkspaceTestimoXRoot);
         request.OutputRoot = ChooseString(request.OutputRoot, options.OutputRoot);
         request.StageRoot = ChooseString(request.StageRoot, options.StageRoot);
         request.ManifestJsonPath = ChooseString(request.ManifestJsonPath, options.ManifestJsonPath);
@@ -117,6 +118,7 @@ internal static class PowerForgeReleaseRequestMapper
             request.SignOnMissingTool = options.SignOnMissingTool;
         if (options.SignOnFailure.HasValue)
             request.SignOnFailure = options.SignOnFailure;
+        request.SignTimeoutSeconds = options.SignTimeoutSeconds ?? request.SignTimeoutSeconds;
 
         if (options.WorkspaceEnableFeatures.Length > 0)
             request.WorkspaceEnableFeatures = options.WorkspaceEnableFeatures;
@@ -206,6 +208,7 @@ internal static class PowerForgeReleaseRequestMapper
             SignSubjectName = source.SignSubjectName,
             SignOnMissingTool = source.SignOnMissingTool,
             SignOnFailure = source.SignOnFailure,
+            SignTimeoutSeconds = source.SignTimeoutSeconds,
             SignTimestampUrl = source.SignTimestampUrl,
             SignDescription = source.SignDescription,
             SignUrl = source.SignUrl,

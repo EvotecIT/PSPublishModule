@@ -513,36 +513,54 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void RunProcessWithTimeout_PreservesUnterminatedOutputWithInheritedHandles(bool useStandardError)
     {
-        if (!DotNetPublishPipelineRunner.IsWindows())
-            return;
-
         var method = typeof(DotNetPublishPipelineRunner).GetMethod(
             "RunProcessWithTimeout",
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
         var stopwatch = Stopwatch.StartNew();
+        string fileName;
+        string[] arguments;
+        if (DotNetPublishPipelineRunner.IsWindows())
+        {
+            fileName = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "PowerShell",
+                "7",
+                "pwsh.exe");
+            arguments =
+            [
+                "-NoProfile",
+                "-Command",
+                "$descendant = Start-Process -FilePath $env:ComSpec -ArgumentList '/d','/c','ping 127.0.0.1 -n 11 >nul' -NoNewWindow -PassThru; " +
+                "[Console]::Out.WriteLine('descendant-pid=' + $descendant.Id); " +
+                (useStandardError
+                    ? "[Console]::Error.Write('parent-complete')"
+                    : "[Console]::Out.Write('parent-complete')")
+            ];
+        }
+        else
+        {
+            fileName = "/bin/sh";
+            arguments =
+            [
+                "-c",
+                "sleep 10 & descendant=$!; printf 'descendant-pid=%s\\n' \"$descendant\"; " +
+                (useStandardError
+                    ? "printf parent-complete >&2"
+                    : "printf parent-complete")
+            ];
+        }
 
         var raw = method!.Invoke(
             null,
             new object[]
             {
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                    "PowerShell",
-                    "7",
-                    "pwsh.exe"),
+                fileName,
                 Environment.CurrentDirectory,
-                new[]
-                {
-                    "-NoProfile",
-                    "-Command",
-                    "Start-Process -FilePath $env:ComSpec -ArgumentList '/d','/c','ping 127.0.0.1 -n 11 >nul' -NoNewWindow; " +
-                    (useStandardError
-                        ? "[Console]::Error.Write('parent-complete')"
-                        : "[Console]::Out.Write('parent-complete')")
-                },
+                arguments,
                 TimeSpan.FromSeconds(2),
                 CancellationToken.None
             });
@@ -555,13 +573,80 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
         var timedOut = (bool)resultType.GetField("Item4")!.GetValue(raw)!;
 
-        Assert.False(timedOut);
-        Assert.Equal(0, exitCode);
-        Assert.Contains(
-            "parent-complete",
-            useStandardError ? stderr : stdout,
-            StringComparison.Ordinal);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), stopwatch.Elapsed.ToString());
+        string? processIdLine = stdout
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(line => line.StartsWith("descendant-pid=", StringComparison.Ordinal));
+        Assert.NotNull(processIdLine);
+        Assert.True(int.TryParse(processIdLine!["descendant-pid=".Length..], out int processId));
+
+        using var descendant = Process.GetProcessById(processId);
+        try
+        {
+            Assert.False(descendant.HasExited);
+            Assert.False(timedOut);
+            Assert.Equal(0, exitCode);
+            Assert.Contains(
+                "parent-complete",
+                useStandardError ? stderr : stdout,
+                StringComparison.Ordinal);
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), stopwatch.Elapsed.ToString());
+        }
+        finally
+        {
+            try
+            {
+                if (!descendant.HasExited)
+                {
+                    descendant.Kill(entireProcessTree: true);
+                    descendant.WaitForExit(5000);
+                }
+            }
+            catch
+            {
+                // best effort test cleanup
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void RunProcessWithTimeout_TimesOutContinuouslyWritingUnixProcess()
+    {
+        if (DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "RunProcessWithTimeout",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var stopwatch = Stopwatch.StartNew();
+
+        var raw = method!.Invoke(
+            null,
+            new object[]
+            {
+                "/bin/sh",
+                Environment.CurrentDirectory,
+                new[]
+                {
+                    "-c",
+                    "(sleep 3; kill -TERM $$) & while :; do printf 'continuous-output-0123456789\\n'; done"
+                },
+                TimeSpan.FromMilliseconds(200),
+                CancellationToken.None
+            });
+
+        stopwatch.Stop();
+        Assert.NotNull(raw);
+        var resultType = raw!.GetType();
+        var exitCode = (int)resultType.GetField("Item1")!.GetValue(raw)!;
+        var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
+        var timedOut = (bool)resultType.GetField("Item4")!.GetValue(raw)!;
+
+        Assert.True(timedOut);
+        Assert.Equal(-1, exitCode);
+        Assert.Contains("timed out", stderr, StringComparison.OrdinalIgnoreCase);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), stopwatch.Elapsed.ToString());
     }
 
     [Fact]

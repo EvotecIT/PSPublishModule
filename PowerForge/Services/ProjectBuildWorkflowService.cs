@@ -40,7 +40,8 @@ internal sealed class ProjectBuildWorkflowService
         Action? remotePublishAttempted = null,
         bool coordinatedReleaseCheckpointActive = false,
         IProjectBuildProgressReporter? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool deferPublishing = false)
     {
         if (config is null)
             throw new ArgumentNullException(nameof(config));
@@ -169,7 +170,7 @@ internal sealed class ProjectBuildWorkflowService
             return new ProjectBuildWorkflowResult { Result = result };
         }
 
-        if (!preparation.PublishGitHub)
+        if (!preparation.PublishGitHub || deferPublishing)
         {
             result.Success = true;
             return new ProjectBuildWorkflowResult { Result = result };

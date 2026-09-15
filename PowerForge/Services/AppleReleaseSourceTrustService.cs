@@ -66,7 +66,16 @@ internal sealed partial class AppleReleaseSourceTrustService
             _validationScope = validationScope;
             try
             {
-                return CaptureCore(repositoryRoot, configPath);
+                try
+                {
+                    return CaptureCore(repositoryRoot, configPath);
+                }
+                catch (Exception exception) when (!IsSourceTrustFailure(exception))
+                {
+                    throw new InvalidOperationException(
+                        $"Apple source trust validation failed: {exception.Message}",
+                        exception);
+                }
             }
             finally
             {
@@ -75,6 +84,11 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
         }
     }
+
+    private static bool IsSourceTrustFailure(Exception exception)
+        => exception.Message.StartsWith(
+            "Apple source trust validation failed:",
+            StringComparison.Ordinal);
 
     private AppleReleaseSourceTrustSnapshot CaptureCore(string repositoryRoot, string configPath)
     {

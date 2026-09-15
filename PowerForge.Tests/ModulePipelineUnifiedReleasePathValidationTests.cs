@@ -192,6 +192,164 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void Run_RejectsScriptLayoutRootInsideProtectedProjectBuildStaging()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string protectedStagingPath = Path.Combine(root.FullName, "Artifacts", "ProjectBuild");
+            Directory.CreateDirectory(protectedStagingPath);
+            string protectedFile = Path.Combine(protectedStagingPath, "project-build.txt");
+            File.WriteAllText(protectedFile, "project-build");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) => new ProjectBuildHostExecutionResult
+                {
+                    Success = true,
+                    ConfigPath = configPath ?? request.ConfigPath,
+                    RootPath = root.FullName,
+                    StagingPath = protectedStagingPath,
+                    Result = new ProjectBuildResult
+                    {
+                        Success = true,
+                        Release = new DotNetRepositoryReleaseResult { Success = true }
+                    }
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Script,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(root.FullName, "Artifacts", "Script"),
+                            DoNotClear = true,
+                            RequiredModules = new ArtefactRequiredModulesConfiguration
+                            {
+                                ModulesPath = protectedStagingPath
+                            }
+                        }
+                    }
+                }
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("main script copy root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project build staging path", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("project-build", File.ReadAllText(protectedFile));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsScriptPackedZipThatMatchesProtectedProjectReleaseZip()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string releaseOutput = Path.Combine(root.FullName, "Artifacts", "Releases");
+            string releaseZipPath = Path.Combine(releaseOutput, moduleName + ".zip");
+
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: null,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    Directory.CreateDirectory(releaseOutput);
+                    File.WriteAllText(releaseZipPath, "project-release-zip");
+                    var release = new DotNetRepositoryReleaseResult { Success = true };
+                    release.Projects.Add(new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "Project",
+                        PackageId = "Project",
+                        IsPackable = true,
+                        NewVersion = "1.0.0",
+                        ReleaseZipPath = releaseZipPath
+                    });
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        ReleaseZipOutputPath = releaseOutput,
+                        Result = new ProjectBuildResult { Success = true, Release = release }
+                    };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.ScriptPacked,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = releaseOutput,
+                            ArtefactName = moduleName + ".zip"
+                        }
+                    }
+                }
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("zip output file", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project build release zip asset", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("project-release-zip", File.ReadAllText(releaseZipPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_AllowsPackedModuleZipBesideProjectReleaseZipWithDifferentName()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -786,7 +786,7 @@ si Alias:CreatedBySi Get-Four
             var plan = runner.Plan(spec);
             var buildResult = new ModuleBuildResult(root.FullName, manifestPath, new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
 
-            runner.UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, packageWithoutScriptFolders: false);
+            runner.UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, synchronizeMergedRootModule: false);
 
             Assert.Equal(1, scriptDetector.Calls);
             var write = Assert.Single(manifestMutator.ManifestExportWrites);

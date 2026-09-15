@@ -102,6 +102,39 @@ public sealed partial class ModulePipelineRunner
             string.Join(Environment.NewLine, conflicts.Select(static message => "- " + message)));
     }
 
+    private static void ValidateSignedScriptArtefactLayouts(
+        bool signModule,
+        string projectRoot,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IReadOnlyList<ConfigurationArtefactSegment>? artefacts)
+    {
+        if (!signModule || artefacts is null)
+            return;
+
+        foreach (ConfigurationArtefactSegment artefact in artefacts.Where(static item => item is not null))
+        {
+            if (artefact.ArtefactType != ArtefactType.Script)
+                continue;
+
+            ArtefactConfiguration cfg = artefact.Configuration ?? new ArtefactConfiguration();
+            string outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
+                cfg.Path,
+                projectRoot,
+                moduleName,
+                moduleVersion,
+                preRelease,
+                artefact.ArtefactType);
+            ArtefactLayoutPathResolver.ValidateFinalizedScriptLayout(
+                cfg,
+                outputRoot,
+                moduleName,
+                moduleVersion,
+                preRelease);
+        }
+    }
+
     private static void AddDeliveryExcludedDirectoryConflict(
         List<string> conflicts,
         string projectRoot,
@@ -172,18 +205,18 @@ public sealed partial class ModulePipelineRunner
                 outputRoot,
                 $"artefact output root for '{artefact.ArtefactType}'");
 
-            if (artefact.ArtefactType is not ArtefactType.Unpacked)
+            if (artefact.ArtefactType is not (ArtefactType.Unpacked or ArtefactType.Script))
                 continue;
+
+            var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
+                cfg,
+                outputRoot,
+                moduleName,
+                moduleVersion,
+                preRelease);
 
             if (cfg.RequiredModules.Enabled == true)
             {
-                var requiredModulesRoot = ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
-                    cfg,
-                    outputRoot,
-                    moduleName,
-                    moduleVersion,
-                    preRelease);
-
                 AddPathOverlapConflict(
                     conflicts,
                     warnedScopes,
@@ -196,14 +229,7 @@ public sealed partial class ModulePipelineRunner
             var modulesRoot = ArtefactLayoutPathResolver.ResolveModulesRootForUnpacked(
                 cfg,
                 outputRoot,
-                cfg.RequiredModules.Enabled == true
-                    ? ArtefactLayoutPathResolver.ResolveRequiredModulesRootForUnpacked(
-                        cfg,
-                        outputRoot,
-                        moduleName,
-                        moduleVersion,
-                        preRelease)
-                    : outputRoot,
+                requiredModulesRoot,
                 moduleName,
                 moduleVersion,
                 preRelease);
@@ -267,21 +293,37 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static bool DoPathsOverlap(string pathA, string pathB)
-        => IsSameOrChildPath(pathA, pathB) || IsSameOrChildPath(pathB, pathA);
+    {
+        var comparison = GetPathComparison(pathA, pathB);
+        return IsSameOrChildPath(pathA, pathB, comparison) ||
+               IsSameOrChildPath(pathB, pathA, comparison);
+    }
 
     private static bool IsSameOrChildPath(string rootPath, string candidatePath)
+        => IsSameOrChildPath(rootPath, candidatePath, GetPathComparison(rootPath, candidatePath));
+
+    private static bool IsSameOrChildPath(
+        string rootPath,
+        string candidatePath,
+        StringComparison comparison)
     {
         var root = Path.GetFullPath(rootPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var candidate = Path.GetFullPath(candidatePath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        if (string.Equals(root, candidate, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(root, candidate, comparison))
             return true;
 
         var rootWithSeparator = root + Path.DirectorySeparatorChar;
         var candidateWithSeparator = candidate + Path.DirectorySeparatorChar;
-        return candidateWithSeparator.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase);
+        return candidateWithSeparator.StartsWith(rootWithSeparator, comparison);
     }
+
+    private static StringComparison GetPathComparison(string pathA, string pathB)
+        => FrameworkCompatibility.GetPathStringComparisonForPath(pathA) == StringComparison.OrdinalIgnoreCase ||
+           FrameworkCompatibility.GetPathStringComparisonForPath(pathB) == StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 
 }

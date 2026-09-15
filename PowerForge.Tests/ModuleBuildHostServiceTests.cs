@@ -42,6 +42,7 @@ public sealed class ModuleBuildHostServiceTests
             ModuleVersion = "3.1.0",
             StagingPath = @"C:\repo\.powerforge\staging",
             ReuseStaging = true,
+            ReleaseCheckpoint = true,
             NoDotnetBuild = true,
             NoSign = true,
             IncludeProjectPackages = false,
@@ -60,6 +61,7 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$moduleBuildArguments['ModuleVersion'] = '3.1.0'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['StagingPath'] = 'C:\\repo\\.powerforge\\staging'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['ReuseStaging'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$moduleBuildArguments['PowerForgeReleaseCheckpoint'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoDotnetBuild'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['NoSign'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$moduleBuildArguments['IncludeProjectPackages'] = $false", captured.CommandText!, StringComparison.Ordinal);
@@ -341,7 +343,8 @@ public sealed class ModuleBuildHostServiceTests
             Framework = "net10.0",
             RunMode = ConfigurationGateMode.Publish,
             PowerForgeReleaseStage = true,
-            UnifiedGitHubRelease = true
+            UnifiedGitHubRelease = true,
+            ReleaseCheckpoint = true
         });
 
         Assert.NotNull(captured);
@@ -355,7 +358,68 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$buildScriptArguments['PowerForgeReleaseStage'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('PowerForgeUnifiedGitHubRelease')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['PowerForgeUnifiedGitHubRelease'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$PSDefaultParameterValues['Invoke-ModuleBuild:PowerForgeReleaseCheckpoint'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ReleaseCheckpointFlowsThroughLegacyScriptWithoutConsumerParameter()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "pf-module-host-release-checkpoint-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "CheckpointHost";
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, moduleName));
+            var buildRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
+            var modulePath = Path.Combine(moduleRoot.FullName, moduleName + ".psd1");
+            var scriptPath = Path.Combine(buildRoot.FullName, "Build-Module.ps1");
+            var markerPath = Path.Combine(root.FullName, "release-checkpoint.txt");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, moduleName + ".psm1"), string.Empty);
+            File.WriteAllText(
+                modulePath,
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0' }}");
+            File.WriteAllText(
+                scriptPath,
+                $$"""
+                $result = Invoke-ModuleBuild -ModuleName '{{moduleName}}' -Path '{{root.FullName.Replace("'", "''")}}' -RunMode Manifest -PassThru -Settings { }
+                $flags = [Reflection.BindingFlags]'Instance,NonPublic'
+                $property = $result.Plan.GetType().GetProperty('ReleaseCheckpoint', $flags)
+                if ($null -eq $property -or -not [bool] $property.GetValue($result.Plan)) {
+                    throw 'The release checkpoint did not reach the legacy script module build.'
+                }
+                [IO.File]::WriteAllText('{{markerPath.Replace("'", "''")}}', 'True')
+                """);
+
+            var repoRoot = RepoRootLocator.Find();
+            var pspublishModulePath = Path.Combine(
+                repoRoot,
+                "PSPublishModule",
+                "bin",
+                "Release",
+                "net8.0",
+                "PSPublishModule.dll");
+            Assert.True(File.Exists(pspublishModulePath), $"Built net8.0 module was not found: {pspublishModulePath}");
+
+            var result = await new ModuleBuildHostService().ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+            {
+                RepositoryRoot = root.FullName,
+                ScriptPath = scriptPath,
+                ModulePath = pspublishModulePath,
+                Framework = "net8.0",
+                RunMode = ConfigurationGateMode.Build,
+                ReleaseCheckpoint = true,
+                Timeout = TimeSpan.FromMinutes(1)
+            });
+
+            Assert.True(result.Succeeded, result.StandardError);
+            Assert.Equal("True", File.ReadAllText(markerPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
     }
 
     [Fact]
@@ -722,6 +786,51 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Equal(
             "Module version '3.0.76' is not greater than repository version '3.0.76'.",
             result.FailureMessage);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_CapturesProducedArtefactsWithoutProgressReporter()
+    {
+        PowerShellRunRequest? captured = null;
+        string outputPath = Path.GetFullPath(@"C:\repo\Artefacts\Company.Tools.zip");
+        var message = JsonSerializer.Serialize(new ModulePipelineProgressProtocolMessage
+        {
+            ArtefactOutputs = new[]
+            {
+                new PowerForgeModuleArtefactOutputSummary
+                {
+                    Type = ArtefactType.ScriptPacked,
+                    OutputPath = outputPath,
+                    EntryPointRelativePath = "app/Company.Tools.ps1"
+                }
+            }
+        });
+        string protocolLine = "##powerforge-module-progress-v1##" +
+                              Convert.ToBase64String(Encoding.UTF8.GetBytes(message));
+        var runner = new StubPowerShellRunner(request =>
+        {
+            captured = request;
+            request.OutputLineReceived!(protocolLine);
+            return new PowerShellRunResult(0, protocolLine + Environment.NewLine + "ok", string.Empty, "pwsh");
+        });
+
+        ModuleBuildHostExecutionResult result = await new ModuleBuildHostService(runner).ExecuteBuildAsync(
+            new ModuleBuildHostBuildRequest
+            {
+                RepositoryRoot = @"C:\repo",
+                ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+                ModulePath = @"C:\repo\Module\PSPublishModule.psd1"
+            });
+
+        PowerForgeModuleArtefactOutputSummary output = Assert.Single(result.ArtefactOutputs);
+        Assert.Equal(ArtefactType.ScriptPacked, output.Type);
+        Assert.Equal(outputPath, output.OutputPath);
+        Assert.Equal("app/Company.Tools.ps1", output.EntryPointRelativePath);
+        Assert.DoesNotContain("##powerforge-module-progress", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal("ok", result.StandardOutput);
+        Assert.NotNull(captured);
+        Assert.Equal("1", captured!.EnvironmentVariables![ModulePipelineProgressProtocol.EnvironmentVariable]);
+        Assert.NotNull(captured.OutputLineReceived);
     }
 
     private sealed class RecordingReleaseProgress : IPowerForgeReleaseProgressReporterV2

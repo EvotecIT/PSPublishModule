@@ -91,6 +91,11 @@ public sealed class ModuleBuildHostBuildRequest
     internal bool RequireReusableOutput { get; set; }
 
     /// <summary>
+    /// Preserves configured local signing during the build pass that produces a deferred release checkpoint.
+    /// </summary>
+    internal bool ReleaseCheckpoint { get; set; }
+
+    /// <summary>
     /// Disables module signing when true.
     /// </summary>
     public bool NoSign { get; set; }

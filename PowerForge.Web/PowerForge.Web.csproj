@@ -4,7 +4,7 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <VersionPrefix>3.0.135</VersionPrefix>
+    <VersionPrefix>3.0.142</VersionPrefix>
     <PackageId>PowerForge.Web</PackageId>
     <RootNamespace>PowerForge.Web</RootNamespace>
     <Description>PowerForge.Web static-site engine and reusable website build components.</Description>
@@ -31,9 +31,9 @@
   <ItemGroup>
     <PackageReference Include="Google.Apis.Auth" Version="1.76.0" />
     <PackageReference Include="HtmlTinkerX" Version="3.0.1" />
-    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.16.0" />
-    <PackageReference Include="OfficeIMO.Markdown" Version="3.2.6" />
-    <PackageReference Include="Scriban" Version="7.2.6" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.17.1" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="3.4.1" />
+    <PackageReference Include="Scriban" Version="7.4.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
@@ -49,6 +49,8 @@
     <EmbeddedResource Include="Assets\ApiDocs\api-header.html" />
     <EmbeddedResource Include="Assets\ApiDocs\api-footer.html" />
     <EmbeddedResource Include="Assets\WebMcp\site-search.v1.js" />
+    <EmbeddedResource Include="Assets\Media\media-viewer.v1.js" />
+    <EmbeddedResource Include="Assets\Media\media-viewer.v1.css" />
     <EmbeddedResource Include="Assets\SitemapProtocol\sitemap.xsd" />
     <EmbeddedResource Include="Assets\SitemapProtocol\siteindex.xsd" />
   </ItemGroup>

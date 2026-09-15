@@ -106,9 +106,11 @@ internal sealed partial class PowerForgeReleaseService
         string? releaseVersionFloor = null,
         string? releaseVersionFloorProject = null,
         bool forcePlanOnly = false,
-        bool suppressPublishing = false)
+        bool suppressPublishing = false,
+        bool deferPublishing = false)
     {
         ApplyPackageRequestOverrides(packages, request, configurationOverride);
+        var canApplyReleaseVersionFloor = packages.UpdateVersions != false;
         var packageRequest = new ProjectBuildHostRequest
         {
             ConfigPath = configPath,
@@ -116,12 +118,13 @@ internal sealed partial class PowerForgeReleaseService
             PlanOnly = forcePlanOnly || request.PlanOnly || request.ValidateOnly ? true : null,
             PublishNuget = suppressPublishing ? false : request.PublishNuget,
             PublishGitHub = suppressPublishing || publishUnifiedGitHub ? false : request.PublishProjectGitHub,
-            ReleaseVersionFloor = releaseVersionFloor,
-            ReleaseVersionFloorProject = releaseVersionFloorProject,
+            ReleaseVersionFloor = canApplyReleaseVersionFloor ? releaseVersionFloor : null,
+            ReleaseVersionFloorProject = canApplyReleaseVersionFloor ? releaseVersionFloorProject : null,
             BuildSpecPrepared = preparedSpec => request.PackageBuildSpec = preparedSpec,
             RemotePublishAttempted = () => ValidatePostBuildSourceState(request),
             CancellationToken = request.CancellationToken
         };
+        packageRequest.DeferPublishing = deferPublishing;
         if (request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress)
         {
             packageRequest.Progress = new ProjectBuildReleaseProgressAdapter(

@@ -24,6 +24,9 @@ Install the promoter as root:
 install -o root -g root -m 0755 \
   Deployment/Linux/powerforge-service-deploy.sh \
   /usr/local/sbin/powerforge-service-deploy
+install -o root -g root -m 0755 \
+  Deployment/Linux/powerforge-service-deploy-ssh.sh \
+  /usr/local/sbin/powerforge-service-deploy-ssh
 ```
 
 Create one root-owned configuration per service under `/etc/powerforge/services`:
@@ -105,6 +108,17 @@ Validate the effective sudoers rule with `visudo -cf` and `sudo -l -U powerforge
 The privileged command accepts no caller-controlled paths. It only reads
 `/tmp/powerforge-service-example/artifact.tar` and `deployment.json`, then validates
 their ownership and copies them into root-only staging before inspection.
+
+Restrict the deployment public key to the streaming transport and the fixed services assigned to that
+account. Repeat `--allow-service` only when one deployment identity intentionally owns several services:
+
+```text
+restrict,command="/usr/local/sbin/powerforge-service-deploy-ssh --allow-service example" ssh-ed25519 AAAA... deployment
+```
+
+The forced command rejects shells, forwarding, SCP/SFTP, unexpected archive entries, oversized payloads,
+and service identifiers outside that key's allowlist. The composite deployment action streams exactly
+`artifact.tar` and `deployment.json`; only the root-owned promoter crosses the privilege boundary.
 
 ## Caller Workflow
 

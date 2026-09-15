@@ -33,7 +33,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static readonly HashSet<string> TrustedSdkAutoReferencedPackageIds = new(
         new[]
         {
-            "Microsoft.NET.ILLink.Tasks"
+            "Microsoft.NET.ILLink.Tasks",
+            "NETStandard.Library.Ref"
         },
         StringComparer.OrdinalIgnoreCase);
 
@@ -45,6 +46,7 @@ public sealed partial class DotNetPublishPipelineRunner
         HashSet<string> sdkManagedPackageKeys,
         IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
         IReadOnlyDictionary<string, string?>? environmentVariables,
+        IReadOnlyDictionary<string, string> committedPackageHashes,
         IReadOnlyDictionary<string, string> committedArchivePaths,
         VerifiedPackageArchiveCache archives,
         out string? failureReason)
@@ -55,6 +57,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 properties,
                 effectiveGlobalProperties,
                 environmentVariables,
+                committedPackageHashes,
                 committedArchivePaths,
                 archives,
                 out JsonDocument? document,
@@ -106,6 +109,7 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement properties,
         IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
         IReadOnlyDictionary<string, string?>? environmentVariables,
+        IReadOnlyDictionary<string, string> committedPackageHashes,
         IReadOnlyDictionary<string, string> committedArchivePaths,
         VerifiedPackageArchiveCache archives,
         out JsonDocument? document,
@@ -187,19 +191,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 failureReason = "SDK package keys could not be read from the restore graph";
                 return false;
             }
-            if (!TryPrimeSdkEvidencePackages(
-                    temporaryRoot,
-                    isolatedPackageRoot,
-                    verifiedPackageSource,
-                    configPath,
-                    committedArchivePaths.Keys,
-                    "verified-lock",
-                    Path.GetDirectoryName(projectPath)!,
-                    environmentVariables))
-            {
-                failureReason = "locked packages could not be primed into the isolated package root";
-                return false;
-            }
             if (!TryWriteSdkEvidenceNuGetConfig(
                     configPath,
                     verifiedPackageSource,
@@ -216,7 +207,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     sdkPackageKeys,
                     "sdk-packages",
                     Path.GetDirectoryName(projectPath)!,
-                    environmentVariables))
+                    environmentVariables,
+                    requireEmptyPackageRoot: true))
             {
                 failureReason = "SDK-owned packages could not be primed from the trusted source";
                 return false;
@@ -231,6 +223,28 @@ public sealed partial class DotNetPublishPipelineRunner
                     archives))
             {
                 failureReason = "SDK package hashes or archive snapshots could not be verified";
+                return false;
+            }
+            if (!HaveNoConflictingSdkPackageHashes(
+                    committedPackageHashes,
+                    trustedSdkPackageHashes,
+                    out string? conflictingPackageKey))
+            {
+                failureReason = $"SDK-owned package '{conflictingPackageKey}' conflicts with the committed package hash";
+                return false;
+            }
+            if (!TryPrimeSdkEvidencePackages(
+                    temporaryRoot,
+                    isolatedPackageRoot,
+                    verifiedPackageSource,
+                    configPath,
+                    committedArchivePaths.Keys,
+                    "verified-lock",
+                    Path.GetDirectoryName(projectPath)!,
+                    environmentVariables,
+                    requireEmptyPackageRoot: false))
+            {
+                failureReason = "locked packages could not be primed into the isolated package root";
                 return false;
             }
             if (!TryWriteSdkEvidenceNuGetConfig(
@@ -514,10 +528,17 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string> packageKeys,
         string projectName,
         string workingDirectory,
-        IReadOnlyDictionary<string, string?>? environmentVariables)
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        bool requireEmptyPackageRoot)
     {
         try
         {
+            if (requireEmptyPackageRoot &&
+                Directory.EnumerateFileSystemEntries(isolatedPackageRoot).Any())
+            {
+                return false;
+            }
+
             var packages = packageKeys
                 .Select(key =>
                 {
@@ -681,6 +702,24 @@ public sealed partial class DotNetPublishPipelineRunner
         return expected.Count == actual.Count &&
                expected.All(package => actual.TryGetValue(package.Key, out string? hash) &&
                                        string.Equals(package.Value, hash, StringComparison.Ordinal));
+    }
+
+    private static bool HaveNoConflictingSdkPackageHashes(
+        IReadOnlyDictionary<string, string> committedPackageHashes,
+        IReadOnlyDictionary<string, string> trustedSdkPackageHashes,
+        out string? conflictingPackageKey)
+    {
+        conflictingPackageKey = null;
+        foreach (KeyValuePair<string, string> package in trustedSdkPackageHashes)
+        {
+            if (committedPackageHashes.TryGetValue(package.Key, out string? committedHash) &&
+                !string.Equals(committedHash, package.Value, StringComparison.Ordinal))
+            {
+                conflictingPackageKey = package.Key;
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void TryDeleteSdkEvidenceRoot(string? path)

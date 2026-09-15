@@ -69,7 +69,7 @@ internal sealed class EmbeddedModuleDependencyService
                 : Path.Combine(reference.ModuleName, version!);
             var destination = Path.Combine(modulesRoot, relativePath);
 
-            CopyDirectory(installed.ModuleBasePath!, destination, overwrite: true);
+            CopyDirectory(installed.ModuleBasePath!, destination, overwrite: true, excludeBuildHostMetadata: true);
             entries.Add(new EmbeddedModuleDependencyEntry
             {
                 Name = reference.ModuleName,
@@ -630,7 +630,11 @@ internal sealed class EmbeddedModuleDependencyService
         };
     }
 
-    private static void CopyDirectory(string sourceDirectory, string destinationDirectory, bool overwrite)
+    private static void CopyDirectory(
+        string sourceDirectory,
+        string destinationDirectory,
+        bool overwrite,
+        bool excludeBuildHostMetadata = false)
     {
         if (!Directory.Exists(sourceDirectory))
             throw new DirectoryNotFoundException($"Directory not found: {sourceDirectory}");
@@ -646,12 +650,18 @@ internal sealed class EmbeddedModuleDependencyService
         foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
         {
             var relative = ComputeRelativePath(sourceDirectory, directory);
+            if (excludeBuildHostMetadata && ModuleDependencyPackageFilter.IsBuildHostMetadataPath(relative))
+                continue;
+
             Directory.CreateDirectory(Path.Combine(destinationDirectory, relative));
         }
 
         foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
         {
             var relative = ComputeRelativePath(sourceDirectory, file);
+            if (excludeBuildHostMetadata && ModuleDependencyPackageFilter.IsBuildHostMetadataPath(relative))
+                continue;
+
             var target = Path.Combine(destinationDirectory, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target, overwrite: true);

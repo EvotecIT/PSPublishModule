@@ -23,7 +23,11 @@ public sealed class DotNetPublishPipelineRunnerCancellationTests
             ]
         };
 
-        var execution = Task.Run(() => runner.Run(plan, progress: null, scope.Token));
+        var execution = Task.Factory.StartNew(
+            () => runner.Run(plan, progress: null, scope.Token),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
         await processRunner.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         scope.Cancel();
 

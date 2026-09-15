@@ -36,6 +36,12 @@ public sealed class ModuleBuildHostExecutionResult
     public string Executable { get; set; } = string.Empty;
 
     /// <summary>
+    /// Successfully produced module artefacts reported by the isolated build.
+    /// </summary>
+    internal PowerForgeModuleArtefactOutputSummary[] ArtefactOutputs { get; set; } =
+        Array.Empty<PowerForgeModuleArtefactOutputSummary>();
+
+    /// <summary>
     /// True when <see cref="ExitCode"/> is zero.
     /// </summary>
     public bool Succeeded => ExitCode == 0;
