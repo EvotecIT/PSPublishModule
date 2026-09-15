@@ -28,11 +28,8 @@ public sealed partial class DotNetPublishPipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (selected.Length <= 1 || selected.Any(framework =>
-                !declared.Contains(framework, StringComparer.OrdinalIgnoreCase)))
-        {
+        if (selected.Length <= 1)
             return Array.Empty<string>();
-        }
 
         return selected;
     }

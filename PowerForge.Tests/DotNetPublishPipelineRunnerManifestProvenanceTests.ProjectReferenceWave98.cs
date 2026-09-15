@@ -208,7 +208,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("net8.0", "net8.0;net10.0", false)]
     [InlineData("net8.0;net10.0", "net10.0", false)]
     [InlineData("net8.0;net10.0", "net8.0;net10.0", true)]
-    [InlineData("net8.0;net10.0", "net8.0;net9.0", false)]
+    [InlineData("net8.0;net10.0", "net8.0;net9.0", true)]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ControlledRestore_UsesOnlyDeclaredMultiTargetFrameworkMatrix(
         string? declaredTargetFrameworks,
@@ -226,9 +226,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.Equal(expectsMatrix, frameworks.Length > 1);
         if (expectsMatrix)
         {
-            Assert.Equal(2, frameworks.Length);
-            Assert.Contains("net8.0", frameworks);
-            Assert.Contains("net10.0", frameworks);
+            Assert.Equal(
+                selectedTargetFrameworks.Split(';').OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase),
+                frameworks);
         }
     }
 }
