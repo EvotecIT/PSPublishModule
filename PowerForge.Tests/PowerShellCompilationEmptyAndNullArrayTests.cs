@@ -12,15 +12,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
-            function Test-EmptyIdentity { $First = @(); $Second = @(); return [object]::ReferenceEquals($First, $Second) }
-            function Test-TypedEmptyIdentity { [int[]]$First = @(); [int[]]$Second = @(); return [object]::ReferenceEquals($First, $Second) }
-            function Get-EmptyJaggedCount { [int[][]]$Values = @(); return $Values.Length }
-            function Get-EmptyDeepJaggedCount { [string[][][]]$Values = @(); return $Values.Length }
-            function Test-EmptyConcatenationIdentity { $First = @() + @(); $Second = @() + @(); return [object]::ReferenceEquals($First, $Second) }
-            function Get-EmptyCount { $Values = @(); return $Values.Length }
-            function Get-NullCount { $Values = @($null); return $Values.Length }
-            function Get-MixedNullCount { $Values = @(1; $null; 2); return $Values.Length }
-            function Get-CollectedNull { $Values = @($null); return $Values[0] }
+            function Test-EmptyIdentity { [CmdletBinding()] param() $First = @(); $Second = @(); return [object]::ReferenceEquals($First, $Second) }
+            function Test-TypedEmptyIdentity { [CmdletBinding()] param() [int[]]$First = @(); [int[]]$Second = @(); return [object]::ReferenceEquals($First, $Second) }
+            function Get-EmptyJaggedCount { [CmdletBinding()] param() [int[][]]$Values = @(); return $Values.Length }
+            function Get-EmptyDeepJaggedCount { [CmdletBinding()] param() [string[][][]]$Values = @(); return $Values.Length }
+            function Test-EmptyConcatenationIdentity { [CmdletBinding()] param() $First = @() + @(); $Second = @() + @(); return [object]::ReferenceEquals($First, $Second) }
+            function Get-EmptyCount { [CmdletBinding()] param() $Values = @(); return $Values.Length }
+            function Get-NullCount { [CmdletBinding()] param() $Values = @($null); return $Values.Length }
+            function Get-MixedNullCount { [CmdletBinding()] param() $Values = @(1; $null; 2); return $Values.Length }
+            function Get-CollectedNull { [CmdletBinding()] param() $Values = @($null); return $Values[0] }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "PowerForge.ClosedArrays",

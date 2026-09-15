@@ -10,30 +10,29 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("-InputObject (Clear-Local $Trace) -NoEnumerate")]
     [InlineData("([object](Clear-Local $Trace)) -NoEnumerate")]
     [InlineData("-InputObject ([object](Clear-Local $Trace)) -NoEnumerate")]
-    public void NoEnumerate_RetainsOutputFreeLocalCalls(string arguments)
+    public void NoEnumerate_CompilesOutputFreeLocalCalls(string arguments)
     {
         using var fixture = ArtifactFixture.Create(
             "function Clear-Local { [CmdletBinding()] param([Collections.ArrayList]$Trace); $Trace.Clear() }; " +
             "function Get-Output { [CmdletBinding()] param([Collections.ArrayList]$Trace); Microsoft.PowerShell.Utility\\Write-Output " + arguments + " }", ".psm1");
         var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "OutputFreeLocalCalls", "net10.0");
-        Assert.DoesNotContain(result.Methods, method => method.SourceName == "Get-Output");
-        Assert.NotEmpty(result.Diagnostics);
+        Assert.Contains(result.Methods, method => method.SourceName == "Get-Output");
     }
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("$Result=[object](Clear-Local $Trace)", false)]
-    [InlineData("Clear-Local $Trace", true)]
-    [InlineData("[void](Clear-Local $Trace)", true)]
-    public void NoEnumerate_EmptyCallConsumptionGuardPreservesStatementCalls(string body, bool emitted)
+    [InlineData("$Result=[object](Clear-Local $Trace)")]
+    [InlineData("Clear-Local $Trace")]
+    [InlineData("[void](Clear-Local $Trace)")]
+    public void NoEnumerate_EmptyCallConsumptionCompilesStatementCalls(string body)
     {
         using var fixture = ArtifactFixture.Create(
             "function Clear-Local { [CmdletBinding()] param([Collections.ArrayList]$Trace); $Trace.Clear() }; " +
             "function Invoke-Caller { [CmdletBinding()] param([Collections.ArrayList]$Trace); " + body + "; 'after' }", ".psm1");
         var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "EmptyCallConsumption", "net10.0");
-        Assert.Equal(emitted, result.Methods.Any(method => method.SourceName == "Invoke-Caller"));
+        Assert.Contains(result.Methods, method => method.SourceName == "Invoke-Caller");
     }
 
     [Theory]

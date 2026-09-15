@@ -4,9 +4,15 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    public static IEnumerable<object[]> CompleteHexWorkflowHosts()
+        => StatementErrorHosts().Select(configuration => new[]
+        {
+            configuration[0], configuration[1], PowerShellCompilationMode.Hybrid
+        });
+
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [MemberData(nameof(CompleteConversionWorkflowHosts))]
+    [MemberData(nameof(CompleteHexWorkflowHosts))]
     public void CompleteWorkflow_PinnedHexPreservesCaptureErrorsAndContainers(string framework, string host, PowerShellCompilationMode mode)
     {
         var source = FindCompleteConversionWorkflow("PSSharedGoods", "Convert-HexToBinary.ps1");

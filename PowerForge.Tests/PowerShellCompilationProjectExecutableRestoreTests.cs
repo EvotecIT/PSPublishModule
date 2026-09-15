@@ -8,7 +8,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData(PowerShellCompilationMode.Strict, "return 7", "7")]
-    [InlineData(PowerShellCompilationMode.Hybrid, "Write-Host 'ready'", "ready")]
+    [InlineData(PowerShellCompilationMode.Package, "Write-Host 'ready'", "ready")]
     public void Project_RestoreBuildAndRunPreservesSingleFilePackageClosure(
         PowerShellCompilationMode mode, string source, string expectedOutput)
     {

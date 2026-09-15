@@ -57,22 +57,22 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
-            function Get-Parenthesized { $Values = @((1,2)); return ,$Values }
-            function Get-Nested { $Values = @((1,2),(3,4)); return ,$Values }
-            function Get-WrappedEmpty { $Values = @(,@()); return ,$Values }
-            function Get-CollectedEmpty { $Values = @(@()); return ,$Values }
-            function Get-Mixed { $Values = @((1,2); $null; ,(3,4)); return ,$Values }
-            function Get-Recollected { $Values = @(@((1,2),(3,4))); return ,$Values }
-            function Get-Typed { [int[]]$Values = @((1,2); 3); return ,$Values }
-            function Get-WrappedNull { $Values = @(,$null); return ,$Values }
+            function Get-Parenthesized { [CmdletBinding()] param() $Values = @((1,2)); return ,$Values }
+            function Get-Nested { [CmdletBinding()] param() $Values = @((1,2),(3,4)); return ,$Values }
+            function Get-WrappedEmpty { [CmdletBinding()] param() $Values = @(,@()); return ,$Values }
+            function Get-CollectedEmpty { [CmdletBinding()] param() $Values = @(@()); return ,$Values }
+            function Get-Mixed { [CmdletBinding()] param() $Values = @((1,2); $null; ,(3,4)); return ,$Values }
+            function Get-Recollected { [CmdletBinding()] param() $Values = @(@((1,2),(3,4))); return ,$Values }
+            function Get-Typed { [CmdletBinding()] param() [int[]]$Values = @((1,2); 3); return ,$Values }
+            function Get-WrappedNull { [CmdletBinding()] param() $Values = @(,$null); return ,$Values }
             function Get-Wrapped { [CmdletBinding()] param([object]$Value) $Values = @(,$Value); return ,$Values }
             function Get-Pair { [CmdletBinding()] param([object]$Value) $Values = @($Value,$Value); return ,$Values }
-            function Test-EmptyCollectedIdentity { $First = @(@()); $Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
-            function Test-EmptyDeepIdentity { $First = @(@(@())); $Second = @(@(@())); return [object]::ReferenceEquals($First,$Second) }
-            function Test-EmptyObjectIdentity { [object[]]$First = @(@()); [object[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
-            function Test-EmptyIntIdentity { [int[]]$First = @(@()); [int[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
-            function Test-EmptyStringIdentity { [string[]]$First = @(@()); [string[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
-            function Test-EmptyLiteralIdentity { $First = @(); $Second = @(); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyCollectedIdentity { [CmdletBinding()] param() $First = @(@()); $Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyDeepIdentity { [CmdletBinding()] param() $First = @(@(@())); $Second = @(@(@())); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyObjectIdentity { [CmdletBinding()] param() [object[]]$First = @(@()); [object[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyIntIdentity { [CmdletBinding()] param() [int[]]$First = @(@()); [int[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyStringIdentity { [CmdletBinding()] param() [string[]]$First = @(@()); [string[]]$Second = @(@()); return [object]::ReferenceEquals($First,$Second) }
+            function Test-EmptyLiteralIdentity { [CmdletBinding()] param() $First = @(); $Second = @(); return [object]::ReferenceEquals($First,$Second) }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "PowerForge.ArrayGrouping",

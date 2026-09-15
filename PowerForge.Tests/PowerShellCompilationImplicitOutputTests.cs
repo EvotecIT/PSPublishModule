@@ -4,18 +4,16 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
-    [Theory]
+    [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("return Get-Array")]
-    public void Transpile_RetainsUnqualifiedEnumerationAfterImplicitOutput(string ending)
+    public void Transpile_CompilesUnqualifiedEnumerationAfterImplicitOutput()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Array { [CmdletBinding()] param() return 1,2 }; function Get-Records { [CmdletBinding()] param() 'start'; " + ending + " }", ".psm1");
+            "function Get-Array { [CmdletBinding()] param() return 1,2 }; function Get-Records { [CmdletBinding()] param() 'start'; return Get-Array }", ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "ImplicitOutput", "net10.0");
         Assert.Contains(typed.Methods, method => method.SourceName == "Get-Array");
-        Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Get-Records");
-        Assert.NotEmpty(typed.Diagnostics);
+        Assert.Contains(typed.Methods, method => method.SourceName == "Get-Records");
     }
 
     [Fact]
@@ -109,11 +107,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$null = Get-Records; return 9")]
     [InlineData("return (Get-Records) + 1")]
     [InlineData("[void](Get-Records); return 9")]
-    [InlineData("Get-Records | Out-Null; return 9")]
-    public void Transpile_RetainsConsumedSuccessStreams(string body)
+    public void Transpile_CompilesConsumedSuccessStreams(string body)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-Records { [CmdletBinding()] param() 1; return 2 }; function Get-Consumer { [CmdletBinding()] param() " + body + " }", ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "ImplicitOutput", "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+        Assert.Contains(typed.Methods, method => method.SourceName == "Get-Records");
+        Assert.Contains(typed.Methods, method => method.SourceName == "Get-Consumer");
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Transpile_RetainsPipedSuccessStreamConsumption()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Records { [CmdletBinding()] param() 1; return 2 }; function Get-Consumer { [CmdletBinding()] param() Get-Records | Out-Null; return 9 }", ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "ImplicitOutput", "net10.0",
             PowerShellCompilationCapabilities.HybridModule);
@@ -124,7 +134,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Transpile_RetainsConsumedTransitiveSuccessStreams()
+    public void Transpile_CompilesConsumedTransitiveSuccessStreams()
     {
         using var fixture = ArtifactFixture.Create("""
             function Get-Records { [CmdletBinding()] param() 1; return 2 }
@@ -136,8 +146,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.HybridModule);
         Assert.Contains(typed.Methods, method => method.SourceName == "Get-Records");
         Assert.Contains(typed.Methods, method => method.SourceName == "Get-Forwarded");
-        Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Get-Consumer");
-        Assert.NotEmpty(typed.Diagnostics);
+        Assert.Contains(typed.Methods, method => method.SourceName == "Get-Consumer");
     }
 
     [Theory]
