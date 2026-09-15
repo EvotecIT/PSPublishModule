@@ -23,6 +23,22 @@ public sealed class ModuleInstaller
     /// the resolved version and installed paths.
     /// </summary>
     public ModuleInstallerResult InstallFromStaging(string stagingPath, string moduleName, string moduleVersion, ModuleInstallerOptions? options = null)
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validateNewDestinations: null);
+
+    internal ModuleInstallerResult InstallFromStagingTransactional(
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        ModuleInstallerOptions options,
+        Action<IReadOnlyList<string>> validateNewDestinations)
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validateNewDestinations);
+
+    private ModuleInstallerResult InstallFromStagingCore(
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        ModuleInstallerOptions? options,
+        Action<IReadOnlyList<string>>? validateNewDestinations)
     {
         if (string.IsNullOrWhiteSpace(stagingPath) || !Directory.Exists(stagingPath))
             throw new DirectoryNotFoundException($"Staging path not found: {stagingPath}");
@@ -59,7 +75,8 @@ public sealed class ModuleInstaller
 
                 // If the user has an old "flat" install (no version folder), it can mask versioned installs.
                 // Handle it before installing the new version folder.
-                HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
+                if (!options.RequireAllDestinationRoots)
+                    HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
 
                 var finalPath = EnsureChildPath(moduleRoot, resolvedVersion);
                 var tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
@@ -161,12 +178,7 @@ public sealed class ModuleInstaller
 
         if (failures.Count > 0 && options.RequireAllDestinationRoots)
         {
-            var rollbackFailures = new List<string>();
-            foreach (var path in installed)
-            {
-                try { Directory.Delete(path, recursive: true); }
-                catch (Exception ex) { rollbackFailures.Add($"{path}: {ex.Message}"); }
-            }
+            var rollbackFailures = RollBackNewDestinations(installed);
 
             var rollbackMessage = rollbackFailures.Count == 0
                 ? "New destinations created by this attempt were rolled back."
@@ -182,8 +194,25 @@ public sealed class ModuleInstaller
 
         if (options.RequireAllDestinationRoots)
         {
+            try
+            {
+                validateNewDestinations?.Invoke(installed);
+            }
+            catch (Exception validationException)
+            {
+                var rollbackFailures = RollBackNewDestinations(installed);
+                if (rollbackFailures.Count == 0)
+                    throw;
+
+                throw new InvalidOperationException(
+                    "Signed install validation failed and one or more new destinations could not be rolled back: " +
+                    string.Join("; ", rollbackFailures),
+                    validationException);
+            }
+
             foreach (var moduleRoot in installedModuleRoots.Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
                 var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
                 pruned.AddRange(removed);
                 _logger.Verbose($"Installed at {moduleRoot}; versions kept={left}, pruned={removed.Count}");
@@ -191,6 +220,17 @@ public sealed class ModuleInstaller
         }
 
         return new ModuleInstallerResult(resolvedVersion, installed, pruned);
+    }
+
+    private static List<string> RollBackNewDestinations(IEnumerable<string> installedPaths)
+    {
+        var failures = new List<string>();
+        foreach (var path in installedPaths)
+        {
+            try { Directory.Delete(path, recursive: true); }
+            catch (Exception ex) { failures.Add($"{path}: {ex.Message}"); }
+        }
+        return failures;
     }
 
     private void HandleLegacyFlatInstall(

@@ -124,6 +124,8 @@ public sealed partial class ModulePipelineRunner
                     PreserveVersions = plan.InstallPreserveVersions
                 };
                 ModuleSigningResult? installPackageSigningResult = null;
+                var validateSignedInstallTransactionally =
+                    plan.SignModule && plan.InstallStrategy == InstallationStrategy.AutoRevision;
                 state.InstallResult = plan.SignModule
                     ? pipeline.InstallFromStagingWithManifestFinalizer(
                         installSpec,
@@ -131,31 +133,26 @@ public sealed partial class ModulePipelineRunner
                             plan,
                             manifestPath,
                             state.SigningResult),
-                        requireAllDestinationRoots: plan.InstallStrategy == InstallationStrategy.AutoRevision)
+                        validateInstalledPaths: validateSignedInstallTransactionally
+                            ? installedPaths => ValidateAndFinalizeSignedInstall(
+                                plan,
+                                buildResult.StagingPath,
+                                installPackagePath,
+                                installedPaths,
+                                state.SigningResult,
+                                installPackageSigningResult)
+                            : null,
+                        requireAllDestinationRoots: validateSignedInstallTransactionally)
                     : pipeline.InstallFromStaging(installSpec);
-                foreach (var installedPath in state.InstallResult.InstalledPaths)
+                if (!validateSignedInstallTransactionally)
                 {
-                    var deliveredSigningResult = CreateDeliveredSigningResult(
-                        state.SigningResult,
+                    ValidateAndFinalizeSignedInstall(
+                        plan,
                         buildResult.StagingPath,
-                        installedPath);
-                    if (installPackageSigningResult is not null)
-                    {
-                        var deliveredInstallPackageSigningResult = CreateDeliveredSigningResult(
-                            installPackageSigningResult,
-                            installPackagePath,
-                            installedPath)
-                            ?? throw new InvalidOperationException(
-                                "The signed install manifest was not delivered byte-for-byte to the installed module.");
-                        deliveredSigningResult = deliveredSigningResult is null
-                            ? deliveredInstallPackageSigningResult
-                            : AggregateSigningResults(deliveredSigningResult, deliveredInstallPackageSigningResult);
-                    }
-                    _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
-                        installedPath,
-                        plan.ModuleName,
-                        deliveredSigningResult,
-                        plan.Signing);
+                        installPackagePath,
+                        state.InstallResult.InstalledPaths,
+                        state.SigningResult,
+                        installPackageSigningResult);
                 }
                 session.Done(session.InstallStep);
             }

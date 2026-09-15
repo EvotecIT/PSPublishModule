@@ -136,7 +136,9 @@ public sealed class ModulePipelineInstallSigningTests
 
             var firstRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules-first"));
             var secondRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules-second"));
-            Directory.CreateDirectory(Path.Combine(firstRoot.FullName, moduleName, "1.0.0"));
+            var firstModuleRoot = Directory.CreateDirectory(Path.Combine(firstRoot.FullName, moduleName));
+            Directory.CreateDirectory(Path.Combine(firstModuleRoot.FullName, "1.0.0"));
+            WriteMinimalModule(firstModuleRoot.FullName, moduleName, "0.9.0");
             Directory.CreateDirectory(Path.Combine(secondRoot.FullName, moduleName, "1.0.0"));
             File.WriteAllText(Path.Combine(secondRoot.FullName, moduleName + ".blocked"), "unrelated");
             var blockedModuleRoot = Path.Combine(secondRoot.FullName, moduleName);
@@ -145,6 +147,7 @@ public sealed class ModulePipelineInstallSigningTests
 
             var hosted = new RecordingHostedOperations();
             var spec = CreateSpec(sourceRoot.FullName, moduleName, firstRoot.FullName, secondRoot.FullName);
+            spec.Install!.LegacyFlatHandling = LegacyFlatModuleHandling.Delete;
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 powerShellRunner: null,
@@ -155,8 +158,53 @@ public sealed class ModulePipelineInstallSigningTests
 
             Assert.Contains("every module root", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(Directory.Exists(Path.Combine(firstRoot.FullName, moduleName, "1.0.0.1")));
+            Assert.True(File.Exists(Path.Combine(firstModuleRoot.FullName, moduleName + ".psd1")));
+            Assert.True(File.Exists(Path.Combine(firstModuleRoot.FullName, moduleName + ".psm1")));
             Assert.True(File.Exists(blockedModuleRoot));
             Assert.Equal("blocks module directory creation", File.ReadAllText(blockedModuleRoot));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void TransactionalInstall_RollsBackWhenDeliveredValidationFails()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SignedTestModule";
+            var sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            WriteMinimalModule(sourceRoot.FullName, moduleName, "1.0.0.1");
+            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            var destination = Path.Combine(installRoot.FullName, moduleName, "1.0.0.1");
+            var installer = new ModuleInstaller(new NullLogger());
+            var options = new ModuleInstallerOptions(
+                destinationRoots: new[] { installRoot.FullName },
+                strategy: InstallationStrategy.Exact,
+                keepVersions: 5,
+                legacyFlatHandling: LegacyFlatModuleHandling.Ignore,
+                preserveVersions: null,
+                requireNewDestination: true,
+                requireAllDestinationRoots: true);
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                installer.InstallFromStagingTransactional(
+                    sourceRoot.FullName,
+                    moduleName,
+                    "1.0.0.1",
+                    options,
+                    installedPaths =>
+                    {
+                        var installedPath = Assert.Single(installedPaths);
+                        File.AppendAllText(Path.Combine(installedPath, moduleName + ".psd1"), "corrupted");
+                        throw new InvalidOperationException("delivered byte validation failed");
+                    }));
+
+            Assert.Contains("delivered byte validation failed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(destination));
         }
         finally
         {

@@ -296,22 +296,26 @@ public sealed class ModuleBuildPipeline
             spec,
             updateManifestToResolvedVersion,
             finalizeChangedManifest: null,
+            validateInstalledPaths: null,
             requireAllDestinationRoots: false);
 
     internal ModuleInstallerResult InstallFromStagingWithManifestFinalizer(
         ModuleInstallSpec spec,
         Action<string, string> finalizeChangedManifest,
+        Action<IReadOnlyList<string>>? validateInstalledPaths,
         bool requireAllDestinationRoots)
         => InstallFromStagingCore(
             spec,
             updateManifestToResolvedVersion: null,
             finalizeChangedManifest,
+            validateInstalledPaths,
             requireAllDestinationRoots);
 
     private ModuleInstallerResult InstallFromStagingCore(
         ModuleInstallSpec spec,
         bool? updateManifestToResolvedVersion,
         Action<string, string>? finalizeChangedManifest,
+        Action<IReadOnlyList<string>>? validateInstalledPaths,
         bool requireAllDestinationRoots)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));        
@@ -367,7 +371,14 @@ public sealed class ModuleBuildPipeline
             preserveVersions: spec.PreserveVersions,
             requireNewDestination: originalStrategy == InstallationStrategy.AutoRevision,
             requireAllDestinationRoots: requireAllDestinationRoots);
-        return installer.InstallFromStaging(staging, spec.Name, resolved, options);
+        return requireAllDestinationRoots && validateInstalledPaths is not null
+            ? installer.InstallFromStagingTransactional(
+                staging,
+                spec.Name,
+                resolved,
+                options,
+                validateInstalledPaths)
+            : installer.InstallFromStaging(staging, spec.Name, resolved, options);
     }
 
     private string ResolveModuleVersionFromManifestIfAuto(string? version, string manifestPath, string? fallbackVersion)

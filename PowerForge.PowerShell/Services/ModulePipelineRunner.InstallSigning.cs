@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -45,5 +46,40 @@ public sealed partial class ModulePipelineRunner
             _ = AggregateSigningResults(sourceSigningResult, signingResult);
 
         return signingResult;
+    }
+
+    private static void ValidateAndFinalizeSignedInstall(
+        ModulePipelinePlan plan,
+        string signedSourceRoot,
+        string installPackagePath,
+        IReadOnlyList<string> installedPaths,
+        ModuleSigningResult? sourceSigningResult,
+        ModuleSigningResult? installPackageSigningResult)
+    {
+        foreach (var installedPath in installedPaths)
+        {
+            var deliveredSigningResult = CreateDeliveredSigningResult(
+                sourceSigningResult,
+                signedSourceRoot,
+                installedPath);
+            if (installPackageSigningResult is not null)
+            {
+                var deliveredInstallPackageSigningResult = CreateDeliveredSigningResult(
+                    installPackageSigningResult,
+                    installPackagePath,
+                    installedPath)
+                    ?? throw new InvalidOperationException(
+                        "The signed install manifest was not delivered byte-for-byte to the installed module.");
+                deliveredSigningResult = deliveredSigningResult is null
+                    ? deliveredInstallPackageSigningResult
+                    : AggregateSigningResults(deliveredSigningResult, deliveredInstallPackageSigningResult);
+            }
+
+            _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
+                installedPath,
+                plan.ModuleName,
+                deliveredSigningResult,
+                plan.Signing);
+        }
     }
 }
