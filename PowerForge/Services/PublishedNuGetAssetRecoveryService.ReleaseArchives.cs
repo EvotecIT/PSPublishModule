@@ -16,7 +16,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                 $"The rebuilt release ZIP required for recovery was not found: {releaseZipPath}",
                 releaseZipPath);
 
-        var payload = ReadPublishedReleasePayload(publishedPackagePaths);
+        var payload = ReadPublishedReleasePayload(publishedPackagePaths, owningPublishedPackagePath);
         var requiredPayload = ReadPublishedReleasePayload([owningPublishedPackagePath]);
         using var source = ZipFile.OpenRead(releaseZipPath);
         var matched = new Dictionary<string, PublishedPackageEntry>(StringComparer.OrdinalIgnoreCase);
@@ -47,29 +47,57 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
     }
 
     private static IReadOnlyDictionary<string, PublishedPackageEntry> ReadPublishedReleasePayload(
-        IEnumerable<string> packagePaths)
+        IEnumerable<string> packagePaths,
+        string? owningPackagePath = null)
     {
         var payload = new Dictionary<string, PublishedPackageEntry>(StringComparer.OrdinalIgnoreCase);
-        foreach (var packagePath in packagePaths)
+        var normalizedOwner = string.IsNullOrWhiteSpace(owningPackagePath)
+            ? null
+            : Path.GetFullPath(owningPackagePath);
+        var orderedPackagePaths = packagePaths
+            .Select(Path.GetFullPath)
+            .OrderBy(path => string.Equals(path, normalizedOwner, StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            .ToArray();
+        foreach (var packagePath in orderedPackagePaths)
         {
+            var isOwner = string.Equals(packagePath, normalizedOwner, StringComparison.OrdinalIgnoreCase);
             using var package = ZipFile.OpenRead(packagePath);
             foreach (var entry in package.Entries)
             {
                 if (string.IsNullOrEmpty(entry.Name))
                     continue;
                 var name = NormalizeArchivePath(entry.FullName);
+                if (!isOwner && normalizedOwner is not null &&
+                    name.StartsWith("tools/", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
                 var releasePath = MapPublishedPackageEntryToReleasePath(name);
                 if (releasePath is null)
                     continue;
-                var published = new PublishedPackageEntry(ReadAllBytes(entry), entry.LastWriteTime, entry.ExternalAttributes);
+                var published = new PublishedPackageEntry(
+                    ReadAllBytes(entry),
+                    entry.LastWriteTime,
+                    entry.ExternalAttributes,
+                    packagePath,
+                    name.StartsWith("tools/", StringComparison.OrdinalIgnoreCase));
                 if (payload.TryGetValue(releasePath, out var existing))
                 {
-                    if (!existing.Bytes.SequenceEqual(published.Bytes))
+                    if (existing.Bytes.SequenceEqual(published.Bytes))
+                        continue;
+                    if (isOwner &&
+                        published.IsToolPayload &&
+                        !existing.IsToolPayload &&
+                        !string.Equals(
+                            existing.SourcePackagePath,
+                            packagePath,
+                            StringComparison.OrdinalIgnoreCase))
                     {
-                        throw new InvalidOperationException(
-                            $"Published NuGet packages contain conflicting library payload '{releasePath}'.");
+                        payload[releasePath] = published;
+                        continue;
                     }
-                    continue;
+                    throw new InvalidOperationException(
+                        $"Published NuGet packages contain conflicting library payload '{releasePath}'.");
                 }
                 payload.Add(releasePath, published);
             }
@@ -176,11 +204,18 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
 
     private sealed class PublishedPackageEntry
     {
-        internal PublishedPackageEntry(byte[] bytes, DateTimeOffset lastWriteTime, int externalAttributes)
+        internal PublishedPackageEntry(
+            byte[] bytes,
+            DateTimeOffset lastWriteTime,
+            int externalAttributes,
+            string sourcePackagePath,
+            bool isToolPayload)
         {
             Bytes = bytes;
             LastWriteTime = lastWriteTime;
             ExternalAttributes = externalAttributes;
+            SourcePackagePath = sourcePackagePath;
+            IsToolPayload = isToolPayload;
         }
 
         internal byte[] Bytes { get; }
@@ -188,5 +223,9 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         internal DateTimeOffset LastWriteTime { get; }
 
         internal int ExternalAttributes { get; }
+
+        internal string SourcePackagePath { get; }
+
+        internal bool IsToolPayload { get; }
     }
 }
