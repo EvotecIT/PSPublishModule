@@ -1147,9 +1147,11 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 IReadOnlyList<string> packages,
                 DotNetRepositoryReleaseSpec spec,
                 string sha256,
+                out string[] failedPackages,
                 out string error) =>
             {
                 packagesSeenBySigner = packages.ToArray();
+                failedPackages = packages.ToArray();
                 error = "simulated signing failure";
                 return false;
             };

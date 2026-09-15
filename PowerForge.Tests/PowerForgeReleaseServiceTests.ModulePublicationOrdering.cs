@@ -821,6 +821,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }));
 
             Assert.Contains("changed after the release build", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("tracked-input.txt", exception.Message, StringComparison.OrdinalIgnoreCase);
             var build = Assert.Single(moduleCalls);
             Assert.Equal(ConfigurationGateMode.Build, build.RunMode);
             Assert.False(build.IncludeModulePublishing);
@@ -886,7 +887,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_post_build_source_guard_rejects_ignored_source_in_project_reference_graph()
+    public void Execute_post_build_source_guard_does_not_audit_ignored_project_inputs()
     {
         var root = CreateSandbox();
         try
@@ -926,9 +927,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
             PowerForgeReleaseSpec spec = CreateReleaseSpec(root, Path.Combine(root, "Build-Module.ps1"));
             spec.Module = null;
-            spec.Tools!.GitHub.Publish = true;
+            spec.Tools!.GitHub.Publish = false;
 
-            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+            PowerForgeReleaseResult result = service.Execute(
                 spec,
                 new PowerForgeReleaseRequest
                 {
@@ -937,9 +938,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     SourceRepositoryRoot = root,
                     ExpectedSourceRevision = revision,
                     SourceInputPaths = [releasePath, appProject]
-                }));
+                });
 
-            Assert.Contains("changed after the release build", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(result.Success, result.ErrorMessage);
             Assert.Equal(0, publicationAttempts);
         }
         finally
@@ -1002,7 +1003,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_package_source_guard_rejects_ignored_evaluated_project_input()
+    public void Execute_package_source_guard_does_not_treat_ignored_dependency_input_as_dirty_source()
     {
         var root = CreateSandbox();
         try
@@ -1055,7 +1056,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
             };
 
-            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
+            PowerForgeReleaseResult result = service.Execute(
                 spec,
                 new PowerForgeReleaseRequest
                 {
@@ -1065,9 +1066,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     SourceRepositoryRoot = root,
                     ExpectedSourceRevision = revision,
                     SourceInputPaths = [releasePath]
-                }));
+                });
 
-            Assert.Contains("changed after the release build", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(result.Success, result.ErrorMessage);
         }
         finally
         {
@@ -1124,7 +1125,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_post_build_source_guard_allows_dirty_operator_file_outside_configured_module_source()
+    public void Execute_post_build_source_guard_rejects_dirty_checkout_when_explicitly_enabled()
     {
         var root = CreateSandbox();
         try
@@ -1168,7 +1169,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
             };
 
-            PowerForgeReleaseResult result = service.Execute(
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.Execute(
                 spec,
                 new PowerForgeReleaseRequest
                 {
@@ -1178,12 +1179,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                     SourceRepositoryRoot = root,
                     ExpectedSourceRevision = revision,
                     SourceInputPaths = [releasePath]
-                });
+                }));
 
-            Assert.True(result.Success, result.ErrorMessage);
-            Assert.Equal(2, moduleCalls.Count);
+            Assert.Contains("Build/Build-Project.ps1", exception.Message.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+            Assert.Single(moduleCalls);
             Assert.Equal(ConfigurationGateMode.Build, moduleCalls[0].RunMode);
-            Assert.Equal(ConfigurationGateMode.Publish, moduleCalls[1].RunMode);
         }
         finally
         {

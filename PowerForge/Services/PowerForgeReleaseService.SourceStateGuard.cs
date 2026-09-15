@@ -44,35 +44,17 @@ internal sealed partial class PowerForgeReleaseService
                 "SourceRepositoryRoot must identify the actual Git top-level checkout.");
         }
 
+        // ExpectedSourceRevision is an explicit checkout-integrity guard. Keep it
+        // about the checkout: package-cache imports and MSBuild provenance are
+        // validated by the build and artifact validation lanes and must not be
+        // reclassified as working-tree mutations here.
         DotNetPublishPipelineRunner.SourceProvenance source =
             DotNetPublishPipelineRunner.ReadSourceProvenance(
                 repositoryRoot,
                 generatedPaths: request.GeneratedProvenancePaths,
                 explicitInputPaths: request.SourceInputPaths,
-                buildProjectPaths: request.SourceInputPaths?.Where(path =>
-                    path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
-                    path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
-                    path.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase)),
-                buildConfiguration: request.Configuration,
-                buildPlan: request.DotNetPublishPlan,
-                sourceRootPaths: request.SourceRootPaths);
+                sourceRootPaths: new[] { repositoryRoot });
         ValidateExpectedSourceSnapshot(source, expectedRevision);
-
-        if (request.PackageBuildSpec is not null)
-        {
-            string[] packageProjectPaths =
-                DotNetRepositoryReleaseService.ResolveSelectedProjectPaths(request.PackageBuildSpec);
-            DotNetPublishPipelineRunner.SourceProvenance packageSource =
-                DotNetPublishPipelineRunner.ReadSourceProvenance(
-                    repositoryRoot,
-                    generatedPaths: request.GeneratedProvenancePaths,
-                    explicitInputPaths: (request.SourceInputPaths ?? Array.Empty<string>()).Concat(packageProjectPaths),
-                    buildProjectPaths: packageProjectPaths,
-                    buildConfiguration: request.PackageBuildSpec.Configuration,
-                    sourceRootPaths: request.SourceRootPaths);
-            ValidateExpectedSourceSnapshot(packageSource, expectedRevision);
-        }
-
     }
 
     private static void ValidateExpectedSourceSnapshot(
@@ -88,8 +70,16 @@ internal sealed partial class PowerForgeReleaseService
         }
         if (source.Dirty is not false)
         {
+            string paths = source.DirtyPaths.Length == 0
+                ? "none reported"
+                : string.Join(", ", source.DirtyPaths.Take(10)) +
+                  (source.DirtyPaths.Length > 10 ? $" (+{source.DirtyPaths.Length - 10} more)" : string.Empty);
+            string reasons = source.DirtyReasons.Length == 0
+                ? "working-tree state is not clean"
+                : string.Join("; ", source.DirtyReasons);
             throw new InvalidOperationException(
-                "Release source changed after the release build. Publication is blocked before package, module, tool, or GitHub mutation.");
+                "Release source changed after the release build. Publication is blocked before package, module, tool, or GitHub mutation. " +
+                $"Changed paths: {paths}. Reason: {reasons}.");
         }
     }
 }

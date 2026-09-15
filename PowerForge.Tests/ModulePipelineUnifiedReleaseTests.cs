@@ -985,6 +985,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         {
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            Directory.Delete(Path.Combine(root.FullName, ".git"));
 
             var events = new List<string>();
             var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
@@ -1115,6 +1116,105 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             runner.Run(spec);
 
             Assert.Equal(new[] { "package:build", "module:PowerShellGallery", "package:nuget", "package:github", "module:github" }, events);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_PackageNuGetFailureStopsBeforeModulePublication()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            Directory.Delete(Path.Combine(root.FullName, ".git"));
+
+            var events = new List<string>();
+            var hostedOperations = new FakeHostedOperations(events);
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hostedOperations,
+                manifestMutator: null,
+                missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, _, configPath) =>
+                {
+                    if (request.PublishNuget == true)
+                    {
+                        events.Add("package:nuget:failed");
+                        return new ProjectBuildHostExecutionResult
+                        {
+                            Success = false,
+                            ConfigPath = configPath ?? request.ConfigPath,
+                            RootPath = root.FullName,
+                            ErrorMessage = "NuGet package signing failed."
+                        };
+                    }
+
+                    events.Add("package:build");
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages",
+                            RootPath = "Sources",
+                            BuildBeforeModule = true,
+                            Build = true,
+                            PublishNuget = true
+                        }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration
+                        {
+                            PublishOrder = new[] { "NuGet", "PowerShellGallery" }
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery,
+                            RepositoryName = "PSGallery",
+                            ApiKey = "gallery-token"
+                        }
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+
+            Assert.Contains("NuGet package signing failed", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(new[] { "package:build", "package:nuget:failed" }, events);
+            Assert.Empty(hostedOperations.PublishedModuleVersions);
+            Assert.False(Directory.Exists(Path.Combine(root.FullName, ".git")));
         }
         finally
         {

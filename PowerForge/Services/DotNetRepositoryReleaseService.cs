@@ -20,6 +20,7 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<string> packages,
         DotNetRepositoryReleaseSpec spec,
         string sha256,
+        out string[] failedPackages,
         out string error);
 
     internal delegate PackagePushResult PackagePushHandler(

@@ -4,6 +4,19 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("current-files")]
+    public void VerifySharedReleaseSourceCommit_without_exact_opt_in_does_not_require_git(string? configuredCommit)
+    {
+        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "not-a-git-checkout");
+
+        var result = PowerForgeReleaseService.VerifySharedReleaseSourceCommit(missingPath, configuredCommit);
+
+        Assert.Null(result);
+    }
+
     [Fact]
     public void VerifySharedReleaseSourceCommit_accepts_only_validated_public_release_inputs()
     {

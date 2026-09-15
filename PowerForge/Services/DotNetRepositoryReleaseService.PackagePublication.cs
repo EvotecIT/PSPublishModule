@@ -97,20 +97,21 @@ public sealed partial class DotNetRepositoryReleaseService
 
         _logger.Info($"Signing {packages.Length} NuGet package(s)...");
         var watch = Stopwatch.StartNew();
-        if (!_signPackages(packages, spec, signingCertificateSha256, out var error))
+        if (!_signPackages(packages, spec, signingCertificateSha256, out var failedPackages, out var error))
         {
             watch.Stop();
             result.ErrorMessage = error;
             result.Success = false;
-            MarkPackageSigningFailure(projects, packages, error);
+            MarkPackageSigningFailure(projects, failedPackages, error);
             _logger.Warn(error);
             foreach (var package in packages)
             {
+                bool failed = failedPackages.Contains(package, StringComparer.OrdinalIgnoreCase);
                 UpdateArtifactProgress(
                     detailedProgress,
                     items[package],
-                    ProjectBuildProgressItemState.Failed,
-                    error,
+                    failed ? ProjectBuildProgressItemState.Failed : ProjectBuildProgressItemState.Completed,
+                    failed ? error : "signed; publication blocked by another package signing failure",
                     watch.Elapsed);
             }
 
