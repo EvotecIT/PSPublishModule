@@ -3,7 +3,8 @@ namespace PowerForge;
 public sealed partial class DotNetPublishPipelineRunner
 {
     internal static string[] SelectControlledMultiFrameworkRestoreFrameworks(
-        IReadOnlyDictionary<string, string> evaluatedProperties)
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        IEnumerable<string?> selectedFrameworks)
     {
         if (!evaluatedProperties.TryGetValue("TargetFrameworks", out string? declaredFrameworks) ||
             string.IsNullOrWhiteSpace(declaredFrameworks))
@@ -11,14 +12,29 @@ public sealed partial class DotNetPublishPipelineRunner
             return Array.Empty<string>();
         }
 
-        string[] frameworks = declaredFrameworks
+        string[] declared = declaredFrameworks
             .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(framework => framework.Trim())
             .Where(framework => framework.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        return frameworks.Length > 1 ? frameworks : Array.Empty<string>();
+        if (declared.Length <= 1)
+            return Array.Empty<string>();
+
+        string[] selected = selectedFrameworks
+            .Where(framework => !string.IsNullOrWhiteSpace(framework))
+            .Select(framework => framework!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (selected.Length <= 1 || selected.Any(framework =>
+                !declared.Contains(framework, StringComparer.OrdinalIgnoreCase)))
+        {
+            return Array.Empty<string>();
+        }
+
+        return selected;
     }
 
     private static bool TryRestoreControlledMultiFrameworkProject(

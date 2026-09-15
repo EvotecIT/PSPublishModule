@@ -5,6 +5,90 @@ namespace PowerForge.Tests;
 
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ReadSourceProvenance_DoesNotRestoreUnselectedDeclaredFrameworkPackages()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
+            string sharedDirectory = Directory.CreateDirectory(Path.Combine(root, "Shared")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string sharedProject = Path.Combine(sharedDirectory, "Shared.csproj");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType>
+                    <TargetFramework>net10.0</TargetFramework>
+                    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
+                  </PropertyGroup>
+                  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(sharedProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks></PropertyGroup>
+                  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+                    <PackageReference Include="System.Text.Json" Version="10.0.10" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"),
+                "internal static class Program { private static void Main() { _ = Shared.Value; } }");
+            File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"),
+                "public static class Shared { public const int Value = 1; }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root,
+                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved selected-framework graph\"");
+            string revision = RunGit(root, "rev-parse HEAD").Trim();
+            RunDotNet(root,
+                $"build \"{appProject}\" -c Release -f net10.0 -r linux-x64 --no-restore --nologo " +
+                "-m:1 -p:BuildInParallel=false " +
+                $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
+                "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                SourceRevision = revision,
+                NoBuildInPublish = true,
+                NoRestoreInPublish = true,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "App",
+                        ProjectPath = appProject,
+                        Combinations =
+                        [
+                            new DotNetPublishTargetCombination
+                            {
+                                Framework = "net10.0",
+                                Runtime = "linux-x64",
+                                Style = DotNetPublishStyle.FrameworkDependent
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
+
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -119,13 +203,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Theory]
-    [InlineData(null, false)]
-    [InlineData("", false)]
-    [InlineData("net8.0", false)]
-    [InlineData("net8.0;net10.0", true)]
+    [InlineData(null, "net8.0;net10.0", false)]
+    [InlineData("", "net8.0;net10.0", false)]
+    [InlineData("net8.0", "net8.0;net10.0", false)]
+    [InlineData("net8.0;net10.0", "net10.0", false)]
+    [InlineData("net8.0;net10.0", "net8.0;net10.0", true)]
+    [InlineData("net8.0;net10.0", "net8.0;net9.0", false)]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ControlledRestore_UsesOnlyDeclaredMultiTargetFrameworkMatrix(
         string? declaredTargetFrameworks,
+        string selectedTargetFrameworks,
         bool expectsMatrix)
     {
         var evaluatedProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -133,7 +220,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             evaluatedProperties["TargetFrameworks"] = declaredTargetFrameworks;
 
         string[] frameworks = DotNetPublishPipelineRunner.SelectControlledMultiFrameworkRestoreFrameworks(
-            evaluatedProperties);
+            evaluatedProperties,
+            selectedTargetFrameworks.Split(';'));
 
         Assert.Equal(expectsMatrix, frameworks.Length > 1);
         if (expectsMatrix)

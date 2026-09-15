@@ -546,8 +546,15 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string projectPath = Path.GetFullPath(node.Request.ProjectPath);
+            StringComparison pathComparison = IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
             string[] frameworks = SelectControlledMultiFrameworkRestoreFrameworks(
-                node.EvaluatedProperties);
+                node.EvaluatedProperties,
+                graphBuildNodes
+                    .Where(candidate =>
+                        Path.GetFullPath(candidate.Request.ProjectPath).Equals(projectPath, pathComparison))
+                    .Select(candidate => candidate.Request.TargetFramework));
             bool restoreWithFrameworkMatrix = frameworks.Length > 1;
             if (restoreWithFrameworkMatrix)
             {
