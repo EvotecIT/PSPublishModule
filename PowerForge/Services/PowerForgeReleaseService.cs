@@ -733,7 +733,11 @@ internal sealed partial class PowerForgeReleaseService
                         request,
                         dotNetTargets,
                         () => _planDotNetTools(dotNetSpecForTools, dotNetSourcePathForTools, request, selectedToolOutputs));
-                    ApplySharedReleaseVersion(dotNetPlan, sharedReleaseVersion, spec.GitHub?.Commitish, configPath);
+                    ApplySharedReleaseVersion(
+                        dotNetPlan,
+                        sharedReleaseVersion,
+                        spec.GitHub?.Commitish,
+                        request.EffectiveConfigurationPath ?? configPath);
                     ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
                     result.DotNetToolPlan = dotNetPlan;
 
@@ -772,7 +776,10 @@ internal sealed partial class PowerForgeReleaseService
                         ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool) &&
                         IsStandalonePowerForgeToolSelected(result))
                     {
-                        VerifySharedReleaseSourceCommit(toolPlan.ProjectRoot, spec.GitHub?.Commitish, configPath);
+                        VerifySharedReleaseSourceCommit(
+                            toolPlan.ProjectRoot,
+                            spec.GitHub?.Commitish,
+                            request.EffectiveConfigurationPath ?? configPath);
                     }
 
                     if (!request.PlanOnly && !request.ValidateOnly)
