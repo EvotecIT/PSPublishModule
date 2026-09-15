@@ -13,7 +13,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             "foreach ($WhatIfPreference in $Flags) { if ($WhatIfPreference) { return $true } }; return $false }",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.LoopWhatIf", "CompiledPowerShell", "net8.0");
+            new[] { fixture.ScriptPath }, "PowerForge.LoopWhatIf", "CompiledPowerShell", "net10.0");
         var method = Assert.Single(typed.Methods);
         Assert.False(method.RequiresPowerShellRuntimeState);
 
@@ -38,7 +38,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
         var function = Assert.Single(Assert.Single(plan.Files).Units);
 

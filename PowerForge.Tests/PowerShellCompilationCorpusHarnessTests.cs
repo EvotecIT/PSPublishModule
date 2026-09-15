@@ -14,7 +14,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             "Benchmarks",
             "PowerShellCompilation",
             "Corpus",
-            "public-corpus-baseline.net8.json");
+            "public-corpus-baseline.net10.json");
         using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(baselinePath));
         var hybrid = document.RootElement.GetProperty("hybrid");
         var analyzed = hybrid.GetProperty("analyzedUnits").GetInt32();

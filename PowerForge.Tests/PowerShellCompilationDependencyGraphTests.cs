@@ -30,9 +30,9 @@ public sealed class PowerShellCompilationDependencyGraphTests
             script,
             PowerShellCompilationArtifactKind.Library,
             PowerShellCompilationMode.Strict);
-        var repeated = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(input, targetFramework: "net8.0", runtimeIdentifier: "win-x64");
+        var repeated = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(input, targetFramework: "net10.0", runtimeIdentifier: "win-x64");
 
-        Assert.Equal(repeated.LockSha256, new PowerShellCompilationDependencyPlanner().AnalyzeGraph(input, targetFramework: "net8.0", runtimeIdentifier: "win-x64").LockSha256);
+        Assert.Equal(repeated.LockSha256, new PowerShellCompilationDependencyPlanner().AnalyzeGraph(input, targetFramework: "net10.0", runtimeIdentifier: "win-x64").LockSha256);
         Assert.All(repeated.Nodes, node => Assert.False(string.IsNullOrWhiteSpace(node.Id)));
         Assert.All(repeated.Edges, edge =>
         {
@@ -67,11 +67,11 @@ public sealed class PowerShellCompilationDependencyGraphTests
             PowerShellCompilationArtifactKind.Library,
             PowerShellCompilationMode.Strict);
 
-        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Strict, "net8.0");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Strict, "net10.0");
 
         Assert.NotNull(plan.DependencyGraph);
         Assert.Equal(
-            new PowerShellCompilationDependencyPlanner().AnalyzeGraph(input, PowerShellCompilationMode.Strict, targetFramework: "net8.0").LockSha256,
+            new PowerShellCompilationDependencyPlanner().AnalyzeGraph(input, PowerShellCompilationMode.Strict, targetFramework: "net10.0").LockSha256,
             plan.DependencyGraph!.LockSha256);
         Assert.Contains(plan.DependencyGraph.Nodes, node =>
             node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Semantic) &&
@@ -91,7 +91,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
         var expected = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(
             input,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0");
+            targetFramework: "net10.0");
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             script,
@@ -100,7 +100,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
             PowerShellCompilationArtifactKind.Library,
             PowerShellCompilationMode.Strict)
         {
-            TargetFramework = "net8.0",
+            TargetFramework = "net10.0",
             ExpectedDependencyLock = expected
         });
 
@@ -189,7 +189,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
         var expected = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(
             input,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0");
+            targetFramework: "net10.0");
         File.WriteAllText(script, "function Get-Demo { return 2 }");
         var output = Path.Combine(fixture.Root, "out");
 
@@ -200,7 +200,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
             PowerShellCompilationArtifactKind.Library,
             PowerShellCompilationMode.Strict)
         {
-            TargetFramework = "net8.0",
+            TargetFramework = "net10.0",
             ExpectedDependencyLock = expected
         });
 
@@ -365,10 +365,10 @@ public sealed class PowerShellCompilationDependencyGraphTests
         {
             Variant("Shared.Managed", "net47", string.Empty, "1111"),
             Variant("Shared.Managed", "netstandard2.1", string.Empty, "2222"),
-            Variant("Native.Managed", "net8.0", "win-x64", "3333"),
-            Variant("Native.Managed", "net8.0", "linux-x64", "4444"),
-            Variant("Edition.Managed", "net8.0", string.Empty, "5555", "Desktop"),
-            Variant("Edition.Managed", "net8.0", string.Empty, "6666", "Core")
+            Variant("Native.Managed", "net10.0", "win-x64", "3333"),
+            Variant("Native.Managed", "net10.0", "linux-x64", "4444"),
+            Variant("Edition.Managed", "net10.0", string.Empty, "5555", "Desktop"),
+            Variant("Edition.Managed", "net10.0", string.Empty, "6666", "Core")
         };
 
         Assert.Empty(PowerShellCompilationDependencyGraphBuilder.FindConflicts(nodes));
@@ -405,7 +405,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
                 {
                     Name = "Runtime.Provided.Assembly",
                     Version = version,
-                    TargetFramework = "net8.0",
+                    TargetFramework = "net10.0",
                     PublicKeyToken = "aaaaaaaaaaaaaaaa"
                 }
             };
@@ -523,7 +523,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
             => new PowerShellCompilationDependencyPlanner().AnalyzeGraph(
                 new PowerShellCompilationInputResolver().Resolve(script, kind, mode),
                 mode,
-                targetFramework: "net8.0",
+                targetFramework: "net10.0",
                 runtimeIdentifier: "win-x64");
 
         var package = Resolve(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package);

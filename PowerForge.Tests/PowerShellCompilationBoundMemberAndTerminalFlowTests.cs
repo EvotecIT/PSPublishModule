@@ -9,7 +9,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Test-TypeToken { param([string] $Name, [int] $Expected) return [Type]::GetType($Name).MetadataToken -eq $Expected }",
             TestPath("nullable-clr-member.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var comparison = Assert.IsType<PowerShellBoundBinaryExpression>(
@@ -27,7 +27,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Test-Value { param([int] $Value) try { $result = $Value -gt 0; $result } catch { return $false } }",
             TestPath("terminal-try-output.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var tryStatement = Assert.IsType<PowerShellBoundTryStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements));

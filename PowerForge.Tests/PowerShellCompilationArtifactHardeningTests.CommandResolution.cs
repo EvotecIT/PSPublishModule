@@ -8,7 +8,7 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_HybridPreservesRequiredModuleCommandShadowAcrossExpressionShapes(
         string targetFramework,
@@ -109,7 +109,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true)
         {
-            TargetFramework = "net8.0"
+            TargetFramework = "net10.0"
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);

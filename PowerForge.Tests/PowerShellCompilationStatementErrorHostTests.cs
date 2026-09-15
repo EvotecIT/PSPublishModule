@@ -8,8 +8,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         yield return new object[] { "net10.0", "pwsh" };
         if (OperatingSystem.IsWindows()) yield return new object[] { "net472", "powershell.exe" };
-        var pinnedHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH");
-        if (!string.IsNullOrWhiteSpace(pinnedHost)) yield return new object[] { "net8.0", pinnedHost };
+        var pinnedHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
+        if (!string.IsNullOrWhiteSpace(pinnedHost)) yield return new object[] { "net10.0", pinnedHost };
     }
 
     [Theory]

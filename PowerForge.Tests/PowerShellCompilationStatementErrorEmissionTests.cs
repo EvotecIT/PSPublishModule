@@ -290,7 +290,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             File.WriteAllText(Path.Combine(fixture.OutputPath, source.Key), source.Value);
         var references = framework == "net472"
             ? "<PackageReference Include=\"Microsoft.NETFramework.ReferenceAssemblies\" Version=\"1.0.3\" /><PackageReference Include=\"Microsoft.PowerShell.5.ReferenceAssemblies\" Version=\"1.1.0\" />"
-            : "<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"" + (framework == "net8.0" ? "7.4.18" : "7.6.5") + "\" ExcludeAssets=\"runtime\" />";
+            : "<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"7.6.5\" ExcludeAssets=\"runtime\" />";
         var project = Path.Combine(fixture.OutputPath, "Generated.StatementErrors.csproj");
         File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>" + framework +
             "</TargetFramework><LangVersion>latest</LangVersion><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup><ItemGroup>" + references + "</ItemGroup></Project>");

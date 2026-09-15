@@ -16,7 +16,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapabilities.TypedExecutable);
 
         var function = Assert.Single(result.Analyzed.Functions);
@@ -228,7 +228,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             var assembly = new[] { new PowerShellCompilationArtifactFile { Path = Path.Combine(root, "out", "TargetProof.dll"), Role = "Primary" } };
 
             var accepted = Verify(assembly, "net10.0");
-            var mismatch = Assert.Throws<InvalidOperationException>(() => Verify(assembly, "net8.0"));
+            var mismatch = Assert.Throws<InvalidOperationException>(() => Verify(assembly, "net10.0"));
 
             Assert.True(accepted.Verified);
             Assert.Equal("net10.0", accepted.TargetFramework);
@@ -662,7 +662,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
                 structural,
                 new[] { path },
                 root,
-                "net8.0",
+                "net10.0",
                 PowerShellCompilationCapabilities.StaticRuntimeFacts);
 
             var analyzed = Assert.Single(Assert.Single(semantic).Units);

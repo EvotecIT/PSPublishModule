@@ -307,7 +307,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 AotCompatible = true,
                 EntryPoint = new PowerShellCompilationProviderAdapterEntryPoint
                 {
-                    AssemblyPath = "lib/net8.0/Proof.dll",
+                    AssemblyPath = "lib/net10.0/Proof.dll",
                     TypeName = "Proof.Adapter",
                     MethodName = "Transform",
                     ResultType = resultType

@@ -394,8 +394,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         => targetFramework?.Equals("net472", StringComparison.OrdinalIgnoreCase) == true || IsCoreTarget(targetFramework);
 
     private static bool IsCoreTarget(string? targetFramework)
-        => targetFramework?.Equals("net8.0", StringComparison.OrdinalIgnoreCase) == true ||
-           targetFramework?.Equals("net10.0", StringComparison.OrdinalIgnoreCase) == true;
+        => PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework);
 
     private static bool IsCoreProfile(PowerShellCompilationSemanticOracleProfile semanticProfile)
         => semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7;

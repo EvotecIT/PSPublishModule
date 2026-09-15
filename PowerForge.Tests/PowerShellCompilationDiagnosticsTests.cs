@@ -190,7 +190,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var plan = new PowerShellCompilationPlan(
             PowerShellCompilationMode.Strict,
             new[] { new PowerShellCompilationFilePlan(sourcePath, "input.ps1", Array.Empty<PowerShellCompilationUnitPlan>(), Array.Empty<PowerShellCompilationDiagnostic>()) },
-            "net8.0");
+            "net10.0");
 
         var redacted = PowerShellCompilationDiagnosticsEvidenceBuilder.Redact(
             plan,

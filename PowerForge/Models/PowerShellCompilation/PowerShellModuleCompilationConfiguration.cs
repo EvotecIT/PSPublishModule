@@ -12,7 +12,7 @@ public sealed class PowerShellModuleCompilationConfiguration
     public PowerShellCompilationMode Mode { get; set; } = PowerShellCompilationMode.Hybrid;
 
     /// <summary>Target framework used by the generated binary module.</summary>
-    public string TargetFramework { get; set; } = "net8.0";
+    public string TargetFramework { get; set; } = PowerShellCompilationTargetFrameworkPolicy.Default;
 
     /// <summary>Policy used to select non-code payload.</summary>
     public PowerShellCompilationResourceMode ResourceMode { get; set; } = PowerShellCompilationResourceMode.Declared;

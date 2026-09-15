@@ -76,7 +76,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     [Trait("Category", "PowerShellCompilerGate")]
     public void RuntimeFreeModule_StrictArtifactIncludesInitializationAndInstanceAbi(string targetFramework)

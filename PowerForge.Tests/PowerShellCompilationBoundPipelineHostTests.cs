@@ -11,7 +11,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
@@ -39,7 +39,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));

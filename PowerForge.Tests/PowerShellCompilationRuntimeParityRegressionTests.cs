@@ -15,7 +15,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Strict);
 
-        var plan = new PowerShellCompilationAnalyzer().Analyze(resolved, PowerShellCompilationMode.Strict, "net8.0");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(resolved, PowerShellCompilationMode.Strict, "net10.0");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,

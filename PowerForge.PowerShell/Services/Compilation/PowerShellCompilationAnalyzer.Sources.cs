@@ -26,7 +26,7 @@ public sealed partial class PowerShellCompilationAnalyzer
     public PowerShellCompilationPlan Analyze(
         PowerShellCompilationResolvedInput input,
         PowerShellCompilationMode mode = PowerShellCompilationMode.Analyze,
-        string? targetFramework = "net8.0",
+        string? targetFramework = PowerShellCompilationTargetFrameworkPolicy.Default,
         PowerShellCompilationResourceMode resourceMode = PowerShellCompilationResourceMode.Declared,
         IEnumerable<string>? includeResource = null,
         IEnumerable<string>? excludeResource = null,
@@ -71,7 +71,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         var normalizedTargetFramework = new PowerShellCompilationSpec(
             input.SourcePath,
             target?.Mode ?? mode,
-            targetFramework: target?.TargetFramework ?? targetFramework ?? "net8.0").TargetFramework;
+            targetFramework: target?.TargetFramework ?? targetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default).TargetFramework;
         var plan = AnalyzeFiles(
             target?.Mode ?? mode,
             input.CompilationSourceFiles,
@@ -120,7 +120,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             dependencyGraph,
             target);
         return capabilityMode == PowerShellCompilationMode.Package
-            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? "net8.0")
+            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default)
             : combined;
     }
 

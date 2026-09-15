@@ -141,7 +141,7 @@ internal sealed class BuildConfigurationFactory
             Enabled = request.CompilePowerShellSpecified ? request.CompilePowerShell : true,
             Mode = mode,
             TargetFramework = string.IsNullOrWhiteSpace(request.PowerShellCompilationTargetFramework)
-                ? "net8.0"
+                ? PowerShellCompilationTargetFrameworkPolicy.Default
                 : request.PowerShellCompilationTargetFramework!.Trim(),
             ResourceMode = request.PowerShellCompilationResourceMode ?? PowerShellCompilationResourceMode.Declared,
             IncludeResource = request.PowerShellCompilationIncludeResource ?? Array.Empty<string>(),

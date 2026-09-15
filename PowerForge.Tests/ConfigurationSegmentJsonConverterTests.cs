@@ -23,7 +23,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
                     "PowerShellCompilation": {
                       "Enabled": true,
                       "Mode": "Hybrid",
-                      "TargetFramework": "net8.0",
+                      "TargetFramework": "net10.0",
                       "AllowUnreviewedDependencies": true
                     }
                   }
@@ -42,7 +42,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
         var compilation = Assert.IsType<PowerShellModuleCompilationConfiguration>(segment.BuildModule.PowerShellCompilation);
         Assert.True(compilation.Enabled);
         Assert.Equal(PowerShellCompilationMode.Hybrid, compilation.Mode);
-        Assert.Equal("net8.0", compilation.TargetFramework);
+        Assert.Equal("net10.0", compilation.TargetFramework);
         Assert.True(compilation.AllowUnreviewedDependencies);
     }
 

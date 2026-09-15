@@ -13,7 +13,7 @@ $loopCalls = [int](Get-BenchmarkInput LoopCalls $(if ($quick) { 100 } else { 100
 $warmup = [int](Get-BenchmarkInput Warmup $(if ($quick) { 1 } else { 3 }))
 $iterations = [int](Get-BenchmarkInput Iterations $(if ($quick) { 3 } else { 12 }))
 $includeOptimizedExecutables = Get-BenchmarkInput IncludeOptimizedExecutables $false -Bool
-$targetFramework = if ([System.Environment]::Version.Major -ge 10) { 'net10.0' } else { 'net8.0' }
+$targetFramework = 'net10.0'
 $architecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
 $defaultRid = if ($IsWindows) { "win-$architecture" } elseif ($IsMacOS) { "osx-$architecture" } else { "linux-$architecture" }
 $runtimeIdentifier = Get-BenchmarkInput RuntimeIdentifier $defaultRid
@@ -664,7 +664,7 @@ New-BenchmarkSuite 'powershell-compilation-build-cost' -OutputRoot $outputRoot {
                 'PowerForge.CompilationBudget.Library',
                 [PowerForge.PowerShellCompilationArtifactKind]::Library,
                 [PowerForge.PowerShellCompilationMode]::Strict)
-            $spec.TargetFramework = 'net8.0'
+            $spec.TargetFramework = 'net10.0'
             $spec.UseBuildCache = $false
             $run.Result = Invoke-ReviewedCompilationBuild -Spec $spec
             $process.Refresh()

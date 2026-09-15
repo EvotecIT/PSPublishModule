@@ -446,10 +446,10 @@ public sealed class PowerShellCompilationSpec
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)
         {
-            if (!normalizedTargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase) &&
-                !normalizedTargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
-                !normalizedTargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("PowerShell compilation analysis currently targets net472, net8.0, or net10.0.", nameof(targetFramework));
+            if (!PowerShellCompilationTargetFrameworkPolicy.IsSupported(normalizedTargetFramework))
+                throw new ArgumentException(
+                    $"PowerShell compilation analysis currently targets {PowerShellCompilationTargetFrameworkPolicy.Legacy} or {PowerShellCompilationTargetFrameworkPolicy.Modern}.",
+                    nameof(targetFramework));
         }
 
         Path = System.IO.Path.GetFullPath(path.Trim().Trim('"'));

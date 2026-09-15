@@ -161,14 +161,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void MinimizedCasesExecuteOnConfiguredExactPowerShellProfiles()
     {
-        var powerShell74Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH");
         var powerShell76Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
-        Assert.False(string.IsNullOrWhiteSpace(powerShell74Path), "POWERFORGE_PWSH74_PATH is required by the pinned semantic-host lane.");
         Assert.False(string.IsNullOrWhiteSpace(powerShell76Path), "POWERFORGE_PWSH76_PATH is required by the pinned semantic-host lane.");
         var profiles = new List<(string ProfileId, string? HostPath)>
         {
             (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, null),
-            (PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, powerShell74Path),
             (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, powerShell76Path)
         };
         Assert.Equal(

@@ -28,7 +28,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [MemberData(nameof(StatementErrorHosts))]
     public void OutputCapture_PreservesNestedNullAndFlowRecords(string framework, string host)
     {
-        if (framework == "net8.0") host = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH") ?? host;
+        if (framework == "net10.0") host = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH") ?? host;
         using var fixture = ArtifactFixture.Create("""
             function Get-NestedCapture {
                 [CmdletBinding()] param()

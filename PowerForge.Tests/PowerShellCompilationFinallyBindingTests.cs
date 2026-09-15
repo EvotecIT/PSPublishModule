@@ -10,7 +10,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         var document = PowerShellSourceParser.Parse(
             "function Get-Value { param([int]$Value) try { $Value=1 } finally { $Value=2 }; return $Value }",
             TestPath("finally-stopping.ps1"));
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0",
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0",
             hosted ? PowerShellCompilationCapabilities.BinaryModule : PowerShellCompilationCapability.None);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message));
@@ -28,7 +28,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         var document = PowerShellSourceParser.Parse(
             "function Get-Value { param([int]$Value) while($Value -gt 0) { try { $Value=0 } finally { " + transfer + " } }; return $Value }",
             TestPath("finally-transfer.ps1"));
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Methods);
         Assert.Contains(document.Errors, error => error.ErrorId == "ControlLeavingFinally");

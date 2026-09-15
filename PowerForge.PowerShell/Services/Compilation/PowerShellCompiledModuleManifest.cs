@@ -291,9 +291,8 @@ internal static class PowerShellCompiledModuleManifest
     {
         var (powerShellVersion, edition) = targetFramework.ToLowerInvariant() switch
         {
-            "net472" => ("5.1", "Desktop"),
-            "net8.0" => ("7.4", "Core"),
-            "net10.0" => ("7.6", "Core"),
+            PowerShellCompilationTargetFrameworkPolicy.Legacy => ("5.1", "Desktop"),
+            PowerShellCompilationTargetFrameworkPolicy.Modern => ("7.6", "Core"),
             _ => throw new ArgumentException($"Unsupported compiled module target framework '{targetFramework}'.", nameof(targetFramework))
         };
 

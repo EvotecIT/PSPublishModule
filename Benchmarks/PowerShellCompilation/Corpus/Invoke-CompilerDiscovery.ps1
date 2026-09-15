@@ -1,4 +1,4 @@
-#requires -Version 7.4
+#requires -Version 7.6
 [CmdletBinding()]
 param(
     [string] $PacketPath = (Join-Path $PSScriptRoot 'compiler-discovery.net10.json'),

@@ -170,7 +170,7 @@ public sealed class PowerShellCompilationBuildSpec
     public PowerShellCompilationMode Mode { get; }
 
     /// <summary>Target framework used by the generated project.</summary>
-    public string TargetFramework { get; set; } = "net8.0";
+    public string TargetFramework { get; set; } = PowerShellCompilationTargetFrameworkPolicy.Default;
 
     /// <summary>Optional runtime identifier for executable publication.</summary>
     public string? RuntimeIdentifier { get; set; }

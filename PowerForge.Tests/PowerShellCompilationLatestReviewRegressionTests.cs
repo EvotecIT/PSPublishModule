@@ -36,8 +36,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     {
         Assert.True(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible(null, 4, isNetFrameworkHost: true));
         Assert.True(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net472", 4, isNetFrameworkHost: true));
-        Assert.False(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net8.0", 4, isNetFrameworkHost: true));
-        Assert.True(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net8.0", 8, isNetFrameworkHost: false));
+        Assert.False(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net8.0", 10, isNetFrameworkHost: false));
         Assert.False(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net10.0", 8, isNetFrameworkHost: false));
         Assert.True(PowerShellGeneratedTargetFrameworkPolicy.IsHostCompatible("net10.0", 10, isNetFrameworkHost: false));
     }

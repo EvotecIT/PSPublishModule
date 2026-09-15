@@ -89,7 +89,7 @@ internal static partial class Program
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? "None";
             if (!Enum.TryParse<PowerShellCompilationExecutableOptimization>(optimizationValue, true, out var optimization) || !Enum.IsDefined(typeof(PowerShellCompilationExecutableOptimization), optimization))
                 return WritePowerShellError(outputJson, 2, "Optimization must be None, Trimmed, or NativeAot.", logger, "powershell.project.init");
-            var framework = TryGetOptionValue(args, "--framework") ?? (kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict ? "net10.0" : "net8.0");
+            var framework = TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default;
             var selfContained = args.Any(static value => value.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)) || optimization != PowerShellCompilationExecutableOptimization.None;
             var semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(
                 TryGetOptionValue(args, "--semantic-profile") ??

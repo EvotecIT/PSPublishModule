@@ -16,7 +16,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            "net8.0",
+            "net10.0",
             runtimeIdentifier: null,
             selfContained: false,
             singleFile: false,
@@ -147,7 +147,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            "net8.0",
+            "net10.0",
             null,
             false,
             false,
@@ -188,7 +188,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            "net8.0",
+            "net10.0",
             null,
             false,
             false,
@@ -220,7 +220,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            "net8.0",
+            "net10.0",
             null,
             false,
             false,
@@ -248,7 +248,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            "net8.0",
+            "net10.0",
             null,
             false,
             false,

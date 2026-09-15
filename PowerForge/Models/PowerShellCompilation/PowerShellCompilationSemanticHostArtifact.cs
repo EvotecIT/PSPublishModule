@@ -147,9 +147,7 @@ public static class PowerShellCompilationSemanticHostArtifactService
         if (!Version.TryParse(artifact.HostVersion, out var version))
             throw new InvalidOperationException($"Semantic oracle reported invalid host version '{artifact.HostVersion}'.");
         var expectedMajor = profile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 ? 5 : 7;
-        var expectedMinor = profile.ProfileId == PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId ? 4
-            : profile.ProfileId == PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId ? 6
-            : 1;
+        var expectedMinor = profile.ProfileId == PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId ? 6 : 1;
         if (version.Major != expectedMajor || version.Minor != expectedMinor)
             throw new InvalidOperationException($"Semantic profile '{profile.ProfileId}' does not accept host version '{version}'.");
         if (profile.OperatingSystem != "Any" && !string.Equals(profile.OperatingSystem, artifact.OperatingSystem, StringComparison.OrdinalIgnoreCase))

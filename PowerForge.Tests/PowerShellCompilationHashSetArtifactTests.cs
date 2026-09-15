@@ -4,7 +4,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void HashSet_StrictLibraryPreservesPublicSetIdentity(string framework)
     {

@@ -23,7 +23,9 @@ public sealed partial class PowerShellCompilationCensusRunner
     {
         if (paths is null) throw new ArgumentNullException(nameof(paths));
         if (options is null) throw new ArgumentNullException(nameof(options));
-        var targetFramework = string.IsNullOrWhiteSpace(options.TargetFramework) ? "net8.0" : options.TargetFramework!.Trim();
+        var targetFramework = string.IsNullOrWhiteSpace(options.TargetFramework)
+            ? PowerShellCompilationTargetFrameworkPolicy.Default
+            : options.TargetFramework!.Trim();
         var profile = PowerShellCompilationSemanticOracleCatalog.Get(string.IsNullOrWhiteSpace(options.SemanticProfileId)
             ? PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework)
             : options.SemanticProfileId).ProfileId;
@@ -721,7 +723,9 @@ public sealed partial class PowerShellCompilationCensusRunner
             : StringComparer.Ordinal;
 
     private static string NormalizeTargetFramework(string? targetFramework)
-        => string.IsNullOrWhiteSpace(targetFramework) ? "net8.0" : targetFramework!.Trim();
+        => string.IsNullOrWhiteSpace(targetFramework)
+            ? PowerShellCompilationTargetFrameworkPolicy.Default
+            : targetFramework!.Trim();
 
     private sealed class AnalyzedProduct
     {

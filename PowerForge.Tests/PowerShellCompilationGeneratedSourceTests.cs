@@ -127,7 +127,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("net8.0", "10.0.11")]
     [InlineData("net10.0", "10.0.11")]
     public void Build_EmittedBinaryModulePinsServicedSecurityXmlDependency(string targetFramework, string expectedVersion)
     {

@@ -52,8 +52,11 @@ internal static class PowerShellCompilationGeneratedPackageCatalog
 
     private static void AddPowerShellRuntimePackages(ICollection<PackageIdentity> packages, string framework)
     {
-        var sdkVersion = framework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "7.6.5" : "7.4.18";
-        packages.Add(Find("Microsoft.PowerShell.SDK", sdkVersion));
+        if (!PowerShellCompilationTargetFrameworkPolicy.IsModern(framework))
+            throw new ArgumentException(
+                $"Generated PowerShell runtime packages require {PowerShellCompilationTargetFrameworkPolicy.Modern}.",
+                nameof(framework));
+        packages.Add(Find("Microsoft.PowerShell.SDK", "7.6.5"));
         packages.Add(Find("System.Security.Cryptography.Xml", "10.0.11"));
     }
 

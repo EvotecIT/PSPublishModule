@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "packetId": "powerforge-public-powershell-modules-net8-v1",
+  "packetId": "powerforge-public-powershell-modules-net10-v1",
   "fixedOn": "2026-08-30",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
-  "targetFramework": "net8.0",
+  "targetFramework": "net10.0",
   "strictTargetFramework": "net10.0",
   "strictRuntimeIdentifiers": [
     "win-x64",

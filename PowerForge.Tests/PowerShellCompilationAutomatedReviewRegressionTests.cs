@@ -47,12 +47,12 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         var executable = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.TypedExecutable));
         var binary = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
 
         Assert.False(Assert.Single(Assert.Single(executable.Files).Units).IsCompilable);
@@ -66,7 +66,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.TypedExecutable));
         var parameter = Assert.Single(Assert.Single(Assert.Single(plan.Files).Units).Parameters);
 
@@ -94,7 +94,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
             "function Get-DeclaredValue { [OutputType([string[]])] param() return 'Ada' }; Export-ModuleMember -Function Get-DeclaredValue",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.DeclaredOutput", "CompiledPowerShell", "net8.0");
+            new[] { fixture.ScriptPath }, "PowerForge.DeclaredOutput", "CompiledPowerShell", "net10.0");
         Assert.True(typed.Methods.Length == 1, string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         var method = typed.Methods[0];
         Assert.Equal(typeof(string[]).FullName, method.DeclaredOutputType);
@@ -114,7 +114,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell")]
     public void Build_BinaryModulePreservesResolvedAdvisoryOutputTypeNameWithoutAClrSignatureReference(
         string targetFramework,
@@ -192,12 +192,12 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         var binary = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
         var executable = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.TypedExecutable));
 
         var binaryUnit = Assert.Single(Assert.Single(binary.Files).Units);
@@ -216,7 +216,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
             $"function Invoke-DeclaredVoid {{ [OutputType([void])] param() {body} }}; Export-ModuleMember -Function Invoke-DeclaredVoid",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.DeclaredVoidOutput", "CompiledPowerShell", "net8.0");
+            new[] { fixture.ScriptPath }, "PowerForge.DeclaredVoidOutput", "CompiledPowerShell", "net10.0");
         var method = Assert.Single(typed.Methods);
         Assert.Equal(typeof(void).FullName, method.DeclaredOutputType);
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -294,12 +294,12 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         var binary = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
         var executable = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.TypedExecutable));
         var artifact = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -338,7 +338,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
 
         Assert.False(Assert.Single(Assert.Single(plan.Files).Units).IsCompilable);

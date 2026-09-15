@@ -3,7 +3,6 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Int32Arithmetic_ClosedPromotionAndCallConsumersMatchPowerShell(string framework)

@@ -32,7 +32,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
             Build-Module -Path '{{EscapePowerShellLiteral(testRoot)}}' -ModuleName '{{moduleName}}' `
                 -StagingPath '{{EscapePowerShellLiteral(staging)}}' -KeepStaging -SkipInstall -NoInteractive -Quiet -PassThru -Settings {
                     New-ConfigurationBuild -Enable -CompilePowerShell -PowerShellCompilationMode Strict `
-                        -PowerShellCompilationTargetFramework net8.0 -PowerShellCompilationAllowUnreviewedDependencies `
+                        -PowerShellCompilationTargetFramework net10.0 -PowerShellCompilationAllowUnreviewedDependencies `
                         -SignModule -CertificateThumbprint '{{EscapePowerShellLiteral(thumbprint)}}'
                     New-ConfigurationArtefact -Type Packed -Enable -Path '{{EscapePowerShellLiteral(artefactRoot)}}' `
                         -ArtefactName '{{moduleName}}.zip'
@@ -142,7 +142,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
             Build-Module -Path '{{EscapePowerShellLiteral(testRoot)}}' -ModuleName '{{hybridName}}' `
                 -StagingPath '{{EscapePowerShellLiteral(hybridStaging)}}' -KeepStaging -SkipInstall -NoInteractive -Quiet -PassThru -Settings {
                     New-ConfigurationBuild -Enable -CompilePowerShell -PowerShellCompilationMode Hybrid `
-                        -PowerShellCompilationTargetFramework net8.0 -PowerShellCompilationIncludeResource README.md `
+                        -PowerShellCompilationTargetFramework net10.0 -PowerShellCompilationIncludeResource README.md `
                         -PowerShellCompilationAllowUnreviewedDependencies
                     New-ConfigurationArtefact -Type Packed -Enable -Path '{{EscapePowerShellLiteral(artefactRoot)}}' `
                         -ArtefactName '{{hybridName}}.zip'
@@ -152,14 +152,14 @@ public sealed class ModulePipelinePowerShellCompilationTests
             Build-Module -Path '{{EscapePowerShellLiteral(testRoot)}}' -ModuleName '{{strictName}}' `
                 -StagingPath '{{EscapePowerShellLiteral(strictStaging)}}' -KeepStaging -SkipInstall -NoInteractive -Quiet -PassThru -Settings {
                     New-ConfigurationBuild -Enable -CompilePowerShell -PowerShellCompilationMode Strict `
-                        -PowerShellCompilationTargetFramework net8.0 -PowerShellCompilationAllowUnreviewedDependencies `
+                        -PowerShellCompilationTargetFramework net10.0 -PowerShellCompilationAllowUnreviewedDependencies `
                         -PowerShellCompilationEmitIrSnapshots
                 } | Out-Null
             try {
                 Build-Module -Path '{{EscapePowerShellLiteral(testRoot)}}' -ModuleName '{{rejectedName}}' `
                     -StagingPath '{{EscapePowerShellLiteral(rejectedStaging)}}' -KeepStaging -SkipInstall -NoInteractive -Quiet -PassThru -Settings {
                         New-ConfigurationBuild -Enable -CompilePowerShell -PowerShellCompilationMode Strict `
-                            -PowerShellCompilationTargetFramework net8.0 -PowerShellCompilationAllowUnreviewedDependencies
+                            -PowerShellCompilationTargetFramework net10.0 -PowerShellCompilationAllowUnreviewedDependencies
                     } | Out-Null
                 throw 'Strict compilation unexpectedly accepted unsupported runtime behavior.'
             } catch {
@@ -296,7 +296,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
                         {
                             Enabled = true,
                             Mode = PowerShellCompilationMode.Hybrid,
-                            TargetFramework = "net8.0",
+                            TargetFramework = "net10.0",
                             IncludeResource = new[] { "README.md", "Assets/metadata.txt" },
                             ExcludeResource = new[] { "excluded.txt" },
                             AllowUnreviewedDependencies = true,
@@ -633,7 +633,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
                             {
                                 Enabled = true,
                                 Mode = PowerShellCompilationMode.Hybrid,
-                                TargetFramework = "net8.0",
+                                TargetFramework = "net10.0",
                                 IncludeResource = new[] { "Assets/Icon.json", "Assets/icon.json" },
                                 AllowUnreviewedDependencies = true
                             }

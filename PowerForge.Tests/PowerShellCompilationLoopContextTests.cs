@@ -19,7 +19,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             ? "function Get-Outer { param([double]$Limit) try { return Get-Inner -Limit $Limit } catch { return -1.0 } }"
             : "function Get-Outer { param([double]$Limit) return Get-Inner -Limit $Limit }");
         var document = PowerShellSourceParser.Parse(source, TestPath("loop-callback-calls.ps1"));
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0",
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0",
             hosted ? PowerShellCompilationCapabilities.BinaryModule : PowerShellCompilationCapability.None);
         Assert.Empty(result.Emitted.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         Assert.Equal(2, result.Emitted.Methods.Length);

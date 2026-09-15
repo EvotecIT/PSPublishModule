@@ -57,7 +57,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 ModuleManifestPath = resolved.ModuleManifestPath,
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,
-                TargetFramework = "net8.0",
+                TargetFramework = "net10.0",
                 EmitSource = true
             });
 
@@ -123,7 +123,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             {
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,
-                TargetFramework = "net8.0",
+                TargetFramework = "net10.0",
                 EmitSource = true
             });
 

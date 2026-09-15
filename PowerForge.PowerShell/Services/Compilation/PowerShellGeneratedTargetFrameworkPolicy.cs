@@ -9,6 +9,8 @@ internal static class PowerShellGeneratedTargetFrameworkPolicy
 {
     internal static void EnsureHostCanAnalyze(string? targetFramework)
     {
+        if (!string.IsNullOrWhiteSpace(targetFramework))
+            PowerShellCompilationTargetFrameworkPolicy.EnsureSupported(targetFramework);
         if (IsHostCompatible(
                 targetFramework,
                 Environment.Version.Major,
@@ -22,13 +24,13 @@ internal static class PowerShellGeneratedTargetFrameworkPolicy
 
     internal static bool IsHostCompatible(string? targetFramework, int hostMajor, bool isNetFrameworkHost)
     {
-        if (string.IsNullOrWhiteSpace(targetFramework) ||
-            string.Equals(targetFramework, "net472", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(targetFramework))
             return true;
-        var requiredMajor = GetRequiredModernHostMajor(targetFramework!);
-        return !isNetFrameworkHost && hostMajor >= requiredMajor;
+        if (targetFramework.Equals(PowerShellCompilationTargetFrameworkPolicy.Legacy, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework) && !isNetFrameworkHost && hostMajor >= 10;
     }
 
     private static int GetRequiredModernHostMajor(string targetFramework)
-        => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? 10 : 8;
+        => PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework) ? 10 : 0;
 }

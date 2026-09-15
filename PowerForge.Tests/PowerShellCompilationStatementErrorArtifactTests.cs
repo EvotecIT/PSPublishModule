@@ -66,7 +66,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         var document = PowerShellSourceParser.Parse("function Read-Value { [CmdletBinding()] param([string]$Text) return [int]::Parse($Text) }",
             Path.Combine(Path.GetTempPath(), "statement-error-capability.ps1"));
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0",
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0",
             PowerShellCompilationCapabilities.BinaryModule);
         Assert.Empty(result.Emitted.Diagnostics);
         Assert.True(Assert.Single(result.Lowered.Functions).RequiresPowerShellStatementErrors);

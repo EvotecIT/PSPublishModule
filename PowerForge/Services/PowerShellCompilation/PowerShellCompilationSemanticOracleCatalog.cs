@@ -12,9 +12,6 @@ public static class PowerShellCompilationSemanticOracleCatalog
     /// <summary>Windows PowerShell 5.1 profile identity.</summary>
     public const string WindowsPowerShell51ProfileId = "PowerForge.Oracle.WindowsPowerShell/5.1";
 
-    /// <summary>PowerShell 7.4 long-term-support profile identity.</summary>
-    public const string PowerShell74ProfileId = "PowerForge.Oracle.PowerShell/7.4";
-
     /// <summary>PowerShell 7.6 profile identity.</summary>
     public const string PowerShell76ProfileId = "PowerForge.Oracle.PowerShell/7.6";
 
@@ -92,20 +89,6 @@ public static class PowerShellCompilationSemanticOracleCatalog
             "Microsoft Windows PowerShell 5.1 product source",
             string.Empty,
             "https://learn.microsoft.com/powershell/scripting/windows-powershell/starting-windows-powershell");
-
-        yield return new PowerShellCompilationSemanticOracleProfile(
-            PowerShell74ProfileId,
-            PowerShellCompilationSemanticHostFamily.PowerShell7,
-            "pwsh",
-            "Core",
-            "[7.4,7.5)",
-            "Any",
-            "Any",
-            "invariant-per-case",
-            new[] { "CoreEdition", "CrossPlatform", "CimCmdlets" },
-            "https://github.com/PowerShell/PowerShell",
-            "b3d5b858eba508785484768b4b3e318742416b83",
-            "https://learn.microsoft.com/powershell/scripting/whats-new/what-s-new-in-powershell-74");
 
         yield return new PowerShellCompilationSemanticOracleProfile(
             PowerShell76ProfileId,

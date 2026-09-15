@@ -94,7 +94,7 @@ internal static partial class Program
         try
         {
             PowerShellCompilationTargetContract? targetContract = null;
-            var targetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0";
+            var targetFramework = TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default;
             var semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ??
                                     PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
             semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;

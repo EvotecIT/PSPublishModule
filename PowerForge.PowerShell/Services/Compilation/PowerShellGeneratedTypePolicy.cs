@@ -257,8 +257,7 @@ internal static class PowerShellGeneratedTypePolicy
     {
         if (targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase))
             return ResolveNet472ReferenceDirectory();
-        if (!targetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
-            !targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
+        if (!PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework))
             return null;
 
         var dotnetRoot = ResolveDotNetRoot();

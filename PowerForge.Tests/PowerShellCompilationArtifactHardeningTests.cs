@@ -9,7 +9,7 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_StrictBinaryModulePreservesMandatoryMetadataForTypedHelper(string targetFramework, string host)
     {

@@ -23,7 +23,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             artifactFixture.ScriptPath,
             "PowerForge.Compiled",
             "CancellationCollisionMethods",
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(typed.Methods);
         Assert.Contains(typed.Diagnostics, static diagnostic =>
@@ -53,12 +53,12 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 new[] { artifactFixture.ScriptPath },
                 "PowerForge.Compiled",
                 "CancellationMemberCollisionMethods",
-                "net8.0");
+                "net10.0");
 
         var prepared = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(
             typed,
             new[] { "Invoke-Collision" },
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(prepared.Methods);
         Assert.Contains(prepared.Diagnostics, diagnostic =>
@@ -84,7 +84,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 new[] { artifactFixture.ScriptPath },
                 "PowerForge.Compiled",
                 "CooperativeProviderMethods",
-                "net8.0");
+                "net10.0");
 
         Assert.Empty(typed.Diagnostics);
         var wrapper = Assert.Single(typed.Methods, static method =>
@@ -101,7 +101,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         var source = PowerShellBinaryCmdletSourceGenerator.Generate(
             typed,
             new[] { "Invoke-PackageCancellation" },
-            "net8.0");
+            "net10.0");
 
         Assert.Contains(
             "private readonly global::System.Threading.CancellationTokenSource _providerCancellation = new();",
@@ -559,7 +559,7 @@ function Invoke-ProviderCleanupFailure {
             "Information",
             "Transform");
         provider.Adapter.Dependencies = new[] { "Generic.Semantic.Provider.Dependency" };
-        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net8.0/Generic.Semantic.Provider.WithDependency.dll";
+        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net10.0/Generic.Semantic.Provider.WithDependency.dll";
         provider.Adapter.EntryPoint.TypeName = "Generic.Semantic.Provider.DependencyAdapter";
         providerFixture.Manifest.Providers = new[] { provider };
         var runtimeAssembly = typeof(Generic.Semantic.Provider.DependencyAdapter).Assembly.Location;
@@ -573,8 +573,8 @@ function Invoke-ProviderCleanupFailure {
             {
                 Assemblies = new[]
                 {
-                    new PowerShellCompilationProviderAssemblyInput(runtimeAssembly, "lib/net8.0/Generic.Semantic.Provider.WithDependency.dll"),
-                    new PowerShellCompilationProviderAssemblyInput(dependencyAssembly, "lib/net8.0/Generic.Semantic.Provider.Dependency.dll")
+                    new PowerShellCompilationProviderAssemblyInput(runtimeAssembly, "lib/net10.0/Generic.Semantic.Provider.WithDependency.dll"),
+                    new PowerShellCompilationProviderAssemblyInput(dependencyAssembly, "lib/net10.0/Generic.Semantic.Provider.Dependency.dll")
                 }
             });
         using var artifactFixture = ScriptFixture.Create(

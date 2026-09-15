@@ -77,7 +77,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         string methodName,
         string expectedValue)
     {
-        foreach (var targetFramework in new[] { "net472", "net8.0", "net10.0" })
+        foreach (var targetFramework in new[] { "net472", "net10.0" })
         {
             using var fixture = OracleFixture.Create(source);
             var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -105,7 +105,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [Theory]
     [InlineData("net472")]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreePipelineParameterEnumerationExecutesAcrossTargets(string targetFramework)
     {
@@ -174,7 +173,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [Theory]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreePipelineLifecycleExecutesAcrossTargets(string targetFramework)
     {
@@ -202,7 +200,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [Theory]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreePipelineLifecycleParameterInputPreservesNullAndEmptyCardinality(string targetFramework)
     {
@@ -233,7 +230,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [Theory]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreePipelineLifecycleProcessOutputPreservesOrderAndCardinality(string targetFramework)
     {
@@ -278,7 +274,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var profiles = new[]
         {
             (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, (string?)null),
-            (PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH")),
             (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"))
         };
         Assert.All(profiles.Skip(1), static profile => Assert.False(string.IsNullOrWhiteSpace(profile.Item2)));
@@ -317,7 +312,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [Theory]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreeCommentHelpExecutesAcrossTargets(string targetFramework)
     {

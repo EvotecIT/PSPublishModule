@@ -28,8 +28,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh", false)]
-    [InlineData("net8.0", "pwsh", true)]
+    [InlineData("net10.0", "pwsh", false)]
+    [InlineData("net10.0", "pwsh", true)]
     [InlineData("net472", "powershell.exe", false)]
     [InlineData("net472", "powershell.exe", true)]
     public void Build_ModuleMatchesPowerShellForBasicAndAdvancedPostTestLoops(string targetFramework, string host, bool advanced)

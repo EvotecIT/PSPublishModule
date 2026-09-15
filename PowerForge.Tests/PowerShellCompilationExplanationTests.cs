@@ -117,7 +117,7 @@ public sealed class PowerShellCompilationExplanationTests
         var plan = new PowerShellCompilationPlan(
             PowerShellCompilationMode.Strict,
             new[] { file },
-            "net8.0",
+            "net10.0",
             new[] { dependency });
         var regionGraph = new PowerShellCompilationRegionGraph(new[]
         {
@@ -318,7 +318,7 @@ public sealed class PowerShellCompilationExplanationTests
             File.WriteAllText(secondPath, "function Get-Second { 2 }; function Get-First { param([int] $Left, [string] $Right) $Left }");
 
             string Fingerprint(string path) => PowerShellCompilationExplanationService.Create(
-                new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Strict, targetFramework: "net8.0")))
+                new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Strict, targetFramework: "net10.0")))
                 .SemanticFingerprintSha256;
 
             Assert.Equal(Fingerprint(firstPath), Fingerprint(secondPath));

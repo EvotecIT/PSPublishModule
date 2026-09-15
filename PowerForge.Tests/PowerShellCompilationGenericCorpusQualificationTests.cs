@@ -27,7 +27,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             {
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,
-                TargetFramework = "net8.0",
+                TargetFramework = "net10.0",
                 IncludeResource = new[] { "report-label.txt" }
             });
 

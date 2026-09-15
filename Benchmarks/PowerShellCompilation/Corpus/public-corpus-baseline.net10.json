@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "packetId": "powerforge-public-powershell-modules-net8-v1",
-  "packetSha256": "9afce834cfca8147ec73a6918e8d3ba41af20d37a4e71ad2aea1c3eb81f65801",
+  "packetId": "powerforge-public-powershell-modules-net10-v1",
+  "packetSha256": "ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e",
   "recordedOn": "2026-09-04",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "hybrid": {

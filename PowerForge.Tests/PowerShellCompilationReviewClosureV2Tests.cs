@@ -16,7 +16,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { fixture.ScriptPath },
             "PowerForge.ShouldProcessIdentity",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         Assert.Contains(typed.Methods, static method => method.SourceName == "Invoke-InnerChange");
         Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Invoke-OuterChange");
@@ -30,7 +30,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
-            TargetFramework = "net8.0"
+            TargetFramework = "net10.0"
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -65,7 +65,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { fixture.ScriptPath },
             "PowerForge.RuntimeStateRecursion",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(typed.Methods);
         Assert.Contains(typed.Diagnostics, static diagnostic =>
@@ -91,7 +91,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
-            TargetFramework = "net8.0"
+            TargetFramework = "net10.0"
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -114,7 +114,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
-            TargetFramework = "net8.0"
+            TargetFramework = "net10.0"
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -129,7 +129,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.TypedExecutable));
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
 
@@ -152,12 +152,12 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { fixture.ScriptPath },
             "PowerForge.RegionCollision",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         var prepared = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(
             typed,
             exportedFunctions: null,
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(prepared.Methods);
         Assert.Contains(prepared.Diagnostics, diagnostic =>
@@ -174,7 +174,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0"));
+            targetFramework: "net10.0"));
         var function = Assert.Single(Assert.Single(plan.Files).Units);
 
         Assert.False(function.IsCompilable);

@@ -420,7 +420,7 @@ public sealed partial class PowerShellCompilationCensusTests
         try
         {
             var runner = new PowerShellCompilationCensusRunner();
-            var baseline = runner.Run(new[] { source }, "net8.0");
+            var baseline = runner.Run(new[] { source }, "net10.0");
 
             var exception = Assert.Throws<ArgumentException>(() => runner.Run(new[] { source }, "net10.0", baseline));
             Assert.Contains("target framework", exception.Message, StringComparison.OrdinalIgnoreCase);

@@ -152,7 +152,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             ModuleManifestPath = Path.Combine(fixture.RootPath, "Demo.psd1"),
             CompilationSourcePaths = new[] { Path.Combine(fixture.RootPath, "Demo.psm1") },
             ResourceMode = PowerShellCompilationResourceMode.CompleteModule,
-            TargetFramework = "net8.0"
+            TargetFramework = "net10.0"
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);

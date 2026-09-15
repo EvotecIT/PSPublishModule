@@ -76,7 +76,6 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
     [Theory]
     [InlineData("net472")]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void Build_StrictLibraryExecutesBoundedGetDateAcrossTargets(string targetFramework)
     {
@@ -108,7 +107,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_StrictBinaryModulePreservesQualifiedNoArgumentGetDateContract(string targetFramework, string host)
     {

@@ -75,8 +75,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             throw new ArgumentException("Signing requires an RFC3161 timestamp server URL.", nameof(spec));
         if (spec.SigningTimeoutSeconds < 1)
             throw new ArgumentOutOfRangeException(nameof(spec), "Signing timeout must be positive.");
-        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) && !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Executables currently target net8.0 or net10.0.", nameof(spec));
+        PowerShellCompilationTargetFrameworkPolicy.EnsureSupported(spec.TargetFramework, spec.Kind);
         PowerShellCompilationBuildSpec.EnsureModeSupported(spec.Kind, spec.Mode);
         if (spec.Kind != PowerShellCompilationArtifactKind.Executable &&
             (spec.SelfContained || !string.IsNullOrWhiteSpace(spec.RuntimeIdentifier)))
@@ -88,11 +87,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             if (!spec.SelfContained || string.IsNullOrWhiteSpace(spec.RuntimeIdentifier) || !spec.SingleFile)
                 throw new ArgumentException("Trimmed and NativeAot executables require SelfContained, RuntimeIdentifier, and SingleFile.", nameof(spec));
         }
-        if (spec.Kind != PowerShellCompilationArtifactKind.Executable &&
-            !spec.TargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase) &&
-            !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
-            !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Typed libraries and binary modules currently target net472, net8.0, or net10.0.", nameof(spec));
     }
 
     private static string[] ResolveCompilationSourcePaths(PowerShellCompilationBuildSpec spec)

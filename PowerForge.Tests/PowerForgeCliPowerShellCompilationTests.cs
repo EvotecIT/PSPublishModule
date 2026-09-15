@@ -610,7 +610,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Fact]
-    public async Task Analyze_HonorsRequestedTargetFrameworkMemberSurface()
+    public async Task Analyze_DefaultsToNet10AndRejectsRetiredNet8Target()
     {
         var repositoryRoot = FindRepositoryRoot();
         var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Target Analysis Tests", Guid.NewGuid().ToString("N"));
@@ -620,26 +620,21 @@ public sealed class PowerForgeCliPowerShellCompilationTests
 
         try
         {
-            var net8 = await RunCliAsync(
+            var retired = await RunCliAsync(
                 repositoryRoot,
                 $"powershell analyze \"{source}\" --mode Strict --framework net8.0 --output json");
-            Assert.Equal(1, net8.ExitCode);
-            using (var document = JsonDocument.Parse(net8.StdOut))
-            {
-                var result = document.RootElement.GetProperty("result");
-                Assert.Equal("net8.0", result.GetProperty("targetFramework").GetString());
-                Assert.Equal(0, result.GetProperty("compilableUnits").GetInt32());
-            }
+            Assert.Equal(2, retired.ExitCode);
+            Assert.Contains("net472 or net10.0", retired.StdErr + retired.StdOut, StringComparison.OrdinalIgnoreCase);
 
             var defaultTarget = await RunCliAsync(
                 repositoryRoot,
                 $"powershell analyze \"{source}\" --mode Strict --output json");
-            Assert.Equal(1, defaultTarget.ExitCode);
+            Assert.Equal(0, defaultTarget.ExitCode);
             using (var document = JsonDocument.Parse(defaultTarget.StdOut))
             {
                 var result = document.RootElement.GetProperty("result");
-                Assert.Equal("net8.0", result.GetProperty("targetFramework").GetString());
-                Assert.Equal(0, result.GetProperty("compilableUnits").GetInt32());
+                Assert.Equal("net10.0", result.GetProperty("targetFramework").GetString());
+                Assert.Equal(1, result.GetProperty("compilableUnits").GetInt32());
             }
 
             var net10 = await RunCliAsync(

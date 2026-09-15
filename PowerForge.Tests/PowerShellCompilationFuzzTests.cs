@@ -34,8 +34,8 @@ public sealed class PowerShellCompilationFuzzTests
             foreach (var source in cases)
             {
                 File.WriteAllText(path, source);
-                var first = analyzer.Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Hybrid, targetFramework: "net8.0"));
-                var second = analyzer.Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Hybrid, targetFramework: "net8.0"));
+                var first = analyzer.Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Hybrid, targetFramework: "net10.0"));
+                var second = analyzer.Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Hybrid, targetFramework: "net10.0"));
 
                 Assert.Equal(GetPlanSignature(first), GetPlanSignature(second));
                 Assert.InRange(first.Files.Sum(static file => file.Diagnostics.Length + file.Units.Sum(static unit => unit.Diagnostics.Length)), 0, 512);

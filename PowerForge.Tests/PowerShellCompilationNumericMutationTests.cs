@@ -8,7 +8,6 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     public static IEnumerable<object[]> NumericArtifactTargets()
     {
-        yield return new object[] { "net8.0", "pwsh" };
         yield return new object[] { "net10.0", "pwsh" };
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             yield return new object[] { "net472", "powershell.exe" };

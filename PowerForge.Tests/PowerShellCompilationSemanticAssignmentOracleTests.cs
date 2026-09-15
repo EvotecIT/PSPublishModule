@@ -6,7 +6,6 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationSemanticOracleTests
 {
     [Theory]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreeStaticMemberAssignmentExecutesAcrossCoreTargets(string targetFramework)
     {
@@ -35,7 +34,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [Theory]
     [InlineData("net472")]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreeIndexAndMemberAssignmentExecuteAcrossTargets(string targetFramework)
     {

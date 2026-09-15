@@ -22,11 +22,6 @@
     },
     {
       "id": "Microsoft.PowerShell.SDK",
-      "version": "7.4.18",
-      "contentHash": "8A7dueENKUSfjDo2UXptob2nUmrPUi2MrBgdeiu88SpGZ2UYETC8C1r4Mj9b/USMFeD2Yc4JlNA70sduUhRapQ=="
-    },
-    {
-      "id": "Microsoft.PowerShell.SDK",
       "version": "7.6.5",
       "contentHash": "QQahpTrSQA0Bip0B+tkusI5SUHRYVbORpTlUZVLMWUwsdO2VVyDdpDDUMMbGZB6dw9JbwMA/B7auMAD3D9Ss/g=="
     },

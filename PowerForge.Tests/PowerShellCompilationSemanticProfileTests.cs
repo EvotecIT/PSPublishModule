@@ -8,7 +8,6 @@ public sealed class PowerShellCompilationSemanticProfileTests
 {
     [Theory]
     [InlineData("net472", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId)]
-    [InlineData("net8.0", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)]
     [InlineData("net10.0", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)]
     public void CompatibilityTargetSelectsFrameworkOwnedSemanticProfile(string targetFramework, string expectedProfileId)
     {
@@ -23,6 +22,20 @@ public sealed class PowerShellCompilationSemanticProfileTests
             explicitContract: false);
 
         Assert.Equal(expectedProfileId, target.SemanticProfileId);
+    }
+
+    [Fact]
+    public void CompatibilityTargetRejectsRetiredNet8Framework()
+    {
+        Assert.Throws<ArgumentException>(() => PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            "net8.0",
+            runtimeIdentifier: null,
+            selfContained: false,
+            singleFile: false,
+            PowerShellCompilationExecutableOptimization.None,
+            explicitContract: false));
     }
 
     [Fact]

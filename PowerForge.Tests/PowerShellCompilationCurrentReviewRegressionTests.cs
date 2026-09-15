@@ -57,7 +57,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
 

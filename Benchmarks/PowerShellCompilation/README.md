@@ -40,7 +40,7 @@ The `powershell-compilation-typed-local-calls` lane uses the same entry script a
 
 Do not interpret the binary-cmdlet lane as pure arithmetic throughput: it intentionally includes PowerShell command discovery, parameter binding, pipeline, and `PSCmdlet.WriteObject` overhead. The typed-CLR and hand-written-C# lanes perform their repeated calls inside C# and are the appropriate comparison for code-generation quality.
 
-The same quick matrix can run under Linux PowerShell. A host whose PowerShell runtime sits on an intermediate .NET major may emit reference-unification warnings while loading the supported `net8.0` benchmark artifact; those warnings must be disclosed with the run rather than treated as a clean standard baseline.
+The same quick matrix can run under Linux PowerShell 7.6 on .NET 10. The standard benchmark artifact targets `net10.0`; older Core hosts are outside the active compiler support matrix.
 
 For a bounded cross-platform baseline, override `Calls`, `LoopCalls`, `Warmup`, and `Iterations`. Positional workload semantics remain identical; only the sample volume changes. `IncludeOptimizedExecutables` publishes and executes the checked-in `typed-executable-optimization.ps1` workload as ReadyToRun, trimmed, and NativeAOT artifacts, then records their SDK, hashes, and byte sizes in startup metadata. ReadyToRun is benchmark-only and does not become a public compilation target.
 
