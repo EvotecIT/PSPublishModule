@@ -59,7 +59,7 @@ The active continuation branch is `fix/compiler-audit-milestones`. It preserves 
 - [x] Build `PowerForge.PowerShell` for `net10.0` and `net472` with zero warnings and errors. Normalize nullable target input explicitly so the `net472` compiler does not lose flow-state guarantees.
 - [x] Pass the complete compiler category: 661/661 tests on .NET 10, including generated `net10`/PowerShell 7.6 and `net472`/Windows PowerShell 5.1 artifact cases.
 - [x] Pass all six fixed Strict corpus programs as `net10.0` `win-x64` artifacts.
-- [ ] Complete independent review of the frozen continuation diff and keep this branch available for the next bounded semantic slice. CI and a PR remain intentionally outside this checkpoint.
+- [x] Complete independent review of the frozen continuation diff, correct its current-behavior documentation findings, and keep this branch available for the next bounded semantic slice. CI and a PR remain intentionally outside this checkpoint.
 
 The supported compiler framework/host pairs are now `net10.0` with PowerShell 7.6 and `net472` with Windows PowerShell 5.1. [Microsoft ends .NET 8 support on 10 November 2026](https://dotnet.microsoft.com/en-us/platform/support/policy), while .NET 10 is supported through November 2028. Older roadmap paragraphs retain dated `net8`/PowerShell 7.4 observations only as historical evidence; they are not active targets, gates, or release claims.
 
