@@ -39,7 +39,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             runs[runs.Count - 1].Add(binding);
         }
 
-        foreach (var run in runs.Where(run => run.Count >= 2 &&
+        foreach (var run in runs.Where(run => run.Count >= 1 &&
                      run[0].AuthoredStatementIndex > 0 &&
                      run[run.Count - 1].AuthoredStatementEndIndex < authoredStatements.Count - 1))
         {

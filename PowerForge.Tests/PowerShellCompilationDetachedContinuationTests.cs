@@ -7,6 +7,87 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
+    public void Build_HybridSingleStatementPrefixAndDetachedRegionPreserveContinuation(
+        string framework,
+        string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Get-SingleStatementRegionReport {
+                [CmdletBinding()]
+                param([int] $Seed, [string] $Mode)
+                [string] $Trace = "prefix:$Seed"
+                data PrefixBarrier { }
+                & {
+                    "middle:$Trace"
+                    if ($Mode -eq 'error') { Write-Error 'middle-error' }
+                }
+                data MiddleBarrier { }
+                $Trace = "$Trace|typed"
+                data TailBarrier { }
+                & { "tail:$Trace" }
+            }
+            Export-ModuleMember -Function Get-SingleStatementRegionReport
+            """, ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "SingleStatementRegionMethods", framework,
+            PowerShellCompilationCapabilities.HybridModule);
+        var promoted = typed.PromotedRegions.OrderBy(static region => region.StartOffset).ToArray();
+        Assert.True(promoted.Length == 2,
+            "Promoted: " + promoted.Length + Environment.NewLine +
+            string.Join(Environment.NewLine, typed.Diagnostics.Select(static item => item.Code + ": " + item.Message)) + Environment.NewLine +
+            string.Join(Environment.NewLine, typed.RegionCandidates.Select(static item => item.DecisionCode + ": " + item.Reason)));
+        Assert.All(promoted, static region => Assert.Equal(region.StartLine, region.EndLine));
+        Assert.True(promoted[0].RequiresLocalOwnershipGuard);
+        Assert.False(promoted[1].RequiresLocalOwnershipGuard);
+        Assert.Equal(new[] { "Trace" }, promoted[0].ContinuationLocals.Select(static local => local.Name));
+        Assert.Equal(new[] { "Trace" }, promoted[1].InputLocals.Select(static local => local.Name));
+        Assert.Equal(new[] { "Trace" }, promoted[1].ContinuationLocals.Select(static local => local.Name));
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.SingleStatementRegions",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(2, result.Manifest!.PromotedTypedRegions);
+        const string probe = """
+            $ErrorActionPreference = 'Continue'
+            $continuedErrors = @()
+            $continued = @(Get-SingleStatementRegionReport -Seed 7 -Mode error -ErrorAction Continue -ErrorVariable continuedErrors 2>$null)
+            'continue=' + ($continued -join ',') + '/errors=' + $continuedErrors.Count
+            $stopped = [Collections.Generic.List[object]]::new()
+            try {
+                Get-SingleStatementRegionReport -Seed 8 -Mode error -ErrorAction Stop 2>$null | ForEach-Object { [void]$stopped.Add($_) }
+            } catch {
+                'stop=' + ($stopped.ToArray() -join ',') + '/caught=' + $_.FullyQualifiedErrorId
+            }
+            $reuseErrors = @()
+            $reuse = @(Get-SingleStatementRegionReport -Seed 9 -Mode normal -ErrorAction Continue -ErrorVariable reuseErrors 2>$null)
+            'reuse=' + ($reuse -join ',') + '/errors=' + $reuseErrors.Count
+            """;
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath,
+            "original-single-statement-regions");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath,
+            "compiled-single-statement-regions");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Contains("continue=middle:prefix:7,tail:prefix:7|typed/errors=1", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("stop=middle:prefix:8/caught=", original.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("tail:prefix:8", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("reuse=middle:prefix:9,tail:prefix:9|typed/errors=0", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void Build_HybridSecondDetachedRegionTransfersMultipleLocalsAndPreservesHostedContinuation(
         string framework,
         string host)

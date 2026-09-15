@@ -81,7 +81,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             if (newTransfer is not null) transfers.Add(newTransfer);
             nextIndex = binding.AuthoredStatementEndIndex + 1;
         }
-        if (selected.Count < 2 || locals.Count == 0) return false;
+        if (selected.Count == 0 || locals.Count == 0) return false;
         var lastSpan = selected[selected.Count - 1].Span;
         // The synthetic transfer occurs after the last authored assignment. Giving it that
         // assignment's start offset would falsely classify the newly initialized local as live-in.

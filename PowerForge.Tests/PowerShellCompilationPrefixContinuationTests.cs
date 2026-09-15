@@ -185,18 +185,28 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("[int]$result = 0; $result += $Number; & { $result }")]
-    [InlineData("[int]$result = 0; $Number = 7; & { $result; $Number }")]
-    [InlineData("[int]$result = 0; Write-Warning 'before'; $result = 7; & { $result }")]
-    [InlineData("& { 'before' }; [int]$result = 0; $result = 7; & { $result }")]
-    public void Transpile_HybridPrefixRejectsUnrepresentedFailuresAndSideEffects(string body)
+    [InlineData("[int]$result = 0; $result += $Number; & { $result }", true)]
+    [InlineData("[int]$result = 0; $Number = 7; & { $result; $Number }", true)]
+    [InlineData("[int]$result = 0; Write-Warning 'before'; $result = 7; & { $result }", true)]
+    [InlineData("& { 'before' }; [int]$result = 0; $result = 7; & { $result }", false)]
+    public void Transpile_HybridPrefixStopsBeforeUnrepresentedFailuresAndSideEffects(
+        string body,
+        bool expectsSingleStatementPrefix)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-PrefixValue { [CmdletBinding()] param([int]$Number); " + body + " }", ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "PrefixMethods", "net10.0",
             PowerShellCompilationCapabilities.HybridModule);
-        Assert.DoesNotContain(typed.PromotedRegions, region => region.ContinuationLocals.Count != 0);
+        var prefixes = typed.PromotedRegions.Where(region => region.ContinuationLocals.Count != 0).ToArray();
+        if (!expectsSingleStatementPrefix)
+        {
+            Assert.Empty(prefixes);
+            return;
+        }
+        var prefix = Assert.Single(prefixes);
+        Assert.Equal("[int]$result = 0", File.ReadAllText(fixture.ScriptPath)
+            .Substring(prefix.StartOffset, prefix.EndOffset - prefix.StartOffset));
     }
 
     [Fact]
