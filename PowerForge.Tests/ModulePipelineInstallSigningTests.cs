@@ -45,6 +45,92 @@ public sealed class ModulePipelineInstallSigningTests
             Assert.DoesNotContain(
                 installSigningCall.FilePaths,
                 static path => path.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(result.SigningResult);
+            Assert.Equal(1, result.SigningResult.Resigned);
+            Assert.Contains(
+                Path.GetFullPath(installedManifest),
+                result.SigningResult.VerifiedFilePaths.Select(Path.GetFullPath),
+                StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void SignedAutoRevisionInstall_DoesNotSignManifestExcludedByPolicy()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SignedTestModule";
+            var sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            WriteMinimalModule(sourceRoot.FullName, moduleName, "1.0.0");
+            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            Directory.CreateDirectory(Path.Combine(installRoot.FullName, moduleName, "1.0.0"));
+            var hosted = new RecordingHostedOperations { HonorSigningPatterns = true };
+            var spec = CreateSpec(sourceRoot.FullName, moduleName, installRoot.FullName);
+            var signing = spec.Segments.OfType<ConfigurationOptionsSegment>().Single().Options.Signing!;
+            signing.Include = new[] { "*.psm1" };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hosted);
+
+            var result = runner.Run(spec, runner.Plan(spec));
+
+            var installedRoot = Assert.Single(result.InstallResult?.InstalledPaths ?? Array.Empty<string>());
+            var installedManifest = Path.Combine(installedRoot, moduleName + ".psd1");
+            Assert.True(ManifestEditor.TryGetTopLevelString(installedManifest, "ModuleVersion", out var installedVersion));
+            Assert.Equal("1.0.0.1", installedVersion);
+            Assert.DoesNotContain(hosted.SigningCalls, static call => call.OverwriteSigned);
+            Assert.DoesNotContain("# test install signature", File.ReadAllText(installedManifest), StringComparison.Ordinal);
+            Assert.NotNull(result.SigningResult);
+            Assert.Equal(0, result.SigningResult.Resigned);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SignedAutoRevisionInstall_RollsBackWhenSignedPayloadIsChangedOrMissing(bool deletePayload)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SignedTestModule";
+            var sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            WriteMinimalModule(sourceRoot.FullName, moduleName, "1.0.0");
+            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            Directory.CreateDirectory(Path.Combine(installRoot.FullName, moduleName, "1.0.0"));
+            var hosted = new RecordingHostedOperations
+            {
+                AfterInstallManifestVersionObserved = (_, manifestPath) =>
+                {
+                    var payloadPath = Path.Combine(Path.GetDirectoryName(manifestPath)!, moduleName + ".psm1");
+                    if (deletePayload)
+                        File.Delete(payloadPath);
+                    else
+                        File.AppendAllText(payloadPath, "tampered");
+                }
+            };
+            var spec = CreateSpec(sourceRoot.FullName, moduleName, installRoot.FullName);
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hosted);
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
+
+            Assert.Contains("Signed payload", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(Path.Combine(installRoot.FullName, moduleName, "1.0.0.1")));
         }
         finally
         {
@@ -99,7 +185,7 @@ public sealed class ModulePipelineInstallSigningTests
             var sentinelPath = Path.Combine(concurrentDestination, "sentinel.txt");
             var hosted = new RecordingHostedOperations
             {
-                AfterInstallManifestVersionObserved = _ =>
+                AfterInstallManifestVersionObserved = (_, _) =>
                 {
                     Directory.CreateDirectory(concurrentDestination);
                     File.WriteAllText(sentinelPath, "concurrent install");
@@ -117,6 +203,79 @@ public sealed class ModulePipelineInstallSigningTests
             Assert.Contains("will not be overwritten", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal("concurrent install", File.ReadAllText(sentinelPath));
             Assert.False(File.Exists(Path.Combine(concurrentDestination, moduleName + ".psd1")));
+            Assert.Empty(Directory.EnumerateDirectories(
+                Path.Combine(installRoot.FullName, moduleName),
+                ".tmp_install_*",
+                SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void DestinationRoots_CanonicalizeTrailingSeparators()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var roots = ModuleInstaller.ResolveDestinationRoots(new[]
+            {
+                root.FullName,
+                root.FullName + Path.DirectorySeparatorChar
+            });
+
+            Assert.Single(roots);
+            Assert.Equal(root.FullName, roots[0]);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void DestinationRoots_PreserveCaseDistinctDirectoriesOnCaseSensitiveFileSystems()
+    {
+        if (FrameworkCompatibility.IsWindows())
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var upper = Directory.CreateDirectory(Path.Combine(root.FullName, "User"));
+            var lower = Directory.CreateDirectory(Path.Combine(root.FullName, "user"));
+
+            var roots = ModuleInstaller.ResolveDestinationRoots(new[] { upper.FullName, lower.FullName });
+
+            Assert.Equal(2, roots.Count);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void InstallLock_BestEffortRetainsWritableRoots()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var usableRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "usable"));
+            var blockedRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "blocked"));
+            File.WriteAllText(Path.Combine(blockedRoot.FullName, ".powerforge"), "blocks lock directory creation");
+
+            using var installLock = ModuleInstallOperationLock.Acquire(
+                new[] { blockedRoot.FullName, usableRoot.FullName },
+                "SignedTestModule",
+                requireAllRoots: false);
+
+            Assert.Single(installLock.LockedRoots);
+            Assert.Equal(usableRoot.FullName, installLock.LockedRoots[0]);
+            Assert.Single(installLock.Failures);
+            Assert.Contains(blockedRoot.FullName, installLock.Failures[0], StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -262,7 +421,8 @@ public sealed class ModulePipelineInstallSigningTests
     {
         public List<SigningCall> SigningCalls { get; } = new();
         public bool FailInstallManifestSigning { get; set; }
-        public Action<string>? AfterInstallManifestVersionObserved { get; set; }
+        public bool HonorSigningPatterns { get; set; }
+        public Action<string, string>? AfterInstallManifestVersionObserved { get; set; }
         public string? InstallManifestSha256 { get; private set; }
 
         public ModuleSigningResult SignModuleOutput(
@@ -274,6 +434,14 @@ public sealed class ModulePipelineInstallSigningTests
             SigningOptionsConfiguration signing)
         {
             var paths = packageFilePaths.Select(Path.GetFullPath).ToArray();
+            var verifiedPaths = HonorSigningPatterns
+                ? paths.Where(path => includePatterns.Any(pattern =>
+                    pattern == "*" ||
+                    string.Equals(pattern, "*" + Path.GetExtension(path), StringComparison.OrdinalIgnoreCase)))
+                    .Where(path => !excludeSubstrings.Any(exclude =>
+                        path.Contains(exclude, StringComparison.OrdinalIgnoreCase)))
+                    .ToArray()
+                : paths;
             string? manifestVersion = null;
             if (signing.OverwriteSigned == true && paths.Length == 1 &&
                 paths[0].EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
@@ -287,20 +455,20 @@ public sealed class ModulePipelineInstallSigningTests
                 if (FailInstallManifestSigning)
                     throw new InvalidOperationException("install manifest signing failed");
 
-                AfterInstallManifestVersionObserved?.Invoke(manifestVersion);
+                AfterInstallManifestVersionObserved?.Invoke(manifestVersion, paths[0]);
                 File.AppendAllText(paths[0], Environment.NewLine + "# test install signature");
                 InstallManifestSha256 = ComputeSha256(paths[0]);
             }
 
             return new ModuleSigningResult
             {
-                TotalMatched = paths.Length,
-                TotalAfterExclude = paths.Length,
-                Attempted = paths.Length,
-                SignedNew = manifestVersion is null ? paths.Length : 0,
-                Resigned = manifestVersion is null ? 0 : paths.Length,
+                TotalMatched = verifiedPaths.Length,
+                TotalAfterExclude = verifiedPaths.Length,
+                Attempted = verifiedPaths.Length,
+                SignedNew = manifestVersion is null ? verifiedPaths.Length : 0,
+                Resigned = manifestVersion is null ? 0 : verifiedPaths.Length,
                 CertificateThumbprint = "AABBCC",
-                VerifiedFilePaths = paths
+                VerifiedFilePaths = verifiedPaths
             };
         }
 

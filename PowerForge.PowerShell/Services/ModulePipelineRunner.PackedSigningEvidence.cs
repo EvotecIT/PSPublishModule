@@ -321,7 +321,9 @@ public sealed partial class ModulePipelineRunner
     internal static ModuleSigningResult? CreateDeliveredSigningResult(
         ModuleSigningResult? signingResult,
         string signedSourceRoot,
-        string deliveredRoot)
+        string deliveredRoot,
+        IEnumerable<string>? replacedSourcePaths = null,
+        IEnumerable<string>? expectedSourcePaths = null)
     {
         if (signingResult is null || !signingResult.Success ||
             signingResult.VerifiedFilePaths is not { Length: > 0 })
@@ -331,22 +333,73 @@ public sealed partial class ModulePipelineRunner
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var sourcePrefix = sourceRoot + Path.DirectorySeparatorChar;
         var targetRoot = Path.GetFullPath(deliveredRoot);
+        var replaced = (replacedSourcePaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var verifiedDeliveredPaths = new List<string>();
-        foreach (var sourcePathValue in signingResult.VerifiedFilePaths
-                     .Where(static path => !string.IsNullOrWhiteSpace(path))
-                     .Distinct(PowerShellCompilationPathSafety.PathComparer))
+        var verifiedSourcePaths = signingResult.VerifiedFilePaths
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Where(sourcePath => sourcePath.StartsWith(
+                sourcePrefix,
+                PowerShellCompilationPathSafety.GetPathComparison(sourcePrefix)))
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .ToArray();
+        var requireCompleteDelivery = expectedSourcePaths is not null;
+        var sourcePathsToMap = expectedSourcePaths is null
+            ? verifiedSourcePaths
+            : expectedSourcePaths
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath)
+                .ToArray();
+        if (requireCompleteDelivery && sourcePathsToMap.Any(path =>
+                !verifiedSourcePaths.Contains(path, PowerShellCompilationPathSafety.PathComparer)))
         {
-            var sourcePath = Path.GetFullPath(sourcePathValue);
-            if (!sourcePath.StartsWith(sourcePrefix, PowerShellCompilationPathSafety.GetPathComparison(sourcePrefix))) continue;
+            throw new InvalidOperationException(
+                "Expected delivered signing evidence was not present in the verified source signing result.");
+        }
+
+        foreach (var sourcePath in sourcePathsToMap
+            .Where(sourcePath => !replaced.Contains(sourcePath))
+            .Distinct(PowerShellCompilationPathSafety.PathComparer))
+        {
             var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, sourcePath);
             var targetPath = Path.GetFullPath(Path.Combine(targetRoot, relativePath));
             PowerShellCompilationPathSafety.EnsureContained(
                 targetRoot,
                 targetPath,
                 $"Delivered signing evidence path '{relativePath}' escapes the installed module root.");
-            if (!File.Exists(sourcePath) || !File.Exists(targetPath)) continue;
-            if (!string.Equals(ComputeFileSha256(sourcePath), ComputeFileSha256(targetPath), StringComparison.OrdinalIgnoreCase))
+            if (!File.Exists(sourcePath))
+            {
+                if (requireCompleteDelivery)
+                {
+                    throw new InvalidOperationException(
+                        $"Signed source payload is missing before delivery validation: '{sourcePath}'.");
+                }
                 continue;
+            }
+
+            if (!File.Exists(targetPath))
+            {
+                if (requireCompleteDelivery)
+                {
+                    throw new InvalidOperationException(
+                        $"Signed payload was not delivered to the expected path: '{targetPath}'.");
+                }
+                continue;
+            }
+
+            if (!string.Equals(ComputeFileSha256(sourcePath), ComputeFileSha256(targetPath), StringComparison.OrdinalIgnoreCase))
+            {
+                if (requireCompleteDelivery)
+                {
+                    throw new InvalidOperationException(
+                        $"Signed payload was not delivered byte-for-byte: '{targetPath}'.");
+                }
+                continue;
+            }
+
             verifiedDeliveredPaths.Add(targetPath);
         }
 

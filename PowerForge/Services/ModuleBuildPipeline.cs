@@ -332,9 +332,16 @@ public sealed class ModuleBuildPipeline
 
         var originalStrategy = spec.Strategy;
         using var installLock = originalStrategy == InstallationStrategy.AutoRevision
-            ? ModuleInstallOperationLock.Acquire(spec.Roots, spec.Name)
+            ? ModuleInstallOperationLock.Acquire(spec.Roots, spec.Name, requireAllDestinationRoots)
             : null;
-        var resolved = ModuleInstaller.ResolveTargetVersion(spec.Roots, spec.Name, spec.Version, originalStrategy);
+        var installRoots = installLock?.LockedRoots ?? spec.Roots;
+        if (installLock is not null)
+        {
+            foreach (var failure in installLock.Failures)
+                _logger.Warn($"Skipping module root because its install lock could not be acquired: {failure}");
+        }
+
+        var resolved = ModuleInstaller.ResolveTargetVersion(installRoots, spec.Name, spec.Version, originalStrategy);
         var manifestPath = Path.Combine(staging, $"{spec.Name}.psd1");
         var patchManifest = updateManifestToResolvedVersion ?? spec.UpdateManifestToResolvedVersion;
         if (patchManifest && finalizeChangedManifest is not null)
@@ -364,7 +371,7 @@ public sealed class ModuleBuildPipeline
 
         var installer = new ModuleInstaller(_logger);
         var options = new ModuleInstallerOptions(
-            destinationRoots: spec.Roots,
+            destinationRoots: installRoots,
             strategy: InstallationStrategy.Exact,
             keepVersions: spec.KeepVersions,
             legacyFlatHandling: spec.LegacyFlatHandling,

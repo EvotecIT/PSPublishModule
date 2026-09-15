@@ -110,6 +110,10 @@ public sealed partial class ModulePipelineRunner
                     plan.Delivery,
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
                     finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
+                var expectedSignedInstallSourcePaths = CaptureExpectedSignedInstallSourcePaths(
+                    state.SigningResult,
+                    buildResult.StagingPath,
+                    installPackagePath);
 
                 var installSpec = new ModuleInstallSpec
                 {
@@ -124,6 +128,7 @@ public sealed partial class ModulePipelineRunner
                     PreserveVersions = plan.InstallPreserveVersions
                 };
                 ModuleSigningResult? installPackageSigningResult = null;
+                ModuleSigningResult? deliveredInstallSigningResult = null;
                 var validateSignedInstallTransactionally =
                     plan.SignModule && plan.InstallStrategy == InstallationStrategy.AutoRevision;
                 state.InstallResult = plan.SignModule
@@ -132,13 +137,15 @@ public sealed partial class ModulePipelineRunner
                         (manifestPath, _) => installPackageSigningResult = SignChangedInstallManifest(
                             plan,
                             manifestPath,
+                            buildResult.StagingPath,
                             state.SigningResult),
                         validateInstalledPaths: validateSignedInstallTransactionally
-                            ? installedPaths => ValidateAndFinalizeSignedInstall(
+                            ? installedPaths => deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
                                 plan,
                                 buildResult.StagingPath,
                                 installPackagePath,
                                 installedPaths,
+                                expectedSignedInstallSourcePaths,
                                 state.SigningResult,
                                 installPackageSigningResult)
                             : null,
@@ -146,14 +153,17 @@ public sealed partial class ModulePipelineRunner
                     : pipeline.InstallFromStaging(installSpec);
                 if (!validateSignedInstallTransactionally)
                 {
-                    ValidateAndFinalizeSignedInstall(
+                    deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
                         plan,
                         buildResult.StagingPath,
                         installPackagePath,
                         state.InstallResult.InstalledPaths,
+                        expectedSignedInstallSourcePaths,
                         state.SigningResult,
                         installPackageSigningResult);
                 }
+                if (deliveredInstallSigningResult is not null)
+                    state.SigningResult = AggregateSigningResults(state.SigningResult, deliveredInstallSigningResult);
                 session.Done(session.InstallStep);
             }
             catch (Exception ex)

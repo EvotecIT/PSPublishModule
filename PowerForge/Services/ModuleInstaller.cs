@@ -67,6 +67,7 @@ public sealed class ModuleInstaller
         var failures = new List<string>();
         foreach (var root in roots)
         {
+            string? tempPath = null;
             try
             {
                 var rootFull = Path.GetFullPath(root.Trim().Trim('"'));
@@ -79,7 +80,7 @@ public sealed class ModuleInstaller
                     HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
 
                 var finalPath = EnsureChildPath(moduleRoot, resolvedVersion);
-                var tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
+                tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
 
                 // Prefer temp under moduleRoot for fast rename; fall back to OS temp on access issues
                 try
@@ -104,6 +105,7 @@ public sealed class ModuleInstaller
                 {
                     if (options.RequireNewDestination)
                     {
+                        TryDeleteDirectory(tempPath);
                         throw new IOException(
                             $"Resolved install destination already exists and will not be overwritten: '{finalPath}'.");
                     }
@@ -174,6 +176,11 @@ public sealed class ModuleInstaller
             {
                 failures.Add($"{root}: {ex.Message}");
             }
+            finally
+            {
+                if (!string.IsNullOrWhiteSpace(tempPath) && Directory.Exists(tempPath))
+                    TryDeleteDirectory(tempPath);
+            }
         }
 
         if (failures.Count > 0 && options.RequireAllDestinationRoots)
@@ -210,7 +217,7 @@ public sealed class ModuleInstaller
                     validationException);
             }
 
-            foreach (var moduleRoot in installedModuleRoots.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var moduleRoot in installedModuleRoots.Distinct(FrameworkCompatibility.PathComparer))
             {
                 HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
                 var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
@@ -475,10 +482,24 @@ public sealed class ModuleInstaller
         {
             if (string.IsNullOrWhiteSpace(root))
                 throw new ArgumentException("Module installation roots cannot contain empty paths.", nameof(roots));
-            resolved.Add(Path.GetFullPath(root.Trim().Trim('"')));
+            resolved.Add(NormalizeRootPath(root));
         }
 
-        return resolved.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return resolved.Distinct(FrameworkCompatibility.PathComparer).ToArray();
+    }
+
+    private static string NormalizeRootPath(string root)
+    {
+        var fullPath = Path.GetFullPath(root.Trim().Trim('"'));
+        var pathRoot = Path.GetPathRoot(fullPath) ?? string.Empty;
+        while (fullPath.Length > pathRoot.Length &&
+               (fullPath[fullPath.Length - 1] == Path.DirectorySeparatorChar ||
+                fullPath[fullPath.Length - 1] == Path.AltDirectorySeparatorChar))
+        {
+            fullPath = fullPath.Substring(0, fullPath.Length - 1);
+        }
+
+        return fullPath;
     }
 
     private static IReadOnlyList<string> GetDefaultModuleRoots()
@@ -515,7 +536,9 @@ public sealed class ModuleInstaller
         }
 
         // Deduplicate
-        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();       
+        return list.Select(NormalizeRootPath)
+            .Distinct(FrameworkCompatibility.PathComparer)
+            .ToArray();
     }
 
     private static string ResolveVersion(IEnumerable<string> roots, string moduleName, string baseVersion, InstallationStrategy strategy)
