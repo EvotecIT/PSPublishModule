@@ -49,6 +49,8 @@ public sealed partial class ModulePublisher
                 new ManagedModulePublishRequest
                 {
                     ModulePath = modulePath,
+                    ManifestPath = Path.Combine(modulePath, $"{plan.ModuleName}.psd1"),
+                    Name = plan.ModuleName,
                     Repository = CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
                     PublishRepository = CreateManagedPublishRepository(repositoryName, repoConfig, plan.ProjectRoot),
                     OutputDirectory = temporaryPackagePath,
