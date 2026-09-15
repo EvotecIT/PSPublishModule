@@ -362,21 +362,26 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
     internal bool CapturesSuccessOutput { get; }
 }
 
-internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
+internal class PowerShellBoundReturnStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression, bool emitsValue = true)
+        : this(span, expression, emitsValue, emitsSuccessOutput: true) { }
+
+    protected PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression, bool emitsValue, bool emitsSuccessOutput)
         : base(span,
             (expression?.Effects ?? PowerShellSemanticEffect.None) |
-            (expression is null || !emitsValue ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.SuccessOutput) |
+            (expression is null || !emitsValue || !emitsSuccessOutput ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.SuccessOutput) |
             (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None),
             expression?.Capabilities ?? PowerShellRequiredCapability.None)
     {
         Expression = expression;
         EmitsValue = expression is not null && emitsValue;
+        EmitsSuccessOutput = EmitsValue && emitsSuccessOutput;
     }
 
     internal PowerShellBoundExpression? Expression { get; }
     internal bool EmitsValue { get; }
+    internal bool EmitsSuccessOutput { get; }
 }
 
 internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatement

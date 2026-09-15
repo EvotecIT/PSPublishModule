@@ -84,7 +84,10 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 .Where(static expression => expression is not null)
                 .Select(expression => Resolve(expression!, functions))
                 .ToArray();
-            if (outputs.Length == 0) return PowerShellOutputCardinality.None;
+            if (outputs.Length == 0)
+                return statements.LastOrDefault() is PowerShellBoundRegionTransferStatement
+                    ? PowerShellOutputCardinality.Scalar
+                    : PowerShellOutputCardinality.None;
             if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Unknown))
                 return PowerShellOutputCardinality.Unknown;
             if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Collection))

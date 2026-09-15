@@ -150,7 +150,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             collectionElementType: function.OutputCardinality == PowerShellOutputCardinality.Collection
                 ? function.CollectionElementType?.FullName ?? typeof(object).FullName!
                 : string.Empty,
-            outputScalarization: function.OutputCardinality switch
+            outputScalarization: function.Statements.LastOrDefault() is PowerShellLoweredRegionTransferStatement
+                ? "PreserveRegionTransfer" : function.OutputCardinality switch
             {
                 PowerShellOutputCardinality.None => "NoOutput",
                 PowerShellOutputCardinality.Collection => "EnumerateCollection",

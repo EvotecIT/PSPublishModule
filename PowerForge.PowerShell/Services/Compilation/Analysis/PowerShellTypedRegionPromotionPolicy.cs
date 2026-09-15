@@ -53,8 +53,13 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.static-boundary", "The candidate contains a hosted command or module-state boundary.");
         if (region.Errors.Count != 0)
             return Reject("region.error-route", $"The candidate has modeled error route(s): {string.Join(", ", region.Errors)}.");
-        if (!region.Streams.SequenceEqual(new[] { "Success" }, StringComparer.Ordinal))
-            return Reject("region.stream-contract", $"The candidate stream set [{string.Join(", ", region.Streams)}] is outside the single Success result contract.");
+        var expectedStreams = candidate.ContinuationLocals.Length > 0 ? Array.Empty<string>() : new[] { "Success" };
+        if (!region.Streams.SequenceEqual(expectedStreams, StringComparer.Ordinal))
+            return Reject("region.stream-contract", $"The candidate stream set [{string.Join(", ", region.Streams)}] does not match its terminal-output or local-transfer contract.");
+        if (candidate.ContinuationLocals.Length > 0 && !region.Outputs.SequenceEqual(
+                candidate.ContinuationLocals.Select(static local => "transfer:Local:" + local.Name).OrderBy(static name => name, StringComparer.Ordinal),
+                StringComparer.Ordinal))
+            return Reject("region.continuation-outputs", "The canonical region graph does not expose exactly the returned local-storage targets.");
         if (!region.Inputs.All(static input => input.StartsWith("Parameter:", StringComparison.Ordinal)))
             return Reject("region.input-transfer", "The candidate reads a live value that is not a retained-function parameter.");
         if (!region.Mutations.All(static mutation => mutation.StartsWith("Local:", StringComparison.Ordinal)))
@@ -76,11 +81,9 @@ internal static class PowerShellTypedRegionPromotionPolicy
 
     private static bool HasCompleteContinuationResult(PowerShellBoundRegionCandidate candidate)
     {
-        if (candidate.RegionFunction.Body.Statements.LastOrDefault() is not PowerShellBoundReturnStatement tail)
+        if (candidate.RegionFunction.Body.Statements.LastOrDefault() is not PowerShellBoundRegionTransferStatement tail)
             return false;
-        var values = tail.Expression is PowerShellBoundArrayExpression array
-            ? array.Elements.ToArray()
-            : tail.Expression is not null ? new[] { tail.Expression } : Array.Empty<PowerShellBoundExpression>();
+        var values = tail.Locals.ToArray();
         return values.Length == candidate.ContinuationLocals.Length && values.Select((value, index) =>
             value is PowerShellBoundVariableExpression variable && variable.Symbol.Kind == PowerShellSymbolKind.Local &&
             variable.Symbol.Name.Equals(candidate.ContinuationLocals[index].Name, StringComparison.OrdinalIgnoreCase) &&

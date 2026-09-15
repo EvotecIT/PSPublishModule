@@ -364,7 +364,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
     internal static PowerShellBoundExpression? GetSuccessOutputExpression(PowerShellBoundStatement statement)
         => statement switch
         {
-            PowerShellBoundReturnStatement { EmitsValue: true } returned => returned.Expression,
+            PowerShellBoundReturnStatement { EmitsSuccessOutput: true } returned => returned.Expression,
             PowerShellBoundExpressionStatement { EmitsOutput: true } expression => expression.Expression,
             PowerShellBoundStreamWriteStatement { Kind: PowerShellStreamCommandKind.Success } stream => stream.Message,
             _ => null

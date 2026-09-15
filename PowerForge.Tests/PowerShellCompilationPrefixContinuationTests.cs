@@ -38,11 +38,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void Build_HybridPrefixPreservesNullableConstraintAndNullTransfer(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-NullablePrefix {
                 [CmdletBinding()]
@@ -74,11 +72,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void Build_HybridPrefixTransfersEveryScalarLocalInOrder(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-PrefixReport {
                 [CmdletBinding()]
@@ -97,6 +93,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "MultiLocalMethods", framework,
             PowerShellCompilationCapabilities.HybridModule);
+        Assert.True(typed.PromotedRegions.Any(candidate => candidate.ContinuationLocals.Count > 0),
+            "Methods: " + string.Join(", ", typed.Methods.Select(method => method.SourceName)) + Environment.NewLine +
+            string.Join(Environment.NewLine, typed.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message)) + Environment.NewLine +
+            string.Join(Environment.NewLine, typed.RegionCandidates.Select(candidate => candidate.DecisionCode + ": " + candidate.Reason)));
         var region = Assert.Single(typed.PromotedRegions, candidate => candidate.ContinuationLocals.Count > 0);
         Assert.Equal(new[] { "Count", "Label", "Flag", "Tail" }, region.ContinuationLocals.Select(local => local.Name));
         Assert.Equal(new[] { true, false, true, true }, region.ContinuationLocals.Select(local => local.HasTypeConstraint));

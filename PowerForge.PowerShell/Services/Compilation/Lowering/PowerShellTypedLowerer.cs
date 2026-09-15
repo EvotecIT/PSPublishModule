@@ -465,6 +465,9 @@ internal sealed partial class PowerShellTypedLowerer
                 assignment.MemberName,
                 assignment.ReceiverBehavior,
                 LowerExpression(assignment.Value, functions, names, targetCapabilities)),
+            PowerShellBoundRegionTransferStatement transfer => new PowerShellLoweredRegionTransferStatement(
+                transfer.Span, LowerExpression(transfer.Expression!, functions, names, targetCapabilities),
+                transfer.Locals.Select(static local => local.Symbol).ToArray()),
             PowerShellBoundReturnStatement returned => new PowerShellLoweredReturnStatement(
                 returned.Span,
                 returned.Expression is null ? null : LowerExpression(returned.Expression, functions, names, targetCapabilities),

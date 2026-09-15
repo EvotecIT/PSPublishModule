@@ -391,7 +391,7 @@ internal static class PowerShellHybridModuleComposer
                 token.Extent.EndOffset <= function.Body.Extent.StartOffset &&
                 token.Kind != TokenKind.Comment && token.Kind != TokenKind.NewLine)
             .Skip(1).First();
-        var declaration = function.Extent.Text[..(name.Extent.EndOffset - function.Extent.StartOffset)];
+        var declaration = function.Extent.Text.Substring(0, name.Extent.EndOffset - function.Extent.StartOffset);
         return PowerShellNativeFunctionSourceGenerator.Registration(typed, method, declaration);
     }
 

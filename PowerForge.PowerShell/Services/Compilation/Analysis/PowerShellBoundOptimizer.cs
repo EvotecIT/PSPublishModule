@@ -103,6 +103,8 @@ internal sealed class PowerShellBoundOptimizer
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
             PowerShellBoundNativeAssignmentStatement assignment => new PowerShellBoundNativeAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value), assignment.Operation, assignment.Target),
+            // Transfer operands are immutable local reads; retain their ordered ABI owner.
+            PowerShellBoundRegionTransferStatement transfer => transfer,
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
                 returned.Span, returned.Expression is null ? null : OptimizeExpression(returned.Expression), returned.EmitsValue),
             PowerShellBoundExpressionStatement expression => new PowerShellBoundExpressionStatement(

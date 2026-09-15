@@ -111,7 +111,7 @@ internal static class PowerShellHybridRegionRewriter
         return edits.ToArray();
     }
 
-    private static string Quote(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 
     private static bool HasSafeGraph(PowerShellCompilationRegionGraph graph)
         => graph.ScriptBlocks.Count == 0 && graph.Regions.Count == 1 &&

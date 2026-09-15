@@ -43,6 +43,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 .SelectMany(static later => later.Inputs)
                 .ToHashSet(StringComparer.Ordinal);
             var outputs = fact.Mutations.Where(laterInputs.Contains).ToList();
+            outputs.AddRange(fact.Transfers);
             if (fact.Streams.Contains("Success", StringComparer.Ordinal)) outputs.Add("stream:Success");
             regions[index] = new PowerShellCompilationRegion(
                 CreateRegionId(fact.Span, fact.Execution),
@@ -267,6 +268,10 @@ internal static class PowerShellLoweredRegionGraphBuilder
             accumulator.Span,
             inputs,
             mutations,
+            PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
+                .OfType<PowerShellLoweredRegionTransferStatement>()
+                .SelectMany(static transfer => transfer.Locals)
+                .Select(static local => "transfer:Local:" + local.Name).ToArray(),
             streams,
             errors,
             CountHostedCommandBoundarySites(statements),
@@ -282,7 +287,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
         {
             if (statement is PowerShellLoweredStatementErrorBoundary) result.Add("Error");
             if (statement is PowerShellLoweredCommandRegionStatement) result.Add("Success");
-            if (statement is PowerShellLoweredReturnStatement { EmitsValue: true } ||
+            if (statement is PowerShellLoweredReturnStatement { EmitsSuccessOutput: true } ||
                 statement is PowerShellLoweredExpressionStatement { DiscardValue: false } valueStatement &&
                 valueStatement.Expression.ClrType != typeof(void))
                 result.Add("Success");
@@ -450,6 +455,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
         SourceSpan Span,
         string[] Inputs,
         string[] Mutations,
+        string[] Transfers,
         string[] Streams,
         string[] Errors,
         int HostedCommandBoundarySites,

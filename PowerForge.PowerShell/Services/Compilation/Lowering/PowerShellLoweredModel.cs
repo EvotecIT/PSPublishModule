@@ -131,17 +131,22 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal bool CapturesClrReturn { get; }
 }
 
-internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
+internal class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
 {
     internal PowerShellLoweredReturnStatement(SourceSpan span, PowerShellLoweredExpression? expression, bool emitsValue)
+        : this(span, expression, emitsValue, emitsSuccessOutput: true) { }
+
+    protected PowerShellLoweredReturnStatement(SourceSpan span, PowerShellLoweredExpression? expression, bool emitsValue, bool emitsSuccessOutput)
         : base(span)
     {
         Expression = expression;
         EmitsValue = expression is not null && emitsValue;
+        EmitsSuccessOutput = EmitsValue && emitsSuccessOutput;
     }
 
     internal PowerShellLoweredExpression? Expression { get; }
     internal bool EmitsValue { get; }
+    internal bool EmitsSuccessOutput { get; }
 }
 
 internal sealed class PowerShellLoweredExpressionStatement : PowerShellLoweredStatement

@@ -61,7 +61,7 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
                     RewriteBlock(boundary.Body, usesNativeInvocation, commandEnumeration, document, true),
                     boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint));
             }
-            else if (statement is PowerShellBoundReturnStatement { EmitsValue: true, Expression: not null } returned)
+            else if (statement is PowerShellBoundReturnStatement { EmitsSuccessOutput: true, Expression: not null } returned)
             {
                 var output = Output(returned.Span, returned.Expression, usesNativeInvocation, commandEnumeration);
                 var exit = new PowerShellBoundReturnStatement(returned.Span, null);

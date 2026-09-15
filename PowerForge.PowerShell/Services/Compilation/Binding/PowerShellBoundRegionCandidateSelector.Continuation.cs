@@ -31,17 +31,19 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         var nextIndex = 0;
         foreach (var binding in bindings)
         {
+            var statement = PowerShellBoundRegionLocalProjection.Project(binding.Statement, parameters, locals, functionLocals);
+            if (statement is null) break;
             // The helper ABI already carries native stopping. Its checkpoint is the only
             // host effect allowed here; the ordinary promotion policy still checks errors.
-            var stopping = binding.Statement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStopping);
+            var stopping = statement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStopping);
             if (binding.AuthoredStatementIndex != nextIndex ||
                 binding.AuthoredStatementEndIndex >= authoredStatements.Count - 1 ||
-                (binding.Statement.Effects & ~(PowerShellSemanticEffect.Mutation | PowerShellLoopInterruptContract.Effects(stopping))) != 0 ||
-                (binding.Statement.Capabilities & ~PowerShellLoopInterruptContract.Capabilities(stopping)) != PowerShellRequiredCapability.None)
+                (statement.Effects & ~(PowerShellSemanticEffect.Mutation | PowerShellLoopInterruptContract.Effects(stopping))) != 0 ||
+                (statement.Capabilities & ~PowerShellLoopInterruptContract.Capabilities(stopping)) != PowerShellRequiredCapability.None)
                 break;
             var candidateLocals = locals.ToList();
             PowerShellCompiledRegionLocal? newTransfer = null;
-            if (binding.Statement is PowerShellBoundAssignmentStatement assignment &&
+            if (statement is PowerShellBoundAssignmentStatement assignment &&
                 !locals.Any(local => local.Symbol.StableKey == assignment.Target.StableKey))
             {
                 if (functionLocals.Any(local => local.Symbol.StableKey == assignment.Target.StableKey &&
@@ -52,7 +54,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 candidateLocals.Add(new PowerShellBoundLocal(assignment.Target, assignment.Value.Type));
             }
             var nested = PowerShellSemanticAnalyzer.EnumerateStatements(
-                new PowerShellBoundBlock(binding.Statement.Span, new[] { binding.Statement })).ToArray();
+                new PowerShellBoundBlock(statement.Span, new[] { statement })).ToArray();
             if (nested.OfType<PowerShellBoundAssignmentStatement>().Any(update =>
                     !candidateLocals.Any(local => local.Symbol.StableKey == update.Target.StableKey &&
                                                   local.Type.ClrType == update.Value.Type.ClrType)) ||
@@ -62,7 +64,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                     newTransfer is null || !ReferenceEquals(node, authoredStatements[binding.AuthoredStatementIndex])))
                 break;
             if (nested.Any(static statement => statement is PowerShellBoundReturnStatement or PowerShellBoundThrowStatement) ||
-                PowerShellBoundRegionOpportunitySelector.EnumerateWrittenSymbols(new[] { binding.Statement })
+                PowerShellBoundRegionOpportunitySelector.EnumerateWrittenSymbols(new[] { statement })
                     .Any(symbol => !candidateLocals.Any(local => local.Symbol.StableKey == symbol.StableKey)))
                 break;
             var expressions = nested.SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
@@ -73,7 +75,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                     !candidateLocals.Any(local => local.Symbol.StableKey == read.Symbol.StableKey &&
                                                   local.Type.ClrType == read.Type.ClrType)))
                 break;
-            selected.Add(binding.Statement);
+            selected.Add(statement);
             locals = candidateLocals;
             if (newTransfer is not null) transfers.Add(newTransfer);
             nextIndex = binding.AuthoredStatementEndIndex + 1;
@@ -84,11 +86,9 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         // assignment's start offset would falsely classify the newly initialized local as live-in.
         var transferSpan = new SourceSpan(lastSpan.DocumentId, lastSpan.EndOffset, lastSpan.EndOffset,
             lastSpan.EndLine, lastSpan.EndColumn, lastSpan.EndLine, lastSpan.EndColumn);
-        var values = locals.Select(local => (PowerShellBoundExpression)new PowerShellBoundVariableExpression(
+        var values = locals.Select(local => new PowerShellBoundVariableExpression(
             transferSpan, local.Symbol, local.Type)).ToArray();
-        var result = values.Length == 1 ? values[0] : new PowerShellBoundArrayExpression(
-            transferSpan, typeof(object[]), PowerShellBoundArrayKind.Literal, values);
-        selected.Add(new PowerShellBoundReturnStatement(transferSpan, result));
+        selected.Add(new PowerShellBoundRegionTransferStatement(transferSpan, values));
         return TryCreateBound(document, syntax, sourceFunction, parameters, locals, selected.ToArray(),
             out candidate, transfers.ToArray());
     }
