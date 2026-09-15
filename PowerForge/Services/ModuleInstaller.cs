@@ -23,6 +23,22 @@ public sealed class ModuleInstaller
     /// the resolved version and installed paths.
     /// </summary>
     public ModuleInstallerResult InstallFromStaging(string stagingPath, string moduleName, string moduleVersion, ModuleInstallerOptions? options = null)
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validateNewDestinations: null);
+
+    internal ModuleInstallerResult InstallFromStagingTransactional(
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        ModuleInstallerOptions options,
+        Action<IReadOnlyList<string>> validateNewDestinations)
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validateNewDestinations);
+
+    private ModuleInstallerResult InstallFromStagingCore(
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        ModuleInstallerOptions? options,
+        Action<IReadOnlyList<string>>? validateNewDestinations)
     {
         if (string.IsNullOrWhiteSpace(stagingPath) || !Directory.Exists(stagingPath))
             throw new DirectoryNotFoundException($"Staging path not found: {stagingPath}");
@@ -39,8 +55,9 @@ public sealed class ModuleInstaller
         ValidatePathSegment(moduleVersion, nameof(moduleVersion));
 
         options ??= new ModuleInstallerOptions();
-        var roots = options.DestinationRoots.Count > 0 ? options.DestinationRoots : GetDefaultModuleRoots();
+        var roots = ResolveDestinationRoots(options.DestinationRoots);
         var installed = new List<string>();
+        var installedModuleRoots = new List<string>();
         var pruned = new List<string>();
         var preserveVersions = new HashSet<string>(options.PreserveVersions ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
@@ -50,6 +67,7 @@ public sealed class ModuleInstaller
         var failures = new List<string>();
         foreach (var root in roots)
         {
+            string? tempPath = null;
             try
             {
                 var rootFull = Path.GetFullPath(root.Trim().Trim('"'));
@@ -58,10 +76,11 @@ public sealed class ModuleInstaller
 
                 // If the user has an old "flat" install (no version folder), it can mask versioned installs.
                 // Handle it before installing the new version folder.
-                HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
+                if (!options.RequireAllDestinationRoots)
+                    HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
 
                 var finalPath = EnsureChildPath(moduleRoot, resolvedVersion);
-                var tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
+                tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
 
                 // Prefer temp under moduleRoot for fast rename; fall back to OS temp on access issues
                 try
@@ -84,6 +103,13 @@ public sealed class ModuleInstaller
                 // If target exists
                 if (Directory.Exists(finalPath))
                 {
+                    if (options.RequireNewDestination)
+                    {
+                        TryDeleteDirectory(tempPath);
+                        throw new IOException(
+                            $"Resolved install destination already exists and will not be overwritten: '{finalPath}'.");
+                    }
+
                     if (options.Strategy == InstallationStrategy.AutoRevision)  
                     {
                         // Compute next revision
@@ -109,6 +135,20 @@ public sealed class ModuleInstaller
                 {
                     Directory.Move(tempPath, finalPath);
                 }
+                catch (IOException ex) when (options.RequireNewDestination)
+                {
+                    TryDeleteDirectory(tempPath);
+                    throw new IOException(
+                        $"The new install destination could not be claimed atomically: '{finalPath}'.",
+                        ex);
+                }
+                catch (UnauthorizedAccessException ex) when (options.RequireNewDestination)
+                {
+                    TryDeleteDirectory(tempPath);
+                    throw new UnauthorizedAccessException(
+                        $"The new install destination could not be claimed atomically: '{finalPath}'.",
+                        ex);
+                }
                 catch (IOException)
                 {
                     // Cross-volume or locked rename; fall back to copy-then-delete
@@ -122,16 +162,36 @@ public sealed class ModuleInstaller
                     TryDeleteDirectory(tempPath);
                 }
                 installed.Add(finalPath);
+                installedModuleRoots.Add(moduleRoot);
 
                 // Prune old versions
-                var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
-                pruned.AddRange(removed);
-                _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
+                if (!options.RequireAllDestinationRoots)
+                {
+                    var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
+                    pruned.AddRange(removed);
+                    _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
+                }
             }
             catch (Exception ex)
             {
                 failures.Add($"{root}: {ex.Message}");
             }
+            finally
+            {
+                if (tempPath is not null && Directory.Exists(tempPath))
+                    TryDeleteDirectory(tempPath);
+            }
+        }
+
+        if (failures.Count > 0 && options.RequireAllDestinationRoots)
+        {
+            var rollbackFailures = RollBackNewDestinations(installed);
+
+            var rollbackMessage = rollbackFailures.Count == 0
+                ? "New destinations created by this attempt were rolled back."
+                : $"Rollback also failed: {string.Join("; ", rollbackFailures)}";
+            throw new UnauthorizedAccessException(
+                $"Failed to install into every module root. Errors: {string.Join("; ", failures)} {rollbackMessage}");
         }
 
         if (installed.Count == 0)
@@ -139,7 +199,53 @@ public sealed class ModuleInstaller
             throw new UnauthorizedAccessException($"Failed to install into any module root. Errors: {string.Join("; ", failures)}");
         }
 
+        if (options.RequireAllDestinationRoots)
+        {
+            try
+            {
+                validateNewDestinations?.Invoke(installed);
+            }
+            catch (Exception validationException)
+            {
+                var rollbackFailures = RollBackNewDestinations(installed);
+                if (rollbackFailures.Count == 0)
+                    throw;
+
+                throw new InvalidOperationException(
+                    "Signed install validation failed and one or more new destinations could not be rolled back: " +
+                    string.Join("; ", rollbackFailures),
+                    validationException);
+            }
+
+            foreach (var moduleRoot in installedModuleRoots.Distinct(FrameworkCompatibility.PathComparer))
+            {
+                try
+                {
+                    HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
+                    var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
+                    pruned.AddRange(removed);
+                    _logger.Verbose($"Installed at {moduleRoot}; versions kept={left}, pruned={removed.Count}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(
+                        $"The module install was committed at '{moduleRoot}', but post-install legacy/pruning housekeeping failed: {ex.Message}");
+                }
+            }
+        }
+
         return new ModuleInstallerResult(resolvedVersion, installed, pruned);
+    }
+
+    private static List<string> RollBackNewDestinations(IEnumerable<string> installedPaths)
+    {
+        var failures = new List<string>();
+        foreach (var path in installedPaths)
+        {
+            try { Directory.Delete(path, recursive: true); }
+            catch (Exception ex) { failures.Add($"{path}: {ex.Message}"); }
+        }
+        return failures;
     }
 
     private void HandleLegacyFlatInstall(
@@ -369,9 +475,39 @@ public sealed class ModuleInstaller
     /// </summary>
     public static string ResolveTargetVersion(IEnumerable<string>? roots, string moduleName, string moduleVersion, InstallationStrategy strategy)
     {
-        var list = (roots == null ? Array.Empty<string>() : roots.ToArray());
-        var effectiveRoots = list.Length > 0 ? list : GetDefaultModuleRoots();
-        return ResolveVersion(effectiveRoots, moduleName, moduleVersion, strategy);
+        return ResolveVersion(ResolveDestinationRoots(roots), moduleName, moduleVersion, strategy);
+    }
+
+    internal static IReadOnlyList<string> ResolveDestinationRoots(IEnumerable<string>? roots)
+    {
+        var supplied = roots?.ToArray() ?? Array.Empty<string>();
+        var effective = supplied.Length > 0 ? supplied : GetDefaultModuleRoots().ToArray();
+        if (effective.Length == 0)
+            throw new InvalidOperationException("No module installation roots could be resolved.");
+
+        var resolved = new List<string>();
+        foreach (var root in effective)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                throw new ArgumentException("Module installation roots cannot contain empty paths.", nameof(roots));
+            resolved.Add(NormalizeRootPath(root));
+        }
+
+        return resolved.Distinct(FrameworkCompatibility.PathComparer).ToArray();
+    }
+
+    private static string NormalizeRootPath(string root)
+    {
+        var fullPath = Path.GetFullPath(root.Trim().Trim('"'));
+        var pathRoot = Path.GetPathRoot(fullPath) ?? string.Empty;
+        while (fullPath.Length > pathRoot.Length &&
+               (fullPath[fullPath.Length - 1] == Path.DirectorySeparatorChar ||
+                fullPath[fullPath.Length - 1] == Path.AltDirectorySeparatorChar))
+        {
+            fullPath = fullPath.Substring(0, fullPath.Length - 1);
+        }
+
+        return fullPath;
     }
 
     private static IReadOnlyList<string> GetDefaultModuleRoots()
@@ -408,7 +544,9 @@ public sealed class ModuleInstaller
         }
 
         // Deduplicate
-        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();       
+        return list.Select(NormalizeRootPath)
+            .Distinct(FrameworkCompatibility.PathComparer)
+            .ToArray();
     }
 
     private static string ResolveVersion(IEnumerable<string> roots, string moduleName, string baseVersion, InstallationStrategy strategy)

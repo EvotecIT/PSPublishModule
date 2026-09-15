@@ -110,6 +110,10 @@ public sealed partial class ModulePipelineRunner
                     plan.Delivery,
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
                     finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
+                var expectedSignedInstallSourcePaths = CaptureExpectedSignedInstallSourcePaths(
+                    state.SigningResult,
+                    buildResult.StagingPath,
+                    installPackagePath);
 
                 var installSpec = new ModuleInstallSpec
                 {
@@ -123,19 +127,43 @@ public sealed partial class ModulePipelineRunner
                     LegacyFlatHandling = plan.InstallLegacyFlatHandling,
                     PreserveVersions = plan.InstallPreserveVersions
                 };
-                state.InstallResult = pipeline.InstallFromStaging(installSpec);
-                foreach (var installedPath in state.InstallResult.InstalledPaths)
+                ModuleSigningResult? installPackageSigningResult = null;
+                ModuleSigningResult? deliveredInstallSigningResult = null;
+                var validateSignedInstallTransactionally =
+                    plan.SignModule && plan.InstallStrategy == InstallationStrategy.AutoRevision;
+                state.InstallResult = plan.SignModule
+                    ? pipeline.InstallFromStagingWithManifestFinalizer(
+                        installSpec,
+                        (manifestPath, _) => installPackageSigningResult = SignChangedInstallManifest(
+                            plan,
+                            manifestPath,
+                            buildResult.StagingPath,
+                            state.SigningResult),
+                        validateInstalledPaths: validateSignedInstallTransactionally
+                            ? installedPaths => deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
+                                plan,
+                                buildResult.StagingPath,
+                                installPackagePath,
+                                installedPaths,
+                                expectedSignedInstallSourcePaths,
+                                state.SigningResult,
+                                installPackageSigningResult)
+                            : null,
+                        requireAllDestinationRoots: validateSignedInstallTransactionally)
+                    : pipeline.InstallFromStaging(installSpec);
+                if (!validateSignedInstallTransactionally)
                 {
-                    var deliveredSigningResult = CreateDeliveredSigningResult(
-                        state.SigningResult,
+                    deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
+                        plan,
                         buildResult.StagingPath,
-                        installedPath);
-                    _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
-                        installedPath,
-                        plan.ModuleName,
-                        deliveredSigningResult,
-                        plan.Signing);
+                        installPackagePath,
+                        state.InstallResult.InstalledPaths,
+                        expectedSignedInstallSourcePaths,
+                        state.SigningResult,
+                        installPackageSigningResult);
                 }
+                if (deliveredInstallSigningResult is not null)
+                    state.SigningResult = AggregateSigningResults(state.SigningResult, deliveredInstallSigningResult);
                 session.Done(session.InstallStep);
             }
             catch (Exception ex)

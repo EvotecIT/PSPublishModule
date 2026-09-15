@@ -128,7 +128,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void DeliveredSigningEvidenceDropsAutoRevisionManifestButRetainsByteIdenticalPayload()
+    public void DeliveredSigningEvidenceDropsChangedManifestButRetainsByteIdenticalPayload()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Delivered Signing Tests", Guid.NewGuid().ToString("N"));
         var signedRoot = Path.Combine(root, "signed");

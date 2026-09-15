@@ -292,6 +292,31 @@ public sealed class ModuleBuildPipeline
     /// <param name="updateManifestToResolvedVersion">When true, patches the PSD1 ModuleVersion to the resolved version.</param>
     /// <returns>Installer result including resolved version and installed paths.</returns>
     public ModuleInstallerResult InstallFromStaging(ModuleInstallSpec spec, bool? updateManifestToResolvedVersion = null)
+        => InstallFromStagingCore(
+            spec,
+            updateManifestToResolvedVersion,
+            finalizeChangedManifest: null,
+            validateInstalledPaths: null,
+            requireAllDestinationRoots: false);
+
+    internal ModuleInstallerResult InstallFromStagingWithManifestFinalizer(
+        ModuleInstallSpec spec,
+        Action<string, string> finalizeChangedManifest,
+        Action<IReadOnlyList<string>>? validateInstalledPaths,
+        bool requireAllDestinationRoots)
+        => InstallFromStagingCore(
+            spec,
+            updateManifestToResolvedVersion: null,
+            finalizeChangedManifest,
+            validateInstalledPaths,
+            requireAllDestinationRoots);
+
+    private ModuleInstallerResult InstallFromStagingCore(
+        ModuleInstallSpec spec,
+        bool? updateManifestToResolvedVersion,
+        Action<string, string>? finalizeChangedManifest,
+        Action<IReadOnlyList<string>>? validateInstalledPaths,
+        bool requireAllDestinationRoots)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));        
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
@@ -305,22 +330,62 @@ public sealed class ModuleBuildPipeline
             manifestPath: Path.Combine(staging, $"{spec.Name}.psd1"),
             fallbackVersion: null);
 
-        var resolved = ModuleInstaller.ResolveTargetVersion(spec.Roots, spec.Name, spec.Version, spec.Strategy);
-        var patchManifest = updateManifestToResolvedVersion ?? spec.UpdateManifestToResolvedVersion;
-        if (patchManifest)
+        var originalStrategy = spec.Strategy;
+        using var installLock = originalStrategy == InstallationStrategy.AutoRevision
+            ? ModuleInstallOperationLock.Acquire(spec.Roots, spec.Name, requireAllDestinationRoots)
+            : null;
+        var installRoots = installLock?.LockedRoots ?? spec.Roots;
+        if (installLock is not null)
         {
-            try { _manifestMutator.TrySetTopLevelModuleVersion(Path.Combine(staging, $"{spec.Name}.psd1"), resolved); }
+            foreach (var failure in installLock.Failures)
+                _logger.Warn($"Skipping module root because its install lock could not be acquired: {failure}");
+        }
+
+        var resolved = ModuleInstaller.ResolveTargetVersion(installRoots, spec.Name, spec.Version, originalStrategy);
+        var manifestPath = Path.Combine(staging, $"{spec.Name}.psd1");
+        var patchManifest = updateManifestToResolvedVersion ?? spec.UpdateManifestToResolvedVersion;
+        if (patchManifest && finalizeChangedManifest is not null)
+        {
+            if (!ModuleManifestValueReader.TryGetTopLevelString(manifestPath, "ModuleVersion", out var currentVersion) ||
+                string.IsNullOrWhiteSpace(currentVersion))
+            {
+                throw new InvalidOperationException(
+                    $"The install manifest ModuleVersion could not be read before finalized delivery: '{manifestPath}'.");
+            }
+
+            if (!string.Equals(currentVersion, resolved, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!_manifestMutator.TrySetTopLevelModuleVersion(manifestPath, resolved))
+                {
+                    throw new InvalidOperationException(
+                        $"The install manifest could not be updated to resolved version '{resolved}': '{manifestPath}'.");
+                }
+                finalizeChangedManifest(manifestPath, resolved);
+            }
+        }
+        else if (patchManifest)
+        {
+            try { _manifestMutator.TrySetTopLevelModuleVersion(manifestPath, resolved); }
             catch { /* best effort */ }
         }
 
         var installer = new ModuleInstaller(_logger);
         var options = new ModuleInstallerOptions(
-            destinationRoots: spec.Roots,
+            destinationRoots: installRoots,
             strategy: InstallationStrategy.Exact,
             keepVersions: spec.KeepVersions,
             legacyFlatHandling: spec.LegacyFlatHandling,
-            preserveVersions: spec.PreserveVersions);
-        return installer.InstallFromStaging(staging, spec.Name, resolved, options);
+            preserveVersions: spec.PreserveVersions,
+            requireNewDestination: originalStrategy == InstallationStrategy.AutoRevision,
+            requireAllDestinationRoots: requireAllDestinationRoots);
+        return requireAllDestinationRoots && validateInstalledPaths is not null
+            ? installer.InstallFromStagingTransactional(
+                staging,
+                spec.Name,
+                resolved,
+                options,
+                validateInstalledPaths)
+            : installer.InstallFromStaging(staging, spec.Name, resolved, options);
     }
 
     private string ResolveModuleVersionFromManifestIfAuto(string? version, string manifestPath, string? fallbackVersion)

@@ -36,6 +36,18 @@ public sealed class ModuleInstallerOptions
     public IReadOnlyCollection<string> PreserveVersions { get; }
 
     /// <summary>
+    /// When true, installation fails instead of overwriting a destination version that appeared
+    /// after AutoRevision resolution.
+    /// </summary>
+    public bool RequireNewDestination { get; }
+
+    /// <summary>
+    /// When true, every configured destination root must receive the new version. Any newly created
+    /// destinations are rolled back when one root fails.
+    /// </summary>
+    public bool RequireAllDestinationRoots { get; }
+
+    /// <summary>
     /// Creates options with destination roots, strategy, and retention.
     /// </summary>
     public ModuleInstallerOptions(
@@ -44,7 +56,34 @@ public sealed class ModuleInstallerOptions
         int keepVersions = 3,
         LegacyFlatModuleHandling legacyFlatHandling = LegacyFlatModuleHandling.Warn,
         IEnumerable<string>? preserveVersions = null)
+        : this(
+            destinationRoots,
+            strategy,
+            keepVersions,
+            legacyFlatHandling,
+            preserveVersions,
+            requireNewDestination: false,
+            requireAllDestinationRoots: false)
     {
+    }
+
+    /// <summary>
+    /// Creates options with explicit collision and all-root delivery requirements.
+    /// </summary>
+    public ModuleInstallerOptions(
+        IEnumerable<string>? destinationRoots,
+        InstallationStrategy strategy,
+        int keepVersions,
+        LegacyFlatModuleHandling legacyFlatHandling,
+        IEnumerable<string>? preserveVersions,
+        bool requireNewDestination,
+        bool requireAllDestinationRoots)
+    {
+        if (requireAllDestinationRoots && !requireNewDestination)
+            throw new ArgumentException(
+                "All-root installation requires new destinations so a partial install can be rolled back safely.",
+                nameof(requireAllDestinationRoots));
+
         DestinationRoots = (destinationRoots ?? Array.Empty<string>()).ToArray();
         Strategy = strategy;
         KeepVersions = keepVersions < 1 ? 1 : keepVersions;
@@ -54,5 +93,7 @@ public sealed class ModuleInstallerOptions
             .Select(v => v.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        RequireNewDestination = requireNewDestination;
+        RequireAllDestinationRoots = requireAllDestinationRoots;
     }
 }
