@@ -23,8 +23,11 @@
   <Target Name="ReplaceNuGetWithExecutableProviderPackage" AfterTargets="GenerateNuspec">
     <PropertyGroup>
       <ProviderPackageOutputPath>$([System.IO.Path]::Combine('$(PackageOutputPath)', '$(PackageId).$(PackageVersion).nupkg'))</ProviderPackageOutputPath>
+      <DotNetHostFileName Condition="'$(OS)' == 'Windows_NT'">dotnet.exe</DotNetHostFileName>
+      <DotNetHostFileName Condition="'$(DotNetHostFileName)' == ''">dotnet</DotNetHostFileName>
+      <DotNetHostExecutable>$([System.IO.Path]::Combine('$(NetCoreRoot)', '$(DotNetHostFileName)'))</DotNetHostExecutable>
     </PropertyGroup>
-    <Exec Command="dotnet run --project &quot;$(MSBuildProjectFullPath)&quot; --configuration $(Configuration) --no-build -- &quot;$(ProviderPackageOutputPath)&quot; &quot;$(PackageVersion)&quot;" />
+    <Exec Command="&quot;$(DotNetHostExecutable)&quot; &quot;$(TargetPath)&quot; &quot;$(ProviderPackageOutputPath)&quot; &quot;$(PackageVersion)&quot;" />
   </Target>
 
 </Project>

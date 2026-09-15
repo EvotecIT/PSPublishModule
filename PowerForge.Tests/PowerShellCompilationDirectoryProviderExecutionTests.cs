@@ -8,6 +8,7 @@ using Xunit;
 namespace PowerForge.Tests;
 
 [Trait("Category", "PowerShellCompilation")]
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class PowerShellCompilationDirectoryProviderExecutionTests
 {
     [WindowsFact]
@@ -26,11 +27,13 @@ public sealed class PowerShellCompilationDirectoryProviderExecutionTests
                 repoRoot,
                 "PowerForge.PowerShell.Provider.Directory.Runtime",
                 "PowerForge.PowerShell.Provider.Directory.Runtime.csproj");
+            Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("dotnet", out var dotNetPath));
             var pack = await new ProcessRunner().RunAsync(new ProcessRunRequest(
-                "dotnet",
+                dotNetPath,
                 repoRoot,
                 new[] { "pack", project, "-c", "Release", "--no-build", "--no-restore", "-o", output, "--nologo" },
-                TimeSpan.FromMinutes(2)));
+                TimeSpan.FromMinutes(2),
+                new Dictionary<string, string?> { ["PATH"] = string.Empty }));
             Assert.True(pack.Succeeded, pack.StdErr + Environment.NewLine + pack.StdOut);
             var package = Assert.Single(Directory.GetFiles(output, PowerShellDirectoryRuntimeProviderPackage.PackageId + ".*.nupkg"));
             var resolution = new PowerShellCompilationProviderPackageReader().Resolve(
