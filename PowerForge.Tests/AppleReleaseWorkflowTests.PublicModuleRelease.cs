@@ -2,6 +2,51 @@ namespace PowerForge.Tests;
 
 public sealed partial class AppleReleaseWorkflowTests
 {
+    [Theory]
+    [InlineData("powershell")]
+    [InlineData("pwsh")]
+    public void PublicReleaseBuildRunnerStreamsFailureReceiptBeforeChildExit(string shell)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            string runnerPath = Path.Combine(
+                FindRepoRoot(),
+                "Build",
+                "Private",
+                "Invoke-PowerForgePublicReleaseBuild.ps1");
+            string buildScriptPath = Path.Combine(root.FullName, "failing-build.ps1");
+            string requestPath = Path.Combine(root.FullName, "request.clixml");
+            File.WriteAllText(
+                buildScriptPath,
+                "[pscustomobject]@{ Success = $false; ErrorMessage = 'engine failure detail' } | ConvertTo-Json\nexit 1\n");
+            var prepare = Run(
+                shell,
+                root.FullName,
+                "-NoProfile",
+                "-Command",
+                $"@{{}} | Export-Clixml -LiteralPath '{requestPath.Replace("'", "''", StringComparison.Ordinal)}'");
+            prepare.EnsureSuccess();
+
+            string command =
+                $"$env:POWERFORGE_RELEASE_BUILD_SCRIPT = '{buildScriptPath.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                $"$env:POWERFORGE_RELEASE_BUILD_REQUEST = '{requestPath.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                $"& '{runnerPath.Replace("'", "''", StringComparison.Ordinal)}'";
+            var result = Run(shell, root.FullName, "-NoProfile", "-Command", command);
+
+            Assert.Equal(1, result.ExitCode);
+            using var receipt = System.Text.Json.JsonDocument.Parse(result.StandardOutput);
+            Assert.False(receipt.RootElement.GetProperty("Success").GetBoolean());
+            Assert.Equal(
+                "engine failure detail",
+                receipt.RootElement.GetProperty("ErrorMessage").GetString());
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void PublicModuleReleaseHasNoGitHubWorkflowAndRetainsGuardedLocalScript()
     {
@@ -38,7 +83,20 @@ public sealed partial class AppleReleaseWorkflowTests
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase));
             }
         });
-        Assert.Contains("$expectedConfirmation = \"publish:$Version`:$ExpectedCommit\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"publish:$Version`:$ExpectedCommit\"", script, StringComparison.Ordinal);
+        Assert.Contains("ReleaseSourceRoot", script, StringComparison.Ordinal);
+        Assert.Contains("ExpectedToolCommit", script, StringComparison.Ordinal);
+        Assert.Contains("publish:$Version`:$ExpectedCommit`:tool:$ExpectedToolCommit", script, StringComparison.Ordinal);
+        Assert.Contains("The PowerForge tool checkout must start clean", script, StringComparison.Ordinal);
+        Assert.Contains("[StringComparison]::Ordinal)", script, StringComparison.Ordinal);
+        Assert.Contains("New-PowerForgeReleaseToolSnapshot", script, StringComparison.Ordinal);
+        Assert.Contains("Remove-PowerForgeReleaseToolSnapshot", script, StringComparison.Ordinal);
+        Assert.Contains("Invoke-PowerForgeReleaseBuildProcess", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet restore $snapshotModuleProject --locked-mode --disable-parallel", script, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_CLI_USE_MSBUILD_SERVER", script, StringComparison.Ordinal);
+        Assert.Contains("Set-PowerForgePublicReleaseAuthorizationReceipt", script, StringComparison.Ordinal);
+        Assert.Contains("$preserveSuccessfulReceipt", script, StringComparison.Ordinal);
+        Assert.Contains("SuccessfulReleaseReceiptPath", script, StringComparison.Ordinal);
         Assert.Contains("-or -not $certificate.HasPrivateKey", script, StringComparison.Ordinal);
         Assert.Contains("$certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)", script, StringComparison.Ordinal);
         Assert.Contains("The release checkout must start clean", script, StringComparison.Ordinal);
@@ -78,7 +136,7 @@ public sealed partial class AppleReleaseWorkflowTests
             "Release receipts must not be created until the checkout is proven clean.");
         Assert.True(
             script.IndexOf("Remove-Item -LiteralPath $ReceiptPath", StringComparison.Ordinal) <
-            script.IndexOf("& $buildScript @buildParameters", StringComparison.Ordinal),
+            script.IndexOf("$buildProcess = Invoke-PowerForgeReleaseBuildProcess", StringComparison.Ordinal),
             "A prior untracked receipt must be removed before portable provenance is captured.");
         Assert.DoesNotContain("Status         = 'Running'", script, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
@@ -518,6 +576,254 @@ public sealed partial class AppleReleaseWorkflowTests
         {
             try { repository.Delete(recursive: true); } catch { }
             try { receiptDirectory.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void PublicModuleReleaseRejectsWrongToolCommitForSeparateReleaseSource()
+    {
+        var sourceRoot = FindRepoRoot();
+        var toolRepository = Directory.CreateTempSubdirectory();
+        var releaseRepository = Directory.CreateTempSubdirectory();
+        var receiptDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            string toolBuildDirectory = Path.Combine(toolRepository.FullName, "Build");
+            string toolPrivateDirectory = Path.Combine(toolBuildDirectory, "Private");
+            string releaseBuildDirectory = Path.Combine(releaseRepository.FullName, "Build");
+            Directory.CreateDirectory(toolPrivateDirectory);
+            Directory.CreateDirectory(releaseBuildDirectory);
+            string scriptPath = Path.Combine(toolBuildDirectory, "Invoke-PowerForgePublicRelease.ps1");
+            string configPath = Path.Combine(releaseBuildDirectory, "release.json");
+            File.Copy(Path.Combine(sourceRoot, "Build", "Invoke-PowerForgePublicRelease.ps1"), scriptPath);
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1"),
+                Path.Combine(toolPrivateDirectory, "Get-PowerForgeReleaseSourceState.ps1"));
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "Test-PowerForgeTrackedReleaseReceipt.ps1"),
+                Path.Combine(toolPrivateDirectory, "Test-PowerForgeTrackedReleaseReceipt.ps1"));
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1"),
+                Path.Combine(toolPrivateDirectory, "New-PowerForgeReleaseEvidenceWorkspace.ps1"));
+            File.WriteAllText(configPath, "{}");
+
+            foreach (var repository in new[] { toolRepository, releaseRepository })
+            {
+                Run("git", repository.FullName, "init").EnsureSuccess();
+                Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+                Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+                Run("git", repository.FullName, "add", ".").EnsureSuccess();
+                Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
+            }
+
+            string releaseRevision = Run("git", releaseRepository.FullName, "rev-parse", "HEAD")
+                .EnsureSuccess().StandardOutput.Trim();
+            string receiptPath = Path.Combine(receiptDirectory.FullName, "failure.json");
+            var result = Run(
+                "pwsh",
+                toolRepository.FullName,
+                "-NoProfile",
+                "-File",
+                scriptPath,
+                "-Operation",
+                "Plan",
+                "-Version",
+                "3.0.81",
+                "-ExpectedCommit",
+                releaseRevision,
+                "-ReleaseSourceRoot",
+                releaseRepository.FullName,
+                "-ExpectedToolCommit",
+                new string('0', 40),
+                "-ConfigPath",
+                configPath,
+                "-ReceiptPath",
+                receiptPath);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("Expected PowerForge tool commit", result.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(receiptPath));
+            Assert.True(string.IsNullOrWhiteSpace(
+                Run("git", toolRepository.FullName, "status", "--porcelain=v1").EnsureSuccess().StandardOutput));
+            Assert.True(string.IsNullOrWhiteSpace(
+                Run("git", releaseRepository.FullName, "status", "--porcelain=v1").EnsureSuccess().StandardOutput));
+        }
+        finally
+        {
+            try { toolRepository.Delete(recursive: true); } catch { }
+            try { releaseRepository.Delete(recursive: true); } catch { }
+            try { receiptDirectory.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void PublicModuleReleaseRejectsDirtySeparateToolCheckout()
+    {
+        var sourceRoot = FindRepoRoot();
+        var toolRepository = Directory.CreateTempSubdirectory();
+        var releaseRepository = Directory.CreateTempSubdirectory();
+        var receiptDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            string toolBuildDirectory = Path.Combine(toolRepository.FullName, "Build");
+            string toolPrivateDirectory = Path.Combine(toolBuildDirectory, "Private");
+            string releaseBuildDirectory = Path.Combine(releaseRepository.FullName, "Build");
+            Directory.CreateDirectory(toolPrivateDirectory);
+            Directory.CreateDirectory(releaseBuildDirectory);
+            string scriptPath = Path.Combine(toolBuildDirectory, "Invoke-PowerForgePublicRelease.ps1");
+            string configPath = Path.Combine(releaseBuildDirectory, "release.json");
+            File.Copy(Path.Combine(sourceRoot, "Build", "Invoke-PowerForgePublicRelease.ps1"), scriptPath);
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1"),
+                Path.Combine(toolPrivateDirectory, "Get-PowerForgeReleaseSourceState.ps1"));
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "Test-PowerForgeTrackedReleaseReceipt.ps1"),
+                Path.Combine(toolPrivateDirectory, "Test-PowerForgeTrackedReleaseReceipt.ps1"));
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1"),
+                Path.Combine(toolPrivateDirectory, "New-PowerForgeReleaseEvidenceWorkspace.ps1"));
+            File.WriteAllText(configPath, "{}");
+
+            foreach (var repository in new[] { toolRepository, releaseRepository })
+            {
+                Run("git", repository.FullName, "init").EnsureSuccess();
+                Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+                Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+                Run("git", repository.FullName, "add", ".").EnsureSuccess();
+                Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
+            }
+
+            string releaseRevision = Run("git", releaseRepository.FullName, "rev-parse", "HEAD")
+                .EnsureSuccess().StandardOutput.Trim();
+            string toolRevision = Run("git", toolRepository.FullName, "rev-parse", "HEAD")
+                .EnsureSuccess().StandardOutput.Trim();
+            File.AppendAllText(scriptPath, Environment.NewLine + "# dirty tool input");
+
+            var result = Run(
+                "pwsh",
+                toolRepository.FullName,
+                "-NoProfile",
+                "-File",
+                scriptPath,
+                "-Operation",
+                "Plan",
+                "-Version",
+                "3.0.81",
+                "-ExpectedCommit",
+                releaseRevision,
+                "-ReleaseSourceRoot",
+                releaseRepository.FullName,
+                "-ExpectedToolCommit",
+                toolRevision,
+                "-ConfigPath",
+                configPath,
+                "-ReceiptPath",
+                Path.Combine(receiptDirectory.FullName, "failure.json"));
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("PowerForge tool checkout must start clean", result.StandardError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { toolRepository.Delete(recursive: true); } catch { }
+            try { releaseRepository.Delete(recursive: true); } catch { }
+            try { receiptDirectory.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void PublicModuleReleasePreservesLegacyPositionalParameterOrder()
+    {
+        var sourceRoot = FindRepoRoot();
+        var repository = Directory.CreateTempSubdirectory();
+        var receiptDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            string buildDirectory = Path.Combine(repository.FullName, "Build");
+            string privateDirectory = Path.Combine(buildDirectory, "Private");
+            Directory.CreateDirectory(privateDirectory);
+            string scriptPath = Path.Combine(buildDirectory, "Invoke-PowerForgePublicRelease.ps1");
+            string configPath = Path.Combine(buildDirectory, "release.json");
+            string receiptPath = Path.Combine(receiptDirectory.FullName, "positional.json");
+            File.Copy(Path.Combine(sourceRoot, "Build", "Invoke-PowerForgePublicRelease.ps1"), scriptPath);
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1"),
+                Path.Combine(privateDirectory, "Get-PowerForgeReleaseSourceState.ps1"));
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "Test-PowerForgeTrackedReleaseReceipt.ps1"),
+                Path.Combine(privateDirectory, "Test-PowerForgeTrackedReleaseReceipt.ps1"));
+            File.Copy(
+                Path.Combine(sourceRoot, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1"),
+                Path.Combine(privateDirectory, "New-PowerForgeReleaseEvidenceWorkspace.ps1"));
+            File.WriteAllText(configPath, "{}");
+            Run("git", repository.FullName, "init").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.email", "powerforge-tests@example.invalid").EnsureSuccess();
+            Run("git", repository.FullName, "config", "user.name", "PowerForge Tests").EnsureSuccess();
+            Run("git", repository.FullName, "add", ".").EnsureSuccess();
+            Run("git", repository.FullName, "commit", "-m", "fixture").EnsureSuccess();
+            string revision = Run("git", repository.FullName, "rev-parse", "HEAD")
+                .EnsureSuccess().StandardOutput.Trim();
+
+            var result = Run(
+                "pwsh",
+                repository.FullName,
+                "-NoProfile",
+                "-File",
+                scriptPath,
+                "Plan",
+                "3.0.81",
+                revision,
+                "legacy-confirmation",
+                configPath,
+                receiptPath);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.True(File.Exists(receiptPath));
+            Assert.DoesNotContain("ReleaseSourceRoot", result.StandardError, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("ExpectedToolCommit", result.StandardError, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { repository.Delete(recursive: true); } catch { }
+            try { receiptDirectory.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void PublicReleaseAuthorizationReceiptPersistsSourceAndToolBinding()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            string receiptPath = Path.Combine(root.FullName, "release.json");
+            string effectiveConfigPath = Path.Combine(root.FullName, "effective.json");
+            File.WriteAllText(receiptPath, "{\"Success\":true,\"ReleaseAssets\":[\"asset.zip\"]}");
+            string helperPath = Path.Combine(
+                FindRepoRoot(),
+                "Build",
+                "Private",
+                "Set-PowerForgePublicReleaseAuthorizationReceipt.ps1");
+            string command = $". '{helperPath.Replace("'", "''", StringComparison.Ordinal)}'; " +
+                             $"Set-PowerForgePublicReleaseAuthorizationReceipt -ReceiptPath '{receiptPath.Replace("'", "''", StringComparison.Ordinal)}' " +
+                             $"-ReleaseCommit '{new string('a', 40)}' -ToolCommit '{new string('b', 40)}' " +
+                             $"-ReleaseSourceRoot '{root.FullName.Replace("'", "''", StringComparison.Ordinal)}' " +
+                             $"-EffectiveConfigPath '{effectiveConfigPath.Replace("'", "''", StringComparison.Ordinal)}' " +
+                             $"-EffectiveConfigSha256 '{new string('c', 64)}'";
+
+            Run("pwsh", root.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+
+            using var receipt = System.Text.Json.JsonDocument.Parse(File.ReadAllText(receiptPath));
+            var authorization = receipt.RootElement.GetProperty("ReleaseAuthorization");
+            Assert.Equal(new string('a', 40), authorization.GetProperty("ReleaseCommit").GetString());
+            Assert.Equal(new string('b', 40), authorization.GetProperty("ToolCommit").GetString());
+            Assert.Equal(new string('c', 64), authorization.GetProperty("EffectiveConfigSha256").GetString());
+            Assert.Equal("asset.zip", receipt.RootElement.GetProperty("ReleaseAssets")[0].GetString());
+            Assert.Empty(Directory.GetFiles(root.FullName, "*.tmp"));
+            Assert.Empty(Directory.GetFiles(root.FullName, "*.bak"));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
         }
     }
 
