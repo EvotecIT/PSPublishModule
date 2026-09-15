@@ -1,10 +1,14 @@
 using System.DirectoryServices.Protocols;
 using PowerForge;
 
-if (args.Length != 2)
-    throw new ArgumentException("Expected output package path and package version.");
+if (args.Length is not (2 or 4))
+    throw new ArgumentException("Expected output package path and package version, optionally followed by repository URL and commit.");
 
-PowerShellDirectoryRuntimeProviderPackage.Build(args[0], args[1]);
+PowerShellDirectoryRuntimeProviderPackage.Build(
+    args[0],
+    args[1],
+    args.Length == 4 ? args[2] : null,
+    args.Length == 4 ? args[3] : null);
 
 /// <summary>Builds the distributable executable directory-provider package consumed by compiler projects.</summary>
 public static class PowerShellDirectoryRuntimeProviderPackage
@@ -13,7 +17,11 @@ public static class PowerShellDirectoryRuntimeProviderPackage
     public const string PackageId = "PowerForge.PowerShell.Provider.Directory.Runtime";
 
     /// <summary>Creates and immediately validates one exact win-x64 provider package.</summary>
-    public static PowerShellCompilationProviderResolution Build(string outputPath, string version)
+    public static PowerShellCompilationProviderResolution Build(
+        string outputPath,
+        string version,
+        string? repositoryUrl = null,
+        string? repositoryCommit = null)
     {
         if (string.IsNullOrWhiteSpace(outputPath)) throw new ArgumentException("An output package path is required.", nameof(outputPath));
         if (!Version.TryParse(version, out var parsedVersion) || parsedVersion.Build < 0 || parsedVersion.Revision >= 0)
@@ -42,6 +50,8 @@ public static class PowerShellDirectoryRuntimeProviderPackage
         return new PowerShellCompilationProviderPackageBuilder().Build(
             new PowerShellCompilationProviderPackageBuildRequest(Path.GetFullPath(outputPath), manifest)
             {
+                RepositoryUrl = repositoryUrl,
+                RepositoryCommit = repositoryCommit,
                 Assemblies = new[]
                 {
                     new PowerShellCompilationProviderAssemblyInput(
