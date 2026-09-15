@@ -17,11 +17,10 @@ public sealed class ModulePipelineInstallSigningTests
             const string moduleName = "SignedTestModule";
             var sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
             WriteMinimalModule(sourceRoot.FullName, moduleName, "1.0.0");
-
             var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
             Directory.CreateDirectory(Path.Combine(installRoot.FullName, moduleName, "1.0.0"));
             var hosted = new RecordingHostedOperations();
-            var spec = CreateSpec(sourceRoot.FullName, installRoot.FullName, moduleName);
+            var spec = CreateSpec(sourceRoot.FullName, moduleName, installRoot.FullName);
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 powerShellRunner: null,
@@ -66,7 +65,7 @@ public sealed class ModulePipelineInstallSigningTests
             var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
             Directory.CreateDirectory(Path.Combine(installRoot.FullName, moduleName, "1.0.0"));
             var hosted = new RecordingHostedOperations { FailInstallManifestSigning = true };
-            var spec = CreateSpec(sourceRoot.FullName, installRoot.FullName, moduleName);
+            var spec = CreateSpec(sourceRoot.FullName, moduleName, installRoot.FullName);
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 powerShellRunner: null,
@@ -84,7 +83,88 @@ public sealed class ModulePipelineInstallSigningTests
         }
     }
 
-    private static ModulePipelineSpec CreateSpec(string sourceRoot, string installRoot, string moduleName)
+    [Fact]
+    public void SignedAutoRevisionInstall_DoesNotOverwriteDestinationCreatedWhileSigning()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SignedTestModule";
+            var sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            WriteMinimalModule(sourceRoot.FullName, moduleName, "1.0.0");
+
+            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            Directory.CreateDirectory(Path.Combine(installRoot.FullName, moduleName, "1.0.0"));
+            var concurrentDestination = Path.Combine(installRoot.FullName, moduleName, "1.0.0.1");
+            var sentinelPath = Path.Combine(concurrentDestination, "sentinel.txt");
+            var hosted = new RecordingHostedOperations
+            {
+                AfterInstallManifestVersionObserved = _ =>
+                {
+                    Directory.CreateDirectory(concurrentDestination);
+                    File.WriteAllText(sentinelPath, "concurrent install");
+                }
+            };
+            var spec = CreateSpec(sourceRoot.FullName, moduleName, installRoot.FullName);
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hosted);
+
+            var exception = Assert.Throws<UnauthorizedAccessException>(() => runner.Run(spec, runner.Plan(spec)));
+
+            Assert.Contains("will not be overwritten", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("concurrent install", File.ReadAllText(sentinelPath));
+            Assert.False(File.Exists(Path.Combine(concurrentDestination, moduleName + ".psd1")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void SignedAutoRevisionInstall_RollsBackWhenAnyDestinationRootFails()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SignedTestModule";
+            var sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            WriteMinimalModule(sourceRoot.FullName, moduleName, "1.0.0");
+
+            var firstRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules-first"));
+            var secondRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules-second"));
+            Directory.CreateDirectory(Path.Combine(firstRoot.FullName, moduleName, "1.0.0"));
+            Directory.CreateDirectory(Path.Combine(secondRoot.FullName, moduleName, "1.0.0"));
+            File.WriteAllText(Path.Combine(secondRoot.FullName, moduleName + ".blocked"), "unrelated");
+            var blockedModuleRoot = Path.Combine(secondRoot.FullName, moduleName);
+            Directory.Delete(blockedModuleRoot, recursive: true);
+            File.WriteAllText(blockedModuleRoot, "blocks module directory creation");
+
+            var hosted = new RecordingHostedOperations();
+            var spec = CreateSpec(sourceRoot.FullName, moduleName, firstRoot.FullName, secondRoot.FullName);
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                hostedOperations: hosted);
+
+            var exception = Assert.Throws<UnauthorizedAccessException>(() => runner.Run(spec, runner.Plan(spec)));
+
+            Assert.Contains("every module root", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(Path.Combine(firstRoot.FullName, moduleName, "1.0.0.1")));
+            Assert.True(File.Exists(blockedModuleRoot));
+            Assert.Equal("blocks module directory creation", File.ReadAllText(blockedModuleRoot));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static ModulePipelineSpec CreateSpec(string sourceRoot, string moduleName, params string[] installRoots)
         => new()
         {
             Build = new ModuleBuildSpec
@@ -100,7 +180,7 @@ public sealed class ModulePipelineInstallSigningTests
                 Enabled = true,
                 Strategy = InstallationStrategy.AutoRevision,
                 KeepVersions = 5,
-                Roots = new[] { installRoot },
+                Roots = installRoots,
                 UpdateManifestToResolvedVersion = true
             },
             Segments = new IConfigurationSegment[]
@@ -134,6 +214,7 @@ public sealed class ModulePipelineInstallSigningTests
     {
         public List<SigningCall> SigningCalls { get; } = new();
         public bool FailInstallManifestSigning { get; set; }
+        public Action<string>? AfterInstallManifestVersionObserved { get; set; }
         public string? InstallManifestSha256 { get; private set; }
 
         public ModuleSigningResult SignModuleOutput(
@@ -158,6 +239,7 @@ public sealed class ModulePipelineInstallSigningTests
                 if (FailInstallManifestSigning)
                     throw new InvalidOperationException("install manifest signing failed");
 
+                AfterInstallManifestVersionObserved?.Invoke(manifestVersion);
                 File.AppendAllText(paths[0], Environment.NewLine + "# test install signature");
                 InstallManifestSha256 = ComputeSha256(paths[0]);
             }

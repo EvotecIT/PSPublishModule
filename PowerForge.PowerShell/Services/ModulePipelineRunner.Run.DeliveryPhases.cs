@@ -123,11 +123,16 @@ public sealed partial class ModulePipelineRunner
                     LegacyFlatHandling = plan.InstallLegacyFlatHandling,
                     PreserveVersions = plan.InstallPreserveVersions
                 };
-                var installPackageSigningResult = PrepareSignedInstallPackage(
-                    plan,
-                    installSpec,
-                    state.SigningResult);
-                state.InstallResult = pipeline.InstallFromStaging(installSpec);
+                ModuleSigningResult? installPackageSigningResult = null;
+                state.InstallResult = plan.SignModule
+                    ? pipeline.InstallFromStagingWithManifestFinalizer(
+                        installSpec,
+                        (manifestPath, _) => installPackageSigningResult = SignChangedInstallManifest(
+                            plan,
+                            manifestPath,
+                            state.SigningResult),
+                        requireAllDestinationRoots: plan.InstallStrategy == InstallationStrategy.AutoRevision)
+                    : pipeline.InstallFromStaging(installSpec);
                 foreach (var installedPath in state.InstallResult.InstalledPaths)
                 {
                     var deliveredSigningResult = CreateDeliveredSigningResult(

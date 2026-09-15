@@ -11,50 +11,21 @@ public sealed partial class ModulePipelineRunner
     /// Public/package artefacts retain their release version and signature, while a versioned local
     /// install receives a separately signed manifest whose ModuleVersion matches its install folder.
     /// </summary>
-    private ModuleSigningResult? PrepareSignedInstallPackage(
+    private ModuleSigningResult SignChangedInstallManifest(
         ModulePipelinePlan plan,
-        ModuleInstallSpec installSpec,
+        string manifestPath,
         ModuleSigningResult? sourceSigningResult)
     {
-        if (!plan.SignModule || !installSpec.UpdateManifestToResolvedVersion)
-            return null;
-
-        var resolvedVersion = ModuleInstaller.ResolveTargetVersion(
-            installSpec.Roots,
-            installSpec.Name,
-            installSpec.Version,
-            installSpec.Strategy);
-        var manifestPath = Path.GetFullPath(Path.Combine(
-            installSpec.StagingPath,
-            installSpec.Name + ".psd1"));
-
-        if (!ManifestEditor.TryGetTopLevelString(manifestPath, "ModuleVersion", out var currentVersion) ||
-            string.IsNullOrWhiteSpace(currentVersion))
-        {
-            throw new InvalidOperationException(
-                $"The install manifest ModuleVersion could not be read before signed delivery: '{manifestPath}'.");
-        }
-
-        installSpec.Version = resolvedVersion;
-        installSpec.Strategy = InstallationStrategy.Exact;
-        installSpec.UpdateManifestToResolvedVersion = false;
-
-        if (string.Equals(currentVersion, resolvedVersion, StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        if (!_manifestMutator.TrySetTopLevelModuleVersion(manifestPath, resolvedVersion))
-        {
-            throw new InvalidOperationException(
-                $"The signed install manifest could not be updated to resolved version '{resolvedVersion}': '{manifestPath}'.");
-        }
+        manifestPath = Path.GetFullPath(manifestPath);
 
         var installManifestSigning = CloneSigningOptions(plan.Signing)
             ?? throw new InvalidOperationException("Signing is enabled but no signing options were provided.");
         installManifestSigning.OverwriteSigned = true;
 
         var signingResult = _hostedOperations.SignModuleOutput(
-            installSpec.Name,
-            installSpec.StagingPath,
+            plan.ModuleName,
+            Path.GetDirectoryName(manifestPath)
+                ?? throw new InvalidOperationException("The install manifest directory could not be resolved."),
             new[] { manifestPath },
             new[] { "*.psd1" },
             Array.Empty<string>(),

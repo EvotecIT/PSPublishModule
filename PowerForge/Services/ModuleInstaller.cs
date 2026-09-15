@@ -39,8 +39,9 @@ public sealed class ModuleInstaller
         ValidatePathSegment(moduleVersion, nameof(moduleVersion));
 
         options ??= new ModuleInstallerOptions();
-        var roots = options.DestinationRoots.Count > 0 ? options.DestinationRoots : GetDefaultModuleRoots();
+        var roots = ResolveDestinationRoots(options.DestinationRoots);
         var installed = new List<string>();
+        var installedModuleRoots = new List<string>();
         var pruned = new List<string>();
         var preserveVersions = new HashSet<string>(options.PreserveVersions ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
@@ -84,6 +85,12 @@ public sealed class ModuleInstaller
                 // If target exists
                 if (Directory.Exists(finalPath))
                 {
+                    if (options.RequireNewDestination)
+                    {
+                        throw new IOException(
+                            $"Resolved install destination already exists and will not be overwritten: '{finalPath}'.");
+                    }
+
                     if (options.Strategy == InstallationStrategy.AutoRevision)  
                     {
                         // Compute next revision
@@ -109,6 +116,20 @@ public sealed class ModuleInstaller
                 {
                     Directory.Move(tempPath, finalPath);
                 }
+                catch (IOException ex) when (options.RequireNewDestination)
+                {
+                    TryDeleteDirectory(tempPath);
+                    throw new IOException(
+                        $"The new install destination could not be claimed atomically: '{finalPath}'.",
+                        ex);
+                }
+                catch (UnauthorizedAccessException ex) when (options.RequireNewDestination)
+                {
+                    TryDeleteDirectory(tempPath);
+                    throw new UnauthorizedAccessException(
+                        $"The new install destination could not be claimed atomically: '{finalPath}'.",
+                        ex);
+                }
                 catch (IOException)
                 {
                     // Cross-volume or locked rename; fall back to copy-then-delete
@@ -122,11 +143,15 @@ public sealed class ModuleInstaller
                     TryDeleteDirectory(tempPath);
                 }
                 installed.Add(finalPath);
+                installedModuleRoots.Add(moduleRoot);
 
                 // Prune old versions
-                var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
-                pruned.AddRange(removed);
-                _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
+                if (!options.RequireAllDestinationRoots)
+                {
+                    var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
+                    pruned.AddRange(removed);
+                    _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
+                }
             }
             catch (Exception ex)
             {
@@ -134,9 +159,35 @@ public sealed class ModuleInstaller
             }
         }
 
+        if (failures.Count > 0 && options.RequireAllDestinationRoots)
+        {
+            var rollbackFailures = new List<string>();
+            foreach (var path in installed)
+            {
+                try { Directory.Delete(path, recursive: true); }
+                catch (Exception ex) { rollbackFailures.Add($"{path}: {ex.Message}"); }
+            }
+
+            var rollbackMessage = rollbackFailures.Count == 0
+                ? "New destinations created by this attempt were rolled back."
+                : $"Rollback also failed: {string.Join("; ", rollbackFailures)}";
+            throw new UnauthorizedAccessException(
+                $"Failed to install into every module root. Errors: {string.Join("; ", failures)} {rollbackMessage}");
+        }
+
         if (installed.Count == 0)
         {
             throw new UnauthorizedAccessException($"Failed to install into any module root. Errors: {string.Join("; ", failures)}");
+        }
+
+        if (options.RequireAllDestinationRoots)
+        {
+            foreach (var moduleRoot in installedModuleRoots.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
+                pruned.AddRange(removed);
+                _logger.Verbose($"Installed at {moduleRoot}; versions kept={left}, pruned={removed.Count}");
+            }
         }
 
         return new ModuleInstallerResult(resolvedVersion, installed, pruned);
@@ -369,9 +420,25 @@ public sealed class ModuleInstaller
     /// </summary>
     public static string ResolveTargetVersion(IEnumerable<string>? roots, string moduleName, string moduleVersion, InstallationStrategy strategy)
     {
-        var list = (roots == null ? Array.Empty<string>() : roots.ToArray());
-        var effectiveRoots = list.Length > 0 ? list : GetDefaultModuleRoots();
-        return ResolveVersion(effectiveRoots, moduleName, moduleVersion, strategy);
+        return ResolveVersion(ResolveDestinationRoots(roots), moduleName, moduleVersion, strategy);
+    }
+
+    internal static IReadOnlyList<string> ResolveDestinationRoots(IEnumerable<string>? roots)
+    {
+        var supplied = roots?.ToArray() ?? Array.Empty<string>();
+        var effective = supplied.Length > 0 ? supplied : GetDefaultModuleRoots().ToArray();
+        if (effective.Length == 0)
+            throw new InvalidOperationException("No module installation roots could be resolved.");
+
+        var resolved = new List<string>();
+        foreach (var root in effective)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                throw new ArgumentException("Module installation roots cannot contain empty paths.", nameof(roots));
+            resolved.Add(Path.GetFullPath(root.Trim().Trim('"')));
+        }
+
+        return resolved.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static IReadOnlyList<string> GetDefaultModuleRoots()
