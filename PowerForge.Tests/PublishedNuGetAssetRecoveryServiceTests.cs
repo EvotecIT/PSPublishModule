@@ -148,6 +148,134 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
     }
 
     [Fact]
+    public void Restore_PrefersEachReleaseZipOwningPackageWhenToolAndLibraryPayloadsCollide()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string libraryPackageId = "PowerForge.Web";
+            const string toolPackageId = "PowerForge.Web.Build";
+            const string version = "3.0.81";
+            const string assemblyName = "PowerForge.Web.dll";
+            var libraryPackagePath = Path.Combine(root.FullName, $"{libraryPackageId}.{version}.nupkg");
+            var toolPackagePath = Path.Combine(root.FullName, $"{toolPackageId}.{version}.nupkg");
+            var libraryReleaseZipPath = Path.Combine(root.FullName, $"{libraryPackageId}.{version}.zip");
+            var toolReleaseZipPath = Path.Combine(root.FullName, $"{toolPackageId}.{version}.zip");
+            var publishedLibrary = CreatePackage(libraryPackageId, version, "published-library");
+            var publishedTool = CreateToolPackageWithLibrary(
+                toolPackageId,
+                version,
+                assemblyName,
+                "published-tool");
+            File.WriteAllBytes(libraryPackagePath, CreatePackage(libraryPackageId, version, "rebuilt-library"));
+            File.WriteAllBytes(
+                toolPackagePath,
+                CreateToolPackageWithLibrary(toolPackageId, version, assemblyName, "rebuilt-tool"));
+            CreateReleaseZipWithEntry(libraryReleaseZipPath, $"net10.0/{assemblyName}", "rebuilt-library");
+            CreateReleaseZipWithEntry(toolReleaseZipPath, $"net10.0/{assemblyName}", "rebuilt-tool-zip");
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(
+                    new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [libraryPackageId] = publishedLibrary,
+                        [toolPackageId] = publishedTool
+                    })));
+
+            var restored = service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [libraryPackagePath, toolPackagePath, libraryReleaseZipPath, toolReleaseZipPath],
+                CancellationToken.None);
+
+            Assert.Equal(
+                [libraryPackagePath, libraryReleaseZipPath, toolPackagePath, toolReleaseZipPath],
+                restored);
+            using (var libraryRelease = ZipFile.OpenRead(libraryReleaseZipPath))
+            {
+                Assert.Equal(
+                    "published-library",
+                    ReadText(Assert.Single(libraryRelease.Entries, entry => entry.FullName == $"net10.0/{assemblyName}")));
+            }
+            using (var toolRelease = ZipFile.OpenRead(toolReleaseZipPath))
+            {
+                Assert.Equal(
+                    "published-tool",
+                    ReadText(Assert.Single(toolRelease.Entries, entry => entry.FullName == $"net10.0/{assemblyName}")));
+            }
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_RejectsConflictingLibraryPayloadsEvenWhenOnePackageOwnsReleaseZip()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string firstPackageId = "Shared.First";
+            const string secondPackageId = "Shared.Second";
+            const string version = "3.0.81";
+            const string assemblyName = "Shared.Common.dll";
+            var firstPackagePath = Path.Combine(root.FullName, $"{firstPackageId}.{version}.nupkg");
+            var secondPackagePath = Path.Combine(root.FullName, $"{secondPackageId}.{version}.nupkg");
+            var firstReleaseZipPath = Path.Combine(root.FullName, $"{firstPackageId}.{version}.zip");
+            var publishedFirst = CreateLibraryPackageWithLibrary(
+                firstPackageId,
+                version,
+                assemblyName,
+                "published-first");
+            var publishedSecond = CreateLibraryPackageWithLibrary(
+                secondPackageId,
+                version,
+                assemblyName,
+                "published-second");
+            File.WriteAllBytes(
+                firstPackagePath,
+                CreateLibraryPackageWithLibrary(firstPackageId, version, assemblyName, "rebuilt-first"));
+            File.WriteAllBytes(
+                secondPackagePath,
+                CreateLibraryPackageWithLibrary(secondPackageId, version, assemblyName, "rebuilt-second"));
+            CreateReleaseZipWithEntry(firstReleaseZipPath, $"net10.0/{assemblyName}", "rebuilt-first");
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(
+                    new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [firstPackageId] = publishedFirst,
+                        [secondPackageId] = publishedSecond
+                    })));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [firstPackagePath, secondPackagePath, firstReleaseZipPath],
+                CancellationToken.None));
+
+            Assert.Contains("conflicting library payload", exception.Message, StringComparison.Ordinal);
+            using (var firstPackage = ZipFile.OpenRead(firstPackagePath))
+            {
+                Assert.Equal(
+                    "rebuilt-first",
+                    ReadText(Assert.Single(
+                        firstPackage.Entries,
+                        entry => entry.FullName == $"lib/net10.0/{assemblyName}")));
+            }
+            using var release = ZipFile.OpenRead(firstReleaseZipPath);
+            Assert.Equal(
+                "rebuilt-first",
+                ReadText(Assert.Single(release.Entries, entry => entry.FullName == $"net10.0/{assemblyName}")));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Restore_RetriesUntilNewlyPublishedPackageIsReadable()
     {
         var root = Directory.CreateTempSubdirectory();
@@ -249,6 +377,43 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         return memory.ToArray();
     }
 
+    private static byte[] CreateToolPackageWithLibrary(
+        string packageId,
+        string version,
+        string assemblyName,
+        string payload)
+    {
+        using var memory = new MemoryStream();
+        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            WriteTextEntry(
+                archive,
+                $"{packageId}.nuspec",
+                $"<package><metadata><id>{packageId}</id><version>{version}</version></metadata></package>");
+            WriteTextEntry(archive, "tools/net10.0/any/DotnetToolSettings.xml", "package-only metadata");
+            WriteTextEntry(archive, $"tools/net10.0/any/{assemblyName}", payload);
+        }
+        return memory.ToArray();
+    }
+
+    private static byte[] CreateLibraryPackageWithLibrary(
+        string packageId,
+        string version,
+        string assemblyName,
+        string payload)
+    {
+        using var memory = new MemoryStream();
+        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            WriteTextEntry(
+                archive,
+                $"{packageId}.nuspec",
+                $"<package><metadata><id>{packageId}</id><version>{version}</version></metadata></package>");
+            WriteTextEntry(archive, $"lib/net10.0/{assemblyName}", payload);
+        }
+        return memory.ToArray();
+    }
+
     private static void WriteTextEntry(ZipArchive archive, string name, string value)
     {
         var entry = archive.CreateEntry(name);
@@ -267,18 +432,36 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         dependencyWriter.Write("preserve dependency");
     }
 
+    private static void CreateReleaseZipWithEntry(string path, string entryName, string payload)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        WriteTextEntry(archive, entryName, payload);
+    }
+
     private static string ReadText(ZipArchiveEntry entry)
     {
         using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
         return reader.ReadToEnd();
     }
 
-    private sealed class NuGetRecoveryHandler(
-        byte[] packageBytes,
-        int packageNotFoundResponses = 0) : HttpMessageHandler
+    private sealed class NuGetRecoveryHandler : HttpMessageHandler
     {
+        private readonly byte[]? _packageBytes;
+        private readonly IReadOnlyDictionary<string, byte[]>? _packageBytesById;
+        private int _packageNotFoundResponses;
+
+        internal NuGetRecoveryHandler(byte[] packageBytes, int packageNotFoundResponses = 0)
+        {
+            _packageBytes = packageBytes;
+            _packageNotFoundResponses = packageNotFoundResponses;
+        }
+
+        internal NuGetRecoveryHandler(IReadOnlyDictionary<string, byte[]> packageBytesById)
+        {
+            _packageBytesById = packageBytesById;
+        }
+
         internal List<string> RequestUris { get; } = [];
-        private int _packageNotFoundResponses = packageNotFoundResponses;
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -305,9 +488,14 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
                 });
             }
 
+            var responseBytes = _packageBytes ?? _packageBytesById!
+                .Single(item => uri.Contains(
+                    $"/{item.Key.ToLowerInvariant()}/",
+                    StringComparison.OrdinalIgnoreCase))
+                .Value;
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new ByteArrayContent(packageBytes)
+                Content = new ByteArrayContent(responseBytes)
             });
         }
     }
