@@ -6,19 +6,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedProperties,
         IEnumerable<string?> selectedFrameworks)
     {
-        if (!evaluatedProperties.TryGetValue("TargetFrameworks", out string? declaredFrameworks) ||
-            string.IsNullOrWhiteSpace(declaredFrameworks))
-        {
-            return Array.Empty<string>();
-        }
-
-        string[] declared = declaredFrameworks
-            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(framework => framework.Trim())
-            .Where(framework => framework.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        string[] declared = ReadControlledDeclaredTargetFrameworks(evaluatedProperties);
         if (declared.Length <= 1)
             return Array.Empty<string>();
 
@@ -28,16 +16,40 @@ public sealed partial class DotNetPublishPipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (selected.Length <= 1)
+        if (selected.Length <= 1 || selected.Any(framework =>
+                !declared.Contains(framework, StringComparer.OrdinalIgnoreCase)))
             return Array.Empty<string>();
 
         return selected;
     }
 
+    private static string[] ReadControlledDeclaredTargetFrameworks(
+        IReadOnlyDictionary<string, string> evaluatedProperties)
+    {
+        string? declaredFrameworks = ReadControlledDeclaredTargetFrameworksValue(evaluatedProperties);
+        if (declaredFrameworks is null)
+            return Array.Empty<string>();
+
+        return declaredFrameworks
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(framework => framework.Trim())
+            .Where(framework => framework.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string? ReadControlledDeclaredTargetFrameworksValue(
+        IReadOnlyDictionary<string, string> evaluatedProperties)
+        => evaluatedProperties.TryGetValue("TargetFrameworks", out string? declaredFrameworks) &&
+           !string.IsNullOrWhiteSpace(declaredFrameworks)
+            ? declaredFrameworks
+            : null;
+
     private static bool TryRestoreControlledMultiFrameworkProject(
         string originalProjectPath,
         ControlledPublishGraphNode representative,
         IReadOnlyCollection<string> frameworks,
+        string declaredFrameworks,
         string originalGitRoot,
         string controlledSourceRoot,
         IReadOnlyDictionary<string, string?> controlledEnvironment,
@@ -76,8 +88,16 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         arguments.RemoveAll(argument =>
             argument.StartsWith("-p:TargetFramework=", StringComparison.OrdinalIgnoreCase) ||
-            argument.StartsWith("-p:TargetFrameworks=", StringComparison.OrdinalIgnoreCase));
-        arguments.Add("-p:TargetFrameworks=" + BuildMsBuildListPropertyValue(frameworks));
+            argument.StartsWith("-p:TargetFrameworks=", StringComparison.OrdinalIgnoreCase) ||
+            argument.StartsWith("-p:_TargetFrameworkOverride=", StringComparison.OrdinalIgnoreCase) ||
+            argument.StartsWith("-p:_DisableNuGetRestoreTargetFrameworksOverride=", StringComparison.OrdinalIgnoreCase));
+        // NuGet's restore targets support a restore-only framework override. Preserve the
+        // project's declared TargetFrameworks value so project conditions retain their exact
+        // semantics while the assets file is limited to frameworks selected by this build graph.
+        // The behavioral provenance tests intentionally guard this SDK integration point.
+        arguments.Add("-p:TargetFrameworks=" + EscapeMsBuildPropertyValue(declaredFrameworks));
+        arguments.Add("-p:_TargetFrameworkOverride=" + BuildMsBuildListPropertyValue(frameworks));
+        arguments.Add("-p:_DisableNuGetRestoreTargetFrameworksOverride=true");
         arguments.Add("-p:BuildProjectReferences=false");
         arguments.Add("-p:RestoreRecursive=false");
         AppendControlledProofSafeguards(
@@ -105,11 +125,10 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasDistinctControlledProjectRestoreContexts(
         IReadOnlyCollection<ControlledPublishGraphNode> nodes)
     {
-        StringComparer pathComparer = IsWindows()
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
         return nodes
-            .GroupBy(node => Path.GetFullPath(node.Request.ProjectPath), pathComparer)
+            .GroupBy(
+                node => Path.GetFullPath(node.Request.ProjectPath),
+                FrameworkCompatibility.PathComparer)
             .Any(group => group
                 .Select(BuildControlledRestoreContextKey)
                 .Distinct(StringComparer.Ordinal)

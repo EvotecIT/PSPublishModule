@@ -9,7 +9,7 @@ internal static class FrameworkCompatibility
 {
     private static readonly FileSystemPathComparisonCache PathComparisonCache = new(
         IsCaseSensitiveDirectory,
-        DefaultPathStringComparison);
+        DefaultExistingFileSystemPathStringComparison);
 
     internal static StringComparer PathComparer { get; } = new FileSystemAwarePathComparer();
 
@@ -43,6 +43,16 @@ internal static class FrameworkCompatibility
 
     private static StringComparison DefaultPathStringComparison()
         => IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+    private static StringComparison DefaultExistingFileSystemPathStringComparison()
+        => DefaultExistingFileSystemPathStringComparison(IsWindows(), IsMacOS());
+
+    internal static StringComparison DefaultExistingFileSystemPathStringComparison(
+        bool isWindows,
+        bool isMacOS)
+        => isWindows || isMacOS
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
@@ -161,6 +171,10 @@ internal static class FrameworkCompatibility
         {
             if (ReferenceEquals(x, y)) return true;
             if (x is null || y is null) return false;
+            // Paths that differ by more than case cannot alias on any supported file system.
+            // Avoid probing their unrelated parent directories; equality is used while an
+            // admitted SDK closure is watched and must not create probe files inside it.
+            if (!string.Equals(x, y, StringComparison.OrdinalIgnoreCase)) return false;
             return string.Equals(x, y, ResolveComparison(x, y));
         }
 

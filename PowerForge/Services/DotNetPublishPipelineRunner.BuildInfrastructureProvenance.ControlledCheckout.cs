@@ -244,9 +244,9 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static bool ContainsRootedBuildValue(string value, string? gitRoot)
     {
         value = DecodeMsBuildEscapes(value);
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+        StringComparison comparison = !string.IsNullOrWhiteSpace(gitRoot)
+            ? FrameworkCompatibility.GetPathStringComparisonForPath(gitRoot!)
+            : FrameworkCompatibility.PathStringComparison();
         if (!string.IsNullOrWhiteSpace(gitRoot) &&
             value.IndexOf(Path.GetFullPath(gitRoot!), comparison) >= 0)
             return true;
@@ -591,7 +591,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             var controlledBuildInputs = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                FrameworkCompatibility.PathComparer)
             {
                 controlledProjectPath
             };
@@ -613,7 +613,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             var controlledMsBuildInputs = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                FrameworkCompatibility.PathComparer)
             {
                 controlledProjectPath
             };
@@ -655,7 +655,7 @@ public sealed partial class DotNetPublishPipelineRunner
             var controlledProjectContexts = new Dictionary<
                 string,
                 IReadOnlyDictionary<string, string>[]>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FrameworkCompatibility.PathComparer);
             foreach (KeyValuePair<string, IReadOnlyDictionary<string, string>[]> project in
                      evaluatedProjectContexts ??
                      new Dictionary<string, IReadOnlyDictionary<string, string>[]>() )

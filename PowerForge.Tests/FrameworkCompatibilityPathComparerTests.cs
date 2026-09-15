@@ -2,6 +2,20 @@ namespace PowerForge.Tests;
 
 public sealed class FrameworkCompatibilityPathComparerTests
 {
+    [Theory]
+    [InlineData(true, false, StringComparison.OrdinalIgnoreCase)]
+    [InlineData(false, true, StringComparison.OrdinalIgnoreCase)]
+    [InlineData(false, false, StringComparison.Ordinal)]
+    public void DefaultExistingFileSystemPathComparison_UsesPlatformFileSystemDefault(
+        bool isWindows,
+        bool isMacOS,
+        StringComparison expected)
+    {
+        Assert.Equal(
+            expected,
+            FrameworkCompatibility.DefaultExistingFileSystemPathStringComparison(isWindows, isMacOS));
+    }
+
     [Fact]
     public void FileSystemPathComparisonCache_ProbesEachDirectoryOnlyOnce()
     {
@@ -97,5 +111,21 @@ public sealed class FrameworkCompatibilityPathComparerTests
 
         Assert.True(comparer.Equals(upper, lower));
         Assert.Equal(0, comparer.Compare(upper, lower));
+    }
+
+    [Fact]
+    public void FileSystemAwarePathComparer_DoesNotProbeUnrelatedPathsForEquality()
+    {
+        int probes = 0;
+        var comparer = new FrameworkCompatibility.FileSystemAwarePathComparer(_ =>
+        {
+            probes++;
+            return StringComparison.OrdinalIgnoreCase;
+        });
+
+        Assert.False(comparer.Equals(
+            Path.Combine("sdk", "Microsoft.Common.targets"),
+            Path.Combine("repo", "Custom.targets")));
+        Assert.Equal(0, probes);
     }
 }

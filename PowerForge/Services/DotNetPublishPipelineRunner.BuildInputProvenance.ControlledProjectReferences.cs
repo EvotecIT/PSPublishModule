@@ -50,7 +50,10 @@ public sealed partial class DotNetPublishPipelineRunner
             var trackedInputPaths = new HashSet<string>(
                 trackedInputList.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(path => path.Replace('\\', '/').TrimStart('/')),
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FrameworkCompatibility.GetPathStringComparison(contextGitRoot!) ==
+                StringComparison.OrdinalIgnoreCase
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal);
             string[] controlledConditionPropertyNames = ReadControlledBuildPropertyNames(
                 executableMsBuildInputs
                     .Where(path =>
@@ -94,7 +97,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Where(reference => File.Exists(reference.ProjectPath))
                     .GroupBy(
                         reference => Path.GetFullPath(reference.ProjectPath),
-                        IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                        FrameworkCompatibility.PathComparer)
                     .ToDictionary(
                         group => group.Key,
                         group => group
@@ -111,7 +114,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 StringComparer.Ordinal)
                             .Select(context => (IReadOnlyDictionary<string, string>)context.First())
                             .ToArray(),
-                        IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                        FrameworkCompatibility.PathComparer);
             string rootProjectPath = Path.GetFullPath(request.ProjectPath);
             IReadOnlyDictionary<string, string> rootContext = BuildProjectContext(
                 request,
@@ -195,10 +198,9 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 string originalCustomAfterTargets = Path.GetFullPath(
                     customAfterMicrosoftCommonTargets!);
-                StringComparer pathComparer = IsWindows()
-                    ? StringComparer.OrdinalIgnoreCase
-                    : StringComparer.Ordinal;
-                if (executableMsBuildInputs.Contains(originalCustomAfterTargets, pathComparer))
+                if (executableMsBuildInputs.Contains(
+                        originalCustomAfterTargets,
+                        FrameworkCompatibility.PathComparer))
                 {
                     if (!IsSameOrBelowBuildInputPath(originalCustomAfterTargets, originalGitRoot!))
                     {
@@ -558,9 +560,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledRoot,
         string originalRoot)
     {
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+        StringComparison comparison =
+            FrameworkCompatibility.GetPathStringComparisonForPath(controlledRoot);
         int index = value.IndexOf(controlledRoot, comparison);
         if (index < 0)
             return value;
@@ -597,7 +598,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (hasProjectReferences && projectReferences.ValueKind != JsonValueKind.Array)
             return false;
         var nonOutputProjectPaths = new HashSet<string>(
-            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            FrameworkCompatibility.PathComparer);
         if (hasProjectReferences)
         {
             foreach (JsonElement item in projectReferences.EnumerateArray())
@@ -674,7 +675,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToDictionary(BuildEvaluatedProjectReferenceKey, StringComparer.Ordinal);
         var resolvedProjectPaths = new HashSet<string>(
             participatingResolvedReferences.Select(reference => Path.GetFullPath(reference.ProjectPath)),
-            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            FrameworkCompatibility.PathComparer);
         foreach (EvaluatedProjectReference captured in capturedReferences)
         {
             // A target-time addition may intentionally enter ProjectReference after the SDK's
