@@ -219,10 +219,18 @@ public sealed class ModuleInstaller
 
             foreach (var moduleRoot in installedModuleRoots.Distinct(FrameworkCompatibility.PathComparer))
             {
-                HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
-                var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
-                pruned.AddRange(removed);
-                _logger.Verbose($"Installed at {moduleRoot}; versions kept={left}, pruned={removed.Count}");
+                try
+                {
+                    HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
+                    var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
+                    pruned.AddRange(removed);
+                    _logger.Verbose($"Installed at {moduleRoot}; versions kept={left}, pruned={removed.Count}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(
+                        $"The module install was committed at '{moduleRoot}', but post-install legacy/pruning housekeeping failed: {ex.Message}");
+                }
             }
         }
 

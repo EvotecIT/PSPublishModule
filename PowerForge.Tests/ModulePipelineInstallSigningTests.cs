@@ -284,6 +284,34 @@ public sealed class ModulePipelineInstallSigningTests
     }
 
     [Fact]
+    public void InstallLock_DeduplicatesPhysicalRootAliases()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var physicalRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "physical"));
+            var aliasRoot = Path.Combine(root.FullName, "alias");
+            try { Directory.CreateSymbolicLink(aliasRoot, physicalRoot.FullName); }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            using var installLock = ModuleInstallOperationLock.Acquire(
+                new[] { physicalRoot.FullName, aliasRoot },
+                "SignedTestModule",
+                requireAllRoots: true);
+
+            Assert.Single(installLock.LockedRoots);
+            Assert.Empty(installLock.Failures);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void SignedAutoRevisionInstall_RollsBackWhenAnyDestinationRootFails()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -371,6 +399,52 @@ public sealed class ModulePipelineInstallSigningTests
         }
     }
 
+    [Fact]
+    public void TransactionalInstall_KeepsValidatedInstallWhenLegacyHousekeepingFails()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "SignedTestModule";
+            var sourceRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
+            WriteMinimalModule(sourceRoot.FullName, moduleName, "1.0.0.1");
+            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(installRoot.FullName, moduleName));
+            WriteMinimalModule(moduleRoot.FullName, moduleName, "0.9.0");
+            var blockedLegacyDestination = Path.Combine(moduleRoot.FullName, "0.9.0");
+            File.WriteAllText(blockedLegacyDestination, "blocks legacy conversion directory");
+            var installedDestination = Path.Combine(moduleRoot.FullName, "1.0.0.1");
+            var logger = new CollectingLogger();
+            var installer = new ModuleInstaller(logger);
+            var options = new ModuleInstallerOptions(
+                destinationRoots: new[] { installRoot.FullName },
+                strategy: InstallationStrategy.Exact,
+                keepVersions: 5,
+                legacyFlatHandling: LegacyFlatModuleHandling.Convert,
+                preserveVersions: null,
+                requireNewDestination: true,
+                requireAllDestinationRoots: true);
+
+            var result = installer.InstallFromStagingTransactional(
+                sourceRoot.FullName,
+                moduleName,
+                "1.0.0.1",
+                options,
+                installedPaths => Assert.Single(installedPaths));
+
+            Assert.Equal(installedDestination, Assert.Single(result.InstalledPaths));
+            Assert.True(Directory.Exists(installedDestination));
+            Assert.True(File.Exists(Path.Combine(moduleRoot.FullName, moduleName + ".psd1")));
+            Assert.Equal("blocks legacy conversion directory", File.ReadAllText(blockedLegacyDestination));
+            Assert.Contains(logger.Warnings, warning =>
+                warning.Contains("post-install legacy/pruning housekeeping failed", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec CreateSpec(string sourceRoot, string moduleName, params string[] installRoots)
         => new()
         {
@@ -416,6 +490,17 @@ public sealed class ModulePipelineInstallSigningTests
 
     private static string ComputeSha256(string path)
         => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+
+    private sealed class CollectingLogger : ILogger
+    {
+        public List<string> Warnings { get; } = new();
+        public bool IsVerbose => false;
+        public void Info(string message) { }
+        public void Success(string message) { }
+        public void Warn(string message) => Warnings.Add(message);
+        public void Error(string message) { }
+        public void Verbose(string message) { }
+    }
 
     private sealed class RecordingHostedOperations : IModulePipelineHostedOperations
     {

@@ -30,14 +30,30 @@ internal sealed class ModuleInstallOperationLock : IDisposable
         var acquired = new List<ManagedModuleInstallLock>();
         var lockedRoots = new List<string>();
         var failures = new List<string>();
+        var physicalRootIdentities = new HashSet<string>(StringComparer.Ordinal);
+        var resolvedRoots = ModuleInstaller.ResolveDestinationRoots(roots)
+            .OrderBy(static path => path, FrameworkCompatibility.PathComparer)
+            .ToArray();
         try
         {
-            foreach (var root in ModuleInstaller.ResolveDestinationRoots(roots)
-                         .OrderBy(static path => path, FrameworkCompatibility.PathComparer))
+            foreach (var root in resolvedRoots)
             {
                 try
                 {
+                    string? physicalRootIdentity = null;
+                    if (resolvedRoots.Length > 1)
+                    {
+                        Directory.CreateDirectory(root);
+                        physicalRootIdentity = ExistingFilePathIdentityResolver
+                            .ResolveDirectoryStatus(root)
+                            .Identity;
+                        if (physicalRootIdentities.Contains(physicalRootIdentity))
+                            continue;
+                    }
+
                     acquired.Add(ManagedModuleInstallLock.Acquire(root, moduleName, CancellationToken.None));
+                    if (physicalRootIdentity is not null)
+                        physicalRootIdentities.Add(physicalRootIdentity);
                     lockedRoots.Add(root);
                 }
                 catch (Exception ex) when (!requireAllRoots)
