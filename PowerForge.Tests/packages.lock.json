@@ -583,8 +583,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.0",
-        "contentHash": "usa3QT805kWKRx2DFaHZggPJGdNixczQYof8VhbDRImJ2knOkPU3PQ7ewOG93UeQRn0eQa7PjI7KyKg/wyF7xw=="
+        "resolved": "3.4.1",
+        "contentHash": "vC+noxhSbXvKj4hCljPA8+wxzEZNkhUEF7YLpsxHX+GypB/Yofc38KhoJ+hEfSES73lkwmiWcQKnf1lc4YcS3A=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
@@ -598,10 +598,10 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.4.0",
-        "contentHash": "slfuppYFOPTYGjKeg0yNjHEWujFYXlvBFsHPCIkRHprDa0ZVBeXsf+aVZqf0xTETdW/fHf9lAx6rqf5E84ro1w==",
+        "resolved": "3.4.1",
+        "contentHash": "Arfz7sg5ngtPaksl9EKMHyEOk1SHbAxqgwYvWDtO+PAPRbTHR+TJNdI3Dd79RVJpIpxAQc5Q0lfyfF5oCAtO0g==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.0"
+          "OfficeIMO.Core": "3.4.1"
         }
       },
       "OfficeIMO.Markdown.Html": {
@@ -1191,7 +1191,7 @@
           "Google.Apis.Auth": "[1.76.0, )",
           "HtmlTinkerX": "[3.0.1, )",
           "Magick.NET-Q8-AnyCPU": "[14.17.1, )",
-          "OfficeIMO.Markdown": "[3.4.0, )",
+          "OfficeIMO.Markdown": "[3.4.1, )",
           "PowerForge": "[3.0.142, )",
           "Scriban": "[7.4.0, )",
           "YamlDotNet": "[18.1.0, )"
@@ -1213,7 +1213,7 @@
         "dependencies": {
           "HtmlForgeX": "[0.56.0, )",
           "HtmlForgeX.Markdown": "[0.56.0, )",
-          "OfficeIMO.Markdown": "[3.4.0, )",
+          "OfficeIMO.Markdown": "[3.4.1, )",
           "PowerForge": "[3.0.142, )",
           "PowerForge.PowerShell": "[3.0.142, )",
           "Spectre.Console": "[0.57.2, )",
