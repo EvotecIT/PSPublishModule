@@ -494,6 +494,8 @@ public sealed partial class DotNetRepositoryReleaseService
         var cancellationToken = ActiveCancellationToken.Value;
         cancellationToken.ThrowIfCancellationRequested();
 
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
+
         using var p = Process.Start(psi);
         if (p is null) return 1;
         using var cancellationRegistration = cancellationToken.Register(() =>

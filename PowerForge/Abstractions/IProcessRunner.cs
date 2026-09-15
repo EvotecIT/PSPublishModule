@@ -490,6 +490,9 @@ public sealed partial class ProcessRunner : IProcessRunner
         if (!request.InheritEnvironment)
             startInfo.EnvironmentVariables.Clear();
 
+        if (request.CaptureOutput || request.CaptureError)
+            DotNetProcessLifetime.DisableBuildServerReuse(startInfo);
+
         if (request.EnvironmentVariables is not null)
         {
             foreach (var variable in request.EnvironmentVariables)
