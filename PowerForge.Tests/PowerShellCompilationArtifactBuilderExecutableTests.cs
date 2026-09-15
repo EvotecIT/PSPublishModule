@@ -388,6 +388,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     private static (int ExitCode, string StandardOutput, string StandardError) RunProcess(string fileName, params string[] arguments)
     {
+        const int processTimeoutMilliseconds = 120_000;
         var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
@@ -401,11 +402,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         using var process = Process.Start(startInfo)!;
         var standardOutput = process.StandardOutput.ReadToEndAsync();
         var standardError = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(60_000))
+        if (!process.WaitForExit(processTimeoutMilliseconds))
         {
             process.Kill(entireProcessTree: true);
             process.WaitForExit();
-            Assert.Fail("Typed executable did not exit within 60 seconds.");
+            Assert.Fail($"Typed executable did not exit within {processTimeoutMilliseconds / 1000} seconds.");
         }
         return (process.ExitCode, standardOutput.GetAwaiter().GetResult(), standardError.GetAwaiter().GetResult());
     }

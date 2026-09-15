@@ -36,7 +36,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         // Earlier output remains in the graph and must pass its ordinary cardinality proof.
         if (statements[statements.Length - 1] is PowerShellBoundExpressionStatement
             { EmitsOutput: true, RequiresOutputContinuation: false } terminal &&
-            PowerShellStableScalarTypePolicy.IsSupported(terminal.Expression.Type.ClrType))
+            PowerShellRegionTransferTypePolicy.IsSupported(terminal.Expression.Type.ClrType))
             statements[statements.Length - 1] = new PowerShellBoundReturnStatement(terminal.Span, terminal.Expression);
         if (!AlwaysReturns(statements[statements.Length - 1])) return false;
         return TryCreateBound(document, syntax, sourceFunction, parameters, locals,
@@ -52,7 +52,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         PowerShellBoundStatement[] statements,
         out PowerShellBoundRegionCandidate candidate,
         PowerShellCompiledRegionLocal[]? continuationLocals = null,
-        PowerShellCompiledRegionLocal[]? inputLocals = null)
+        PowerShellCompiledRegionLocal[]? inputLocals = null,
+        bool allowsPrefixOwnedInputLocals = false)
     {
         candidate = null!;
         // A standalone region has no native function context argument. Do not detach reads from their invocation owner.
@@ -78,14 +79,16 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         if (selectedParameters.Any(static parameter =>
                 parameter.Contract.IsSwitch ||
                 !IsSimpleVariableName(parameter.Symbol.Name) ||
-                !PowerShellStableScalarTypePolicy.IsSupported(parameter.Type.ClrType)))
+                !(parameter.Symbol.Kind == PowerShellSymbolKind.Local
+                    ? PowerShellRegionTransferTypePolicy.IsSupported(parameter.Type.ClrType)
+                    : PowerShellStableScalarTypePolicy.IsSupported(parameter.Type.ClrType))))
             return false;
         var selectedLocals = locals.Where(local => usedSymbols.Contains(local.Symbol.StableKey) &&
             !parameters.Any(parameter => parameter.Symbol.StableKey == local.Symbol.StableKey)).ToArray();
         if (selectedLocals.Any(local =>
                 local.Type.Provenance == PowerShellTypeFactProvenance.Unknown ||
                 continuationLocals is { Length: > 0 } && local.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble ||
-                !PowerShellStableScalarTypePolicy.IsSupported(local.Type.ClrType) && local.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble))
+                !PowerShellRegionTransferTypePolicy.IsSupported(local.Type.ClrType) && local.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble))
             return false;
 
         var helperName = CreateHelperName(sourceFunction, span);
@@ -135,7 +138,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 .Select(static parameter => parameter.Contract).ToArray(),
             continuationLocals,
             requiresLocalOwnershipGuard: continuationLocals is { Length: > 0 } && inputLocals is not { Length: > 0 },
-            inputLocals);
+            inputLocals,
+            allowsPrefixOwnedInputLocals);
         return true;
     }
 
@@ -241,7 +245,8 @@ internal sealed class PowerShellBoundRegionCandidate
         PowerShellCompilationParameter[] inputParameters,
         PowerShellCompiledRegionLocal[]? continuationLocals = null,
         bool requiresLocalOwnershipGuard = false,
-        PowerShellCompiledRegionLocal[]? inputLocals = null)
+        PowerShellCompiledRegionLocal[]? inputLocals = null,
+        bool allowsPrefixOwnedInputLocals = false)
     {
         RegionId = regionId;
         SourceSha256 = sourceSha256;
@@ -254,6 +259,7 @@ internal sealed class PowerShellBoundRegionCandidate
         ContinuationLocals = continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>();
         InputLocals = inputLocals ?? Array.Empty<PowerShellCompiledRegionLocal>();
         RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
+        AllowsPrefixOwnedInputLocals = allowsPrefixOwnedInputLocals;
     }
 
     internal string RegionId { get; }
@@ -267,4 +273,5 @@ internal sealed class PowerShellBoundRegionCandidate
     internal PowerShellImmutableArray<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
     internal PowerShellImmutableArray<PowerShellCompiledRegionLocal> InputLocals { get; }
     internal bool RequiresLocalOwnershipGuard { get; }
+    internal bool AllowsPrefixOwnedInputLocals { get; }
 }

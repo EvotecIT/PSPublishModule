@@ -102,7 +102,7 @@ public sealed class PowerShellCompiledRegion
     public string SourcePath { get; }
     /// <summary>Generated CLR helper member name.</summary>
     public string GeneratedName { get; }
-    /// <summary>Stable scalar CLR return type.</summary>
+    /// <summary>Supported CLR region-transfer return type.</summary>
     public string ReturnType { get; }
     /// <summary>Current retained-function parameter values transferred into the region.</summary>
     public IReadOnlyList<PowerShellCompilationParameter> InputParameters { get; }
@@ -125,10 +125,10 @@ public sealed class PowerShellCompiledRegion
     /// <summary>Relocation-safe authored document identity.</summary>
     public string DocumentId { get; }
 
-    /// <summary>Ordered scalar locals restored before PowerShell resumes; empty for a terminal return.</summary>
+    /// <summary>Ordered locals restored before PowerShell resumes; empty for a terminal return.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
 
-    /// <summary>Ordered established scalar locals transferred into this region.</summary>
+    /// <summary>Ordered established locals transferred into this region.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> InputLocals { get; }
 
     /// <summary>Whether the helper requires the retained invocation's native loop-stopping callback.</summary>

@@ -115,10 +115,10 @@ public sealed class PowerShellCompilationRegionCandidate
     public string GeneratedName { get; }
     /// <summary>Canonical lowered graph when the candidate reached lowering; otherwise null.</summary>
     public PowerShellCompilationRegionGraph? RegionGraph { get; }
-    /// <summary>Ordered scalar locals transferred to the continuation, or empty for a terminal candidate.</summary>
+    /// <summary>Ordered locals transferred to the continuation, or empty for a terminal candidate.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
 
-    /// <summary>Ordered established scalar locals transferred into the candidate.</summary>
+    /// <summary>Ordered established locals transferred into the candidate.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> InputLocals { get; }
 
     /// <summary>Whether a promoted helper requires fresh invocation-local targets and retains the original statements when that proof fails.</summary>

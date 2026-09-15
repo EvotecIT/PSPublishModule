@@ -27,6 +27,17 @@ internal static class PowerShellBoundRegionLocalProjection
                     Expression: PowerShellBoundMutationExpression { Operation: PowerShellBoundMutationOperator.Assign, Value: not null,
                         NativeTargetRead: { DirectLocal: true } } mutation })
                 return Assignment(mutation.Span, mutation.NativeTargetRead.Name, mutation.Value);
+            if (current is PowerShellBoundExpressionStatement expressionStatement)
+            {
+                var expression = Expression(expressionStatement.Expression);
+                return expression is null
+                    ? null
+                    : new PowerShellBoundExpressionStatement(
+                        expressionStatement.Span,
+                        expression,
+                        expressionStatement.EmitsOutput,
+                        expressionStatement.RequiresOutputContinuation);
+            }
             if (current is PowerShellBoundIfStatement conditional)
             {
                 var clauses = new List<PowerShellBoundConditionalClause>();
@@ -71,7 +82,7 @@ internal static class PowerShellBoundRegionLocalProjection
             if (expression is PowerShellBoundNativeVariableExpression { DirectLocal: true } variable)
             {
                 if (variable.Name.IndexOf(':') >= 0 || !values.TryGetValue(variable.Name, out var value) ||
-                    !PowerShellStableScalarTypePolicy.IsSupported(value.Type)) return null;
+                    !PowerShellRegionTransferTypePolicy.IsSupported(value.Type)) return null;
                 return new PowerShellBoundVariableExpression(variable.Span, value.Symbol, value.Type);
             }
             if (expression is PowerShellBoundConversionExpression conversion)

@@ -16,10 +16,10 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
                 function.NativeFunctionBinding is not null || function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) ||
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
                     statement is PowerShellBoundStreamWriteStatement { Provider: null }) ||
-                commandHost && PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
+                commandHost && PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(statement =>
                     PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output &&
                     output is not PowerShellBoundInvocationExpression && output.Type.ClrType != typeof(void) &&
-                    !PowerShellStableScalarTypePolicy.IsSupported(output.Type)) ||
+                    !IsDirectOutputRecord(function, output)) ||
                 commandHost && function.Body.Effects.HasFlag(PowerShellSemanticEffect.SuccessOutput) &&
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
                     statement is PowerShellBoundTryStatement { FinallyBlock: not null }))
@@ -96,6 +96,16 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
             usesCommandHostEnumeration: !usesNativeInvocation && commandEnumeration &&
                 expression.Type.ClrType != typeof(void) &&
                 !PowerShellStableScalarTypePolicy.IsSupported(expression.Type));
+
+    private static bool IsDirectOutputRecord(
+        PowerShellBoundFunction function,
+        PowerShellBoundExpression expression)
+        => PowerShellStableScalarTypePolicy.IsSupported(expression.Type) ||
+           expression is PowerShellBoundVariableExpression variable &&
+           expression.Type.ClrType == typeof(System.Collections.Hashtable) &&
+           function.Parameters.Any(parameter =>
+               parameter.Symbol.Kind == PowerShellSymbolKind.Local &&
+               parameter.Symbol.StableKey.Equals(variable.Symbol.StableKey, StringComparison.Ordinal));
 
     // A failed returned output must resume after the authored return statement,
     // rather than execute the CLR exit after its output operation has failed.

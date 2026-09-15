@@ -5,9 +5,9 @@ namespace PowerForge;
 internal static partial class PowerShellBoundRegionCandidateSelector
 {
     /// <summary>
-    /// Selects the first statement-aligned typed run after a guarded prefix and before a later
-    /// retained statement. Every local crossing either edge must already have an authored stable
-    /// scalar constraint, and every mutated local is returned to the retained continuation.
+    /// Selects the first statement-aligned typed run after a guarded prefix. Every local input must
+    /// have an authored stable constraint or exact guarded-prefix provenance. Mutated outputs remain
+    /// stable scalars and return to a later retained continuation; a read-only run may be terminal.
     /// </summary>
     internal static bool TryCreateDetachedContinuation(
         ParsedSourceDocument document,
@@ -40,11 +40,10 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         }
 
         foreach (var run in runs.Where(run => run.Count >= 1 &&
-                     run[0].AuthoredStatementIndex > 0 &&
-                     run[run.Count - 1].AuthoredStatementEndIndex < authoredStatements.Count - 1))
+                     run[0].AuthoredStatementIndex > 0))
         {
             if (TryCreateDetachedRun(document, syntax, sourceFunction, parameters, functionLocals,
-                    authoredStatements, run, out candidate))
+                    authoredStatements, run, guardedPrefix, out candidate))
                 return true;
         }
         return false;
@@ -58,12 +57,23 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         IReadOnlyList<PowerShellBoundLocal> functionLocals,
         IReadOnlyList<StatementAst> authoredStatements,
         IReadOnlyList<PowerShellBoundStatementBinding> run,
+        PowerShellBoundRegionCandidate guardedPrefix,
         out PowerShellBoundRegionCandidate candidate)
     {
         candidate = null!;
         var rawStatements = run.Select(static binding => binding.Statement).ToArray();
+        var nativeLocalNames = PowerShellSemanticAnalyzer.EnumerateStatements(
+                new PowerShellBoundBlock(rawStatements[0].Span, rawStatements))
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundNativeVariableExpression>()
+            .Where(static variable => variable.DirectLocal && variable.Name.IndexOf(':') < 0)
+            .Select(static variable => variable.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var localSymbols = PowerShellBoundRegionOpportunitySelector.EnumerateReadSymbols(rawStatements)
             .Concat(PowerShellBoundRegionOpportunitySelector.EnumerateWrittenSymbols(rawStatements))
+            .Concat(functionLocals.Where(local => nativeLocalNames.Contains(local.Symbol.Name))
+                .Select(static local => local.Symbol))
             .Where(static symbol => symbol.Kind == PowerShellSymbolKind.Local)
             .GroupBy(static symbol => symbol.StableKey, StringComparer.Ordinal)
             .Select(static group => group.First())
@@ -72,13 +82,23 @@ internal static partial class PowerShellBoundRegionCandidateSelector
 
         var localParameters = new List<PowerShellBoundParameter>();
         var inputLocals = new List<PowerShellCompiledRegionLocal>();
+        var hasPrefixOwnedInput = false;
         foreach (var local in functionLocals.Where(local => localSymbols.Any(symbol =>
                      symbol.StableKey == local.Symbol.StableKey)))
         {
             if (local.Type.Provenance is PowerShellTypeFactProvenance.Unknown or PowerShellTypeFactProvenance.Int32OrDouble ||
-                !PowerShellStableScalarTypePolicy.IsSupported(local.Type.ClrType) ||
-                !TryFindEstablishedConstraint(authoredStatements, run[0].AuthoredStatementIndex, local, out var constraintSyntax))
+                !PowerShellRegionTransferTypePolicy.IsSupported(local.Type.ClrType))
                 return false;
+            var hasConstraint = TryFindEstablishedConstraint(
+                authoredStatements,
+                run[0].AuthoredStatementIndex,
+                local,
+                out var constraintSyntax);
+            var prefixOwned = !hasConstraint && guardedPrefix.ContinuationLocals.Any(output =>
+                output.Name.Equals(local.Symbol.Name, StringComparison.OrdinalIgnoreCase) &&
+                output.TypeName.Equals(local.Type.ClrType.FullName ?? local.Type.ClrType.Name, StringComparison.Ordinal));
+            if (!hasConstraint && !prefixOwned) return false;
+            hasPrefixOwnedInput |= prefixOwned;
             localParameters.Add(new PowerShellBoundParameter(
                 local.Symbol,
                 local.Type,
@@ -89,7 +109,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             inputLocals.Add(new PowerShellCompiledRegionLocal(
                 local.Symbol.Name,
                 local.Type.ClrType.FullName ?? local.Type.ClrType.Name,
-                hasTypeConstraint: true,
+                hasTypeConstraint: hasConstraint,
                 constraintSyntax));
         }
         if (localParameters.Count != localSymbols.Length) return false;
@@ -105,7 +125,19 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 functionLocals);
             if (statement is null) return false;
             var stopping = statement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStopping);
-            if ((statement.Effects & ~(PowerShellSemanticEffect.Mutation | PowerShellLoopInterruptContract.Effects(stopping))) != 0 ||
+            var terminalOutput = binding.AuthoredStatementEndIndex == authoredStatements.Count - 1 &&
+                ReferenceEquals(binding, run[run.Count - 1]) &&
+                statement is PowerShellBoundExpressionStatement
+                {
+                    EmitsOutput: true,
+                    RequiresOutputContinuation: false,
+                    Expression.Type.ClrType: var outputType
+                } &&
+                PowerShellRegionTransferTypePolicy.IsSupported(outputType);
+            var allowedEffects = PowerShellSemanticEffect.Mutation |
+                                 PowerShellLoopInterruptContract.Effects(stopping) |
+                                 (terminalOutput ? PowerShellSemanticEffect.SuccessOutput : PowerShellSemanticEffect.None);
+            if ((statement.Effects & ~allowedEffects) != 0 ||
                 (statement.Capabilities & ~PowerShellLoopInterruptContract.Capabilities(stopping)) != PowerShellRequiredCapability.None)
                 return false;
             var nested = PowerShellSemanticAnalyzer.EnumerateStatements(
@@ -126,19 +158,37 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 parameter.Symbol.Name.Equals(local.Name, StringComparison.OrdinalIgnoreCase) &&
                 writtenKeys.Contains(parameter.Symbol.StableKey)))
             .ToArray();
-        if (outputs.Length == 0) return false;
+        if (outputs.Any(output => !PowerShellStableScalarTypePolicy.IsSupported(
+                localParameters.Single(parameter => parameter.Symbol.Name.Equals(
+                    output.Name, StringComparison.OrdinalIgnoreCase)).Type.ClrType)))
+            return false;
 
-        var lastSpan = projected[projected.Count - 1].Span;
-        var transferSpan = new SourceSpan(lastSpan.DocumentId, lastSpan.EndOffset, lastSpan.EndOffset,
-            lastSpan.EndLine, lastSpan.EndColumn, lastSpan.EndLine, lastSpan.EndColumn);
-        projected.Add(new PowerShellBoundRegionTransferStatement(
-            transferSpan,
-            outputs.Select(output =>
-            {
-                var parameter = localParameters.Single(item =>
-                    item.Symbol.Name.Equals(output.Name, StringComparison.OrdinalIgnoreCase));
-                return new PowerShellBoundVariableExpression(transferSpan, parameter.Symbol, parameter.Type);
-            }).ToArray()));
+        if (outputs.Length > 0)
+        {
+            if (run[run.Count - 1].AuthoredStatementEndIndex >= authoredStatements.Count - 1)
+                return false;
+            var lastSpan = projected[projected.Count - 1].Span;
+            var transferSpan = new SourceSpan(lastSpan.DocumentId, lastSpan.EndOffset, lastSpan.EndOffset,
+                lastSpan.EndLine, lastSpan.EndColumn, lastSpan.EndLine, lastSpan.EndColumn);
+            projected.Add(new PowerShellBoundRegionTransferStatement(
+                transferSpan,
+                outputs.Select(output =>
+                {
+                    var parameter = localParameters.Single(item =>
+                        item.Symbol.Name.Equals(output.Name, StringComparison.OrdinalIgnoreCase));
+                    return new PowerShellBoundVariableExpression(transferSpan, parameter.Symbol, parameter.Type);
+                }).ToArray()));
+        }
+        else
+        {
+            if (run[run.Count - 1].AuthoredStatementEndIndex != authoredStatements.Count - 1)
+                return false;
+            if (projected[projected.Count - 1] is PowerShellBoundExpressionStatement
+                { EmitsOutput: true, RequiresOutputContinuation: false } terminal &&
+                PowerShellRegionTransferTypePolicy.IsSupported(terminal.Expression.Type.ClrType))
+                projected[projected.Count - 1] = new PowerShellBoundReturnStatement(terminal.Span, terminal.Expression);
+            if (!AlwaysReturns(projected[projected.Count - 1])) return false;
+        }
 
         return TryCreateBound(
             document,
@@ -148,8 +198,9 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             functionLocals,
             projected.ToArray(),
             out candidate,
-            outputs,
-            inputLocals.ToArray());
+            outputs.Length == 0 ? null : outputs,
+            inputLocals.ToArray(),
+            hasPrefixOwnedInput);
     }
 
     private static bool TryFindEstablishedConstraint(

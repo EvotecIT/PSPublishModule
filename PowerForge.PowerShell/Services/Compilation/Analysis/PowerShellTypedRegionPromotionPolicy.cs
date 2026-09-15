@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Fail-closed promotion policy for terminal scalar returns and prefixes transferring scalar locals.
+/// Fail-closed promotion policy for terminal returns and prefixes transferring supported local values.
 /// Both contracts require parameter inputs, local mutations, and no modeled failure route.
 /// </summary>
 internal static class PowerShellTypedRegionPromotionPolicy
@@ -19,17 +19,17 @@ internal static class PowerShellTypedRegionPromotionPolicy
         if (lowered.RequiresPowerShellStatementErrors)
             return Reject("region.statement-errors", "The candidate requires a PowerShell statement-error host not represented by the helper ABI.");
         if (candidate.ContinuationLocals.Length > 0 && !HasCompleteContinuationResult(candidate))
-            return Reject("region.continuation-result", "The helper does not return the exact ordered scalar local transfer contract.");
+            return Reject("region.continuation-result", "The helper does not return the exact ordered local transfer contract.");
         if (!HasCompleteInputLocalContract(candidate))
-            return Reject("region.input-local-contract", "The helper local inputs are not exact authored stable scalar transfers.");
+            return Reject("region.input-local-contract", "The helper local inputs are not exact authored or guarded-prefix transfers.");
         if (candidate.ContinuationLocals.Length > 0 && !candidate.RequiresLocalOwnershipGuard &&
             !UpdatesEstablishedInputLocals(candidate))
-            return Reject("region.local-ownership", "Scalar output requires either fresh invocation-local ownership or exact established input-local targets.");
+            return Reject("region.local-ownership", "Local output requires either fresh invocation-local ownership or exact established input-local targets.");
         var transfersMultipleLocals = candidate.ContinuationLocals.Length > 1;
         if (!transfersMultipleLocals && lowered.OutputCardinality != PowerShellOutputCardinality.Scalar)
             return Reject("region.return-cardinality", "The candidate does not return exactly one scalar value on every accepted path.");
-        if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !PowerShellStableScalarTypePolicy.IsSupported(lowered.ReturnType))
-            return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a stable scalar transfer type.");
+        if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !PowerShellRegionTransferTypePolicy.IsSupported(lowered.ReturnType))
+            return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a supported region transfer type.");
         if (lowered.RequiresPowerShellStreams)
             return Reject("region.stream-contract", "The candidate requires PowerShell stream semantics beyond the single scalar Success result contract.");
         if (lowered.RequiresProviderCancellation)
@@ -67,21 +67,21 @@ internal static class PowerShellTypedRegionPromotionPolicy
             .Concat(candidate.InputLocals.Select(static local => "Local:" + local.Name))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (!region.Inputs.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(allowedInputs))
-            return Reject("region.input-transfer", "The candidate live inputs do not exactly match its function-parameter and scalar-local transfer contract.");
+            return Reject("region.input-transfer", "The candidate live inputs do not exactly match its function-parameter and local transfer contract.");
         if (!region.Mutations.All(static mutation => mutation.StartsWith("Local:", StringComparison.Ordinal)))
             return Reject("region.mutation", "The candidate mutates state outside its region-local values.");
         if (candidate.ContinuationLocals.Length > 0 &&
             region.Mutations.Any(mutation => !candidate.ContinuationLocals.Any(local =>
                 mutation.Equals("Local:" + local.Name, StringComparison.OrdinalIgnoreCase))))
-            return Reject("region.continuation-transfer", "The prefix mutates a local outside its scalar continuation transfer.");
+            return Reject("region.continuation-transfer", "The prefix mutates a local outside its continuation transfer.");
         return new PowerShellTypedRegionPromotionDecision(
             isSafe: true,
             "region.promoted",
             candidate.ContinuationLocals.Length == 0
-                ? "The candidate satisfies the bounded terminal scalar promotion contract."
+                ? "The candidate satisfies the bounded terminal region-transfer contract."
                 : candidate.RequiresLocalOwnershipGuard
-                    ? "The candidate satisfies the bounded prefix scalar continuation contract when its invocation-local targets are fresh; otherwise its original statements execute in place."
-                    : "The candidate satisfies complete scalar live-in and live-out transfer contracts for established invocation-local targets.");
+                    ? "The candidate satisfies the bounded prefix continuation contract when its invocation-local targets are fresh; otherwise its original statements execute in place."
+                    : "The candidate satisfies complete live-in and live-out transfer contracts for established invocation-local targets.");
     }
 
     private static PowerShellTypedRegionPromotionDecision Reject(string code, string reason)
@@ -95,20 +95,21 @@ internal static class PowerShellTypedRegionPromotionPolicy
         return values.Length == candidate.ContinuationLocals.Length && values.Select((value, index) =>
             value is PowerShellBoundVariableExpression variable && variable.Symbol.Kind == PowerShellSymbolKind.Local &&
             variable.Symbol.Name.Equals(candidate.ContinuationLocals[index].Name, StringComparison.OrdinalIgnoreCase) &&
-            PowerShellStableScalarTypePolicy.IsSupported(variable.Type.ClrType) &&
+            PowerShellRegionTransferTypePolicy.IsSupported(variable.Type.ClrType) &&
             (variable.Type.ClrType.FullName ?? variable.Type.ClrType.Name) == candidate.ContinuationLocals[index].TypeName).All(static valid => valid);
     }
 
     private static bool HasCompleteInputLocalContract(PowerShellBoundRegionCandidate candidate)
         => candidate.InputLocals.All(local =>
             !string.IsNullOrWhiteSpace(local.Name) &&
-            local.HasTypeConstraint &&
-            !string.IsNullOrWhiteSpace(local.TypeConstraintSyntax) &&
+            ((local.HasTypeConstraint && !string.IsNullOrWhiteSpace(local.TypeConstraintSyntax)) ||
+             (!local.HasTypeConstraint && string.IsNullOrWhiteSpace(local.TypeConstraintSyntax) &&
+              candidate.AllowsPrefixOwnedInputLocals)) &&
             candidate.RegionFunction.Parameters.Any(parameter =>
                 parameter.Symbol.Kind == PowerShellSymbolKind.Local &&
                 parameter.Symbol.Name.Equals(local.Name, StringComparison.OrdinalIgnoreCase) &&
                 (parameter.Type.ClrType.FullName ?? parameter.Type.ClrType.Name).Equals(local.TypeName, StringComparison.Ordinal) &&
-                PowerShellStableScalarTypePolicy.IsSupported(parameter.Type.ClrType))) &&
+                PowerShellRegionTransferTypePolicy.IsSupported(parameter.Type.ClrType))) &&
            candidate.InputLocals.Select(static local => local.Name)
                .Distinct(StringComparer.OrdinalIgnoreCase).Count() == candidate.InputLocals.Length;
 

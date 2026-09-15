@@ -2,10 +2,10 @@ using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
-/// <summary>A scalar local transferred across a retained PowerShell and typed-region boundary.</summary>
+/// <summary>A local value transferred across a retained PowerShell and typed-region boundary.</summary>
 public sealed class PowerShellCompiledRegionLocal
 {
-    /// <summary>Creates an immutable scalar continuation transfer.</summary>
+    /// <summary>Creates immutable metadata for a local-value transfer.</summary>
     [JsonConstructor]
     public PowerShellCompiledRegionLocal(string name, string typeName, bool hasTypeConstraint, string typeConstraintSyntax = "")
     {
@@ -17,7 +17,7 @@ public sealed class PowerShellCompiledRegionLocal
 
     /// <summary>Unqualified authored local variable name.</summary>
     public string Name { get; }
-    /// <summary>CLR scalar type of the transferred value.</summary>
+    /// <summary>CLR type of the transferred value.</summary>
     public string TypeName { get; }
     /// <summary>Whether the receiving variable retains an authored type constraint.</summary>
     public bool HasTypeConstraint { get; }

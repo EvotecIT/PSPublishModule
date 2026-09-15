@@ -279,18 +279,33 @@ internal sealed partial class PowerShellSemanticAnalyzer
             .Where(static assignment => assignment.Value is PowerShellBoundDictionaryExpression)
             .Select(static assignment => assignment.Target.StableKey)
             .ToHashSet(StringComparer.Ordinal);
+        var regionDictionaryInputs = function.Parameters
+            .Where(static parameter => parameter.Symbol.Kind == PowerShellSymbolKind.Local &&
+                                       parameter.Type.ClrType == typeof(System.Collections.Hashtable))
+            .Select(static parameter => parameter.Symbol.StableKey)
+            .ToHashSet(StringComparer.Ordinal);
         return EnumerateStatements(function.Body)
             .Select(GetSuccessOutputExpression)
             .Where(static expression => expression is not null)
-            .Any(expression => CarriesCompilerDictionary(expression!, dictionaryLocals));
+            .Any(expression => CarriesCompilerDictionary(expression!, dictionaryLocals, regionDictionaryInputs));
     }
 
-    private static bool CarriesCompilerDictionary(PowerShellBoundExpression expression, ISet<string> dictionaryLocals)
-        => expression is PowerShellBoundDictionaryExpression || expression.Type.DictionaryValueKind != PowerShellDictionaryValueKind.None ||
+    private static bool CarriesCompilerDictionary(
+        PowerShellBoundExpression expression,
+        ISet<string> dictionaryLocals,
+        ISet<string> regionDictionaryInputs)
+    {
+        var exactInputPassthrough = expression is PowerShellBoundVariableExpression input &&
+                                    regionDictionaryInputs.Contains(input.Symbol.StableKey) &&
+                                    !dictionaryLocals.Contains(input.Symbol.StableKey);
+        return expression is PowerShellBoundDictionaryExpression ||
+           (!exactInputPassthrough && expression.Type.DictionaryValueKind != PowerShellDictionaryValueKind.None) ||
            expression is PowerShellBoundVariableExpression variable && dictionaryLocals.Contains(variable.Symbol.StableKey) ||
-           expression is PowerShellBoundArrayExpression array && array.Elements.Any(element => CarriesCompilerDictionary(element, dictionaryLocals)) ||
+           expression is PowerShellBoundArrayExpression array && array.Elements.Any(element =>
+               CarriesCompilerDictionary(element, dictionaryLocals, regionDictionaryInputs)) ||
            expression is PowerShellBoundConversionExpression conversion && conversion.Type.ClrType == typeof(object) &&
-               CarriesCompilerDictionary(conversion.Operand, dictionaryLocals);
+               CarriesCompilerDictionary(conversion.Operand, dictionaryLocals, regionDictionaryInputs);
+    }
 
     internal static IEnumerable<PowerShellBoundExpression> EnumerateExpressions(PowerShellBoundExpression expression)
     {

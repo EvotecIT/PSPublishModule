@@ -5,7 +5,7 @@ namespace PowerForge;
 internal static partial class PowerShellBoundRegionCandidateSelector
 {
     /// <summary>
-    /// Selects a prefix that initializes and computes scalar locals. Every introduced local is
+    /// Selects a prefix that initializes and computes supported transfer locals. Every introduced local is
     /// transferred back in declaration order, including locals observed only by unbound later code.
     /// </summary>
     internal static bool TryCreateContinuation(
@@ -119,7 +119,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         if (assignment.Operation != PowerShellBoundMutationOperator.Assign ||
             assignment.Target.Kind != PowerShellSymbolKind.Local ||
             !IsSimpleVariableName(assignment.Target.Name) ||
-            !PowerShellStableScalarTypePolicy.IsSupported(assignment.Value.Type.ClrType) ||
+            !PowerShellRegionTransferTypePolicy.IsSupported(assignment.Value.Type.ClrType) ||
             authoredStatement is not AssignmentStatementAst authoredAssignment)
             return false;
         // Validation and transformation attributes can execute user behavior during binding.

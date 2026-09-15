@@ -3,6 +3,7 @@
 param(
     [Parameter(Mandatory)] [string] $EvidencePath,
     [ValidateSet('win-x64', 'linux-x64')] [string] $RuntimeIdentifier = 'win-x64',
+    [ValidateRange(1, 32)] [int] $MaxParallelThreads = 4,
     [switch] $NoBuild
 )
 
@@ -14,11 +15,13 @@ New-Item -ItemType Directory -Path $EvidencePath -Force | Out-Null
     runtimeIdentifier = $RuntimeIdentifier
     powerShellVersion = $PSVersionTable.PSVersion.ToString()
     windowsPowerShell51 = if ($IsWindows) { 'selected by numeric artifact tests' } else { 'unavailable; net472 numeric artifact cases not selected' }
+    maxParallelThreads = $MaxParallelThreads
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidencePath 'host-capabilities.json') -Encoding utf8
 $filter = 'Category=PowerShellCompilerGate|FullyQualifiedName~PowerShellCompilationCensusTests|FullyQualifiedName~PowerShellCompilationBoundPipelineTests|FullyQualifiedName~PowerShellCompilationFuzzTests'
 $testArguments = @('test', (Join-Path $repositoryRoot 'PowerForge.Tests/PowerForge.Tests.csproj'),
     '-c', 'Release', '--filter', $filter, '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath)
 if ($NoBuild) { $testArguments += @('--no-build', '--no-restore') }
+$testArguments += @('--', "xUnit.MaxParallelThreads=$MaxParallelThreads")
 Push-Location $repositoryRoot
 try {
     & dotnet @testArguments

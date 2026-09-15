@@ -18,6 +18,11 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
                 unary.Operand.ClrType == typeof(bool) && unary.Operation == PowerShellBoundUnaryOperator.LogicalNot,
             PowerShellLoweredClrInvocationExpression invocation => PowerShellClrPrimitiveInvocationPolicy.IsNonThrowing(
                 invocation.DeclaringType, invocation.MemberName, invocation.InvocationKind, invocation.ClrType, invocation.ParameterTypes),
+            // An empty Hashtable literal has no key/value evaluation, conversion, comparison,
+            // or duplicate-key route. Ordinary allocation failure is outside the modeled
+            // language-error contract, as it is for the other generated local containers.
+            PowerShellLoweredDictionaryExpression dictionary =>
+                dictionary.ClrType == typeof(System.Collections.Hashtable) && dictionary.Entries.Count == 0,
             _ => false
         };
 

@@ -54,9 +54,8 @@ internal static class PowerShellHybridRegionRewriter
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' source changed after semantic selection.");
             if (!HasSafeGraph(region.RegionGraph))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' does not carry a fail-closed typed boundary graph.");
-            if (region.InputLocals.Any(static local =>
-                    !local.HasTypeConstraint || string.IsNullOrWhiteSpace(local.TypeConstraintSyntax)))
-                throw new InvalidOperationException($"Promoted region '{region.RegionId}' is missing its authored input-local type constraint.");
+            if (region.InputLocals.Any(local => !HasInputLocalProvenance(regions, region, local)))
+                throw new InvalidOperationException($"Promoted region '{region.RegionId}' is missing its authored constraint or guarded-prefix input provenance.");
             var inputs = region.InputParameters.Select(static parameter => "${" + parameter.Name + "}")
                 .Concat(region.InputLocals.Select(static local => "${" + local.Name + "}"));
             if (region.RequiresPowerShellStopping)
@@ -124,6 +123,23 @@ internal static class PowerShellHybridRegionRewriter
     }
 
     private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+
+    private static bool HasInputLocalProvenance(
+        IReadOnlyList<PowerShellCompiledRegion> regions,
+        PowerShellCompiledRegion region,
+        PowerShellCompiledRegionLocal local)
+    {
+        if (local.HasTypeConstraint) return !string.IsNullOrWhiteSpace(local.TypeConstraintSyntax);
+        if (!string.IsNullOrWhiteSpace(local.TypeConstraintSyntax)) return false;
+        return regions.Any(prefix =>
+            prefix.StartOffset < region.StartOffset &&
+            prefix.RequiresLocalOwnershipGuard &&
+            prefix.SourceName.Equals(region.SourceName, StringComparison.OrdinalIgnoreCase) &&
+            prefix.SourceLine == region.SourceLine &&
+            prefix.ContinuationLocals.Any(output =>
+                output.Name.Equals(local.Name, StringComparison.OrdinalIgnoreCase) &&
+                output.TypeName.Equals(local.TypeName, StringComparison.Ordinal)));
+    }
 
     private static bool HasSafeGraph(PowerShellCompilationRegionGraph graph)
         => graph.ScriptBlocks.Count == 0 && graph.Regions.Count == 1 &&

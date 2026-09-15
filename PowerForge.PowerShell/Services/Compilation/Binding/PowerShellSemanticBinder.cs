@@ -244,7 +244,8 @@ internal sealed partial class PowerShellSemanticBinder
                     authoredStatements,
                     statementBindings,
                     lastFailedStatementIndex,
-                    out var candidate))
+                    out var candidate) &&
+                !regionCandidates.ContainsKey(candidate.RegionId))
                 regionCandidates[candidate.RegionId] = candidate;
             return null;
         }
