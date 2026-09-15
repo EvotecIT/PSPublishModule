@@ -507,6 +507,9 @@ public sealed partial class ProcessRunner : IProcessRunner
             }
         }
 
+        if (request.CaptureOutput || request.CaptureError)
+            DotNetProcessLifetime.DisableBuildServerReuse(startInfo);
+
 #if NET472
         startInfo.Arguments = string.Join(" ", request.Arguments.Select(QuoteArgument));
 #else
