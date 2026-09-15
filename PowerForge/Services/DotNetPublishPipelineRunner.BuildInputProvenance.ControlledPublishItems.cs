@@ -113,7 +113,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             offlinePackageSources.Add(offlinePackageSource);
             string[] distinctOfflinePackageSources = offlinePackageSources
-                .Distinct(FrameworkCompatibility.PathComparer)
+                .Distinct(FileSystemPathSafety.ExistingPathComparer)
                 .ToArray();
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
             new XDocument(
@@ -514,7 +514,7 @@ public sealed partial class DotNetPublishPipelineRunner
             })
             .GroupBy(
                 node => Path.GetFullPath(node.Request.ProjectPath),
-                FrameworkCompatibility.PathComparer)
+                FileSystemPathSafety.ExistingPathComparer)
             .ToDictionary(
                 group => group.Key,
                 group => group
@@ -528,7 +528,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         StringComparer.Ordinal)
                     .Select(context => (IReadOnlyDictionary<string, string>)context.First())
                     .ToArray(),
-                FrameworkCompatibility.PathComparer);
+                FileSystemPathSafety.ExistingPathComparer);
     }
 
     private static bool TryBuildControlledPublishProjectGraph(
@@ -547,7 +547,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string projectPath = Path.GetFullPath(node.Request.ProjectPath);
             string?[] selectedFrameworks = graphBuildNodes
                 .Where(candidate =>
-                    FrameworkCompatibility.PathComparer.Equals(
+                    FileSystemPathSafety.ExistingPathComparer.Equals(
                         Path.GetFullPath(candidate.Request.ProjectPath),
                         projectPath))
                 .Select(candidate => candidate.Request.TargetFramework)

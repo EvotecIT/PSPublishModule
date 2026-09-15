@@ -128,7 +128,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return nodes
             .GroupBy(
                 node => Path.GetFullPath(node.Request.ProjectPath),
-                FrameworkCompatibility.PathComparer)
+                FileSystemPathSafety.ExistingPathComparer)
             .Any(group => group
                 .Select(BuildControlledRestoreContextKey)
                 .Distinct(StringComparer.Ordinal)

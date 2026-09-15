@@ -217,7 +217,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(Path.GetDirectoryName)
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Cast<string>()
-                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .Distinct(FileSystemPathSafety.ExistingPathComparer)
                 .ToArray()
             : [taskInputBaseDirectory];
         if (inputBaseDirectories.Length == 0)

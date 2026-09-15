@@ -97,7 +97,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Where(reference => File.Exists(reference.ProjectPath))
                     .GroupBy(
                         reference => Path.GetFullPath(reference.ProjectPath),
-                        FrameworkCompatibility.PathComparer)
+                        FileSystemPathSafety.ExistingPathComparer)
                     .ToDictionary(
                         group => group.Key,
                         group => group
@@ -114,7 +114,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 StringComparer.Ordinal)
                             .Select(context => (IReadOnlyDictionary<string, string>)context.First())
                             .ToArray(),
-                        FrameworkCompatibility.PathComparer);
+                        FileSystemPathSafety.ExistingPathComparer);
             string rootProjectPath = Path.GetFullPath(request.ProjectPath);
             IReadOnlyDictionary<string, string> rootContext = BuildProjectContext(
                 request,
@@ -200,7 +200,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     customAfterMicrosoftCommonTargets!);
                 if (executableMsBuildInputs.Contains(
                         originalCustomAfterTargets,
-                        FrameworkCompatibility.PathComparer))
+                        FileSystemPathSafety.ExistingPathComparer))
                 {
                     if (!IsSameOrBelowBuildInputPath(originalCustomAfterTargets, originalGitRoot!))
                     {
@@ -385,7 +385,8 @@ public sealed partial class DotNetPublishPipelineRunner
             references = Array.Empty<EvaluatedProjectReference>();
             resolvedItemsJson = string.Empty;
             failureReason = exception.GetType().Name +
-                " while resolving controlled project references";
+                " while resolving controlled project references: " +
+                exception.Message;
             return false;
         }
         finally
@@ -560,9 +561,11 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledRoot,
         string originalRoot)
     {
-        StringComparison comparison =
-            FrameworkCompatibility.GetPathStringComparisonForPath(controlledRoot);
-        int index = value.IndexOf(controlledRoot, comparison);
+        int index = IndexOfPathWithFileSystemSemantics(
+            value,
+            controlledRoot,
+            0,
+            FileSystemPathSafety.ExistingPathComparer);
         if (index < 0)
             return value;
         var mapped = new StringBuilder(value.Length - controlledRoot.Length + originalRoot.Length);
@@ -572,7 +575,11 @@ public sealed partial class DotNetPublishPipelineRunner
             mapped.Append(value, offset, index - offset);
             mapped.Append(originalRoot);
             offset = index + controlledRoot.Length;
-            index = value.IndexOf(controlledRoot, offset, comparison);
+            index = IndexOfPathWithFileSystemSemantics(
+                value,
+                controlledRoot,
+                offset,
+                FileSystemPathSafety.ExistingPathComparer);
         }
         mapped.Append(value, offset, value.Length - offset);
         return mapped.ToString();
@@ -598,7 +605,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (hasProjectReferences && projectReferences.ValueKind != JsonValueKind.Array)
             return false;
         var nonOutputProjectPaths = new HashSet<string>(
-            FrameworkCompatibility.PathComparer);
+            FileSystemPathSafety.ExistingPathComparer);
         if (hasProjectReferences)
         {
             foreach (JsonElement item in projectReferences.EnumerateArray())
@@ -675,7 +682,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToDictionary(BuildEvaluatedProjectReferenceKey, StringComparer.Ordinal);
         var resolvedProjectPaths = new HashSet<string>(
             participatingResolvedReferences.Select(reference => Path.GetFullPath(reference.ProjectPath)),
-            FrameworkCompatibility.PathComparer);
+            FileSystemPathSafety.ExistingPathComparer);
         foreach (EvaluatedProjectReference captured in capturedReferences)
         {
             // A target-time addition may intentionally enter ProjectReference after the SDK's

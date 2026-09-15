@@ -254,9 +254,6 @@ public sealed partial class DotNetPublishPipelineRunner
         string? metadataName = null,
         string? evaluatedMetadataValue = null)
     {
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         string[] identityBaseDirectories =
         [
             Path.GetDirectoryName(declaringProjectPath)!,
@@ -272,7 +269,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     declaration,
                     evaluatedConditionProperties,
                     identityBaseDirectories,
-                    comparison,
                     identity.Value,
                     out bool identityMatchIsCertain);
             if (!identityMatches)
@@ -293,7 +289,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 declaration,
                 evaluatedConditionProperties,
                 identityBaseDirectories,
-                comparison,
                 exclude.Value,
                 out bool excludeMatchIsCertain);
             if (!excludeMatchIsCertain)
@@ -415,7 +410,6 @@ public sealed partial class DotNetPublishPipelineRunner
         PreprocessedProjectReferenceDeclaration declaration,
         IReadOnlyDictionary<string, string> evaluatedConditionProperties,
         IEnumerable<string> identityBaseDirectories,
-        StringComparison comparison,
         string itemSpec,
         out bool matchIsCertain)
     {
@@ -457,18 +451,17 @@ public sealed partial class DotNetPublishPipelineRunner
                     }
 
                     bool[] baseMatches = identityBaseDirectories.Distinct(
-                            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                            FileSystemPathSafety.ExistingPathComparer)
                         .Select(baseDirectory =>
                             TryResolveLiteralProjectReferencePath(
                                 baseDirectory,
                                 expandedItemSpec,
                                 out string? declaredPath) &&
-                            string.Equals(declaredPath, referencedPath, comparison) ||
+                            FileSystemPathSafety.ExistingPathComparer.Equals(declaredPath!, referencedPath) ||
                             TryMatchProjectReferenceGlob(
                                 baseDirectory,
                                 expandedItemSpec,
-                                referencedPath,
-                                comparison))
+                                referencedPath))
                         .ToArray();
                     if (baseMatches.Distinct().Count() > 1)
                     {

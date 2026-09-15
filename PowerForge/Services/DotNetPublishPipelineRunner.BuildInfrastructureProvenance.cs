@@ -35,11 +35,10 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             string fullPath = Path.GetFullPath(path);
-            StringComparison comparison = IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
             if (!(expectedOutputPaths ?? Array.Empty<string>()).Any(expectedPath =>
-                    string.Equals(Path.GetFullPath(expectedPath), fullPath, comparison)))
+                    FileSystemPathSafety.ExistingPathComparer.Equals(
+                        Path.GetFullPath(expectedPath),
+                        fullPath)))
             {
                 return false;
             }
@@ -135,13 +134,10 @@ public sealed partial class DotNetPublishPipelineRunner
         VerifiedPackageInputCatalog? verifiedPackages,
         IDictionary<string, bool> cache)
     {
-        StringComparer comparer = IsWindows()
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
         string[] fullCandidatePaths = candidatePaths
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
-            .Distinct(comparer)
+            .Distinct(FileSystemPathSafety.ExistingPathComparer)
             .ToArray();
         if (fullCandidatePaths.Length == 0)
             return true;
@@ -181,7 +177,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedMsBuildInputs,
                     effectiveGlobalProperties,
                     new Dictionary<string, IReadOnlyDictionary<string, string>[]>(
-                        IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                        FileSystemPathSafety.ExistingPathComparer)
                     {
                         [Path.GetFullPath(request.ProjectPath)] = [controlledEvaluationProperties]
                     },
@@ -374,8 +370,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         string BuildCacheKey(string path)
-            => request.BuildVisitKey() + "\0" +
-               (IsWindows() ? path.ToUpperInvariant() : path);
+            => request.BuildVisitKey() + "\0" + path;
 
         bool CacheAll(bool result)
         {
@@ -488,20 +483,18 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
                 controlledEntries.Add((controlledSource, target));
-                if (string.Equals(
+                if (FileSystemPathSafety.ExistingPathComparer.Equals(
                         fullSource,
-                        originalRoot,
-                        IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        originalRoot))
                 {
                     mappedOriginalRoot = target;
                 }
             }
         }
 
-        if (!controlledEntries.Any(entry => string.Equals(
+        if (!controlledEntries.Any(entry => FileSystemPathSafety.ExistingPathComparer.Equals(
                 entry.Source,
-                NormalizeBuildInputPathRoot(controlledSourceRoot),
-                IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
+                NormalizeBuildInputPathRoot(controlledSourceRoot))))
         {
             controlledEntries.Add((NormalizeBuildInputPathRoot(controlledSourceRoot), mappedOriginalRoot));
         }
@@ -517,7 +510,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         string outputDirectory = Path.GetDirectoryName(Path.GetFullPath(path))!;
         foreach (string candidateDirectory in new[] { projectDirectory, outputDirectory }
-                     .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+                     .Distinct(FileSystemPathSafety.ExistingPathComparer))
         {
             string? gitRoot = ReadGitText(candidateDirectory, "rev-parse --show-toplevel");
             if (string.IsNullOrWhiteSpace(gitRoot))
@@ -545,10 +538,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             string? parent = Path.GetDirectoryName(current);
             if (string.IsNullOrWhiteSpace(parent) ||
-                string.Equals(
-                    parent,
-                    current,
-                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                string.Equals(parent, current, StringComparison.Ordinal))
             {
                 return current;
             }
@@ -579,10 +569,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar);
         return trimmed.Length == 0 ||
-               string.Equals(
-                   trimmed,
-                   trimmedPathRoot,
-                   IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+               string.Equals(trimmed, trimmedPathRoot, StringComparison.Ordinal)
             ? pathRoot
             : trimmed;
     }
@@ -626,7 +613,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string fullPath = Path.GetFullPath(path);
         var roots = new HashSet<string>(
             evaluatedRoots ?? Array.Empty<string>(),
-            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            FileSystemPathSafety.ExistingPathComparer);
         AddEnvironmentDirectory(roots, "DOTNET_ROOT");
         AddEnvironmentDirectory(roots, "DOTNET_ROOT(x86)");
         AddEnvironmentDirectory(roots, "MSBuildSDKsPath");
@@ -676,19 +663,30 @@ public sealed partial class DotNetPublishPipelineRunner
             roots.Add(Path.GetFullPath(value));
     }
 
-    private static bool IsSameOrBelowBuildInputPath(string path, string root)
+    internal static bool IsSameOrBelowBuildInputPath(string path, string root)
+        => IsSameOrBelowBuildInputPath(path, root, FileSystemPathSafety.ExistingPathComparer);
+
+    internal static bool IsSameOrBelowBuildInputPath(
+        string path,
+        string root,
+        IEqualityComparer<string> pathComparer)
     {
         string fullRoot = NormalizeBuildInputPathRoot(root);
         string fullPath = NormalizeBuildInputPathRoot(path);
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        string separator = fullRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
-                           fullRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
-            ? string.Empty
-            : Path.DirectorySeparatorChar.ToString();
-        return string.Equals(fullPath, fullRoot, comparison) ||
-               fullPath.StartsWith(fullRoot + separator, comparison);
+        if (fullPath.Length < fullRoot.Length ||
+            !pathComparer.Equals(fullPath.Substring(0, fullRoot.Length), fullRoot))
+        {
+            return false;
+        }
+        if (fullPath.Length == fullRoot.Length ||
+            fullRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+            fullRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return fullPath[fullRoot.Length] == Path.DirectorySeparatorChar ||
+               fullPath[fullRoot.Length] == Path.AltDirectorySeparatorChar;
     }
 
     private sealed class ProjectEvaluationRequest
