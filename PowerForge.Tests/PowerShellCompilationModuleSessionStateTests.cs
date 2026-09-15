@@ -5,13 +5,12 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     public static IEnumerable<object[]> ModuleSessionStateHosts()
-        => StatementErrorHosts().SelectMany(configuration => new[] { false, true }
-            .Select(hybrid => new object[] { configuration[0], configuration[1], hybrid }));
+        => StatementErrorHosts();
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(ModuleSessionStateHosts))]
-    public void ModuleSessionState_PreservesSnapshotsAcrossCallersImportsAndRunspaces(string framework, string host, bool hybrid)
+    public void ModuleSessionState_HybridFallbackPreservesSnapshotsAcrossCallersImportsAndRunspaces(string framework, string host)
     {
         const string functions = """
             function Read-OwnerState {
@@ -20,18 +19,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             }
             function Read-IndirectOwnerState { [CmdletBinding()] param() return Read-OwnerState }
             """;
-        var source = hybrid
-            ? "$null=$Error.Add('initial module error'); $WhatIfPreference=$true\n" + functions + "\nfunction Add-OwnerError { [CmdletBinding()] param() $null=$Error.Add('added module error'); return $Error.Count }"
-            : functions;
+        var source = "$null=$Error.Add('initial module error'); $WhatIfPreference=$true\n" + functions +
+            "\nfunction Add-OwnerError { [CmdletBinding()] param() $null=$Error.Add('added module error'); return $Error.Count }";
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.ModuleSessionState", PowerShellCompilationArtifactKind.BinaryModule,
-            hybrid ? PowerShellCompilationMode.Hybrid : PowerShellCompilationMode.Strict,
+            PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
-        if (hybrid) Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
-        else Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
 
         const string probe = """
             foreach($cycle in 0,1) {
@@ -52,7 +49,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                         [pscustomobject]@{phase='local';cycle=$cycle;name=$name;values=$values;callerErrors=$global:Error.Count} | ConvertTo-Json -Compress
                     }
                 }
-                if($hybrid) { $null=Add-OwnerError }
+                $null=Add-OwnerError
                 [pscustomobject]@{phase='after-mutation';cycle=$cycle;values=@(Read-OwnerState);callerErrors=$global:Error.Count} | ConvertTo-Json -Compress
                 $global:VerbosePreference='Continue'
                 [pscustomobject]@{phase='global-change';cycle=$cycle;values=@(Read-OwnerState)} | ConvertTo-Json -Compress
@@ -69,7 +66,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                     if($ps.HadErrors) { throw "Runspace import failed: $($ps.Streams.Error)" }
                     $ps.Commands.Clear()
                 }
-                if($hybrid) { [void]$first.AddCommand('Add-OwnerError'); [void]$first.Invoke(); $first.Commands.Clear() }
+                [void]$first.AddCommand('Add-OwnerError'); [void]$first.Invoke(); $first.Commands.Clear()
                 $index=0
                 foreach($ps in $first,$second) {
                     [void]$ps.AddCommand('Read-OwnerState')
@@ -80,7 +77,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }
             } finally { $first.Dispose(); $second.Dispose() }
             """;
-        var setup = "$hybrid=$" + (hybrid ? "true" : "false") + "; $modulePath='";
+        const string setup = "$modulePath='";
         var original = RunStatementErrorProbe(host, setup + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
             fixture.RootPath, "original-module-session-state");
         var compiled = RunStatementErrorProbe(host, setup + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,

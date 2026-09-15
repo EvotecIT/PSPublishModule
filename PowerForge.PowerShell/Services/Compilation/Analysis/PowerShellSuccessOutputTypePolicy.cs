@@ -27,6 +27,14 @@ internal static class PowerShellSuccessOutputTypePolicy
         // Captured regions do not contribute records to the enclosing command.
         if (statement is PowerShellBoundCommandRegionStatement) return typeof(object);
         var expression = PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement);
+        // An unconsumed local command writes directly to its caller's success stream.
+        // Its invocation has a void CLR value contract, but still contributes the
+        // target command's record metadata.
+        if (expression is null && statement is PowerShellBoundReturnStatement
+            {
+                Expression: PowerShellBoundInvocationExpression streamedCall
+            } && functions.TryGetValue(streamedCall.Target.StableKey, out var streamedTarget))
+            return Resolve(streamedTarget, functions, visiting);
         if (expression is null) return null;
         if (statement is PowerShellBoundStreamWriteStatement { Provider.Adapter.EntryPoint: { } entryPoint })
             return entryPoint.ResultType switch

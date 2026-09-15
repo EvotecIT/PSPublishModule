@@ -36,7 +36,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 fixture.ScriptPath, fixture.OutputPath, "Generated.ModuleAllScopePreferences", PowerShellCompilationArtifactKind.BinaryModule,
                 PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-            Assert.Equal(1, result.Manifest!.CompiledMethods);
+            Assert.Equal(0, result.Manifest!.CompiledMethods);
+            Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
             var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
                 fixture.RootPath, "original-all-scope-preferences");
             var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,

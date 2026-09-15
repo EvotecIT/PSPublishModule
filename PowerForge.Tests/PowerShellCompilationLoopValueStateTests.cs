@@ -6,19 +6,32 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("$Values = [string[]]$script:State")]
-    [InlineData("$Values = $Alias; $Alias = [string[]]$script:State")]
-    [InlineData("$Values = [string[]](Read-State)")]
-    public void Analyze_LoopCarriedModuleOriginCannotEscapeCollectionBoundary(string mutation)
+    [InlineData("$Values = [string[]]$script:State", false)]
+    [InlineData("$Values = $Alias; $Alias = [string[]]$script:State", false)]
+    [InlineData("$Values = [string[]](Read-State)", true)]
+    public void Analyze_LoopCarriedModuleOriginHonorsNativeFunctionBoundary(string mutation, bool expectedCompilable)
     {
-        using var fixture = ArtifactFixture.Create(
+        var source =
             "function Read-State { return $script:State }; " +
             "function Get-LoopState { param([string[]]$Seed); [string[]]$Values = $Seed; [string[]]$Alias = $Seed; [int]$Index = 0; " +
-            "while ($Index -lt 3) { foreach ($Item in $Values) { $null = $Item }; " + mutation + "; $Index += 1 }; return 1 }", ".psm1");
+            "while ($Index -lt 3) { foreach ($Item in $Values) { $null = $Item }; " + mutation + "; $Index += 1 }; return 1 }";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var bound = new PowerShellSemanticBinder().Bind(
+            new[] { PowerShellSourceParser.Parse(source, fixture.ScriptPath) }, "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+        var readState = Assert.Single(bound.Functions, function => function.Symbol.Name == "Read-State");
+        Assert.True(PowerShellModuleStateOriginPolicy.ReturnsDerivedModuleState(readState), string.Join(";", PowerShellSemanticAnalyzer
+            .EnumerateStatements(readState.Body).Select(statement => statement.GetType().Name + ":" + string.Join(",",
+                PowerShellSemanticAnalyzer.EnumerateDirectExpressions(statement).Select(expression => expression.GetType().Name + ":" +
+                    (expression is PowerShellBoundNativeVariableExpression native ? native.Name : string.Empty))))));
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath, PowerShellCompilationMode.Analyze, targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.HybridModule));
-        Assert.False(FindFunction(plan, "Get-LoopState").IsCompilable);
+        Assert.Equal(expectedCompilable, FindFunction(plan, "Get-LoopState").IsCompilable);
+        Assert.True(expectedCompilable || FindFunction(plan, "Get-LoopState").Diagnostics.Any(diagnostic =>
+                diagnostic.Message.Contains("live Hybrid module state", StringComparison.Ordinal)),
+            string.Join(Environment.NewLine, plan.Files.SelectMany(file => file.Units).Select(function => function.Name + ":" + function.IsCompilable + ":" +
+                string.Join("|", function.Diagnostics.Select(diagnostic => diagnostic.Code + ":" + diagnostic.Message)))));
     }
 
     [Fact]

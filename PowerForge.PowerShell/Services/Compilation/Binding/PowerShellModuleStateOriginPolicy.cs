@@ -95,6 +95,8 @@ internal static class PowerShellModuleStateOriginPolicy
                 Kind: PowerShellRuntimeStateIntrinsicKind.ModuleVariable
             } ||
            expression is PowerShellBoundVariableExpression { IsModuleStateDerived: true } ||
+           expression is PowerShellBoundNativeVariableExpression { Name: var name } &&
+               name.StartsWith("script:", StringComparison.OrdinalIgnoreCase) ||
            expression is PowerShellBoundInvocationExpression { ReturnsModuleStateDerived: true };
 
     private static bool IsConcreteTypedReceiver(Type type)

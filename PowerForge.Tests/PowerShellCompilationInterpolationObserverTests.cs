@@ -54,6 +54,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(original.StandardError);
         Assert.Empty(compiled.StandardError);
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
-        Assert.Equal(1, result.Manifest.CompiledMethods);
+        Assert.Equal(expression.StartsWith("Expand-Leaf", StringComparison.Ordinal) ? 2 : 1, result.Manifest.CompiledMethods);
     }
 }
