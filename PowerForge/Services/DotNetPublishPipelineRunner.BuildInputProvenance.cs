@@ -874,12 +874,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         buildPlan!.EnvironmentVariables,
                         buildPlan.ControlledBuildEnvironmentVariableNames,
                         buildPlan.TrustedBuildPackages,
-                        sdkPackageEvidenceGlobalProperties: combination.Style == DotNetPublishStyle.SelfContained
-                            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                            {
-                                ["PublishSingleFile"] = "true"
-                            }
-                            : null,
+                        sdkPackageEvidenceGlobalProperties:
+                            BuildSdkPackageEvidenceProperties(combination.Style),
                         requiresPrebuiltProjectReferenceOutputProof:
                             RequiresPrebuiltProjectReferenceOutputProof(
                                 buildPlan,
@@ -1009,6 +1005,28 @@ public sealed partial class DotNetPublishPipelineRunner
         return properties;
     }
 
+    private static IReadOnlyDictionary<string, string>? BuildSdkPackageEvidenceProperties(
+        DotNetPublishStyle style)
+    {
+        if (IsPortableStyle(style))
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                // The real portable publish is single-file but not necessarily trimmed. The SDK derives
+                // its linker-pack requirement from the single-file analyzer without changing the
+                // consumer project's conditional restore graph.
+                ["PublishSingleFile"] = "true"
+            };
+        }
+
+        return style == DotNetPublishStyle.SelfContained
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PublishSingleFile"] = "true"
+            }
+            : null;
+    }
+
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageArchiveCache verifiedPackageArchives,
@@ -1027,6 +1045,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-verbosity:quiet",
             "-getProperty:TargetFramework",
             "-getProperty:TargetFrameworks",
+            "-getProperty:RuntimeIdentifier",
             "-getProperty:TargetPlatformVersion",
             "-getProperty:MSBuildAllProjects",
             "-getProperty:BaseOutputPath",

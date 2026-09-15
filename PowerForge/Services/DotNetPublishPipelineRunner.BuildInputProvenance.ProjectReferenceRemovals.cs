@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -105,10 +106,13 @@ public sealed partial class DotNetPublishPipelineRunner
                                  assignment.DefiningProjectPath,
                                  assignment.Value))
                     {
-                        if (candidate.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
-                            candidate.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
-                            candidate.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
-                            !TryUnescapeMsBuildLiteral(candidate, out string? decoded))
+                        string effectiveCandidate = RemoveProjectReferenceMetadataSelfReference(
+                            candidate,
+                            metadataName);
+                        if (effectiveCandidate.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                            effectiveCandidate.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                            effectiveCandidate.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
+                            !TryUnescapeMsBuildLiteral(effectiveCandidate, out string? decoded))
                         {
                             return false;
                         }
@@ -172,6 +176,25 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static string RemoveProjectReferenceMetadataSelfReference(string value, string metadataName)
+    {
+        return Regex.Replace(
+            value,
+            @"%\(\s*(?:([A-Za-z_][A-Za-z0-9_.-]*)\.)?([A-Za-z_][A-Za-z0-9_.-]*)\s*\)",
+            match =>
+            {
+                string itemName = match.Groups[1].Value;
+                string referencedMetadataName = match.Groups[2].Value;
+                bool isSelfReference = referencedMetadataName.Equals(
+                                           metadataName,
+                                           StringComparison.OrdinalIgnoreCase) &&
+                                       (itemName.Length == 0 ||
+                                        itemName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase));
+                return isSelfReference ? string.Empty : match.Value;
+            },
+            RegexOptions.CultureInvariant);
     }
 
     private static bool HasUncertainProjectReferencePropertyRemoval(

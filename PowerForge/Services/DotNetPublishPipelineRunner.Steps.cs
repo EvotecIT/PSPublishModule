@@ -705,6 +705,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 merged[kv.Key] = kv.Value;
         }
 
+        // A RuntimeIdentifiers list from any configuration layer is a restore graph declaration.
+        // Concrete build and publish steps already carry one explicit RuntimeIdentifier and must
+        // not request every restore-only runtime pack again (notably for platform-specific desktop
+        // frameworks). Apply this after target/style overrides so they cannot reintroduce it.
+        if (!string.IsNullOrWhiteSpace(runtime))
+            merged.Remove("RuntimeIdentifiers");
+
         if (!string.IsNullOrWhiteSpace(plan.SourceRevision))
         {
             // Command-line global properties ensure the publisher-signed ProductVersion carries the exact source object ID.
