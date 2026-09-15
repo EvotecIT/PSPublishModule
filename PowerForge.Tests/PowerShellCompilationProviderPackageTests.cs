@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Xml.Linq;
 using PowerForge;
 using Xunit;
 
@@ -13,6 +14,38 @@ namespace PowerForge.Tests;
 [Trait("Category", "PowerShellCompilation")]
 public sealed partial class PowerShellCompilationProviderPackageTests
 {
+    [Fact]
+    public void SdkBuildWritesRepositoryProvenanceToNuspec()
+    {
+        using var fixture = ProviderFixture.Create();
+        var packagePath = fixture.PackagePath("repository-provenance.nupkg");
+        const string repositoryUrl = "https://github.com/EvotecIT/PSPublishModule";
+        var repositoryCommit = new string('a', 40);
+
+        new PowerShellCompilationProviderPackageBuilder().Build(
+            new PowerShellCompilationProviderPackageBuildRequest(packagePath, fixture.Manifest)
+            {
+                RepositoryUrl = repositoryUrl,
+                RepositoryCommit = repositoryCommit,
+                Assemblies = new[]
+                {
+                    new PowerShellCompilationProviderAssemblyInput(
+                        typeof(Generic.Semantic.Provider.NoticeAdapter).Assembly.Location,
+                        "lib/net8.0/Generic.Semantic.Provider.dll")
+                }
+            });
+
+        using var archive = ZipFile.OpenRead(packagePath);
+        var nuspec = Assert.Single(archive.Entries, static entry =>
+            entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
+        using var stream = nuspec.Open();
+        var repository = Assert.Single(XDocument.Load(stream).Descendants(), static element =>
+            element.Name.LocalName == "repository");
+        Assert.Equal("git", repository.Attribute("type")?.Value);
+        Assert.Equal(repositoryUrl, repository.Attribute("url")?.Value);
+        Assert.Equal(repositoryCommit, repository.Attribute("commit")?.Value);
+    }
+
     [Fact]
     public void SdkConformanceKitProducesOrderStableEvidenceAndRejectsAmbiguousRegistration()
     {
