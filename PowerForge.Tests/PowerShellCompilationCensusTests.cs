@@ -421,8 +421,23 @@ public sealed partial class PowerShellCompilationCensusTests
         {
             var runner = new PowerShellCompilationCensusRunner();
             var baseline = runner.Run(new[] { source }, "net10.0");
+            var differentTargetBaseline = new PowerShellCompilationCensusResult(
+                "net472",
+                baseline.Products,
+                baseline.Regressions,
+                baseline.Frontier,
+                baseline.CoBlockers,
+                baseline.SourceDrifts,
+                baseline.FunctionFrontier,
+                baseline.FunctionCoBlockers)
+            {
+                ArtifactKind = baseline.ArtifactKind,
+                Mode = baseline.Mode,
+                SemanticProfileId = baseline.SemanticProfileId,
+                Recurse = baseline.Recurse
+            };
 
-            var exception = Assert.Throws<ArgumentException>(() => runner.Run(new[] { source }, "net10.0", baseline));
+            var exception = Assert.Throws<ArgumentException>(() => runner.Run(new[] { source }, "net10.0", differentTargetBaseline));
             Assert.Contains("target framework", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally

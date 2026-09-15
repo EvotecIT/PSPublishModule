@@ -8,8 +8,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellCompilationRegionCandidate
 {
-    /// <summary>Creates immutable region-candidate decision evidence.</summary>
-    [JsonConstructor]
+    /// <summary>Creates region-candidate evidence using the original public constructor contract.</summary>
     public PowerShellCompilationRegionCandidate(
         string regionId,
         string sourceSha256,
@@ -30,6 +29,35 @@ public sealed class PowerShellCompilationRegionCandidate
         PowerShellCompilationRegionGraph? regionGraph,
         IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null,
         bool requiresLocalOwnershipGuard = false)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            startOffset, endOffset, startLine, startColumn, endLine, endColumn, promoted, decisionCode,
+            reason, generatedName, regionGraph, continuationLocals, requiresLocalOwnershipGuard, inputLocals: null)
+    {
+    }
+
+    /// <summary>Creates immutable region-candidate decision evidence.</summary>
+    [JsonConstructor]
+    public PowerShellCompilationRegionCandidate(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        bool promoted,
+        string decisionCode,
+        string reason,
+        string generatedName,
+        PowerShellCompilationRegionGraph? regionGraph,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -49,6 +77,7 @@ public sealed class PowerShellCompilationRegionCandidate
         GeneratedName = generatedName ?? string.Empty;
         RegionGraph = regionGraph;
         ContinuationLocals = Array.AsReadOnly((continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
+        InputLocals = Array.AsReadOnly((inputLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
         RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
     }
 
@@ -88,6 +117,9 @@ public sealed class PowerShellCompilationRegionCandidate
     public PowerShellCompilationRegionGraph? RegionGraph { get; }
     /// <summary>Ordered scalar locals transferred to the continuation, or empty for a terminal candidate.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
+
+    /// <summary>Ordered established scalar locals transferred into the candidate.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocal> InputLocals { get; }
 
     /// <summary>Whether a promoted helper requires fresh invocation-local targets and retains the original statements when that proof fails.</summary>
     public bool RequiresLocalOwnershipGuard { get; }

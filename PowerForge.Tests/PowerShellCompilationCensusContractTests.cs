@@ -89,7 +89,7 @@ public sealed partial class PowerShellCompilationCensusTests
         var current = runner.Run(new[] { good });
         var legacy = new PowerShellCompilationCensusResult(null, current.Products, current.Regressions, sourceDrifts: null);
         Assert.True(runner.Run(new[] { good }, baseline: legacy).Passed);
-        Assert.Throws<ArgumentException>(() => runner.Run(new[] { good }, "net10.0", legacy));
+        Assert.Throws<ArgumentException>(() => runner.Run(new[] { good }, "net472", legacy));
     }
 
     private sealed class CensusInputFixture : IDisposable

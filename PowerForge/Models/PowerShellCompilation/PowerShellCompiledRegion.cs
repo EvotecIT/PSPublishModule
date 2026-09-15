@@ -8,8 +8,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellCompiledRegion
 {
-    /// <summary>Creates immutable promoted-region evidence.</summary>
-    [JsonConstructor]
+    /// <summary>Creates promoted-region evidence using the original public constructor contract.</summary>
     public PowerShellCompiledRegion(
         string regionId,
         string sourceSha256,
@@ -32,6 +31,38 @@ public sealed class PowerShellCompiledRegion
         IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null,
         bool requiresPowerShellStopping = false,
         bool requiresLocalOwnershipGuard = false)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            generatedName, returnType, inputParameters, startOffset, endOffset, startLine, startColumn,
+            endLine, endColumn, sourceMap, regionGraph, documentId, continuationLocals,
+            requiresPowerShellStopping, requiresLocalOwnershipGuard, inputLocals: null)
+    {
+    }
+
+    /// <summary>Creates immutable promoted-region evidence.</summary>
+    [JsonConstructor]
+    public PowerShellCompiledRegion(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        string generatedName,
+        string returnType,
+        IReadOnlyList<PowerShellCompilationParameter>? inputParameters,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
+        PowerShellCompilationRegionGraph regionGraph,
+        string documentId,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresPowerShellStopping,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -52,6 +83,7 @@ public sealed class PowerShellCompiledRegion
         RegionGraph = regionGraph ?? new PowerShellCompilationRegionGraph(Array.Empty<PowerShellCompilationRegion>());
         DocumentId = documentId ?? string.Empty;
         ContinuationLocals = Array.AsReadOnly((continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
+        InputLocals = Array.AsReadOnly((inputLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
         RequiresPowerShellStopping = requiresPowerShellStopping;
         RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
     }
@@ -95,6 +127,9 @@ public sealed class PowerShellCompiledRegion
 
     /// <summary>Ordered scalar locals restored before PowerShell resumes; empty for a terminal return.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
+
+    /// <summary>Ordered established scalar locals transferred into this region.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocal> InputLocals { get; }
 
     /// <summary>Whether the helper requires the retained invocation's native loop-stopping callback.</summary>
     public bool RequiresPowerShellStopping { get; }

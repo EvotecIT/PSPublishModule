@@ -11,15 +11,27 @@ namespace PowerForge.Generated.Runtime
     /// <summary>Installs compiler-selected regions while preserving the retained statements' original AST extents.</summary>
     public static class PowerShellHybridRegionHost
     {
+        /// <summary>Creates a retained function using the original single-prefix runtime contract.</summary>
+        public static ScriptBlock Create(PSModuleInfo module, string source, string sourcePath,
+            int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded, string[] localNames)
+            => Create(module, source, sourcePath, functionStart, functionEnd, starts, ends, replacements, guarded,
+                Array.Empty<string>(), Array.Empty<string>(), starts == null ? Array.Empty<int>() : new int[starts.Length], localNames);
+
         /// <summary>Creates a module-owned retained function with immutable statement-aligned region replacements.</summary>
         /// <remarks>The replacements are compiler output. Runtime validation checks shape and source identity, not semantic eligibility.</remarks>
         public static ScriptBlock Create(PSModuleInfo module, string source, string sourcePath,
-            int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded, string[] localNames)
+            int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded,
+            string[] inputLocalNames, string[] inputLocalTypeNames, int[] inputLocalCounts, string[] localNames)
         {
             if (module == null) throw new ArgumentNullException(nameof(module));
             if (starts == null || ends == null || replacements == null || guarded == null ||
                 starts.Length == 0 || starts.Length != ends.Length || starts.Length != replacements.Length || starts.Length != guarded.Length)
                 throw new ArgumentException("Every retained region requires a complete replacement contract.");
+            if (inputLocalNames == null || inputLocalTypeNames == null || inputLocalCounts == null ||
+                inputLocalNames.Length != inputLocalTypeNames.Length || inputLocalCounts.Length != starts.Length ||
+                inputLocalCounts.Any(static count => count < 0) || inputLocalCounts.Sum() != inputLocalNames.Length ||
+                inputLocalCounts[0] != 0)
+                throw new ArgumentException("Every detached region requires a complete live input-local contract.", nameof(inputLocalCounts));
             if (localNames == null || localNames.Length == 0 || !guarded[0] || guarded.Skip(1).Any(value => value))
                 throw new ArgumentException("The retained region host requires one guarded initialization prefix.", nameof(guarded));
             var document = PowerShellNativeFunctionHost.ParseSelectedDocument(source, sourcePath, functionStart, functionEnd);
@@ -39,6 +51,7 @@ namespace PowerForge.Generated.Runtime
             var statements = new List<StatementAst>();
             var retainedStatements = new List<StatementAst>();
             var next = 0;
+            var inputLocalOffset = 0;
             for (var region = 0; region < starts.Length; region++)
             {
                 while (next < authored.Count && authored[next].Extent.StartOffset < starts[region])
@@ -57,7 +70,15 @@ namespace PowerForge.Generated.Runtime
                 if (replacement.ParamBlock != null || replacement.BeginBlock != null || replacement.ProcessBlock != null ||
                     replacement.DynamicParamBlock != null || replacement.EndBlock?.Statements.Count != 1)
                     throw new ArgumentException("A retained region replacement requires one compiler-owned statement.", nameof(replacements));
-                var statement = replacement.EndBlock.Statements[0];
+                StatementAst statement = replacement.EndBlock.Statements[0];
+                var inputCount = inputLocalCounts[region];
+                if (inputCount > 0)
+                {
+                    var names = inputLocalNames.Skip(inputLocalOffset).Take(inputCount).ToArray();
+                    var types = inputLocalTypeNames.Skip(inputLocalOffset).Take(inputCount).ToArray();
+                    statement = CreateInputLocalChoice(statement, original, names, types, body.EndBlock.Extent, sourcePath);
+                }
+                inputLocalOffset += inputCount;
                 statements.Add((StatementAst)statement.Copy());
                 if (guarded[region]) retainedStatements.AddRange(original);
                 else retainedStatements.Add((StatementAst)statement.Copy());
@@ -97,6 +118,24 @@ namespace PowerForge.Generated.Runtime
             }
             InstallChoice(originalScript, compiledScript, retainedScript, localNames);
             return originalScript;
+        }
+
+        /// <summary>Checks a detached region's transferred locals at the region's live execution boundary.</summary>
+        public static bool CanUpdateLocals(SessionState session, string[] names, string[] typeNames)
+            => PowerShellRegionLocalOwnership.CanUpdateLocals(session, names, typeNames);
+
+        private static StatementAst CreateInputLocalChoice(StatementAst replacement, IReadOnlyList<StatementAst> original,
+            string[] names, string[] typeNames, IScriptExtent extent, string sourcePath)
+        {
+            static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+            var conditionSource = "if ([PowerForge.Generated.Runtime.PowerShellHybridRegionHost]::CanUpdateLocals(" +
+                "$ExecutionContext.SessionState, [string[]]@(" + string.Join(", ", names.Select(Quote)) +
+                "), [string[]]@(" + string.Join(", ", typeNames.Select(Quote)) + "))) { }";
+            var condition = (IfStatementAst)PowerShellNativeFunctionHost.Parse(conditionSource, sourcePath).EndBlock.Statements[0];
+            return new IfStatementAst(extent,
+                new[] { Tuple.Create((PipelineBaseAst)condition.Clauses[0].Item1.Copy(),
+                    new StatementBlockAst(extent, new[] { (StatementAst)replacement.Copy() }, null)) },
+                new StatementBlockAst(extent, original.Select(static item => (StatementAst)item.Copy()), null));
         }
 
         private static void InstallChoice(ScriptBlock original, ScriptBlock compiled, ScriptBlock? retained, string[] localNames)

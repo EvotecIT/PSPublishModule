@@ -228,7 +228,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             var assembly = new[] { new PowerShellCompilationArtifactFile { Path = Path.Combine(root, "out", "TargetProof.dll"), Role = "Primary" } };
 
             var accepted = Verify(assembly, "net10.0");
-            var mismatch = Assert.Throws<InvalidOperationException>(() => Verify(assembly, "net10.0"));
+            var mismatch = Assert.Throws<InvalidOperationException>(() => Verify(assembly, "net472"));
 
             Assert.True(accepted.Verified);
             Assert.Equal("net10.0", accepted.TargetFramework);

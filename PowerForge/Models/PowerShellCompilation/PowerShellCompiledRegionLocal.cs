@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
-/// <summary>A scalar local restored to the retained PowerShell function after a typed prefix.</summary>
+/// <summary>A scalar local transferred across a retained PowerShell and typed-region boundary.</summary>
 public sealed class PowerShellCompiledRegionLocal
 {
     /// <summary>Creates an immutable scalar continuation transfer.</summary>

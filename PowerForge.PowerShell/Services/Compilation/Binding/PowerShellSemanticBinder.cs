@@ -218,11 +218,20 @@ internal sealed partial class PowerShellSemanticBinder
                 locals,
                 authoredStatements,
                 statementBindings);
+        PowerShellBoundRegionCandidate? guardedPrefixCandidate = null;
         if (regionCandidates is not null &&
             PowerShellBoundRegionCandidateSelector.TryCreateContinuation(
                 document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
                 out var continuationCandidate))
+        {
             regionCandidates[continuationCandidate.RegionId] = continuationCandidate;
+            guardedPrefixCandidate = continuationCandidate;
+        }
+        if (regionCandidates is not null && guardedPrefixCandidate is not null &&
+            PowerShellBoundRegionCandidateSelector.TryCreateDetachedContinuation(
+                document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
+                guardedPrefixCandidate, out var detachedContinuationCandidate))
+            regionCandidates[detachedContinuationCandidate.RegionId] = detachedContinuationCandidate;
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
             if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&

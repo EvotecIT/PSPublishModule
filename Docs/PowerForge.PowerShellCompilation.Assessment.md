@@ -1,6 +1,6 @@
 # PowerShell compiler readiness assessment
 
-Updated: 2026-09-15. The active continuation is preserved on `fix/compiler-audit-milestones` without a pull request. Its reconciled candidate passes 661/661 compiler-category tests and all six Strict `net10.0` `win-x64` corpus programs. The current compiler support matrix is `net10.0`/PowerShell 7.6 plus `net472`/Windows PowerShell 5.1; `net8.0` is retired from forward-looking compiler targets because Microsoft support ends on 10 November 2026. The 2026-09-06 and 2026-09-07 sections below retain their original evidence dates, revisions, and pre-retirement measurements. None of these results establishes current public-package availability.
+Updated: 2026-09-15. The active continuation is preserved on `fix/compiler-audit-milestones` without a pull request. Its reconciled candidate passes 877/877 compiler-category tests and all six Strict `net10.0` `win-x64` corpus programs. The current compiler support matrix is `net10.0`/PowerShell 7.6 plus `net472`/Windows PowerShell 5.1; `net8.0` is retired from forward-looking compiler targets because Microsoft support ends on 10 November 2026. The 2026-09-06 and 2026-09-07 sections below retain their original evidence dates, revisions, and pre-retirement measurements. None of these results establishes current public-package availability.
 
 ## Current audit: foundations exist, useful coverage is still narrow
 
@@ -10,7 +10,7 @@ The architecture is substantially ahead of the workload coverage. Source inspect
 | --- | --- | --- |
 | Artifact modes | Package, Hybrid, Strict module/library, managed EXE, and NativeAOT paths with explicit runtime/dependency contracts | Arbitrary dynamic PowerShell remains hosted; an EXE/DLL extension alone proves no semantic compilation |
 | Language semantics | Bounded typed values, calls, control flow, collections, commands, and lifecycle through canonical IR | Dynamic promotion, general collection enumeration/failure continuation, multiple success outputs, and broader pipeline/value contracts |
-| Module-scale compilation | Live Hybrid state, scalar prefixes with continuation, terminal/complete-body helpers, and numeric/range proofs | Multiple regions, wider transfers, local-call/error closure, and Strict persistent state/lifetime |
+| Module-scale compilation | Live Hybrid state, scalar prefixes, terminal/complete-body helpers, and one second detached scalar region with exact local transfers | Real-workflow multiple-region qualification, wider/additional regions, local-call closure, and remaining Strict persistent-state/lifetime work |
 | .NET consumption | ABI v4, generated projects, source maps, runtime-free provider adapters, lock/provenance verification | A broader set of ordinary C# consumer libraries and versioned API/lifetime qualification |
 | Development experience | Project init/analyze/explain/recommend/lock/restore/build/test/pack/install/diagnose, verified cache, generated C#/PDB mapping | Coherent run/watch and demonstrated source-debugger workflows; source maps alone do not prove debugger usability |
 | Distribution/platforms | Explicit preview support matrix and selected Windows/Linux Strict profiles | Public-feed install/upgrade/rollback, additional physical profiles, and the remaining disposable management-target qualification |

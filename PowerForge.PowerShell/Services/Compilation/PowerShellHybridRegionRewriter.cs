@@ -54,7 +54,11 @@ internal static class PowerShellHybridRegionRewriter
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' source changed after semantic selection.");
             if (!HasSafeGraph(region.RegionGraph))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' does not carry a fail-closed typed boundary graph.");
-            var inputs = region.InputParameters.Select(static parameter => "${" + parameter.Name + "}");
+            if (region.InputLocals.Any(static local =>
+                    !local.HasTypeConstraint || string.IsNullOrWhiteSpace(local.TypeConstraintSyntax)))
+                throw new InvalidOperationException($"Promoted region '{region.RegionId}' is missing its authored input-local type constraint.");
+            var inputs = region.InputParameters.Select(static parameter => "${" + parameter.Name + "}")
+                .Concat(region.InputLocals.Select(static local => "${" + local.Name + "}"));
             if (region.RequiresPowerShellStopping)
                 inputs = inputs.Append("[PowerForge.Generated.Runtime.PowerShellStatementErrorContext]::CreateLoopInterrupt($ExecutionContext)");
             var arguments = string.Join(", ", inputs);
@@ -67,8 +71,13 @@ internal static class PowerShellHybridRegionRewriter
                     (local.HasTypeConstraint ? local.TypeConstraintSyntax : string.Empty) + "${" + local.Name + "}")) + " = ";
             var invocation = receiver + "[" + typed.NamespaceName + "." + typed.TypeName + "]::" +
                              region.GeneratedName + "(" + arguments + ")";
-            if (region.ContinuationLocals.Count > 0 && !region.RequiresLocalOwnershipGuard)
-                throw new InvalidOperationException($"Promoted region '{region.RegionId}' is missing its invocation-local ownership condition.");
+            if (region.ContinuationLocals.Count > 0 && !region.RequiresLocalOwnershipGuard &&
+                region.ContinuationLocals.Any(output => !region.InputLocals.Any(input =>
+                    input.Name.Equals(output.Name, StringComparison.OrdinalIgnoreCase) &&
+                    input.TypeName.Equals(output.TypeName, StringComparison.Ordinal) &&
+                    input.HasTypeConstraint && output.HasTypeConstraint &&
+                    input.TypeConstraintSyntax.Equals(output.TypeConstraintSyntax, StringComparison.Ordinal))))
+                throw new InvalidOperationException($"Promoted region '{region.RegionId}' writes a local absent from its established input-local contract.");
             if (region.RequiresLocalOwnershipGuard)
             {
                 if (region.ContinuationLocals.Count == 0)
@@ -101,6 +110,9 @@ internal static class PowerShellHybridRegionRewriter
                 "), [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.EndOffset)) +
                 "), [string[]]@(" + string.Join(", ", replacements.Select(item => Quote(item.Replacement))) +
                 "), [bool[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.RequiresLocalOwnershipGuard ? "$true" : "$false")) +
+                "), [string[]]@(" + string.Join(", ", replacements.SelectMany(static item => item.Region.InputLocals).Select(local => Quote(local.Name))) +
+                "), [string[]]@(" + string.Join(", ", replacements.SelectMany(static item => item.Region.InputLocals).Select(local => Quote(local.TypeName))) +
+                "), [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.InputLocals.Count)) +
                 "), [string[]]@(" + string.Join(", ", replacements.Where(static item => item.Region.RequiresLocalOwnershipGuard)
                     .SelectMany(static item => item.Region.ContinuationLocals).Select(local => Quote(local.Name))) + ")))) { }\n";
             edits.Add(new PowerShellHybridSourceEdit(owner.Extent.StartOffset,
