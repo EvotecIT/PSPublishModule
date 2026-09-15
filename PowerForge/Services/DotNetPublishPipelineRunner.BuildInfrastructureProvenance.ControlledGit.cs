@@ -52,8 +52,9 @@ public sealed partial class DotNetPublishPipelineRunner
         while (pending.Count > 0)
         {
             ControlledGitRepository repository = pending.Dequeue();
-            string visitKey = repository.GitDirectory + "\0" + repository.Revision;
-            if (!visited.Add(IsWindows() ? visitKey.ToUpperInvariant() : visitKey))
+            string visitKey = NormalizeProjectReferenceIdentityPath(repository.GitDirectory) +
+                "\0" + repository.Revision;
+            if (!visited.Add(visitKey))
                 continue;
             if (!HasOnlyControlledGitAttributeSources(repository.GitDirectory) ||
                 !TryReadConfiguredGitFilterNames(gitRoot, repository.GitDirectory, names) ||

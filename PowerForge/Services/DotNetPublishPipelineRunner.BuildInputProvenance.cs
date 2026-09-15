@@ -56,8 +56,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan is null || string.IsNullOrWhiteSpace(plan.ProjectRoot))
             return Array.Empty<string>();
 
-        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var inputs = new HashSet<string>(comparison);
+        var inputs = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
         foreach (DotNetPublishBundlePlan bundle in plan.Bundles ?? Array.Empty<DotNetPublishBundlePlan>())
         {
             if (bundle is null)
@@ -151,7 +150,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        return inputs.OrderBy(path => path, comparison).ToArray();
+        return inputs.OrderBy(path => path, StringComparer.Ordinal).ToArray();
     }
 
     internal static string[] EnumerateCommandHookSourceInputs(DotNetPublishPlan? plan)
@@ -159,8 +158,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan is null || string.IsNullOrWhiteSpace(plan.ProjectRoot))
             return Array.Empty<string>();
 
-        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var inputs = new HashSet<string>(comparison);
+        var inputs = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
         foreach (DotNetPublishStep step in (plan.Steps ?? Array.Empty<DotNetPublishStep>())
                      .Where(step => step is not null && step.Kind == DotNetPublishStepKind.CommandHook))
         {
@@ -201,7 +199,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        return inputs.OrderBy(path => path, comparison).ToArray();
+        return inputs.OrderBy(path => path, StringComparer.Ordinal).ToArray();
     }
 
     private static void AddFileBackedCommandValueSourceInput(
@@ -311,7 +309,7 @@ public sealed partial class DotNetPublishPipelineRunner
         out NoBuildPublishInput[] noBuildPublishInputs,
         out string? failureReason)
     {
-        var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        IEqualityComparer<string> comparison = FileSystemPathSafety.ExistingPathComparer;
         ProjectEvaluationRequest[] roots = BuildProjectEvaluationRequests(
                 projectPaths,
                 configuration,
@@ -319,7 +317,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 buildStep)
             .ToArray();
         var visited = new HashSet<string>(StringComparer.Ordinal);
-        var directories = new HashSet<string>(comparison);
+        var directories = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var generatedRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
@@ -733,15 +731,14 @@ public sealed partial class DotNetPublishPipelineRunner
         if (buildPlan?.Targets is not { Length: > 0 })
             return true;
 
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         string projectPath = Path.GetFullPath(request.ProjectPath);
         DotNetPublishTargetPlan[] targets = buildPlan.Targets
             .Where(target =>
                 target is not null &&
                 !string.IsNullOrWhiteSpace(target.ProjectPath) &&
-                string.Equals(Path.GetFullPath(target.ProjectPath), projectPath, comparison) &&
+                FileSystemPathSafety.ExistingPathComparer.Equals(
+                    Path.GetFullPath(target.ProjectPath),
+                    projectPath) &&
                 IsPublishProvenanceCombinationInScope(target.Name, combination: null, buildStep))
             .ToArray();
         if (targets.Length == 0)
@@ -791,12 +788,9 @@ public sealed partial class DotNetPublishPipelineRunner
         string fullProjectPath = Path.GetFullPath(projectPath);
         DotNetPublishTargetPlan[] matchingTargets = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
             .Where(target => !string.IsNullOrWhiteSpace(target.ProjectPath) &&
-                Path.GetFullPath(ResolvePath(plan.ProjectRoot, target.ProjectPath))
-                    .Equals(
-                        fullProjectPath,
-                        IsWindows()
-                            ? StringComparison.OrdinalIgnoreCase
-                            : StringComparison.Ordinal))
+                FileSystemPathSafety.ExistingPathComparer.Equals(
+                    Path.GetFullPath(ResolvePath(plan.ProjectRoot, target.ProjectPath)),
+                    fullProjectPath))
             .ToArray();
         if (matchingTargets.Length == 0)
             return true;
@@ -1134,19 +1128,19 @@ public sealed partial class DotNetPublishPipelineRunner
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             JsonElement root = document.RootElement;
-            var inputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            var sourceInputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var inputs = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
+            var sourceInputs = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
             var references = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
             var rawReferences = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
             var publishEvaluatedReferences = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
             var mainEvaluationReferenceKeys = new HashSet<string>(StringComparer.Ordinal);
             var targetFrameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var generatedBuildRoots = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FileSystemPathSafety.ExistingPathComparer);
             var outputRoots = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FileSystemPathSafety.ExistingPathComparer);
             var expectedOutputPaths = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FileSystemPathSafety.ExistingPathComparer);
             var generatedProjectReferenceOutputs = new List<GeneratedProjectReferenceOutput>();
             EvaluatedPublishInput[] publishInputs = Array.Empty<EvaluatedPublishInput>();
             string? intermediateRoot = null;
@@ -1156,9 +1150,9 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string> evaluatedProjectReferenceConditionProperties =
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var packageRoots = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FileSystemPathSafety.ExistingPathComparer);
             var importPaths = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FileSystemPathSafety.ExistingPathComparer);
             string[] trustedBuildInfrastructureRoots = Array.Empty<string>();
             PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations =
                 Array.Empty<PreprocessedProjectReferenceDeclaration>();
@@ -1567,7 +1561,7 @@ public sealed partial class DotNetPublishPipelineRunner
             evaluation = new EvaluatedProjectInputs(
                 inputs.ToArray(),
                 importPaths.Concat(new[] { request.ProjectPath }).Distinct(
-                    IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray(),
+                    FileSystemPathSafety.ExistingPathComparer).ToArray(),
                 sourceInputs.ToArray(),
                 references.Values.ToArray(),
                 targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray(),
@@ -1686,7 +1680,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string[] generatedPaths = (plan.GeneratedConfigurationInputPaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)
-            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .Distinct(FileSystemPathSafety.ExistingPathComparer)
             .ToArray();
         if (generatedPaths.Length == 0)
             return;

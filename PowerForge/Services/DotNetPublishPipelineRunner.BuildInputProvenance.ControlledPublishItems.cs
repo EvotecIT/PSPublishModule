@@ -113,7 +113,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             offlinePackageSources.Add(offlinePackageSource);
             string[] distinctOfflinePackageSources = offlinePackageSources
-                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .Distinct(FileSystemPathSafety.ExistingPathComparer)
                 .ToArray();
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
             new XDocument(
@@ -504,9 +504,6 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string> rootEvaluatedProperties,
             IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
     {
-        StringComparer comparer = IsWindows()
-            ? StringComparer.OrdinalIgnoreCase
-            : StringComparer.Ordinal;
         return graphBuildNodes
             .Select(node => (
                 Request: node.Request,
@@ -515,7 +512,9 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 (Request: rootRequest, EvaluatedProperties: rootEvaluatedProperties)
             })
-            .GroupBy(node => Path.GetFullPath(node.Request.ProjectPath), comparer)
+            .GroupBy(
+                node => Path.GetFullPath(node.Request.ProjectPath),
+                FileSystemPathSafety.ExistingPathComparer)
             .ToDictionary(
                 group => group.Key,
                 group => group
@@ -529,7 +528,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         StringComparer.Ordinal)
                     .Select(context => (IReadOnlyDictionary<string, string>)context.First())
                     .ToArray(),
-                comparer);
+                FileSystemPathSafety.ExistingPathComparer);
     }
 
     private static bool TryBuildControlledPublishProjectGraph(
@@ -546,8 +545,27 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string projectPath = Path.GetFullPath(node.Request.ProjectPath);
+            string?[] selectedFrameworks = graphBuildNodes
+                .Where(candidate =>
+                    FileSystemPathSafety.ExistingPathComparer.Equals(
+                        Path.GetFullPath(candidate.Request.ProjectPath),
+                        projectPath))
+                .Select(candidate => candidate.Request.TargetFramework)
+                .ToArray();
             string[] frameworks = SelectControlledMultiFrameworkRestoreFrameworks(
-                node.EvaluatedProperties);
+                node.EvaluatedProperties,
+                selectedFrameworks);
+            if (frameworks.Length == 0 && selectedFrameworks
+                    .Where(framework => !string.IsNullOrWhiteSpace(framework))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(2)
+                    .Count() > 1)
+            {
+                failureReason = $"project '{projectPath}' selects multiple target frameworks " +
+                    "outside its declared TargetFrameworks matrix; " +
+                    "context-isolated restore assets are required.";
+                return false;
+            }
             bool restoreWithFrameworkMatrix = frameworks.Length > 1;
             if (restoreWithFrameworkMatrix)
             {
@@ -560,6 +578,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         projectPath,
                         node,
                         frameworks,
+                        ReadControlledDeclaredTargetFrameworksValue(node.EvaluatedProperties)!,
                         originalGitRoot,
                         controlledSourceRoot,
                         controlledEnvironment,

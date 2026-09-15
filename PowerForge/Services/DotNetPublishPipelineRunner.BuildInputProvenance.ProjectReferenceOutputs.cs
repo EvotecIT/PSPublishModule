@@ -253,7 +253,11 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string NormalizeProjectReferenceIdentityPath(string path)
     {
         string fullPath = Path.GetFullPath(path);
-        return IsWindows() ? fullPath.ToUpperInvariant() : fullPath;
+        string directory = Path.GetDirectoryName(fullPath) ?? fullPath;
+        return FrameworkCompatibility.GetPathStringComparison(directory) ==
+               StringComparison.OrdinalIgnoreCase
+            ? fullPath.ToUpperInvariant()
+            : fullPath;
     }
 
     private static string NormalizeMsBuildPropertyIdentityName(string name)
@@ -380,14 +384,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
 
-            StringComparison comparison = IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
             EvaluatedProjectReference[] assemblyProjectReferences = knownProjectReferences
-                .Where(reference => string.Equals(
+                .Where(reference => FileSystemPathSafety.ExistingPathComparer.Equals(
                     reference.ProjectPath,
-                    normalizedSourceProjectPath,
-                    comparison))
+                    normalizedSourceProjectPath))
                 .ToArray();
             if (assemblyProjectReferences.Length == 0)
                 return false;
@@ -486,15 +486,11 @@ public sealed partial class DotNetPublishPipelineRunner
 
             string current = Path.GetFullPath(outputPath);
             string boundary = NormalizeBuildInputPathRoot(gitRoot!);
-            StringComparison comparison = IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
             while (true)
             {
-                bool atBoundary = string.Equals(
+                bool atBoundary = FileSystemPathSafety.ExistingPathComparer.Equals(
                     current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                    boundary.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                    comparison);
+                    boundary.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                 try
                 {
                     if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
@@ -515,7 +511,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 string? parent = Path.GetDirectoryName(current);
                 if (string.IsNullOrWhiteSpace(parent) ||
-                    string.Equals(parent, current, comparison) ||
+                    string.Equals(parent, current, StringComparison.Ordinal) ||
                     !IsSameOrBelowBuildInputPath(parent, boundary))
                 {
                     return true;
@@ -592,10 +588,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string commonTarget = Path.GetFullPath(Path.Combine(
                 msBuildToolsPath,
                 "Microsoft.Common.CurrentVersion.targets"));
-            StringComparison comparison = IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal;
-            if (string.Equals(actualTarget, commonTarget, comparison))
+            if (FileSystemPathSafety.ExistingPathComparer.Equals(actualTarget, commonTarget))
                 return true;
 
             if (!outputItemType.Equals("Analyzer", StringComparison.OrdinalIgnoreCase))
@@ -609,10 +602,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 "Microsoft.NET.Sdk",
                 "targets",
                 "Microsoft.NET.ConflictResolution.targets"));
-            return string.Equals(
+            return FileSystemPathSafety.ExistingPathComparer.Equals(
                 actualTarget,
-                analyzerConflictTarget,
-                comparison);
+                analyzerConflictTarget);
         }
         catch
         {

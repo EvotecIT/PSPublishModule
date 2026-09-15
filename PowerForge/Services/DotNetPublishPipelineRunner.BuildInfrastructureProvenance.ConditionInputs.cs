@@ -175,13 +175,9 @@ public sealed partial class DotNetPublishPipelineRunner
         string boundary = Path.GetFullPath(root).TrimEnd(
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar);
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        while (!string.Equals(
+        while (!FileSystemPathSafety.ExistingPathComparer.Equals(
                    current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                   boundary,
-                   comparison))
+                   boundary))
         {
             try
             {
@@ -196,7 +192,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 return true;
             }
             string? parent = Path.GetDirectoryName(current);
-            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, StringComparison.Ordinal))
                 return true;
             current = parent;
         }

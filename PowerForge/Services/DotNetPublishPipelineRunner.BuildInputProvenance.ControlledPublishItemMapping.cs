@@ -109,8 +109,9 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         if (string.IsNullOrWhiteSpace(root))
             return false;
-        return value.IndexOf(
+        return ContainsPathWithFileSystemSemantics(
+            value,
             Path.GetFullPath(root),
-            IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) >= 0;
+            FileSystemPathSafety.ExistingPathComparer);
     }
 }

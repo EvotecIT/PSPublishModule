@@ -6,7 +6,7 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string[]>
         ExternalTargetNameCache = new(
-            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            FileSystemPathSafety.ExistingPathComparer);
 
     private static bool TryCreateReachableControlledBuildDocuments(
         XDocument document,

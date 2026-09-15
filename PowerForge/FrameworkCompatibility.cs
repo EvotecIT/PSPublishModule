@@ -9,7 +9,7 @@ internal static class FrameworkCompatibility
 {
     private static readonly FileSystemPathComparisonCache PathComparisonCache = new(
         IsCaseSensitiveDirectory,
-        DefaultPathStringComparison);
+        ConservativePathStringComparison);
 
     internal static StringComparer PathComparer { get; } = new FileSystemAwarePathComparer();
 
@@ -46,6 +46,9 @@ internal static class FrameworkCompatibility
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
+    internal static StringComparison ConservativePathStringComparison()
+        => StringComparison.Ordinal;
+
     public static StringComparison GetPathStringComparison(string directory)
     {
         try
@@ -55,12 +58,10 @@ internal static class FrameworkCompatibility
         }
         catch
         {
-            // fall back to the platform default below
+            // Unknown directory semantics fail closed as case-sensitive.
         }
 
-        return IsMacOS()
-            ? StringComparison.OrdinalIgnoreCase
-            : PathStringComparison();
+        return ConservativePathStringComparison();
     }
 
     public static StringComparison GetPathStringComparisonForPath(string path)
@@ -73,7 +74,7 @@ internal static class FrameworkCompatibility
         {
             var parent = Path.GetDirectoryName(current);
             if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, StringComparison.Ordinal))
-                return PathStringComparison();
+                return ConservativePathStringComparison();
             current = parent;
         }
 
@@ -98,41 +99,32 @@ internal static class FrameworkCompatibility
 
     private static bool IsCaseSensitiveDirectory(string directory)
     {
-        var probeName = "powerforge-case-" + Guid.NewGuid().ToString("N") + "a.tmp";
-        var probePath = Path.Combine(directory, probeName);
-        var alternatePath = Path.Combine(directory, probeName.ToUpperInvariant());
-        try
+        string[] entries = Directory.GetFileSystemEntries(directory);
+        var entryNames = new HashSet<string>(
+            entries.Select(path => Path.GetFileName(path)),
+            StringComparer.Ordinal);
+        foreach (string entry in entries)
         {
-            File.WriteAllText(probePath, string.Empty);
-            return !File.Exists(alternatePath);
-        }
-        finally
-        {
-            TryDeleteFile(probePath);
-            TryDeleteFile(alternatePath);
-        }
-    }
+            string entryName = Path.GetFileName(entry);
+            char[] alternateName = entryName.ToCharArray();
+            int index = Array.FindIndex(alternateName, character =>
+                char.ToUpperInvariant(character) != char.ToLowerInvariant(character));
+            if (index < 0)
+                continue;
 
-    private static bool IsMacOS()
-    {
-#if NET472
-        return false;
-#else
-        return OperatingSystem.IsMacOS();
-#endif
-    }
+            alternateName[index] = char.IsUpper(alternateName[index])
+                ? char.ToLowerInvariant(alternateName[index])
+                : char.ToUpperInvariant(alternateName[index]);
+            string alternateEntryName = new string(alternateName);
+            if (entryNames.Contains(alternateEntryName))
+                return true;
 
-    private static void TryDeleteFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
+            string alternatePath = Path.Combine(directory, alternateEntryName);
+            return !File.Exists(alternatePath) && !Directory.Exists(alternatePath);
         }
-        catch
-        {
-            // best effort cleanup
-        }
+
+        // Empty directories and names without case variants provide no read-only proof.
+        return true;
     }
 
     internal sealed class FileSystemAwarePathComparer : StringComparer
@@ -161,6 +153,10 @@ internal static class FrameworkCompatibility
         {
             if (ReferenceEquals(x, y)) return true;
             if (x is null || y is null) return false;
+            // Paths that differ by more than case cannot alias on any supported file system.
+            // Avoid probing their unrelated parent directories; equality is used while an
+            // admitted SDK closure is watched and must not create probe files inside it.
+            if (!string.Equals(x, y, StringComparison.OrdinalIgnoreCase)) return false;
             return string.Equals(x, y, ResolveComparison(x, y));
         }
 
