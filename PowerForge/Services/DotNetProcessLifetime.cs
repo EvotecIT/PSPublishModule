@@ -6,6 +6,7 @@ namespace PowerForge;
 internal static class DotNetProcessLifetime
 {
     internal const string DisableNodeReuseEnvironmentVariable = "MSBUILDDISABLENODEREUSE";
+    internal const string DisableCliMsBuildServerEnvironmentVariable = "DOTNET_CLI_USE_MSBUILD_SERVER";
 
     internal static void DisableBuildServerReuse(ProcessStartInfo startInfo)
     {
@@ -20,5 +21,6 @@ internal static class DotNetProcessLifetime
         }
 
         startInfo.EnvironmentVariables[DisableNodeReuseEnvironmentVariable] = "1";
+        startInfo.EnvironmentVariables[DisableCliMsBuildServerEnvironmentVariable] = "0";
     }
 }
