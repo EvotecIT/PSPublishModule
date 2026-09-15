@@ -5,6 +5,32 @@ namespace PowerForge.Tests;
 public sealed class ProcessRunnerEnvironmentTests
 {
     [Theory]
+    [InlineData("0")]
+    [InlineData(null)]
+    public void BuildStartInfo_preserves_explicit_dotnet_node_reuse_override(string? explicitValue)
+    {
+        var request = new ProcessRunRequest(
+            "dotnet",
+            Path.GetTempPath(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30),
+            new Dictionary<string, string?>
+            {
+                [DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable] = explicitValue
+            });
+        var buildStartInfo = typeof(ProcessRunner).GetMethod(
+            "BuildStartInfo",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        var startInfo = Assert.IsType<System.Diagnostics.ProcessStartInfo>(buildStartInfo!.Invoke(null, new object[] { request }));
+
+        if (explicitValue is null)
+            Assert.False(startInfo.EnvironmentVariables.ContainsKey(DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable));
+        else
+            Assert.Equal(explicitValue, startInfo.EnvironmentVariables[DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable]);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task RunAsync_exposes_started_process_before_external_work_boundary(bool ownProcessTree)
