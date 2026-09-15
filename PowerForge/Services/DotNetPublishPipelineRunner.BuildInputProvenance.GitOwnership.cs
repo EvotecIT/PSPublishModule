@@ -6,14 +6,11 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         string currentRoot = NormalizeBuildInputPathRoot(repositoryRoot);
         string outerRoot = NormalizeBuildInputPathRoot(outerGitRoot);
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         if (!HasNoGitReplacementRefs(currentRoot) ||
-            (!string.Equals(currentRoot, outerRoot, comparison) &&
+            (!FileSystemPathSafety.ExistingPathComparer.Equals(currentRoot, outerRoot) &&
              !HasCleanNestedGitWorktree(currentRoot)))
             return false;
-        while (!string.Equals(currentRoot, outerRoot, comparison))
+        while (!FileSystemPathSafety.ExistingPathComparer.Equals(currentRoot, outerRoot))
         {
             string? parentDirectory = Path.GetDirectoryName(currentRoot);
             if (string.IsNullOrWhiteSpace(parentDirectory))
@@ -23,11 +20,11 @@ public sealed partial class DotNetPublishPipelineRunner
             if (string.IsNullOrWhiteSpace(parentRepository))
                 return false;
             parentRepository = NormalizeBuildInputPathRoot(parentRepository!);
-            if (string.Equals(parentRepository, currentRoot, comparison) ||
+            if (FileSystemPathSafety.ExistingPathComparer.Equals(parentRepository, currentRoot) ||
                 !IsSameOrBelowBuildInputPath(currentRoot, parentRepository) ||
                 !IsSameOrBelowBuildInputPath(parentRepository, outerRoot) ||
                 !HasNoGitReplacementRefs(parentRepository) ||
-                (!string.Equals(parentRepository, outerRoot, comparison) &&
+                (!FileSystemPathSafety.ExistingPathComparer.Equals(parentRepository, outerRoot) &&
                  !HasCleanNestedGitWorktree(parentRepository)))
             {
                 return false;

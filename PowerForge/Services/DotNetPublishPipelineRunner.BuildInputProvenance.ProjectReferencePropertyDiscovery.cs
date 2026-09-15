@@ -8,7 +8,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         string[] paths = projectPaths
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .Distinct(FileSystemPathSafety.ExistingPathComparer)
             .ToArray();
         var names = new HashSet<string>(
             ReadProjectReferenceConditionPropertyNames(paths),
@@ -41,7 +41,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var propertyDefinitions = new Dictionary<string, List<XElement>>(StringComparer.OrdinalIgnoreCase);
         foreach (string projectPath in projectPaths
                      .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-                     .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+                     .Distinct(FileSystemPathSafety.ExistingPathComparer))
         {
             try
             {

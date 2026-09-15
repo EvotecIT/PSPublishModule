@@ -244,12 +244,14 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static bool ContainsRootedBuildValue(string value, string? gitRoot)
     {
         value = DecodeMsBuildEscapes(value);
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         if (!string.IsNullOrWhiteSpace(gitRoot) &&
-            value.IndexOf(Path.GetFullPath(gitRoot!), comparison) >= 0)
+            ContainsPathWithFileSystemSemantics(
+                value,
+                Path.GetFullPath(gitRoot!),
+                FileSystemPathSafety.ExistingPathComparer))
+        {
             return true;
+        }
 
         for (int index = 0; index < value.Length; index++)
         {
@@ -288,6 +290,39 @@ public sealed partial class DotNetPublishPipelineRunner
                 return true;
         }
         return false;
+    }
+
+    internal static bool ContainsPathWithFileSystemSemantics(
+        string value,
+        string path,
+        IEqualityComparer<string> pathComparer)
+        => IndexOfPathWithFileSystemSemantics(value, path, 0, pathComparer) >= 0;
+
+    internal static int IndexOfPathWithFileSystemSemantics(
+        string value,
+        string path,
+        int searchStart,
+        IEqualityComparer<string> pathComparer)
+    {
+        if (string.IsNullOrEmpty(value) ||
+            string.IsNullOrEmpty(path) ||
+            searchStart < 0 ||
+            searchStart > value.Length - path.Length)
+        {
+            return -1;
+        }
+
+        while (searchStart <= value.Length - path.Length)
+        {
+            int index = value.IndexOf(path, searchStart, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+                return -1;
+            if (pathComparer.Equals(value.Substring(index, path.Length), path))
+                return index;
+            searchStart = index + 1;
+        }
+
+        return -1;
     }
 
     internal static bool ContainsEscapingRelativeBuildValue(
@@ -591,7 +626,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             var controlledBuildInputs = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                FileSystemPathSafety.ExistingPathComparer)
             {
                 controlledProjectPath
             };
@@ -613,7 +648,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             var controlledMsBuildInputs = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                FileSystemPathSafety.ExistingPathComparer)
             {
                 controlledProjectPath
             };
@@ -655,7 +690,7 @@ public sealed partial class DotNetPublishPipelineRunner
             var controlledProjectContexts = new Dictionary<
                 string,
                 IReadOnlyDictionary<string, string>[]>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FileSystemPathSafety.ExistingPathComparer);
             foreach (KeyValuePair<string, IReadOnlyDictionary<string, string>[]> project in
                      evaluatedProjectContexts ??
                      new Dictionary<string, IReadOnlyDictionary<string, string>[]>() )

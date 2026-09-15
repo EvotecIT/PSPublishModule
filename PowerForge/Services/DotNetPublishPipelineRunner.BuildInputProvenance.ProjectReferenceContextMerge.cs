@@ -8,18 +8,14 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<EvaluatedProjectReference> publishEvaluatedReferences,
         ISet<string> mainEvaluationReferenceKeys)
     {
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         EvaluatedProjectReference[] raw = rawReferences.ToArray();
         var results = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
         foreach (EvaluatedProjectReference resolved in resolvedReferences)
         {
             EvaluatedProjectReference[] matchingRaw = raw
-                .Where(reference => string.Equals(
+                .Where(reference => FileSystemPathSafety.ExistingPathComparer.Equals(
                     Path.GetFullPath(reference.ProjectPath),
-                    Path.GetFullPath(resolved.ProjectPath),
-                    comparison))
+                    Path.GetFullPath(resolved.ProjectPath)))
                 .ToArray();
             if (matchingRaw.Length == 0)
             {

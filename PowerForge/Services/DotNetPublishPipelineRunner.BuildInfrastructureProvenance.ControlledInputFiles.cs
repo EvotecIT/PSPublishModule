@@ -86,7 +86,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             var executableInputs = new HashSet<string>(
                 executableMsBuildInputs.Select(Path.GetFullPath),
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                FileSystemPathSafety.ExistingPathComparer);
             if (!string.IsNullOrWhiteSpace(controlledProjectPath))
             {
                 controlledProjectPath = Path.GetFullPath(controlledProjectPath!);

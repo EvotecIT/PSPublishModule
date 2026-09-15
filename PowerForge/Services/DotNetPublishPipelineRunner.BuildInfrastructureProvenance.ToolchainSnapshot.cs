@@ -16,6 +16,7 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly Dictionary<string, FileSnapshot> _files;
         private readonly List<FileSystemWatcher> _watchers = new();
         private int _changed;
+        private string? _changedPath;
         private bool _disposed;
 
         private TrustedDotNetInstallationSnapshot(
@@ -110,11 +111,14 @@ public sealed partial class DotNetPublishPipelineRunner
         internal void ValidateUnchanged(bool verifyHashes)
         {
             if (Volatile.Read(ref _changed) != 0)
-                ThrowChanged();
+                ThrowChanged(Volatile.Read(ref _changedPath));
 
             string[] currentFiles = EnumerateCapturedFiles(_capturedRoots).ToArray();
-            if (currentFiles.Length != _files.Count || currentFiles.Any(path => !_files.ContainsKey(path)))
-                ThrowChanged();
+            if (currentFiles.Length != _files.Count)
+                ThrowChanged("captured file count changed");
+            string? unrecognizedPath = currentFiles.FirstOrDefault(path => !_files.ContainsKey(path));
+            if (unrecognizedPath is not null)
+                ThrowChanged(unrecognizedPath);
             foreach (string path in currentFiles)
             {
                 FileSnapshot expected = _files[path];
@@ -125,11 +129,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     (verifyHashes &&
                      !string.Equals(ComputeFileSha256(path), expected.Sha256, StringComparison.OrdinalIgnoreCase)))
                 {
-                    ThrowChanged();
+                    ThrowChanged(path);
                 }
             }
             if (Volatile.Read(ref _changed) != 0)
-                ThrowChanged();
+                ThrowChanged(Volatile.Read(ref _changedPath));
         }
 
         public void Dispose()
@@ -197,17 +201,23 @@ public sealed partial class DotNetPublishPipelineRunner
         private void MarkChanged(object sender, FileSystemEventArgs args)
         {
             if (AffectsCapturedClosure(args.FullPath))
-                Interlocked.Exchange(ref _changed, 1);
+                MarkChanged(args.FullPath);
         }
 
         private void MarkChanged(object sender, RenamedEventArgs args)
         {
             if (AffectsCapturedClosure(args.FullPath) || AffectsCapturedClosure(args.OldFullPath))
-                Interlocked.Exchange(ref _changed, 1);
+                MarkChanged(args.FullPath);
         }
 
         private void MarkChanged(object sender, ErrorEventArgs args)
-            => Interlocked.Exchange(ref _changed, 1);
+            => MarkChanged("filesystem watcher overflowed");
+
+        private void MarkChanged(string path)
+        {
+            Interlocked.CompareExchange(ref _changedPath, path, null);
+            Interlocked.Exchange(ref _changed, 1);
+        }
 
         private bool AffectsCapturedClosure(string path)
         {
@@ -470,9 +480,10 @@ public sealed partial class DotNetPublishPipelineRunner
             return true;
         }
 
-        private static void ThrowChanged()
+        private static void ThrowChanged(string? detail = null)
             => throw new InvalidOperationException(
-                "The selected dotnet SDK/runtime closure changed after admission.");
+                "The selected dotnet SDK/runtime closure changed after admission" +
+                (string.IsNullOrWhiteSpace(detail) ? "." : $": '{detail}'."));
 
         private sealed class FileSnapshot
         {

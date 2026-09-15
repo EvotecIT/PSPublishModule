@@ -62,9 +62,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var key = new StringBuilder();
         AppendAssignmentKeyPart(
             key,
-            IsWindows()
-                ? assignment.DefiningProjectPath.ToUpperInvariant()
-                : assignment.DefiningProjectPath);
+            NormalizeProjectReferenceIdentityPath(assignment.DefiningProjectPath));
         AppendAssignmentKeyPart(key, assignment.Value);
         AppendAssignmentKeyPart(key, assignment.IsPreResolveTargetTime ? "1" : "0");
         AppendAssignmentPropertyTable(key, assignment.InitialProperties);
@@ -73,9 +71,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             AppendAssignmentKeyPart(
                 key,
-                IsWindows()
-                    ? definition.DefiningProjectPath.ToUpperInvariant()
-                    : definition.DefiningProjectPath);
+                NormalizeProjectReferenceIdentityPath(definition.DefiningProjectPath));
             AppendAssignmentKeyPart(
                 key,
                 definition.Element.ToString(SaveOptions.DisableFormatting));
