@@ -28,10 +28,11 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         var selected = new List<PowerShellBoundStatement>();
         var locals = new List<PowerShellBoundLocal>();
         var transfers = new List<PowerShellCompiledRegionLocal>();
+        var regionParameters = parameters.Select(ProjectParameterContract).ToArray();
         var nextIndex = 0;
         foreach (var binding in bindings)
         {
-            var statement = PowerShellBoundRegionLocalProjection.Project(binding.Statement, parameters, locals, functionLocals);
+            var statement = PowerShellBoundRegionLocalProjection.Project(binding.Statement, regionParameters, locals, functionLocals);
             if (statement is null) break;
             // The helper ABI already carries native stopping. Its checkpoint is the only
             // host effect allowed here; the ordinary promotion policy still checks errors.
@@ -89,8 +90,24 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         var values = locals.Select(local => new PowerShellBoundVariableExpression(
             transferSpan, local.Symbol, local.Type)).ToArray();
         selected.Add(new PowerShellBoundRegionTransferStatement(transferSpan, values));
-        return TryCreateBound(document, syntax, sourceFunction, parameters, locals, selected.ToArray(),
+        return TryCreateBound(document, syntax, sourceFunction, regionParameters, locals, selected.ToArray(),
             out candidate, transfers.ToArray());
+    }
+
+    private static PowerShellBoundParameter ProjectParameterContract(PowerShellBoundParameter parameter)
+    {
+        if (parameter.Type.Provenance != PowerShellTypeFactProvenance.Unknown ||
+            !parameter.Contract.TypeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod) ||
+            Type.GetType(parameter.Contract.TypeName, throwOnError: false) is not { } contractType ||
+            !PowerShellStableScalarTypePolicy.IsSupported(contractType))
+            return parameter;
+        return new PowerShellBoundParameter(
+            parameter.Symbol,
+            new PowerShellTypeFact(
+                contractType,
+                PowerShellTypeFactProvenance.Explicit,
+                "The detached region receives this value after the retained PowerShell function applies its authored parameter contract."),
+            parameter.Contract);
     }
 
     private static bool TryCreateContinuationLocal(

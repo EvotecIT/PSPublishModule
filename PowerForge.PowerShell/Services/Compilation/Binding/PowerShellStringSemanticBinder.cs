@@ -27,11 +27,13 @@ internal static class PowerShellStringSemanticBinder
                 continue;
             }
             var nested = syntax.NestedExpressions[expressionIndex];
-            if (nested is not VariableExpressionAst)
+            if (nested is not VariableExpressionAst && !usesNativeInvocation)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", "Expandable-string subexpressions are not yet represented by the bound pipeline.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
                 return null;
             }
+            // Native-bound functions evaluate admitted subexpressions through their live
+            // invocation owner. Runtime-free expressions retain the narrower scalar contract.
             var expression = bindExpression(nested, null);
             if (expression is null) return null;
             if (!usesNativeInvocation && PowerShellStringificationScopePolicy.RequiresCallerScope(typeof(string), expression))

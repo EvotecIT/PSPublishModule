@@ -15,7 +15,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 param()
                 $First = 'hello'
                 $Second = 'world'
-                Write-Output "$First $Second"
+                Write-Output "$First $($Second.ToUpperInvariant())"
             }
             """, ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
@@ -32,7 +32,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var run = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal) + "'; Get-WholePrefix");
         Assert.Equal(0, run.ExitCode);
-        Assert.Equal("hello world", run.StandardOutput.Trim());
+        Assert.Equal("hello WORLD", run.StandardOutput.Trim());
         Assert.Empty(run.StandardError);
     }
 
@@ -47,6 +47,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 param([Nullable[int]] $Number)
                 [Nullable[int]] $Value = $Number
                 $Count = 1
+                data NullablePrefixBarrier { }
                 & { if ($null -eq $Value) { 'null' } else { $Value } }
                 $Value = '9'
                 $Value.GetType().Name
@@ -84,6 +85,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [bool] $Flag = $false
                 if ($Selected) { $Count = 7; $Flag = $true }
                 [string] $Tail = 'end'
+                data MultiLocalPrefixBarrier { }
                 & { "$Count|$Label|$Flag|$Tail" }
                 $Count = '9'
                 $Label = 3
@@ -108,7 +110,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.PromotedTypedRegions > 0);
+        Assert.True(result.Manifest!.PromotedTypedRegions > 0,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message)));
         const string probe = "@(Get-PrefixReport -Title '' -Selected $false; Get-PrefixReport -Title 'Sample' -Selected $true) -join '~'";
         var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
@@ -155,6 +158,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 param([bool] $Enabled)
                 CONSTRAINT $result = 0
                 if ($Enabled) { $result = 7 }
+                data PrefixContinuationBarrier { }
                 & { "hosted:$result" }
                 $result = '9'
                 "after:$($result.GetType().FullName):$result"
@@ -166,7 +170,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.PromotedTypedRegions > 0);
+        Assert.True(result.Manifest!.PromotedTypedRegions > 0,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message)));
         const string probe = "@(Get-PrefixValue $false; Get-PrefixValue $true) -join '|'";
         var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
@@ -204,6 +209,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 param([bool] $Enabled)
                 [int] $result = 0
                 if ($Enabled) { $result = 7 }
+                data ScalarPrefixBarrier { }
                 & { "hosted:$result" }
                 return $result
             }
