@@ -178,7 +178,7 @@ public sealed class ModuleInstaller
             }
             finally
             {
-                if (!string.IsNullOrWhiteSpace(tempPath) && Directory.Exists(tempPath))
+                if (tempPath is not null && Directory.Exists(tempPath))
                     TryDeleteDirectory(tempPath);
             }
         }
