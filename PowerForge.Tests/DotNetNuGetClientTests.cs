@@ -364,6 +364,65 @@ public sealed class DotNetNuGetClientTests
     }
 
     [Fact]
+    public async Task SignPackagesIndividuallyAsync_RetriesOnlyThePackageThatFailed()
+    {
+        var attempts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var processRunner = new StubProcessRunner(request =>
+        {
+            string package = request.Arguments[2];
+            attempts[package] = attempts.TryGetValue(package, out int count) ? count + 1 : 1;
+            bool transientFailure = package.EndsWith("One.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase) &&
+                                    attempts[package] == 1;
+            return transientFailure
+                ? new ProcessRunResult(1, string.Empty, "Access was denied because of a security violation.", request.FileName, TimeSpan.Zero, timedOut: false)
+                : new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var client = new DotNetNuGetClient(processRunner);
+        string first = @"C:\repo\Artifacts\One.1.0.0.nupkg";
+        string second = @"C:\repo\Artifacts\Two.1.0.0.nupkg";
+
+        var outcome = await client.SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
+            new[] { first, second },
+            certificateFingerprint: "ABC123",
+            certificateStoreLocation: "CurrentUser",
+            timeStampServer: "http://timestamp.digicert.com"));
+
+        Assert.True(outcome.Result.Succeeded, outcome.Result.ErrorMessage);
+        Assert.Empty(outcome.FailedPackages);
+        Assert.Equal(2, attempts[first]);
+        Assert.Equal(1, attempts[second]);
+        Assert.Contains("One.1.0.0.nupkg: signed on retry", outcome.Result.StdOut, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SignPackagesIndividuallyAsync_ReportsOnlyThePackageThatStillFails()
+    {
+        var processRunner = new StubProcessRunner(request =>
+        {
+            string package = request.Arguments[2];
+            bool fails = package.EndsWith("Two.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase);
+            return fails
+                ? new ProcessRunResult(1, string.Empty, "Access was denied because of a security violation.", request.FileName, TimeSpan.Zero, timedOut: false)
+                : new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var client = new DotNetNuGetClient(processRunner);
+        string first = @"C:\repo\Artifacts\One.1.0.0.nupkg";
+        string second = @"C:\repo\Artifacts\Two.1.0.0.nupkg";
+
+        var outcome = await client.SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
+            new[] { first, second },
+            certificateFingerprint: "ABC123",
+            certificateStoreLocation: "CurrentUser",
+            timeStampServer: "http://timestamp.digicert.com"));
+
+        Assert.False(outcome.Result.Succeeded);
+        Assert.Equal(new[] { second }, outcome.FailedPackages);
+        Assert.Contains("1 of 2 package(s)", outcome.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("Two.1.0.0.nupkg", outcome.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("One.1.0.0.nupkg:", outcome.Result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SignPackageAsync_DefaultPreservesAlreadySignedPackage()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

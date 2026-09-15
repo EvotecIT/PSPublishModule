@@ -146,48 +146,71 @@ internal sealed partial class PowerForgeReleaseService
             return allowed;
 
         var configPath = Path.GetFullPath(releaseConfigPath);
-        var expectedConfigDirectory = Path.Combine(projectRoot, "Build");
-        var configDirectory = Path.GetDirectoryName(configPath);
-        if (!PathEquals(configDirectory, expectedConfigDirectory) ||
-            !Regex.IsMatch(Path.GetFileName(configPath), @"^\.release\.authorized\.[0-9]+\.json$", RegexOptions.CultureInvariant))
+        var configMatch = AuthorizedConfigurationFileName.Match(Path.GetFileName(configPath));
+        if (PathIsWithin(configPath, projectRoot) || !configMatch.Success || !File.Exists(configPath))
         {
             return allowed;
         }
 
-        EnsureOrdinaryGeneratedFile(projectRoot, configPath, "Public release authorization config");
+        EnsureOrdinaryFile(configPath, "Public release authorization config");
+        if (!string.Equals(configMatch.Groups["commit"].Value, expectedCommit, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The public release authorization config filename does not bind the expected commit.");
+
         using var config = JsonDocument.Parse(File.ReadAllText(configPath));
         var root = config.RootElement;
         var configuredCommit = GetRequiredNestedString(root, "GitHub", "Commitish");
         if (!string.Equals(configuredCommit, expectedCommit, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The public release authorization config does not bind the expected commit.");
 
-        allowed.Add(ToGitPath(projectRoot, configPath));
-
         var provenancePath = Path.Combine(projectRoot, "Module", "PowerForge.ReleaseProvenance.json");
-        if (!File.Exists(provenancePath))
-            return allowed;
-
-        EnsureOrdinaryGeneratedFile(projectRoot, provenancePath, "Public release module provenance");
-        using var provenance = JsonDocument.Parse(File.ReadAllText(provenancePath));
-        var provenanceRoot = provenance.RootElement;
         var expectedModuleName = GetRequiredNestedString(root, "Module", "ModuleName");
         var expectedVersion = GetRequiredNestedString(root, "Module", "ModuleVersion");
         var expectedOwner = GetRequiredNestedString(root, "GitHub", "Owner");
         var expectedRepository = GetRequiredNestedString(root, "GitHub", "Repository");
-        RequireExactString(provenanceRoot, "moduleName", expectedModuleName);
-        RequireExactString(provenanceRoot, "version", expectedVersion);
-        RequireExactString(provenanceRoot, "repository", $"https://github.com/{expectedOwner}/{expectedRepository}");
-        RequireExactString(provenanceRoot, "commit", expectedCommit);
-        if (!provenanceRoot.TryGetProperty("schemaVersion", out var schemaVersion) ||
-            schemaVersion.ValueKind != JsonValueKind.Number ||
-            schemaVersion.GetInt32() != 1)
-        {
-            throw new InvalidOperationException("The public release module provenance schema is invalid.");
-        }
-        if (provenanceRoot.EnumerateObject().Count() != 5)
-            throw new InvalidOperationException("The public release module provenance contains unexpected properties.");
+        if (!string.Equals(configMatch.Groups["version"].Value, expectedVersion, StringComparison.Ordinal))
+            throw new InvalidOperationException("The public release authorization config filename does not bind the configured module version.");
 
-        allowed.Add(ToGitPath(projectRoot, provenancePath));
+        if (File.Exists(provenancePath))
+        {
+            EnsureOrdinaryGeneratedFile(projectRoot, provenancePath, "Public release module provenance");
+            using var provenance = JsonDocument.Parse(File.ReadAllText(provenancePath));
+            var provenanceRoot = provenance.RootElement;
+            RequireExactString(provenanceRoot, "moduleName", expectedModuleName);
+            RequireExactString(provenanceRoot, "version", expectedVersion);
+            RequireExactString(provenanceRoot, "repository", $"https://github.com/{expectedOwner}/{expectedRepository}");
+            RequireExactString(provenanceRoot, "commit", expectedCommit);
+            if (!provenanceRoot.TryGetProperty("schemaVersion", out var schemaVersion) ||
+                schemaVersion.ValueKind != JsonValueKind.Number ||
+                schemaVersion.GetInt32() != 1 ||
+                !provenanceRoot.TryGetProperty("sourceDirty", out var sourceDirty) ||
+                sourceDirty.ValueKind != JsonValueKind.False)
+            {
+                throw new InvalidOperationException("The public release module provenance schema or source state is invalid.");
+            }
+            if (provenanceRoot.EnumerateObject().Count() != 6)
+                throw new InvalidOperationException("The public release module provenance contains unexpected properties.");
+
+            allowed.Add(ToGitPath(projectRoot, provenancePath));
+        }
+
+        var signedProvenancePath = Path.Combine(
+            projectRoot,
+            "Module",
+            PowerForgeModuleSourceAttestationWriter.FileName);
+        if (File.Exists(signedProvenancePath))
+        {
+            EnsureOrdinaryGeneratedFile(projectRoot, signedProvenancePath, "Signed public release module provenance");
+            var signedProvenance = PowerForgeModuleSourceAttestationWriter.Read(File.ReadAllBytes(signedProvenancePath));
+            if (!string.Equals(signedProvenance.ModuleName, expectedModuleName, StringComparison.Ordinal) ||
+                !string.Equals(signedProvenance.Version, expectedVersion, StringComparison.Ordinal) ||
+                !string.Equals(signedProvenance.SourceRevision, expectedCommit, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The signed public release module provenance does not match the authorization config.");
+            }
+
+            allowed.Add(ToGitPath(projectRoot, signedProvenancePath));
+        }
+
         return allowed;
     }
 
@@ -231,6 +254,25 @@ internal sealed partial class PowerForgeReleaseService
                 break;
             current = Path.GetDirectoryName(current)
                       ?? throw new InvalidOperationException($"{name} escaped the release checkout.");
+        }
+    }
+
+    private static void EnsureOrdinaryFile(string path, string name)
+    {
+        if (!File.Exists(path))
+            throw new InvalidOperationException($"{name} was not found: {path}");
+
+        var current = Path.GetFullPath(path);
+        while (true)
+        {
+            var attributes = File.GetAttributes(current);
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"{name} must not traverse a link or reparse point: {current}");
+
+            var parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || PathEquals(current, parent))
+                break;
+            current = parent;
         }
     }
 

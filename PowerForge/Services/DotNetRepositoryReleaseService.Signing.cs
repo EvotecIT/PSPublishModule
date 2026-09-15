@@ -14,8 +14,10 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<string> packages,
         DotNetRepositoryReleaseSpec spec,
         string sha256,
+        out string[] failedPackages,
         out string error)
     {
+        failedPackages = Array.Empty<string>();
         error = string.Empty;
         if (packages is null || packages.Count == 0) return true;
 
@@ -28,32 +30,30 @@ public sealed partial class DotNetRepositoryReleaseService
             .ToArray();
         if (packagePaths.Length == 0) return true;
 
-        var exitCode = RunDotnetSign(
+        DotNetNuGetSignResult result = RunDotnetSign(
             packagePaths,
             sha256,
             store,
             timeStampServer,
             spec.OverwriteSignedPackages,
-            out var stdErr,
-            out var stdOut);
-        if (exitCode == 0) return true;
+            out failedPackages);
+        if (result.Succeeded) return true;
 
-        var msg = string.Join(Environment.NewLine, stdErr, stdOut).Trim();
-        error = $"Signing failed for {packagePaths.Length} package(s). {msg}".Trim();
+        error = result.ErrorMessage
+            ?? string.Join(Environment.NewLine, result.StdErr, result.StdOut).Trim();
         return false;
     }
 
-    private static int RunDotnetSign(
+    private static DotNetNuGetSignResult RunDotnetSign(
         IReadOnlyList<string> packagePaths,
         string sha256,
         string store,
         string timeStampServer,
         bool overwriteSignedPackages,
-        out string stdErr,
-        out string stdOut)
+        out string[] failedPackages)
     {
-        var result = new DotNetNuGetClient()
-            .SignPackageAsync(new DotNetNuGetSignRequest(
+        (DotNetNuGetSignResult Result, string[] FailedPackages) outcome = new DotNetNuGetClient()
+            .SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
                 packagePaths: packagePaths,
                 certificateFingerprint: sha256,
                 certificateStoreLocation: store,
@@ -62,9 +62,8 @@ public sealed partial class DotNetRepositoryReleaseService
             .GetAwaiter()
             .GetResult();
 
-        stdErr = result.StdErr;
-        stdOut = result.StdOut;
-        return result.ExitCode;
+        failedPackages = outcome.FailedPackages;
+        return outcome.Result;
     }
 
     private static void MarkPackageSigningFailure(

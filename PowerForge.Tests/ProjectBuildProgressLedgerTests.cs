@@ -615,8 +615,10 @@ public sealed class ProjectBuildProgressLedgerTests
                 IReadOnlyList<string> packages,
                 DotNetRepositoryReleaseSpec spec,
                 string sha256,
+                out string[] failedPackages,
                 out string error) =>
             {
+                failedPackages = Array.Empty<string>();
                 error = string.Empty;
                 return packages.Count > 0;
             };
