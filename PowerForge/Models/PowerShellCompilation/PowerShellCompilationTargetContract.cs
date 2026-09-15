@@ -133,12 +133,15 @@ public static class PowerShellCompilationTargetContractService
     /// <summary>Returns the semantic profile implied by a compatibility target framework.</summary>
     public static string GetDefaultSemanticProfileId(string? targetFramework)
     {
-        if (string.IsNullOrWhiteSpace(targetFramework) ||
-            PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework))
+        if (targetFramework is null)
             return PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
-        if (targetFramework.Trim().Equals(PowerShellCompilationTargetFrameworkPolicy.Legacy, StringComparison.OrdinalIgnoreCase))
+
+        var framework = targetFramework.Trim();
+        if (framework.Length == 0 || PowerShellCompilationTargetFrameworkPolicy.IsModern(framework))
+            return PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+        if (framework.Equals(PowerShellCompilationTargetFrameworkPolicy.Legacy, StringComparison.OrdinalIgnoreCase))
             return PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId;
-        PowerShellCompilationTargetFrameworkPolicy.EnsureSupported(targetFramework);
+        PowerShellCompilationTargetFrameworkPolicy.EnsureSupported(framework);
         throw new InvalidOperationException("Unreachable target framework policy state.");
     }
 

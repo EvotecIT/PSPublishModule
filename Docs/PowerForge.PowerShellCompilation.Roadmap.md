@@ -1,6 +1,6 @@
 # PowerShell Compilation Architecture Roadmap
 
-Last updated: 2026-09-07
+Last updated: 2026-09-15
 
 This roadmap is the execution plan for growing PowerForge PowerShell compilation without turning the analyzer, transpiler, command handling, or C# emitter into increasingly coupled catch-all components.
 
@@ -49,6 +49,20 @@ The product succeeds when users can predict which of these outcomes they are get
 
 ## Current position
 
+The active continuation branch is `fix/compiler-audit-milestones`. It preserves the earlier continuation work, merges current `main`, and is intentionally being developed without a pull request. The remote branch is the recovery point between milestones.
+
+### Continuation checkpoint: 2026-09-15
+
+- [x] Preserve the continuation history, reconcile it with current `main`, and push each stable checkpoint.
+- [x] Close the exposed continuation regressions in prefix selection, output metadata, interpolation, module-state provenance, fallback expectations, and numeric error observation.
+- [x] Retire `net8.0` from the PowerShell compiler's target policy, defaults, fixtures, compiler tests, semantic oracle, corpus packets, and active support claims. Keep unrelated PowerForge target frameworks outside this compiler-specific decision.
+- [x] Build `PowerForge.PowerShell` for `net10.0` and `net472` with zero warnings and errors. Normalize nullable target input explicitly so the `net472` compiler does not lose flow-state guarantees.
+- [x] Pass the complete compiler category: 661/661 tests on .NET 10, including generated `net10`/PowerShell 7.6 and `net472`/Windows PowerShell 5.1 artifact cases.
+- [x] Pass all six fixed Strict corpus programs as `net10.0` `win-x64` artifacts.
+- [ ] Complete independent review of the frozen continuation diff and keep this branch available for the next bounded semantic slice. CI and a PR remain intentionally outside this checkpoint.
+
+The supported compiler framework/host pairs are now `net10.0` with PowerShell 7.6 and `net472` with Windows PowerShell 5.1. [Microsoft ends .NET 8 support on 10 November 2026](https://dotnet.microsoft.com/en-us/platform/support/policy), while .NET 10 is supported through November 2028. Older roadmap paragraphs retain dated `net8`/PowerShell 7.4 observations only as historical evidence; they are not active targets, gates, or release claims.
+
 The current audit starts from `origin/main` at `a901af85b` on 2026-09-07, including merged corrective PR #883 and continuation PR #884. It includes the semantic-pipeline migration, exact-closure remediation, Milestone 14–22 implementation waves, and Milestone 23 live state, scalar continuation, terminal/complete-body region, and numeric slices. The [current readiness assessment](PowerForge.PowerShellCompilation.Assessment.md) separates the audit's tested working-tree correction from this merged baseline. Earlier multi-target and target-host results retain their own evidence dates. Merged source is not proof of a published package or released product.
 
 ### Current corrective gate: assignment semantics
@@ -86,7 +100,7 @@ The compiler already provides:
 - [x] consume one reviewed dependency lock during build, reject source/dependency drift, and resolve exact local/acquired transitive module identity without importing or executing source; unresolved external modules remain explicit target requirements
 - [x] a product-neutral acceptance corpus and replaceable real-module census inputs
 - [x] PowerShell 5.1 and supported PowerShell 7 differential coverage, including hosted lifecycle raw-input, cleanup, and explicit `clean` version behavior
-- [x] net472, net8.0, and net10.0 compiler build lanes
+- [x] `net472` and `net10.0` compiler build lanes; the compiler no longer accepts `net8.0` as a target
 - [x] an explicit integrity-bound target contract in engine, CLI/cmdlet, generated source, manifests, provenance, and SBOM sidecars
 - [x] a verified content-addressed build cache that rejects incomplete, modified, malformed, cross-target, and reparse-root/ancestor entries
 - [x] a managed Hybrid executable path that registers compiled cmdlets while retaining unsupported source and dependency units for hosted execution
@@ -1657,7 +1671,7 @@ The parser-to-artifact semantic pipeline is canonical. The broader redesign is c
 - [x] the focused compiler suite passes on the integrated branch candidate;
 - [x] established applicable PowerShell 5.1 and PowerShell 7 differential lanes in that suite pass;
 - [x] hosted lifecycle has an explicit PowerShell 5.1/7 version-capability matrix and differential proof;
-- [x] net472, net8.0, and net10.0 builds remain warning-free on the integrated branch candidate;
+- [x] `net472` and `net10.0` compiler builds remain warning-free on the integrated branch candidate;
 - [x] each artifact records one normalized, integrity-bound semantic/execution/deployment target contract from Milestone 14; compatibility fields may construct that contract, but artifact generation and evidence consume the contract;
 - [x] Strict publication fails when delivered dependency closure cannot mechanically exclude PowerShell runtime, source fallback, or missing non-framework managed references;
 - [x] every emitted runtime-free helper has one versioned owner and is trim/NativeAOT clean, or the artifact explicitly records that no support substrate is present;

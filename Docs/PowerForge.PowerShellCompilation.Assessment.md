@@ -1,6 +1,6 @@
 # PowerShell compiler readiness assessment
 
-Updated: 2026-09-07. The latest audit starts from `origin/main` at `a901af85bce7343582116a9c996fb1cf7fcc265a`, which contains merged corrective PR #883 and continuation PR #884. The assignment-constraint correction described first is tested working-tree source pending integration. The 2026-09-06 sections below retain their original evidence dates and pre-merge measurements. None of these results establishes current public-package availability.
+Updated: 2026-09-15. The active continuation is preserved on `fix/compiler-audit-milestones` without a pull request. Its reconciled candidate passes 661/661 compiler-category tests and all six Strict `net10.0` `win-x64` corpus programs. The current compiler support matrix is `net10.0`/PowerShell 7.6 plus `net472`/Windows PowerShell 5.1; `net8.0` is retired from forward-looking compiler targets because Microsoft support ends on 10 November 2026. The 2026-09-06 and 2026-09-07 sections below retain their original evidence dates, revisions, and pre-retirement measurements. None of these results establishes current public-package availability.
 
 ## Current audit: foundations exist, useful coverage is still narrow
 
@@ -143,7 +143,7 @@ Retain generated C# as the backend and semantic decisions in the binder, immutab
 
 ## Reproduction
 
-Build the CLI and tests from the same checkout with SDK `10.0.303`. Artifact validation also needs .NET 8 reference assemblies/runtime and the selected PowerShell host. On Windows, the numeric matrix includes Windows PowerShell 5.1.
+Build the CLI and tests from the same checkout with the repository's .NET 10 SDK. Artifact validation also needs the selected PowerShell 7.6 host; on Windows, the `net472` matrix uses Windows PowerShell 5.1.
 
 ```powershell
 ./Build/Invoke-PowerShellCompilerGate.ps1 `

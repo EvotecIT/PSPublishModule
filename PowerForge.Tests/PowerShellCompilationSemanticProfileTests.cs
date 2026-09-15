@@ -7,6 +7,17 @@ namespace PowerForge.Tests;
 public sealed class PowerShellCompilationSemanticProfileTests
 {
     [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void MissingCompatibilityTargetSelectsModernSemanticProfile(string? targetFramework)
+    {
+        Assert.Equal(
+            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework));
+    }
+
+    [Theory]
     [InlineData("net472", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId)]
     [InlineData("net10.0", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)]
     public void CompatibilityTargetSelectsFrameworkOwnedSemanticProfile(string targetFramework, string expectedProfileId)

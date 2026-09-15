@@ -13,9 +13,9 @@ internal static class PowerShellCompilationGeneratedPackageCatalog
         PowerShellCompilationMode mode,
         string? targetFramework)
     {
-        var framework = string.IsNullOrWhiteSpace(targetFramework)
-            ? PowerShellCompilationTargetFrameworkPolicy.Default
-            : targetFramework.Trim();
+        var framework = targetFramework?.Trim();
+        if (framework is null || framework.Length == 0)
+            framework = PowerShellCompilationTargetFrameworkPolicy.Default;
         var selected = new List<PackageIdentity>();
         if (PowerShellCommandMetadataBuildSupport.RequiresBuildTool(kind, mode))
         {
