@@ -34,7 +34,7 @@ public sealed class PowerShellCompilationManagementProviderExecutionTests
                 "PowerForge.PowerShell.Provider.Management.Runtime",
                 "PowerForge.PowerShell.Provider.Management.Runtime.csproj");
             Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("dotnet", out var dotNetPath));
-            var pack = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+            var pack = await new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
                 dotNetPath,
                 repoRoot,
                 new[]
