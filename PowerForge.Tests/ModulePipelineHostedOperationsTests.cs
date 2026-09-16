@@ -2171,40 +2171,11 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
-    public void SignModuleOutput_RetriesStoreCertificateUnknownErrorsWithWindowsPowerShell()
+    public void SignModuleOutput_UsesWindowsPowerShellForWindowsStoreCertificate()
     {
         var requests = new List<PowerShellRunRequest>();
-        var requestedPackageFiles = new List<string[]>();
         var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
-        var manifestPath = Path.Combine(rootPath, "TestModule.psd1");
         var modulePath = Path.Combine(rootPath, "TestModule.psm1");
-        var failedSummary = new ModuleSigningResult
-        {
-            TotalMatched = 2,
-            TotalAfterExclude = 2,
-            Attempted = 2,
-            SignedNew = 1,
-            Failed = 1,
-            UnknownError = 1,
-            FailedFiles = new[]
-            {
-                $"{modulePath} :: signing returned status UnknownError"
-            },
-            FailedFilePaths = new[]
-            {
-                modulePath
-            },
-            VerifiedFilePaths = new[] { manifestPath },
-            PreservedThirdPartySignatures = new[]
-            {
-                new ModuleSigningPreservedSignature
-                {
-                    FilePath = manifestPath,
-                    Subject = "CN=Vendor",
-                    Thumbprint = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-                }
-            }
-        };
         var successSummary = new ModuleSigningResult
         {
             TotalMatched = 1,
@@ -2216,66 +2187,7 @@ public sealed class ModulePipelineHostedOperationsTests
         var runner = new RecordingPowerShellRunner(request =>
         {
             requests.Add(request);
-            requestedPackageFiles.Add(File.ReadAllLines(request.Arguments[1]));
-            return requests.Count == 1
-                ? new PowerShellRunResult(2, EncodeSigningSummary(failedSummary), string.Empty, "pwsh.exe")
-                : new PowerShellRunResult(0, EncodeSigningSummary(successSummary), string.Empty, "powershell.exe");
-        });
-
-        var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
-        var result = operations.SignModuleOutput(
-            moduleName: "TestModule",
-            rootPath: rootPath,
-            packageFilePaths: new[] { manifestPath, modulePath },
-            includePatterns: new[] { "*.psd1", "*.psm1" },
-            excludeSubstrings: Array.Empty<string>(),
-            signing: new SigningOptionsConfiguration { CertificateThumbprint = "0123456789ABCDEF" });
-
-        Assert.Equal(2, requests.Count);
-        Assert.True(requests[0].PreferPwsh);
-        Assert.False(requests[1].PreferPwsh);
-        Assert.Equal(PowerShellHostRequirement.WindowsPowerShell, requests[1].HostRequirement);
-        Assert.Equal("0", requests[0].Arguments[8]);
-        Assert.Equal("1", requests[1].Arguments[8]);
-        Assert.Equal(new[] { manifestPath, modulePath }, requestedPackageFiles[0]);
-        Assert.Equal(new[] { modulePath }, requestedPackageFiles[1]);
-        Assert.Equal(2, result.SignedNew);
-        Assert.Equal(0, result.Failed);
-        Assert.Equal(
-            new[] { manifestPath, modulePath }.OrderBy(path => path),
-            result.VerifiedFilePaths.OrderBy(path => path));
-        Assert.Equal(manifestPath, Assert.Single(result.PreservedThirdPartySignatures).FilePath);
-    }
-
-    [Fact]
-    public void SignModuleOutput_RetriesTerminatingSigningExceptionsWithWindowsPowerShell()
-    {
-        var requests = new List<PowerShellRunRequest>();
-        var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
-        var modulePath = Path.Combine(rootPath, "TestModule.psm1");
-        var failedSummary = new ModuleSigningResult
-        {
-            TotalMatched = 1,
-            TotalAfterExclude = 1,
-            Attempted = 1,
-            Failed = 1,
-            SigningException = 1,
-            FailedFiles = new[] { $"{modulePath} :: key container access failed" },
-            FailedFilePaths = new[] { modulePath }
-        };
-        var successSummary = new ModuleSigningResult
-        {
-            TotalMatched = 1,
-            TotalAfterExclude = 1,
-            Attempted = 1,
-            SignedNew = 1
-        };
-        var runner = new RecordingPowerShellRunner(request =>
-        {
-            requests.Add(request);
-            return requests.Count == 1
-                ? new PowerShellRunResult(2, EncodeSigningSummary(failedSummary), string.Empty, "pwsh.exe")
-                : new PowerShellRunResult(0, EncodeSigningSummary(successSummary), string.Empty, "powershell.exe");
+            return new PowerShellRunResult(0, EncodeSigningSummary(successSummary), string.Empty, "powershell.exe");
         });
 
         var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
@@ -2287,10 +2199,10 @@ public sealed class ModulePipelineHostedOperationsTests
             excludeSubstrings: Array.Empty<string>(),
             signing: new SigningOptionsConfiguration { CertificateThumbprint = "0123456789ABCDEF" });
 
-        Assert.Equal(2, requests.Count);
-        Assert.False(requests[1].PreferPwsh);
-        Assert.Equal(PowerShellHostRequirement.WindowsPowerShell, requests[1].HostRequirement);
-        Assert.Equal("1", requests[1].Arguments[8]);
+        var request = Assert.Single(requests);
+        Assert.False(request.PreferPwsh);
+        Assert.Equal(PowerShellHostRequirement.WindowsPowerShell, request.HostRequirement);
+        Assert.Equal("0", request.Arguments[8]);
         Assert.Equal(1, result.SignedNew);
     }
 
@@ -2314,7 +2226,7 @@ public sealed class ModulePipelineHostedOperationsTests
         var runner = new RecordingPowerShellRunner(request =>
         {
             requests.Add(request);
-            return new PowerShellRunResult(2, EncodeSigningSummary(failedSummary), string.Empty, "pwsh.exe");
+            return new PowerShellRunResult(2, EncodeSigningSummary(failedSummary), string.Empty, "powershell.exe");
         });
 
         var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
@@ -2326,7 +2238,9 @@ public sealed class ModulePipelineHostedOperationsTests
             excludeSubstrings: Array.Empty<string>(),
             signing: new SigningOptionsConfiguration { CertificateThumbprint = "0123456789ABCDEF" }));
 
-        Assert.Single(requests);
+        var request = Assert.Single(requests);
+        Assert.False(request.PreferPwsh);
+        Assert.Equal(PowerShellHostRequirement.WindowsPowerShell, request.HostRequirement);
         Assert.Equal(1, exception.Result?.PrecheckFailure);
         Assert.Contains("precheck returned status UnknownError", exception.Message, StringComparison.Ordinal);
     }
@@ -2394,95 +2308,6 @@ public sealed class ModulePipelineHostedOperationsTests
             signing: new SigningOptionsConfiguration { CertificateThumbprint = "0123456789ABCDEF" }));
 
         Assert.Single(requests);
-    }
-
-    [Fact]
-    public void SignModuleOutput_PreservesBothFailuresWhenWindowsPowerShellRetryFails()
-    {
-        var requests = new List<PowerShellRunRequest>();
-        var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
-        var modulePath = Path.Combine(rootPath, "TestModule.psm1");
-        var initialSummary = new ModuleSigningResult
-        {
-            TotalMatched = 1,
-            TotalAfterExclude = 1,
-            Attempted = 1,
-            Failed = 1,
-            UnknownError = 1,
-            FailedFiles = new[] { $"{modulePath} :: initial provider failure" },
-            FailedFilePaths = new[] { modulePath }
-        };
-        var retrySummary = new ModuleSigningResult
-        {
-            TotalMatched = 1,
-            TotalAfterExclude = 1,
-            Attempted = 1,
-            Failed = 1,
-            FailedFiles = new[] { $"{modulePath} :: retry certificate failure" },
-            FailedFilePaths = new[] { modulePath }
-        };
-        var runner = new RecordingPowerShellRunner(request =>
-        {
-            requests.Add(request);
-            return requests.Count == 1
-                ? new PowerShellRunResult(2, EncodeSigningSummary(initialSummary), string.Empty, "pwsh.exe")
-                : new PowerShellRunResult(2, EncodeSigningSummary(retrySummary), string.Empty, "powershell.exe");
-        });
-
-        var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
-        var exception = Assert.Throws<ModuleSigningException>(() => operations.SignModuleOutput(
-            moduleName: "TestModule",
-            rootPath: rootPath,
-            packageFilePaths: new[] { modulePath },
-            includePatterns: new[] { "*.psm1" },
-            excludeSubstrings: Array.Empty<string>(),
-            signing: new SigningOptionsConfiguration { CertificateThumbprint = "0123456789ABCDEF" }));
-
-        Assert.Equal(2, requests.Count);
-        Assert.Contains("pwsh.exe", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("powershell.exe", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("initial provider failure", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("retry certificate failure", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(retrySummary.FailedFiles, exception.Result?.FailedFiles);
-    }
-
-    [Fact]
-    public void SignModuleOutput_RetainsInitialStructuredFailureWhenRetryHasNoSummary()
-    {
-        var requests = new List<PowerShellRunRequest>();
-        var rootPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
-        var modulePath = Path.Combine(rootPath, "TestModule.psm1");
-        var initialSummary = new ModuleSigningResult
-        {
-            TotalMatched = 1,
-            TotalAfterExclude = 1,
-            Attempted = 1,
-            Failed = 1,
-            UnknownError = 1,
-            FailedFiles = new[] { $"{modulePath} :: initial provider failure" },
-            FailedFilePaths = new[] { modulePath }
-        };
-        var runner = new RecordingPowerShellRunner(request =>
-        {
-            requests.Add(request);
-            return requests.Count == 1
-                ? new PowerShellRunResult(2, EncodeSigningSummary(initialSummary), string.Empty, "pwsh.exe")
-                : new PowerShellRunResult(1, string.Empty, "Windows PowerShell host failed", "powershell.exe");
-        });
-
-        var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
-        var exception = Assert.Throws<ModuleSigningException>(() => operations.SignModuleOutput(
-            moduleName: "TestModule",
-            rootPath: rootPath,
-            packageFilePaths: new[] { modulePath },
-            includePatterns: new[] { "*.psm1" },
-            excludeSubstrings: Array.Empty<string>(),
-            signing: new SigningOptionsConfiguration { CertificateThumbprint = "0123456789ABCDEF" }));
-
-        Assert.Equal(2, requests.Count);
-        Assert.Equal(initialSummary.FailedFiles, exception.Result?.FailedFiles);
-        Assert.Contains("initial provider failure", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("Windows PowerShell host failed", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
