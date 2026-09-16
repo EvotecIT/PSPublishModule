@@ -1,5 +1,7 @@
 using PowerForge;
+using PSPublishModule;
 using System.IO;
+using System.Management.Automation;
 
 namespace PowerForge.Tests;
 
@@ -52,6 +54,18 @@ public sealed class DocumentationConfigurationFactoryTests
         var config = File.ReadAllText(configPath);
         Assert.DoesNotContain("\"StartClean\"", config, StringComparison.Ordinal);
         Assert.DoesNotContain("\"UpdateWhenNew\"", config, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(nameof(NewConfigurationDocumentationCommand.StartClean))]
+    [InlineData(nameof(NewConfigurationDocumentationCommand.UpdateWhenNew))]
+    public void DocumentationCmdlet_AcceptsLegacyAutomaticBehaviorSwitches(string propertyName)
+    {
+        var property = typeof(NewConfigurationDocumentationCommand).GetProperty(propertyName);
+
+        Assert.NotNull(property);
+        Assert.Equal(typeof(SwitchParameter), property!.PropertyType);
+        Assert.Contains(property.GetCustomAttributes(inherit: true), attribute => attribute is ParameterAttribute);
     }
 
     [Fact]

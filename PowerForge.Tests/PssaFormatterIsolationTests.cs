@@ -21,7 +21,7 @@ public sealed class PssaFormatterIsolationTests
     }
 
     [Fact]
-    public void EmbeddedFormatter_OnlyToleratesKnownPowerShellClassMemberMetadataFailure()
+    public void EmbeddedFormatter_OnlyToleratesKnownPowerShellRuntimeMetadataFailures()
     {
         var buildScript = typeof(PssaFormatter).GetMethod("BuildScript", BindingFlags.NonPublic | BindingFlags.Static);
         var script = Assert.IsType<string>(buildScript?.Invoke(null, null));
@@ -30,8 +30,10 @@ public sealed class PssaFormatterIsolationTests
         Assert.Contains("*PowerShellCustomFunctionAttribute*", script, StringComparison.Ordinal);
         Assert.Contains("*FunctionMemberAst*", script, StringComparison.Ordinal);
         Assert.Contains("*FunctionDefinitionAst*", script, StringComparison.Ordinal);
+        Assert.Contains("^Unable to find type \\[[^\\]]+\\]\\.$", script, StringComparison.Ordinal);
         Assert.Contains("*PowerShellCustomFunctionAttribute*' -and", script, StringComparison.Ordinal);
         Assert.Contains("*FunctionMemberAst*' -and", script, StringComparison.Ordinal);
+        Assert.Contains("^Unable to find type \\[[^\\]]+\\]\\.$'", script, StringComparison.Ordinal);
         Assert.Contains("$unexpectedErrors.Count -gt 0 -or $null -eq $formatted", script, StringComparison.Ordinal);
         Assert.Contains("WARNING::", script, StringComparison.Ordinal);
     }
@@ -40,7 +42,8 @@ public sealed class PssaFormatterIsolationTests
     [InlineData("PowerShellCustomFunctionAttribute metadata is unavailable")]
     [InlineData("FunctionMemberAst metadata is unavailable")]
     [InlineData("FunctionDefinitionAst metadata is unavailable")]
-    public void EmbeddedFormatter_ToleratesEachKnownClassMemberMetadataFailure(string errorMessage)
+    [InlineData("Unable to find type [Contoso.Optional.Runtime.Type].")]
+    public void EmbeddedFormatter_ToleratesEachKnownRuntimeMetadataFailure(string errorMessage)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -76,6 +79,94 @@ public sealed class PssaFormatterIsolationTests
             Assert.False(result.Changed);
             Assert.Equal("Unchanged", result.Message);
             Assert.Single(logger.Warnings);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EmbeddedFormatter_RejectsUnexpectedFormatterErrorEvenWhenOutputExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string moduleRoot = Path.Combine(root, "modules", "PSScriptAnalyzer", "999.0.0");
+            Directory.CreateDirectory(moduleRoot);
+            WriteTestModule(
+                moduleRoot,
+                "999.0.0",
+                """
+                function Invoke-Formatter {
+                    [CmdletBinding()]
+                    param([string] $ScriptDefinition, [hashtable] $Settings)
+                    Write-Error 'Unexpected formatter failure'
+                    return $ScriptDefinition
+                }
+                Export-ModuleMember -Function Invoke-Formatter
+                """);
+
+            string inputPath = Path.Combine(root, "module.ps1");
+            File.WriteAllText(inputPath, "Get-Date");
+            var logger = new CollectingLogger();
+            var formatter = new PssaFormatter(
+                new EnvironmentPowerShellRunner(new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = Path.Combine(root, "modules")
+                }),
+                logger);
+
+            FormatterResult result = Assert.Single(formatter.FormatFiles(new[] { inputPath }));
+
+            Assert.False(result.Changed);
+            Assert.Equal("Error: Unexpected formatter failure", result.Message);
+            Assert.Empty(logger.Warnings);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EmbeddedFormatter_RejectsKnownMetadataFailureWhenOutputIsNull()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string moduleRoot = Path.Combine(root, "modules", "PSScriptAnalyzer", "999.0.0");
+            Directory.CreateDirectory(moduleRoot);
+            WriteTestModule(
+                moduleRoot,
+                "999.0.0",
+                """
+                function Invoke-Formatter {
+                    [CmdletBinding()]
+                    param([string] $ScriptDefinition, [hashtable] $Settings)
+                    Write-Error 'Unable to find type [Contoso.Optional.Runtime.Type].'
+                    return $null
+                }
+                Export-ModuleMember -Function Invoke-Formatter
+                """);
+
+            string inputPath = Path.Combine(root, "module.ps1");
+            File.WriteAllText(inputPath, "Get-Date");
+            var logger = new CollectingLogger();
+            var formatter = new PssaFormatter(
+                new EnvironmentPowerShellRunner(new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = Path.Combine(root, "modules")
+                }),
+                logger);
+
+            FormatterResult result = Assert.Single(formatter.FormatFiles(new[] { inputPath }));
+
+            Assert.False(result.Changed);
+            Assert.Equal("Error: Unable to find type [Contoso.Optional.Runtime.Type].", result.Message);
+            Assert.Empty(logger.Warnings);
         }
         finally
         {

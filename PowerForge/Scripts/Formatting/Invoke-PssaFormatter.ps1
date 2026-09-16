@@ -115,17 +115,18 @@ foreach ($f in $Files) {
             $message = $_.Exception.Message
             $message -notlike '*PowerShellCustomFunctionAttribute*' -and
             $message -notlike '*FunctionMemberAst*' -and
-            $message -notlike '*FunctionDefinitionAst*'
+            $message -notlike '*FunctionDefinitionAst*' -and
+            $message -notmatch '^Unable to find type \[[^\]]+\]\.$'
         })
         if ($unexpectedErrors.Count -gt 0 -or $null -eq $formatted) {
             $messages = @($formatterErrors | ForEach-Object { $_.Exception.Message }) -join '; '
             throw $messages
         }
-        # PowerShell 7.6 can surface this non-terminating engine error while
-        # PSScriptAnalyzer's PSUseCorrectCasing rule inspects class method calls.
-        # Invoke-Formatter still returns its complete formatted script, so retain
-        # that output while making the compatibility fallback visible to callers.
-        Write-Output ("WARNING::" + $f + "::PSScriptAnalyzer skipped class-member command casing because the current PowerShell runtime could not inspect FunctionMemberAst metadata.")
+        # PowerShell/PSScriptAnalyzer can surface non-terminating metadata errors while
+        # formatting otherwise valid modules whose classes or parameter types are supplied
+        # only by their target environment. Invoke-Formatter still returns its complete
+        # formatted script, so retain that output and make the fallback visible to callers.
+        Write-Output ("WARNING::" + $f + "::PSScriptAnalyzer could not inspect some runtime type metadata; the complete formatted output was retained.")
     }
     if ($null -ne $formatted -and $formatted -ne $text) {
         [System.IO.File]::WriteAllText($f, $formatted, [System.Text.UTF8Encoding]::new($true))

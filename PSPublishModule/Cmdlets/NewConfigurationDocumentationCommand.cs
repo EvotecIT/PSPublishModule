@@ -38,6 +38,16 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     [Parameter] public SwitchParameter Enable { get; set; }
 
     /// <summary>
+    /// Legacy compatibility switch. Documentation builds clean stale generated files by default.
+    /// </summary>
+    [Parameter] public SwitchParameter StartClean { get; set; }
+
+    /// <summary>
+    /// Legacy compatibility switch. Documentation builds update the project documentation path by default.
+    /// </summary>
+    [Parameter] public SwitchParameter UpdateWhenNew { get; set; }
+
+    /// <summary>
     /// When enabled, the generated external help file is also synced
     /// back to the project root (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>).
     /// </summary>
