@@ -7,8 +7,9 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class AppleDeviceDeploymentService
 {
+    // Xcode 27 allows an empty hostname, annotates identifiers, and adds Reality.
     private static readonly Regex DeviceLineRegex = new(
-        @"^(?<name>.+?)\s{2,}(?<hostname>\S+)\s{2,}(?<identifier>[0-9A-Fa-f-]{36})\s{2,}(?<state>.+?)\s{2,}(?<model>.+)$",
+        @"^(?<name>.+?)\s{2,}(?:(?<hostname>\S+)\s{2,})?(?<identifier>[0-9A-Fa-f-]+)(?: \((?:UDID|ECID|CoreDevice ID)\))?\s{2,}(?<state>.+?)\s{2,}(?<model>.+?)(?:\s{2,}(?:physical|simulated))?$",
         RegexOptions.Compiled);
 
     private static readonly Regex BundleIdRegex = new(
