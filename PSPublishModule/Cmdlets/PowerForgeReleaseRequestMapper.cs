@@ -72,6 +72,7 @@ internal static class PowerForgeReleaseRequestMapper
             options.ExpectedSourceRevision);
         if (options.SourceInputPaths.Length > 0)
             request.SourceInputPaths = options.SourceInputPaths;
+        request.ModuleHostPath = ChooseString(request.ModuleHostPath, options.ModuleHostPath);
         request.ReleaseVersion = ChooseString(request.ReleaseVersion, options.ReleaseVersion);
         request.ModuleVersion = ChooseString(request.ModuleVersion, options.ModuleVersion);
         request.ModulePreReleaseTag = ChooseString(request.ModulePreReleaseTag, options.ModulePreReleaseTag);
@@ -166,6 +167,7 @@ internal static class PowerForgeReleaseRequestMapper
             SourceRepositoryRoot = source.SourceRepositoryRoot,
             ExpectedSourceRevision = source.ExpectedSourceRevision,
             SourceInputPaths = source.SourceInputPaths.ToArray(),
+            ModuleHostPath = source.ModuleHostPath,
             ReleaseVersion = source.ReleaseVersion,
             ModuleFramework = source.ModuleFramework,
             ModuleRunMode = source.ModuleRunMode,

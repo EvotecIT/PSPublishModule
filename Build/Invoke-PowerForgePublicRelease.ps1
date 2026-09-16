@@ -443,6 +443,7 @@ try {
         ModuleVersion = $Version
         ConfigPath    = $ConfigPath
         EffectiveConfigurationPath = $effectiveConfigPath
+        ModuleHostPath = Join-Path $toolSnapshotRoot 'PSPublishModule\bin\Release\net8.0\PSPublishModule.dll'
         Json          = $true
     }
     switch ($Operation) {

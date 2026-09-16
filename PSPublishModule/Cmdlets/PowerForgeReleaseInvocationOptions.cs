@@ -32,6 +32,8 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public string[] SourceInputPaths { get; set; } = System.Array.Empty<string>();
 
+    public string? ModuleHostPath { get; set; }
+
     public string? ReleaseVersion { get; set; }
 
     public string? ModuleFramework { get; set; }

@@ -64,7 +64,8 @@ param(
     [string[]] $Frameworks,
     [Alias('Flavor')]
     [ValidateSet('SingleContained', 'SingleFx', 'Portable', 'Fx')]
-    [string[]] $Flavors
+    [string[]] $Flavors,
+    [string] $ModuleHostPath
 )
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
