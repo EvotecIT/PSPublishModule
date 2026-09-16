@@ -52,6 +52,7 @@ public sealed partial class AppleReleaseWorkflowTests
     {
         var root = FindRepoRoot();
         var script = Read(root, "Build", "Invoke-PowerForgePublicRelease.ps1");
+        var buildProject = Read(root, "Build", "Build-Project.ps1");
         var sourceState = Read(root, "Build", "Private", "Get-PowerForgeReleaseSourceState.ps1");
         var evidenceWorkspace = Read(root, "Build", "Private", "New-PowerForgeReleaseEvidenceWorkspace.ps1");
         var commitishAuthorization = Read(root, "Build", "Private", "Set-PowerForgeAuthorizedReleaseCommitish.ps1");
@@ -120,6 +121,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$buildParameters.SourceRepositoryRoot = $repositoryRoot", script, StringComparison.Ordinal);
         Assert.Contains("$buildParameters.ExpectedSourceRevision = $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("$buildParameters.SourceInputPath = [string[]] $explicitInputPaths", script, StringComparison.Ordinal);
+        Assert.Contains("ModuleHostPath = Join-Path $toolSnapshotRoot", script, StringComparison.Ordinal);
+        Assert.Contains("[string] $ModuleHostPath", buildProject, StringComparison.Ordinal);
         Assert.Contains("New-PowerForgeReleaseEvidenceWorkspace", script, StringComparison.Ordinal);
         Assert.Contains("[IO.Path]::GetTempPath()", evidenceWorkspace, StringComparison.Ordinal);
         Assert.Contains("[Guid]::NewGuid().ToString('N')", evidenceWorkspace, StringComparison.Ordinal);
