@@ -30,20 +30,22 @@ public sealed class PssaFormatterIsolationTests
         Assert.Contains("*PowerShellCustomFunctionAttribute*", script, StringComparison.Ordinal);
         Assert.Contains("*FunctionMemberAst*", script, StringComparison.Ordinal);
         Assert.Contains("*FunctionDefinitionAst*", script, StringComparison.Ordinal);
-        Assert.Contains("^Unable to find type \\[[^\\]]+\\]\\.$", script, StringComparison.Ordinal);
+        Assert.Contains("Unable to find type [Microsoft.ActiveDirectory.Management.ADEntity].", script, StringComparison.Ordinal);
+        Assert.Contains("$knownExternalTypeReferences.ContainsKey($message)", script, StringComparison.Ordinal);
+        Assert.Contains("$text.Contains($knownExternalTypeReferences[$message])", script, StringComparison.Ordinal);
         Assert.Contains("*PowerShellCustomFunctionAttribute*' -and", script, StringComparison.Ordinal);
         Assert.Contains("*FunctionMemberAst*' -and", script, StringComparison.Ordinal);
-        Assert.Contains("^Unable to find type \\[[^\\]]+\\]\\.$'", script, StringComparison.Ordinal);
+        Assert.Contains("-not $isKnownExternalTypeError", script, StringComparison.Ordinal);
         Assert.Contains("$unexpectedErrors.Count -gt 0 -or $null -eq $formatted", script, StringComparison.Ordinal);
         Assert.Contains("WARNING::", script, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("PowerShellCustomFunctionAttribute metadata is unavailable")]
-    [InlineData("FunctionMemberAst metadata is unavailable")]
-    [InlineData("FunctionDefinitionAst metadata is unavailable")]
-    [InlineData("Unable to find type [Contoso.Optional.Runtime.Type].")]
-    public void EmbeddedFormatter_ToleratesEachKnownRuntimeMetadataFailure(string errorMessage)
+    [InlineData("PowerShellCustomFunctionAttribute metadata is unavailable", "Get-Date")]
+    [InlineData("FunctionMemberAst metadata is unavailable", "Get-Date")]
+    [InlineData("FunctionDefinitionAst metadata is unavailable", "Get-Date")]
+    [InlineData("Unable to find type [Microsoft.ActiveDirectory.Management.ADEntity].", "param([Microsoft.ActiveDirectory.Management.ADEntity] $Object)")]
+    public void EmbeddedFormatter_ToleratesEachKnownRuntimeMetadataFailure(string errorMessage, string inputScript)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -65,7 +67,7 @@ public sealed class PssaFormatterIsolationTests
                 """);
 
             string inputPath = Path.Combine(root, "module.ps1");
-            File.WriteAllText(inputPath, "Get-Date");
+            File.WriteAllText(inputPath, inputScript);
             var logger = new CollectingLogger();
             var formatter = new PssaFormatter(
                 new EnvironmentPowerShellRunner(new Dictionary<string, string?>
@@ -86,8 +88,12 @@ public sealed class PssaFormatterIsolationTests
         }
     }
 
-    [Fact]
-    public void EmbeddedFormatter_RejectsUnexpectedFormatterErrorEvenWhenOutputExists()
+    [Theory]
+    [InlineData("Unexpected formatter failure", "Get-Date")]
+    [InlineData("Unable to find type [Contoso.Optional.Runtime.Type].", "param([Contoso.Optional.Runtime.Type] $Object)")]
+    [InlineData("Unable to find type [Microsoft.ActiveDirectory.Management.ADEntitty].", "param([Microsoft.ActiveDirectory.Management.ADEntitty] $Object)")]
+    [InlineData("Unable to find type [Microsoft.ActiveDirectory.Management.ADEntity].", "Get-Date")]
+    public void EmbeddedFormatter_RejectsUnexpectedFormatterErrorEvenWhenOutputExists(string errorMessage, string inputScript)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -98,18 +104,18 @@ public sealed class PssaFormatterIsolationTests
             WriteTestModule(
                 moduleRoot,
                 "999.0.0",
-                """
+                $$"""
                 function Invoke-Formatter {
                     [CmdletBinding()]
                     param([string] $ScriptDefinition, [hashtable] $Settings)
-                    Write-Error 'Unexpected formatter failure'
+                    Write-Error '{{errorMessage}}'
                     return $ScriptDefinition
                 }
                 Export-ModuleMember -Function Invoke-Formatter
                 """);
 
             string inputPath = Path.Combine(root, "module.ps1");
-            File.WriteAllText(inputPath, "Get-Date");
+            File.WriteAllText(inputPath, inputScript);
             var logger = new CollectingLogger();
             var formatter = new PssaFormatter(
                 new EnvironmentPowerShellRunner(new Dictionary<string, string?>
@@ -121,7 +127,7 @@ public sealed class PssaFormatterIsolationTests
             FormatterResult result = Assert.Single(formatter.FormatFiles(new[] { inputPath }));
 
             Assert.False(result.Changed);
-            Assert.Equal("Error: Unexpected formatter failure", result.Message);
+            Assert.Equal($"Error: {errorMessage}", result.Message);
             Assert.Empty(logger.Warnings);
         }
         finally
@@ -146,14 +152,14 @@ public sealed class PssaFormatterIsolationTests
                 function Invoke-Formatter {
                     [CmdletBinding()]
                     param([string] $ScriptDefinition, [hashtable] $Settings)
-                    Write-Error 'Unable to find type [Contoso.Optional.Runtime.Type].'
+                    Write-Error 'Unable to find type [Microsoft.ActiveDirectory.Management.ADEntity].'
                     return $null
                 }
                 Export-ModuleMember -Function Invoke-Formatter
                 """);
 
             string inputPath = Path.Combine(root, "module.ps1");
-            File.WriteAllText(inputPath, "Get-Date");
+            File.WriteAllText(inputPath, "param([Microsoft.ActiveDirectory.Management.ADEntity] $Object)");
             var logger = new CollectingLogger();
             var formatter = new PssaFormatter(
                 new EnvironmentPowerShellRunner(new Dictionary<string, string?>
@@ -165,7 +171,7 @@ public sealed class PssaFormatterIsolationTests
             FormatterResult result = Assert.Single(formatter.FormatFiles(new[] { inputPath }));
 
             Assert.False(result.Changed);
-            Assert.Equal("Error: Unable to find type [Contoso.Optional.Runtime.Type].", result.Message);
+            Assert.Equal("Error: Unable to find type [Microsoft.ActiveDirectory.Management.ADEntity].", result.Message);
             Assert.Empty(logger.Warnings);
         }
         finally

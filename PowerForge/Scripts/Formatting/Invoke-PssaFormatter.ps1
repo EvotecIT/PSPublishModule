@@ -111,20 +111,26 @@ foreach ($f in $Files) {
         $formatted = Invoke-Formatter -ScriptDefinition $text -ErrorAction SilentlyContinue -ErrorVariable +formatterErrors
     }
     if ($formatterErrors.Count -gt 0) {
+        $knownExternalTypeReferences = @{
+            'Unable to find type [Microsoft.ActiveDirectory.Management.ADEntity].' = '[Microsoft.ActiveDirectory.Management.ADEntity]'
+        }
         $unexpectedErrors = @($formatterErrors | Where-Object {
             $message = $_.Exception.Message
+            $isKnownExternalTypeError = $knownExternalTypeReferences.ContainsKey($message) -and
+                $text.Contains($knownExternalTypeReferences[$message])
             $message -notlike '*PowerShellCustomFunctionAttribute*' -and
             $message -notlike '*FunctionMemberAst*' -and
             $message -notlike '*FunctionDefinitionAst*' -and
-            $message -notmatch '^Unable to find type \[[^\]]+\]\.$'
+            -not $isKnownExternalTypeError
         })
         if ($unexpectedErrors.Count -gt 0 -or $null -eq $formatted) {
             $messages = @($formatterErrors | ForEach-Object { $_.Exception.Message }) -join '; '
             throw $messages
         }
         # PowerShell/PSScriptAnalyzer can surface non-terminating metadata errors while
-        # formatting otherwise valid modules whose classes or parameter types are supplied
-        # only by their target environment. Invoke-Formatter still returns its complete
+        # formatting otherwise valid modules whose known parameter types are supplied only
+        # by their target environment. Exact messages and source references are allowlisted
+        # so a misspelled or unexpected missing type still fails. Invoke-Formatter returns its complete
         # formatted script, so retain that output and make the fallback visible to callers.
         Write-Output ("WARNING::" + $f + "::PSScriptAnalyzer could not inspect some runtime type metadata; the complete formatted output was retained.")
     }
