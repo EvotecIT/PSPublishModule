@@ -27,34 +27,46 @@ try {
   exit 3
 }
 
-$names = DecodeLines $NamesB64
-$repos = DecodeLines $ReposB64
+$names = @(DecodeLines $NamesB64)
+$repos = @(DecodeLines $ReposB64)
 $prerelease = ($PrereleaseFlag -eq '1')
 
-$params = @{ ErrorAction = 'Stop' }
-if ($names.Count -gt 0) { $params.Name = $names }
-if ($repos.Count -gt 0) { $params.Repository = $repos[0] }
-$params.AllVersions = $true
-if ($prerelease) { $params.AllowPrerelease = $true }
+$commonParams = @{ ErrorAction = 'Stop' }
+if ($repos.Count -gt 0) { $commonParams.Repository = $repos[0] }
+if ($prerelease) { $commonParams.AllowPrerelease = $true }
 if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
   $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
-  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
+  $commonParams.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
 }
 
 try {
-  $results = Find-Module @params
-  foreach ($r in @($results)) {
-    $name = [string]$r.Name
-    $ver = [string]$r.Version
-    $repo = [string]$r.Repository
-    $guid = [string]$r.Guid
-    $fields = @($name, $ver, $repo, $guid) | ForEach-Object { Enc ([string]$_) }
-    Write-Output ('PFPWSGET::ITEM::' + ($fields -join '::'))
+  foreach ($requestedName in $names) {
+    $params = @{
+      ErrorAction = 'Stop'
+      Name = $requestedName
+      AllVersions = $true
+    }
+    foreach ($entry in $commonParams.GetEnumerator()) { $params[$entry.Key] = $entry.Value }
+
+    try {
+      $results = Find-Module @params
+    } catch {
+      if ($_.Exception.Message -match 'No match was found') { continue }
+      throw
+    }
+
+    foreach ($r in @($results)) {
+      $name = [string]$r.Name
+      $ver = [string]$r.Version
+      $repo = [string]$r.Repository
+      $guid = [string]$r.Guid
+      $fields = @($name, $ver, $repo, $guid) | ForEach-Object { Enc ([string]$_) }
+      Write-Output ('PFPWSGET::ITEM::' + ($fields -join '::'))
+    }
   }
   exit 0
 } catch {
   $msg = $_.Exception.Message
-  if ($msg -match 'No match was found') { exit 0 }
   $b64 = Enc $msg
   Write-Output ('PFPWSGET::ERROR::' + $b64)
   exit 1
