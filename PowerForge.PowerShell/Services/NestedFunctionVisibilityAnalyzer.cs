@@ -105,7 +105,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return result;
     }
 
-    private static bool TryGetDeclarationContext(
+    private bool TryGetDeclarationContext(
         FunctionDefinitionAst declaration,
         out ScriptBlockAst declarationScope,
         out NamedBlockAst declarationBlock)
@@ -126,7 +126,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         while (declarationScope.Parent is ScriptBlockExpressionAst expression &&
                expression.Parent is CommandAst invocation &&
-               IsScopePromotingInvocation(expression, invocation))
+               IsScopePromotingInvocation(expression, invocation) &&
+               DeclarationDominatesPromotedBlockExit(declaration))
         {
             if (declarationBlock.BlockKind == TokenKind.Process)
                 break;
@@ -148,7 +149,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return true;
     }
 
-    private static bool TryGetPotentialDeclarationContext(
+    private bool TryGetPotentialDeclarationContext(
         FunctionDefinitionAst declaration,
         out ScriptBlockAst declarationScope,
         out NamedBlockAst declarationBlock)
@@ -166,7 +167,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         while (declarationScope.Parent is ScriptBlockExpressionAst expression &&
                expression.Parent is CommandAst invocation &&
-               IsScopePromotingInvocation(expression, invocation))
+               IsScopePromotingInvocation(expression, invocation) &&
+               DeclarationDominatesPromotedBlockExit(declaration))
         {
             var parentScope = FindContainingScriptBlock(invocation);
             var parentBlock = parentScope is null ? null : FindNamedBlockInScope(invocation, parentScope);
@@ -234,7 +236,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return false;
     }
 
-    private static bool IsPromotedDeclarationDominatingCommand(
+    private bool IsPromotedDeclarationDominatingCommand(
         FunctionDefinitionAst declaration,
         CommandAst command)
     {
@@ -242,6 +244,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (declarationScope?.Parent is not ScriptBlockExpressionAst expression ||
             expression.Parent is not CommandAst invocation ||
             !IsScopePromotingInvocation(expression, invocation) ||
+            !DeclarationDominatesPromotedBlockExit(declaration) ||
             invocation.Parent is not PipelineAst pipeline ||
             pipeline.Parent is not StatementBlockAst statementBlock ||
             invocation.Extent.EndOffset > command.Extent.StartOffset)
@@ -264,6 +267,16 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return false;
+    }
+
+    private static bool DeclarationDominatesPromotedBlockExit(FunctionDefinitionAst declaration)
+    {
+        if (declaration.Parent is not NamedBlockAst declarationBlock)
+            return false;
+
+        return declarationBlock.Statements
+            .Where(statement => statement.Extent.EndOffset <= declaration.Extent.StartOffset)
+            .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst);
     }
 
     private static bool DeclarationDominatesFinallyCall(
@@ -367,6 +380,13 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
                 invocationOffset = trapOffset.Value;
             }
+            else if (TryGetCleanExecutionOffset(
+                         invocation.Command,
+                         declaration,
+                         declarationScope) is int cleanExecutionOffset)
+            {
+                invocationOffset = cleanExecutionOffset;
+            }
             else if (invocationOffset >= declaration.Extent.EndOffset)
             {
                 continue;
@@ -420,7 +440,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return;
         }
 
-        var invocationName = ResolveInvocationName(invocation);
+        var invocationName = ResolveInvocationName(invocation, invocationOffset);
         if (string.IsNullOrWhiteSpace(invocationName) ||
             !functionsByName.TryGetValue(invocationName!, out var namedCandidates))
         {
@@ -430,7 +450,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         EnqueueCandidates(invocation.Command, invocationOffset, namedCandidates, declarationScope, queue);
     }
 
-    private string? ResolveInvocationName(InvocationSite invocation)
+    private string? ResolveInvocationName(InvocationSite invocation, int executionOffset)
     {
         var invocationName = invocation.Name;
         if (string.IsNullOrWhiteSpace(invocationName))
@@ -441,7 +461,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return invocationName;
 
         var declaration = declarations
-            .Where(alias => AliasCanShadowInvocation(alias, invocation.Command))
+            .Where(alias => AliasCanShadowInvocation(alias, invocation.Command, executionOffset))
             .OrderByDescending(alias => alias.Extent.EndOffset)
             .FirstOrDefault();
         var target = declaration is null ? null : TryGetAuthoredAliasTarget(declaration);
@@ -450,7 +470,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             : NormalizeDeclaredFunctionName(target!);
     }
 
-    private static void EnqueueCandidates(
+    private void EnqueueCandidates(
         CommandAst invocation,
         int invocationOffset,
         IEnumerable<FunctionDefinitionAst> candidates,
@@ -489,7 +509,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (_executionGraphs.TryGetValue(declarationScope, out var graph))
             return graph;
 
-        graph = new ScopeExecutionGraph(declarationScope);
+        graph = new ScopeExecutionGraph(this, declarationScope);
         _executionGraphs[declarationScope] = graph;
         return graph;
     }
@@ -626,7 +646,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return null;
     }
 
-    private static int? TryGetTrapExecutionOffset(
+    private int? TryGetTrapExecutionOffset(
         TrapStatementAst trap,
         FunctionDefinitionAst declaration,
         ScriptBlockAst declarationScope)
@@ -660,11 +680,34 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return triggeringOffsets.Count == 0 ? null : triggeringOffsets.Min();
     }
 
+    private int? TryGetCleanExecutionOffset(
+        CommandAst command,
+        FunctionDefinitionAst declaration,
+        ScriptBlockAst declarationScope)
+    {
+        var commandBlock = FindNamedBlockInScope(command, declarationScope);
+        if (commandBlock is null ||
+            !string.Equals(commandBlock.BlockKind.ToString(), "Clean", StringComparison.OrdinalIgnoreCase) ||
+            !TryGetDeclarationContext(declaration, out var declarationEffectiveScope, out var declarationBlock) ||
+            !ReferenceEquals(declarationEffectiveScope, declarationScope) ||
+            declarationBlock.BlockKind != TokenKind.Begin)
+        {
+            return null;
+        }
+
+        var transferStatement = declarationBlock.Statements
+            .Where(statement => statement.Extent.EndOffset <= declaration.Extent.StartOffset)
+            .Where(statement => statement is not FunctionDefinitionAst && statement is not TrapStatementAst)
+            .OrderBy(statement => statement.Extent.StartOffset)
+            .FirstOrDefault();
+        return transferStatement?.Extent.StartOffset;
+    }
+
     private sealed class ScopeExecutionGraph
     {
         private readonly Dictionary<FunctionDefinitionAst, InvocationSite[]> _functionInvocations = new();
 
-        internal ScopeExecutionGraph(ScriptBlockAst scope)
+        internal ScopeExecutionGraph(NestedFunctionVisibilityAnalyzer analyzer, ScriptBlockAst scope)
         {
             var functions = scope.FindAll(
                     ast => ast is FunctionDefinitionAst,
@@ -673,7 +716,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 .Select(function => new
                 {
                     Function = function,
-                    HasContext = TryGetPotentialDeclarationContext(function, out var declarationScope, out _),
+                    HasContext = analyzer.TryGetPotentialDeclarationContext(function, out var declarationScope, out _),
                     Scope = declarationScope
                 })
                 .Where(item => item.HasContext && ReferenceEquals(item.Scope, scope))

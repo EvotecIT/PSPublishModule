@@ -219,7 +219,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return valueAst.FindAll(ast => ReferenceEquals(ast, target), searchNestedScriptBlocks: true).Any();
     }
 
-    private static bool IsScopePromotingInvocation(
+    private bool IsScopePromotingInvocation(
         ScriptBlockExpressionAst expression,
         CommandAst invocation)
     {
@@ -230,6 +230,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         var invocationName = NormalizeInvocationName(rawName);
         if (!string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase) ||
             !HasTrustedModuleQualification(rawName, invocationName) ||
+            IsPotentiallyShadowedByScriptFunction(invocation, rawName, invocationName) ||
             HasUnresolvedSplat(invocation) ||
             !IsScriptBlockBoundToAnyParameter(invocation, expression, "ScriptBlock"))
         {
@@ -237,7 +238,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         var noNewScope = TryGetBoundSwitchValue(invocation, "NoNewScope");
-        return noNewScope ?? HasAnyParameter(invocation, "NoNewScope");
+        return noNewScope == true;
     }
 
     private static IReadOnlyDictionary<string, CommandAst[]> FindAuthoredAliasDeclarations(ScriptBlockAst root)
@@ -316,9 +317,12 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return null;
     }
 
-    private static bool AliasCanShadowInvocation(CommandAst aliasDeclaration, CommandAst invocation)
+    private static bool AliasCanShadowInvocation(
+        CommandAst aliasDeclaration,
+        CommandAst invocation,
+        int? executionOffset = null)
     {
-        if (aliasDeclaration.Extent.EndOffset > invocation.Extent.StartOffset)
+        if (aliasDeclaration.Extent.EndOffset > (executionOffset ?? invocation.Extent.StartOffset))
             return false;
 
         var aliasScope = FindContainingScriptBlock(aliasDeclaration);
@@ -462,26 +466,24 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
     private static bool? TryGetBoundSwitchValue(CommandAst invocation, string parameterName)
     {
-        try
+        foreach (var parameter in invocation.CommandElements.OfType<CommandParameterAst>())
         {
-            var binding = StaticParameterBinder.BindCommand(invocation);
-            if (!binding.BoundParameters.TryGetValue(parameterName, out var result))
-                return binding.BindingExceptions.Count == 0 ? false : null;
+            if (!parameterName.StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase))
+                continue;
 
-            return result.Value switch
+            return parameter.Argument switch
             {
+                null => true,
                 VariableExpressionAst variable when
                     string.Equals(variable.VariablePath.UserPath, "false", StringComparison.OrdinalIgnoreCase) => false,
                 VariableExpressionAst variable when
                     string.Equals(variable.VariablePath.UserPath, "true", StringComparison.OrdinalIgnoreCase) => true,
                 ConstantExpressionAst constant when constant.Value is bool value => value,
-                _ => true
+                _ => null
             };
         }
-        catch
-        {
-            return null;
-        }
+
+        return false;
     }
 
     private static bool HasPositionalRemoteTarget(CommandAst invocation)

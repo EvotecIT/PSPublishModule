@@ -110,6 +110,7 @@ public sealed class MissingFunctionsAnalyzerReviewClosureTests
 
     [Theory]
     [InlineData("Invoke-Command -NoNewScope")]
+    [InlineData("Invoke-Command -NoNewScope:$true")]
     [InlineData("icm -NoNewScope")]
     [InlineData("Microsoft.PowerShell.Core\\Invoke-Command -NoNewScope")]
     public void Analyze_RecognizesDeclarationPromotedByInvokeCommandNoNewScope(string invocation)
@@ -207,6 +208,61 @@ public sealed class MissingFunctionsAnalyzerReviewClosureTests
     }
 
     [Fact]
+    public void Analyze_DoesNotPromoteInvokeCommandDeclarationForDynamicNoNewScope()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                $sameScope = $false
+                Invoke-Command -NoNewScope:$sameScope { function Invoke-PowerForgeDynamicChildLocal { 'local' } }
+                Invoke-PowerForgeDynamicChildLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeDynamicChildLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_DoesNotPromoteDeclarationThroughShadowedInvokeCommand()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-Command { param([switch] $NoNewScope, [scriptblock] $ScriptBlock) }
+                Invoke-Command -NoNewScope { function Invoke-PowerForgeShadowedChildLocal { 'local' } }
+                Invoke-PowerForgeShadowedChildLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeShadowedChildLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_DoesNotPromoteDeclarationThroughAliasedInvokeCommand()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Save-PowerForgeScriptBlock { param([switch] $NoNewScope, [scriptblock] $ScriptBlock) }
+                Set-Alias Invoke-Command Save-PowerForgeScriptBlock
+                Invoke-Command -NoNewScope { function Invoke-PowerForgeAliasedChildLocal { 'local' } }
+                Invoke-PowerForgeAliasedChildLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeAliasedChildLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Analyze_RecognizesDotSourcedDeclarationThatDominatesGuardedCall()
     {
         var analyzer = new MissingFunctionsAnalyzer();
@@ -223,6 +279,26 @@ public sealed class MissingFunctionsAnalyzerReviewClosureTests
 
         Assert.DoesNotContain(report.Summary, item =>
             string.Equals(item.Name, "Invoke-PowerForgeGuardedDotLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_DoesNotPromoteDeclarationAfterEarlyExitInDotSourcedBlock()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                . {
+                    return
+                    function Invoke-PowerForgeUnreachedDotLocal { 'local' }
+                }
+                Invoke-PowerForgeUnreachedDotLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeUnreachedDotLocal", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -283,6 +359,50 @@ public sealed class MissingFunctionsAnalyzerReviewClosureTests
 
         Assert.Contains(report.Summary, item =>
             string.Equals(item.Name, "Invoke-PowerForgeAliasedLate", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_ResolvesDeferredAliasAtCallerExecutionOffset()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeAliasEntry { go }
+                function Invoke-PowerForgeAliasTarget { Invoke-PowerForgeDeferredAliasLate }
+                Set-Alias go Invoke-PowerForgeAliasTarget
+                Invoke-PowerForgeAliasEntry
+                function Invoke-PowerForgeDeferredAliasLate { 'late' }
+            }
+            Outer
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeDeferredAliasLate", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_AccountsForEarlyBeginTransferToCleanThroughDeferredFunction()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                begin {
+                    function Invoke-PowerForgeCleanCaller { Invoke-PowerForgeCleanDeferredLate }
+                    throw 'stop'
+                    function Invoke-PowerForgeCleanDeferredLate { 'late' }
+                }
+                clean {
+                    Invoke-PowerForgeCleanCaller
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeCleanDeferredLate", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
