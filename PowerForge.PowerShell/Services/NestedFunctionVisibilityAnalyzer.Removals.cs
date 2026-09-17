@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation.Language;
 
@@ -23,8 +24,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return false;
 
         var name = NormalizeDeclaredFunctionName(declaration.Name);
-        if (!_functionRemovalsByName.TryGetValue(name, out var removals))
-            return false;
+        var removals = GetPotentialFunctionRemovals(name);
 
         return removals.Any(removal =>
             removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
@@ -40,8 +40,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         CommandAst? executionCommand = null)
     {
         var name = NormalizeDeclaredFunctionName(declaration.Name);
-        if (!_functionRemovalsByName.TryGetValue(name, out var removals))
-            return false;
+        var removals = GetPotentialFunctionRemovals(name);
 
         return removals.Any(removal =>
             removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
@@ -50,6 +49,18 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             (IsGuaranteedCommandInScope(removal, declarationScope) ||
              executionCommand is not null &&
              RemovalDominatesCommand(removal, executionCommand, declarationScope)));
+    }
+
+    private IEnumerable<CommandAst> GetPotentialFunctionRemovals(string functionName)
+    {
+        if (_functionRemovalsByName.TryGetValue(functionName, out var exactRemovals))
+        {
+            foreach (var removal in exactRemovals)
+                yield return removal;
+        }
+
+        foreach (var removal in _dynamicFunctionRemovals)
+            yield return removal;
     }
 
     private bool RemovalDominatesCommand(

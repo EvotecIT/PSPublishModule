@@ -128,6 +128,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             {
                 if (declaration.Extent.EndOffset > invocation.Extent.StartOffset ||
                     !IsDeclarationQualifierVisibleAtCommand(declaration, invocation) ||
+                    IsRemovedBeforeCommand(declaration, invocation) ||
                     !TryGetPotentialDeclarationContext(
                         declaration,
                         out var declarationScope,
@@ -295,93 +296,6 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                !IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName);
     }
 
-    private IReadOnlyDictionary<string, CommandAst[]> FindAliasRemovalCommands(ScriptBlockAst root)
-    {
-        return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
-            .Cast<CommandAst>()
-            .SelectMany(command => TryGetRemovedAliasNames(command)
-                .Select(name => new { Command = command, Name = name }))
-            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(item => item.Command).ToArray(),
-                StringComparer.OrdinalIgnoreCase);
-    }
-
-    private IEnumerable<string> TryGetRemovedAliasNames(CommandAst command)
-    {
-        var rawCommandName = command.GetCommandName();
-        var commandName = NormalizeInvocationName(rawCommandName);
-        var aliasRemoval = string.Equals(commandName, "Remove-Alias", StringComparison.OrdinalIgnoreCase) ||
-                           string.Equals(commandName, "ral", StringComparison.OrdinalIgnoreCase);
-        var providerRemoval = string.Equals(commandName, "Remove-Item", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(commandName, "Clear-Item", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(commandName, "ri", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(commandName, "rm", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(commandName, "del", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(commandName, "erase", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(commandName, "cli", StringComparison.OrdinalIgnoreCase);
-        if (!aliasRemoval && !providerRemoval)
-            yield break;
-        if (IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName))
-            yield break;
-        if (TryGetBoundSwitchValue(command, "WhatIf") == true)
-            yield break;
-
-        foreach (var argument in command.CommandElements.Skip(1).OfType<StringConstantExpressionAst>())
-        {
-            if (aliasRemoval)
-            {
-                yield return argument.Value;
-            }
-            else if (TryGetAliasProviderName(argument.Value, out var aliasName))
-            {
-                yield return aliasName;
-            }
-        }
-    }
-
-    private IReadOnlyDictionary<string, CommandAst[]> FindFunctionRemovalCommands(ScriptBlockAst root)
-    {
-        return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
-            .Cast<CommandAst>()
-            .SelectMany(command => TryGetRemovedFunctionNames(command)
-                .Select(name => new { Command = command, Name = name }))
-            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Select(item => item.Command).ToArray(),
-                StringComparer.OrdinalIgnoreCase);
-    }
-
-    private IEnumerable<string> TryGetRemovedFunctionNames(CommandAst command)
-    {
-        var rawCommandName = command.GetCommandName();
-        var commandName = NormalizeInvocationName(rawCommandName);
-        if (!string.Equals(commandName, "Remove-Item", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "Clear-Item", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "ri", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "rm", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "del", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "erase", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "cli", StringComparison.OrdinalIgnoreCase))
-        {
-            yield break;
-        }
-
-        if (IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName))
-            yield break;
-
-        if (TryGetBoundSwitchValue(command, "WhatIf") == true)
-            yield break;
-
-        foreach (var argument in command.CommandElements.Skip(1).OfType<StringConstantExpressionAst>())
-        {
-            if (TryGetFunctionProviderName(argument.Value, out var functionName))
-                yield return NormalizeDeclaredFunctionName(functionName);
-        }
-    }
-
     private static string? TryGetAuthoredAliasName(CommandAst command)
     {
         var commandName = NormalizeInvocationName(command.GetCommandName());
@@ -528,6 +442,12 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             }
 
             aliasScope = _root;
+        }
+
+        if (IsPrivateAliasDeclaration(aliasDeclaration) &&
+            !ReferenceEquals(FindContainingScriptBlock(invocation), aliasScope))
+        {
+            return false;
         }
 
         if (IsAliasRemovedBeforeInvocation(

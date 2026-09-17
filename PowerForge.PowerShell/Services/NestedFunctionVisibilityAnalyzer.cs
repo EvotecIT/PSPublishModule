@@ -24,6 +24,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         new Dictionary<string, CommandAst[]>(StringComparer.OrdinalIgnoreCase);
     private readonly IReadOnlyDictionary<string, CommandAst[]> _functionRemovalsByName =
         new Dictionary<string, CommandAst[]>(StringComparer.OrdinalIgnoreCase);
+    private readonly CommandAst[] _dynamicFunctionRemovals = Array.Empty<CommandAst>();
 
     internal NestedFunctionVisibilityAnalyzer(
         ScriptBlockAst root,
@@ -35,6 +36,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         _dynamicAliasDeclarations = FindDynamicAliasDeclarations(root);
         _aliasRemovalsByName = FindAliasRemovalCommands(root);
         _functionRemovalsByName = FindFunctionRemovalCommands(root);
+        _dynamicFunctionRemovals = FindDynamicFunctionRemovalCommands(root);
     }
 
     internal static string NormalizeDeclaredFunctionName(string name)

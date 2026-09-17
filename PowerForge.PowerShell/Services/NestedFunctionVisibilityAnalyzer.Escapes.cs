@@ -86,7 +86,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         if (pipeline.Parent is AssignmentStatementAst assignment &&
             assignment.Left is VariableExpressionAst variable &&
-            string.Equals(variable.VariablePath.UserPath, "null", StringComparison.OrdinalIgnoreCase))
+            string.Equals(variable.VariablePath.UserPath, "null", StringComparison.OrdinalIgnoreCase) &&
+            pipeline.PipelineElements.Count == 1)
         {
             return true;
         }
@@ -116,24 +117,42 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (string.Equals(commandName, "Get-Command", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(commandName, "gcm", StringComparison.OrdinalIgnoreCase))
         {
-            return BoundLookupCanMatchFunction(command, functionName, providerPath: false, "Name");
+            return BoundLookupCanMatchFunction(
+                command,
+                functionName,
+                providerPath: false,
+                providerEnumeration: false,
+                "Name");
         }
 
-        if (!string.Equals(commandName, "Get-Item", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "gi", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "Get-Content", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "gc", StringComparison.OrdinalIgnoreCase))
+        var providerEnumeration = string.Equals(commandName, "Get-ChildItem", StringComparison.OrdinalIgnoreCase) ||
+                                  string.Equals(commandName, "gci", StringComparison.OrdinalIgnoreCase) ||
+                                  string.Equals(commandName, "dir", StringComparison.OrdinalIgnoreCase) ||
+                                  string.Equals(commandName, "ls", StringComparison.OrdinalIgnoreCase);
+        var providerLookup = providerEnumeration ||
+                             string.Equals(commandName, "Get-Item", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(commandName, "gi", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(commandName, "Get-Content", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(commandName, "gc", StringComparison.OrdinalIgnoreCase);
+        if (!providerLookup)
         {
             return false;
         }
 
-        return BoundLookupCanMatchFunction(command, functionName, providerPath: true, "Path", "LiteralPath");
+        return BoundLookupCanMatchFunction(
+            command,
+            functionName,
+            providerPath: true,
+            providerEnumeration,
+            "Path",
+            "LiteralPath");
     }
 
     private static bool BoundLookupCanMatchFunction(
         CommandAst command,
         string functionName,
         bool providerPath,
+        bool providerEnumeration,
         params string[] parameterNames)
     {
         try
@@ -142,7 +161,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             foreach (var parameterName in parameterNames)
             {
                 if (binding.BoundParameters.TryGetValue(parameterName, out var result))
-                    return LookupValueCanMatchFunction(result.Value, functionName, providerPath);
+                    return LookupValueCanMatchFunction(result.Value, functionName, providerPath, providerEnumeration);
             }
 
             if (binding.BindingExceptions.Count == 0)
@@ -154,27 +173,45 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         var arguments = command.CommandElements.Skip(1).Where(element => element is not CommandParameterAst).ToArray();
-        return arguments.Any(argument => LookupValueCanMatchFunction(argument, functionName, providerPath));
+        return arguments.Any(argument =>
+            LookupValueCanMatchFunction(argument, functionName, providerPath, providerEnumeration));
     }
 
-    private static bool LookupValueCanMatchFunction(object? value, string functionName, bool providerPath)
+    private static bool LookupValueCanMatchFunction(
+        object? value,
+        string functionName,
+        bool providerPath,
+        bool providerEnumeration)
     {
         if (value is StringConstantExpressionAst literal)
-            return LookupTextCanMatchFunction(literal.Value, functionName, providerPath);
+            return LookupTextCanMatchFunction(literal.Value, functionName, providerPath, providerEnumeration);
         if (value is ExpandableStringExpressionAst expandable && expandable.NestedExpressions.Count == 0)
-            return LookupTextCanMatchFunction(expandable.Value, functionName, providerPath);
+            return LookupTextCanMatchFunction(expandable.Value, functionName, providerPath, providerEnumeration);
         if (value is ConstantExpressionAst constant && constant.Value is string text)
-            return LookupTextCanMatchFunction(text, functionName, providerPath);
+            return LookupTextCanMatchFunction(text, functionName, providerPath, providerEnumeration);
         if (value is ArrayLiteralAst array)
-            return array.Elements.Any(element => LookupValueCanMatchFunction(element, functionName, providerPath));
+        {
+            return array.Elements.Any(element =>
+                LookupValueCanMatchFunction(element, functionName, providerPath, providerEnumeration));
+        }
 
         return value is not null;
     }
 
-    private static bool LookupTextCanMatchFunction(string text, string functionName, bool providerPath)
+    private static bool LookupTextCanMatchFunction(
+        string text,
+        string functionName,
+        bool providerPath,
+        bool providerEnumeration)
     {
         if (!providerPath)
             return LookupPatternMatchesName(text, functionName);
+
+        if (providerEnumeration &&
+            string.Equals(text.Trim().TrimEnd('\\'), "function:", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
 
         return TryGetFunctionProviderName(text, out var providerFunction) &&
                LookupPatternMatchesName(providerFunction, functionName);

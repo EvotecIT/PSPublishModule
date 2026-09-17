@@ -12,9 +12,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         CommandAst command)
     {
         if (declaration.Parent is not StatementBlockAst declarationBlock ||
-            declarationBlock.Parent is not TryStatementAst tryStatement ||
-            (!ReferenceEquals(tryStatement.Body, declarationBlock) &&
-             !ReferenceEquals(tryStatement.Finally, declarationBlock)) ||
+            !TryGetGuaranteedDeclarationTryStatement(declarationBlock, out var tryStatement) ||
             !DeclarationDominatesBlockExit(declaration, declarationBlock))
         {
             return false;
@@ -48,11 +46,20 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         TryStatementAst tryStatement,
         FunctionDefinitionAst declaration)
     {
-        return TryBodyAlwaysThrowsAfterDeclaration(tryStatement.Body, declaration) &&
-               tryStatement.CatchClauses.Any(catchClause =>
-                   BlockCanRemoveFunctionAfterDeclaration(catchClause.Body, declaration)) ||
-               tryStatement.Finally is not null &&
-               BlockCanRemoveFunctionAfterDeclaration(tryStatement.Finally, declaration);
+        var declarationCatch = declaration.Parent is StatementBlockAst declarationBlock &&
+                               declarationBlock.Parent is CatchClauseAst
+            ? declarationBlock
+            : null;
+        var catchPathGuaranteed = ReferenceEquals(declaration.Parent, tryStatement.Body)
+            ? TryBodyAlwaysThrowsAfterDeclaration(tryStatement.Body, declaration)
+            : TryBodyBeginsWithUnconditionalThrow(tryStatement.Body);
+        return (catchPathGuaranteed &&
+                (declarationCatch is not null
+                    ? BlockCanRemoveFunctionAfterDeclaration(declarationCatch, declaration)
+                    : tryStatement.CatchClauses.Any(catchClause =>
+                        BlockCanRemoveFunctionAfterDeclaration(catchClause.Body, declaration)))) ||
+               (tryStatement.Finally is not null &&
+                BlockCanRemoveFunctionAfterDeclaration(tryStatement.Finally, declaration));
     }
 
     private static bool TryBodyAlwaysThrowsAfterDeclaration(
@@ -65,13 +72,44 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             is ThrowStatementAst;
     }
 
+    private static bool TryBodyBeginsWithUnconditionalThrow(StatementBlockAst block)
+    {
+        return block.Statements
+            .FirstOrDefault(statement => statement is not FunctionDefinitionAst && statement is not TrapStatementAst)
+            is ThrowStatementAst;
+    }
+
+    private static bool TryGetGuaranteedDeclarationTryStatement(
+        StatementBlockAst declarationBlock,
+        out TryStatementAst tryStatement)
+    {
+        tryStatement = null!;
+        if (declarationBlock.Parent is TryStatementAst directTry &&
+            (ReferenceEquals(directTry.Body, declarationBlock) ||
+             ReferenceEquals(directTry.Finally, declarationBlock)))
+        {
+            tryStatement = directTry;
+            return true;
+        }
+
+        if (declarationBlock.Parent is CatchClauseAst catchClause &&
+            catchClause.Parent is TryStatementAst catchTry &&
+            catchClause.CatchTypes.Count == 0 &&
+            TryBodyBeginsWithUnconditionalThrow(catchTry.Body))
+        {
+            tryStatement = catchTry;
+            return true;
+        }
+
+        return false;
+    }
+
     private bool BlockCanRemoveFunctionAfterDeclaration(
         StatementBlockAst block,
         FunctionDefinitionAst declaration)
     {
         var functionName = NormalizeDeclaredFunctionName(declaration.Name);
-        if (!_functionRemovalsByName.TryGetValue(functionName, out var removals))
-            return false;
+        var removals = GetPotentialFunctionRemovals(functionName);
 
         return removals.Any(removal =>
             removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
@@ -151,24 +189,50 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 graph));
     }
 
-    private static bool DeclarationDominatesInstallerExit(
+    private bool DeclarationDominatesInstallerExit(
         FunctionDefinitionAst declaration,
         FunctionDefinitionAst installer)
     {
         if (DeclarationDominatesPromotedBlockExit(declaration))
             return true;
-        if (declaration.Parent is not StatementBlockAst finallyBlock ||
-            finallyBlock.Parent is not TryStatementAst tryStatement ||
-            !ReferenceEquals(tryStatement.Finally, finallyBlock) ||
-            !DeclarationDominatesBlockExit(declaration, finallyBlock) ||
-            tryStatement.Parent is not NamedBlockAst installerBlock ||
+        if (declaration.Parent is not StatementBlockAst declarationBlock ||
+            !DeclarationDominatesBlockExit(declaration, declarationBlock))
+        {
+            return false;
+        }
+
+        StatementAst controlStatement;
+        if (declarationBlock.Parent is TryStatementAst tryStatement &&
+            ReferenceEquals(tryStatement.Finally, declarationBlock))
+        {
+            controlStatement = tryStatement;
+        }
+        else if (declarationBlock.Parent is CatchClauseAst catchClause &&
+                 catchClause.Parent is TryStatementAst catchTry &&
+                 catchClause.CatchTypes.Count == 0 &&
+                 TryBodyBeginsWithUnconditionalThrow(catchTry.Body))
+        {
+            controlStatement = catchTry;
+        }
+        else if (declarationBlock.Parent is LoopStatementAst loop &&
+                 (loop is DoWhileStatementAst || loop is DoUntilStatementAst) &&
+                 !BlockCanRemoveFunctionAfterDeclaration(declarationBlock, declaration))
+        {
+            controlStatement = loop;
+        }
+        else
+        {
+            return false;
+        }
+
+        if (controlStatement.Parent is not NamedBlockAst installerBlock ||
             !ReferenceEquals(installerBlock.Parent, installer.Body))
         {
             return false;
         }
 
         return installerBlock.Statements
-            .Where(statement => statement.Extent.EndOffset <= tryStatement.Extent.StartOffset)
+            .Where(statement => statement.Extent.EndOffset <= controlStatement.Extent.StartOffset)
             .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst);
     }
 
@@ -181,17 +245,14 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         var latestRemovalOffset = -1;
         var functionName = NormalizeDeclaredFunctionName(declaration.Name);
-        if (_functionRemovalsByName.TryGetValue(functionName, out var removals))
-        {
-            latestRemovalOffset = removals
-                .Where(removal =>
-                    removal.Extent.EndOffset <= consumerOffset &&
-                    ReferenceEquals(FindEffectiveCommandScope(removal), _root) &&
-                    IsGuaranteedCommandInScope(removal, _root))
-                .Select(removal => removal.Extent.EndOffset)
-                .DefaultIfEmpty(-1)
-                .Max();
-        }
+        latestRemovalOffset = GetPotentialFunctionRemovals(functionName)
+            .Where(removal =>
+                removal.Extent.EndOffset <= consumerOffset &&
+                ReferenceEquals(FindEffectiveCommandScope(removal), _root) &&
+                IsGuaranteedCommandInScope(removal, _root))
+            .Select(removal => removal.Extent.EndOffset)
+            .DefaultIfEmpty(-1)
+            .Max();
 
         return guaranteedRootInvocations.Any(invocation =>
             invocation.Command.Extent.StartOffset >= latestRemovalOffset &&
