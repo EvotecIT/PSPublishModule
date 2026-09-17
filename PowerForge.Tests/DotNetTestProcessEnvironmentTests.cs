@@ -8,6 +8,7 @@ public sealed class DotNetTestProcessEnvironmentTests
     public void DisableBuildServers_uses_supported_dotnet_and_msbuild_switches()
     {
         var startInfo = new ProcessStartInfo();
+        startInfo.Environment.Remove("DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER");
 
         DotNetTestProcessEnvironment.DisableBuildServers(startInfo);
 
