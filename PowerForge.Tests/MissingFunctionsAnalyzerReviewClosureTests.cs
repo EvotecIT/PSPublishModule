@@ -188,4 +188,120 @@ public sealed class MissingFunctionsAnalyzerReviewClosureTests
         Assert.Contains(report.Summary, item =>
             string.Equals(item.Name, "Invoke-PowerForgeProviderLocal", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void Analyze_DoesNotPromoteInvokeCommandDeclarationWhenNoNewScopeIsFalse()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                Invoke-Command -NoNewScope:$false { function Invoke-PowerForgeChildLocal { 'local' } }
+                Invoke-PowerForgeChildLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeChildLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesDotSourcedDeclarationThatDominatesGuardedCall()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                if ($Enable) {
+                    . { function Invoke-PowerForgeGuardedDotLocal { 'local' } }
+                    Invoke-PowerForgeGuardedDotLocal
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeGuardedDotLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesTryDeclarationThatDominatesFinallyCall()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                try {
+                    function Invoke-PowerForgeFinallyLocal { 'local' }
+                } finally {
+                    Invoke-PowerForgeFinallyLocal
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeFinallyLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_DoesNotCarryTryDeclarationIntoIsolatedFinallyScriptBlock()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                try {
+                    function Invoke-PowerForgeFinallyIsolatedLocal { 'local' }
+                } finally {
+                    Start-Job { Invoke-PowerForgeFinallyIsolatedLocal }
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeFinallyIsolatedLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_FollowsAuthoredAliasTargetInDeferredCallGraph()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeAliasedCaller { Invoke-PowerForgeAliasedLate }
+                Set-Alias sort Invoke-PowerForgeAliasedCaller
+                sort
+                function Invoke-PowerForgeAliasedLate { 'late' }
+            }
+            Outer
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeAliasedLate", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_UsesLatestUnconditionalFunctionDefinitionAtCallSite()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeRedefinedCaller { Invoke-PowerForgeRedefinedLate }
+                function Invoke-PowerForgeRedefinedCaller { 'safe' }
+                Invoke-PowerForgeRedefinedCaller
+                function Invoke-PowerForgeRedefinedLate { 'late' }
+            }
+            Outer
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeRedefinedLate", StringComparison.OrdinalIgnoreCase));
+    }
 }

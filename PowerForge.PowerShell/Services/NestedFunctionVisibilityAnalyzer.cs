@@ -51,7 +51,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         foreach (var declaration in declarations)
         {
-            if (IsDominatingDeclarationInContainingStatementBlock(declaration, command))
+            if (IsDominatingDeclarationInContainingStatementBlock(declaration, command) ||
+                IsPromotedDeclarationDominatingCommand(declaration, command) ||
+                DeclarationDominatesFinallyCall(declaration, command))
                 return true;
 
             if (!TryGetDeclarationContext(declaration, out var declarationScope, out var declarationBlock) ||
@@ -232,6 +234,69 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return false;
     }
 
+    private static bool IsPromotedDeclarationDominatingCommand(
+        FunctionDefinitionAst declaration,
+        CommandAst command)
+    {
+        var declarationScope = FindContainingScriptBlock(declaration);
+        if (declarationScope?.Parent is not ScriptBlockExpressionAst expression ||
+            expression.Parent is not CommandAst invocation ||
+            !IsScopePromotingInvocation(expression, invocation) ||
+            invocation.Parent is not PipelineAst pipeline ||
+            pipeline.Parent is not StatementBlockAst statementBlock ||
+            invocation.Extent.EndOffset > command.Extent.StartOffset)
+        {
+            return false;
+        }
+
+        var parentScope = FindContainingScriptBlock(invocation);
+        if (parentScope is null || !ReferenceEquals(parentScope, FindContainingScriptBlock(command)))
+            return false;
+
+        for (Ast? current = command.Parent; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, statementBlock))
+                return true;
+            if (current is FunctionDefinitionAst || current is ScriptBlockExpressionAst)
+                return false;
+            if (ReferenceEquals(current, parentScope))
+                return false;
+        }
+
+        return false;
+    }
+
+    private static bool DeclarationDominatesFinallyCall(
+        FunctionDefinitionAst declaration,
+        CommandAst command)
+    {
+        if (declaration.Parent is not StatementBlockAst tryBody ||
+            tryBody.Parent is not TryStatementAst tryStatement ||
+            !ReferenceEquals(tryStatement.Body, tryBody) ||
+            tryStatement.Finally is null ||
+            !ExecutesDirectlyInStatementBlock(command, tryStatement.Finally))
+        {
+            return false;
+        }
+
+        return tryBody.Statements
+            .Where(statement => statement.Extent.EndOffset <= declaration.Extent.StartOffset)
+            .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst);
+    }
+
+    private static bool ExecutesDirectlyInStatementBlock(CommandAst command, StatementBlockAst statementBlock)
+    {
+        for (Ast? current = command.Parent; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, statementBlock))
+                return true;
+            if (current is FunctionDefinitionAst || current is ScriptBlockExpressionAst)
+                return false;
+        }
+
+        return false;
+    }
+
     private static NamedBlockAst? FindNamedBlockInScope(Ast ast, ScriptBlockAst scope)
     {
         for (Ast? current = ast.Parent; current is not null && !ReferenceEquals(current, scope); current = current.Parent)
@@ -341,7 +406,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return false;
     }
 
-    private static void EnqueueAvailableFunctions(
+    private void EnqueueAvailableFunctions(
         InvocationSite invocation,
         int invocationOffset,
         IReadOnlyDictionary<string, FunctionDefinitionAst[]> functionsByName,
@@ -355,7 +420,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return;
         }
 
-        var invocationName = invocation.Name;
+        var invocationName = ResolveInvocationName(invocation);
         if (string.IsNullOrWhiteSpace(invocationName) ||
             !functionsByName.TryGetValue(invocationName!, out var namedCandidates))
         {
@@ -365,6 +430,26 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         EnqueueCandidates(invocation.Command, invocationOffset, namedCandidates, declarationScope, queue);
     }
 
+    private string? ResolveInvocationName(InvocationSite invocation)
+    {
+        var invocationName = invocation.Name;
+        if (string.IsNullOrWhiteSpace(invocationName))
+            return invocationName;
+
+        var normalizedAliasName = NormalizeInvocationName(invocationName);
+        if (!_aliasDeclarationsByName.TryGetValue(normalizedAliasName, out var declarations))
+            return invocationName;
+
+        var declaration = declarations
+            .Where(alias => AliasCanShadowInvocation(alias, invocation.Command))
+            .OrderByDescending(alias => alias.Extent.EndOffset)
+            .FirstOrDefault();
+        var target = declaration is null ? null : TryGetAuthoredAliasTarget(declaration);
+        return string.IsNullOrWhiteSpace(target)
+            ? invocationName
+            : NormalizeDeclaredFunctionName(target!);
+    }
+
     private static void EnqueueCandidates(
         CommandAst invocation,
         int invocationOffset,
@@ -372,19 +457,28 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         ScriptBlockAst declarationScope,
         Queue<(FunctionDefinitionAst Function, int InvocationOffset)> queue)
     {
-        foreach (var candidate in candidates)
-        {
-            if (candidate.Extent.EndOffset > invocationOffset ||
-                !TryGetPotentialDeclarationContext(candidate, out var candidateScope, out var candidateBlock) ||
-                !ReferenceEquals(candidateScope, declarationScope) ||
-                !IsDeclarationBlockCompatibleWithCommand(
+        var eligible = candidates
+            .Where(candidate =>
+                candidate.Extent.EndOffset <= invocationOffset &&
+                TryGetPotentialDeclarationContext(candidate, out var candidateScope, out var candidateBlock) &&
+                ReferenceEquals(candidateScope, declarationScope) &&
+                IsDeclarationBlockCompatibleWithCommand(
                     candidate,
                     candidateBlock,
                     invocation,
                     declarationScope))
-            {
+            .ToArray();
+        var latestUnconditional = eligible
+            .Where(candidate => candidate.Parent is NamedBlockAst)
+            .OrderByDescending(candidate => candidate.Extent.EndOffset)
+            .FirstOrDefault();
+
+        foreach (var candidate in eligible)
+        {
+            if (candidate.Parent is NamedBlockAst &&
+                latestUnconditional is not null &&
+                !ReferenceEquals(candidate, latestUnconditional))
                 continue;
-            }
 
             queue.Enqueue((candidate, invocationOffset));
         }

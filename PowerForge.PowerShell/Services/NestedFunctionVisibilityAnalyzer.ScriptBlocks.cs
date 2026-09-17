@@ -236,7 +236,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return false;
         }
 
-        var noNewScope = TryHasAnyBoundParameter(invocation, "NoNewScope");
+        var noNewScope = TryGetBoundSwitchValue(invocation, "NoNewScope");
         return noNewScope ?? HasAnyParameter(invocation, "NoNewScope");
     }
 
@@ -287,6 +287,30 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         catch
         {
             // Dynamic alias names cannot safely establish a concrete shadow.
+        }
+
+        return null;
+    }
+
+    private static string? TryGetAuthoredAliasTarget(CommandAst command)
+    {
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(command);
+            if (binding.BoundParameters.TryGetValue("Value", out var result))
+            {
+                return result.Value switch
+                {
+                    StringConstantExpressionAst literal => literal.Value,
+                    ExpandableStringExpressionAst expandable when expandable.NestedExpressions.Count == 0 =>
+                        expandable.Value,
+                    _ => null
+                };
+            }
+        }
+        catch
+        {
+            // Dynamic alias targets cannot safely establish a concrete call edge.
         }
 
         return null;
@@ -434,6 +458,30 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return null;
+    }
+
+    private static bool? TryGetBoundSwitchValue(CommandAst invocation, string parameterName)
+    {
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(invocation);
+            if (!binding.BoundParameters.TryGetValue(parameterName, out var result))
+                return binding.BindingExceptions.Count == 0 ? false : null;
+
+            return result.Value switch
+            {
+                VariableExpressionAst variable when
+                    string.Equals(variable.VariablePath.UserPath, "false", StringComparison.OrdinalIgnoreCase) => false,
+                VariableExpressionAst variable when
+                    string.Equals(variable.VariablePath.UserPath, "true", StringComparison.OrdinalIgnoreCase) => true,
+                ConstantExpressionAst constant when constant.Value is bool value => value,
+                _ => true
+            };
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static bool HasPositionalRemoteTarget(CommandAst invocation)
