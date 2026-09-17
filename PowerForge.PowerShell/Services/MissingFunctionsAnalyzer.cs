@@ -171,6 +171,10 @@ public sealed class MissingFunctionsAnalyzer
             ast = Parser.ParseInput(text, out tokens, out errors);
         }
 
+        var functionDeclarations = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: true)
+            .Cast<FunctionDefinitionAst>()
+            .ToArray();
+
         var declaredFunctions = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()
             .Select(f => f.Name)
@@ -178,12 +182,14 @@ public sealed class MissingFunctionsAnalyzer
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var commandNames = ExtractCommandNames(ast).ToArray();
+        var commandNames = ExtractCommandNames(ast, functionDeclarations).ToArray();
 
         return new ParsedInput(effectiveFilePath, declaredFunctions, commandNames);
     }
 
-    private static IEnumerable<string> ExtractCommandNames(ScriptBlockAst ast)
+    private static IEnumerable<string> ExtractCommandNames(
+        ScriptBlockAst ast,
+        IReadOnlyCollection<FunctionDefinitionAst> functionDeclarations)
     {
         var adCmdlets = new HashSet<string>(new[]
         {
@@ -246,11 +252,48 @@ public sealed class MissingFunctionsAnalyzer
                 continue;
             if (!LooksLikeCommandName(name))
                 continue;
+            if (IsFunctionDeclaredInVisibleScope(cmd, name, functionDeclarations))
+                continue;
 
             set.Add(name);
         }
 
         return set.OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFunctionDeclaredInVisibleScope(
+        CommandAst command,
+        string commandName,
+        IReadOnlyCollection<FunctionDefinitionAst> functionDeclarations)
+    {
+        foreach (var declaration in functionDeclarations)
+        {
+            if (!string.Equals(declaration.Name, commandName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var declarationScope = FindContainingScriptBlock(declaration);
+            if (declarationScope is null)
+                continue;
+
+            for (Ast? current = command; current is not null; current = current.Parent)
+            {
+                if (ReferenceEquals(current, declarationScope))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static ScriptBlockAst? FindContainingScriptBlock(Ast ast)
+    {
+        for (Ast? current = ast.Parent; current is not null; current = current.Parent)
+        {
+            if (current is ScriptBlockAst scriptBlock)
+                return scriptBlock;
+        }
+
+        return null;
     }
 
     private MissingFunctionCommand ResolveCommand(string name, HashSet<string> approvedModules)
