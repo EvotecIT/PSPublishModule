@@ -534,7 +534,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             [
                 "-NoProfile",
                 "-Command",
-                "$descendant = Start-Process -FilePath $env:ComSpec -ArgumentList '/d','/c','ping 127.0.0.1 -n 11 >nul' -NoNewWindow -PassThru; " +
+                "$descendant = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 10' -NoNewWindow -PassThru; " +
                 "[Console]::Out.WriteLine('descendant-pid=' + $descendant.Id); " +
                 (useStandardError
                     ? "[Console]::Error.Write('parent-complete')"
