@@ -86,7 +86,16 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 continue;
             }
 
-            if (declaration.Extent.EndOffset <= command.Extent.StartOffset)
+            var directExecutionOffset = command.Extent.StartOffset;
+            var trap = FindContainingTrap(command, declarationScope);
+            if (trap is not null &&
+                TryGetTrapExecutionOffset(trap, declaration, declarationScope) is int trapExecutionOffset)
+            {
+                directExecutionOffset = trapExecutionOffset;
+            }
+
+            if (declaration.Extent.EndOffset <= directExecutionOffset &&
+                !IsRemovedBeforeExecution(declaration, directExecutionOffset, declarationScope))
                 return true;
         }
 
@@ -95,16 +104,22 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
     private bool IsRemovedBeforeCommand(FunctionDefinitionAst declaration, CommandAst command)
     {
+        return TryGetPotentialDeclarationContext(declaration, out var declarationScope, out _) &&
+               IsRemovedBeforeExecution(declaration, command.Extent.StartOffset, declarationScope);
+    }
+
+    private bool IsRemovedBeforeExecution(
+        FunctionDefinitionAst declaration,
+        int executionOffset,
+        ScriptBlockAst declarationScope)
+    {
         var name = NormalizeDeclaredFunctionName(declaration.Name);
-        if (!_functionRemovalsByName.TryGetValue(name, out var removals) ||
-            !TryGetPotentialDeclarationContext(declaration, out var declarationScope, out _))
-        {
+        if (!_functionRemovalsByName.TryGetValue(name, out var removals))
             return false;
-        }
 
         return removals.Any(removal =>
             removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
-            removal.Extent.EndOffset <= command.Extent.StartOffset &&
+            removal.Extent.EndOffset <= executionOffset &&
             ReferenceEquals(FindContainingScriptBlock(removal), declarationScope));
     }
 
@@ -420,7 +435,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             {
                 invocationOffset = cleanExecutionOffset;
             }
-            else if (invocationOffset >= declaration.Extent.EndOffset)
+            else if (invocationOffset >= declaration.Extent.EndOffset &&
+                     !IsRemovedBeforeExecution(declaration, invocationOffset, declarationScope))
             {
                 continue;
             }
@@ -647,11 +663,10 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             .Select((element, index) => new { element, index })
             .FirstOrDefault(item => ReferenceEquals(item.element, command))
             ?.index ?? -1;
-        return commandIndex >= 0 && pipeline.PipelineElements
-            .Skip(commandIndex + 1)
-            .OfType<CommandAst>()
-            .Any(consumer =>
-                string.Equals(consumer.GetCommandName(), "Out-Null", StringComparison.OrdinalIgnoreCase));
+        return commandIndex >= 0 &&
+               commandIndex + 2 == pipeline.PipelineElements.Count &&
+               pipeline.PipelineElements[commandIndex + 1] is CommandAst consumer &&
+               string.Equals(consumer.GetCommandName(), "Out-Null", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsFunctionLookupCommand(CommandAst command, string functionName)

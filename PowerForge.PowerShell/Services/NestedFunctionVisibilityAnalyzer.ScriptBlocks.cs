@@ -307,26 +307,31 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     private static string? TryGetAuthoredAliasName(CommandAst command)
     {
         var commandName = NormalizeInvocationName(command.GetCommandName());
-        if (!string.Equals(commandName, "Set-Alias", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "New-Alias", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "sal", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "nal", StringComparison.OrdinalIgnoreCase))
-        {
+        var aliasCommand = string.Equals(commandName, "Set-Alias", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(commandName, "New-Alias", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(commandName, "sal", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(commandName, "nal", StringComparison.OrdinalIgnoreCase);
+        var providerCommand = string.Equals(commandName, "Set-Item", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "New-Item", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "si", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "ni", StringComparison.OrdinalIgnoreCase);
+        if (!aliasCommand && !providerCommand)
             return null;
-        }
 
         try
         {
             var binding = StaticParameterBinder.BindCommand(command);
-            if (binding.BoundParameters.TryGetValue("Name", out var result))
+            if (aliasCommand && binding.BoundParameters.TryGetValue("Name", out var result))
             {
-                return result.Value switch
-                {
-                    StringConstantExpressionAst literal => literal.Value,
-                    ExpandableStringExpressionAst expandable when expandable.NestedExpressions.Count == 0 =>
-                        expandable.Value,
-                    _ => null
-                };
+                return TryGetLiteralText(result.Value);
+            }
+
+            if (providerCommand &&
+                (binding.BoundParameters.TryGetValue("Path", out result) ||
+                 binding.BoundParameters.TryGetValue("LiteralPath", out result)) &&
+                TryGetAliasProviderName(TryGetLiteralText(result.Value), out var aliasName))
+            {
+                return aliasName;
             }
         }
         catch
@@ -337,21 +342,36 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return null;
     }
 
+    private static string? TryGetLiteralText(object? value)
+    {
+        return value switch
+        {
+            StringConstantExpressionAst literal => literal.Value,
+            ExpandableStringExpressionAst expandable when expandable.NestedExpressions.Count == 0 => expandable.Value,
+            _ => null
+        };
+    }
+
+    private static bool TryGetAliasProviderName(string? providerPath, out string aliasName)
+    {
+        aliasName = string.Empty;
+        if (string.IsNullOrWhiteSpace(providerPath) ||
+            !providerPath!.StartsWith("alias:", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        aliasName = providerPath.Substring("alias:".Length).TrimStart('\\');
+        return aliasName.Length > 0;
+    }
+
     private static string? TryGetAuthoredAliasTarget(CommandAst command)
     {
         try
         {
             var binding = StaticParameterBinder.BindCommand(command);
             if (binding.BoundParameters.TryGetValue("Value", out var result))
-            {
-                return result.Value switch
-                {
-                    StringConstantExpressionAst literal => literal.Value,
-                    ExpandableStringExpressionAst expandable when expandable.NestedExpressions.Count == 0 =>
-                        expandable.Value,
-                    _ => null
-                };
-            }
+                return TryGetLiteralText(result.Value);
         }
         catch
         {

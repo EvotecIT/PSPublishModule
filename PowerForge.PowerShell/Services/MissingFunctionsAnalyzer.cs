@@ -68,9 +68,7 @@ public sealed class MissingFunctionsAnalyzer
     {
         var parsed = ParseInput(filePath, code);
 
-        var declaredFunctions = parsed.FunctionNames;
         var excludeFunctions = new HashSet<string>(knownFunctions, StringComparer.OrdinalIgnoreCase);
-        foreach (var fn in declaredFunctions) excludeFunctions.Add(fn);
 
         var commandNames = parsed.CommandNames.Where(n => !ignoreFunctions.Contains(n)).ToArray();
         var filteredNames = commandNames
