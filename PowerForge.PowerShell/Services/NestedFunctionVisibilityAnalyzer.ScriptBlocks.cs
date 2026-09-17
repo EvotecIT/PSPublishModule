@@ -57,20 +57,20 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 "VMId",
                 "VMName",
                 "ContainerId");
-            if (remoteBinding.HasValue)
-                return remoteBinding.Value;
-
-            return HasAnyParameter(
-                       invocation,
-                       "ComputerName",
-                       "ConnectionUri",
-                       "Session",
-                       "HostName",
-                       "SSHConnection",
-                       "VMId",
-                       "VMName",
-                       "ContainerId") ||
-                   HasPositionalRemoteTarget(invocation);
+            var isRemote = remoteBinding ??
+                           (HasAnyParameter(
+                                invocation,
+                                "ComputerName",
+                                "ConnectionUri",
+                                "Session",
+                                "HostName",
+                                "SSHConnection",
+                                "VMId",
+                                "VMName",
+                                "ContainerId") ||
+                            HasPositionalRemoteTarget(invocation));
+            return isRemote ||
+                   !IsScriptBlockBoundToAnyParameter(invocation, scriptBlockExpression, "ScriptBlock");
         }
 
         if (string.Equals(invocationName, "ForEach-Object", StringComparison.OrdinalIgnoreCase))
@@ -79,10 +79,21 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 return true;
 
             var parallelBinding = TryHasAnyBoundParameter(invocation, "Parallel");
-            return parallelBinding ?? HasAnyParameter(invocation, "Parallel");
+            var isParallel = parallelBinding ?? HasAnyParameter(invocation, "Parallel");
+            return isParallel ||
+                   !IsScriptBlockBoundToAnyParameter(
+                       invocation,
+                       scriptBlockExpression,
+                       "Begin",
+                       "Process",
+                       "End",
+                       "RemainingScripts");
         }
 
-        return !IsKnownSynchronousScriptBlockConsumer(invocationName);
+        return !IsKnownSynchronousScriptBlockConsumer(
+            invocationName,
+            invocation,
+            scriptBlockExpression);
     }
 
     private bool IsPotentiallyShadowedByScriptFunction(
@@ -92,6 +103,12 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         if (!string.IsNullOrWhiteSpace(rawInvocationName) && rawInvocationName!.IndexOf('\\') >= 0)
             return false;
+
+        if (_aliasDeclarationsByName.TryGetValue(normalizedInvocationName, out var aliases) &&
+            aliases.Any(alias => AliasCanShadowInvocation(alias, invocation)))
+        {
+            return true;
+        }
 
         if (!_functionDeclarationsByName.ContainsKey(normalizedInvocationName))
             return false;
@@ -115,7 +132,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                     continue;
                 }
 
-                if (IsDeclarationBlockCompatibleWithCommand(declarationBlock, invocation, declarationScope))
+                if (IsDeclarationBlockCompatibleWithCommand(
+                        declaration,
+                        declarationBlock,
+                        invocation,
+                        declarationScope))
                     return true;
             }
 
@@ -127,15 +148,166 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
     }
 
-    private static bool IsKnownSynchronousScriptBlockConsumer(string invocationName)
+    private static bool IsKnownSynchronousScriptBlockConsumer(
+        string invocationName,
+        CommandAst invocation,
+        ScriptBlockExpressionAst scriptBlockExpression)
     {
-        return string.Equals(invocationName, "Where-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Sort-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Group-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Measure-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Select-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Measure-Command", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Trace-Command", StringComparison.OrdinalIgnoreCase);
+        if (string.Equals(invocationName, "Where-Object", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsScriptBlockBoundToAnyParameter(
+                invocation,
+                scriptBlockExpression,
+                "FilterScript");
+        }
+
+        if (string.Equals(invocationName, "Sort-Object", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Group-Object", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Measure-Object", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Select-Object", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsScriptBlockBoundToAnyParameter(
+                invocation,
+                scriptBlockExpression,
+                "Property");
+        }
+
+        if (string.Equals(invocationName, "Measure-Command", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Trace-Command", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsScriptBlockBoundToAnyParameter(
+                invocation,
+                scriptBlockExpression,
+                "Expression");
+        }
+
+        return false;
+    }
+
+    private static bool IsScriptBlockBoundToAnyParameter(
+        CommandAst invocation,
+        ScriptBlockExpressionAst scriptBlockExpression,
+        params string[] parameterNames)
+    {
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(invocation);
+            foreach (var parameterName in parameterNames)
+            {
+                if (binding.BoundParameters.TryGetValue(parameterName, out var result) &&
+                    ContainsAst(result.Value, scriptBlockExpression))
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // Unresolved binding is treated as escaping rather than assuming same-runspace execution.
+        }
+
+        return false;
+    }
+
+    private static bool ContainsAst(object? value, Ast target)
+    {
+        if (ReferenceEquals(value, target))
+            return true;
+        if (value is not Ast valueAst)
+            return false;
+
+        return valueAst.FindAll(ast => ReferenceEquals(ast, target), searchNestedScriptBlocks: true).Any();
+    }
+
+    private static bool IsScopePromotingInvocation(
+        ScriptBlockExpressionAst expression,
+        CommandAst invocation)
+    {
+        if (invocation.InvocationOperator == TokenKind.Dot && IsInvocationTarget(expression, invocation))
+            return true;
+
+        var rawName = invocation.GetCommandName();
+        var invocationName = NormalizeInvocationName(rawName);
+        if (!string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase) ||
+            !HasTrustedModuleQualification(rawName, invocationName) ||
+            HasUnresolvedSplat(invocation) ||
+            !IsScriptBlockBoundToAnyParameter(invocation, expression, "ScriptBlock"))
+        {
+            return false;
+        }
+
+        var noNewScope = TryHasAnyBoundParameter(invocation, "NoNewScope");
+        return noNewScope ?? HasAnyParameter(invocation, "NoNewScope");
+    }
+
+    private static IReadOnlyDictionary<string, CommandAst[]> FindAuthoredAliasDeclarations(ScriptBlockAst root)
+    {
+        return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .Select(command => new
+            {
+                Command = command,
+                AliasName = TryGetAuthoredAliasName(command)
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.AliasName))
+            .GroupBy(
+                item => NormalizeInvocationName(item.AliasName),
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(item => item.Command).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string? TryGetAuthoredAliasName(CommandAst command)
+    {
+        var commandName = NormalizeInvocationName(command.GetCommandName());
+        if (!string.Equals(commandName, "Set-Alias", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "New-Alias", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "sal", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "nal", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(command);
+            if (binding.BoundParameters.TryGetValue("Name", out var result))
+            {
+                return result.Value switch
+                {
+                    StringConstantExpressionAst literal => literal.Value,
+                    ExpandableStringExpressionAst expandable when expandable.NestedExpressions.Count == 0 =>
+                        expandable.Value,
+                    _ => null
+                };
+            }
+        }
+        catch
+        {
+            // Dynamic alias names cannot safely establish a concrete shadow.
+        }
+
+        return null;
+    }
+
+    private static bool AliasCanShadowInvocation(CommandAst aliasDeclaration, CommandAst invocation)
+    {
+        if (aliasDeclaration.Extent.EndOffset > invocation.Extent.StartOffset)
+            return false;
+
+        var aliasScope = FindContainingScriptBlock(aliasDeclaration);
+        if (aliasScope is null)
+            return false;
+
+        for (Ast? current = invocation; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, aliasScope))
+                return true;
+        }
+
+        return false;
     }
 
     private static bool HasTrustedModuleQualification(string? rawInvocationName, string normalizedInvocationName)
@@ -219,6 +391,10 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return "Measure-Object";
         if (string.Equals(normalized, "select", StringComparison.OrdinalIgnoreCase))
             return "Select-Object";
+        if (string.Equals(normalized, "sal", StringComparison.OrdinalIgnoreCase))
+            return "Set-Alias";
+        if (string.Equals(normalized, "nal", StringComparison.OrdinalIgnoreCase))
+            return "New-Alias";
 
         return normalized;
     }

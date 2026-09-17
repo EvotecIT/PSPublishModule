@@ -174,7 +174,9 @@ public sealed class MissingFunctionsAnalyzer
         var functionDeclarationsByName = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: true)
             .Cast<FunctionDefinitionAst>()
             .Where(f => !string.IsNullOrWhiteSpace(f.Name))
-            .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(
+                f => NestedFunctionVisibilityAnalyzer.NormalizeDeclaredFunctionName(f.Name),
+                StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 group => group.Key,
                 group => group.ToArray(),
@@ -182,12 +184,12 @@ public sealed class MissingFunctionsAnalyzer
 
         var declaredFunctions = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()
-            .Select(f => f.Name)
+            .Select(f => NestedFunctionVisibilityAnalyzer.NormalizeDeclaredFunctionName(f.Name))
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var visibilityAnalyzer = new NestedFunctionVisibilityAnalyzer(functionDeclarationsByName);
+        var visibilityAnalyzer = new NestedFunctionVisibilityAnalyzer(ast, functionDeclarationsByName);
         var commandNames = ExtractCommandNames(ast, visibilityAnalyzer).ToArray();
 
         return new ParsedInput(effectiveFilePath, declaredFunctions, commandNames);

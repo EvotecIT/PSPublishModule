@@ -16,11 +16,32 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         _invokedBeforeDeclarationCache = new();
     private readonly Dictionary<FunctionDefinitionAst, bool> _deferredFunctionEscapeCache = new();
     private readonly HashSet<CommandAst> _shadowResolutionInProgress = new();
+    private readonly IReadOnlyDictionary<string, CommandAst[]> _aliasDeclarationsByName;
 
     internal NestedFunctionVisibilityAnalyzer(
+        ScriptBlockAst root,
         IReadOnlyDictionary<string, FunctionDefinitionAst[]> functionDeclarationsByName)
     {
         _functionDeclarationsByName = functionDeclarationsByName;
+        _aliasDeclarationsByName = FindAuthoredAliasDeclarations(root);
+    }
+
+    internal static string NormalizeDeclaredFunctionName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var separator = name.IndexOf(':');
+        if (separator <= 0 || separator + 1 >= name.Length)
+            return name;
+
+        var qualifier = name.Substring(0, separator);
+        return string.Equals(qualifier, "local", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(qualifier, "script", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(qualifier, "global", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(qualifier, "private", StringComparison.OrdinalIgnoreCase)
+            ? name.Substring(separator + 1)
+            : name;
     }
 
     internal bool IsDeclaredInVisibleScope(CommandAst command, string commandName)
@@ -30,8 +51,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         foreach (var declaration in declarations)
         {
+            if (IsDominatingDeclarationInContainingStatementBlock(declaration, command))
+                return true;
+
             if (!TryGetDeclarationContext(declaration, out var declarationScope, out var declarationBlock) ||
-                !IsDeclarationBlockCompatibleWithCommand(declarationBlock, command, declarationScope))
+                !IsDeclarationBlockCompatibleWithCommand(declaration, declarationBlock, command, declarationScope))
             {
                 continue;
             }
@@ -100,8 +124,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         while (declarationScope.Parent is ScriptBlockExpressionAst expression &&
                expression.Parent is CommandAst invocation &&
-               invocation.InvocationOperator == TokenKind.Dot &&
-               IsInvocationTarget(expression, invocation))
+               IsScopePromotingInvocation(expression, invocation))
         {
             if (declarationBlock.BlockKind == TokenKind.Process)
                 break;
@@ -141,8 +164,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         while (declarationScope.Parent is ScriptBlockExpressionAst expression &&
                expression.Parent is CommandAst invocation &&
-               invocation.InvocationOperator == TokenKind.Dot &&
-               IsInvocationTarget(expression, invocation))
+               IsScopePromotingInvocation(expression, invocation))
         {
             var parentScope = FindContainingScriptBlock(invocation);
             var parentBlock = parentScope is null ? null : FindNamedBlockInScope(invocation, parentScope);
@@ -157,6 +179,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     }
 
     private static bool IsDeclarationBlockCompatibleWithCommand(
+        FunctionDefinitionAst declaration,
         NamedBlockAst declarationBlock,
         CommandAst command,
         ScriptBlockAst declarationScope)
@@ -168,10 +191,45 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (ReferenceEquals(commandBlock, declarationBlock))
             return true;
 
-        return declarationBlock.BlockKind == TokenKind.Begin &&
-               (commandBlock.BlockKind == TokenKind.Process ||
-                commandBlock.BlockKind == TokenKind.End ||
-                string.Equals(commandBlock.BlockKind.ToString(), "Clean", StringComparison.OrdinalIgnoreCase));
+        if (declarationBlock.BlockKind != TokenKind.Begin)
+            return false;
+
+        if (commandBlock.BlockKind == TokenKind.Process || commandBlock.BlockKind == TokenKind.End)
+            return true;
+
+        return string.Equals(commandBlock.BlockKind.ToString(), "Clean", StringComparison.OrdinalIgnoreCase) &&
+               DeclarationDominatesCleanTransfer(declaration, declarationBlock);
+    }
+
+    private static bool DeclarationDominatesCleanTransfer(
+        FunctionDefinitionAst declaration,
+        NamedBlockAst declarationBlock)
+    {
+        return declarationBlock.Statements
+            .Where(statement => statement.Extent.EndOffset <= declaration.Extent.StartOffset)
+            .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst);
+    }
+
+    private static bool IsDominatingDeclarationInContainingStatementBlock(
+        FunctionDefinitionAst declaration,
+        CommandAst command)
+    {
+        if (declaration.Parent is not StatementBlockAst statementBlock ||
+            declaration.Extent.EndOffset > command.Extent.StartOffset ||
+            !ReferenceEquals(FindContainingScriptBlock(declaration), FindContainingScriptBlock(command)))
+        {
+            return false;
+        }
+
+        for (Ast? current = command.Parent; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, statementBlock))
+                return true;
+            if (current is ScriptBlockAst)
+                return false;
+        }
+
+        return false;
     }
 
     private static NamedBlockAst? FindNamedBlockInScope(Ast ast, ScriptBlockAst scope)
@@ -319,7 +377,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             if (candidate.Extent.EndOffset > invocationOffset ||
                 !TryGetPotentialDeclarationContext(candidate, out var candidateScope, out var candidateBlock) ||
                 !ReferenceEquals(candidateScope, declarationScope) ||
-                !IsDeclarationBlockCompatibleWithCommand(candidateBlock, invocation, declarationScope))
+                !IsDeclarationBlockCompatibleWithCommand(
+                    candidate,
+                    candidateBlock,
+                    invocation,
+                    declarationScope))
             {
                 continue;
             }
@@ -367,7 +429,6 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         var escaped = declarationScope.FindAll(
                 ast => ast is VariableExpressionAst ||
-                       ast is StringConstantExpressionAst ||
                        ast is CommandAst,
                 searchNestedScriptBlocks: true)
             .Any(ast => IsEscapingFunctionProviderReference(ast, function));
@@ -377,12 +438,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
     private static bool IsEscapingFunctionProviderReference(Ast ast, FunctionDefinitionAst function)
     {
-        string? providerPath = ast switch
-        {
-            VariableExpressionAst variable => variable.VariablePath.UserPath,
-            StringConstantExpressionAst text => text.Value,
-            _ => null
-        };
+        string? providerPath = ast is VariableExpressionAst variable
+            ? variable.VariablePath.UserPath
+            : null;
         if (ast is CommandAst command && IsFunctionLookupCommand(command, function.Name))
             return true;
 
@@ -406,8 +464,19 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     private static bool IsFunctionLookupCommand(CommandAst command, string functionName)
     {
         var commandName = command.GetCommandName();
-        if (!string.Equals(commandName, "Get-Command", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(commandName, "gcm", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(commandName, "Get-Command", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(commandName, "gcm", StringComparison.OrdinalIgnoreCase))
+        {
+            return command.CommandElements
+                .Skip(1)
+                .OfType<StringConstantExpressionAst>()
+                .Any(argument => string.Equals(argument.Value, functionName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.Equals(commandName, "Get-Item", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "gi", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "Get-Content", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "gc", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -415,7 +484,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return command.CommandElements
             .Skip(1)
             .OfType<StringConstantExpressionAst>()
-            .Any(argument => string.Equals(argument.Value, functionName, StringComparison.OrdinalIgnoreCase));
+            .Select(argument => argument.Value)
+            .Any(path => TryGetFunctionProviderName(path, out var providerFunction) &&
+                         string.Equals(providerFunction, functionName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool TryGetFunctionProviderName(string? providerPath, out string functionName)
@@ -516,7 +587,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 .ToArray();
 
             FunctionsByName = functions
-                .GroupBy(function => function.Name, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(
+                    function => NormalizeDeclaredFunctionName(function.Name),
+                    StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
                     group => group.Key,
                     group => group.ToArray(),
