@@ -35,6 +35,20 @@ public sealed class PowerShellCompilationRegionTransferContractTests
         Assert.Equal(output, contract.OutputBehavior);
         Assert.Equal(PowerShellRegionTransferDirection.LiveIn, contract.Direction);
         Assert.Equal(PowerShellRegionTransferOwnership.ParameterBorrowed, contract.Ownership);
+        Assert.Equal(2, contract.SchemaVersion);
+        if (output == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel)
+        {
+            Assert.Equal(PowerShellRegionEnumerationOwner.RetainedPowerShell, contract.EnumerationOwner);
+            Assert.Equal(PowerShellRegionEnumerationFailureBehavior.PreservePartialSuccessAndStatementContinuation,
+                contract.EnumerationFailureBehavior);
+            Assert.Equal(PowerShellRegionEnumeratorLifetime.RetainedPowerShell, contract.EnumeratorLifetime);
+        }
+        else
+        {
+            Assert.Equal(PowerShellRegionEnumerationOwner.None, contract.EnumerationOwner);
+            Assert.Equal(PowerShellRegionEnumerationFailureBehavior.None, contract.EnumerationFailureBehavior);
+            Assert.Equal(PowerShellRegionEnumeratorLifetime.None, contract.EnumeratorLifetime);
+        }
     }
 
     [Theory]

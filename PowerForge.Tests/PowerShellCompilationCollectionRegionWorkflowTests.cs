@@ -92,7 +92,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.PromotedTypedRegions);
+        Assert.Equal(3, result.Manifest!.PromotedTypedRegions);
 
         const string probe = """
             function Describe-Split($name, $arguments) {
@@ -141,23 +141,192 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var regions = typed.PromotedRegions.Where(static region => region.SourceName == "Split-Array")
             .OrderBy(static region => region.StartOffset).ToArray();
 
-        Assert.True(regions.Length == 2,
+        Assert.True(regions.Length == 3,
             string.Join(Environment.NewLine, typed.RegionCandidates.Where(static candidate => candidate.SourceName == "Split-Array")
-                .Select(static candidate => candidate.StartLine + "-" + candidate.EndLine + " " + candidate.DecisionCode + ": " + candidate.Reason)));
-        Assert.Equal(new[] { 44, 51 }, regions.Select(static region => region.StartLine));
-        Assert.True(regions[0].RequiresLocalOwnershipGuard);
-        var fresh = Assert.IsType<PowerShellRegionTransferContract>(Assert.Single(regions[0].ContinuationLocals).Contract);
+                .Select(static candidate => candidate.StartLine + "-" + candidate.EndLine + " " + candidate.DecisionCode + ": " + candidate.Reason)) +
+            Environment.NewLine + string.Join(Environment.NewLine, typed.RegionOpportunities.Where(static opportunity => opportunity.SourceName == "Split-Array")
+                .Select(static opportunity => opportunity.StartLine + "-" + opportunity.EndLine + " " + opportunity.Continuation +
+                    " inputs=" + string.Join(",", opportunity.LiveInputs.Select(static input => input.Identity + ":" + input.TypeName)) +
+                    " outputs=" + string.Join(",", opportunity.LiveOutputs.Select(static output => output.Identity + ":" + output.TypeName)))));
+        Assert.Equal(new[] { 36, 44, 51 }, regions.Select(static region => region.StartLine));
+        var envelope = Assert.IsType<PowerShellRegionControlFlowContract>(regions[0].ControlFlowContract);
+        Assert.Equal(PowerShellRegionControlFlowBehavior.ReturnOrFallThrough, envelope.Behavior);
+        Assert.Equal(PowerShellRegionTransferOutputBehavior.EnumerateOneLevel, envelope.ReturnValue.OutputBehavior);
+        Assert.True(regions[1].RequiresLocalOwnershipGuard);
+        var fresh = Assert.IsType<PowerShellRegionTransferContract>(Assert.Single(regions[1].ContinuationLocals).Contract);
         Assert.Equal(PowerShellRegionTransferShape.ListSequence, fresh.Shape);
         Assert.Equal(PowerShellRegionTransferDirection.LiveOut, fresh.Direction);
         Assert.Equal(PowerShellRegionTransferOwnership.GuardedFresh, fresh.Ownership);
-        Assert.Empty(regions[1].ContinuationLocals);
-        var input = Assert.Single(regions[1].InputLocals);
+        Assert.Empty(regions[2].ContinuationLocals);
+        var input = Assert.Single(regions[2].InputLocals);
         Assert.Equal("outArray", input.Name, ignoreCase: true);
         var earlier = Assert.IsType<PowerShellRegionTransferContract>(input.Contract);
         Assert.Equal(PowerShellRegionTransferDirection.LiveIn, earlier.Direction);
         Assert.Equal(PowerShellRegionTransferOwnership.EarlierRegion, earlier.Ownership);
         Assert.Equal(PowerShellRegionTransferOutputBehavior.NoEnumerate,
-            Assert.IsType<PowerShellRegionTransferContract>(regions[1].TerminalTransferContract).OutputBehavior);
+            Assert.IsType<PowerShellRegionTransferContract>(regions[2].TerminalTransferContract).OutputBehavior);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void CompleteWorkflow_ConditionalReturnsPreserveClosedCollectionOutputContracts(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Get-VectorReturn { param([string[]]$Value, [bool]$Return) if ($Return) { return $Value }; 'continued' }
+            function Get-ArrayReturn { param([Array]$Value, [bool]$Return) if ($Return) { return $Value }; 'continued' }
+            function Get-ArrayListReturn { param([Collections.ArrayList]$Value, [bool]$Return) if ($Return) { return $Value }; 'continued' }
+            function Get-ListReturn { param([Collections.Generic.List[object]]$Value, [bool]$Return) if ($Return) { return $Value }; 'continued' }
+            function Get-MapReturn { param([hashtable]$Value, [bool]$Return) if ($Return) { return $Value }; 'continued' }
+            function Get-NoEnumerateReturn { param([Array]$Value, [bool]$Return) if ($Return) { return ,$Value }; 'continued' }
+            Export-ModuleMember -Function Get-*Return
+            """, ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "ConditionalCollectionReturns", framework,
+            PowerShellCompilationCapabilities.HybridModule);
+        var controls = typed.PromotedRegions.Where(static region => region.ControlFlowContract is not null)
+            .OrderBy(static region => region.SourceName, StringComparer.Ordinal).ToArray();
+        Assert.Equal(6, controls.Length);
+        AssertControlReturn(controls, "Get-VectorReturn", PowerShellRegionTransferShape.StableScalarVector,
+            PowerShellRegionTransferOutputBehavior.EnumerateOneLevel);
+        AssertControlReturn(controls, "Get-ArrayReturn", PowerShellRegionTransferShape.ListSequence,
+            PowerShellRegionTransferOutputBehavior.EnumerateOneLevel);
+        AssertControlReturn(controls, "Get-ArrayListReturn", PowerShellRegionTransferShape.ListSequence,
+            PowerShellRegionTransferOutputBehavior.EnumerateOneLevel);
+        AssertControlReturn(controls, "Get-ListReturn", PowerShellRegionTransferShape.ListSequence,
+            PowerShellRegionTransferOutputBehavior.EnumerateOneLevel);
+        AssertControlReturn(controls, "Get-MapReturn", PowerShellRegionTransferShape.AtomicMap,
+            PowerShellRegionTransferOutputBehavior.Atomic);
+        AssertControlReturn(controls, "Get-NoEnumerateReturn", PowerShellRegionTransferShape.ListSequence,
+            PowerShellRegionTransferOutputBehavior.NoEnumerate);
+        Assert.All(controls, static region =>
+        {
+            var roundTrip = System.Text.Json.JsonSerializer.Deserialize<PowerShellCompiledRegion>(
+                System.Text.Json.JsonSerializer.Serialize(region));
+            Assert.NotNull(roundTrip?.ControlFlowContract);
+            Assert.Equal(region.ControlFlowContract!.ReturnValue.OutputBehavior,
+                roundTrip!.ControlFlowContract!.ReturnValue.OutputBehavior);
+        });
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "Generated.ConditionalCollectionReturns",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+
+        const string probe = """
+            $arrayList = [Collections.ArrayList]::new()
+            [void]$arrayList.Add('alpha'); [void]$arrayList.Add('beta')
+            $emptyArrayList = [Collections.ArrayList]::new()
+            $list = [Collections.Generic.List[object]]::new()
+            $list.Add('alpha'); $list.Add('beta')
+            $emptyList = [Collections.Generic.List[object]]::new()
+            $nestedArray = [object[]]::new(2)
+            $nestedArray[0] = [object[]]@('inner-a','inner-b')
+            $nestedArray[1] = 'tail'
+            $cases = @(
+                @{ Name = 'Get-VectorReturn'; Value = [string[]]@() },
+                @{ Name = 'Get-VectorReturn'; Value = [string[]]@('alpha') },
+                @{ Name = 'Get-VectorReturn'; Value = [string[]]@('alpha','beta') },
+                @{ Name = 'Get-ArrayReturn'; Value = $null },
+                @{ Name = 'Get-ArrayReturn'; Value = [object[]]@() },
+                @{ Name = 'Get-ArrayReturn'; Value = [object[]]@('alpha') },
+                @{ Name = 'Get-ArrayReturn'; Value = $nestedArray },
+                @{ Name = 'Get-ArrayReturn'; Value = [object[]]@('alpha','beta') },
+                @{ Name = 'Get-ArrayListReturn'; Value = $emptyArrayList },
+                @{ Name = 'Get-ArrayListReturn'; Value = $arrayList },
+                @{ Name = 'Get-ListReturn'; Value = $emptyList },
+                @{ Name = 'Get-ListReturn'; Value = $list },
+                @{ Name = 'Get-MapReturn'; Value = @{} },
+                @{ Name = 'Get-MapReturn'; Value = @{ first = 1; second = 2 } },
+                @{ Name = 'Get-NoEnumerateReturn'; Value = [object[]]@() },
+                @{ Name = 'Get-NoEnumerateReturn'; Value = [object[]]@('alpha','beta') }
+            )
+            foreach ($case in $cases) {
+                foreach ($return in $true,$false) {
+                    $records = @(& $case.Name -Value $case.Value -Return:$return)
+                    [pscustomobject]@{
+                        name = $case.Name
+                        return = $return
+                        count = $records.Count
+                        types = @($records | ForEach-Object { if ($null -eq $_) { '<null>' } else { $_.GetType().FullName } })
+                        values = @($records | ForEach-Object { [string]$_ })
+                    } | ConvertTo-Json -Depth 5 -Compress
+                }
+                $stopped = @(& $case.Name -Value $case.Value -Return:$true | Select-Object -First 1)
+                $reused = @(& $case.Name -Value $case.Value -Return:$true)
+                [pscustomobject]@{
+                    name = $case.Name
+                    phase = 'stop-and-reuse'
+                    stopped = @($stopped | ForEach-Object { [string]$_ })
+                    reused = @($reused | ForEach-Object { [string]$_ })
+                    inputCount = if ($case.Value -is [Collections.ICollection]) { $case.Value.Count } else { -1 }
+                } | ConvertTo-Json -Depth 5 -Compress
+            }
+            """;
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath,
+            "conditional-collection-return-original");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath,
+            "conditional-collection-return-compiled");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
+    private static void AssertControlReturn(
+        PowerShellCompiledRegion[] regions,
+        string sourceName,
+        PowerShellRegionTransferShape shape,
+        PowerShellRegionTransferOutputBehavior outputBehavior)
+    {
+        var control = Assert.IsType<PowerShellRegionControlFlowContract>(
+            Assert.Single(regions, region => region.SourceName == sourceName).ControlFlowContract);
+        Assert.Equal(PowerShellRegionControlFlowBehavior.ReturnOrFallThrough, control.Behavior);
+        Assert.Equal(shape, control.ReturnValue.Shape);
+        Assert.Equal(PowerShellRegionTransferDirection.TerminalSuccess, control.ReturnValue.Direction);
+        Assert.Equal(PowerShellRegionTransferOwnership.ParameterBorrowed, control.ReturnValue.Ownership);
+        Assert.Equal(outputBehavior, control.ReturnValue.OutputBehavior);
+        Assert.Equal(PowerShellRegionTransferMutation.None, control.ReturnValue.Mutation);
+        if (outputBehavior == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel)
+        {
+            Assert.Equal(PowerShellRegionEnumerationOwner.RetainedPowerShell, control.ReturnValue.EnumerationOwner);
+            Assert.Equal(PowerShellRegionEnumerationFailureBehavior.PreservePartialSuccessAndStatementContinuation,
+                control.ReturnValue.EnumerationFailureBehavior);
+            Assert.Equal(PowerShellRegionEnumeratorLifetime.RetainedPowerShell, control.ReturnValue.EnumeratorLifetime);
+        }
+        else
+        {
+            Assert.Equal(PowerShellRegionEnumerationOwner.None, control.ReturnValue.EnumerationOwner);
+            Assert.Equal(PowerShellRegionEnumerationFailureBehavior.None, control.ReturnValue.EnumerationFailureBehavior);
+            Assert.Equal(PowerShellRegionEnumeratorLifetime.None, control.ReturnValue.EnumeratorLifetime);
+        }
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("param([object]$Value,[bool]$Return) if ($Return) { return $Value }; 'continued'")]
+    [InlineData("param([Collections.ArrayList]$Value,[bool]$Return) if ($Return) { $Value.Add('changed'); return $Value }; 'continued'")]
+    [InlineData("param([bool]$Return) [string[]]$Value=@('alpha'); if ($Return) { return $Value }; 'continued'")]
+    public void Transpile_ConditionalReturnKeepsUnprovedEnumerationMutationAndLocalOwnershipRetained(string body)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-UnprovedReturn { " + body + " }" + Environment.NewLine,
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "UnprovedConditionalReturn", "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.DoesNotContain(typed.PromotedRegions,
+            static region => region.SourceName == "Get-UnprovedReturn" && region.ControlFlowContract is not null);
     }
 
     [Theory]

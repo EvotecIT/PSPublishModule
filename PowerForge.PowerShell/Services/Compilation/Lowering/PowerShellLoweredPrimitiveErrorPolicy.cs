@@ -18,6 +18,7 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
                 unary.Operand.ClrType == typeof(bool) && unary.Operation == PowerShellBoundUnaryOperator.LogicalNot,
             PowerShellLoweredClrInvocationExpression invocation => PowerShellClrPrimitiveInvocationPolicy.IsNonThrowing(
                 invocation.DeclaringType, invocation.MemberName, invocation.InvocationKind, invocation.ClrType, invocation.ParameterTypes),
+            PowerShellLoweredClrMemberExpression member => IsNonThrowingMemberRead(member),
             // A closed literal map has no dynamic key/value evaluation or conversion route.
             // The binder already rejects duplicate literal keys. Ordinary allocation failure is
             // outside the modeled language-error contract, as it is for other generated containers.
@@ -38,6 +39,13 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
                (literal.Value is null || PowerShellStableScalarTypePolicy.IsSupported(literal.ClrType)) ||
            expression is PowerShellLoweredDictionaryExpression dictionary && IsClosedLiteralMap(dictionary);
 
+    private static bool IsNonThrowingMemberRead(PowerShellLoweredClrMemberExpression member)
+        => !member.IsStatic && member.ClrType == typeof(int) && member.MemberName == "Length" &&
+           (member.DeclaringType == typeof(Array) &&
+                member.ReceiverBehavior == PowerShellClrReceiverBehavior.NormalizeNullCount ||
+            member.DeclaringType.IsArray &&
+                member.ReceiverBehavior == PowerShellClrReceiverBehavior.NormalizeNullArrayLength);
+
     internal static bool IsNonThrowingNumericMutation(Type type, PowerShellIntegralMutationSemantics semantics)
         => type == typeof(double) && semantics == PowerShellIntegralMutationSemantics.None ||
            semantics == PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble;
@@ -57,6 +65,10 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
                 PowerShellBoundBinaryOperator.Multiply or PowerShellBoundBinaryOperator.Divide or PowerShellBoundBinaryOperator.Remainder or
                 PowerShellBoundBinaryOperator.Equal or PowerShellBoundBinaryOperator.NotEqual or PowerShellBoundBinaryOperator.LessThan or
                 PowerShellBoundBinaryOperator.LessThanOrEqual or PowerShellBoundBinaryOperator.GreaterThan or PowerShellBoundBinaryOperator.GreaterThanOrEqual;
+        if (binary.Left.ClrType == typeof(int) && binary.Right.ClrType == typeof(int))
+            return binary.Operation is PowerShellBoundBinaryOperator.Equal or PowerShellBoundBinaryOperator.NotEqual or
+                PowerShellBoundBinaryOperator.LessThan or PowerShellBoundBinaryOperator.LessThanOrEqual or
+                PowerShellBoundBinaryOperator.GreaterThan or PowerShellBoundBinaryOperator.GreaterThanOrEqual;
         return binary.Left.ClrType == typeof(bool) && binary.Right.ClrType == typeof(bool) &&
             binary.Operation is PowerShellBoundBinaryOperator.Equal or PowerShellBoundBinaryOperator.NotEqual or
                 PowerShellBoundBinaryOperator.LogicalAnd or PowerShellBoundBinaryOperator.LogicalOr;

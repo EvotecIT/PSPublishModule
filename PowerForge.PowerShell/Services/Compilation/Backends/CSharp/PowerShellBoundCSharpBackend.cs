@@ -401,6 +401,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredHostedBooleanCommandExpression hostedBoolean => EmitHostedBooleanCommand(hostedBoolean),
             PowerShellLoweredParameterPresenceExpression presence => $"__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(presence.ParameterName)})",
             PowerShellLoweredConversionExpression conversion => EmitConversion(conversion),
+            PowerShellLoweredRegionControlFlowExpression controlFlow => controlFlow.Kind == PowerShellRegionControlFlowKind.FallThrough
+                ? "global::PowerForge.Generated.Runtime.PowerShellRegionControlFlowEnvelope.FallThrough()"
+                : "global::PowerForge.Generated.Runtime.PowerShellRegionControlFlowEnvelope.Return((object?)(" + EmitExpression(controlFlow.Value!) + "))",
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
             PowerShellLoweredUnaryExpression unary => EmitUnary(unary),
             PowerShellLoweredTypeTestExpression typeTest => EmitTypeTest(typeTest),

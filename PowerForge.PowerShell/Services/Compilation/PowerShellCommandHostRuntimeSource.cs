@@ -7,6 +7,15 @@ internal static class PowerShellCommandHostRuntimeSource
     {
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
         var requiresRegionHost = typed.PromotedRegions.Any(static region => region.RequiresLocalOwnershipGuard);
+        var requiresRegionControlFlow = typed.PromotedRegions.Any(static region => region.ControlFlowContract is not null);
+        if (requiresRegionControlFlow)
+        {
+            using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
+                "PowerForge.PowerShell.Compilation.PowerShellRegionControlFlowEnvelope.cs")
+                ?? throw new InvalidOperationException("Missing retained region control-flow runtime source.");
+            using var reader = new StreamReader(stream);
+            sources.Add("RegionControlFlow.g.cs", "#nullable enable\n" + reader.ReadToEnd());
+        }
         if (requiresRegionHost)
         {
             foreach (var name in new[] { "PowerShellRegionLocalOwnership", "PowerShellHybridRegionHost" })

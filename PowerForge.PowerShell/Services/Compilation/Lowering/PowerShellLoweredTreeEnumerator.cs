@@ -140,6 +140,9 @@ internal static class PowerShellLoweredTreeEnumerator
             case PowerShellLoweredConversionExpression conversion:
                 yield return conversion.Operand;
                 break;
+            case PowerShellLoweredRegionControlFlowExpression { Value: not null } controlFlow:
+                yield return controlFlow.Value;
+                break;
             case PowerShellLoweredBinaryExpression binary:
                 yield return binary.Left;
                 yield return binary.Right;

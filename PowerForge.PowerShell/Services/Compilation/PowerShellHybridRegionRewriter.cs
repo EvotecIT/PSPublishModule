@@ -64,14 +64,27 @@ internal static class PowerShellHybridRegionRewriter
             if (region.ContinuationLocals.Any(static local =>
                     local.HasTypeConstraint && string.IsNullOrWhiteSpace(local.TypeConstraintSyntax)))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' is missing its authored continuation type constraint.");
-            var receiver = region.ContinuationLocals.Count == 0
-                ? region.TerminalTransferContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.NoEnumerate
-                    ? "return ,"
-                    : "return "
-                : string.Join(", ", region.ContinuationLocals.Select(static local =>
-                    (local.HasTypeConstraint ? local.TypeConstraintSyntax : string.Empty) + "${" + local.Name + "}")) + " = ";
-            var invocation = receiver + "[" + typed.NamespaceName + "." + typed.TypeName + "]::" +
-                             region.GeneratedName + "(" + arguments + ")";
+            var call = "[" + typed.NamespaceName + "." + typed.TypeName + "]::" +
+                       region.GeneratedName + "(" + arguments + ")";
+            string invocation;
+            if (region.ControlFlowContract is not null)
+            {
+                var temporary = GetControlFlowTemporary(region);
+                var returned = region.ControlFlowContract.ReturnValue.OutputBehavior == PowerShellRegionTransferOutputBehavior.NoEnumerate
+                    ? "return ,${" + temporary + "}.Value"
+                    : "return ${" + temporary + "}.Value";
+                invocation = "if ((${" + temporary + "} = " + call + ").ShouldReturn) { " + returned + " }";
+            }
+            else
+            {
+                var receiver = region.ContinuationLocals.Count == 0
+                    ? region.TerminalTransferContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.NoEnumerate
+                        ? "return ,"
+                        : "return "
+                    : string.Join(", ", region.ContinuationLocals.Select(static local =>
+                        (local.HasTypeConstraint ? local.TypeConstraintSyntax : string.Empty) + "${" + local.Name + "}")) + " = ";
+                invocation = receiver + call;
+            }
             if (region.ContinuationLocals.Count > 0 && !region.RequiresLocalOwnershipGuard &&
                 region.ContinuationLocals.Any(output => !region.InputLocals.Any(input =>
                     input.Name.Equals(output.Name, StringComparison.OrdinalIgnoreCase) &&
@@ -113,6 +126,8 @@ internal static class PowerShellHybridRegionRewriter
                 "), [string[]]@(" + string.Join(", ", replacements.SelectMany(static item => item.Region.InputLocals).Select(local => Quote(local.Name))) +
                 "), [string[]]@(" + string.Join(", ", replacements.SelectMany(static item => item.Region.InputLocals).Select(local => Quote(local.TypeName))) +
                 "), [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.InputLocals.Count)) +
+                "), [string[]]@(" + string.Join(", ", replacements.Where(static item => item.Region.ControlFlowContract is not null)
+                    .Select(static item => Quote(GetControlFlowTemporary(item.Region)))) +
                 "), [string[]]@(" + string.Join(", ", replacements.Where(static item => item.Region.RequiresLocalOwnershipGuard)
                     .SelectMany(static item => item.Region.ContinuationLocals).Select(local => Quote(local.Name))) + "))) { }\n";
             edits.Add(new PowerShellHybridSourceEdit(owner.Extent.StartOffset,
@@ -124,6 +139,9 @@ internal static class PowerShellHybridRegionRewriter
     }
 
     private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+
+    private static string GetControlFlowTemporary(PowerShellCompiledRegion region)
+        => "__PowerForgeRegionFlow_" + region.GeneratedName.TrimStart('_');
 
     private static bool HasInputLocalProvenance(
         IReadOnlyList<PowerShellCompiledRegion> regions,

@@ -97,4 +97,17 @@ public sealed class PowerForgePublicBinaryCompatibilityTests
 
         Assert.NotNull(method);
     }
+
+    [Fact]
+    public void PowerShellHybridRegionHost_PreservesOriginalInstallSignature()
+    {
+        var method = typeof(PowerShellHybridRegionHost).GetMethod(nameof(PowerShellHybridRegionHost.TryInstallDeclaredFunction), new[]
+        {
+            typeof(PSModuleInfo), typeof(string), typeof(string), typeof(string), typeof(int), typeof(int),
+            typeof(int[]), typeof(int[]), typeof(string[]), typeof(bool[]), typeof(string[]), typeof(string[]),
+            typeof(int[]), typeof(string[])
+        });
+
+        Assert.NotNull(method);
+    }
 }

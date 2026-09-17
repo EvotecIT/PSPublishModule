@@ -65,7 +65,6 @@ public sealed class PowerShellCompilationRegionCandidate
     }
 
     /// <summary>Creates immutable region-candidate decision evidence with its closed terminal transfer contract.</summary>
-    [JsonConstructor]
     public PowerShellCompilationRegionCandidate(
         string regionId,
         string sourceSha256,
@@ -88,6 +87,38 @@ public sealed class PowerShellCompilationRegionCandidate
         bool requiresLocalOwnershipGuard,
         IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals,
         PowerShellRegionTransferContract? terminalTransferContract)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            startOffset, endOffset, startLine, startColumn, endLine, endColumn, promoted, decisionCode,
+            reason, generatedName, regionGraph, continuationLocals, requiresLocalOwnershipGuard,
+            inputLocals, terminalTransferContract, controlFlowContract: null)
+    {
+    }
+
+    /// <summary>Creates immutable region-candidate evidence with value-transfer and control-flow contracts.</summary>
+    [JsonConstructor]
+    public PowerShellCompilationRegionCandidate(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        bool promoted,
+        string decisionCode,
+        string reason,
+        string generatedName,
+        PowerShellCompilationRegionGraph? regionGraph,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals,
+        PowerShellRegionTransferContract? terminalTransferContract,
+        PowerShellRegionControlFlowContract? controlFlowContract)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -110,6 +141,7 @@ public sealed class PowerShellCompilationRegionCandidate
         InputLocals = Array.AsReadOnly((inputLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
         RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
         TerminalTransferContract = terminalTransferContract;
+        ControlFlowContract = controlFlowContract;
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -157,4 +189,6 @@ public sealed class PowerShellCompilationRegionCandidate
 
     /// <summary>Closed terminal Success-output behavior, or null for local continuation transfers.</summary>
     public PowerShellRegionTransferContract? TerminalTransferContract { get; }
+    /// <summary>Return-or-fallthrough behavior, or null for ordinary transfer regions.</summary>
+    public PowerShellRegionControlFlowContract? ControlFlowContract { get; }
 }

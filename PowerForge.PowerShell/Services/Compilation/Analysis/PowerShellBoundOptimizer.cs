@@ -103,6 +103,13 @@ internal sealed class PowerShellBoundOptimizer
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
             PowerShellBoundNativeAssignmentStatement assignment => new PowerShellBoundNativeAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value), assignment.Operation, assignment.Target),
+            PowerShellBoundRegionControlFlowReturnStatement controlFlow =>
+                new PowerShellBoundRegionControlFlowReturnStatement(
+                    controlFlow.Span,
+                    ((PowerShellBoundRegionControlFlowExpression)controlFlow.Expression!).Kind,
+                    ((PowerShellBoundRegionControlFlowExpression)controlFlow.Expression!).Value is { } controlValue
+                        ? OptimizeExpression(controlValue)
+                        : null),
             // Transfer operands are immutable local reads; retain their ordered ABI owner.
             PowerShellBoundRegionTransferStatement transfer => transfer,
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
@@ -148,6 +155,11 @@ internal sealed class PowerShellBoundOptimizer
 
     private PowerShellBoundExpression OptimizeExpression(PowerShellBoundExpression expression)
     {
+        if (expression is PowerShellBoundRegionControlFlowExpression controlFlow)
+            return new PowerShellBoundRegionControlFlowExpression(
+                controlFlow.Span,
+                controlFlow.Kind,
+                controlFlow.Value is null ? null : OptimizeExpression(controlFlow.Value));
         if (expression is PowerShellBoundMembershipExpression membership)
             return new PowerShellBoundMembershipExpression(membership.Span, OptimizeExpression(membership.Left),
                 OptimizeExpression(membership.Right), membership.ElementType, membership.CollectionOnRight,

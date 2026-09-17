@@ -8,7 +8,8 @@ internal static class PowerShellBoundRegionLocalProjection
 {
     internal static PowerShellBoundStatement? Project(PowerShellBoundStatement statement,
         IReadOnlyList<PowerShellBoundParameter> parameters, IReadOnlyList<PowerShellBoundLocal> initializedLocals,
-        IReadOnlyList<PowerShellBoundLocal> functionLocals)
+        IReadOnlyList<PowerShellBoundLocal> functionLocals,
+        bool includeControlFlow = false)
     {
         if (!statement.Capabilities.HasFlag(PowerShellRequiredCapability.NativeFunctionBinding)) return statement;
         var values = parameters.Select(static parameter => (parameter.Symbol, parameter.Type))
@@ -23,6 +24,13 @@ internal static class PowerShellBoundRegionLocalProjection
                 return boundary.Body.Statements.Length == 1 ? Statement(boundary.Body.Statements[0]) : null;
             if (current is PowerShellBoundNativeAssignmentStatement { Operation: PowerShellBoundMutationOperator.Assign } assigned)
                 return Assignment(assigned.Span, assigned.Name, assigned.Value);
+            if (includeControlFlow && current is PowerShellBoundReturnStatement returned)
+            {
+                var value = returned.Expression is null ? null : Expression(returned.Expression);
+                return returned.Expression is not null && value is null
+                    ? null
+                    : new PowerShellBoundReturnStatement(returned.Span, value, returned.EmitsValue);
+            }
             if (current is PowerShellBoundExpressionStatement { EmitsOutput: false,
                     Expression: PowerShellBoundMutationExpression { Operation: PowerShellBoundMutationOperator.Assign, Value: not null,
                         NativeTargetRead: { DirectLocal: true } } mutation })
@@ -94,6 +102,38 @@ internal static class PowerShellBoundRegionLocalProjection
                 return conversion.NormalizeNullString
                     ? new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, normalizeNullString: true)
                     : operand;
+            }
+            if (includeControlFlow && expression is PowerShellBoundClrMemberExpression member)
+            {
+                var receiver = member.Receiver is null ? null : Expression(member.Receiver);
+                if (member.Receiver is not null && receiver is null) return null;
+                return new PowerShellBoundClrMemberExpression(
+                    member.Span,
+                    member.DeclaringType,
+                    member.MemberName,
+                    member.IsStatic,
+                    receiver,
+                    member.ReceiverBehavior,
+                    member.Type);
+            }
+            if (includeControlFlow && expression is PowerShellBoundBinaryExpression binary &&
+                !binary.UsesNativeInvocation &&
+                !binary.PreserveStatementErrors)
+            {
+                var left = Expression(binary.Left);
+                var right = Expression(binary.Right);
+                if (left is null || right is null) return null;
+                return new PowerShellBoundBinaryExpression(
+                    binary.Span,
+                    binary.Operation,
+                    left,
+                    right,
+                    binary.Type,
+                    preserveStatementErrors: false,
+                    usesNativeInvocation: false,
+                    binary.NativeIgnoreCase,
+                    binary.OperatorSpan,
+                    binary.OperatorSourceText);
             }
             if (expression is PowerShellBoundInterpolatedStringExpression text)
             {

@@ -75,7 +75,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             decision.Policy.IsSafe ? decision.Emission?.GeneratedName ?? string.Empty : string.Empty,
             decision.Emission?.RegionGraph,
             candidate.ContinuationLocals.ToArray(), candidate.RequiresLocalOwnershipGuard, candidate.InputLocals.ToArray(),
-            candidate.TerminalTransferContract);
+            candidate.TerminalTransferContract,
+            candidate.ControlFlowContract);
     }
 
     private static PowerShellCompilationRegionCandidate RejectGeneratedNameCollision(PowerShellCompilationRegionCandidate candidate)
@@ -98,7 +99,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             generatedName: string.Empty,
             candidate.RegionGraph,
             candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals,
-            candidate.TerminalTransferContract);
+            candidate.TerminalTransferContract,
+            candidate.ControlFlowContract);
 
     private static PowerShellCompilationRegionCandidate RejectWholeFunctionCoverage(PowerShellCompilationRegionCandidate candidate)
         => new(
@@ -111,7 +113,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             "The containing function is already selected for whole-function emission.",
             generatedName: string.Empty,
             candidate.RegionGraph, candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals,
-            candidate.TerminalTransferContract);
+            candidate.TerminalTransferContract,
+            candidate.ControlFlowContract);
 
     private static PowerShellCompilationRegionCandidate RejectEnclosedRegion(PowerShellCompilationRegionCandidate candidate)
         => new(
@@ -124,7 +127,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             "A larger approved region covers this candidate's complete authored span.",
             generatedName: string.Empty,
             candidate.RegionGraph, candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals,
-            candidate.TerminalTransferContract);
+            candidate.TerminalTransferContract,
+            candidate.ControlFlowContract);
 }
 
 internal sealed class PowerShellTypedRegionSelection

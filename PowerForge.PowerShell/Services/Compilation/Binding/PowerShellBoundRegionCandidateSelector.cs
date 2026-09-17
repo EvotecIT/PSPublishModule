@@ -54,7 +54,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         PowerShellCompiledRegionLocal[]? continuationLocals = null,
         PowerShellCompiledRegionLocal[]? inputLocals = null,
         bool allowsPrefixOwnedInputLocals = false,
-        PowerShellRegionTransferContract? terminalTransferContract = null)
+        PowerShellRegionTransferContract? terminalTransferContract = null,
+        PowerShellRegionControlFlowContract? controlFlowContract = null)
     {
         candidate = null!;
         // A standalone region has no native function context argument. Do not detach reads from their invocation owner.
@@ -79,10 +80,13 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         var selectedParameters = parameters.Where(parameter => usedSymbols.Contains(parameter.Symbol.StableKey)).ToArray();
         if (selectedParameters.Any(static parameter =>
                 parameter.Contract.IsSwitch ||
-                !IsSimpleVariableName(parameter.Symbol.Name) ||
-                !(parameter.Symbol.Kind == PowerShellSymbolKind.Local
-                    ? PowerShellRegionTransferTypePolicy.IsSupported(parameter.Type.ClrType)
-                    : PowerShellStableScalarTypePolicy.IsSupported(parameter.Type.ClrType))))
+                !IsSimpleVariableName(parameter.Symbol.Name)) ||
+            selectedParameters.Any(parameter =>
+                controlFlowContract is not null
+                    ? !PowerShellRegionTransferTypePolicy.IsSupported(parameter.Type.ClrType)
+                    : !(parameter.Symbol.Kind == PowerShellSymbolKind.Local
+                        ? PowerShellRegionTransferTypePolicy.IsSupported(parameter.Type.ClrType)
+                        : PowerShellStableScalarTypePolicy.IsSupported(parameter.Type.ClrType))))
             return false;
         var selectedLocals = locals.Where(local => usedSymbols.Contains(local.Symbol.StableKey) &&
             !parameters.Any(parameter => parameter.Symbol.StableKey == local.Symbol.StableKey)).ToArray();
@@ -141,7 +145,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             requiresLocalOwnershipGuard: continuationLocals is { Length: > 0 } && inputLocals is not { Length: > 0 },
             inputLocals,
             allowsPrefixOwnedInputLocals,
-            terminalTransferContract);
+            terminalTransferContract,
+            controlFlowContract);
         return true;
     }
 
@@ -249,7 +254,8 @@ internal sealed class PowerShellBoundRegionCandidate
         bool requiresLocalOwnershipGuard = false,
         PowerShellCompiledRegionLocal[]? inputLocals = null,
         bool allowsPrefixOwnedInputLocals = false,
-        PowerShellRegionTransferContract? terminalTransferContract = null)
+        PowerShellRegionTransferContract? terminalTransferContract = null,
+        PowerShellRegionControlFlowContract? controlFlowContract = null)
     {
         RegionId = regionId;
         SourceSha256 = sourceSha256;
@@ -264,6 +270,7 @@ internal sealed class PowerShellBoundRegionCandidate
         RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
         AllowsPrefixOwnedInputLocals = allowsPrefixOwnedInputLocals;
         TerminalTransferContract = terminalTransferContract;
+        ControlFlowContract = controlFlowContract;
     }
 
     internal string RegionId { get; }
@@ -279,4 +286,5 @@ internal sealed class PowerShellBoundRegionCandidate
     internal bool RequiresLocalOwnershipGuard { get; }
     internal bool AllowsPrefixOwnedInputLocals { get; }
     internal PowerShellRegionTransferContract? TerminalTransferContract { get; }
+    internal PowerShellRegionControlFlowContract? ControlFlowContract { get; }
 }

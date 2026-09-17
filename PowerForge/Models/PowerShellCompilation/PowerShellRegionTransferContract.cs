@@ -80,6 +80,33 @@ public enum PowerShellRegionTransferMutation
     CompiledOwned
 }
 
+/// <summary>Runtime owner of collection enumeration at a retained/typed region boundary.</summary>
+public enum PowerShellRegionEnumerationOwner
+{
+    /// <summary>The transferred value is not enumerated at this boundary.</summary>
+    None,
+    /// <summary>The retained PowerShell engine owns enumeration and its host-specific semantics.</summary>
+    RetainedPowerShell
+}
+
+/// <summary>Failure and continuation behavior while a transferred collection is enumerated.</summary>
+public enum PowerShellRegionEnumerationFailureBehavior
+{
+    /// <summary>No collection enumeration occurs at this boundary.</summary>
+    None,
+    /// <summary>Records already written remain visible and the retained statement owns error continuation.</summary>
+    PreservePartialSuccessAndStatementContinuation
+}
+
+/// <summary>Owner of an enumerator's lifetime and cleanup at a retained/typed boundary.</summary>
+public enum PowerShellRegionEnumeratorLifetime
+{
+    /// <summary>No enumerator is acquired at this boundary.</summary>
+    None,
+    /// <summary>The retained PowerShell engine owns acquisition, stopping checks, and disposal.</summary>
+    RetainedPowerShell
+}
+
 /// <summary>Complete, versioned contract for one retained/typed value crossing.</summary>
 public sealed class PowerShellRegionTransferContract
 {
@@ -103,7 +130,7 @@ public sealed class PowerShellRegionTransferContract
     }
 
     /// <summary>Contract schema version.</summary>
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
     /// <summary>CLR storage shape.</summary>
     public PowerShellRegionTransferShape Shape { get; }
     /// <summary>Element-level contract.</summary>
@@ -116,6 +143,21 @@ public sealed class PowerShellRegionTransferContract
     public PowerShellRegionTransferOutputBehavior OutputBehavior { get; }
     /// <summary>Mutation authority.</summary>
     public PowerShellRegionTransferMutation Mutation { get; }
+    /// <summary>Owner that performs one-level output enumeration.</summary>
+    public PowerShellRegionEnumerationOwner EnumerationOwner =>
+        OutputBehavior == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel
+            ? PowerShellRegionEnumerationOwner.RetainedPowerShell
+            : PowerShellRegionEnumerationOwner.None;
+    /// <summary>Observable behavior when output enumeration fails after zero or more records.</summary>
+    public PowerShellRegionEnumerationFailureBehavior EnumerationFailureBehavior =>
+        EnumerationOwner == PowerShellRegionEnumerationOwner.RetainedPowerShell
+            ? PowerShellRegionEnumerationFailureBehavior.PreservePartialSuccessAndStatementContinuation
+            : PowerShellRegionEnumerationFailureBehavior.None;
+    /// <summary>Owner of enumeration stopping and cleanup.</summary>
+    public PowerShellRegionEnumeratorLifetime EnumeratorLifetime =>
+        EnumerationOwner == PowerShellRegionEnumerationOwner.RetainedPowerShell
+            ? PowerShellRegionEnumeratorLifetime.RetainedPowerShell
+            : PowerShellRegionEnumeratorLifetime.None;
     /// <summary>Whether the complete combination is admitted by the current closed ABI.</summary>
     public bool Supported { get; }
 }

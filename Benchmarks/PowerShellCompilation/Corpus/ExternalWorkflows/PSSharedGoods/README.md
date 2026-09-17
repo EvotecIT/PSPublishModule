@@ -1,5 +1,7 @@
 # Pinned PSSharedGoods workflows
 
+`FullModule/Public/Objects/Split-Array.ps1` is unchanged source from PSSharedGoods commit `2a807a4f11ba458b7bc405ce3674d93838639af1`, with SHA-256 `fb8e80dfad72d1b0d964fbb660dce08c818707ca8e59d4138a0527f1d2ab6e9b`. `CompleteWorkflow_PinnedSplitArrayPreservesAtomicListOutput` verifies three regions on `net10.0`/PowerShell 7.6 and `net472`/Windows PowerShell 5.1: a parameter-array early return carried by a return-or-fallthrough envelope, fresh `List<object>` construction, and the terminal comma/no-enumerate return. The generated helper never enumerates the early return value. Retained PowerShell owns its output cardinality, partial-success and error continuation, downstream stopping, and enumerator cleanup. Original and generated modules match parts, fixed-size, singleton, and reused invocations. A separate six-family fixture applies the same envelope to stable-scalar vectors, `System.Array`, `ArrayList`, `List<object>`, Hashtable, and explicit no-enumerate output. Direct object/ETS returns, arbitrary enumerators, local collection ownership, and compiled mutation remain retained.
+
 `Convert-BinaryToString.ps1` is the unchanged complete function from [PSSharedGoods commit 2a807a4](https://github.com/EvotecIT/PSSharedGoods/blob/2a807a4f11ba458b7bc405ce3674d93838639af1/Public/Converts/Convert-BinaryToString.ps1). Its MIT license is included in this directory.
 
 The source file SHA-256 is `8d237e02921013b114a7d0af851e8369e2693bbfad5a8d5a17b8ee30e48fa332`. The compiler discovery packet pins the containing archive separately.

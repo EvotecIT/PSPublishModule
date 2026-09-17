@@ -11,15 +11,24 @@ namespace PowerForge.Generated.Runtime
     /// <summary>Installs compiler-selected regions while preserving the retained statements' original AST extents.</summary>
     public static class PowerShellHybridRegionHost
     {
-        /// <summary>Installs a prepared retained-region function, or leaves the authored declaration intact when the target runspace cannot construct it.</summary>
+        /// <summary>Installs a prepared retained-region function without synthetic control-flow locals.</summary>
         public static bool TryInstallDeclaredFunction(PSModuleInfo module, string name, string source, string sourcePath,
             int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded,
             string[] inputLocalNames, string[] inputLocalTypeNames, int[] inputLocalCounts, string[] localNames)
+            => TryInstallDeclaredFunction(module, name, source, sourcePath, functionStart, functionEnd, starts, ends,
+                replacements, guarded, inputLocalNames, inputLocalTypeNames, inputLocalCounts,
+                Array.Empty<string>(), localNames);
+
+        /// <summary>Installs a prepared retained-region function, or leaves the authored declaration intact when the target runspace cannot construct it.</summary>
+        public static bool TryInstallDeclaredFunction(PSModuleInfo module, string name, string source, string sourcePath,
+            int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded,
+            string[] inputLocalNames, string[] inputLocalTypeNames, int[] inputLocalCounts,
+            string[] flowLocalNames, string[] localNames)
         {
             try
             {
                 var script = Create(module, source, sourcePath, functionStart, functionEnd, starts, ends, replacements,
-                    guarded, inputLocalNames, inputLocalTypeNames, inputLocalCounts, localNames);
+                    guarded, inputLocalNames, inputLocalTypeNames, inputLocalCounts, flowLocalNames, localNames);
                 PowerShellNativeFunctionHost.InstallDeclaredFunction(module, name, script);
                 return true;
             }
@@ -35,13 +44,22 @@ namespace PowerForge.Generated.Runtime
         public static ScriptBlock Create(PSModuleInfo module, string source, string sourcePath,
             int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded, string[] localNames)
             => Create(module, source, sourcePath, functionStart, functionEnd, starts, ends, replacements, guarded,
-                Array.Empty<string>(), Array.Empty<string>(), starts == null ? Array.Empty<int>() : new int[starts.Length], localNames);
+                Array.Empty<string>(), Array.Empty<string>(), starts == null ? Array.Empty<int>() : new int[starts.Length],
+                Array.Empty<string>(), localNames);
+
+        /// <summary>Creates a module-owned retained function without synthetic control-flow locals.</summary>
+        public static ScriptBlock Create(PSModuleInfo module, string source, string sourcePath,
+            int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded,
+            string[] inputLocalNames, string[] inputLocalTypeNames, int[] inputLocalCounts, string[] localNames)
+            => Create(module, source, sourcePath, functionStart, functionEnd, starts, ends, replacements, guarded,
+                inputLocalNames, inputLocalTypeNames, inputLocalCounts, Array.Empty<string>(), localNames);
 
         /// <summary>Creates a module-owned retained function with immutable statement-aligned region replacements.</summary>
         /// <remarks>The replacements are compiler output. Runtime validation checks shape and source identity, not semantic eligibility.</remarks>
         public static ScriptBlock Create(PSModuleInfo module, string source, string sourcePath,
             int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded,
-            string[] inputLocalNames, string[] inputLocalTypeNames, int[] inputLocalCounts, string[] localNames)
+            string[] inputLocalNames, string[] inputLocalTypeNames, int[] inputLocalCounts,
+            string[] flowLocalNames, string[] localNames)
         {
             if (module == null) throw new ArgumentNullException(nameof(module));
             if (starts == null || ends == null || replacements == null || guarded == null ||
@@ -52,13 +70,25 @@ namespace PowerForge.Generated.Runtime
                 inputLocalCounts.Any(static count => count < 0) || inputLocalCounts.Sum() != inputLocalNames.Length ||
                 inputLocalCounts[0] != 0)
                 throw new ArgumentException("Every detached region requires a complete live input-local contract.", nameof(inputLocalCounts));
-            if (localNames == null || localNames.Length == 0 || !guarded[0] || guarded.Skip(1).Any(value => value))
+            if (flowLocalNames == null || flowLocalNames.Any(static name =>
+                    string.IsNullOrEmpty(name) || name.IndexOf(':') >= 0) ||
+                flowLocalNames.Distinct(StringComparer.OrdinalIgnoreCase).Count() != flowLocalNames.Length)
+                throw new ArgumentException("Control-flow temporaries require distinct unqualified names.", nameof(flowLocalNames));
+            if (localNames == null || localNames.Length == 0 || guarded.Count(static value => value) != 1)
                 throw new ArgumentException("The retained region host requires one guarded initialization prefix.", nameof(guarded));
+            if (flowLocalNames.Intersect(localNames, StringComparer.OrdinalIgnoreCase).Any())
+                throw new ArgumentException("Control-flow temporaries cannot overlap guarded transfer locals.", nameof(flowLocalNames));
             var document = PowerShellNativeFunctionHost.ParseSelectedDocument(source, sourcePath, functionStart, functionEnd);
             var function = document.FindAll(node => node is FunctionDefinitionAst &&
                 node.Extent.StartOffset == functionStart && node.Extent.EndOffset == functionEnd, true)
                 .Cast<FunctionDefinitionAst>().SingleOrDefault()
                 ?? throw new ArgumentException("The retained function does not match its authored source identity.", nameof(source));
+            var authoredVariableNames = function.FindAll(static node => node is VariableExpressionAst, true)
+                .OfType<VariableExpressionAst>()
+                .Select(static variable => variable.VariablePath.UserPath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (flowLocalNames.Any(authoredVariableNames.Contains))
+                throw new ArgumentException("A control-flow temporary overlaps authored variable storage.", nameof(flowLocalNames));
             var body = function.Body;
             if (function.IsFilter || function.IsWorkflow || body.DynamicParamBlock != null || body.BeginBlock != null || body.ProcessBlock != null ||
                 body.EndBlock == null || !body.EndBlock.Unnamed ||
@@ -113,16 +143,39 @@ namespace PowerForge.Generated.Runtime
             // Preserve the original tuple declaration order and constraints without executing
             // these declarations. The actual initialization choice is outside native statements.
             var placeholder = (IfStatementAst)PowerShellNativeFunctionHost.Parse("if ($false) { }", sourcePath).EndBlock.Statements[0];
-            statements.Insert(0, new IfStatementAst(body.EndBlock.Extent,
+            var paddingStatements = authored.Select(statement => (StatementAst)statement.Copy()).ToList();
+            foreach (var name in flowLocalNames)
+            {
+                var declaration = PowerShellNativeFunctionHost.Parse("${" + name + "} = $null", sourcePath)
+                    .EndBlock.Statements.Single();
+                paddingStatements.Add((StatementAst)declaration.Copy());
+            }
+            var tuplePadding = new IfStatementAst(body.EndBlock.Extent,
                 new[] { Tuple.Create((PipelineBaseAst)placeholder.Clauses[0].Item1.Copy(),
-                    new StatementBlockAst(body.EndBlock.Extent, authored.Select(statement => (StatementAst)statement.Copy()), null)) }, null));
+                    new StatementBlockAst(body.EndBlock.Extent, paddingStatements, null)) }, null);
+            statements.Insert(0, tuplePadding);
             var statementBlock = new StatementBlockAst(body.EndBlock.Extent, statements, null);
             var rewritten = CreateBody(document, body, parameters, statementBlock, function.IsFilter);
             var retained = new FunctionDefinitionAst(function.Extent, function.IsFilter, function.IsWorkflow,
                 function.Name, null, rewritten);
             // A native function's metadata owner is FunctionDefinitionAst, not just its body.
             // Windows PowerShell also requires that owner to find comment-based function help.
-            var originalScript = module.NewBoundScriptBlock(PowerShellNativeFunctionHost.CreateFunctionScriptBlock(function));
+            ScriptBlock originalScript;
+            if (flowLocalNames.Length == 0)
+            {
+                originalScript = module.NewBoundScriptBlock(PowerShellNativeFunctionHost.CreateFunctionScriptBlock(function));
+            }
+            else
+            {
+                var nativeStatements = new[] { (StatementAst)tuplePadding.Copy() }
+                    .Concat(authored.Select(static statement => (StatementAst)statement.Copy()))
+                    .ToArray();
+                var nativeBody = CreateBody(document, body, (ParamBlockAst)parameters.Copy(),
+                    new StatementBlockAst(body.EndBlock.Extent, nativeStatements, null), function.IsFilter);
+                var nativeFunction = new FunctionDefinitionAst(function.Extent, function.IsFilter, function.IsWorkflow,
+                    function.Name, null, nativeBody);
+                originalScript = module.NewBoundScriptBlock(PowerShellNativeFunctionHost.CreateFunctionScriptBlock(nativeFunction));
+            }
             var compiledScript = module.NewBoundScriptBlock(PowerShellNativeFunctionHost.CreateFunctionScriptBlock(retained));
             ScriptBlock? retainedScript = null;
             if (starts.Length > 1)

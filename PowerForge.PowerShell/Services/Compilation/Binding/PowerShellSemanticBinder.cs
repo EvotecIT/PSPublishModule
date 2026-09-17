@@ -218,6 +218,11 @@ internal sealed partial class PowerShellSemanticBinder
                 locals,
                 authoredStatements,
                 statementBindings);
+        if (regionCandidates is not null && functionSymbol.Kind == PowerShellSymbolKind.Function &&
+            PowerShellBoundRegionCandidateSelector.TryCreateControlFlowEnvelope(
+                document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
+                out var controlFlowCandidate))
+            regionCandidates[controlFlowCandidate.RegionId] = controlFlowCandidate;
         PowerShellBoundRegionCandidate? guardedPrefixCandidate = null;
         if (regionCandidates is not null &&
             PowerShellBoundRegionCandidateSelector.TryCreateContinuation(

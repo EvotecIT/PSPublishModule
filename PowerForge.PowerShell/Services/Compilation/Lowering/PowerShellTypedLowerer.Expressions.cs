@@ -50,6 +50,10 @@ internal sealed partial class PowerShellTypedLowerer
                 conversion.UsePowerShellLanguageRuntime,
                 conversion.UsePowerShellTruthiness,
                 conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition, conversion.UseNativeConversion, conversion.UseNativeCustomObjectConversion),
+            PowerShellBoundRegionControlFlowExpression controlFlow => new PowerShellLoweredRegionControlFlowExpression(
+                controlFlow.Span,
+                controlFlow.Kind,
+                controlFlow.Value is null ? null : LowerExpression(controlFlow.Value, functions, names, targetCapabilities)),
             PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
                 binary.Span,
                 binary.Type.ClrType,
