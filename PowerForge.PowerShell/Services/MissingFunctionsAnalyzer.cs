@@ -280,28 +280,28 @@ public sealed class MissingFunctionsAnalyzer
             if (declarationScope is null || !IsUnconditionalDeclaration(declaration, declarationScope))
                 continue;
 
-            for (Ast? current = command; current is not null; current = current.Parent)
-            {
-                if (current is ScriptBlockExpressionAst scriptBlockExpression &&
-                    IsIsolatedInvocationBoundary(scriptBlockExpression))
-                {
-                    break;
-                }
+            if (!TryGetDeferredEntryFunction(command, declaration, declarationScope, out var deferredEntryFunction))
+                continue;
 
-                // A function is visible to recursive calls in its own body once invoked.
-                if (ReferenceEquals(current, declaration))
+            // A function is visible to recursive calls in its own body once invoked.
+            if (ReferenceEquals(deferredEntryFunction, declaration))
+                return true;
+
+            if (deferredEntryFunction is not null)
+            {
+                // Source position inside a nested function does not describe execution order.
+                // The declaration is available unless that function is invoked directly while
+                // the containing scope is still initializing and before the declaration runs.
+                if (!IsInvokedBeforeDeclaration(deferredEntryFunction, declaration, declarationScope))
                     return true;
 
-                if (ReferenceEquals(current, declarationScope))
-                {
-                    // Nested declarations execute sequentially. A declaration later in the
-                    // same scope cannot satisfy an earlier call.
-                    if (declaration.Extent.EndOffset <= command.Extent.StartOffset)
-                        return true;
-
-                    break;
-                }
+                continue;
             }
+
+            // Commands executed directly while the containing scope initializes require the
+            // declaration to have run first.
+            if (declaration.Extent.EndOffset <= command.Extent.StartOffset)
+                return true;
         }
 
         return false;
@@ -318,28 +318,161 @@ public sealed class MissingFunctionsAnalyzer
                ReferenceEquals(namedBlock.Parent, declarationScope);
     }
 
-    private static bool IsIsolatedInvocationBoundary(ScriptBlockExpressionAst scriptBlockExpression)
+    private static bool TryGetDeferredEntryFunction(
+        CommandAst command,
+        FunctionDefinitionAst declaration,
+        ScriptBlockAst declarationScope,
+        out FunctionDefinitionAst? deferredEntryFunction)
     {
-        if (scriptBlockExpression.Parent is not CommandAst invocation)
-            return false;
+        deferredEntryFunction = null;
 
-        var invocationName = invocation.GetCommandName();
-        if (string.IsNullOrWhiteSpace(invocationName))
-            return false;
+        for (Ast? current = command; current is not null; current = current.Parent)
+        {
+            if (current is ScriptBlockExpressionAst scriptBlockExpression &&
+                IsEscapingOrIsolatedScriptBlock(scriptBlockExpression))
+            {
+                return false;
+            }
+
+            if (current is FunctionDefinitionAst function)
+            {
+                if (ReferenceEquals(function, declaration))
+                {
+                    deferredEntryFunction = declaration;
+                    return true;
+                }
+
+                if (ReferenceEquals(FindContainingScriptBlock(function), declarationScope))
+                    deferredEntryFunction = function;
+            }
+
+            if (ReferenceEquals(current, declarationScope))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsInvokedBeforeDeclaration(
+        FunctionDefinitionAst deferredEntryFunction,
+        FunctionDefinitionAst declaration,
+        ScriptBlockAst declarationScope)
+    {
+        var invocations = declarationScope.FindAll(
+                ast => ast is CommandAst command &&
+                       string.Equals(command.GetCommandName(), deferredEntryFunction.Name, StringComparison.OrdinalIgnoreCase),
+                searchNestedScriptBlocks: true)
+            .Cast<CommandAst>();
+
+        foreach (var invocation in invocations)
+        {
+            if (invocation.Extent.StartOffset >= declaration.Extent.EndOffset)
+                continue;
+
+            if (ExecutesWhileScopeInitializes(invocation, declarationScope))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ExecutesWhileScopeInitializes(CommandAst command, ScriptBlockAst declarationScope)
+    {
+        for (Ast? current = command.Parent; current is not null; current = current.Parent)
+        {
+            if (current is FunctionDefinitionAst)
+                return false;
+
+            if (current is ScriptBlockExpressionAst scriptBlockExpression &&
+                IsEscapingOrIsolatedScriptBlock(scriptBlockExpression))
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(current, declarationScope))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsEscapingOrIsolatedScriptBlock(ScriptBlockExpressionAst scriptBlockExpression)
+    {
+        // Assigned, returned, emitted, or otherwise materialized script blocks can outlive
+        // the local function scope. Only script blocks passed directly to a command can be
+        // considered inline, and known asynchronous/remote commands remain boundaries.
+        if (scriptBlockExpression.Parent is not CommandAst invocation)
+            return true;
+
+        var invocationName = NormalizeInvocationName(invocation.GetCommandName());
+        if (invocationName.Length == 0)
+            return false; // call and dot invocation operators execute the block inline
 
         if (string.Equals(invocationName, "Start-Job", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(invocationName, "Start-ThreadJob", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(invocationName, "Start-RSJob", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase))
+            string.Equals(invocationName, "Register-ObjectEvent", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Register-EngineEvent", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Register-CimIndicationEvent", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Register-WmiEvent", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        var isForEachObject = string.Equals(invocationName, "ForEach-Object", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(invocationName, "%", StringComparison.OrdinalIgnoreCase);
-        return isForEachObject && invocation.CommandElements
-            .OfType<CommandParameterAst>()
-            .Any(parameter => string.Equals(parameter.ParameterName, "Parallel", StringComparison.OrdinalIgnoreCase));
+        if (string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase))
+        {
+            return HasAnyParameter(
+                invocation,
+                "ComputerName",
+                "ConnectionUri",
+                "Session",
+                "HostName",
+                "SSHConnection",
+                "VMId",
+                "VMName",
+                "ContainerId");
+        }
+
+        return string.Equals(invocationName, "ForEach-Object", StringComparison.OrdinalIgnoreCase) &&
+               HasAnyParameter(invocation, "Parallel");
+    }
+
+    private static string NormalizeInvocationName(string? invocationName)
+    {
+        if (string.IsNullOrWhiteSpace(invocationName))
+            return string.Empty;
+
+        var normalized = invocationName!.Trim();
+        var moduleSeparator = normalized.LastIndexOf('\\');
+        if (moduleSeparator >= 0 && moduleSeparator + 1 < normalized.Length)
+            normalized = normalized.Substring(moduleSeparator + 1);
+
+        if (string.Equals(normalized, "sajb", StringComparison.OrdinalIgnoreCase))
+            return "Start-Job";
+        if (string.Equals(normalized, "icm", StringComparison.OrdinalIgnoreCase))
+            return "Invoke-Command";
+        if (string.Equals(normalized, "%", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "foreach", StringComparison.OrdinalIgnoreCase))
+        {
+            return "ForEach-Object";
+        }
+
+        return normalized;
+    }
+
+    private static bool HasAnyParameter(CommandAst invocation, params string[] parameterNames)
+    {
+        foreach (var parameter in invocation.CommandElements.OfType<CommandParameterAst>())
+        {
+            var actualName = parameter.ParameterName;
+            if (string.IsNullOrWhiteSpace(actualName))
+                continue;
+
+            if (parameterNames.Any(name => name.StartsWith(actualName, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        return false;
     }
 
     private static ScriptBlockAst? FindContainingScriptBlock(Ast ast)
