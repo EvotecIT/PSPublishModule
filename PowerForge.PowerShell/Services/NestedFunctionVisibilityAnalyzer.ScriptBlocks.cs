@@ -281,7 +281,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             .ToArray();
     }
 
-    private static IReadOnlyDictionary<string, CommandAst[]> FindFunctionRemovalCommands(ScriptBlockAst root)
+    private IReadOnlyDictionary<string, CommandAst[]> FindFunctionRemovalCommands(ScriptBlockAst root)
     {
         return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
@@ -294,9 +294,10 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 StringComparer.OrdinalIgnoreCase);
     }
 
-    private static IEnumerable<string> TryGetRemovedFunctionNames(CommandAst command)
+    private IEnumerable<string> TryGetRemovedFunctionNames(CommandAst command)
     {
-        var commandName = NormalizeInvocationName(command.GetCommandName());
+        var rawCommandName = command.GetCommandName();
+        var commandName = NormalizeInvocationName(rawCommandName);
         if (!string.Equals(commandName, "Remove-Item", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(commandName, "Clear-Item", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(commandName, "ri", StringComparison.OrdinalIgnoreCase) &&
@@ -307,6 +308,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         {
             yield break;
         }
+
+        if (IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName))
+            yield break;
 
         if (TryGetBoundSwitchValue(command, "WhatIf") == true)
             yield break;

@@ -843,4 +843,5 @@ public sealed class MissingFunctionsAnalyzerReviewClosureTests
         Assert.DoesNotContain(report.Summary, item =>
             string.Equals(item.Name, "Invoke-PowerForgeDoLoopLocal", StringComparison.OrdinalIgnoreCase));
     }
+
 }

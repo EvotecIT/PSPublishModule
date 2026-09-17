@@ -77,29 +77,63 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         var graph = GetExecutionGraph(_root);
-        var rootInvocations = graph.RootInvocations
+        var guaranteedRootInvocations = graph.RootInvocations
             .Where(invocation => IsDirectRootInvocation(invocation.Command))
+            .OrderBy(invocation => invocation.Command.Extent.StartOffset)
+            .ToArray();
+        var possibleRootInvocations = graph.RootInvocations
+            .Where(invocation => ExecutesWhileScopeInitializes(invocation.Command, _root))
             .OrderBy(invocation => invocation.Command.Extent.StartOffset)
             .ToArray();
         var containingFunction = FindContainingFunction(command);
         var consumerOffsets = containingFunction is null
             ? new[] { command.Extent.StartOffset }
-            : rootInvocations
-                .Where(invocation => InvocationCanReachFunction(invocation, containingFunction, graph))
+            : possibleRootInvocations
+                .Where(invocation => InvocationCanReachFunction(
+                    invocation,
+                    containingFunction,
+                    graph,
+                    requireGuaranteedPath: false))
                 .Select(invocation => invocation.Command.Extent.StartOffset)
                 .ToArray();
 
-        foreach (var consumerOffset in consumerOffsets)
+        return consumerOffsets.Length > 0 && consumerOffsets.All(consumerOffset =>
+            IsQualifiedDeclarationInstalledForConsumer(
+                declaration,
+                installer,
+                consumerOffset,
+                guaranteedRootInvocations,
+                graph));
+    }
+
+    private bool IsQualifiedDeclarationInstalledForConsumer(
+        FunctionDefinitionAst declaration,
+        FunctionDefinitionAst installer,
+        int consumerOffset,
+        IEnumerable<InvocationSite> guaranteedRootInvocations,
+        ScopeExecutionGraph graph)
+    {
+        var latestRemovalOffset = -1;
+        var functionName = NormalizeDeclaredFunctionName(declaration.Name);
+        if (_functionRemovalsByName.TryGetValue(functionName, out var removals))
         {
-            if (rootInvocations.Any(invocation =>
-                    invocation.Command.Extent.EndOffset <= consumerOffset &&
-                    InvocationCanReachFunction(invocation, installer, graph)))
-            {
-                return true;
-            }
+            latestRemovalOffset = removals
+                .Where(removal =>
+                    removal.Extent.EndOffset <= consumerOffset &&
+                    ReferenceEquals(FindContainingScriptBlock(removal), _root))
+                .Select(removal => removal.Extent.EndOffset)
+                .DefaultIfEmpty(-1)
+                .Max();
         }
 
-        return false;
+        return guaranteedRootInvocations.Any(invocation =>
+            invocation.Command.Extent.StartOffset >= latestRemovalOffset &&
+            invocation.Command.Extent.EndOffset <= consumerOffset &&
+            InvocationCanReachFunction(
+                invocation,
+                installer,
+                graph,
+                requireGuaranteedPath: true));
     }
 
     private static bool HasEffectiveRootQualifier(FunctionDefinitionAst declaration)
@@ -134,10 +168,14 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     private bool InvocationCanReachFunction(
         InvocationSite entry,
         FunctionDefinitionAst target,
-        ScopeExecutionGraph graph)
+        ScopeExecutionGraph graph,
+        bool requireGuaranteedPath)
     {
         var executionOffset = entry.Command.Extent.StartOffset;
-        var queue = new Queue<(FunctionDefinitionAst Function, int InvocationOffset)>();
+        if (requireGuaranteedPath && !HasDeterministicInvocationTarget(entry, executionOffset))
+            return false;
+
+        var queue = new Queue<(FunctionDefinitionAst Function, int InvocationOffset, CommandAst InvocationCommand)>();
         var visited = new HashSet<FunctionDefinitionAst>();
         EnqueueAvailableFunctions(entry, executionOffset, graph.FunctionsByName, _root, queue);
 
@@ -151,7 +189,17 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
             foreach (var invocation in graph.GetFunctionInvocations(item.Function))
             {
-                if (!ExecutesWhileScopeInitializes(invocation.Command, item.Function.Body))
+                if (requireGuaranteedPath
+                        ? !IsGuaranteedFunctionBodyInvocation(invocation.Command, item.Function)
+                        : !ExecutesWhileScopeInitializes(invocation.Command, item.Function.Body))
+                    continue;
+                if (requireGuaranteedPath &&
+                    !HasDeterministicInvocationTarget(invocation, item.InvocationOffset))
+                    continue;
+                if (IsInsideBoundParameterDefault(
+                        invocation.Command,
+                        item.Function,
+                        item.InvocationCommand))
                     continue;
 
                 EnqueueAvailableFunctions(
@@ -164,5 +212,33 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return false;
+    }
+
+    private static bool IsGuaranteedFunctionBodyInvocation(
+        CommandAst command,
+        FunctionDefinitionAst function)
+    {
+        if (command.Parent is not PipelineAst pipeline ||
+            pipeline.Parent is not NamedBlockAst block ||
+            !ReferenceEquals(block.Parent, function.Body))
+        {
+            return false;
+        }
+
+        return block.Statements
+            .Where(statement => statement.Extent.EndOffset <= pipeline.Extent.StartOffset)
+            .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst);
+    }
+
+    private bool HasDeterministicInvocationTarget(InvocationSite invocation, int executionOffset)
+    {
+        if (invocation.IsDynamic ||
+            HasDynamicAliasDeclarationBefore(invocation, executionOffset) ||
+            HasDynamicAliasTargetBefore(invocation, executionOffset))
+        {
+            return false;
+        }
+
+        return ResolveInvocationNames(invocation, executionOffset).Count == 1;
     }
 }

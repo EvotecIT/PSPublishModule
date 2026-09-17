@@ -19,7 +19,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     private readonly HashSet<CommandAst> _shadowResolutionInProgress = new();
     private readonly IReadOnlyDictionary<string, CommandAst[]> _aliasDeclarationsByName;
     private readonly CommandAst[] _dynamicAliasDeclarations;
-    private readonly IReadOnlyDictionary<string, CommandAst[]> _functionRemovalsByName;
+    private readonly IReadOnlyDictionary<string, CommandAst[]> _functionRemovalsByName =
+        new Dictionary<string, CommandAst[]>(StringComparer.OrdinalIgnoreCase);
 
     internal NestedFunctionVisibilityAnalyzer(
         ScriptBlockAst root,
@@ -418,8 +419,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         var graph = GetExecutionGraph(declarationScope);
 
-        var queue = new Queue<(FunctionDefinitionAst Function, int InvocationOffset)>();
-        var processedInvocationOffsets = new Dictionary<FunctionDefinitionAst, int>();
+        var queue = new Queue<(FunctionDefinitionAst Function, int InvocationOffset, CommandAst InvocationCommand)>();
+        var processedInvocations = new HashSet<(FunctionDefinitionAst Function, int InvocationOffset, CommandAst InvocationCommand)>();
 
         foreach (var invocation in graph.RootInvocations)
         {
@@ -454,13 +455,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         while (queue.Count > 0)
         {
             var item = queue.Dequeue();
-            if (processedInvocationOffsets.TryGetValue(item.Function, out var processedOffset) &&
-                processedOffset >= item.InvocationOffset)
-            {
+            if (!processedInvocations.Add(item))
                 continue;
-            }
-
-            processedInvocationOffsets[item.Function] = item.InvocationOffset;
 
             if (ReferenceEquals(item.Function, deferredEntryFunction))
                 return true;
@@ -468,6 +464,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             foreach (var invocation in graph.GetFunctionInvocations(item.Function))
             {
                 if (!ExecutesWhileScopeInitializes(invocation.Command, item.Function.Body))
+                    continue;
+                if (IsInsideBoundParameterDefault(
+                        invocation.Command,
+                        item.Function,
+                        item.InvocationCommand))
                     continue;
 
                 EnqueueAvailableFunctions(
@@ -487,9 +488,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         int invocationOffset,
         IReadOnlyDictionary<string, FunctionDefinitionAst[]> functionsByName,
         ScriptBlockAst declarationScope,
-        Queue<(FunctionDefinitionAst Function, int InvocationOffset)> queue)
+        Queue<(FunctionDefinitionAst Function, int InvocationOffset, CommandAst InvocationCommand)> queue)
     {
-        if (invocation.IsDynamic || HasDynamicAliasDeclarationBefore(invocation, invocationOffset))
+        if (invocation.IsDynamic ||
+            HasDynamicAliasDeclarationBefore(invocation, invocationOffset) ||
+            HasDynamicAliasTargetBefore(invocation, invocationOffset))
         {
             foreach (var candidates in functionsByName.Values)
                 EnqueueCandidates(invocation.Command, invocationOffset, candidates, declarationScope, queue);
@@ -512,6 +515,32 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         return _dynamicAliasDeclarations.Any(alias =>
             AliasCanShadowInvocation(alias, invocation.Command, executionOffset));
+    }
+
+    private bool HasDynamicAliasTargetBefore(InvocationSite invocation, int executionOffset)
+    {
+        var invocationName = invocation.Name;
+        if (string.IsNullOrWhiteSpace(invocationName))
+            return false;
+
+        var aliasName = GetExactInvocationName(invocationName, NormalizeInvocationName(invocationName));
+        if (!_aliasDeclarationsByName.TryGetValue(aliasName, out var declarations))
+            return false;
+
+        var eligible = declarations
+            .Where(alias => AliasCanShadowInvocation(alias, invocation.Command, executionOffset))
+            .OrderBy(alias => alias.Extent.EndOffset)
+            .ToArray();
+        var latestUnconditional = eligible
+            .Where(IsUnconditionalAliasDeclaration)
+            .OrderByDescending(alias => alias.Extent.EndOffset)
+            .FirstOrDefault();
+        var possibleDeclarations = latestUnconditional is null
+            ? eligible
+            : eligible.Where(alias => alias.Extent.EndOffset >= latestUnconditional.Extent.EndOffset);
+
+        return possibleDeclarations.Any(alias =>
+            string.IsNullOrWhiteSpace(TryGetAuthoredAliasTarget(alias)));
     }
 
     private IReadOnlyCollection<string> ResolveInvocationNames(InvocationSite invocation, int executionOffset)
@@ -560,7 +589,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         int invocationOffset,
         IEnumerable<FunctionDefinitionAst> candidates,
         ScriptBlockAst declarationScope,
-        Queue<(FunctionDefinitionAst Function, int InvocationOffset)> queue)
+        Queue<(FunctionDefinitionAst Function, int InvocationOffset, CommandAst InvocationCommand)> queue)
     {
         var eligible = candidates
             .Where(candidate =>
@@ -585,8 +614,57 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 !ReferenceEquals(candidate, latestUnconditional))
                 continue;
 
-            queue.Enqueue((candidate, invocationOffset));
+            queue.Enqueue((candidate, invocationOffset, invocation));
         }
+    }
+
+    private static bool IsInsideBoundParameterDefault(
+        CommandAst command,
+        FunctionDefinitionAst function,
+        CommandAst invocation)
+    {
+        var parameters = function.Parameters ?? function.Body.ParamBlock?.Parameters;
+        if (parameters is null)
+            return false;
+
+        for (var parameterIndex = 0; parameterIndex < parameters.Count; parameterIndex++)
+        {
+            var parameter = parameters[parameterIndex];
+            if (parameter.DefaultValue is null ||
+                !ContainsAst(parameter.DefaultValue, command))
+            {
+                continue;
+            }
+
+            var parameterName = parameter.Name.VariablePath.UserPath;
+            if (IsParameterStaticallyBound(invocation, parameterName, parameterIndex))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsParameterStaticallyBound(
+        CommandAst invocation,
+        string parameterName,
+        int parameterIndex)
+    {
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(invocation);
+            if (binding.BoundParameters.Keys.Any(key =>
+                    string.Equals(key, parameterName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(key, parameterIndex.ToString(), StringComparison.Ordinal)))
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Fall back to named AST matching when static binding is incomplete.
+        }
+
+        return HasAnyParameter(invocation, parameterName);
     }
 
     private ScopeExecutionGraph GetExecutionGraph(ScriptBlockAst declarationScope)
