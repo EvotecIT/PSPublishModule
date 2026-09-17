@@ -23,8 +23,8 @@ internal sealed class PowerShellBoundRegionControlFlowExpression : PowerShellBou
             value?.Effects ?? PowerShellSemanticEffect.None,
             value?.Capabilities ?? PowerShellRequiredCapability.None)
     {
-        if ((kind == PowerShellRegionControlFlowKind.Return) != (value is not null))
-            throw new ArgumentException("Only a return envelope carries a value.", nameof(value));
+        if (kind == PowerShellRegionControlFlowKind.FallThrough && value is not null)
+            throw new ArgumentException("A fallthrough envelope cannot carry a value.", nameof(value));
         Kind = kind;
         Value = value;
     }

@@ -237,6 +237,11 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         out PowerShellRegionTransferContract? contract)
     {
         contract = null;
+        if (statement is PowerShellBoundReturnStatement { Expression: null, EmitsValue: false })
+        {
+            contract = PowerShellRegionTransferTypePolicy.DescribeNoValue();
+            return true;
+        }
         var expression = statement switch
         {
             PowerShellBoundExpressionStatement
@@ -248,6 +253,11 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             _ => null
         };
         if (expression is null) return false;
+        if (expression.ValueState == PowerShellValueState.Null)
+        {
+            contract = PowerShellRegionTransferTypePolicy.DescribeNullValue();
+            return true;
+        }
         if (PowerShellRegionTransferTypePolicy.IsSupported(expression.Type.ClrType))
         {
             contract = PowerShellRegionTransferTypePolicy.Describe(

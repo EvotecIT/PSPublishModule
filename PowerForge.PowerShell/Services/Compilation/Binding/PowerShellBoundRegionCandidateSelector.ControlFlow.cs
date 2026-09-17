@@ -56,7 +56,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 if (clause.Condition.Effects != PowerShellSemanticEffect.None ||
                     clause.Condition.Capabilities != PowerShellRequiredCapability.None ||
                     clause.Body.Statements is not { Count: 1 } ||
-                    clause.Body.Statements[0] is not PowerShellBoundReturnStatement { Expression: not null } returned ||
+                    clause.Body.Statements[0] is not PowerShellBoundReturnStatement returned ||
                     authoredBody.Statements is not { Count: 1 } ||
                     authoredBody.Statements[0] is not ReturnStatementAst authoredReturn ||
                     !TryCreateControlFlowReturn(returned, authoredReturn, parameterKeys, out var flowReturn, out var contract) ||
@@ -118,7 +118,26 @@ internal static partial class PowerShellBoundRegionCandidateSelector
     {
         flowReturn = null!;
         contract = null!;
-        var value = returned.Expression!;
+        var value = returned.Expression;
+        if (value is null)
+        {
+            contract = PowerShellRegionTransferTypePolicy.DescribeNoValue();
+            flowReturn = new PowerShellBoundRegionControlFlowReturnStatement(
+                returned.Span,
+                PowerShellRegionControlFlowKind.Return);
+            return true;
+        }
+        if (value.ValueState == PowerShellValueState.Null &&
+            value.Effects == PowerShellSemanticEffect.None &&
+            value.Capabilities == PowerShellRequiredCapability.None)
+        {
+            contract = PowerShellRegionTransferTypePolicy.DescribeNullValue();
+            flowReturn = new PowerShellBoundRegionControlFlowReturnStatement(
+                returned.Span,
+                PowerShellRegionControlFlowKind.Return,
+                value);
+            return true;
+        }
         if (value is PowerShellBoundVariableExpression variable &&
             parameterKeys.Contains(variable.Symbol.StableKey) &&
             PowerShellRegionTransferTypePolicy.IsSupported(value.Type.ClrType))

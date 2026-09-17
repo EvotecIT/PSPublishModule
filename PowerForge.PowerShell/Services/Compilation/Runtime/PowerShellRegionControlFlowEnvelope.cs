@@ -20,6 +20,9 @@ namespace PowerForge.Generated.Runtime
         /// <summary>Creates the shared fallthrough result.</summary>
         public static PowerShellRegionControlFlowEnvelope FallThrough() => FallThroughValue;
 
+        /// <summary>Creates a return result that writes no success record.</summary>
+        public static PowerShellRegionControlFlowEnvelope Return() => new(true, null);
+
         /// <summary>Creates a return result without enumerating or otherwise observing the value.</summary>
         public static PowerShellRegionControlFlowEnvelope Return(object? value) => new(true, value);
     }

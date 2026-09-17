@@ -36,6 +36,8 @@ internal static class PowerShellTypedRegionPromotionPolicy
         // references are enumerated by the retained PowerShell invocation boundary instead.
         var expectedCardinality = candidate.ControlFlowContract is not null
             ? PowerShellOutputCardinality.None
+            : returnContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.None
+            ? PowerShellOutputCardinality.None
             : candidate.ContinuationLocals.Length == 0 &&
                                   returnContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel &&
                                   lowered.ReturnType.IsArray
@@ -46,7 +48,21 @@ internal static class PowerShellTypedRegionPromotionPolicy
                 $"The candidate return cardinality '{lowered.OutputCardinality}' does not match its '{returnContract?.OutputBehavior}' transfer contract.");
         var supportedReturnType = candidate.ControlFlowContract is not null
             ? lowered.ReturnType == typeof(PowerForge.Generated.Runtime.PowerShellRegionControlFlowEnvelope)
-            : PowerShellRegionTransferTypePolicy.IsSupported(lowered.ReturnType);
+            : lowered.ReturnType == typeof(void)
+                ? returnContract is
+                {
+                    Shape: PowerShellRegionTransferShape.NoValue,
+                    ElementContract: PowerShellRegionTransferElementContract.None,
+                    OutputBehavior: PowerShellRegionTransferOutputBehavior.None,
+                    Supported: true
+                }
+                : (lowered.ReturnType == typeof(object) && returnContract is
+                  {
+                      Shape: PowerShellRegionTransferShape.NullValue,
+                      ElementContract: PowerShellRegionTransferElementContract.None,
+                      OutputBehavior: PowerShellRegionTransferOutputBehavior.Atomic,
+                      Supported: true
+                  }) || PowerShellRegionTransferTypePolicy.IsSupported(lowered.ReturnType);
         if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !supportedReturnType)
             return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a supported region transfer type.");
         if (lowered.RequiresPowerShellStreams)
@@ -75,7 +91,8 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.static-boundary", "The candidate contains a hosted command or module-state boundary.");
         if (region.Errors.Count != 0)
             return Reject("region.error-route", $"The candidate has modeled error route(s): {string.Join(", ", region.Errors)}.");
-        var expectedStreams = candidate.ContinuationLocals.Length > 0 || candidate.ControlFlowContract is not null
+        var expectedStreams = candidate.ContinuationLocals.Length > 0 || candidate.ControlFlowContract is not null ||
+                              returnContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.None
             ? Array.Empty<string>()
             : new[] { "Success" };
         if (!region.Streams.SequenceEqual(expectedStreams, StringComparer.Ordinal))
@@ -136,8 +153,16 @@ internal static class PowerShellTypedRegionPromotionPolicy
             .OfType<PowerShellLoweredRegionControlFlowReturnStatement>()
             .Select(static statement => (PowerShellLoweredRegionControlFlowExpression)statement.Expression!)
             .ToArray();
+        var expectsNoValue = candidate.ControlFlowContract.ReturnValue is
+        {
+            Shape: PowerShellRegionTransferShape.NoValue,
+            ElementContract: PowerShellRegionTransferElementContract.None,
+            OutputBehavior: PowerShellRegionTransferOutputBehavior.None,
+            Supported: true
+        };
         return returns.Count(static expression => expression.Kind == PowerShellRegionControlFlowKind.FallThrough && expression.Value is null) == 1 &&
-               returns.Any(static expression => expression.Kind == PowerShellRegionControlFlowKind.Return && expression.Value is not null) &&
+               returns.Any(expression => expression.Kind == PowerShellRegionControlFlowKind.Return &&
+                   (expectsNoValue ? expression.Value is null : expression.Value is not null)) &&
                PowerShellLoweredTreeEnumerator.EnumerateStatements(lowered.Statements)
                    .OfType<PowerShellLoweredReturnStatement>()
                    .All(static statement => statement is PowerShellLoweredRegionControlFlowReturnStatement);

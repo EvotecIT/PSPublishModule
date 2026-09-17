@@ -44,6 +44,37 @@ internal static class PowerShellRegionTransferTypePolicy
             supported);
     }
 
+    /// <summary>
+    /// Describes an authored return boundary that terminates the function without transferring a
+    /// CLR value or writing a PowerShell success record. This is intentionally separate from
+    /// <see cref="Describe(Type, PowerShellRegionTransferDirection, PowerShellRegionTransferOwnership, PowerShellRegionTransferMutation)"/>
+    /// so <see cref="System.Void"/> can never become a valid live-in or live-out storage type.
+    /// </summary>
+    internal static PowerShellRegionTransferContract DescribeNoValue()
+        => new(
+            PowerShellRegionTransferShape.NoValue,
+            PowerShellRegionTransferElementContract.None,
+            PowerShellRegionTransferDirection.TerminalSuccess,
+            PowerShellRegionTransferOwnership.Unspecified,
+            PowerShellRegionTransferOutputBehavior.None,
+            PowerShellRegionTransferMutation.None,
+            supported: true);
+
+    /// <summary>
+    /// Describes a statically known null expression that PowerShell preserves as one success record.
+    /// The dedicated contract prevents ordinary <see cref="System.Object"/> values from entering the
+    /// closed region ABI while retaining the observable difference from AutomationNull/no output.
+    /// </summary>
+    internal static PowerShellRegionTransferContract DescribeNullValue()
+        => new(
+            PowerShellRegionTransferShape.NullValue,
+            PowerShellRegionTransferElementContract.None,
+            PowerShellRegionTransferDirection.TerminalSuccess,
+            PowerShellRegionTransferOwnership.Unspecified,
+            PowerShellRegionTransferOutputBehavior.Atomic,
+            PowerShellRegionTransferMutation.None,
+            supported: true);
+
     internal static bool IsAtomicDictionaryReference(Type type)
         => type == typeof(System.Collections.Hashtable) ||
            type == typeof(System.Collections.Specialized.OrderedDictionary);

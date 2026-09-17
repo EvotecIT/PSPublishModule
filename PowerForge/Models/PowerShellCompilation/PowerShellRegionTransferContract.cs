@@ -12,7 +12,11 @@ public enum PowerShellRegionTransferShape
     /// <summary>A single-dimensional, zero-based array whose element type is a stable scalar.</summary>
     StableScalarVector,
     /// <summary>An exact System.Array, ArrayList, or List&lt;T&gt; reference used without compiled mutation.</summary>
-    ListSequence
+    ListSequence,
+    /// <summary>No CLR value or PowerShell success record crosses the boundary.</summary>
+    NoValue,
+    /// <summary>A statically known null CLR value crosses as exactly one PowerShell success record.</summary>
+    NullValue
 }
 
 /// <summary>Element-level contract carried by a region transfer.</summary>
@@ -23,7 +27,9 @@ public enum PowerShellRegionTransferElementContract
     /// <summary>Every element has a compiler-supported stable scalar type.</summary>
     StableScalar,
     /// <summary>Elements are opaque references and are never inspected or mutated by the transfer ABI.</summary>
-    OpaqueReference
+    OpaqueReference,
+    /// <summary>No element exists because the boundary transfers no value.</summary>
+    None
 }
 
 /// <summary>Direction in which a value crosses a retained/typed boundary.</summary>
@@ -130,7 +136,7 @@ public sealed class PowerShellRegionTransferContract
     }
 
     /// <summary>Contract schema version.</summary>
-    public int SchemaVersion => 2;
+    public int SchemaVersion => 3;
     /// <summary>CLR storage shape.</summary>
     public PowerShellRegionTransferShape Shape { get; }
     /// <summary>Element-level contract.</summary>

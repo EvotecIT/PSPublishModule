@@ -39,8 +39,16 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             PowerShellRegionTransferTypePolicy.IsSupported(terminal.Expression.Type.ClrType))
             statements[statements.Length - 1] = new PowerShellBoundReturnStatement(terminal.Span, terminal.Expression);
         if (!AlwaysReturns(statements[statements.Length - 1])) return false;
+        var terminalTransferContract = statements[statements.Length - 1] switch
+        {
+            PowerShellBoundReturnStatement { Expression: null, EmitsValue: false } =>
+                PowerShellRegionTransferTypePolicy.DescribeNoValue(),
+            PowerShellBoundReturnStatement { Expression.ValueState: PowerShellValueState.Null } =>
+                PowerShellRegionTransferTypePolicy.DescribeNullValue(),
+            _ => null
+        };
         return TryCreateBound(document, syntax, sourceFunction, parameters, locals,
-            statements, out candidate);
+            statements, out candidate, terminalTransferContract: terminalTransferContract);
     }
 
     private static bool TryCreateBound(

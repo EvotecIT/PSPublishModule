@@ -100,7 +100,8 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
     private static bool IsDirectOutputRecord(
         PowerShellBoundFunction function,
         PowerShellBoundExpression expression)
-        => PowerShellStableScalarTypePolicy.IsSupported(expression.Type) ||
+        => expression.ValueState == PowerShellValueState.Null ||
+           PowerShellStableScalarTypePolicy.IsSupported(expression.Type) ||
            expression is PowerShellBoundVariableExpression variable &&
            PowerShellRegionTransferTypePolicy.IsSupported(expression.Type) &&
            function.Parameters.Any(parameter =>

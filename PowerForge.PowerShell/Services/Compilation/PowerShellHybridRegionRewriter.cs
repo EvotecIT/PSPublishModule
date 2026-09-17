@@ -70,20 +70,31 @@ internal static class PowerShellHybridRegionRewriter
             if (region.ControlFlowContract is not null)
             {
                 var temporary = GetControlFlowTemporary(region);
-                var returned = region.ControlFlowContract.ReturnValue.OutputBehavior == PowerShellRegionTransferOutputBehavior.NoEnumerate
-                    ? "return ,${" + temporary + "}.Value"
-                    : "return ${" + temporary + "}.Value";
+                var returned = region.ControlFlowContract.ReturnValue.OutputBehavior switch
+                {
+                    PowerShellRegionTransferOutputBehavior.None => "return",
+                    PowerShellRegionTransferOutputBehavior.NoEnumerate => "return ,${" + temporary + "}.Value",
+                    _ => "return ${" + temporary + "}.Value"
+                };
                 invocation = "if ((${" + temporary + "} = " + call + ").ShouldReturn) { " + returned + " }";
             }
             else
             {
-                var receiver = region.ContinuationLocals.Count == 0
+                if (region.ContinuationLocals.Count == 0 &&
+                    region.TerminalTransferContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.None)
+                {
+                    invocation = call + "; return";
+                }
+                else
+                {
+                    var receiver = region.ContinuationLocals.Count == 0
                     ? region.TerminalTransferContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.NoEnumerate
                         ? "return ,"
                         : "return "
                     : string.Join(", ", region.ContinuationLocals.Select(static local =>
                         (local.HasTypeConstraint ? local.TypeConstraintSyntax : string.Empty) + "${" + local.Name + "}")) + " = ";
-                invocation = receiver + call;
+                    invocation = receiver + call;
+                }
             }
             if (region.ContinuationLocals.Count > 0 && !region.RequiresLocalOwnershipGuard &&
                 region.ContinuationLocals.Any(output => !region.InputLocals.Any(input =>
