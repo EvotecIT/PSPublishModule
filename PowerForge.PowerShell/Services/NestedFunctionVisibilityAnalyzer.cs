@@ -10,6 +10,7 @@ namespace PowerForge;
 /// </summary>
 internal sealed partial class NestedFunctionVisibilityAnalyzer
 {
+    private readonly ScriptBlockAst _root;
     private readonly IReadOnlyDictionary<string, FunctionDefinitionAst[]> _functionDeclarationsByName;
     private readonly Dictionary<ScriptBlockAst, ScopeExecutionGraph> _executionGraphs = new();
     private readonly Dictionary<FunctionDefinitionAst, Dictionary<FunctionDefinitionAst, bool>>
@@ -17,14 +18,17 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     private readonly Dictionary<FunctionDefinitionAst, bool> _deferredFunctionEscapeCache = new();
     private readonly HashSet<CommandAst> _shadowResolutionInProgress = new();
     private readonly IReadOnlyDictionary<string, CommandAst[]> _aliasDeclarationsByName;
+    private readonly CommandAst[] _dynamicAliasDeclarations;
     private readonly IReadOnlyDictionary<string, CommandAst[]> _functionRemovalsByName;
 
     internal NestedFunctionVisibilityAnalyzer(
         ScriptBlockAst root,
         IReadOnlyDictionary<string, FunctionDefinitionAst[]> functionDeclarationsByName)
     {
+        _root = root;
         _functionDeclarationsByName = functionDeclarationsByName;
         _aliasDeclarationsByName = FindAuthoredAliasDeclarations(root);
+        _dynamicAliasDeclarations = FindDynamicAliasDeclarations(root);
         _functionRemovalsByName = FindFunctionRemovalCommands(root);
     }
 
@@ -60,7 +64,10 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
             if (IsDominatingDeclarationInContainingStatementBlock(declaration, command) ||
                 IsPromotedDeclarationDominatingCommand(declaration, command) ||
-                DeclarationDominatesFinallyCall(declaration, command))
+                DeclarationDominatesFinallyCall(declaration, command) ||
+                DeclarationDominatesFollowingTryCall(declaration, command) ||
+                DeclarationDominatesFollowingDoLoopCall(declaration, command) ||
+                IsQualifiedDeclarationInstalledBeforeCommand(declaration, command))
                 return true;
 
             if (!TryGetDeclarationContext(declaration, out var declarationScope, out var declarationBlock) ||
@@ -482,7 +489,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         ScriptBlockAst declarationScope,
         Queue<(FunctionDefinitionAst Function, int InvocationOffset)> queue)
     {
-        if (invocation.IsDynamic)
+        if (invocation.IsDynamic || HasDynamicAliasDeclarationBefore(invocation, invocationOffset))
         {
             foreach (var candidates in functionsByName.Values)
                 EnqueueCandidates(invocation.Command, invocationOffset, candidates, declarationScope, queue);
@@ -501,14 +508,20 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
     }
 
+    private bool HasDynamicAliasDeclarationBefore(InvocationSite invocation, int executionOffset)
+    {
+        return _dynamicAliasDeclarations.Any(alias =>
+            AliasCanShadowInvocation(alias, invocation.Command, executionOffset));
+    }
+
     private IReadOnlyCollection<string> ResolveInvocationNames(InvocationSite invocation, int executionOffset)
     {
         var invocationName = invocation.Name;
         if (string.IsNullOrWhiteSpace(invocationName))
             return Array.Empty<string>();
 
-        var normalizedAliasName = NormalizeInvocationName(invocationName);
-        if (!_aliasDeclarationsByName.TryGetValue(normalizedAliasName, out var declarations))
+        var aliasName = GetExactInvocationName(invocationName, NormalizeInvocationName(invocationName));
+        if (!_aliasDeclarationsByName.TryGetValue(aliasName, out var declarations))
             return new[] { invocationName! };
 
         var eligible = declarations
@@ -628,7 +641,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             ? variable.VariablePath.UserPath
             : null;
         if (ast is CommandAst command && IsFunctionLookupCommand(command, function.Name))
-            return !IsDiscardedLookupResult(command);
+            return command.Extent.StartOffset >= function.Extent.EndOffset &&
+                   !IsDiscardedLookupResult(command);
 
         if (!TryGetFunctionProviderName(providerPath, out var functionName) ||
             !string.Equals(functionName, function.Name, StringComparison.OrdinalIgnoreCase))

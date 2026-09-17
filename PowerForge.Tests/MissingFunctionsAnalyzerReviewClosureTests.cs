@@ -646,4 +646,201 @@ public sealed class MissingFunctionsAnalyzerReviewClosureTests
         Assert.DoesNotContain(report.Summary, item =>
             string.Equals(item.Name, "Invoke-PowerForgeBeginLocal", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Theory]
+    [InlineData("global")]
+    [InlineData("script")]
+    public void Analyze_RecognizesQualifiedDeclarationInstalledBeforeAnotherFunctionRuns(string qualifier)
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        var code = $$"""
+            function Install-PowerForgeQualifiedLocal {
+                function {{qualifier}}:Invoke-PowerForgeQualifiedInstalledLocal { 'local' }
+            }
+            function Invoke-PowerForgeQualifiedConsumer {
+                Invoke-PowerForgeQualifiedInstalledLocal
+            }
+            Install-PowerForgeQualifiedLocal
+            Invoke-PowerForgeQualifiedConsumer
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeQualifiedInstalledLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesGlobalDeclarationInstalledBeforeRootCall()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Install-PowerForgeGlobalLocal {
+                function global:Invoke-PowerForgeGlobalInstalledLocal { 'local' }
+            }
+            Install-PowerForgeGlobalLocal
+            Invoke-PowerForgeGlobalInstalledLocal
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeGlobalInstalledLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_KeepsAuthoredAliasSpellingDistinctFromCmdletName()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeExactAliasLocal { 'local' }
+                function Save-PowerForgeExactAliasCallback { param([scriptblock] $Callback) }
+                Set-Alias sort Save-PowerForgeExactAliasCallback
+                Sort-Object { Invoke-PowerForgeExactAliasLocal }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeExactAliasLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesForEachObjectEndDeclarationAfterEmptyInput()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                @() | ForEach-Object -Process {} -End {
+                    function Invoke-PowerForgeEndLocal { 'local' }
+                }
+                Invoke-PowerForgeEndLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeEndLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("Remove-Item")]
+    [InlineData("Clear-Item")]
+    public void Analyze_IgnoresFunctionProviderRemovalWithWhatIf(string removalCommand)
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        var code = $$"""
+            function Outer {
+                function Invoke-PowerForgeWhatIfLocal { 'local' }
+                {{removalCommand}} function:Invoke-PowerForgeWhatIfLocal -WhatIf
+                Invoke-PowerForgeWhatIfLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeWhatIfLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_IgnoresFunctionLookupBeforeDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                $saved = Get-Command Invoke-PowerForgeSavedCallback -ErrorAction SilentlyContinue
+                function Invoke-PowerForgeSavedCallback { Invoke-PowerForgeSavedLocal }
+                function Invoke-PowerForgeSavedLocal { 'local' }
+                Invoke-PowerForgeSavedCallback
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeSavedLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_CarriesDominatingTryDeclarationPastHandledException()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                try {
+                    function Invoke-PowerForgeHandledTryLocal { 'local' }
+                    throw 'handled'
+                } catch {}
+                Invoke-PowerForgeHandledTryLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeHandledTryLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_DistrustsConsumerAfterDynamicAliasDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeDynamicAliasLocal { 'local' }
+                function Save-PowerForgeDynamicAliasCallback { param([scriptblock] $Callback) }
+                $name = 'Where-Object'
+                Set-Alias $name Save-PowerForgeDynamicAliasCallback
+                Where-Object { Invoke-PowerForgeDynamicAliasLocal }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeDynamicAliasLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_DoesNotTreatLiteralNonAliasProviderMutationAsDynamicAlias()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeProviderMutationLocal { 'local' }
+                Set-Item variable:PowerForgeMarker 1
+                Where-Object { Invoke-PowerForgeProviderMutationLocal }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeProviderMutationLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("while")]
+    [InlineData("until")]
+    public void Analyze_CarriesDeclarationOutOfGuaranteedDoLoop(string loopKind)
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        var code = $$"""
+            function Outer {
+                do {
+                    function Invoke-PowerForgeDoLoopLocal { 'local' }
+                } {{loopKind}} ($false)
+                Invoke-PowerForgeDoLoopLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeDoLoopLocal", StringComparison.OrdinalIgnoreCase));
+    }
 }

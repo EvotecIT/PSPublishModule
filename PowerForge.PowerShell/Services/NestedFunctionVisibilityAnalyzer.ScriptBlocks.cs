@@ -104,11 +104,14 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (!string.IsNullOrWhiteSpace(rawInvocationName) && rawInvocationName!.IndexOf('\\') >= 0)
             return false;
 
-        if (_aliasDeclarationsByName.TryGetValue(normalizedInvocationName, out var aliases) &&
+        var authoredAliasName = GetExactInvocationName(rawInvocationName, normalizedInvocationName);
+        if (_aliasDeclarationsByName.TryGetValue(authoredAliasName, out var aliases) &&
             aliases.Any(alias => AliasCanShadowInvocation(alias, invocation)))
         {
             return true;
         }
+        if (_dynamicAliasDeclarations.Any(alias => AliasCanShadowInvocation(alias, invocation)))
+            return true;
 
         if (!_functionDeclarationsByName.ContainsKey(normalizedInvocationName))
             return false;
@@ -238,7 +241,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (string.Equals(invocationName, "ForEach-Object", StringComparison.OrdinalIgnoreCase))
         {
             return TryHasAnyBoundParameter(invocation, "Parallel") == false &&
-                   IsScriptBlockBoundToAnyParameter(invocation, expression, "Begin");
+                   IsScriptBlockBoundToAnyParameter(invocation, expression, "Begin", "End");
         }
 
         if (!string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase) ||
@@ -262,12 +265,20 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             })
             .Where(item => !string.IsNullOrWhiteSpace(item.AliasName))
             .GroupBy(
-                item => NormalizeInvocationName(item.AliasName),
+                item => item.AliasName!,
                 StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(item => item.Command).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static CommandAst[] FindDynamicAliasDeclarations(ScriptBlockAst root)
+    {
+        return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .Where(IsPotentialDynamicAliasDeclaration)
+            .ToArray();
     }
 
     private static IReadOnlyDictionary<string, CommandAst[]> FindFunctionRemovalCommands(ScriptBlockAst root)
@@ -296,6 +307,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         {
             yield break;
         }
+
+        if (TryGetBoundSwitchValue(command, "WhatIf") == true)
+            yield break;
 
         foreach (var argument in command.CommandElements.Skip(1).OfType<StringConstantExpressionAst>())
         {
@@ -340,6 +354,53 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return null;
+    }
+
+    private static bool IsPotentialDynamicAliasDeclaration(CommandAst command)
+    {
+        var commandName = NormalizeInvocationName(command.GetCommandName());
+        var aliasCommand = string.Equals(commandName, "Set-Alias", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(commandName, "New-Alias", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(commandName, "sal", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(commandName, "nal", StringComparison.OrdinalIgnoreCase);
+        if (aliasCommand)
+            return string.IsNullOrWhiteSpace(TryGetAuthoredAliasName(command));
+
+        var providerCommand = string.Equals(commandName, "Set-Item", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "New-Item", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "si", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "ni", StringComparison.OrdinalIgnoreCase);
+        if (!providerCommand || !string.IsNullOrWhiteSpace(TryGetAuthoredAliasName(command)))
+            return false;
+
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(command);
+            if (binding.BoundParameters.TryGetValue("Path", out var result) ||
+                binding.BoundParameters.TryGetValue("LiteralPath", out result))
+            {
+                var literalPath = TryGetLiteralText(result.Value);
+                return string.IsNullOrWhiteSpace(literalPath);
+            }
+        }
+        catch
+        {
+            return true;
+        }
+
+        return true;
+    }
+
+    private static string GetExactInvocationName(string? rawInvocationName, string normalizedInvocationName)
+    {
+        if (string.IsNullOrWhiteSpace(rawInvocationName))
+            return normalizedInvocationName;
+
+        var value = rawInvocationName!.Trim();
+        var separator = value.LastIndexOf('\\');
+        return separator >= 0 && separator + 1 < value.Length
+            ? value.Substring(separator + 1)
+            : value;
     }
 
     private static string? TryGetLiteralText(object? value)
