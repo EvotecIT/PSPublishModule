@@ -51,7 +51,8 @@ try {
     try {
       $results = Find-Module @params
     } catch {
-      if ($_.Exception.Message -match 'No match was found') { continue }
+      $errorId = [string]$_.FullyQualifiedErrorId
+      if (($errorId -split ',', 2)[0] -eq 'NoMatchFoundForCriteria') { continue }
       throw
     }
 

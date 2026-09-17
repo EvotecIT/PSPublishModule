@@ -39,7 +39,15 @@ function Find-Module {
   if ($Name.Count -ne 1) { throw 'Find-Module received more than one name.' }
   if (-not $AllVersions) { throw 'Find-Module did not receive AllVersions.' }
   if ($Repository -ne 'PSGallery') { throw 'Find-Module did not receive the repository.' }
-  if ($Name[0] -eq 'Missing.Module') { throw "No match was found for the specified search criteria and module name '$($Name[0])'." }
+  if ($Name[0] -eq 'Missing.Module') {
+    $exception = [InvalidOperationException]::new('Kein passendes Modul wurde gefunden.')
+    $record = [System.Management.Automation.ErrorRecord]::new(
+      $exception,
+      'NoMatchFoundForCriteria',
+      [System.Management.Automation.ErrorCategory]::ObjectNotFound,
+      $Name[0])
+    $PSCmdlet.ThrowTerminatingError($record)
+  }
 
   $versions = if ($Name[0] -eq 'First.Module') { @('2.0.0', '1.0.0') } else { @('3.0.0') }
   foreach ($version in $versions) {
