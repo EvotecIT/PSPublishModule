@@ -73,6 +73,9 @@ public sealed class MissingFunctionsAnalyzerTests
     [InlineData("Microsoft.PowerShell.Core\\Start-Job { Invoke-PowerForgeIsolatedLocal }")]
     [InlineData("sajb { Invoke-PowerForgeIsolatedLocal }")]
     [InlineData("Invoke-Command -ComputerName server -ScriptBlock { Invoke-PowerForgeIsolatedLocal }")]
+    [InlineData("Invoke-Command server { Invoke-PowerForgeIsolatedLocal }")]
+    [InlineData("icm server { Invoke-PowerForgeIsolatedLocal }")]
+    [InlineData("Invoke-Command -Verbose server { Invoke-PowerForgeIsolatedLocal }")]
     [InlineData("icm -Session $session -ScriptBlock { Invoke-PowerForgeIsolatedLocal }")]
     [InlineData("1 | ForEach-Object -Parallel { Invoke-PowerForgeIsolatedLocal }")]
     [InlineData("1 | % -Parallel { Invoke-PowerForgeIsolatedLocal }")]
@@ -96,7 +99,9 @@ public sealed class MissingFunctionsAnalyzerTests
     [Theory]
     [InlineData("1 | ForEach-Object { Invoke-PowerForgePipelineLocal }")]
     [InlineData("Invoke-Command -ScriptBlock { Invoke-PowerForgePipelineLocal }")]
+    [InlineData("Invoke-Command { Invoke-PowerForgePipelineLocal }")]
     [InlineData("icm -NoNewScope -ScriptBlock { Invoke-PowerForgePipelineLocal }")]
+    [InlineData("Invoke-Command -ArgumentList value -ScriptBlock { Invoke-PowerForgePipelineLocal }")]
     [InlineData("& { Invoke-PowerForgePipelineLocal }")]
     public void Analyze_RecognizesNestedFunctionInSameRunspaceScriptBlock(string invocation)
     {
@@ -231,5 +236,172 @@ public sealed class MissingFunctionsAnalyzerTests
 
         Assert.Contains(report.Summary, item =>
             string.Equals(item.Name, "Invoke-PowerForgeLateHelper", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_FollowsTransitiveDeferredCallersBeforeDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeTransitiveA {
+                    Invoke-PowerForgeTransitiveHelper
+                }
+
+                function Invoke-PowerForgeTransitiveB {
+                    Invoke-PowerForgeTransitiveA
+                }
+
+                Invoke-PowerForgeTransitiveB
+                function Invoke-PowerForgeTransitiveHelper { 'local' }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeTransitiveHelper", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesTransitiveDeferredCallersAfterDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeTransitiveA {
+                    Invoke-PowerForgeTransitiveHelper
+                }
+
+                function Invoke-PowerForgeTransitiveB {
+                    Invoke-PowerForgeTransitiveA
+                }
+
+                function Invoke-PowerForgeTransitiveHelper { 'local' }
+                Invoke-PowerForgeTransitiveB
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeTransitiveHelper", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesDotSourcedNestedDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                . { function Invoke-PowerForgeDotSourcedLocal { 'local' } }
+                Invoke-PowerForgeDotSourcedLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeDotSourcedLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_ReportsCallOperatorScopedDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                & { function Invoke-PowerForgeChildScopedLocal { 'local' } }
+                Invoke-PowerForgeChildScopedLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeChildScopedLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_ReportsConditionallyDotSourcedDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                if ($Enable) {
+                    . { function Invoke-PowerForgeConditionalDotLocal { 'local' } }
+                }
+
+                Invoke-PowerForgeConditionalDotLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeConditionalDotLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_ReportsProcessBlockDeclarationUsedFromEndBlock()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                process {
+                    function Invoke-PowerForgeProcessLocal { 'local' }
+                }
+
+                end {
+                    Invoke-PowerForgeProcessLocal
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeProcessLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesBeginBlockDeclarationUsedFromEndBlock()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                begin {
+                    function Invoke-PowerForgeBeginLocal { 'local' }
+                }
+
+                end {
+                    Invoke-PowerForgeBeginLocal
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeBeginLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesProcessBlockDeclarationUsedWithinProcessBlock()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                process {
+                    function Invoke-PowerForgeProcessIterationLocal { 'local' }
+                    Invoke-PowerForgeProcessIterationLocal
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeProcessIterationLocal", StringComparison.OrdinalIgnoreCase));
     }
 }
