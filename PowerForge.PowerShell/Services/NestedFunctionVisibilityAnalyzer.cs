@@ -373,8 +373,15 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                     return true;
                 }
 
-                if (ReferenceEquals(FindContainingScriptBlock(function), declarationScope))
+                var functionScope = FindContainingScriptBlock(function);
+                if (ReferenceEquals(functionScope, declarationScope))
+                {
                     deferredEntryFunction = function;
+                }
+                else if (functionScope is not null && DoesDeferredFunctionBodyEscape(function, functionScope))
+                {
+                    return false;
+                }
             }
 
             if (ReferenceEquals(current, declarationScope))

@@ -116,7 +116,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         if (!HasEffectiveRootQualifier(declaration) ||
             FindContainingFunction(declaration) is not { } installer ||
-            !DeclarationDominatesPromotedBlockExit(declaration))
+            !DeclarationDominatesInstallerExit(declaration, installer))
         {
             return false;
         }
@@ -149,6 +149,27 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 consumerOffset,
                 guaranteedRootInvocations,
                 graph));
+    }
+
+    private static bool DeclarationDominatesInstallerExit(
+        FunctionDefinitionAst declaration,
+        FunctionDefinitionAst installer)
+    {
+        if (DeclarationDominatesPromotedBlockExit(declaration))
+            return true;
+        if (declaration.Parent is not StatementBlockAst finallyBlock ||
+            finallyBlock.Parent is not TryStatementAst tryStatement ||
+            !ReferenceEquals(tryStatement.Finally, finallyBlock) ||
+            !DeclarationDominatesBlockExit(declaration, finallyBlock) ||
+            tryStatement.Parent is not NamedBlockAst installerBlock ||
+            !ReferenceEquals(installerBlock.Parent, installer.Body))
+        {
+            return false;
+        }
+
+        return installerBlock.Statements
+            .Where(statement => statement.Extent.EndOffset <= tryStatement.Extent.StartOffset)
+            .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst);
     }
 
     private bool IsQualifiedDeclarationInstalledForConsumer(

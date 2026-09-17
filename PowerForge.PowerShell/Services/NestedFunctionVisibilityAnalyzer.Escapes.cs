@@ -116,10 +116,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (string.Equals(commandName, "Get-Command", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(commandName, "gcm", StringComparison.OrdinalIgnoreCase))
         {
-            return command.CommandElements
-                .Skip(1)
-                .OfType<StringConstantExpressionAst>()
-                .Any(argument => LookupPatternMatchesName(argument.Value, functionName));
+            return BoundLookupCanMatchFunction(command, functionName, providerPath: false, "Name");
         }
 
         if (!string.Equals(commandName, "Get-Item", StringComparison.OrdinalIgnoreCase) &&
@@ -130,12 +127,57 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return false;
         }
 
-        return command.CommandElements
-            .Skip(1)
-            .OfType<StringConstantExpressionAst>()
-            .Select(argument => argument.Value)
-            .Any(path => TryGetFunctionProviderName(path, out var providerFunction) &&
-                         LookupPatternMatchesName(providerFunction, functionName));
+        return BoundLookupCanMatchFunction(command, functionName, providerPath: true, "Path", "LiteralPath");
+    }
+
+    private static bool BoundLookupCanMatchFunction(
+        CommandAst command,
+        string functionName,
+        bool providerPath,
+        params string[] parameterNames)
+    {
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(command);
+            foreach (var parameterName in parameterNames)
+            {
+                if (binding.BoundParameters.TryGetValue(parameterName, out var result))
+                    return LookupValueCanMatchFunction(result.Value, functionName, providerPath);
+            }
+
+            if (binding.BindingExceptions.Count == 0)
+                return false;
+        }
+        catch
+        {
+            // Fall through to conservative AST matching when command metadata is unavailable.
+        }
+
+        var arguments = command.CommandElements.Skip(1).Where(element => element is not CommandParameterAst).ToArray();
+        return arguments.Any(argument => LookupValueCanMatchFunction(argument, functionName, providerPath));
+    }
+
+    private static bool LookupValueCanMatchFunction(object? value, string functionName, bool providerPath)
+    {
+        if (value is StringConstantExpressionAst literal)
+            return LookupTextCanMatchFunction(literal.Value, functionName, providerPath);
+        if (value is ExpandableStringExpressionAst expandable && expandable.NestedExpressions.Count == 0)
+            return LookupTextCanMatchFunction(expandable.Value, functionName, providerPath);
+        if (value is ConstantExpressionAst constant && constant.Value is string text)
+            return LookupTextCanMatchFunction(text, functionName, providerPath);
+        if (value is ArrayLiteralAst array)
+            return array.Elements.Any(element => LookupValueCanMatchFunction(element, functionName, providerPath));
+
+        return value is not null;
+    }
+
+    private static bool LookupTextCanMatchFunction(string text, string functionName, bool providerPath)
+    {
+        if (!providerPath)
+            return LookupPatternMatchesName(text, functionName);
+
+        return TryGetFunctionProviderName(text, out var providerFunction) &&
+               LookupPatternMatchesName(providerFunction, functionName);
     }
 
     private static bool LookupPatternMatchesName(string pattern, string functionName)
