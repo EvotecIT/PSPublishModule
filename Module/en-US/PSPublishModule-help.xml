@@ -1981,6 +1981,18 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EmitIrSnapshots</maml:name>
+          <maml:description>
+            <maml:para>Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>EmitSource</maml:name>
           <maml:description>
             <maml:para>Publish an independently buildable generated C# source project beside the artifact.</maml:para>
@@ -2012,6 +2024,18 @@
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ExpectedPublicAbiSha256</maml:name>
+          <maml:description>
+            <maml:para>Reviewed public ABI SHA-256 that the generated artifact must match.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -2333,6 +2357,18 @@
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EmitIrSnapshots</maml:name>
+        <maml:description>
+          <maml:para>Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>EmitSource</maml:name>
         <maml:description>
           <maml:para>Publish an independently buildable generated C# source project beside the artifact.</maml:para>
@@ -2364,6 +2400,18 @@
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ExpectedPublicAbiSha256</maml:name>
+        <maml:description>
+          <maml:para>Reviewed public ABI SHA-256 that the generated artifact must match.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -20607,6 +20655,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -20834,6 +20883,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -21073,6 +21123,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -29977,6 +30028,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -30614,6 +30666,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -35726,6 +35779,18 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationEmitIrSnapshots</maml:name>
+          <maml:description>
+            <maml:para>Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>PowerShellCompilationExcludeResource</maml:name>
           <maml:description>
@@ -35734,6 +35799,18 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
           <dev:type>
             <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationExpectedPublicAbiSha256</maml:name>
+          <maml:description>
+            <maml:para>Reviewed public ABI SHA-256 that the generated binary module must match.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -36726,6 +36803,18 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationEmitIrSnapshots</maml:name>
+        <maml:description>
+          <maml:para>Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>PowerShellCompilationExcludeResource</maml:name>
         <maml:description>
@@ -36734,6 +36823,18 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationExpectedPublicAbiSha256</maml:name>
+        <maml:description>
+          <maml:para>Reviewed public ABI SHA-256 that the generated binary module must match.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -38370,10 +38471,34 @@ Relative paths are resolved from the staging root (for example: 'Help\About').</
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>StartClean</maml:name>
+          <maml:description>
+            <maml:para>Legacy compatibility switch. Documentation builds clean stale generated files by default.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>SyncExternalHelpToProjectRoot</maml:name>
           <maml:description>
             <maml:para>When enabled, the generated external help file is also synced&#xD;
 back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UpdateWhenNew</maml:name>
+          <maml:description>
+            <maml:para>Legacy compatibility switch. Documentation builds update the project documentation path by default.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -38495,10 +38620,34 @@ Relative paths are resolved from the staging root (for example: 'Help\About').</
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>StartClean</maml:name>
+        <maml:description>
+          <maml:para>Legacy compatibility switch. Documentation builds clean stale generated files by default.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>SyncExternalHelpToProjectRoot</maml:name>
         <maml:description>
           <maml:para>When enabled, the generated external help file is also synced&#xD;
 back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UpdateWhenNew</maml:name>
+        <maml:description>
+          <maml:para>Legacy compatibility switch. Documentation builds update the project documentation path by default.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -39769,11 +39918,11 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
       <command:verb>New</command:verb>
       <command:noun>ConfigurationDotNetInstaller</command:noun>
       <maml:description>
-        <maml:para>Creates installer configuration (MSI prepare/build) for DotNet publish DSL.</maml:para>
+        <maml:para>Creates MSI, Debian, or macOS app-bundle installer configuration for the DotNet publish DSL.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Creates installer configuration (MSI prepare/build) for DotNet publish DSL.</maml:para>
+      <maml:para>Creates MSI, Debian, or macOS app-bundle installer configuration for the DotNet publish DSL.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -39798,6 +39947,30 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <command:parameterValue required="false" variableLength="false">DotNetPublishMsiClientLicenseOptions</command:parameterValue>
           <dev:type>
             <maml:name>DotNetPublishMsiClientLicenseOptions</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Debian</maml:name>
+          <maml:description>
+            <maml:para>Debian package metadata used when Kind is Debian.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishDebianOptions</command:parameterValue>
+          <dev:type>
+            <maml:name>DotNetPublishDebianOptions</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Frameworks</maml:name>
+          <maml:description>
+            <maml:para>Optional target-framework filter for installer generation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -39838,6 +40011,18 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>HarvestExcludePatterns</maml:name>
+          <maml:description>
+            <maml:para>Optional wildcard patterns excluded from MSI harvesting.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -39891,6 +40076,35 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Kind</maml:name>
+          <maml:description>
+            <maml:para>Installer format. Defaults to MSI.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishInstallerKind</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Msi</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Debian</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">MacApp</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>DotNetPublishInstallerKind</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MacApp</maml:name>
+          <maml:description>
+            <maml:para>macOS app-bundle metadata used when Kind is MacApp.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishMacAppOptions</command:parameterValue>
+          <dev:type>
+            <maml:name>DotNetPublishMacAppOptions</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ManifestPath</maml:name>
           <maml:description>
             <maml:para>Optional manifest path template for MSI prepare output.</maml:para>
@@ -39914,6 +40128,42 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OutputName</maml:name>
+          <maml:description>
+            <maml:para>Optional installer output file-name template.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OutputPath</maml:name>
+          <maml:description>
+            <maml:para>Optional installer output directory template.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PrepareFromBundleId</maml:name>
+          <maml:description>
+            <maml:para>Optional bundle identifier used as the installer payload source.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>PrepareFromTarget</maml:name>
           <maml:description>
@@ -39922,6 +40172,18 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Runtimes</maml:name>
+          <maml:description>
+            <maml:para>Optional runtime filter for installer generation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -39939,6 +40201,30 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignOverrides</maml:name>
+          <maml:description>
+            <maml:para>Optional signing-profile overrides.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishSignPatch</command:parameterValue>
+          <dev:type>
+            <maml:name>DotNetPublishSignPatch</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SignProfile</maml:name>
+          <maml:description>
+            <maml:para>Optional named signing profile.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>StagingPath</maml:name>
           <maml:description>
             <maml:para>Optional staging path template for MSI payload.</maml:para>
@@ -39946,6 +40232,27 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Styles</maml:name>
+          <maml:description>
+            <maml:para>Optional publish-style filter for installer generation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>DotNetPublishStyle[]</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -39990,6 +40297,30 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Debian</maml:name>
+        <maml:description>
+          <maml:para>Debian package metadata used when Kind is Debian.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishDebianOptions</command:parameterValue>
+        <dev:type>
+          <maml:name>DotNetPublishDebianOptions</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Frameworks</maml:name>
+        <maml:description>
+          <maml:para>Optional target-framework filter for installer generation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Harvest</maml:name>
         <maml:description>
           <maml:para>Harvest behavior for payload tree.</maml:para>
@@ -40025,6 +40356,18 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>HarvestExcludePatterns</maml:name>
+        <maml:description>
+          <maml:para>Optional wildcard patterns excluded from MSI harvesting.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -40078,6 +40421,35 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Kind</maml:name>
+        <maml:description>
+          <maml:para>Installer format. Defaults to MSI.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishInstallerKind</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Msi</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Debian</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">MacApp</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>DotNetPublishInstallerKind</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MacApp</maml:name>
+        <maml:description>
+          <maml:para>macOS app-bundle metadata used when Kind is MacApp.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishMacAppOptions</command:parameterValue>
+        <dev:type>
+          <maml:name>DotNetPublishMacAppOptions</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>ManifestPath</maml:name>
         <maml:description>
           <maml:para>Optional manifest path template for MSI prepare output.</maml:para>
@@ -40101,6 +40473,42 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OutputName</maml:name>
+        <maml:description>
+          <maml:para>Optional installer output file-name template.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OutputPath</maml:name>
+        <maml:description>
+          <maml:para>Optional installer output directory template.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PrepareFromBundleId</maml:name>
+        <maml:description>
+          <maml:para>Optional bundle identifier used as the installer payload source.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>PrepareFromTarget</maml:name>
         <maml:description>
@@ -40109,6 +40517,18 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Runtimes</maml:name>
+        <maml:description>
+          <maml:para>Optional runtime filter for installer generation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -40126,6 +40546,30 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignOverrides</maml:name>
+        <maml:description>
+          <maml:para>Optional signing-profile overrides.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishSignPatch</command:parameterValue>
+        <dev:type>
+          <maml:name>DotNetPublishSignPatch</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SignProfile</maml:name>
+        <maml:description>
+          <maml:para>Optional named signing profile.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>StagingPath</maml:name>
         <maml:description>
           <maml:para>Optional staging path template for MSI payload.</maml:para>
@@ -40133,6 +40577,27 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Styles</maml:name>
+        <maml:description>
+          <maml:para>Optional publish-style filter for installer generation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">DotNetPublishStyle[]</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>DotNetPublishStyle[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -40253,6 +40718,7 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -40324,6 +40790,7 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -40583,6 +41050,7 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -40666,6 +41134,7 @@ New-ConfigurationDotNetBenchmarkGate -Id 'storage' -SourcePath 'Artifacts\bench.
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -51997,6 +52466,7 @@ module build should coordinate with that package lane.</maml:para>
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -52132,6 +52602,7 @@ module build should coordinate with that package lane.</maml:para>
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -53048,6 +53519,7 @@ consuming outputs from a separate prebuild step.</maml:para>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Unknown</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Cli</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Desktop</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Service</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Library</command:parameterValue>
           </command:parameterValueGroup>
@@ -53143,6 +53615,7 @@ consuming outputs from a separate prebuild step.</maml:para>
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -53163,6 +53636,7 @@ consuming outputs from a separate prebuild step.</maml:para>
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -53269,6 +53743,7 @@ consuming outputs from a separate prebuild step.</maml:para>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Unknown</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Cli</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Desktop</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Service</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">Library</command:parameterValue>
         </command:parameterValueGroup>
@@ -53364,6 +53839,7 @@ consuming outputs from a separate prebuild step.</maml:para>
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -53384,6 +53860,7 @@ consuming outputs from a separate prebuild step.</maml:para>
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -58117,6 +58594,7 @@ The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....<
             <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
@@ -58260,6 +58738,7 @@ The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....<
           <command:parameterValue required="false" variableLength="false">Portable</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableCompat</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">PortableSize</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">SelfContained</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">FrameworkDependent</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSpeed</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">AotSize</command:parameterValue>
