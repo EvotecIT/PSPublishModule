@@ -140,6 +140,125 @@ public sealed class MissingFunctionsAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_ReportsNestedFunctionPassedToUnknownScriptBlockConsumer()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeCallbackLocal { 'local' }
+                Save-Callback { Invoke-PowerForgeCallbackLocal }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeCallbackLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_ReportsNestedFunctionReachedThroughDynamicInvocationBeforeDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeDynamicCaller {
+                    Invoke-PowerForgeDynamicHelper
+                }
+
+                $name = 'Invoke-PowerForgeDynamicCaller'
+                & $name
+                function Invoke-PowerForgeDynamicHelper { 'local' }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeDynamicHelper", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_ReportsNestedFunctionFromSplatPotentiallyUsedForRemoting()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeSplattedRemoteLocal { 'local' }
+                $remote = @{ ComputerName = 'server' }
+                Invoke-Command @remote -ScriptBlock { Invoke-PowerForgeSplattedRemoteLocal }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeSplattedRemoteLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_ReportsNestedFunctionFromSplatPotentiallyUsedForParallelExecution()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeSplattedParallelLocal { 'local' }
+                $parallel = @{ Parallel = { Invoke-PowerForgeSplattedParallelLocal } }
+                1 | ForEach-Object @parallel
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeSplattedParallelLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_ReportsHelperReachedFromTrapBeforeDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeTrapCaller {
+                    Invoke-PowerForgeTrapHelper
+                }
+
+                throw 'before helper declaration'
+                function Invoke-PowerForgeTrapHelper { 'local' }
+                trap { Invoke-PowerForgeTrapCaller; continue }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeTrapHelper", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_RecognizesHelperDeclaredBeforeAnyTrapTrigger()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeTrapCaller {
+                    Invoke-PowerForgeTrapHelper
+                }
+
+                function Invoke-PowerForgeTrapHelper { 'local' }
+                trap { Invoke-PowerForgeTrapCaller; continue }
+                throw 'after helper declaration'
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeTrapHelper", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Analyze_ReportsConditionalNestedFunctionDeclaration()
     {
         var analyzer = new MissingFunctionsAnalyzer();

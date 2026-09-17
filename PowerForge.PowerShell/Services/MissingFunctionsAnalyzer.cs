@@ -187,14 +187,15 @@ public sealed class MissingFunctionsAnalyzer
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var commandNames = ExtractCommandNames(ast, functionDeclarationsByName).ToArray();
+        var visibilityAnalyzer = new NestedFunctionVisibilityAnalyzer(functionDeclarationsByName);
+        var commandNames = ExtractCommandNames(ast, visibilityAnalyzer).ToArray();
 
         return new ParsedInput(effectiveFilePath, declaredFunctions, commandNames);
     }
 
     private static IEnumerable<string> ExtractCommandNames(
         ScriptBlockAst ast,
-        IReadOnlyDictionary<string, FunctionDefinitionAst[]> functionDeclarationsByName)
+        NestedFunctionVisibilityAnalyzer visibilityAnalyzer)
     {
         var adCmdlets = new HashSet<string>(new[]
         {
@@ -257,7 +258,7 @@ public sealed class MissingFunctionsAnalyzer
                 continue;
             if (!LooksLikeCommandName(name))
                 continue;
-            if (NestedFunctionVisibilityAnalyzer.IsDeclaredInVisibleScope(cmd, name, functionDeclarationsByName))
+            if (visibilityAnalyzer.IsDeclaredInVisibleScope(cmd, name))
                 continue;
 
             set.Add(name);
