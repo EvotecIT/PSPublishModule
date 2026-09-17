@@ -171,9 +171,14 @@ public sealed class MissingFunctionsAnalyzer
             ast = Parser.ParseInput(text, out tokens, out errors);
         }
 
-        var functionDeclarations = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: true)
+        var functionDeclarationsByName = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: true)
             .Cast<FunctionDefinitionAst>()
-            .ToArray();
+            .Where(f => !string.IsNullOrWhiteSpace(f.Name))
+            .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToArray(),
+                StringComparer.OrdinalIgnoreCase);
 
         var declaredFunctions = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()
@@ -182,14 +187,14 @@ public sealed class MissingFunctionsAnalyzer
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var commandNames = ExtractCommandNames(ast, functionDeclarations).ToArray();
+        var commandNames = ExtractCommandNames(ast, functionDeclarationsByName).ToArray();
 
         return new ParsedInput(effectiveFilePath, declaredFunctions, commandNames);
     }
 
     private static IEnumerable<string> ExtractCommandNames(
         ScriptBlockAst ast,
-        IReadOnlyCollection<FunctionDefinitionAst> functionDeclarations)
+        IReadOnlyDictionary<string, FunctionDefinitionAst[]> functionDeclarationsByName)
     {
         var adCmdlets = new HashSet<string>(new[]
         {
@@ -252,7 +257,7 @@ public sealed class MissingFunctionsAnalyzer
                 continue;
             if (!LooksLikeCommandName(name))
                 continue;
-            if (IsFunctionDeclaredInVisibleScope(cmd, name, functionDeclarations))
+            if (IsFunctionDeclaredInVisibleScope(cmd, name, functionDeclarationsByName))
                 continue;
 
             set.Add(name);
@@ -264,25 +269,77 @@ public sealed class MissingFunctionsAnalyzer
     private static bool IsFunctionDeclaredInVisibleScope(
         CommandAst command,
         string commandName,
-        IReadOnlyCollection<FunctionDefinitionAst> functionDeclarations)
+        IReadOnlyDictionary<string, FunctionDefinitionAst[]> functionDeclarationsByName)
     {
-        foreach (var declaration in functionDeclarations)
-        {
-            if (!string.Equals(declaration.Name, commandName, StringComparison.OrdinalIgnoreCase))
-                continue;
+        if (!functionDeclarationsByName.TryGetValue(commandName, out var declarations))
+            return false;
 
+        foreach (var declaration in declarations)
+        {
             var declarationScope = FindContainingScriptBlock(declaration);
-            if (declarationScope is null)
+            if (declarationScope is null || !IsUnconditionalDeclaration(declaration, declarationScope))
                 continue;
 
             for (Ast? current = command; current is not null; current = current.Parent)
             {
-                if (ReferenceEquals(current, declarationScope))
+                if (current is ScriptBlockExpressionAst scriptBlockExpression &&
+                    IsIsolatedInvocationBoundary(scriptBlockExpression))
+                {
+                    break;
+                }
+
+                // A function is visible to recursive calls in its own body once invoked.
+                if (ReferenceEquals(current, declaration))
                     return true;
+
+                if (ReferenceEquals(current, declarationScope))
+                {
+                    // Nested declarations execute sequentially. A declaration later in the
+                    // same scope cannot satisfy an earlier call.
+                    if (declaration.Extent.EndOffset <= command.Extent.StartOffset)
+                        return true;
+
+                    break;
+                }
             }
         }
 
         return false;
+    }
+
+    private static bool IsUnconditionalDeclaration(
+        FunctionDefinitionAst declaration,
+        ScriptBlockAst declarationScope)
+    {
+        // A direct named-block statement always executes when its containing script block
+        // runs. Declarations nested in if/switch/loop/try blocks are path-dependent and
+        // must remain visible to strict missing-command validation.
+        return declaration.Parent is NamedBlockAst namedBlock &&
+               ReferenceEquals(namedBlock.Parent, declarationScope);
+    }
+
+    private static bool IsIsolatedInvocationBoundary(ScriptBlockExpressionAst scriptBlockExpression)
+    {
+        if (scriptBlockExpression.Parent is not CommandAst invocation)
+            return false;
+
+        var invocationName = invocation.GetCommandName();
+        if (string.IsNullOrWhiteSpace(invocationName))
+            return false;
+
+        if (string.Equals(invocationName, "Start-Job", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Start-ThreadJob", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Start-RSJob", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var isForEachObject = string.Equals(invocationName, "ForEach-Object", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(invocationName, "%", StringComparison.OrdinalIgnoreCase);
+        return isForEachObject && invocation.CommandElements
+            .OfType<CommandParameterAst>()
+            .Any(parameter => string.Equals(parameter.ParameterName, "Parallel", StringComparison.OrdinalIgnoreCase));
     }
 
     private static ScriptBlockAst? FindContainingScriptBlock(Ast ast)
