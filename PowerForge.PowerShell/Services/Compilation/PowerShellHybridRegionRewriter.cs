@@ -65,7 +65,9 @@ internal static class PowerShellHybridRegionRewriter
                     local.HasTypeConstraint && string.IsNullOrWhiteSpace(local.TypeConstraintSyntax)))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' is missing its authored continuation type constraint.");
             var receiver = region.ContinuationLocals.Count == 0
-                ? "return "
+                ? region.TerminalTransferContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.NoEnumerate
+                    ? "return ,"
+                    : "return "
                 : string.Join(", ", region.ContinuationLocals.Select(static local =>
                     (local.HasTypeConstraint ? local.TypeConstraintSyntax : string.Empty) + "${" + local.Name + "}")) + " = ";
             var invocation = receiver + "[" + typed.NamespaceName + "." + typed.TypeName + "]::" +
@@ -102,9 +104,8 @@ internal static class PowerShellHybridRegionRewriter
             var replacements = pair.Value;
             // A condition does not reset $? after a successful void expression. Keep the
             // authored declaration's status while native definition owns scope and aliases.
-            var registration = owner.Extent.Text + "\nif ([PowerForge.Generated.Runtime.PowerShellNativeFunctionHost]::InstallDeclaredFunction($ExecutionContext.SessionState.Module, " +
-                Quote(owner.Name) + ", [PowerForge.Generated.Runtime.PowerShellHybridRegionHost]::Create($ExecutionContext.SessionState.Module, " +
-                Quote(source) + ", $PSCommandPath, " + owner.Extent.StartOffset + ", " + owner.Extent.EndOffset +
+            var registration = owner.Extent.Text + "\nif ([PowerForge.Generated.Runtime.PowerShellHybridRegionHost]::TryInstallDeclaredFunction($ExecutionContext.SessionState.Module, " +
+                Quote(owner.Name) + ", " + Quote(source) + ", $PSCommandPath, " + owner.Extent.StartOffset + ", " + owner.Extent.EndOffset +
                 ", [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.StartOffset)) +
                 "), [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.EndOffset)) +
                 "), [string[]]@(" + string.Join(", ", replacements.Select(item => Quote(item.Replacement))) +
@@ -113,7 +114,7 @@ internal static class PowerShellHybridRegionRewriter
                 "), [string[]]@(" + string.Join(", ", replacements.SelectMany(static item => item.Region.InputLocals).Select(local => Quote(local.TypeName))) +
                 "), [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.InputLocals.Count)) +
                 "), [string[]]@(" + string.Join(", ", replacements.Where(static item => item.Region.RequiresLocalOwnershipGuard)
-                    .SelectMany(static item => item.Region.ContinuationLocals).Select(local => Quote(local.Name))) + ")))) { }\n";
+                    .SelectMany(static item => item.Region.ContinuationLocals).Select(local => Quote(local.Name))) + "))) { }\n";
             edits.Add(new PowerShellHybridSourceEdit(owner.Extent.StartOffset,
                 owner.Extent.EndOffset - owner.Extent.StartOffset, registration, replacements[0].Region.RegionId));
         }

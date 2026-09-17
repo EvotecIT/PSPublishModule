@@ -131,11 +131,26 @@ function ConvertTo-PortableRegionOpportunity {
         throw "Region opportunity '$($Opportunity.opportunityId)' does not contain an exclusively typed lowered graph."
     }
     $convertTransfer = {
+        $contractProperty = $_.PSObject.Properties['contract']
+        $contract = if ($null -eq $contractProperty -or $null -eq $contractProperty.Value) { $null } else {
+            $transferContract = $contractProperty.Value
+            [pscustomobject]@{
+                schemaVersion = [int] $transferContract.schemaVersion
+                shape = [string] $transferContract.shape
+                elementContract = [string] $transferContract.elementContract
+                direction = [string] $transferContract.direction
+                ownership = [string] $transferContract.ownership
+                outputBehavior = [string] $transferContract.outputBehavior
+                mutation = [string] $transferContract.mutation
+                supported = [bool] $transferContract.supported
+            }
+        }
         [pscustomobject]@{
             identity = [string] $_.identity
             typeName = [string] $_.typeName
             typeProvenance = [string] $_.typeProvenance
             stableScalar = [bool] $_.stableScalar
+            contract = $contract
         }
     }
 
@@ -177,8 +192,16 @@ function Get-RegionOpportunityShapeKey {
         elseif ([int] $Opportunity.statementCount -ge 5) { '05-09' }
         elseif ([int] $Opportunity.statementCount -ge 2) { '02-04' }
         else { '01' }
-    $inputShape = @($Opportunity.liveInputs | ForEach-Object { "$($_.typeName):$($_.stableScalar)" } | Sort-Object) -join ','
-    $outputShape = @($Opportunity.liveOutputs | ForEach-Object { "$($_.typeName):$($_.stableScalar)" } | Sort-Object) -join ','
+    $inputShape = @($Opportunity.liveInputs | ForEach-Object {
+        $contract = $_.PSObject.Properties['contract']
+        if ($null -eq $contract -or $null -eq $contract.Value) { "$($_.typeName):$($_.stableScalar)" }
+        else { "$($contract.Value.shape):$($contract.Value.elementContract):$($contract.Value.direction):$($contract.Value.ownership):$($contract.Value.outputBehavior):$($contract.Value.mutation):$($contract.Value.supported)" }
+    } | Sort-Object) -join ','
+    $outputShape = @($Opportunity.liveOutputs | ForEach-Object {
+        $contract = $_.PSObject.Properties['contract']
+        if ($null -eq $contract -or $null -eq $contract.Value) { "$($_.typeName):$($_.stableScalar)" }
+        else { "$($contract.Value.shape):$($contract.Value.elementContract):$($contract.Value.direction):$($contract.Value.ownership):$($contract.Value.outputBehavior):$($contract.Value.mutation):$($contract.Value.supported)" }
+    } | Sort-Object) -join ','
     $region = @($Opportunity.graph.regions)[0]
     $streams = @($region.streams | Sort-Object) -join ','
     $errors = @($region.errors | Sort-Object) -join ','

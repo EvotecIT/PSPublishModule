@@ -11,6 +11,26 @@ namespace PowerForge.Generated.Runtime
     /// <summary>Installs compiler-selected regions while preserving the retained statements' original AST extents.</summary>
     public static class PowerShellHybridRegionHost
     {
+        /// <summary>Installs a prepared retained-region function, or leaves the authored declaration intact when the target runspace cannot construct it.</summary>
+        public static bool TryInstallDeclaredFunction(PSModuleInfo module, string name, string source, string sourcePath,
+            int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded,
+            string[] inputLocalNames, string[] inputLocalTypeNames, int[] inputLocalCounts, string[] localNames)
+        {
+            try
+            {
+                var script = Create(module, source, sourcePath, functionStart, functionEnd, starts, ends, replacements,
+                    guarded, inputLocalNames, inputLocalTypeNames, inputLocalCounts, localNames);
+                PowerShellNativeFunctionHost.InstallDeclaredFunction(module, name, script);
+                return true;
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException &&
+                                               exception is not StackOverflowException &&
+                                               exception is not AccessViolationException)
+            {
+                return false;
+            }
+        }
+
         /// <summary>Creates a retained function using the original single-prefix runtime contract.</summary>
         public static ScriptBlock Create(PSModuleInfo module, string source, string sourcePath,
             int functionStart, int functionEnd, int[] starts, int[] ends, string[] replacements, bool[] guarded, string[] localNames)
@@ -46,8 +66,8 @@ namespace PowerForge.Generated.Runtime
                 body.EndBlock.Traps?.Count > 0)
                 throw new ArgumentException("The retained region host requires an unnamed function body without traps.", nameof(source));
             var authored = body.EndBlock.Statements;
-            if (authored.Count == 0 || starts[0] != authored[0].Extent.StartOffset)
-                throw new ArgumentException("The ownership condition must precede every authored body statement.", nameof(starts));
+            if (authored.Count == 0)
+                throw new ArgumentException("The ownership condition requires an authored body statement.", nameof(starts));
             var statements = new List<StatementAst>();
             var retainedStatements = new List<StatementAst>();
             var next = 0;

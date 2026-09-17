@@ -13,5 +13,9 @@ internal static class PowerShellClrPrimitiveInvocationPolicy
            parameterTypes.SequenceEqual(new[] { typeof(object), typeof(object) }) ||
            kind == PowerShellClrInvocationKind.InstanceMethod && declaringType.IsEnum &&
            PowerShellClrTypeSemantics.IsIntegral(Enum.GetUnderlyingType(declaringType)) &&
-           memberName == nameof(Enum.ToString) && returnType == typeof(string) && !parameterTypes.Any();
+           memberName == nameof(Enum.ToString) && returnType == typeof(string) && !parameterTypes.Any() ||
+           kind == PowerShellClrInvocationKind.Constructor && memberName == ".ctor" &&
+           returnType == declaringType && !parameterTypes.Any() &&
+           (declaringType == typeof(System.Collections.ArrayList) ||
+            declaringType.IsGenericType && declaringType.GetGenericTypeDefinition() == typeof(List<>));
 }

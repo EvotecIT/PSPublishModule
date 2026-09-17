@@ -102,7 +102,7 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
         PowerShellBoundExpression expression)
         => PowerShellStableScalarTypePolicy.IsSupported(expression.Type) ||
            expression is PowerShellBoundVariableExpression variable &&
-           expression.Type.ClrType == typeof(System.Collections.Hashtable) &&
+           PowerShellRegionTransferTypePolicy.IsSupported(expression.Type) &&
            function.Parameters.Any(parameter =>
                parameter.Symbol.Kind == PowerShellSymbolKind.Local &&
                parameter.Symbol.StableKey.Equals(variable.Symbol.StableKey, StringComparison.Ordinal));

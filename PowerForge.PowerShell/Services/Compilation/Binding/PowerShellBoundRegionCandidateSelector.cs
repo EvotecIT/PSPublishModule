@@ -53,7 +53,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         out PowerShellBoundRegionCandidate candidate,
         PowerShellCompiledRegionLocal[]? continuationLocals = null,
         PowerShellCompiledRegionLocal[]? inputLocals = null,
-        bool allowsPrefixOwnedInputLocals = false)
+        bool allowsPrefixOwnedInputLocals = false,
+        PowerShellRegionTransferContract? terminalTransferContract = null)
     {
         candidate = null!;
         // A standalone region has no native function context argument. Do not detach reads from their invocation owner.
@@ -139,7 +140,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             continuationLocals,
             requiresLocalOwnershipGuard: continuationLocals is { Length: > 0 } && inputLocals is not { Length: > 0 },
             inputLocals,
-            allowsPrefixOwnedInputLocals);
+            allowsPrefixOwnedInputLocals,
+            terminalTransferContract);
         return true;
     }
 
@@ -246,7 +248,8 @@ internal sealed class PowerShellBoundRegionCandidate
         PowerShellCompiledRegionLocal[]? continuationLocals = null,
         bool requiresLocalOwnershipGuard = false,
         PowerShellCompiledRegionLocal[]? inputLocals = null,
-        bool allowsPrefixOwnedInputLocals = false)
+        bool allowsPrefixOwnedInputLocals = false,
+        PowerShellRegionTransferContract? terminalTransferContract = null)
     {
         RegionId = regionId;
         SourceSha256 = sourceSha256;
@@ -260,6 +263,7 @@ internal sealed class PowerShellBoundRegionCandidate
         InputLocals = inputLocals ?? Array.Empty<PowerShellCompiledRegionLocal>();
         RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
         AllowsPrefixOwnedInputLocals = allowsPrefixOwnedInputLocals;
+        TerminalTransferContract = terminalTransferContract;
     }
 
     internal string RegionId { get; }
@@ -274,4 +278,5 @@ internal sealed class PowerShellBoundRegionCandidate
     internal PowerShellImmutableArray<PowerShellCompiledRegionLocal> InputLocals { get; }
     internal bool RequiresLocalOwnershipGuard { get; }
     internal bool AllowsPrefixOwnedInputLocals { get; }
+    internal PowerShellRegionTransferContract? TerminalTransferContract { get; }
 }

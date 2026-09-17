@@ -399,6 +399,7 @@ internal static partial class PowerShellClrMemberSemanticBinder
         var parameters = selected.GetParameters();
         for (var index = 0; index < arguments.Length; index++)
             arguments[index] = NormalizeLiteralArgument(arguments[index], argumentSyntax[index], parameters[index].ParameterType);
+        var argumentConversions = CreateArgumentConversions(arguments, parameters);
 
         return new PowerShellBoundClrInvocationExpression(
             span,
@@ -410,8 +411,15 @@ internal static partial class PowerShellClrMemberSemanticBinder
             arguments,
             parameters.Select(static parameter => parameter.ParameterType).ToArray(),
             new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Inferred, "The semantic binder selected one exact target-compatible CLR constructor."),
-            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors),
-            argumentConversions: CreateArgumentConversions(arguments, parameters));
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) &&
+            (argumentConversions.Any(static conversion => conversion.Kind != PowerShellClrArgumentConversionKind.None) ||
+             !PowerShellClrPrimitiveInvocationPolicy.IsNonThrowing(
+                 targetType,
+                 ".ctor",
+                 PowerShellClrInvocationKind.Constructor,
+                 targetType,
+                 parameters.Select(static parameter => parameter.ParameterType))),
+            argumentConversions: argumentConversions);
     }
 
     private static bool TryResolveTarget(

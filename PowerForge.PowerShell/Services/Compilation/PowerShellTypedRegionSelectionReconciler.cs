@@ -74,7 +74,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             decision.Policy.Reason,
             decision.Policy.IsSafe ? decision.Emission?.GeneratedName ?? string.Empty : string.Empty,
             decision.Emission?.RegionGraph,
-            candidate.ContinuationLocals.ToArray(), candidate.RequiresLocalOwnershipGuard, candidate.InputLocals.ToArray());
+            candidate.ContinuationLocals.ToArray(), candidate.RequiresLocalOwnershipGuard, candidate.InputLocals.ToArray(),
+            candidate.TerminalTransferContract);
     }
 
     private static PowerShellCompilationRegionCandidate RejectGeneratedNameCollision(PowerShellCompilationRegionCandidate candidate)
@@ -96,7 +97,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             $"The generated helper name '{candidate.GeneratedName}' collides with a selected whole-function method.",
             generatedName: string.Empty,
             candidate.RegionGraph,
-            candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals);
+            candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals,
+            candidate.TerminalTransferContract);
 
     private static PowerShellCompilationRegionCandidate RejectWholeFunctionCoverage(PowerShellCompilationRegionCandidate candidate)
         => new(
@@ -108,7 +110,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             "region.whole-function-selected",
             "The containing function is already selected for whole-function emission.",
             generatedName: string.Empty,
-            candidate.RegionGraph, candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals);
+            candidate.RegionGraph, candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals,
+            candidate.TerminalTransferContract);
 
     private static PowerShellCompilationRegionCandidate RejectEnclosedRegion(PowerShellCompilationRegionCandidate candidate)
         => new(
@@ -120,7 +123,8 @@ internal static class PowerShellTypedRegionSelectionReconciler
             "region.enclosed-by-approved-region",
             "A larger approved region covers this candidate's complete authored span.",
             generatedName: string.Empty,
-            candidate.RegionGraph, candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals);
+            candidate.RegionGraph, candidate.ContinuationLocals, candidate.RequiresLocalOwnershipGuard, candidate.InputLocals,
+            candidate.TerminalTransferContract);
 }
 
 internal sealed class PowerShellTypedRegionSelection

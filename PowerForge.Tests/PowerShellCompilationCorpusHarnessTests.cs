@@ -180,7 +180,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var sourcePath = Path.Combine(sourceRoot, "Nested", "Module.psm1");
         var opportunityJson = System.Text.Json.JsonSerializer.Serialize(new
         {
-            schemaVersion = 1,
+            schemaVersion = 2,
             opportunityId = "opportunity:test",
             sourceSha256 = new string('a', 64),
             sourceDocumentSha256 = new string('b', 64),
@@ -201,7 +201,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             liveInputSourceAnalysisComplete = true,
             liveOutputConsumerAnalysisComplete = false,
             insideTerminalCandidate = false,
-            liveInputs = new[] { new { identity = "Parameter:VALUE", typeName = "System.Int32", typeProvenance = "Explicit", stableScalar = true } },
+            liveInputs = new[] { new { identity = "Parameter:VALUE", typeName = "System.Int32", typeProvenance = "Explicit", stableScalar = true,
+                contract = new { schemaVersion = 1, shape = "StableScalar", elementContract = "StableScalar", direction = "LiveIn",
+                    ownership = "ParameterBorrowed", outputBehavior = "Atomic", mutation = "None", supported = true } } },
             liveOutputs = new[] { new { identity = "Local:RESULT", typeName = "System.Int32", typeProvenance = "Explicit", stableScalar = true } },
             localCalls = Array.Empty<string>(),
             regionGraph = new
@@ -259,6 +261,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Equal("Nested/Module.psm1", root.GetProperty("opportunity").GetProperty("relativePath").GetString());
         Assert.Equal(3, root.GetProperty("opportunity").GetProperty("statementCount").GetInt32());
         Assert.True(root.GetProperty("opportunity").GetProperty("analysisOnly").GetBoolean());
+        Assert.Equal("ParameterBorrowed", root.GetProperty("opportunity").GetProperty("liveInputs")[0]
+            .GetProperty("contract").GetProperty("ownership").GetString());
         Assert.Equal("Local:RESULT", root.GetProperty("opportunity").GetProperty("liveOutputs")[0].GetProperty("identity").GetString());
         Assert.Equal(2, root.GetProperty("frontier")[0].GetProperty("affectedScenarioFamilies").GetInt32());
         Assert.True(root.GetProperty("invalidRejected").GetBoolean());

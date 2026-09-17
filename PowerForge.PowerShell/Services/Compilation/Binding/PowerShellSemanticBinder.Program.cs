@@ -88,7 +88,8 @@ internal sealed partial class PowerShellSemanticBinder
                     functionDiagnostics,
                     targetFramework,
                     capabilities,
-                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
+                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions) &&
+                    declaration.Symbol.Kind == PowerShellSymbolKind.Function
                         ? regionCandidates
                         : null,
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)

@@ -185,13 +185,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("[int]$result = 0; $result += $Number; & { $result }", true)]
-    [InlineData("[int]$result = 0; $Number = 7; & { $result; $Number }", true)]
-    [InlineData("[int]$result = 0; Write-Warning 'before'; $result = 7; & { $result }", true)]
-    [InlineData("& { 'before' }; [int]$result = 0; $result = 7; & { $result }", false)]
-    public void Transpile_HybridPrefixStopsBeforeUnrepresentedFailuresAndSideEffects(
+    [InlineData("[int]$result = 0; $result += $Number; & { $result }", 1)]
+    [InlineData("[int]$result = 0; $Number = 7; & { $result; $Number }", 1)]
+    [InlineData("[int]$result = 0; Write-Warning 'before'; $result = 7; & { $result }", 1)]
+    [InlineData("& { 'before' }; [int]$result = 0; $result = 7; & { $result }", 2)]
+    public void Transpile_HybridPrefixSelectsOnlyClosedInitializationRunAroundHostedEffects(
         string body,
-        bool expectsSingleStatementPrefix)
+        int expectedStatementCount)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-PrefixValue { [CmdletBinding()] param([int]$Number); " + body + " }", ".psm1");
@@ -199,14 +199,39 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "PrefixMethods", "net10.0",
             PowerShellCompilationCapabilities.HybridModule);
         var prefixes = typed.PromotedRegions.Where(region => region.ContinuationLocals.Count != 0).ToArray();
-        if (!expectsSingleStatementPrefix)
-        {
-            Assert.Empty(prefixes);
-            return;
-        }
         var prefix = Assert.Single(prefixes);
-        Assert.Equal("[int]$result = 0", File.ReadAllText(fixture.ScriptPath)
-            .Substring(prefix.StartOffset, prefix.EndOffset - prefix.StartOffset));
+        var selected = File.ReadAllText(fixture.ScriptPath)
+            .Substring(prefix.StartOffset, prefix.EndOffset - prefix.StartOffset);
+        Assert.Contains("[int]$result = 0", selected, StringComparison.Ordinal);
+        Assert.Equal(expectedStatementCount == 2, selected.Contains("$result = 7", StringComparison.Ordinal));
+        Assert.DoesNotContain("& {", selected, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Transpile_LaterFreshRegionDoesNotCompeteWithWholeMethodOwnership()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-WholeValue { param([int]$Number); $Number = 7; [int]$result = 0; return $result }", ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "WholeMethods", "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Single(typed.Methods);
+        Assert.Empty(typed.PromotedRegions);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Transpile_LaterFreshRegionDoesNotDetachFromAssignedNativeScriptBlock()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-WorkerValue { $worker = { & { 'hosted' }; [int]$result = 0; $result = 7 }; & $worker }", ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "WorkerMethods", "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(typed.PromotedRegions);
     }
 
     [Fact]

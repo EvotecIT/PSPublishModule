@@ -12,8 +12,86 @@ internal static class PowerShellRegionTransferTypePolicy
         => type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble || IsSupported(type.ClrType);
 
     internal static bool IsSupported(Type type)
-        => PowerShellStableScalarTypePolicy.IsSupported(type) || IsAtomicDictionaryReference(type);
+        => Describe(type).Supported;
+
+    internal static PowerShellRegionTransferContract Describe(
+        Type type,
+        PowerShellRegionTransferDirection direction = PowerShellRegionTransferDirection.Unspecified,
+        PowerShellRegionTransferOwnership ownership = PowerShellRegionTransferOwnership.Unspecified,
+        PowerShellRegionTransferMutation mutation = PowerShellRegionTransferMutation.None)
+    {
+        if (type is null) throw new ArgumentNullException(nameof(type));
+        var shape = GetShape(type);
+        var element = GetElementContract(type, shape);
+        var output = shape switch
+        {
+            PowerShellRegionTransferShape.StableScalar or PowerShellRegionTransferShape.AtomicMap =>
+                PowerShellRegionTransferOutputBehavior.Atomic,
+            PowerShellRegionTransferShape.StableScalarVector or PowerShellRegionTransferShape.ListSequence =>
+                PowerShellRegionTransferOutputBehavior.EnumerateOneLevel,
+            _ => PowerShellRegionTransferOutputBehavior.None
+        };
+        var supported = shape != PowerShellRegionTransferShape.Unsupported &&
+                        element != PowerShellRegionTransferElementContract.Unsupported &&
+                        mutation != PowerShellRegionTransferMutation.CompiledOwned;
+        return new PowerShellRegionTransferContract(
+            shape,
+            element,
+            direction,
+            ownership,
+            output,
+            mutation,
+            supported);
+    }
 
     internal static bool IsAtomicDictionaryReference(Type type)
-        => type == typeof(System.Collections.Hashtable);
+        => type == typeof(System.Collections.Hashtable) ||
+           type == typeof(System.Collections.Specialized.OrderedDictionary);
+
+    private static PowerShellRegionTransferShape GetShape(Type type)
+    {
+        if (PowerShellStableScalarTypePolicy.IsSupported(type))
+            return PowerShellRegionTransferShape.StableScalar;
+        if (IsAtomicDictionaryReference(type))
+            return PowerShellRegionTransferShape.AtomicMap;
+        if (IsStableScalarVector(type))
+            return PowerShellRegionTransferShape.StableScalarVector;
+        if (IsClosedListReference(type))
+            return PowerShellRegionTransferShape.ListSequence;
+        return PowerShellRegionTransferShape.Unsupported;
+    }
+
+    private static PowerShellRegionTransferElementContract GetElementContract(
+        Type type,
+        PowerShellRegionTransferShape shape)
+        => shape switch
+        {
+            PowerShellRegionTransferShape.StableScalar => PowerShellRegionTransferElementContract.StableScalar,
+            PowerShellRegionTransferShape.AtomicMap => PowerShellRegionTransferElementContract.OpaqueReference,
+            PowerShellRegionTransferShape.StableScalarVector => PowerShellRegionTransferElementContract.StableScalar,
+            PowerShellRegionTransferShape.ListSequence when TryGetListElementType(type, out var element) &&
+                                                            PowerShellStableScalarTypePolicy.IsSupported(element) =>
+                PowerShellRegionTransferElementContract.StableScalar,
+            PowerShellRegionTransferShape.ListSequence => PowerShellRegionTransferElementContract.OpaqueReference,
+            _ => PowerShellRegionTransferElementContract.Unsupported
+        };
+
+    private static bool IsStableScalarVector(Type type)
+        => type.IsArray && type.GetArrayRank() == 1 && type.GetElementType() is { } element &&
+           type == element.MakeArrayType() && PowerShellStableScalarTypePolicy.IsSupported(element);
+
+    private static bool IsClosedListReference(Type type)
+        => type == typeof(Array) || type == typeof(System.Collections.ArrayList) ||
+           type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>);
+
+    private static bool TryGetListElementType(Type type, out Type element)
+    {
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+        {
+            element = type.GetGenericArguments()[0];
+            return true;
+        }
+        element = typeof(object);
+        return false;
+    }
 }

@@ -281,7 +281,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             .ToHashSet(StringComparer.Ordinal);
         var regionDictionaryInputs = function.Parameters
             .Where(static parameter => parameter.Symbol.Kind == PowerShellSymbolKind.Local &&
-                                       parameter.Type.ClrType == typeof(System.Collections.Hashtable))
+                                       PowerShellRegionTransferTypePolicy.IsAtomicDictionaryReference(parameter.Type.ClrType))
             .Select(static parameter => parameter.Symbol.StableKey)
             .ToHashSet(StringComparer.Ordinal);
         return EnumerateStatements(function.Body)

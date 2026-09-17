@@ -18,13 +18,25 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
                 unary.Operand.ClrType == typeof(bool) && unary.Operation == PowerShellBoundUnaryOperator.LogicalNot,
             PowerShellLoweredClrInvocationExpression invocation => PowerShellClrPrimitiveInvocationPolicy.IsNonThrowing(
                 invocation.DeclaringType, invocation.MemberName, invocation.InvocationKind, invocation.ClrType, invocation.ParameterTypes),
-            // An empty Hashtable literal has no key/value evaluation, conversion, comparison,
-            // or duplicate-key route. Ordinary allocation failure is outside the modeled
-            // language-error contract, as it is for the other generated local containers.
-            PowerShellLoweredDictionaryExpression dictionary =>
-                dictionary.ClrType == typeof(System.Collections.Hashtable) && dictionary.Entries.Count == 0,
+            // A closed literal map has no dynamic key/value evaluation or conversion route.
+            // The binder already rejects duplicate literal keys. Ordinary allocation failure is
+            // outside the modeled language-error contract, as it is for other generated containers.
+            PowerShellLoweredDictionaryExpression dictionary => IsClosedLiteralMap(dictionary),
             _ => false
         };
+
+    private static bool IsClosedLiteralMap(PowerShellLoweredDictionaryExpression dictionary)
+        => PowerShellRegionTransferTypePolicy.IsAtomicDictionaryReference(dictionary.ClrType) &&
+           dictionary.Entries.All(static entry => IsClosedLiteralKey(entry.Key) && IsClosedLiteralValue(entry.Value));
+
+    private static bool IsClosedLiteralKey(PowerShellLoweredExpression expression)
+        => expression is PowerShellLoweredLiteralExpression { Value: not null } literal &&
+           PowerShellStableScalarTypePolicy.IsSupported(literal.ClrType);
+
+    private static bool IsClosedLiteralValue(PowerShellLoweredExpression expression)
+        => expression is PowerShellLoweredLiteralExpression literal &&
+               (literal.Value is null || PowerShellStableScalarTypePolicy.IsSupported(literal.ClrType)) ||
+           expression is PowerShellLoweredDictionaryExpression dictionary && IsClosedLiteralMap(dictionary);
 
     internal static bool IsNonThrowingNumericMutation(Type type, PowerShellIntegralMutationSemantics semantics)
         => type == typeof(double) && semantics == PowerShellIntegralMutationSemantics.None ||

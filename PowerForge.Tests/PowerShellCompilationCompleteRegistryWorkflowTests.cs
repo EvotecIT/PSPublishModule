@@ -90,7 +90,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             string.Join(Environment.NewLine, expected.Where(line => line.StartsWith("{", StringComparison.Ordinal)).Take(2)));
         Assert.Contains("depth=2", original.StandardOutput, StringComparison.Ordinal);
         AssertRegistryAcquiredState(expected);
-        Assert.Equal(expected.Length, actual.Length);
+        Assert.True(expected.Length == actual.Length,
+            "Generated registry output length differs." + Environment.NewLine +
+            "Output:" + Environment.NewLine + compiled.StandardOutput + Environment.NewLine +
+            "Error:" + Environment.NewLine + compiled.StandardError);
         Assert.True(expected.SequenceEqual(actual), string.Join(Environment.NewLine, expected.Zip(actual)
             .Where(pair => pair.First != pair.Second).Take(5).Select(pair => "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second)));
         Assert.Equal(original.StandardError, compiled.StandardError);

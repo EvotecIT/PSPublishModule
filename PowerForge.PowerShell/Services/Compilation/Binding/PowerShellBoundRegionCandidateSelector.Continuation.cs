@@ -25,11 +25,62 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             syntax.IsFilter || syntax.IsWorkflow || HasNamedLifecycle(syntax.Body) || syntax.Body.EndBlock?.Traps is { Count: > 0 } ||
             bindings.Count == 0 || bindings[0].AuthoredStatementIndex != 0)
             return false;
+        return TryCreateContinuationRun(
+            document, syntax, sourceFunction, parameters, functionLocals,
+            authoredStatements, bindings, out candidate);
+    }
+
+    /// <summary>
+    /// Selects a later statement-aligned initialization run when its first local has no earlier
+    /// authored reference. Runtime storage is still guarded at invocation entry, so inherited
+    /// AllScope, constrained, or otherwise decorated storage retains the authored PowerShell path.
+    /// </summary>
+    internal static bool TryCreateLaterContinuation(
+        ParsedSourceDocument document,
+        FunctionDefinitionAst syntax,
+        PowerShellSymbolId sourceFunction,
+        IReadOnlyList<PowerShellBoundParameter> parameters,
+        IReadOnlyList<PowerShellBoundLocal> functionLocals,
+        IReadOnlyList<StatementAst> authoredStatements,
+        IReadOnlyList<PowerShellBoundStatementBinding> bindings,
+        out PowerShellBoundRegionCandidate candidate)
+    {
+        candidate = null!;
+        if (!PowerShellSourceSemanticValidator.SupportsDetachedFunctionMetadata(document) ||
+            syntax.IsFilter || syntax.IsWorkflow || HasNamedLifecycle(syntax.Body) ||
+            syntax.Body.EndBlock?.Traps is { Count: > 0 })
+            return false;
+        for (var index = 1; index < bindings.Count; index++)
+        {
+            var binding = bindings[index];
+            if (binding.AuthoredStatementIndex <= 0 ||
+                !IsFreshLocalInitialization(authoredStatements, binding.AuthoredStatementIndex))
+                continue;
+            if (TryCreateContinuationRun(
+                    document, syntax, sourceFunction, parameters, functionLocals,
+                    authoredStatements, bindings.Skip(index).ToArray(), out candidate))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool TryCreateContinuationRun(
+        ParsedSourceDocument document,
+        FunctionDefinitionAst syntax,
+        PowerShellSymbolId sourceFunction,
+        IReadOnlyList<PowerShellBoundParameter> parameters,
+        IReadOnlyList<PowerShellBoundLocal> functionLocals,
+        IReadOnlyList<StatementAst> authoredStatements,
+        IReadOnlyList<PowerShellBoundStatementBinding> bindings,
+        out PowerShellBoundRegionCandidate candidate)
+    {
+        candidate = null!;
+        if (bindings.Count == 0) return false;
         var selected = new List<PowerShellBoundStatement>();
         var locals = new List<PowerShellBoundLocal>();
         var transfers = new List<PowerShellCompiledRegionLocal>();
         var regionParameters = parameters.Select(ProjectParameterContract).ToArray();
-        var nextIndex = 0;
+        var nextIndex = bindings[0].AuthoredStatementIndex;
         foreach (var binding in bindings)
         {
             var statement = PowerShellBoundRegionLocalProjection.Project(binding.Statement, regionParameters, locals, functionLocals);
@@ -94,6 +145,24 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             out candidate, transfers.ToArray());
     }
 
+    private static bool IsFreshLocalInitialization(
+        IReadOnlyList<StatementAst> authoredStatements,
+        int statementIndex)
+    {
+        if (statementIndex < 0 || statementIndex >= authoredStatements.Count ||
+            authoredStatements[statementIndex] is not AssignmentStatementAst assignment)
+            return false;
+        Ast target = assignment.Left;
+        if (target is AttributedExpressionAst attributed) target = attributed.Child;
+        if (target is not VariableExpressionAst variable || !variable.VariablePath.IsUnqualified)
+            return false;
+        var name = variable.VariablePath.UserPath;
+        return !authoredStatements.Take(statementIndex).Any(statement => statement.FindAll(node =>
+                node is VariableExpressionAst prior && prior.VariablePath.IsUnqualified &&
+                prior.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase),
+                searchNestedScriptBlocks: false).Any());
+    }
+
     private static PowerShellBoundParameter ProjectParameterContract(PowerShellBoundParameter parameter)
     {
         if (parameter.Type.Provenance != PowerShellTypeFactProvenance.Unknown ||
@@ -139,7 +208,12 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         if (target is not VariableExpressionAst variable || !variable.VariablePath.IsUnqualified)
             return false;
         transfer = new PowerShellCompiledRegionLocal(assignment.Target.Name,
-            assignment.Value.Type.ClrType.FullName ?? assignment.Value.Type.ClrType.Name, constrained, constraintSyntax);
+            assignment.Value.Type.ClrType.FullName ?? assignment.Value.Type.ClrType.Name, constrained, constraintSyntax,
+            PowerShellRegionTransferTypePolicy.Describe(
+                assignment.Value.Type.ClrType,
+                PowerShellRegionTransferDirection.LiveOut,
+                PowerShellRegionTransferOwnership.GuardedFresh,
+                PowerShellRegionTransferMutation.RetainedOnly));
         return true;
     }
 }

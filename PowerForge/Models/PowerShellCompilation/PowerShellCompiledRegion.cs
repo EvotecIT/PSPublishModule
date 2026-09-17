@@ -38,8 +38,7 @@ public sealed class PowerShellCompiledRegion
     {
     }
 
-    /// <summary>Creates immutable promoted-region evidence.</summary>
-    [JsonConstructor]
+    /// <summary>Creates immutable promoted-region evidence using the established local-transfer contract.</summary>
     public PowerShellCompiledRegion(
         string regionId,
         string sourceSha256,
@@ -63,6 +62,39 @@ public sealed class PowerShellCompiledRegion
         bool requiresPowerShellStopping,
         bool requiresLocalOwnershipGuard,
         IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            generatedName, returnType, inputParameters, startOffset, endOffset, startLine, startColumn,
+            endLine, endColumn, sourceMap, regionGraph, documentId, continuationLocals,
+            requiresPowerShellStopping, requiresLocalOwnershipGuard, inputLocals, terminalTransferContract: null)
+    {
+    }
+
+    /// <summary>Creates immutable promoted-region evidence with its closed terminal transfer contract.</summary>
+    [JsonConstructor]
+    public PowerShellCompiledRegion(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        string generatedName,
+        string returnType,
+        IReadOnlyList<PowerShellCompilationParameter>? inputParameters,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
+        PowerShellCompilationRegionGraph regionGraph,
+        string documentId,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresPowerShellStopping,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals,
+        PowerShellRegionTransferContract? terminalTransferContract)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -86,6 +118,7 @@ public sealed class PowerShellCompiledRegion
         InputLocals = Array.AsReadOnly((inputLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
         RequiresPowerShellStopping = requiresPowerShellStopping;
         RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
+        TerminalTransferContract = terminalTransferContract;
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -136,6 +169,9 @@ public sealed class PowerShellCompiledRegion
 
     /// <summary>Whether execution requires fresh invocation-local targets; otherwise the original region remains in execution.</summary>
     public bool RequiresLocalOwnershipGuard { get; }
+
+    /// <summary>Closed terminal Success-output behavior, or null for local continuation transfers.</summary>
+    public PowerShellRegionTransferContract? TerminalTransferContract { get; }
 
     [JsonIgnore]
     internal string GeneratedSource { get; set; } = string.Empty;

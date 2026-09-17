@@ -146,8 +146,16 @@ internal sealed class PowerShellBoundRegionOpportunityAnalyzer
         var facts = opportunity.SymbolFacts
             .GroupBy(static fact => PowerShellBoundRegionOpportunitySelector.SymbolIdentity(fact.Symbol), StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.Ordinal);
-        var liveInputs = CreateTransfers(region.Inputs, facts);
-        var liveOutputs = CreateTransfers(outputs.Where(static output => !output.StartsWith("stream:", StringComparison.Ordinal)), facts);
+        var liveInputs = CreateTransfers(
+            region.Inputs,
+            facts,
+            PowerShellRegionTransferDirection.LiveIn);
+        var liveOutputs = CreateTransfers(
+            outputs.Where(static output => !output.StartsWith("stream:", StringComparison.Ordinal)),
+            facts,
+            !canFallThrough
+                ? PowerShellRegionTransferDirection.TerminalSuccess
+                : PowerShellRegionTransferDirection.LiveOut);
         var continuation = !canFallThrough
             ? PowerShellCompilationRegionContinuation.Terminating
             : !hasFollowingStatements
@@ -207,18 +215,27 @@ internal sealed class PowerShellBoundRegionOpportunityAnalyzer
 
     private static PowerShellCompilationRegionTransfer[] CreateTransfers(
         IEnumerable<string> identities,
-        IReadOnlyDictionary<string, PowerShellBoundRegionOpportunitySelector.SymbolFact> facts)
+        IReadOnlyDictionary<string, PowerShellBoundRegionOpportunitySelector.SymbolFact> facts,
+        PowerShellRegionTransferDirection direction)
         => identities.Where(facts.ContainsKey)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(static item => item, StringComparer.Ordinal)
             .Select(identity =>
             {
                 var fact = facts[identity];
+                var ownership = fact.Symbol.Kind == PowerShellSymbolKind.Parameter
+                    ? PowerShellRegionTransferOwnership.ParameterBorrowed
+                    : PowerShellRegionTransferOwnership.Unspecified;
                 return new PowerShellCompilationRegionTransfer(
                     identity,
                     fact.Type.ClrType.FullName ?? fact.Type.ClrType.Name,
                     fact.Type.Provenance.ToString(),
-                    PowerShellStableScalarTypePolicy.IsSupported(fact.Type.ClrType));
+                    PowerShellStableScalarTypePolicy.IsSupported(fact.Type.ClrType),
+                    PowerShellRegionTransferTypePolicy.Describe(
+                        fact.Type.ClrType,
+                        direction,
+                        ownership,
+                        PowerShellRegionTransferMutation.None));
             })
             .ToArray();
 

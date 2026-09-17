@@ -71,7 +71,7 @@ internal static class PowerShellBoundRegionLocalProjection
         {
             if (name.IndexOf(':') >= 0 || !targets.TryGetValue(name, out var target)) return null;
             var value = Expression(source);
-            if (value is null || !PowerShellStableScalarTypePolicy.IsSupported(value.Type) ||
+            if (value is null || !PowerShellRegionTransferTypePolicy.IsSupported(value.Type) ||
                 values.TryGetValue(name, out var existing) && existing.Type.ClrType != value.Type.ClrType)
                 return null;
             return new PowerShellBoundAssignmentStatement(span, target, value);

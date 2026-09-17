@@ -224,7 +224,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Transpile_HybridDiscoversNonTerminalTypedOpportunitiesWithoutEmittingThem()
+    public void Transpile_HybridPromotesClosedRegionsAndRetainsOpportunityEvidence()
     {
         using var fixture = ArtifactFixture.Create(
             """
@@ -257,7 +257,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(hybrid.Methods);
-        Assert.Empty(hybrid.PromotedRegions);
+        Assert.Equal(new[] { 3, 10 }, hybrid.PromotedRegions.OrderBy(static region => region.StartLine)
+            .Select(static region => region.StartLine));
+        var guarded = Assert.Single(hybrid.PromotedRegions, static region => region.RequiresLocalOwnershipGuard);
+        Assert.Equal("Seed", Assert.Single(guarded.ContinuationLocals).Name, ignoreCase: true);
+        var terminal = Assert.Single(hybrid.PromotedRegions, static region => !region.RequiresLocalOwnershipGuard);
+        Assert.Empty(terminal.ContinuationLocals);
         Assert.DoesNotContain("__PowerForgeOpportunity_", hybrid.SourceCode, StringComparison.Ordinal);
         var opportunities = hybrid.RegionOpportunities.OrderBy(static item => item.StartOffset).ToArray();
         Assert.Equal(2, opportunities.Length);
@@ -269,6 +274,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(prefix.LiveOutputConsumerAnalysisComplete);
         Assert.False(prefix.InsideTerminalCandidate);
         Assert.Contains(prefix.LiveInputs, static input => input.Identity == "Parameter:VALUE" && input.StableScalar);
+        var parameterTransfer = Assert.Single(prefix.LiveInputs, static input => input.Identity == "Parameter:VALUE");
+        Assert.Equal(PowerShellRegionTransferOwnership.ParameterBorrowed,
+            Assert.IsType<PowerShellRegionTransferContract>(parameterTransfer.Contract).Ownership);
         Assert.Equal(2, prefix.LiveOutputs.Count);
         Assert.Contains(prefix.LiveOutputs, static output => output.Identity == "Local:SEED" && output.StableScalar);
         Assert.Contains(prefix.LiveOutputs, static output => output.Identity == "Local:SCALED" && output.StableScalar);
@@ -295,6 +303,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var json = JsonSerializer.Serialize(census);
         var roundTripped = JsonSerializer.Deserialize<PowerShellCompilationCensusResult>(json);
         Assert.Equal(2, Assert.Single(roundTripped!.Products).RegionOpportunities.Length);
+        Assert.Equal(PowerShellRegionTransferDirection.LiveIn,
+            Assert.IsType<PowerShellRegionTransferContract>(Assert.Single(
+                Assert.Single(roundTripped.Products).RegionOpportunities[0].LiveInputs,
+                static input => input.Identity == "Parameter:VALUE").Contract).Direction);
         var legacyJson = JsonNode.Parse(json)!.AsObject();
         Assert.True(legacyJson["Products"]!.AsArray()[0]!.AsObject().Remove("RegionOpportunities"));
         var legacyRoundTrip = JsonSerializer.Deserialize<PowerShellCompilationCensusResult>(legacyJson.ToJsonString());

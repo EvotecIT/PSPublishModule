@@ -496,7 +496,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             candidate.ContinuationLocals.ToArray(),
             emitted.RequiresPowerShellStopping,
             candidate.RequiresLocalOwnershipGuard,
-            candidate.InputLocals.ToArray());
+            candidate.InputLocals.ToArray(),
+            candidate.TerminalTransferContract);
         compiled.GeneratedSource = emitted.Source;
         return compiled;
     }

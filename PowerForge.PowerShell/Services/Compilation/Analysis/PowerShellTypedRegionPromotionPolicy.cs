@@ -26,9 +26,21 @@ internal static class PowerShellTypedRegionPromotionPolicy
             !UpdatesEstablishedInputLocals(candidate))
             return Reject("region.local-ownership", "Local output requires either fresh invocation-local ownership or exact established input-local targets.");
         var transfersMultipleLocals = candidate.ContinuationLocals.Length > 1;
-        if (!transfersMultipleLocals && lowered.OutputCardinality != PowerShellOutputCardinality.Scalar)
-            return Reject("region.return-cardinality", "The candidate does not return exactly one scalar value on every accepted path.");
-        if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !PowerShellRegionTransferTypePolicy.IsSupported(lowered.ReturnType))
+        var returnContract = transfersMultipleLocals
+            ? null
+            : candidate.TerminalTransferContract ?? PowerShellRegionTransferTypePolicy.Describe(lowered.ReturnType);
+        // The analyzer can prove compile-time array enumeration. System.Array and list-like
+        // references are enumerated by the retained PowerShell invocation boundary instead.
+        var expectedCardinality = candidate.ContinuationLocals.Length == 0 &&
+                                  returnContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel &&
+                                  lowered.ReturnType.IsArray
+            ? PowerShellOutputCardinality.Collection
+            : PowerShellOutputCardinality.Scalar;
+        if (!transfersMultipleLocals && lowered.OutputCardinality != expectedCardinality)
+            return Reject("region.return-cardinality",
+                $"The candidate return cardinality '{lowered.OutputCardinality}' does not match its '{returnContract?.OutputBehavior}' transfer contract.");
+        var supportedReturnType = PowerShellRegionTransferTypePolicy.IsSupported(lowered.ReturnType);
+        if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !supportedReturnType)
             return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a supported region transfer type.");
         if (lowered.RequiresPowerShellStreams)
             return Reject("region.stream-contract", "The candidate requires PowerShell stream semantics beyond the single scalar Success result contract.");
