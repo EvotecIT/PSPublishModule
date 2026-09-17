@@ -7,7 +7,7 @@ namespace PowerForge;
 
 internal sealed partial class NestedFunctionVisibilityAnalyzer
 {
-    private static bool DeclarationDominatesFollowingTryCall(
+    private bool DeclarationDominatesFollowingTryCall(
         FunctionDefinitionAst declaration,
         CommandAst command)
     {
@@ -20,10 +20,13 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return false;
         }
 
+        if (TryStatementCanRemoveFunction(tryStatement, declaration))
+            return false;
+
         return StatementDominatesFollowingCommand(tryStatement, command);
     }
 
-    private static bool DeclarationDominatesFollowingDoLoopCall(
+    private bool DeclarationDominatesFollowingDoLoopCall(
         FunctionDefinitionAst declaration,
         CommandAst command)
     {
@@ -35,7 +38,48 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return false;
         }
 
+        if (BlockCanRemoveFunctionAfterDeclaration(loopBody, declaration))
+            return false;
+
         return StatementDominatesFollowingCommand(loop, command);
+    }
+
+    private bool TryStatementCanRemoveFunction(
+        TryStatementAst tryStatement,
+        FunctionDefinitionAst declaration)
+    {
+        return TryBodyAlwaysThrowsAfterDeclaration(tryStatement.Body, declaration) &&
+               tryStatement.CatchClauses.Any(catchClause =>
+                   BlockCanRemoveFunctionAfterDeclaration(catchClause.Body, declaration)) ||
+               tryStatement.Finally is not null &&
+               BlockCanRemoveFunctionAfterDeclaration(tryStatement.Finally, declaration);
+    }
+
+    private static bool TryBodyAlwaysThrowsAfterDeclaration(
+        StatementBlockAst block,
+        FunctionDefinitionAst declaration)
+    {
+        return block.Statements
+            .Where(statement => statement.Extent.StartOffset >= declaration.Extent.EndOffset)
+            .FirstOrDefault(statement => statement is not FunctionDefinitionAst && statement is not TrapStatementAst)
+            is ThrowStatementAst;
+    }
+
+    private bool BlockCanRemoveFunctionAfterDeclaration(
+        StatementBlockAst block,
+        FunctionDefinitionAst declaration)
+    {
+        var functionName = NormalizeDeclaredFunctionName(declaration.Name);
+        if (!_functionRemovalsByName.TryGetValue(functionName, out var removals))
+            return false;
+
+        return removals.Any(removal =>
+            removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
+            removal.Parent is PipelineAst pipeline &&
+            ReferenceEquals(pipeline.Parent, block) &&
+            block.Statements
+                .Where(statement => statement.Extent.EndOffset <= removal.Extent.StartOffset)
+                .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst));
     }
 
     private static bool DeclarationDominatesBlockExit(

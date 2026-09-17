@@ -127,6 +127,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             foreach (var declaration in _functionDeclarationsByName[normalizedInvocationName])
             {
                 if (declaration.Extent.EndOffset > invocation.Extent.StartOffset ||
+                    !IsDeclarationQualifierVisibleAtCommand(declaration, invocation) ||
                     !TryGetPotentialDeclarationContext(
                         declaration,
                         out var declarationScope,
@@ -209,7 +210,10 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             // Unresolved binding is treated as escaping rather than assuming same-runspace execution.
         }
 
-        return false;
+        return !invocation.CommandElements.OfType<CommandParameterAst>().Any() &&
+               invocation.CommandElements
+                   .OfType<ScriptBlockExpressionAst>()
+                   .Count(expression => ReferenceEquals(expression, scriptBlockExpression)) == 1;
     }
 
     private static bool ContainsAst(object? value, Ast target)
@@ -287,7 +291,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         var rawCommandName = command.GetCommandName();
         var commandName = NormalizeInvocationName(rawCommandName);
-        return !IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName);
+        return TryGetBoundSwitchValue(command, "WhatIf") != true &&
+               !IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName);
     }
 
     private IReadOnlyDictionary<string, CommandAst[]> FindAliasRemovalCommands(ScriptBlockAst root)
@@ -513,9 +518,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (aliasScope is null)
             return false;
 
-        var authoredScope = TryGetAuthoredAliasScope(aliasDeclaration);
-        if (string.Equals(authoredScope, "Script", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(authoredScope, "Global", StringComparison.OrdinalIgnoreCase))
+        if (HasRootAliasScope(aliasDeclaration))
         {
             if (!IsExplicitAliasDeclarationActive(
                     aliasDeclaration,
@@ -562,15 +565,27 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             removal.Extent.StartOffset >= aliasDeclaration.Extent.EndOffset &&
             removal.Extent.EndOffset <= executionOffset &&
             ReferenceEquals(FindEffectiveCommandScope(removal), aliasScope) &&
-            (IsGuaranteedCommandInScope(removal, aliasScope) ||
+            (HasRootAliasScope(removal)
+                ? IsExplicitAliasDeclarationActive(removal, executionOffset)
+                : IsGuaranteedCommandInScope(removal, aliasScope) ||
              CommandDominatesCommandInEffectiveScope(removal, invocation, aliasScope)));
     }
 
     private ScriptBlockAst? FindEffectiveCommandScope(CommandAst command)
     {
+        if (HasRootAliasScope(command))
+            return _root;
+
         return TryGetEffectiveCommandBoundary(command, out var scope, out _)
             ? scope
             : null;
+    }
+
+    private static bool HasRootAliasScope(CommandAst command)
+    {
+        var authoredScope = TryGetAuthoredAliasScope(command);
+        return string.Equals(authoredScope, "Script", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(authoredScope, "Global", StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsGuaranteedCommandInScope(CommandAst command, ScriptBlockAst scope)
@@ -671,7 +686,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         var installer = FindContainingFunction(aliasDeclaration);
         if (installer is null)
             return true;
-        if (!IsGuaranteedFunctionBodyInvocation(aliasDeclaration, installer))
+        if (!IsDirectFunctionBodyCommand(aliasDeclaration, installer))
             return false;
 
         var graph = GetExecutionGraph(_root);
@@ -683,6 +698,15 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 installer,
                 graph,
                 requireGuaranteedPath: true));
+    }
+
+    private static bool IsDirectFunctionBodyCommand(
+        CommandAst command,
+        FunctionDefinitionAst function)
+    {
+        return command.Parent is PipelineAst pipeline &&
+               pipeline.Parent is NamedBlockAst block &&
+               ReferenceEquals(block.Parent, function.Body);
     }
 
     private static bool HasTrustedModuleQualification(string? rawInvocationName, string normalizedInvocationName)
