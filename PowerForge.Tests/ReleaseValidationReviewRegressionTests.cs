@@ -103,7 +103,7 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
     }
 
     [ReleaseValidationLinuxFact]
-    public async Task Inherited_pipe_drain_observes_timeout_after_parent_exit()
+    public async Task Parent_exit_terminates_pipe_holding_descendant_before_output_drain()
     {
         var pidFile = Path.Combine(_root, "child.pid");
         var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -116,8 +116,8 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
             await exited.Task.WaitAsync(TimeSpan.FromSeconds(2));
             var result = await run.WaitAsync(TimeSpan.FromSeconds(3));
 
-            Assert.True(result.TimedOut);
-            Assert.False(result.Succeeded);
+            Assert.True(result.Succeeded, result.StdErr);
+            Assert.False(result.TimedOut);
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(3), $"Drain took {stopwatch.Elapsed}.");
             Assert.True(File.Exists(pidFile));
             await OwnedProcessLifetimeTests.AssertChildStoppedAsync(pidFile);
@@ -128,7 +128,7 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
     [ReleaseValidationLinuxTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Inherited_pipe_drain_observes_caller_cancellation(bool throughReleaseCommand)
+    public async Task Live_parent_observes_caller_cancellation(bool throughReleaseCommand)
     {
         var pidFile = Path.Combine(_root, "child.pid");
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
@@ -139,7 +139,7 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
             {
                 var command = new ReleaseCommandValidation
                 {
-                    FileName = "/bin/sh", WorkingDirectory = _root, Arguments = ShellArguments,
+                    FileName = "/bin/sh", WorkingDirectory = _root, Arguments = ForegroundShellArguments,
                     TimeoutSeconds = 20, Environment = new() { ["CHILD_PID_FILE"] = pidFile }
                 };
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -147,10 +147,12 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
             }
             else
             {
-                var result = await new ProcessRunner(ownProcessTree: true).RunAsync(ShellRequest(pidFile, TimeSpan.FromSeconds(20)), cancellation.Token)
+                var result = await new ProcessRunner(ownProcessTree: true).RunAsync(
+                        ShellRequest(pidFile, TimeSpan.FromSeconds(20), waitForChild: true), cancellation.Token)
                     .WaitAsync(TimeSpan.FromSeconds(3));
                 Assert.True(cancellation.IsCancellationRequested);
                 Assert.False(result.TimedOut);
+                Assert.Equal(130, result.ExitCode);
             }
             Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(3), $"Cancellation took {stopwatch.Elapsed}.");
             Assert.True(File.Exists(pidFile));
@@ -159,8 +161,10 @@ public sealed class ReleaseValidationReviewRegressionTests : IDisposable
         finally { await KillChildAsync(pidFile); }
     }
 
-    private static string[] ShellArguments => ["-c", "sleep 10 & echo $! > \"$CHILD_PID_FILE\""];
-    private ProcessRunRequest ShellRequest(string pidFile, TimeSpan timeout) => new("/bin/sh", _root, ShellArguments,
+    private static string[] ParentExitShellArguments => ["-c", "sleep 10 & echo $! > \"$CHILD_PID_FILE\""];
+    private static string[] ForegroundShellArguments => ["-c", "sleep 10 & child=$!; echo $child > \"$CHILD_PID_FILE\"; wait $child"];
+    private ProcessRunRequest ShellRequest(string pidFile, TimeSpan timeout, bool waitForChild = false) => new(
+        "/bin/sh", _root, waitForChild ? ForegroundShellArguments : ParentExitShellArguments,
         timeout, new Dictionary<string, string?> { ["CHILD_PID_FILE"] = pidFile });
 
     private static async Task KillChildAsync(string pidFile)

@@ -37,24 +37,19 @@ public sealed class OwnedProcessLifetimeTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task Timeout_and_cancellation_terminate_descendants_before_and_after_parent_exit(bool parentExits, bool cancel)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Timeout_and_cancellation_terminate_descendants_while_parent_is_running(bool cancel)
     {
         var pidFile = Path.Combine(_root, "child.pid");
         using var cancellation = new CancellationTokenSource();
-        var parentExit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var request = ChildRequest(pidFile, parentExits, capture: true, cancel ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(5));
-        request.SetCompletionBoundary(_ => parentExit.TrySetResult());
+        var request = ChildRequest(pidFile, parentExits: false, capture: true, cancel ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(5));
         var watch = Stopwatch.StartNew();
         try
         {
             var run = new ProcessRunner(ownProcessTree: true).RunAsync(request, cancellation.Token);
             await WaitForPidAsync(pidFile);
-            if (parentExits) await parentExit.Task.WaitAsync(TimeSpan.FromSeconds(4));
-            Assert.False(run.IsCompleted, "The live child must retain the redirected pipe until the lifetime boundary.");
+            Assert.False(run.IsCompleted, "The foreground process must remain active until its lifetime boundary.");
             if (cancel) cancellation.Cancel();
             var result = await run.WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -62,6 +57,25 @@ public sealed class OwnedProcessLifetimeTests : IDisposable
             Assert.False(result.Succeeded);
             Assert.Equal(cancel ? 130 : 124, result.ExitCode);
             Assert.True(watch.Elapsed < TimeSpan.FromSeconds(12), $"Owned execution took {watch.Elapsed}.");
+            await AssertChildStoppedAsync(pidFile);
+        }
+        finally { await CleanupChildAsync(pidFile); }
+    }
+
+    [Fact]
+    public async Task Successful_parent_exit_terminates_pipe_holding_descendant_before_output_drain()
+    {
+        var pidFile = Path.Combine(_root, "child.pid");
+        try
+        {
+            var watch = Stopwatch.StartNew();
+            var result = await new ProcessRunner(ownProcessTree: true)
+                .RunAsync(ChildRequest(pidFile, parentExits: true, capture: true, TimeSpan.FromSeconds(20)))
+                .WaitAsync(TimeSpan.FromSeconds(8));
+
+            Assert.True(result.Succeeded, result.StdErr);
+            Assert.False(result.TimedOut);
+            Assert.True(watch.Elapsed < TimeSpan.FromSeconds(8), $"Owned execution took {watch.Elapsed}.");
             await AssertChildStoppedAsync(pidFile);
         }
         finally { await CleanupChildAsync(pidFile); }

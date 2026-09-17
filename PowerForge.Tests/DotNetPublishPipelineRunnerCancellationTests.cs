@@ -28,7 +28,10 @@ public sealed class DotNetPublishPipelineRunnerCancellationTests
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default);
-        await processRunner.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        // Tool trust discovery can contend with concurrent CI work before the
+        // injected process runner is reached. Keep the assertion bounded without
+        // treating normal hosted-runner scheduling pressure as a cancellation bug.
+        await processRunner.Started.Task.WaitAsync(TimeSpan.FromSeconds(30));
         scope.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);

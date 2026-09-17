@@ -428,6 +428,13 @@ public sealed partial class ProcessRunner : IProcessRunner
                 timedOut);
             request.InvokeCompletionBoundary(boundaryResult);
 
+            // An owned launch is a bounded foreground operation. Once its original
+            // process exits, terminate any descendants before draining redirected
+            // output so an inherited pipe cannot turn a successful command into a
+            // timeout. General-purpose runners deliberately retain the old behavior.
+            if (_ownProcessTree && process.HasExited)
+                TryKill(process);
+
             if (!await WaitForOutputDrainAsync(stdoutCapture.Completion, stderrCapture.Completion, request.Timeout, stopwatch.Elapsed,
                 cancellationToken).ConfigureAwait(false))
             {
