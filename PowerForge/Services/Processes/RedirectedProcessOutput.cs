@@ -25,9 +25,14 @@ internal sealed partial class RedirectedProcessOutput
         var encoding = reader.CurrentEncoding;
         // Pipe operations can complete synchronously on Unix. Arm them away from the
         // caller so a continuous writer cannot prevent the process deadline from starting.
-        var thread = new Thread(() => { _ = capture.ReadAsync(stream, encoding, lineReceived, completion); })
+        // Do not return until the first read has been armed: a short-lived parent can exit
+        // before this background thread is scheduled while a descendant keeps the pipe open.
+        using var readerArmed = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+            { _ = capture.ReadAsync(stream, encoding, lineReceived, completion, readerArmed.Set); })
         { IsBackground = true, Name = "PowerForge redirected output reader" };
         thread.Start();
+        readerArmed.Wait();
         return capture;
     }
 
@@ -45,19 +50,33 @@ internal sealed partial class RedirectedProcessOutput
         await Completion.ConfigureAwait(false);
     }
 
-    private async Task ReadAsync(Stream stream, Encoding encoding, Action<string>? lineReceived, TaskCompletionSource<object?> completion)
+    private async Task ReadAsync(
+        Stream stream,
+        Encoding encoding,
+        Action<string>? lineReceived,
+        TaskCompletionSource<object?> completion,
+        Action readerArmed)
     {
         var bytes = new byte[4096];
         var chars = new char[Math.Max(encoding.GetMaxCharCount(bytes.Length + 4), (bytes.Length + 4) * 2)];
         var decoder = new ProcessOutputDecoder(encoding);
         var line = lineReceived is null ? null : new StringBuilder();
         var previousCarriageReturn = false;
+        var armed = false;
         Exception? failure = null;
         try
         {
             int read;
-            while ((read = await ReadChunkAsync(stream, bytes, _readCancellation.Token).ConfigureAwait(false)) > 0)
+            while (true)
             {
+                var pendingRead = ReadChunkAsync(stream, bytes, _readCancellation.Token);
+                if (!armed)
+                {
+                    armed = true;
+                    readerArmed();
+                }
+                read = await pendingRead.ConfigureAwait(false);
+                if (read <= 0) break;
                 var count = decoder.Decode(bytes, read, chars, flush: false);
                 Append(chars, count, line, lineReceived, ref previousCarriageReturn);
             }
@@ -71,6 +90,7 @@ internal sealed partial class RedirectedProcessOutput
         catch (Exception exception) { failure = exception; }
         finally
         {
+            if (!armed) readerArmed();
             if (line is { Length: > 0 }) Notify(lineReceived, line.ToString());
             _readCancellation.Dispose();
             if (failure is null) completion.TrySetResult(null);
