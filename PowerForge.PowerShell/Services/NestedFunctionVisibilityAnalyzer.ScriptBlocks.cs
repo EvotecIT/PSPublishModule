@@ -228,10 +228,20 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         var rawName = invocation.GetCommandName();
         var invocationName = NormalizeInvocationName(rawName);
-        if (!string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase) ||
-            !HasTrustedModuleQualification(rawName, invocationName) ||
+        if (!HasTrustedModuleQualification(rawName, invocationName) ||
             IsPotentiallyShadowedByScriptFunction(invocation, rawName, invocationName) ||
-            HasUnresolvedSplat(invocation) ||
+            HasUnresolvedSplat(invocation))
+        {
+            return false;
+        }
+
+        if (string.Equals(invocationName, "ForEach-Object", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryHasAnyBoundParameter(invocation, "Parallel") == false &&
+                   IsScriptBlockBoundToAnyParameter(invocation, expression, "Begin");
+        }
+
+        if (!string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase) ||
             !IsScriptBlockBoundToAnyParameter(invocation, expression, "ScriptBlock"))
         {
             return false;
@@ -258,6 +268,40 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 group => group.Key,
                 group => group.Select(item => item.Command).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyDictionary<string, CommandAst[]> FindFunctionRemovalCommands(ScriptBlockAst root)
+    {
+        return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .SelectMany(command => TryGetRemovedFunctionNames(command)
+                .Select(name => new { Command = command, Name = name }))
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(item => item.Command).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> TryGetRemovedFunctionNames(CommandAst command)
+    {
+        var commandName = NormalizeInvocationName(command.GetCommandName());
+        if (!string.Equals(commandName, "Remove-Item", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "Clear-Item", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "ri", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "rm", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "del", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "erase", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "cli", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        foreach (var argument in command.CommandElements.Skip(1).OfType<StringConstantExpressionAst>())
+        {
+            if (TryGetFunctionProviderName(argument.Value, out var functionName))
+                yield return NormalizeDeclaredFunctionName(functionName);
+        }
     }
 
     private static string? TryGetAuthoredAliasName(CommandAst command)

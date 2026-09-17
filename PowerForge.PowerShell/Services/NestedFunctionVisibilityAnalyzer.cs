@@ -17,6 +17,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     private readonly Dictionary<FunctionDefinitionAst, bool> _deferredFunctionEscapeCache = new();
     private readonly HashSet<CommandAst> _shadowResolutionInProgress = new();
     private readonly IReadOnlyDictionary<string, CommandAst[]> _aliasDeclarationsByName;
+    private readonly IReadOnlyDictionary<string, CommandAst[]> _functionRemovalsByName;
 
     internal NestedFunctionVisibilityAnalyzer(
         ScriptBlockAst root,
@@ -24,6 +25,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         _functionDeclarationsByName = functionDeclarationsByName;
         _aliasDeclarationsByName = FindAuthoredAliasDeclarations(root);
+        _functionRemovalsByName = FindFunctionRemovalCommands(root);
     }
 
     internal static string NormalizeDeclaredFunctionName(string name)
@@ -51,6 +53,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         foreach (var declaration in declarations)
         {
+            if (!IsDeclarationQualifierVisibleAtCommand(declaration, command))
+                continue;
+            if (IsRemovedBeforeCommand(declaration, command))
+                continue;
+
             if (IsDominatingDeclarationInContainingStatementBlock(declaration, command) ||
                 IsPromotedDeclarationDominatingCommand(declaration, command) ||
                 DeclarationDominatesFinallyCall(declaration, command))
@@ -84,6 +91,32 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return false;
+    }
+
+    private bool IsRemovedBeforeCommand(FunctionDefinitionAst declaration, CommandAst command)
+    {
+        var name = NormalizeDeclaredFunctionName(declaration.Name);
+        if (!_functionRemovalsByName.TryGetValue(name, out var removals) ||
+            !TryGetPotentialDeclarationContext(declaration, out var declarationScope, out _))
+        {
+            return false;
+        }
+
+        return removals.Any(removal =>
+            removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
+            removal.Extent.EndOffset <= command.Extent.StartOffset &&
+            ReferenceEquals(FindContainingScriptBlock(removal), declarationScope));
+    }
+
+    private bool IsDeclarationQualifierVisibleAtCommand(
+        FunctionDefinitionAst declaration,
+        CommandAst command)
+    {
+        if (!declaration.Name.StartsWith("private:", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return TryGetPotentialDeclarationContext(declaration, out var declarationScope, out _) &&
+               ReferenceEquals(declarationScope, FindContainingScriptBlock(command));
     }
 
     private bool IsInvokedBeforeDeclarationCached(
@@ -440,34 +473,57 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             return;
         }
 
-        var invocationName = ResolveInvocationName(invocation, invocationOffset);
-        if (string.IsNullOrWhiteSpace(invocationName) ||
-            !functionsByName.TryGetValue(invocationName!, out var namedCandidates))
+        foreach (var invocationName in ResolveInvocationNames(invocation, invocationOffset))
         {
-            return;
-        }
+            if (string.IsNullOrWhiteSpace(invocationName) ||
+                !functionsByName.TryGetValue(invocationName, out var namedCandidates))
+            {
+                continue;
+            }
 
-        EnqueueCandidates(invocation.Command, invocationOffset, namedCandidates, declarationScope, queue);
+            EnqueueCandidates(invocation.Command, invocationOffset, namedCandidates, declarationScope, queue);
+        }
     }
 
-    private string? ResolveInvocationName(InvocationSite invocation, int executionOffset)
+    private IReadOnlyCollection<string> ResolveInvocationNames(InvocationSite invocation, int executionOffset)
     {
         var invocationName = invocation.Name;
         if (string.IsNullOrWhiteSpace(invocationName))
-            return invocationName;
+            return Array.Empty<string>();
 
         var normalizedAliasName = NormalizeInvocationName(invocationName);
         if (!_aliasDeclarationsByName.TryGetValue(normalizedAliasName, out var declarations))
-            return invocationName;
+            return new[] { invocationName! };
 
-        var declaration = declarations
+        var eligible = declarations
             .Where(alias => AliasCanShadowInvocation(alias, invocation.Command, executionOffset))
+            .OrderBy(alias => alias.Extent.EndOffset)
+            .ToArray();
+        var latestUnconditional = eligible
+            .Where(IsUnconditionalAliasDeclaration)
             .OrderByDescending(alias => alias.Extent.EndOffset)
             .FirstOrDefault();
-        var target = declaration is null ? null : TryGetAuthoredAliasTarget(declaration);
-        return string.IsNullOrWhiteSpace(target)
-            ? invocationName
-            : NormalizeDeclaredFunctionName(target!);
+        var possibleDeclarations = latestUnconditional is null
+            ? eligible
+            : eligible.Where(alias => alias.Extent.EndOffset >= latestUnconditional.Extent.EndOffset);
+        var names = possibleDeclarations
+            .Select(TryGetAuthoredAliasTarget)
+            .Where(target => !string.IsNullOrWhiteSpace(target))
+            .Select(target => NormalizeDeclaredFunctionName(target!))
+            .ToList();
+        if (latestUnconditional is null)
+            names.Add(invocationName!);
+
+        return names.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static bool IsUnconditionalAliasDeclaration(CommandAst declaration)
+    {
+        var declarationScope = FindContainingScriptBlock(declaration);
+        return declarationScope is not null &&
+               declaration.Parent is PipelineAst pipeline &&
+               pipeline.Parent is NamedBlockAst block &&
+               ReferenceEquals(block.Parent, declarationScope);
     }
 
     private void EnqueueCandidates(
@@ -556,7 +612,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             ? variable.VariablePath.UserPath
             : null;
         if (ast is CommandAst command && IsFunctionLookupCommand(command, function.Name))
-            return true;
+            return !IsDiscardedLookupResult(command);
 
         if (!TryGetFunctionProviderName(providerPath, out var functionName) ||
             !string.Equals(functionName, function.Name, StringComparison.OrdinalIgnoreCase))
@@ -573,6 +629,29 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return true;
+    }
+
+    private static bool IsDiscardedLookupResult(CommandAst command)
+    {
+        if (command.Parent is not PipelineAst pipeline)
+            return false;
+
+        if (pipeline.Parent is AssignmentStatementAst assignment &&
+            assignment.Left is VariableExpressionAst variable &&
+            string.Equals(variable.VariablePath.UserPath, "null", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var commandIndex = pipeline.PipelineElements
+            .Select((element, index) => new { element, index })
+            .FirstOrDefault(item => ReferenceEquals(item.element, command))
+            ?.index ?? -1;
+        return commandIndex >= 0 && pipeline.PipelineElements
+            .Skip(commandIndex + 1)
+            .OfType<CommandAst>()
+            .Any(consumer =>
+                string.Equals(consumer.GetCommandName(), "Out-Null", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsFunctionLookupCommand(CommandAst command, string functionName)
@@ -767,10 +846,36 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         {
             Command = command;
             Trap = trap;
-            Name = command.GetCommandName();
-            IsDynamic = string.IsNullOrWhiteSpace(Name) &&
-                        command.CommandElements.Count > 0 &&
-                        command.CommandElements[0] is not ScriptBlockExpressionAst;
+            var commandName = command.GetCommandName();
+            if (string.Equals(NormalizeInvocationName(commandName), "Invoke-Expression", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(commandName, "iex", StringComparison.OrdinalIgnoreCase))
+            {
+                Name = TryGetInvokeExpressionTarget(command);
+                IsDynamic = string.IsNullOrWhiteSpace(Name);
+            }
+            else
+            {
+                Name = commandName;
+                IsDynamic = string.IsNullOrWhiteSpace(Name) &&
+                            command.CommandElements.Count > 0 &&
+                            command.CommandElements[0] is not ScriptBlockExpressionAst;
+            }
+        }
+
+        private static string? TryGetInvokeExpressionTarget(CommandAst command)
+        {
+            var arguments = command.CommandElements.Skip(1).ToArray();
+            if (arguments.Length != 1 || arguments[0] is not StringConstantExpressionAst literal)
+                return null;
+
+            var parsed = Parser.ParseInput(literal.Value, out _, out var errors);
+            if (errors.Length > 0)
+                return null;
+
+            var commands = parsed.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
+                .Cast<CommandAst>()
+                .ToArray();
+            return commands.Length == 1 ? commands[0].GetCommandName() : null;
         }
 
         internal CommandAst Command { get; }
