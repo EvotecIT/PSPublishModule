@@ -1031,7 +1031,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 stderrCapture = RedirectedProcessOutput.Start(p.StandardError);
                 exited = p.WaitForExit(ToTimeoutMilliseconds(timeout.Value));
                 if (!exited) TryKillProcessTree(p);
-                DrainRedirectedOutputReads(stdoutCapture, stderrCapture, TimeSpan.FromMilliseconds(500));
+                // A short-lived parent can exit while an inherited pipe remains open in a
+                // descendant. Give an already-armed reader enough time to drain the parent's
+                // final chunk under loaded CI hosts before cancelling the inherited handle.
+                DrainRedirectedOutputReads(stdoutCapture, stderrCapture, TimeSpan.FromSeconds(1));
                 completed = true;
             }
             finally
