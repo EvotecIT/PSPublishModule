@@ -9,6 +9,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
+        if (capture.CapturesStableScalarVector)
+        {
+            EmitStableScalarVectorCapture(builder, capture, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            return;
+        }
         if (capture.NativeTarget is not null)
         {
             // The native owner reads a compound destination before evaluating the
@@ -66,5 +71,35 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (capture.NativeTarget is not null)
             builder.Append(new string(' ', (indent - 1) * 4)).Append('}')
                 .Append(EmitNativeAssignmentLocation(capture.NativeTarget)).AppendLine(";");
+    }
+
+    private void EmitStableScalarVectorCapture(
+        StringBuilder builder,
+        PowerShellLoweredOutputCaptureStatement capture,
+        int indent,
+        Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+    {
+        var target = capture.Target ?? throw new InvalidOperationException("A stable vector capture requires a local target.");
+        var elementType = capture.CapturedElementType ??
+            throw new InvalidOperationException("A stable vector capture requires an element type.");
+        var prefix = new string(' ', indent * 4);
+        var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(elementType);
+        var targetTypeName = elementTypeName + "[]";
+        if (capture.DeclareTarget)
+            builder.Append(prefix).Append(targetTypeName).Append(' ').Append(RenderStorage(target)).AppendLine(" = default!;");
+        builder.Append(prefix).Append("var ").Append(capture.RecordsTemporary)
+            .Append(" = new global::System.Collections.Generic.List<").Append(elementTypeName).AppendLine(">();");
+        var record = getTemporaryIdentifier("capturedVectorRecord");
+        builder.Append(prefix).Append("global::System.Action<object?> ").Append(capture.SinkTemporary)
+            .Append(" = ").Append(record).Append(" => { if (!global::System.Object.ReferenceEquals(")
+            .Append(record).Append(", global::System.Management.Automation.Internal.AutomationNull.Value)) ")
+            .Append(capture.RecordsTemporary).Append(".Add((").Append(elementTypeName).Append(')')
+            .Append(record).AppendLine("!); };");
+        foreach (var statement in capture.Statements)
+            EmitStatement(builder, statement, indent, getTemporaryIdentifier, discardHelper, sourceMap, capture.SinkTemporary);
+        builder.Append(prefix).Append(RenderStorage(target)).Append(" = ")
+            .Append(capture.RecordsTemporary).AppendLine(".ToArray();");
     }
 }

@@ -43,7 +43,8 @@ internal sealed class PowerShellStatementErrorCallPass : IPowerShellSemanticPass
                 // separately resumable statement. Preserve inner body boundaries
                 // without inserting an error handler that would complete the RHS.
                 var rewritten = statement is PowerShellBoundOutputCaptureStatement capture
-                    ? new PowerShellBoundOutputCaptureStatement(capture.Span, capture.Target, RewriteBlock(capture.Body, true), capture.NativeTarget, capture.Operation)
+                    ? new PowerShellBoundOutputCaptureStatement(capture.Span, capture.Target, RewriteBlock(capture.Body, true),
+                        capture.NativeTarget, capture.Operation, capture.Kind, capture.CapturedElementType)
                     : PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement, nested => RewriteBlock(nested));
                 // The native host invokes exactly one clause. Its compiler-owned dispatcher is
                 // not an authored statement and must not process a propagating error a second time.

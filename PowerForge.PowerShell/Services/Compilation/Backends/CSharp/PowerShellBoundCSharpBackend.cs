@@ -175,14 +175,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink = null)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).Append("#line ")
             .Append(statement.Span.StartLine.ToString(CultureInfo.InvariantCulture))
             .Append(" \"").Append(statement.Span.DocumentId).AppendLine("\"");
         var start = PowerShellGeneratedSourcePosition.Get(builder);
-        EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+        EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         var end = PowerShellGeneratedSourcePosition.Get(builder);
         builder.Append(prefix).AppendLine("#line default");
         sourceMap.Add(new PowerShellCompilationSourceMapEntry(
@@ -202,7 +203,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         switch (statement)
@@ -263,7 +265,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append(EmitExpression(expression.Expression)).AppendLine(";");
                 return;
             case PowerShellLoweredStreamWriteStatement stream:
-                EmitProviderStreamWrite(builder, stream, prefix, getTemporaryIdentifier);
+                EmitProviderStreamWrite(builder, stream, prefix, getTemporaryIdentifier, successOutputSink);
                 return;
             case PowerShellLoweredCommandRegionStatement region:
                 EmitCommandRegion(builder, region, prefix);
@@ -276,24 +278,28 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 {
                     var clause = conditional.Clauses[index];
                     builder.Append(prefix).Append(index == 0 ? "if (" : "else if (").Append(EmitExpression(clause.Condition)).AppendLine(")");
-                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        successOutputSink: successOutputSink);
                 }
                 if (conditional.ElseStatements is not null)
                 {
                     builder.Append(prefix).AppendLine("else");
-                    EmitBlock(builder, conditional.ElseStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, conditional.ElseStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        successOutputSink: successOutputSink);
                 }
                 return;
             case PowerShellLoweredWhileStatement loop:
                 if (loop.Kind == PowerShellLoweredLoopKind.While)
                 {
                     builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
-                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap, loop.CheckHostInterrupts);
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        loop.CheckHostInterrupts, successOutputSink);
                 }
                 else
                 {
                     builder.Append(prefix).AppendLine("do");
-                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap, loop.CheckHostInterrupts);
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        loop.CheckHostInterrupts, successOutputSink);
                     builder.Append(prefix).Append("while (");
                     if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append("!(");
                     builder.Append(EmitExpression(loop.Condition));
@@ -308,13 +314,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 var condition = loop.Condition is null ? "true" : EmitExpression(loop.Condition);
                 var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap, loop.CheckHostInterrupts);
+                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                    loop.CheckHostInterrupts, successOutputSink);
                 return;
             case PowerShellLoweredForEachStatement loop:
-                EmitForEach(builder, loop, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitForEach(builder, loop, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
                 return;
             case PowerShellLoweredSwitchStatement switchStatement:
-                EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
                 return;
             case PowerShellLoweredThrowStatement { Expression: null, PreserveStatementErrors: true } thrown:
                 builder.Append(prefix).Append("throw __statementErrors.PrepareRethrow(")
@@ -337,20 +344,22 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append("throw ").Append(EmitExpression(thrown.Expression!)).AppendLine(";");
                 return;
             case PowerShellLoweredStatementErrorBoundary boundary:
-                EmitStatementErrorBoundary(builder, boundary, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitStatementErrorBoundary(builder, boundary, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
                 return;
             case PowerShellLoweredTryStatement { PreserveStatementErrors: true } attempted:
-                EmitNativeTry(builder, attempted, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitNativeTry(builder, attempted, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
                 return;
             case PowerShellLoweredTryStatement tryStatement:
                 builder.Append(prefix).AppendLine("try");
-                EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                    successOutputSink: successOutputSink);
                 foreach (var clause in tryStatement.Catches)
                 {
                     if (clause.ExceptionTypes.Length == 0 && !clause.ExcludePowerShellControlFlow)
                     {
                         builder.Append(prefix).AppendLine("catch (global::System.Exception)");
-                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                            successOutputSink: successOutputSink);
                         continue;
                     }
                     var effectiveException = clause.UnwrapPowerShellRuntimeException
@@ -368,12 +377,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
                             $"{clause.ExceptionTemporary} is not global::System.Management.Automation.FlowControlException && ({filter})";
                     builder.Append(prefix).Append("catch (global::System.Exception ")
                         .Append(clause.ExceptionTemporary).Append(") when (").Append(filter).AppendLine(")");
-                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        successOutputSink: successOutputSink);
                 }
                 if (tryStatement.FinallyStatements is not null)
                 {
                     builder.Append(prefix).AppendLine("finally");
-                    EmitBlock(builder, tryStatement.FinallyStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, tryStatement.FinallyStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        successOutputSink: successOutputSink);
                 }
                 return;
             case PowerShellLoweredBreakStatement:

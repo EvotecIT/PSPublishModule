@@ -136,6 +136,10 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
                 var loopState = assigned.ToHashSet(StringComparer.Ordinal);
                 loopState.Add(forEachLoop.Variable.StableKey);
                 Analyze(forEachLoop.Body, loopState, locals, diagnostics);
+                if (forEachLoop.EnumerationKind == PowerShellForEachEnumerationKind.StableScalar &&
+                    forEachLoop.ElementType.IsValueType &&
+                    Nullable.GetUnderlyingType(forEachLoop.ElementType) is null)
+                    assigned.Add(forEachLoop.Variable.StableKey);
                 continue;
             }
             if (statement is PowerShellBoundSwitchStatement switchStatement)

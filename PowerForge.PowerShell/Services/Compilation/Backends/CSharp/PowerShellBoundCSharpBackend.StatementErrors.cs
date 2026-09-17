@@ -8,13 +8,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private void EmitNativeTry(StringBuilder builder, PowerShellLoweredTryStatement attempted, int indent,
         Func<string, string> getTemporaryIdentifier, string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("try");
         builder.Append(prefix).AppendLine("{");
         builder.Append(prefix).AppendLine("    using (__statementErrors.EnterHandler())");
-        EmitBlock(builder, attempted.Statements, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+        EmitBlock(builder, attempted.Statements, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap,
+            successOutputSink: successOutputSink);
         builder.Append(prefix).AppendLine("}");
         if (attempted.Catches.Length != 0)
         {
@@ -50,7 +51,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             {
                 builder.Append(prefix).Append(index == 0 ? "    if (" : "    else if (")
                     .Append(attempted.ClauseTemporary).Append(" == ").Append(index).AppendLine(")");
-                EmitBlock(builder, attempted.Catches[index].Statements, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitBlock(builder, attempted.Catches[index].Statements, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap,
+                    successOutputSink: successOutputSink);
             }
             builder.Append(prefix).AppendLine("    else { throw; }");
             builder.Append(prefix).AppendLine("    }");
@@ -61,14 +63,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).AppendLine("finally");
             builder.Append(prefix).AppendLine("{");
             builder.Append(prefix).AppendLine("    using (__statementErrors.EnterFinally())");
-            EmitBlock(builder, attempted.FinallyStatements.Value, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitBlock(builder, attempted.FinallyStatements.Value, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap,
+                successOutputSink: successOutputSink);
             builder.Append(prefix).AppendLine("}");
         }
     }
 
     private void EmitStatementErrorBoundary(StringBuilder builder, PowerShellLoweredStatementErrorBoundary boundary,
         int indent, Func<string, string> getTemporaryIdentifier, string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("try");
@@ -80,7 +83,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(boundary.Span.EndLine).Append(", ").Append(boundary.Span.EndColumn).Append(", ")
                 .Append(PowerShellCSharpLiteral.QuoteString(boundary.SourceText)).AppendLine(");");
         foreach (var statement in boundary.Statements)
-            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         if (boundary.NativeSuccessStatus is { } success)
             builder.Append(prefix).Append("    __nativeFunction.SetExecutionStatus(").Append(success ? "true" : "false").AppendLine(");");
         builder.Append(prefix).AppendLine("}");

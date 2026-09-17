@@ -68,7 +68,9 @@ internal static class PowerShellLoweredPrimitiveErrorPolicy
         if (binary.Left.ClrType == typeof(int) && binary.Right.ClrType == typeof(int))
             return binary.Operation is PowerShellBoundBinaryOperator.Equal or PowerShellBoundBinaryOperator.NotEqual or
                 PowerShellBoundBinaryOperator.LessThan or PowerShellBoundBinaryOperator.LessThanOrEqual or
-                PowerShellBoundBinaryOperator.GreaterThan or PowerShellBoundBinaryOperator.GreaterThanOrEqual;
+                PowerShellBoundBinaryOperator.GreaterThan or PowerShellBoundBinaryOperator.GreaterThanOrEqual or
+                PowerShellBoundBinaryOperator.BitwiseAnd or PowerShellBoundBinaryOperator.BitwiseOr or
+                PowerShellBoundBinaryOperator.BitwiseExclusiveOr;
         return binary.Left.ClrType == typeof(bool) && binary.Right.ClrType == typeof(bool) &&
             binary.Operation is PowerShellBoundBinaryOperator.Equal or PowerShellBoundBinaryOperator.NotEqual or
                 PowerShellBoundBinaryOperator.LogicalAnd or PowerShellBoundBinaryOperator.LogicalOr;

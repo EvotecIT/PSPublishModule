@@ -117,6 +117,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool StatementContainsPowerShellStreamWrite(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement { CapturesStableScalarVector: true } => false,
             PowerShellBoundOutputCaptureStatement => true,
             PowerShellBoundStatementErrorBoundary boundary => ContainsPowerShellStreamWrite(boundary.Body),
             PowerShellBoundStreamWriteStatement => true,

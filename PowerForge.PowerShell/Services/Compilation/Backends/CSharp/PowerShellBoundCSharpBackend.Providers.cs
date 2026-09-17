@@ -8,8 +8,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
         StringBuilder builder,
         PowerShellLoweredStreamWriteStatement stream,
         string prefix,
-        Func<string, string> getTemporaryIdentifier)
+        Func<string, string> getTemporaryIdentifier,
+        string? successOutputSink)
     {
+        var successSink = successOutputSink ?? "__writeOutput";
         if (stream.OutputBinding != PowerShellOutputBindingKind.Default)
         {
             var value = getTemporaryIdentifier("outputArgument");
@@ -25,7 +27,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     .Append(prefix).Append("    ").Append(value)
                     .Append(" = new global::System.Collections.Generic.List<object?> { ").Append(value).AppendLine(" };");
             }
-            builder.Append(prefix).Append("__writeOutput(").Append(value).AppendLine(");");
+            builder.Append(prefix).Append(successSink).Append('(').Append(value).AppendLine(");");
             return;
         }
         if (stream.Provider is null)
@@ -40,13 +42,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
             if (stream.UsesNativeInvocation)
             {
                 builder.Append(prefix).Append("__nativeFunction.WriteOutput((object?)")
-                    .Append(EmitExpression(stream.Message)).AppendLine(", __writeOutput);");
+                    .Append(EmitExpression(stream.Message)).Append(", ").Append(successSink).AppendLine(");");
                 return;
             }
             if (stream.UsesCommandHostEnumeration)
             {
                 builder.Append(prefix).Append("__statementErrors.WriteOutput((object?)")
-                    .Append(EmitExpression(stream.Message)).Append(", __writeOutput, ")
+                    .Append(EmitExpression(stream.Message)).Append(", ").Append(successSink).Append(", ")
                     .Append(EmitSourceExtentArguments(stream.Message.Span)).AppendLine(");");
                 return;
             }
@@ -55,15 +57,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 var record = getTemporaryIdentifier("outputRecord");
                 builder.Append(prefix).Append("foreach (var ").Append(record).Append(" in ")
                     .Append(EmitExpression(stream.Message)).AppendLine(")")
-                    .Append(prefix).Append("    __writeOutput((object?)").Append(record).AppendLine(");");
+                    .Append(prefix).Append("    ").Append(successSink).Append("((object?)").Append(record).AppendLine(");");
                 return;
             }
-            builder.Append(prefix).Append("__writeOutput((object?)").Append(EmitExpression(stream.Message)).AppendLine(");");
+            builder.Append(prefix).Append(successSink).Append("((object?)").Append(EmitExpression(stream.Message)).AppendLine(");");
             return;
         }
         var sink = stream.Kind switch
         {
-            PowerShellStreamCommandKind.Success => "__writeOutput",
+            PowerShellStreamCommandKind.Success => successSink,
             PowerShellStreamCommandKind.Verbose => "__writeVerbose",
             PowerShellStreamCommandKind.Debug => "__writeDebug",
             PowerShellStreamCommandKind.Warning => "__writeWarning",

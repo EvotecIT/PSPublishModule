@@ -94,16 +94,51 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 (statement.Capabilities & ~PowerShellLoopInterruptContract.Capabilities(stopping)) != PowerShellRequiredCapability.None)
                 break;
             var candidateLocals = locals.ToList();
-            PowerShellCompiledRegionLocal? newTransfer = null;
+            var newTransfers = new List<PowerShellCompiledRegionLocal>();
             if (statement is PowerShellBoundAssignmentStatement assignment &&
                 !locals.Any(local => local.Symbol.StableKey == assignment.Target.StableKey))
             {
                 if (functionLocals.Any(local => local.Symbol.StableKey == assignment.Target.StableKey &&
                         local.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble))
                     break;
-                if (!TryCreateContinuationLocal(assignment, authoredStatements[binding.AuthoredStatementIndex], out newTransfer))
+                if (!TryCreateContinuationLocal(assignment, authoredStatements[binding.AuthoredStatementIndex], out var newTransfer))
                     break;
                 candidateLocals.Add(new PowerShellBoundLocal(assignment.Target, assignment.Value.Type));
+                newTransfers.Add(newTransfer!);
+            }
+            else if (statement is PowerShellBoundOutputCaptureStatement
+                     {
+                         CapturesStableScalarVector: true,
+                         Target: { } captureTarget,
+                         CapturedVectorType: { } captureType
+                     } capture &&
+                     !locals.Any(local => local.Symbol.StableKey == captureTarget.StableKey))
+            {
+                if (!TryCreateStableVectorCaptureLocal(capture, authoredStatements[binding.AuthoredStatementIndex], out var captureTransfer))
+                    break;
+                candidateLocals.Add(new PowerShellBoundLocal(captureTarget,
+                    new PowerShellTypeFact(captureType, PowerShellTypeFactProvenance.Explicit,
+                        "The authored typed array target owns this closed stable-scalar capture.")));
+                newTransfers.Add(captureTransfer!);
+
+                var captureLoops = PowerShellSemanticAnalyzer.EnumerateStatements(capture.Body)
+                    .OfType<PowerShellBoundForEachStatement>()
+                    .Where(loop => !candidateLocals.Any(local => local.Symbol.StableKey == loop.Variable.StableKey))
+                    .GroupBy(static loop => loop.Variable.StableKey, StringComparer.Ordinal)
+                    .Select(static group => group.First())
+                    .ToArray();
+                foreach (var loop in captureLoops)
+                {
+                    if (!TryCreateStableScalarLoopLocal(loop, out var loopLocal, out var loopTransfer))
+                    {
+                        newTransfers.Clear();
+                        break;
+                    }
+                    candidateLocals.Add(loopLocal!);
+                    newTransfers.Add(loopTransfer!);
+                }
+                if (newTransfers.Count == 0)
+                    break;
             }
             var nested = PowerShellSemanticAnalyzer.EnumerateStatements(
                 new PowerShellBoundBlock(statement.Span, new[] { statement })).ToArray();
@@ -113,7 +148,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 authoredStatements[binding.AuthoredStatementIndex].FindAll(
                     static node => node is AssignmentStatementAst { Left: AttributedExpressionAst },
                     searchNestedScriptBlocks: false).Any(node =>
-                    newTransfer is null || !ReferenceEquals(node, authoredStatements[binding.AuthoredStatementIndex])))
+                    newTransfers.Count == 0 || !ReferenceEquals(node, authoredStatements[binding.AuthoredStatementIndex])))
                 break;
             if (nested.Any(static statement => statement is PowerShellBoundReturnStatement or PowerShellBoundThrowStatement) ||
                 PowerShellBoundRegionOpportunitySelector.EnumerateWrittenSymbols(new[] { statement })
@@ -129,7 +164,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 break;
             selected.Add(statement);
             locals = candidateLocals;
-            if (newTransfer is not null) transfers.Add(newTransfer);
+            transfers.AddRange(newTransfers);
             nextIndex = binding.AuthoredStatementEndIndex + 1;
         }
         if (selected.Count == 0 || locals.Count == 0) return false;
@@ -211,6 +246,65 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             assignment.Value.Type.ClrType.FullName ?? assignment.Value.Type.ClrType.Name, constrained, constraintSyntax,
             PowerShellRegionTransferTypePolicy.Describe(
                 assignment.Value.Type.ClrType,
+                PowerShellRegionTransferDirection.LiveOut,
+                PowerShellRegionTransferOwnership.GuardedFresh,
+                PowerShellRegionTransferMutation.RetainedOnly));
+        return true;
+    }
+
+    private static bool TryCreateStableVectorCaptureLocal(
+        PowerShellBoundOutputCaptureStatement capture,
+        StatementAst authoredStatement,
+        out PowerShellCompiledRegionLocal? transfer)
+    {
+        transfer = null;
+        if (capture.Target is not { Kind: PowerShellSymbolKind.Local } target ||
+            capture.CapturedVectorType is not { } vectorType ||
+            !IsSimpleVariableName(target.Name) ||
+            !PowerShellRegionTransferTypePolicy.IsSupported(vectorType) ||
+            authoredStatement is not AssignmentStatementAst
+            {
+                Left: AttributedExpressionAst
+                {
+                    Attribute: TypeConstraintAst constraint,
+                    Child: VariableExpressionAst variable
+                }
+            } ||
+            !variable.VariablePath.IsUnqualified ||
+            constraint.TypeName.GetReflectionType() != vectorType)
+            return false;
+        transfer = new PowerShellCompiledRegionLocal(target.Name,
+            vectorType.FullName ?? vectorType.Name, true, constraint.Extent.Text,
+            PowerShellRegionTransferTypePolicy.Describe(
+                vectorType,
+                PowerShellRegionTransferDirection.LiveOut,
+                PowerShellRegionTransferOwnership.GuardedFresh,
+                PowerShellRegionTransferMutation.RetainedOnly));
+        return true;
+    }
+
+    private static bool TryCreateStableScalarLoopLocal(
+        PowerShellBoundForEachStatement loop,
+        out PowerShellBoundLocal? local,
+        out PowerShellCompiledRegionLocal? transfer)
+    {
+        local = null;
+        transfer = null;
+        if (loop.EnumerationKind != PowerShellForEachEnumerationKind.StableScalar ||
+            !loop.ElementType.IsValueType ||
+            Nullable.GetUnderlyingType(loop.ElementType) is not null ||
+            loop.Variable.Kind != PowerShellSymbolKind.Local ||
+            !IsSimpleVariableName(loop.Variable.Name) ||
+            !PowerShellRegionTransferTypePolicy.IsSupported(loop.ElementType))
+            return false;
+        local = new PowerShellBoundLocal(
+            loop.Variable,
+            new PowerShellTypeFact(loop.ElementType, PowerShellTypeFactProvenance.Explicit,
+                "The closed stable-scalar foreach assigns this exact element type before transfer."));
+        transfer = new PowerShellCompiledRegionLocal(loop.Variable.Name,
+            loop.ElementType.FullName ?? loop.ElementType.Name, false, string.Empty,
+            PowerShellRegionTransferTypePolicy.Describe(
+                loop.ElementType,
                 PowerShellRegionTransferDirection.LiveOut,
                 PowerShellRegionTransferOwnership.GuardedFresh,
                 PowerShellRegionTransferMutation.RetainedOnly));

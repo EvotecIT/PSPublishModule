@@ -19,6 +19,11 @@ internal static class PowerShellForEachCollectionPolicy
             kind = PowerShellForEachEnumerationKind.ScalarString;
             return typeof(string);
         }
+        if (PowerShellStableScalarTypePolicy.IsSupported(collectionType))
+        {
+            kind = PowerShellForEachEnumerationKind.StableScalar;
+            return collectionType;
+        }
         if (!PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities)) return null;
         if (collectionType == typeof(Array))
         {

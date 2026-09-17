@@ -34,14 +34,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
-        bool checkHostInterrupts = false)
+        bool checkHostInterrupts = false,
+        string? successOutputSink = null)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("{");
         if (checkHostInterrupts)
             builder.Append(prefix).AppendLine("    __checkLoopInterrupts();");
         foreach (var statement in statements)
-            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -51,44 +52,48 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         var collection = EmitExpression(loop.Collection);
         if (loop.EnumerationKind == PowerShellForEachEnumerationKind.NativeInvocation)
         {
-            EmitNativeForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitNativeForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
             return;
         }
         if (loop.EnumerationKind == PowerShellForEachEnumerationKind.PowerShellEnumerable)
         {
-            EmitPowerShellForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitPowerShellForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
             return;
         }
         if (loop.EnumerationKind == PowerShellForEachEnumerationKind.SystemArray)
         {
-            EmitSystemArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitSystemArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
             return;
         }
         if (loop.EnumerationKind == PowerShellForEachEnumerationKind.TypedArray)
         {
-            EmitArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
             return;
         }
 
         var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
-        if (loop.EnumerationKind != PowerShellForEachEnumerationKind.ScalarString)
+        if (loop.EnumerationKind is not (PowerShellForEachEnumerationKind.ScalarString or PowerShellForEachEnumerationKind.StableScalar))
             throw new InvalidOperationException("Unsupported lowered foreach enumeration contract.");
-        // Evaluate the collection once. A null scalar has no iterations, while
-        // an empty string is still one scalar value in PowerShell foreach.
+        // Evaluate the collection once. A nullable/reference scalar has no iterations when null;
+        // every non-null scalar, including an empty string, is one PowerShell foreach record.
         var scalarIdentifier = getTemporaryIdentifier("foreachScalar");
         builder.Append(prefix).Append("var ").Append(scalarIdentifier).Append(" = ").Append(collection).AppendLine(";");
-        var enumerable = $"({scalarIdentifier} is null ? global::System.Array.Empty<string>() : new[] {{ {scalarIdentifier} }})";
+        var scalarCanBeNull = !loop.ElementType.IsValueType || Nullable.GetUnderlyingType(loop.ElementType) is not null;
+        var enumerable = scalarCanBeNull
+            ? $"({scalarIdentifier} is null ? global::System.Array.Empty<{elementTypeName}>() : new[] {{ {scalarIdentifier} }})"
+            : $"new[] {{ {scalarIdentifier} }}";
         var iterationVariable = getTemporaryIdentifier("foreachItem");
         builder.Append(prefix).Append("foreach (").Append(elementTypeName).Append(' ')
             .Append(iterationVariable).Append(" in ").Append(enumerable).AppendLine(")");
         builder.Append(prefix).AppendLine("{");
-        EmitForEachBody(builder, loop, iterationVariable, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+        EmitForEachBody(builder, loop, iterationVariable, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -99,7 +104,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         var iterationVariable = getTemporaryIdentifier("foreachItem");
@@ -107,7 +113,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(" in (").Append(collection).Append(" ?? global::System.Array.Empty<object>()))")
             .AppendLine();
         builder.Append(prefix).AppendLine("{");
-        EmitForEachBody(builder, loop, iterationVariable + "!", indent, getTemporaryIdentifier, discardHelper, sourceMap);
+        EmitForEachBody(builder, loop, iterationVariable + "!", indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -118,7 +124,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         var arrayIdentifier = getTemporaryIdentifier("foreachArray");
@@ -147,7 +154,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("{");
         builder.Append(prefix).Append("    ").Append(elementTypeName).Append(' ').Append(itemIdentifier)
             .Append(" = ").Append(arrayIdentifier).Append('[').Append(indexIdentifier).AppendLine("];");
-        EmitForEachBody(builder, loop, itemIdentifier, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+        EmitForEachBody(builder, loop, itemIdentifier, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -158,7 +165,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink)
     {
         var prefix = new string(' ', (indent + 1) * 4);
         var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
@@ -172,7 +180,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(itemIdentifier).AppendLine(";");
         foreach (var nested in loop.Statements)
         {
-            EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         }
     }
 
@@ -182,7 +190,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         var valueIdentifier = getTemporaryIdentifier("switch_value");
@@ -207,13 +216,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).AppendLine("    {");
             builder.Append(prefix).Append("        ").Append(matchedIdentifier).AppendLine(" = true;");
             foreach (var nested in clause.Statements)
-                EmitStatement(builder, nested, indent + 2, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitStatement(builder, nested, indent + 2, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
             builder.Append(prefix).AppendLine("    }");
         }
         if (statement.DefaultStatements is not null)
         {
             builder.Append(prefix).Append("    if (!").Append(matchedIdentifier).AppendLine(")");
-            EmitBlock(builder, statement.DefaultStatements, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitBlock(builder, statement.DefaultStatements, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap,
+                successOutputSink: successOutputSink);
         }
         builder.Append(prefix).AppendLine("}");
         builder.Append(prefix).AppendLine("while (false);");

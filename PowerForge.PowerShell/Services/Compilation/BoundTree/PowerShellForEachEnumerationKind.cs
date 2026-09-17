@@ -4,6 +4,7 @@ namespace PowerForge;
 internal enum PowerShellForEachEnumerationKind
 {
     TypedArray,
+    StableScalar,
     ScalarString,
     SystemArray,
     PowerShellEnumerable,

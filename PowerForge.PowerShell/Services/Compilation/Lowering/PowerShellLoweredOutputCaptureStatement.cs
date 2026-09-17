@@ -5,7 +5,9 @@ internal sealed class PowerShellLoweredOutputCaptureStatement : PowerShellLowere
 {
     internal PowerShellLoweredOutputCaptureStatement(SourceSpan span, PowerShellSymbolId? target,
         PowerShellLoweredStatement[] statements, string recordsTemporary, string sinkTemporary,
-        PowerShellNativeAssignmentTarget? nativeTarget = null, PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign)
+        PowerShellNativeAssignmentTarget? nativeTarget = null, PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
+        PowerShellOutputCaptureKind kind = PowerShellOutputCaptureKind.CollapsedPowerShellValue, Type? capturedElementType = null,
+        bool declareTarget = false)
         : base(span)
     {
         if (nativeTarget is null && (target is null || operation != PowerShellBoundMutationOperator.Assign))
@@ -16,6 +18,9 @@ internal sealed class PowerShellLoweredOutputCaptureStatement : PowerShellLowere
         SinkTemporary = sinkTemporary;
         NativeTarget = nativeTarget;
         Operation = operation;
+        Kind = kind;
+        CapturedElementType = capturedElementType;
+        DeclareTarget = declareTarget;
     }
 
     internal PowerShellSymbolId? Target { get; }
@@ -24,5 +29,9 @@ internal sealed class PowerShellLoweredOutputCaptureStatement : PowerShellLowere
     internal string SinkTemporary { get; }
     internal PowerShellNativeAssignmentTarget? NativeTarget { get; }
     internal PowerShellBoundMutationOperator Operation { get; }
+    internal PowerShellOutputCaptureKind Kind { get; }
+    internal Type? CapturedElementType { get; }
+    internal bool DeclareTarget { get; }
     internal bool UsesNativeInvocation => NativeTarget is not null;
+    internal bool CapturesStableScalarVector => Kind == PowerShellOutputCaptureKind.StableScalarVector;
 }

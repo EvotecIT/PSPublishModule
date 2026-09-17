@@ -428,6 +428,22 @@ internal sealed partial class PowerShellSemanticBinder
     {
         var nativePosition = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
         if (condition.Type.ClrType == typeof(bool) && !nativePosition) return condition;
+        if (!nativePosition && PowerShellClrTypeSemantics.IsIntegral(condition.Type.ClrType))
+        {
+            var zero = Activator.CreateInstance(condition.Type.ClrType);
+            return new PowerShellBoundBinaryExpression(
+                condition.Span,
+                PowerShellBoundBinaryOperator.NotEqual,
+                condition,
+                new PowerShellBoundLiteralExpression(
+                    condition.Span,
+                    zero,
+                    new PowerShellTypeFact(condition.Type.ClrType, PowerShellTypeFactProvenance.Literal,
+                        "Integral PowerShell truthiness compares the closed value with zero."),
+                    PowerShellValueState.Known),
+                new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred,
+                    "A nonzero integral value is true under PowerShell truthiness."));
+        }
         if (condition.Type.ClrType != typeof(bool) && !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
         {
             var message = condition is PowerShellBoundMutationExpression { Operation: PowerShellBoundMutationOperator.Assign } mutation

@@ -6,7 +6,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private void EmitPowerShellForEach(StringBuilder builder, PowerShellLoweredForEachStatement loop,
         string collection, int indent, Func<string, string> getTemporaryIdentifier, string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         var source = getTemporaryIdentifier("foreachSource");
@@ -21,7 +21,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).Append("    while (__statementErrors.MoveEnumerator(").Append(cursor).AppendLine("))");
         builder.Append(prefix).AppendLine("    {");
         EmitForEachBody(builder, loop, "__statementErrors.ReadEnumeratorCurrent(" + cursor + ")!",
-            indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
+            indent + 1, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).AppendLine("}");
     }

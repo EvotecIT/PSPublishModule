@@ -291,7 +291,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 statement is PowerShellLoweredExpressionStatement { DiscardValue: false } valueStatement &&
                 valueStatement.Expression.ClrType != typeof(void))
                 result.Add("Success");
-            if (statement is PowerShellLoweredStreamWriteStatement stream)
+            if (statement is PowerShellLoweredStreamWriteStatement stream &&
+                !IsOwnedStableVectorWrite(statements, stream))
                 result.Add(stream.Kind.ToString());
         }
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements)
@@ -300,6 +301,15 @@ internal static class PowerShellLoweredRegionGraphBuilder
             result.UnionWith(AllPowerShellStreams);
         return AllPowerShellStreams.Where(result.Contains).ToArray();
     }
+
+    private static bool IsOwnedStableVectorWrite(
+        IEnumerable<PowerShellLoweredStatement> statements,
+        PowerShellLoweredStreamWriteStatement stream)
+        => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
+            .OfType<PowerShellLoweredOutputCaptureStatement>()
+            .Where(static capture => capture.CapturesStableScalarVector)
+            .Any(capture => PowerShellLoweredTreeEnumerator.EnumerateStatements(capture.Statements)
+                .Any(candidate => ReferenceEquals(candidate, stream)));
 
     private static string[] GetErrors(PowerShellLoweredStatement[] statements)
     {

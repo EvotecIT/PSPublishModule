@@ -4,6 +4,113 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
+    /// <summary>
+    /// Binds one closed <c>@(foreach { ... })</c> transformation into a fresh stable-scalar vector.
+    /// The capture owns only implicit success records whose element type is known before lowering;
+    /// it never grants a general PowerShell stream or enumerable contract to detached regions.
+    /// </summary>
+    private bool TryBindStableScalarVectorCapture(
+        ParsedSourceDocument document,
+        AssignmentStatementAst assignment,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities,
+        out PowerShellBoundStatement? capture)
+    {
+        capture = null;
+        if (assignment.Operator != TokenKind.Equals ||
+            UnwrapExpression(assignment.Right) is not ArrayExpressionAst
+            {
+                SubExpression.Traps: null or { Count: 0 },
+                SubExpression.Statements.Count: 1
+            } collected ||
+            collected.SubExpression.Statements[0] is not ForEachStatementAst ||
+            assignment.Left is not AttributedExpressionAst
+            {
+                Attribute: TypeConstraintAst constraint,
+                Child: VariableExpressionAst variable
+            } ||
+            !variable.VariablePath.IsUnqualified)
+            return false;
+
+        var vectorType = constraint.TypeName.GetReflectionType();
+        if (vectorType is null || !PowerShellRegionTransferTypePolicy.IsSupported(vectorType) ||
+            !vectorType.IsArray || vectorType.GetArrayRank() != 1 ||
+            vectorType.GetElementType() is not { } elementType ||
+            !PowerShellStableScalarTypePolicy.IsSupported(elementType) ||
+            !symbols.TryGetValue(variable.VariablePath.UserPath, out var target) ||
+            target.Symbol.Kind != PowerShellSymbolKind.Local ||
+            target.Type.ClrType != vectorType)
+            return false;
+
+        // The temporary stream capability lets ordinary nested statements bind their implicit
+        // success records. The closed-capture validation below consumes that capability and
+        // rejects every provider, explicit stream, dynamic enumeration, and native operation.
+        var captureCapabilities = (capabilities &
+                                   ~(PowerShellCompilationCapability.NativeFunctionBinding |
+                                     PowerShellCompilationCapability.PowerShellStatementErrors |
+                                     PowerShellCompilationCapability.PowerShellLanguageConversions |
+                                     PowerShellCompilationCapability.PowerShellLanguageOperators)) |
+                                  PowerShellCompilationCapability.PowerShellStreams |
+                                  PowerShellCompilationCapability.PipelineParameterBinding;
+        var statement = BindStatementCore(
+            document,
+            collected.SubExpression.Statements[0],
+            symbols,
+            functions,
+            diagnostics,
+            isTerminal: false,
+            targetFramework,
+            captureCapabilities);
+        if (statement is null) return true;
+
+        var body = new PowerShellBoundBlock(statement.Span, new[] { statement });
+        if (!IsClosedStableScalarVectorCapture(body, elementType))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2937",
+                "Typed foreach collection capture requires only closed scalar success records and statically bounded scalar or vector enumeration.",
+                PowerShellSourceParser.GetSpan(document, collected.Extent)));
+            return true;
+        }
+
+        capture = new PowerShellBoundOutputCaptureStatement(
+            PowerShellSourceParser.GetSpan(document, assignment.Extent),
+            target.Symbol,
+            body,
+            kind: PowerShellOutputCaptureKind.StableScalarVector,
+            capturedElementType: elementType);
+        target.Refine(new PowerShellTypeFact(vectorType, PowerShellTypeFactProvenance.Explicit,
+            "A closed foreach capture constructs the authored stable-scalar vector."), PowerShellValueState.Known);
+        diagnostics.Add(new PowerShellSemanticDiagnostic(
+            "PSB2938",
+            "Closed stable-scalar vector capture is eligible only for a guarded region; retained PowerShell owns downstream vector enumeration.",
+            PowerShellSourceParser.GetSpan(document, assignment.Extent)));
+        return true;
+    }
+
+    private static bool IsClosedStableScalarVectorCapture(PowerShellBoundBlock body, Type elementType)
+    {
+        var statements = PowerShellSemanticAnalyzer.EnumerateStatements(body).ToArray();
+        var writes = statements.OfType<PowerShellBoundStreamWriteStatement>().ToArray();
+        if (writes.Length == 0 || statements.Any(static statement =>
+                statement is PowerShellBoundReturnStatement or PowerShellBoundThrowStatement or
+                    PowerShellBoundOutputCaptureStatement or PowerShellBoundCommandRegionStatement or
+                    PowerShellBoundCommandCaptureStatement))
+            return false;
+        if (writes.Any(write => write.Kind != PowerShellStreamCommandKind.Success || write.Provider is not null ||
+                write.OutputBinding != PowerShellOutputBindingKind.Default || write.UsesNativeInvocation ||
+                write.UsesCommandHostEnumeration || write.Message.Type.ClrType != elementType ||
+                write.Message.ValueState is PowerShellValueState.AutomationNull or PowerShellValueState.Missing))
+            return false;
+        return statements.Where(static statement => statement is not PowerShellBoundStreamWriteStatement)
+            .All(static statement => statement is PowerShellBoundIfStatement or PowerShellBoundWhileStatement or
+                    PowerShellBoundForStatement or PowerShellBoundForEachStatement or PowerShellBoundSwitchStatement ||
+                !statement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStreams));
+    }
+
     private PowerShellBoundStatement? BindOutputCapture(ParsedSourceDocument document, AssignmentStatementAst assignment,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,

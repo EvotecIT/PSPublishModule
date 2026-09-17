@@ -6,7 +6,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private void EmitNativeForEach(StringBuilder builder, PowerShellLoweredForEachStatement loop,
         string collection, int indent, Func<string, string> getTemporaryIdentifier, string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? successOutputSink)
     {
         var binding = loop.NativeBinding ?? throw new InvalidOperationException("Native foreach binding is missing.");
         var prefix = new string(' ', indent * 4);
@@ -24,7 +24,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).Append("        ").Append(EmitNativeAssignmentStart(binding.Target, PowerShellBoundMutationOperator.Assign))
             .Append("() => ").Append(scope).Append(".Cursor.Current").Append(EmitNativeAssignmentLocation(binding.Target)).AppendLine(";");
         foreach (var statement in loop.Statements)
-            EmitStatement(builder, statement, indent + 2, getTemporaryIdentifier, discardHelper, sourceMap);
+            EmitStatement(builder, statement, indent + 2, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).AppendLine("}");
     }

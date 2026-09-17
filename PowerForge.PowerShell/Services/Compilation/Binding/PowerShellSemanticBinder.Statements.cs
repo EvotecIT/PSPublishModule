@@ -72,6 +72,9 @@ internal sealed partial class PowerShellSemanticBinder
             return nativeRegion;
         if (statement is AssignmentStatementAst assignment)
         {
+            if (TryBindStableScalarVectorCapture(document, assignment, symbols, functions, diagnostics,
+                    targetFramework, capabilities, out var stableVectorCapture))
+                return stableVectorCapture;
             if (assignment.Right is IfStatementAst or ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
