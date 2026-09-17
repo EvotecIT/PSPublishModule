@@ -14,6 +14,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     private readonly Dictionary<ScriptBlockAst, ScopeExecutionGraph> _executionGraphs = new();
     private readonly Dictionary<FunctionDefinitionAst, Dictionary<FunctionDefinitionAst, bool>>
         _invokedBeforeDeclarationCache = new();
+    private readonly Dictionary<FunctionDefinitionAst, bool> _deferredFunctionEscapeCache = new();
+    private readonly HashSet<CommandAst> _shadowResolutionInProgress = new();
 
     internal NestedFunctionVisibilityAnalyzer(
         IReadOnlyDictionary<string, FunctionDefinitionAst[]> functionDeclarationsByName)
@@ -42,6 +44,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
             if (deferredEntryFunction is not null)
             {
+                if (DoesDeferredFunctionBodyEscape(deferredEntryFunction, declarationScope))
+                    continue;
+
                 if (!IsInvokedBeforeDeclarationCached(deferredEntryFunction, declaration, declarationScope))
                     return true;
 
@@ -95,7 +100,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         while (declarationScope.Parent is ScriptBlockExpressionAst expression &&
                expression.Parent is CommandAst invocation &&
-               invocation.InvocationOperator == TokenKind.Dot)
+               invocation.InvocationOperator == TokenKind.Dot &&
+               IsInvocationTarget(expression, invocation))
         {
             if (declarationBlock.BlockKind == TokenKind.Process)
                 break;
@@ -135,7 +141,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         while (declarationScope.Parent is ScriptBlockExpressionAst expression &&
                expression.Parent is CommandAst invocation &&
-               invocation.InvocationOperator == TokenKind.Dot)
+               invocation.InvocationOperator == TokenKind.Dot &&
+               IsInvocationTarget(expression, invocation))
         {
             var parentScope = FindContainingScriptBlock(invocation);
             var parentBlock = parentScope is null ? null : FindNamedBlockInScope(invocation, parentScope);
@@ -225,6 +232,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         foreach (var invocation in graph.RootInvocations)
         {
+            if (!ExecutesWhileScopeInitializes(invocation.Command, declarationScope))
+                continue;
+
             var invocationOffset = invocation.Command.Extent.StartOffset;
             if (invocation.Trap is not null)
             {
@@ -258,6 +268,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
             foreach (var invocation in graph.GetFunctionInvocations(item.Function))
             {
+                if (!ExecutesWhileScopeInitializes(invocation.Command, item.Function.Body))
+                    continue;
+
                 EnqueueAvailableFunctions(
                     invocation,
                     item.InvocationOffset,
@@ -320,7 +333,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (_executionGraphs.TryGetValue(declarationScope, out var graph))
             return graph;
 
-        graph = new ScopeExecutionGraph(this, declarationScope);
+        graph = new ScopeExecutionGraph(declarationScope);
         _executionGraphs[declarationScope] = graph;
         return graph;
     }
@@ -343,6 +356,87 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return false;
+    }
+
+    private bool DoesDeferredFunctionBodyEscape(
+        FunctionDefinitionAst function,
+        ScriptBlockAst declarationScope)
+    {
+        if (_deferredFunctionEscapeCache.TryGetValue(function, out var cached))
+            return cached;
+
+        var escaped = declarationScope.FindAll(
+                ast => ast is VariableExpressionAst ||
+                       ast is StringConstantExpressionAst ||
+                       ast is CommandAst,
+                searchNestedScriptBlocks: true)
+            .Any(ast => IsEscapingFunctionProviderReference(ast, function));
+        _deferredFunctionEscapeCache[function] = escaped;
+        return escaped;
+    }
+
+    private static bool IsEscapingFunctionProviderReference(Ast ast, FunctionDefinitionAst function)
+    {
+        string? providerPath = ast switch
+        {
+            VariableExpressionAst variable => variable.VariablePath.UserPath,
+            StringConstantExpressionAst text => text.Value,
+            _ => null
+        };
+        if (ast is CommandAst command && IsFunctionLookupCommand(command, function.Name))
+            return true;
+
+        if (!TryGetFunctionProviderName(providerPath, out var functionName) ||
+            !string.Equals(functionName, function.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (ast is VariableExpressionAst &&
+            ast.Parent is CommandAst invocation &&
+            IsInvocationTarget(ast, invocation) &&
+            (invocation.InvocationOperator == TokenKind.Ampersand || invocation.InvocationOperator == TokenKind.Dot))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsFunctionLookupCommand(CommandAst command, string functionName)
+    {
+        var commandName = command.GetCommandName();
+        if (!string.Equals(commandName, "Get-Command", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(commandName, "gcm", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return command.CommandElements
+            .Skip(1)
+            .OfType<StringConstantExpressionAst>()
+            .Any(argument => string.Equals(argument.Value, functionName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryGetFunctionProviderName(string? providerPath, out string functionName)
+    {
+        functionName = string.Empty;
+        if (string.IsNullOrWhiteSpace(providerPath))
+            return false;
+
+        const string prefix = "function:";
+        var value = providerPath!.Trim();
+        if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        functionName = value.Substring(prefix.Length).TrimStart('\\');
+        return functionName.Length > 0;
+    }
+
+    private static bool IsInvocationTarget(Ast target, CommandAst invocation)
+    {
+        return invocation.CommandElements.Count > 0 &&
+               ReferenceEquals(invocation.CommandElements[0], target);
     }
 
     private static ScriptBlockAst? FindContainingScriptBlock(Ast ast)
@@ -405,7 +499,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         private readonly Dictionary<FunctionDefinitionAst, InvocationSite[]> _functionInvocations = new();
 
-        internal ScopeExecutionGraph(NestedFunctionVisibilityAnalyzer owner, ScriptBlockAst scope)
+        internal ScopeExecutionGraph(ScriptBlockAst scope)
         {
             var functions = scope.FindAll(
                     ast => ast is FunctionDefinitionAst,
@@ -432,17 +526,15 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                     ast => ast is CommandAst,
                     searchNestedScriptBlocks: true)
                 .Cast<CommandAst>()
-                .Where(command => owner.ExecutesWhileScopeInitializes(command, scope))
                 .Select(command => new InvocationSite(command, FindContainingTrap(command, scope)))
                 .ToArray();
 
             foreach (var function in functions)
             {
                 _functionInvocations[function] = function.Body.FindAll(
-                        ast => ast is CommandAst,
-                        searchNestedScriptBlocks: true)
+                    ast => ast is CommandAst,
+                    searchNestedScriptBlocks: true)
                     .Cast<CommandAst>()
-                    .Where(command => owner.ExecutesWhileScopeInitializes(command, function.Body))
                     .Select(command => new InvocationSite(command, trap: null))
                     .ToArray();
             }

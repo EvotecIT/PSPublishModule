@@ -14,8 +14,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (invocation.InvocationOperator == TokenKind.Ampersand ||
             invocation.InvocationOperator == TokenKind.Dot)
         {
-            if (invocation.CommandElements.Count > 0 &&
-                ReferenceEquals(invocation.CommandElements[0], scriptBlockExpression))
+            if (IsInvocationTarget(scriptBlockExpression, invocation))
             {
                 return false;
             }
@@ -94,19 +93,38 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (!string.IsNullOrWhiteSpace(rawInvocationName) && rawInvocationName!.IndexOf('\\') >= 0)
             return false;
 
-        if (!_functionDeclarationsByName.TryGetValue(normalizedInvocationName, out var declarations))
+        if (!_functionDeclarationsByName.ContainsKey(normalizedInvocationName))
             return false;
 
-        foreach (var declaration in declarations)
+        if (!_shadowResolutionInProgress.Add(invocation))
+            return true;
+
+        try
         {
-            if (!TryGetPotentialDeclarationContext(declaration, out var declarationScope, out var declarationBlock))
-                continue;
-
-            if (IsDeclarationBlockCompatibleWithCommand(declarationBlock, invocation, declarationScope))
+            if (IsDeclaredInVisibleScope(invocation, normalizedInvocationName))
                 return true;
-        }
 
-        return false;
+            foreach (var declaration in _functionDeclarationsByName[normalizedInvocationName])
+            {
+                if (declaration.Extent.EndOffset > invocation.Extent.StartOffset ||
+                    !TryGetPotentialDeclarationContext(
+                        declaration,
+                        out var declarationScope,
+                        out var declarationBlock))
+                {
+                    continue;
+                }
+
+                if (IsDeclarationBlockCompatibleWithCommand(declarationBlock, invocation, declarationScope))
+                    return true;
+            }
+
+            return false;
+        }
+        finally
+        {
+            _shadowResolutionInProgress.Remove(invocation);
+        }
     }
 
     private static bool IsKnownSynchronousScriptBlockConsumer(string invocationName)
@@ -193,6 +211,14 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         {
             return "Where-Object";
         }
+        if (string.Equals(normalized, "sort", StringComparison.OrdinalIgnoreCase))
+            return "Sort-Object";
+        if (string.Equals(normalized, "group", StringComparison.OrdinalIgnoreCase))
+            return "Group-Object";
+        if (string.Equals(normalized, "measure", StringComparison.OrdinalIgnoreCase))
+            return "Measure-Object";
+        if (string.Equals(normalized, "select", StringComparison.OrdinalIgnoreCase))
+            return "Select-Object";
 
         return normalized;
     }
