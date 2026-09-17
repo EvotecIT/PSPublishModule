@@ -17,8 +17,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         _invokedBeforeDeclarationCache = new();
     private readonly Dictionary<FunctionDefinitionAst, bool> _deferredFunctionEscapeCache = new();
     private readonly HashSet<CommandAst> _shadowResolutionInProgress = new();
-    private readonly IReadOnlyDictionary<string, CommandAst[]> _aliasDeclarationsByName;
-    private readonly CommandAst[] _dynamicAliasDeclarations;
+    private readonly IReadOnlyDictionary<string, CommandAst[]> _aliasDeclarationsByName =
+        new Dictionary<string, CommandAst[]>(StringComparer.OrdinalIgnoreCase);
+    private readonly CommandAst[] _dynamicAliasDeclarations = Array.Empty<CommandAst>();
+    private readonly IReadOnlyDictionary<string, CommandAst[]> _aliasRemovalsByName =
+        new Dictionary<string, CommandAst[]>(StringComparer.OrdinalIgnoreCase);
     private readonly IReadOnlyDictionary<string, CommandAst[]> _functionRemovalsByName =
         new Dictionary<string, CommandAst[]>(StringComparer.OrdinalIgnoreCase);
 
@@ -30,6 +33,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         _functionDeclarationsByName = functionDeclarationsByName;
         _aliasDeclarationsByName = FindAuthoredAliasDeclarations(root);
         _dynamicAliasDeclarations = FindDynamicAliasDeclarations(root);
+        _aliasRemovalsByName = FindAliasRemovalCommands(root);
         _functionRemovalsByName = FindFunctionRemovalCommands(root);
     }
 
@@ -108,84 +112,6 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return false;
-    }
-
-    private bool IsRemovedBeforeCommand(FunctionDefinitionAst declaration, CommandAst command)
-    {
-        if (!TryGetPotentialDeclarationContext(declaration, out var declarationScope, out _))
-            return false;
-
-        var name = NormalizeDeclaredFunctionName(declaration.Name);
-        if (!_functionRemovalsByName.TryGetValue(name, out var removals))
-            return false;
-
-        return removals.Any(removal =>
-            removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
-            removal.Extent.EndOffset <= command.Extent.StartOffset &&
-            ReferenceEquals(FindContainingScriptBlock(removal), declarationScope) &&
-            RemovalDominatesCommand(removal, command, declarationScope));
-    }
-
-    private bool IsRemovedBeforeExecution(
-        FunctionDefinitionAst declaration,
-        int executionOffset,
-        ScriptBlockAst declarationScope,
-        CommandAst? executionCommand = null)
-    {
-        var name = NormalizeDeclaredFunctionName(declaration.Name);
-        if (!_functionRemovalsByName.TryGetValue(name, out var removals))
-            return false;
-
-        return removals.Any(removal =>
-            removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
-            removal.Extent.EndOffset <= executionOffset &&
-            ReferenceEquals(FindContainingScriptBlock(removal), declarationScope) &&
-            (IsDirectScopeCommand(removal, declarationScope) ||
-             executionCommand is not null &&
-             RemovalDominatesCommand(removal, executionCommand, declarationScope)));
-    }
-
-    private static bool RemovalDominatesCommand(
-        CommandAst removal,
-        CommandAst command,
-        ScriptBlockAst declarationScope)
-    {
-        if (IsDirectScopeCommand(removal, declarationScope))
-            return true;
-
-        if (removal.Parent is not PipelineAst pipeline ||
-            pipeline.Parent is not StatementBlockAst statementBlock)
-        {
-            return false;
-        }
-
-        for (Ast? current = command.Parent; current is not null; current = current.Parent)
-        {
-            if (ReferenceEquals(current, statementBlock))
-                return true;
-            if (current is FunctionDefinitionAst || current is ScriptBlockExpressionAst)
-                return false;
-        }
-
-        return false;
-    }
-
-    private static bool IsDirectScopeCommand(CommandAst command, ScriptBlockAst scope)
-    {
-        return command.Parent is PipelineAst pipeline &&
-               pipeline.Parent is NamedBlockAst block &&
-               ReferenceEquals(block.Parent, scope);
-    }
-
-    private bool IsDeclarationQualifierVisibleAtCommand(
-        FunctionDefinitionAst declaration,
-        CommandAst command)
-    {
-        if (!declaration.Name.StartsWith("private:", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return TryGetPotentialDeclarationContext(declaration, out var declarationScope, out _) &&
-               ReferenceEquals(declarationScope, FindContainingScriptBlock(command));
     }
 
     private bool IsInvokedBeforeDeclarationCached(
@@ -763,17 +689,26 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return escaped;
     }
 
-    private static bool IsEscapingFunctionProviderReference(Ast ast, FunctionDefinitionAst function)
+    private bool IsEscapingFunctionProviderReference(Ast ast, FunctionDefinitionAst function)
     {
+        var normalizedFunctionName = NormalizeDeclaredFunctionName(function.Name);
         string? providerPath = ast is VariableExpressionAst variable
             ? variable.VariablePath.UserPath
             : null;
-        if (ast is CommandAst command && IsFunctionLookupCommand(command, function.Name))
-            return command.Extent.StartOffset >= function.Extent.EndOffset &&
+        if (ast is CommandAst command && IsFunctionLookupCommand(command, normalizedFunctionName))
+        {
+            var rawCommandName = command.GetCommandName();
+            var commandName = NormalizeInvocationName(rawCommandName);
+            return !IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName) &&
+                   command.Extent.StartOffset >= function.Extent.EndOffset &&
                    !IsDiscardedLookupResult(command);
+        }
 
         if (!TryGetFunctionProviderName(providerPath, out var functionName) ||
-            !string.Equals(functionName, function.Name, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(
+                NormalizeDeclaredFunctionName(functionName),
+                normalizedFunctionName,
+                StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -792,7 +727,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return true;
     }
 
-    private static bool IsDiscardedLookupResult(CommandAst command)
+    private bool IsDiscardedLookupResult(CommandAst command)
     {
         if (command.Parent is not PipelineAst pipeline)
             return false;
@@ -808,10 +743,19 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             .Select((element, index) => new { element, index })
             .FirstOrDefault(item => ReferenceEquals(item.element, command))
             ?.index ?? -1;
-        return commandIndex >= 0 &&
-               commandIndex + 2 == pipeline.PipelineElements.Count &&
-               pipeline.PipelineElements[commandIndex + 1] is CommandAst consumer &&
-               string.Equals(consumer.GetCommandName(), "Out-Null", StringComparison.OrdinalIgnoreCase);
+        if (commandIndex < 0 ||
+            commandIndex + 2 != pipeline.PipelineElements.Count ||
+            pipeline.PipelineElements[commandIndex + 1] is not CommandAst consumer ||
+            !string.Equals(consumer.GetCommandName(), "Out-Null", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var rawConsumerName = consumer.GetCommandName();
+        return !IsPotentiallyShadowedByScriptFunction(
+            consumer,
+            rawConsumerName,
+            NormalizeInvocationName(rawConsumerName));
     }
 
     private static bool IsFunctionLookupCommand(CommandAst command, string functionName)

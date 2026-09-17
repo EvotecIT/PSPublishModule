@@ -254,7 +254,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return noNewScope == true;
     }
 
-    private static IReadOnlyDictionary<string, CommandAst[]> FindAuthoredAliasDeclarations(ScriptBlockAst root)
+    private IReadOnlyDictionary<string, CommandAst[]> FindAuthoredAliasDeclarations(ScriptBlockAst root)
     {
         return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
@@ -264,6 +264,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 AliasName = TryGetAuthoredAliasName(command)
             })
             .Where(item => !string.IsNullOrWhiteSpace(item.AliasName))
+            .Where(item => IsUnshadowedAliasMutation(item.Command))
             .GroupBy(
                 item => item.AliasName!,
                 StringComparer.OrdinalIgnoreCase)
@@ -273,12 +274,66 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 StringComparer.OrdinalIgnoreCase);
     }
 
-    private static CommandAst[] FindDynamicAliasDeclarations(ScriptBlockAst root)
+    private CommandAst[] FindDynamicAliasDeclarations(ScriptBlockAst root)
     {
         return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .Where(IsPotentialDynamicAliasDeclaration)
+            .Where(IsUnshadowedAliasMutation)
             .ToArray();
+    }
+
+    private bool IsUnshadowedAliasMutation(CommandAst command)
+    {
+        var rawCommandName = command.GetCommandName();
+        var commandName = NormalizeInvocationName(rawCommandName);
+        return !IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName);
+    }
+
+    private IReadOnlyDictionary<string, CommandAst[]> FindAliasRemovalCommands(ScriptBlockAst root)
+    {
+        return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .SelectMany(command => TryGetRemovedAliasNames(command)
+                .Select(name => new { Command = command, Name = name }))
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(item => item.Command).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private IEnumerable<string> TryGetRemovedAliasNames(CommandAst command)
+    {
+        var rawCommandName = command.GetCommandName();
+        var commandName = NormalizeInvocationName(rawCommandName);
+        var aliasRemoval = string.Equals(commandName, "Remove-Alias", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(commandName, "ral", StringComparison.OrdinalIgnoreCase);
+        var providerRemoval = string.Equals(commandName, "Remove-Item", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "Clear-Item", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "ri", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "rm", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "del", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "erase", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(commandName, "cli", StringComparison.OrdinalIgnoreCase);
+        if (!aliasRemoval && !providerRemoval)
+            yield break;
+        if (IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName))
+            yield break;
+        if (TryGetBoundSwitchValue(command, "WhatIf") == true)
+            yield break;
+
+        foreach (var argument in command.CommandElements.Skip(1).OfType<StringConstantExpressionAst>())
+        {
+            if (aliasRemoval)
+            {
+                yield return argument.Value;
+            }
+            else if (TryGetAliasProviderName(argument.Value, out var aliasName))
+            {
+                yield return aliasName;
+            }
+        }
     }
 
     private IReadOnlyDictionary<string, CommandAst[]> FindFunctionRemovalCommands(ScriptBlockAst root)
@@ -454,7 +509,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (aliasDeclaration.Extent.EndOffset > (executionOffset ?? invocation.Extent.StartOffset))
             return false;
 
-        var aliasScope = FindContainingScriptBlock(aliasDeclaration);
+        var aliasScope = FindEffectiveCommandScope(aliasDeclaration);
         if (aliasScope is null)
             return false;
 
@@ -472,6 +527,15 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             aliasScope = _root;
         }
 
+        if (IsAliasRemovedBeforeInvocation(
+                aliasDeclaration,
+                invocation,
+                executionOffset ?? invocation.Extent.StartOffset,
+                aliasScope))
+        {
+            return false;
+        }
+
         for (Ast? current = invocation; current is not null; current = current.Parent)
         {
             if (ReferenceEquals(current, aliasScope))
@@ -479,6 +543,112 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return false;
+    }
+
+    private bool IsAliasRemovedBeforeInvocation(
+        CommandAst aliasDeclaration,
+        CommandAst invocation,
+        int executionOffset,
+        ScriptBlockAst aliasScope)
+    {
+        var aliasName = TryGetAuthoredAliasName(aliasDeclaration);
+        if (string.IsNullOrWhiteSpace(aliasName) ||
+            !_aliasRemovalsByName.TryGetValue(aliasName!, out var removals))
+        {
+            return false;
+        }
+
+        return removals.Any(removal =>
+            removal.Extent.StartOffset >= aliasDeclaration.Extent.EndOffset &&
+            removal.Extent.EndOffset <= executionOffset &&
+            ReferenceEquals(FindEffectiveCommandScope(removal), aliasScope) &&
+            (IsGuaranteedCommandInScope(removal, aliasScope) ||
+             CommandDominatesCommandInEffectiveScope(removal, invocation, aliasScope)));
+    }
+
+    private ScriptBlockAst? FindEffectiveCommandScope(CommandAst command)
+    {
+        return TryGetEffectiveCommandBoundary(command, out var scope, out _)
+            ? scope
+            : null;
+    }
+
+    private bool IsGuaranteedCommandInScope(CommandAst command, ScriptBlockAst scope)
+    {
+        return TryGetEffectiveCommandBoundary(command, out var effectiveScope, out var boundary) &&
+               ReferenceEquals(effectiveScope, scope) &&
+               IsDirectScopeCommand(boundary, scope);
+    }
+
+    private bool CommandDominatesCommandInEffectiveScope(
+        CommandAst command,
+        CommandAst target,
+        ScriptBlockAst scope)
+    {
+        if (!TryGetEffectiveCommandBoundary(command, out var effectiveScope, out var boundary) ||
+            !ReferenceEquals(effectiveScope, scope) ||
+            boundary.Extent.EndOffset > target.Extent.StartOffset)
+        {
+            return false;
+        }
+
+        if (IsDirectScopeCommand(boundary, scope))
+            return true;
+        if (boundary.Parent is not PipelineAst pipeline ||
+            pipeline.Parent is not StatementBlockAst statementBlock)
+        {
+            return false;
+        }
+
+        for (Ast? current = target.Parent; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, statementBlock))
+                return true;
+            if (current is FunctionDefinitionAst || current is ScriptBlockExpressionAst)
+                return false;
+        }
+
+        return false;
+    }
+
+    private bool TryGetEffectiveCommandBoundary(
+        CommandAst command,
+        out ScriptBlockAst scope,
+        out CommandAst boundary)
+    {
+        scope = FindContainingScriptBlock(command)!;
+        boundary = command;
+        if (scope is null)
+            return false;
+
+        while (scope.Parent is ScriptBlockExpressionAst expression &&
+               expression.Parent is CommandAst invocation &&
+               IsScopePromotingInvocation(expression, invocation) &&
+               CommandDominatesPromotedBlockExit(boundary, scope))
+        {
+            var parentScope = FindContainingScriptBlock(invocation);
+            if (parentScope is null)
+                break;
+
+            boundary = invocation;
+            scope = parentScope;
+        }
+
+        return true;
+    }
+
+    private static bool CommandDominatesPromotedBlockExit(CommandAst command, ScriptBlockAst scope)
+    {
+        if (command.Parent is not PipelineAst pipeline ||
+            pipeline.Parent is not NamedBlockAst block ||
+            !ReferenceEquals(block.Parent, scope))
+        {
+            return false;
+        }
+
+        return block.Statements
+            .Where(statement => statement.Extent.EndOffset <= command.Extent.StartOffset)
+            .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst);
     }
 
     private static string? TryGetAuthoredAliasScope(CommandAst command)

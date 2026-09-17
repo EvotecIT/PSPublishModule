@@ -11,10 +11,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         FunctionDefinitionAst declaration,
         CommandAst command)
     {
-        if (declaration.Parent is not StatementBlockAst tryBody ||
-            tryBody.Parent is not TryStatementAst tryStatement ||
-            !ReferenceEquals(tryStatement.Body, tryBody) ||
-            !DeclarationDominatesBlockExit(declaration, tryBody))
+        if (declaration.Parent is not StatementBlockAst declarationBlock ||
+            declarationBlock.Parent is not TryStatementAst tryStatement ||
+            (!ReferenceEquals(tryStatement.Body, declarationBlock) &&
+             !ReferenceEquals(tryStatement.Finally, declarationBlock)) ||
+            !DeclarationDominatesBlockExit(declaration, declarationBlock))
         {
             return false;
         }
@@ -120,8 +121,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             latestRemovalOffset = removals
                 .Where(removal =>
                     removal.Extent.EndOffset <= consumerOffset &&
-                    ReferenceEquals(FindContainingScriptBlock(removal), _root) &&
-                    IsDirectScopeCommand(removal, _root))
+                    ReferenceEquals(FindEffectiveCommandScope(removal), _root) &&
+                    IsGuaranteedCommandInScope(removal, _root))
                 .Select(removal => removal.Extent.EndOffset)
                 .DefaultIfEmpty(-1)
                 .Max();
