@@ -8,7 +8,7 @@ namespace PowerForge;
 /// <summary>
 /// Evaluates whether a nested PowerShell function declaration is visible at a command call site.
 /// </summary>
-internal sealed class NestedFunctionVisibilityAnalyzer
+internal sealed partial class NestedFunctionVisibilityAnalyzer
 {
     private readonly IReadOnlyDictionary<string, FunctionDefinitionAst[]> _functionDeclarationsByName;
     private readonly Dictionary<ScriptBlockAst, ScopeExecutionGraph> _executionGraphs = new();
@@ -97,6 +97,9 @@ internal sealed class NestedFunctionVisibilityAnalyzer
                expression.Parent is CommandAst invocation &&
                invocation.InvocationOperator == TokenKind.Dot)
         {
+            if (declarationBlock.BlockKind == TokenKind.Process)
+                break;
+
             var parentScope = FindContainingScriptBlock(invocation);
             var parentBlock = parentScope is null ? null : FindNamedBlockInScope(invocation, parentScope);
             if (parentScope is null ||
@@ -106,6 +109,38 @@ internal sealed class NestedFunctionVisibilityAnalyzer
             {
                 break;
             }
+
+            declarationScope = parentScope;
+            declarationBlock = parentBlock;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetPotentialDeclarationContext(
+        FunctionDefinitionAst declaration,
+        out ScriptBlockAst declarationScope,
+        out NamedBlockAst declarationBlock)
+    {
+        declarationScope = null!;
+        declarationBlock = null!;
+
+        var syntacticScope = FindContainingScriptBlock(declaration);
+        var syntacticBlock = syntacticScope is null ? null : FindNamedBlockInScope(declaration, syntacticScope);
+        if (syntacticScope is null || syntacticBlock is null)
+            return false;
+
+        declarationScope = syntacticScope;
+        declarationBlock = syntacticBlock;
+
+        while (declarationScope.Parent is ScriptBlockExpressionAst expression &&
+               expression.Parent is CommandAst invocation &&
+               invocation.InvocationOperator == TokenKind.Dot)
+        {
+            var parentScope = FindContainingScriptBlock(invocation);
+            var parentBlock = parentScope is null ? null : FindNamedBlockInScope(invocation, parentScope);
+            if (parentScope is null || parentBlock is null)
+                break;
 
             declarationScope = parentScope;
             declarationBlock = parentBlock;
@@ -127,7 +162,9 @@ internal sealed class NestedFunctionVisibilityAnalyzer
             return true;
 
         return declarationBlock.BlockKind == TokenKind.Begin &&
-               (commandBlock.BlockKind == TokenKind.Process || commandBlock.BlockKind == TokenKind.End);
+               (commandBlock.BlockKind == TokenKind.Process ||
+                commandBlock.BlockKind == TokenKind.End ||
+                string.Equals(commandBlock.BlockKind.ToString(), "Clean", StringComparison.OrdinalIgnoreCase));
     }
 
     private static NamedBlockAst? FindNamedBlockInScope(Ast ast, ScriptBlockAst scope)
@@ -141,7 +178,7 @@ internal sealed class NestedFunctionVisibilityAnalyzer
         return null;
     }
 
-    private static bool TryGetDeferredEntryFunction(
+    private bool TryGetDeferredEntryFunction(
         CommandAst command,
         FunctionDefinitionAst declaration,
         ScriptBlockAst declarationScope,
@@ -267,7 +304,7 @@ internal sealed class NestedFunctionVisibilityAnalyzer
         foreach (var candidate in candidates)
         {
             if (candidate.Extent.EndOffset > invocationOffset ||
-                !TryGetDeclarationContext(candidate, out var candidateScope, out var candidateBlock) ||
+                !TryGetPotentialDeclarationContext(candidate, out var candidateScope, out var candidateBlock) ||
                 !ReferenceEquals(candidateScope, declarationScope) ||
                 !IsDeclarationBlockCompatibleWithCommand(candidateBlock, invocation, declarationScope))
             {
@@ -283,12 +320,12 @@ internal sealed class NestedFunctionVisibilityAnalyzer
         if (_executionGraphs.TryGetValue(declarationScope, out var graph))
             return graph;
 
-        graph = new ScopeExecutionGraph(declarationScope);
+        graph = new ScopeExecutionGraph(this, declarationScope);
         _executionGraphs[declarationScope] = graph;
         return graph;
     }
 
-    private static bool ExecutesWhileScopeInitializes(CommandAst command, ScriptBlockAst declarationScope)
+    private bool ExecutesWhileScopeInitializes(CommandAst command, ScriptBlockAst declarationScope)
     {
         for (Ast? current = command.Parent; current is not null; current = current.Parent)
         {
@@ -303,177 +340,6 @@ internal sealed class NestedFunctionVisibilityAnalyzer
 
             if (ReferenceEquals(current, declarationScope))
                 return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsEscapingOrIsolatedScriptBlock(ScriptBlockExpressionAst scriptBlockExpression)
-    {
-        if (scriptBlockExpression.Parent is not CommandAst invocation)
-            return true;
-
-        if (invocation.InvocationOperator == TokenKind.Ampersand ||
-            invocation.InvocationOperator == TokenKind.Dot)
-        {
-            return false;
-        }
-
-        var invocationName = NormalizeInvocationName(invocation.GetCommandName());
-        if (invocationName.Length == 0)
-            return true;
-
-        if (string.Equals(invocationName, "Start-Job", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(invocationName, "Start-ThreadJob", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(invocationName, "Start-RSJob", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(invocationName, "Register-ObjectEvent", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(invocationName, "Register-EngineEvent", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(invocationName, "Register-CimIndicationEvent", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(invocationName, "Register-WmiEvent", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (string.Equals(invocationName, "Invoke-Command", StringComparison.OrdinalIgnoreCase))
-        {
-            if (HasUnresolvedSplat(invocation))
-                return true;
-
-            var remoteBinding = TryHasAnyBoundParameter(
-                invocation,
-                "ComputerName",
-                "ConnectionUri",
-                "Session",
-                "HostName",
-                "SSHConnection",
-                "VMId",
-                "VMName",
-                "ContainerId");
-            if (remoteBinding.HasValue)
-                return remoteBinding.Value;
-
-            return HasAnyParameter(
-                       invocation,
-                       "ComputerName",
-                       "ConnectionUri",
-                       "Session",
-                       "HostName",
-                       "SSHConnection",
-                       "VMId",
-                       "VMName",
-                       "ContainerId") ||
-                   HasPositionalRemoteTarget(invocation);
-        }
-
-        if (string.Equals(invocationName, "ForEach-Object", StringComparison.OrdinalIgnoreCase))
-        {
-            if (HasUnresolvedSplat(invocation))
-                return true;
-
-            var parallelBinding = TryHasAnyBoundParameter(invocation, "Parallel");
-            return parallelBinding ?? HasAnyParameter(invocation, "Parallel");
-        }
-
-        return !IsKnownSynchronousScriptBlockConsumer(invocationName);
-    }
-
-    private static bool IsKnownSynchronousScriptBlockConsumer(string invocationName)
-    {
-        return string.Equals(invocationName, "Where-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Sort-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Group-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Measure-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Select-Object", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Measure-Command", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(invocationName, "Trace-Command", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool HasUnresolvedSplat(CommandAst invocation)
-    {
-        return invocation.CommandElements
-            .OfType<VariableExpressionAst>()
-            .Any(variable => variable.Splatted);
-    }
-
-    private static string NormalizeInvocationName(string? invocationName)
-    {
-        if (string.IsNullOrWhiteSpace(invocationName))
-            return string.Empty;
-
-        var normalized = invocationName!.Trim();
-        var moduleSeparator = normalized.LastIndexOf('\\');
-        if (moduleSeparator >= 0 && moduleSeparator + 1 < normalized.Length)
-            normalized = normalized.Substring(moduleSeparator + 1);
-
-        if (string.Equals(normalized, "sajb", StringComparison.OrdinalIgnoreCase))
-            return "Start-Job";
-        if (string.Equals(normalized, "icm", StringComparison.OrdinalIgnoreCase))
-            return "Invoke-Command";
-        if (string.Equals(normalized, "%", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(normalized, "foreach", StringComparison.OrdinalIgnoreCase))
-        {
-            return "ForEach-Object";
-        }
-        if (string.Equals(normalized, "?", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(normalized, "where", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Where-Object";
-        }
-
-        return normalized;
-    }
-
-    private static bool HasAnyParameter(CommandAst invocation, params string[] parameterNames)
-    {
-        foreach (var parameter in invocation.CommandElements.OfType<CommandParameterAst>())
-        {
-            var actualName = parameter.ParameterName;
-            if (string.IsNullOrWhiteSpace(actualName))
-                continue;
-
-            if (parameterNames.Any(name => name.StartsWith(actualName, StringComparison.OrdinalIgnoreCase)))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool? TryHasAnyBoundParameter(CommandAst invocation, params string[] parameterNames)
-    {
-        try
-        {
-            var binding = StaticParameterBinder.BindCommand(invocation);
-            if (binding.BoundParameters.Keys.Any(
-                    key => parameterNames.Any(name => string.Equals(name, key, StringComparison.OrdinalIgnoreCase))))
-            {
-                return true;
-            }
-
-            if (binding.BindingExceptions.Count == 0)
-                return false;
-        }
-        catch
-        {
-            // Fall back to AST-only matching when command metadata is unavailable.
-        }
-
-        return null;
-    }
-
-    private static bool HasPositionalRemoteTarget(CommandAst invocation)
-    {
-        foreach (var element in invocation.CommandElements.Skip(1))
-        {
-            if (element is CommandParameterAst)
-                continue;
-
-            if (element is ScriptBlockExpressionAst)
-                return false;
-
-            return element is StringConstantExpressionAst ||
-                   element is ExpandableStringExpressionAst ||
-                   element is ArrayLiteralAst ||
-                   element is ArrayExpressionAst;
         }
 
         return false;
@@ -506,8 +372,8 @@ internal sealed class NestedFunctionVisibilityAnalyzer
         FunctionDefinitionAst declaration,
         ScriptBlockAst declarationScope)
     {
-        if (declaration.Parent is not NamedBlockAst declarationBlock ||
-            !ReferenceEquals(declarationBlock.Parent, declarationScope))
+        if (!TryGetDeclarationContext(declaration, out var effectiveScope, out var declarationBlock) ||
+            !ReferenceEquals(effectiveScope, declarationScope))
         {
             return null;
         }
@@ -516,20 +382,30 @@ internal sealed class NestedFunctionVisibilityAnalyzer
         if (!ReferenceEquals(trapBlock, declarationBlock))
             return null;
 
-        var triggeringStatement = declarationBlock.Statements
-            .Where(statement => statement.Extent.StartOffset < declaration.Extent.StartOffset)
+        var triggeringOffsets = declarationBlock.Statements
+            .Where(statement => statement.Extent.EndOffset <= declaration.Extent.StartOffset)
             .Where(statement => statement is not FunctionDefinitionAst && statement is not TrapStatementAst)
-            .OrderBy(statement => statement.Extent.StartOffset)
-            .FirstOrDefault();
+            .Select(statement => statement.Extent.StartOffset)
+            .ToList();
 
-        return triggeringStatement?.Extent.StartOffset;
+        var syntacticScope = FindContainingScriptBlock(declaration);
+        var syntacticBlock = syntacticScope is null ? null : FindNamedBlockInScope(declaration, syntacticScope);
+        if (syntacticBlock is not null && !ReferenceEquals(syntacticBlock, declarationBlock))
+        {
+            triggeringOffsets.AddRange(syntacticBlock.Statements
+                .Where(statement => statement.Extent.EndOffset <= declaration.Extent.StartOffset)
+                .Where(statement => statement is not FunctionDefinitionAst && statement is not TrapStatementAst)
+                .Select(statement => statement.Extent.StartOffset));
+        }
+
+        return triggeringOffsets.Count == 0 ? null : triggeringOffsets.Min();
     }
 
     private sealed class ScopeExecutionGraph
     {
         private readonly Dictionary<FunctionDefinitionAst, InvocationSite[]> _functionInvocations = new();
 
-        internal ScopeExecutionGraph(ScriptBlockAst scope)
+        internal ScopeExecutionGraph(NestedFunctionVisibilityAnalyzer owner, ScriptBlockAst scope)
         {
             var functions = scope.FindAll(
                     ast => ast is FunctionDefinitionAst,
@@ -538,7 +414,7 @@ internal sealed class NestedFunctionVisibilityAnalyzer
                 .Select(function => new
                 {
                     Function = function,
-                    HasContext = TryGetDeclarationContext(function, out var declarationScope, out _),
+                    HasContext = TryGetPotentialDeclarationContext(function, out var declarationScope, out _),
                     Scope = declarationScope
                 })
                 .Where(item => item.HasContext && ReferenceEquals(item.Scope, scope))
@@ -556,7 +432,7 @@ internal sealed class NestedFunctionVisibilityAnalyzer
                     ast => ast is CommandAst,
                     searchNestedScriptBlocks: true)
                 .Cast<CommandAst>()
-                .Where(command => ExecutesWhileScopeInitializes(command, scope))
+                .Where(command => owner.ExecutesWhileScopeInitializes(command, scope))
                 .Select(command => new InvocationSite(command, FindContainingTrap(command, scope)))
                 .ToArray();
 
@@ -566,7 +442,7 @@ internal sealed class NestedFunctionVisibilityAnalyzer
                         ast => ast is CommandAst,
                         searchNestedScriptBlocks: true)
                     .Cast<CommandAst>()
-                    .Where(command => ExecutesWhileScopeInitializes(command, function.Body))
+                    .Where(command => owner.ExecutesWhileScopeInitializes(command, function.Body))
                     .Select(command => new InvocationSite(command, trap: null))
                     .ToArray();
             }
