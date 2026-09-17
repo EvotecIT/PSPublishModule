@@ -59,6 +59,18 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 yield return removal;
         }
 
+        foreach (var pair in _wildcardFunctionRemovalsByPattern)
+        {
+            var pattern = new System.Management.Automation.WildcardPattern(
+                pair.Key,
+                System.Management.Automation.WildcardOptions.IgnoreCase);
+            if (!pattern.IsMatch(functionName))
+                continue;
+
+            foreach (var removal in pair.Value)
+                yield return removal;
+        }
+
         foreach (var removal in _dynamicFunctionRemovals)
             yield return removal;
     }

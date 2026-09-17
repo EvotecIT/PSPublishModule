@@ -117,6 +117,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (string.Equals(commandName, "Get-Command", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(commandName, "gcm", StringComparison.OrdinalIgnoreCase))
         {
+            if (!GetCommandCanReturnFunction(command))
+                return false;
+
             return BoundLookupCanMatchFunction(
                 command,
                 functionName,
@@ -146,6 +149,32 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             providerEnumeration,
             "Path",
             "LiteralPath");
+    }
+
+    private static bool GetCommandCanReturnFunction(CommandAst command)
+    {
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(command);
+            if (!binding.BoundParameters.TryGetValue("CommandType", out var result))
+                return true;
+
+            var filters = EnumerateLiteralTexts(result.Value)
+                .SelectMany(text => text.Split(','))
+                .Select(filter => filter.Trim())
+                .Where(filter => filter.Length > 0)
+                .ToArray();
+            if (filters.Length == 0)
+                return true;
+
+            return filters.Any(filter =>
+                "Function".StartsWith(filter, StringComparison.OrdinalIgnoreCase) ||
+                "All".StartsWith(filter, StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static bool BoundLookupCanMatchFunction(

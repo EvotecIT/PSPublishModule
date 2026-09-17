@@ -71,13 +71,44 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
     private IEnumerable<string> TryGetRemovedFunctionNames(CommandAst command)
     {
-        if (!TryGetFunctionRemovalValue(command, out var value))
+        if (!TryGetFunctionRemovalValue(command, out var value, out var literalPath))
             yield break;
 
         foreach (var text in EnumerateLiteralTexts(value))
         {
-            if (TryGetFunctionProviderName(text, out var functionName))
+            if (TryGetFunctionProviderName(text, out var functionName) &&
+                (literalPath || !System.Management.Automation.WildcardPattern.ContainsWildcardCharacters(functionName)))
+            {
                 yield return NormalizeDeclaredFunctionName(functionName);
+            }
+        }
+    }
+
+    private IReadOnlyDictionary<string, CommandAst[]> FindWildcardFunctionRemovalCommands(ScriptBlockAst root)
+    {
+        return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .SelectMany(command => TryGetWildcardRemovedFunctionNames(command)
+                .Select(pattern => new { Command = command, Pattern = pattern }))
+            .GroupBy(item => item.Pattern, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(item => item.Command).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private IEnumerable<string> TryGetWildcardRemovedFunctionNames(CommandAst command)
+    {
+        if (!TryGetFunctionRemovalValue(command, out var value, out var literalPath) || literalPath)
+            yield break;
+
+        foreach (var text in EnumerateLiteralTexts(value))
+        {
+            if (TryGetFunctionProviderName(text, out var functionName) &&
+                System.Management.Automation.WildcardPattern.ContainsWildcardCharacters(functionName))
+            {
+                yield return NormalizeDeclaredFunctionName(functionName);
+            }
         }
     }
 
@@ -85,19 +116,36 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         return root.FindAll(ast => ast is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
-            .Where(command => TryGetFunctionRemovalValue(command, out var value) && HasDynamicValue(value))
+            .Where(command =>
+                TryGetFunctionRemovalValue(command, out var value, out _) &&
+                HasDynamicValue(value) &&
+                DynamicValueCanTargetFunctionProvider(value))
             .ToArray();
     }
 
-    private bool TryGetFunctionRemovalValue(CommandAst command, out object? value)
+    private bool TryGetFunctionRemovalValue(
+        CommandAst command,
+        out object? value,
+        out bool literalPath)
     {
         value = null;
+        literalPath = false;
         var rawCommandName = command.GetCommandName();
         var commandName = NormalizeInvocationName(rawCommandName);
-        return IsProviderRemovalCommand(commandName) &&
-               !IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName) &&
-               TryGetBoundSwitchValue(command, "WhatIf") != true &&
-               TryGetBoundRemovalValue(command, new[] { "Path", "LiteralPath" }, out value);
+        if (!IsProviderRemovalCommand(commandName) ||
+            IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName) ||
+            TryGetBoundSwitchValue(command, "WhatIf") == true ||
+            !TryGetBoundRemovalValue(
+                command,
+                new[] { "Path", "LiteralPath" },
+                out value,
+                out var boundParameterName))
+        {
+            return false;
+        }
+
+        literalPath = string.Equals(boundParameterName, "LiteralPath", StringComparison.OrdinalIgnoreCase);
+        return true;
     }
 
     private static bool IsProviderRemovalCommand(string commandName)
@@ -115,8 +163,16 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         CommandAst command,
         IReadOnlyList<string> parameterNames,
         out object? value)
+        => TryGetBoundRemovalValue(command, parameterNames, out value, out _);
+
+    private static bool TryGetBoundRemovalValue(
+        CommandAst command,
+        IReadOnlyList<string> parameterNames,
+        out object? value,
+        out string? boundParameterName)
     {
         value = null;
+        boundParameterName = null;
         try
         {
             var binding = StaticParameterBinder.BindCommand(command);
@@ -125,6 +181,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 if (binding.BoundParameters.TryGetValue(parameterName, out var result))
                 {
                     value = result.Value;
+                    boundParameterName = parameterName;
                     return true;
                 }
             }
@@ -136,6 +193,41 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         value = command.CommandElements.Skip(1).FirstOrDefault(element => element is not CommandParameterAst);
         return value is not null;
+    }
+
+    private static bool DynamicValueCanTargetFunctionProvider(object? value)
+    {
+        if (value is ExpandableStringExpressionAst expandable && expandable.NestedExpressions.Count > 0)
+        {
+            return !TryGetStaticProviderPrefix(expandable.Extent.Text, out var provider) ||
+                   string.Equals(provider, "function", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (value is ArrayLiteralAst array)
+            return array.Elements.Any(DynamicValueCanTargetFunctionProvider);
+        if (value is IEnumerable enumerable && value is not string)
+            return enumerable.Cast<object?>().Any(DynamicValueCanTargetFunctionProvider);
+
+        return HasDynamicValue(value);
+    }
+
+    private static bool TryGetStaticProviderPrefix(string text, out string provider)
+    {
+        provider = string.Empty;
+        var candidate = text.Trim().Trim('"', '\'');
+        var separator = candidate.IndexOf(':');
+        if (separator <= 0)
+            return false;
+
+        var prefix = candidate.Substring(0, separator);
+        if (prefix.Any(character =>
+                !char.IsLetterOrDigit(character) && character != '_' && character != '-' && character != '.'))
+        {
+            return false;
+        }
+
+        provider = prefix;
+        return true;
     }
 
     private static IEnumerable<string> EnumerateLiteralTexts(object? value)
