@@ -237,4 +237,123 @@ public sealed class MissingFunctionsAnalyzerQualifiedAndDeferredReviewTests
         Assert.Contains(report.Summary, item =>
             string.Equals(item.Name, "Invoke-PowerForgeUnboundDefaultLate", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void Analyze_IgnoresConditionalFunctionProviderRemoval()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeConditionallyRemovedLocal { 'local' }
+                if ($false) { Remove-Item function:Invoke-PowerForgeConditionallyRemovedLocal }
+                Invoke-PowerForgeConditionallyRemovedLocal
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeConditionallyRemovedLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_AppliesFunctionProviderRemovalWithinSameGuardedBlock()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeGuardRemovedLocal { 'local' }
+                if ($Enable) {
+                    Remove-Item function:Invoke-PowerForgeGuardRemovedLocal
+                    Invoke-PowerForgeGuardRemovedLocal
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeGuardRemovedLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_AppliesGuardedRemovalAtDeferredInvocationOffset()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                function Invoke-PowerForgeGuardDeferredRemovedLocal { 'local' }
+                function Invoke-PowerForgeGuardRemovedCaller { Invoke-PowerForgeGuardDeferredRemovedLocal }
+                if ($Enable) {
+                    Remove-Item function:Invoke-PowerForgeGuardDeferredRemovedLocal
+                    Invoke-PowerForgeGuardRemovedCaller
+                }
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeGuardDeferredRemovedLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_IgnoresFunctionProviderVariableReadBeforeDeclaration()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Outer {
+                $saved = ${function:Invoke-PowerForgeVariableSavedCallback}
+                function Invoke-PowerForgeVariableSavedCallback { Invoke-PowerForgeVariableSavedLocal }
+                function Invoke-PowerForgeVariableSavedLocal { 'local' }
+                Invoke-PowerForgeVariableSavedCallback
+            }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeVariableSavedLocal", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("Script")]
+    [InlineData("Global")]
+    public void Analyze_FollowsExplicitlyScopedAliasInstalledBeforeInvocation(string scope)
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        var code = $$"""
+            function Invoke-PowerForgeScopedAliasCaller { Invoke-PowerForgeScopedAliasLate }
+            function Install-PowerForgeScopedAlias {
+                Set-Alias go Invoke-PowerForgeScopedAliasCaller -Scope {{scope}}
+            }
+            Install-PowerForgeScopedAlias
+            go
+            function Invoke-PowerForgeScopedAliasLate { 'late' }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.Contains(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeScopedAliasLate", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Analyze_DoesNotApplyExplicitlyScopedAliasWhenInstallerDidNotRun()
+    {
+        var analyzer = new MissingFunctionsAnalyzer();
+        const string code = """
+            function Invoke-PowerForgeInactiveAliasCaller { Invoke-PowerForgeInactiveAliasLate }
+            function Install-PowerForgeInactiveAlias {
+                Set-Alias go Invoke-PowerForgeInactiveAliasCaller -Scope Script
+            }
+            go
+            function Invoke-PowerForgeInactiveAliasLate { 'late' }
+            """;
+
+        var report = analyzer.Analyze(filePath: null, code: code);
+
+        Assert.DoesNotContain(report.Summary, item =>
+            string.Equals(item.Name, "Invoke-PowerForgeInactiveAliasLate", StringComparison.OrdinalIgnoreCase));
+    }
 }

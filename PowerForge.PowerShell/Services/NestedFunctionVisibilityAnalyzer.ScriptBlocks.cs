@@ -446,7 +446,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return null;
     }
 
-    private static bool AliasCanShadowInvocation(
+    private bool AliasCanShadowInvocation(
         CommandAst aliasDeclaration,
         CommandAst invocation,
         int? executionOffset = null)
@@ -458,6 +458,20 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         if (aliasScope is null)
             return false;
 
+        var authoredScope = TryGetAuthoredAliasScope(aliasDeclaration);
+        if (string.Equals(authoredScope, "Script", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(authoredScope, "Global", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!IsExplicitAliasDeclarationActive(
+                    aliasDeclaration,
+                    executionOffset ?? invocation.Extent.StartOffset))
+            {
+                return false;
+            }
+
+            aliasScope = _root;
+        }
+
         for (Ast? current = invocation; current is not null; current = current.Parent)
         {
             if (ReferenceEquals(current, aliasScope))
@@ -465,6 +479,40 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
 
         return false;
+    }
+
+    private static string? TryGetAuthoredAliasScope(CommandAst command)
+    {
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(command);
+            return binding.BoundParameters.TryGetValue("Scope", out var result)
+                ? TryGetLiteralText(result.Value)
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private bool IsExplicitAliasDeclarationActive(CommandAst aliasDeclaration, int executionOffset)
+    {
+        var installer = FindContainingFunction(aliasDeclaration);
+        if (installer is null)
+            return true;
+        if (!IsGuaranteedFunctionBodyInvocation(aliasDeclaration, installer))
+            return false;
+
+        var graph = GetExecutionGraph(_root);
+        return graph.RootInvocations.Any(invocation =>
+            IsDirectRootInvocation(invocation.Command) &&
+            invocation.Command.Extent.EndOffset <= executionOffset &&
+            InvocationCanReachFunction(
+                invocation,
+                installer,
+                graph,
+                requireGuaranteedPath: true));
     }
 
     private static bool HasTrustedModuleQualification(string? rawInvocationName, string normalizedInvocationName)

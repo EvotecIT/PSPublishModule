@@ -120,7 +120,8 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             latestRemovalOffset = removals
                 .Where(removal =>
                     removal.Extent.EndOffset <= consumerOffset &&
-                    ReferenceEquals(FindContainingScriptBlock(removal), _root))
+                    ReferenceEquals(FindContainingScriptBlock(removal), _root) &&
+                    IsDirectScopeCommand(removal, _root))
                 .Select(removal => removal.Extent.EndOffset)
                 .DefaultIfEmpty(-1)
                 .Max();

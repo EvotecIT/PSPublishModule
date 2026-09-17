@@ -103,7 +103,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             }
 
             if (declaration.Extent.EndOffset <= directExecutionOffset &&
-                !IsRemovedBeforeExecution(declaration, directExecutionOffset, declarationScope))
+                !IsRemovedBeforeExecution(declaration, directExecutionOffset, declarationScope, command))
                 return true;
         }
 
@@ -112,14 +112,25 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
     private bool IsRemovedBeforeCommand(FunctionDefinitionAst declaration, CommandAst command)
     {
-        return TryGetPotentialDeclarationContext(declaration, out var declarationScope, out _) &&
-               IsRemovedBeforeExecution(declaration, command.Extent.StartOffset, declarationScope);
+        if (!TryGetPotentialDeclarationContext(declaration, out var declarationScope, out _))
+            return false;
+
+        var name = NormalizeDeclaredFunctionName(declaration.Name);
+        if (!_functionRemovalsByName.TryGetValue(name, out var removals))
+            return false;
+
+        return removals.Any(removal =>
+            removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
+            removal.Extent.EndOffset <= command.Extent.StartOffset &&
+            ReferenceEquals(FindContainingScriptBlock(removal), declarationScope) &&
+            RemovalDominatesCommand(removal, command, declarationScope));
     }
 
     private bool IsRemovedBeforeExecution(
         FunctionDefinitionAst declaration,
         int executionOffset,
-        ScriptBlockAst declarationScope)
+        ScriptBlockAst declarationScope,
+        CommandAst? executionCommand = null)
     {
         var name = NormalizeDeclaredFunctionName(declaration.Name);
         if (!_functionRemovalsByName.TryGetValue(name, out var removals))
@@ -128,7 +139,42 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return removals.Any(removal =>
             removal.Extent.StartOffset >= declaration.Extent.EndOffset &&
             removal.Extent.EndOffset <= executionOffset &&
-            ReferenceEquals(FindContainingScriptBlock(removal), declarationScope));
+            ReferenceEquals(FindContainingScriptBlock(removal), declarationScope) &&
+            (IsDirectScopeCommand(removal, declarationScope) ||
+             executionCommand is not null &&
+             RemovalDominatesCommand(removal, executionCommand, declarationScope)));
+    }
+
+    private static bool RemovalDominatesCommand(
+        CommandAst removal,
+        CommandAst command,
+        ScriptBlockAst declarationScope)
+    {
+        if (IsDirectScopeCommand(removal, declarationScope))
+            return true;
+
+        if (removal.Parent is not PipelineAst pipeline ||
+            pipeline.Parent is not StatementBlockAst statementBlock)
+        {
+            return false;
+        }
+
+        for (Ast? current = command.Parent; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, statementBlock))
+                return true;
+            if (current is FunctionDefinitionAst || current is ScriptBlockExpressionAst)
+                return false;
+        }
+
+        return false;
+    }
+
+    private static bool IsDirectScopeCommand(CommandAst command, ScriptBlockAst scope)
+    {
+        return command.Parent is PipelineAst pipeline &&
+               pipeline.Parent is NamedBlockAst block &&
+               ReferenceEquals(block.Parent, scope);
     }
 
     private bool IsDeclarationQualifierVisibleAtCommand(
@@ -444,7 +490,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                 invocationOffset = cleanExecutionOffset;
             }
             else if (invocationOffset >= declaration.Extent.EndOffset &&
-                     !IsRemovedBeforeExecution(declaration, invocationOffset, declarationScope))
+                     !IsRemovedBeforeExecution(
+                         declaration,
+                         invocationOffset,
+                         declarationScope,
+                         invocation.Command))
             {
                 continue;
             }
@@ -727,6 +777,9 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         {
             return false;
         }
+
+        if (ast.Extent.StartOffset < function.Extent.EndOffset)
+            return false;
 
         if (ast is VariableExpressionAst &&
             ast.Parent is CommandAst invocation &&
