@@ -76,6 +76,12 @@ public sealed class PowerShellCompilationProviderPackageBuildRequest
 
     /// <summary>RID-specific native assets to include.</summary>
     public PowerShellCompilationProviderNativeAssetInput[] NativeAssets { get; set; } = Array.Empty<PowerShellCompilationProviderNativeAssetInput>();
+
+    /// <summary>Optional source repository URL written to NuGet package metadata.</summary>
+    public string? RepositoryUrl { get; set; }
+
+    /// <summary>Optional source revision written to NuGet package metadata.</summary>
+    public string? RepositoryCommit { get; set; }
 }
 
 /// <summary>
@@ -133,7 +139,7 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false))
             {
-                AddText(archive, manifest.PackageId + ".nuspec", CreateNuspec(manifest));
+                AddText(archive, manifest.PackageId + ".nuspec", CreateNuspec(manifest, request.RepositoryUrl, request.RepositoryCommit));
                 AddText(archive, "[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"utf-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"json\" ContentType=\"application/json\"/><Default Extension=\"dll\" ContentType=\"application/octet\"/><Default Extension=\"nuspec\" ContentType=\"application/octet\"/></Types>");
                 AddText(archive, PowerShellCompilationProviderPackageReader.ManifestPath, SerializeManifest(manifest));
                 foreach (var assembly in request.Assemblies.OrderBy(static assembly => assembly.PackagePath, StringComparer.Ordinal))
@@ -263,13 +269,24 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             MayExecuteSource = source.MayExecuteSource
         };
 
-    private static string CreateNuspec(PowerShellCompilationProviderPackageManifest manifest)
+    private static string CreateNuspec(
+        PowerShellCompilationProviderPackageManifest manifest,
+        string? repositoryUrl,
+        string? repositoryCommit)
     {
+        var hasRepositoryUrl = !string.IsNullOrWhiteSpace(repositoryUrl);
+        var hasRepositoryCommit = !string.IsNullOrWhiteSpace(repositoryCommit);
+        if (hasRepositoryUrl != hasRepositoryCommit)
+            throw new InvalidOperationException("Provider package repository URL and commit must be supplied together.");
+
         var dependencies = string.Join(string.Empty, manifest.Dependencies
             .OrderBy(static dependency => dependency.PackageId, StringComparer.Ordinal)
             .Select(static dependency => $"<dependency id=\"{Xml(dependency.PackageId)}\" version=\"[{Xml(dependency.Version)}]\" />"));
         var licenseUrl = "https://licenses.nuget.org/" + Uri.EscapeDataString(manifest.LicenseExpression);
-        return $"<?xml version=\"1.0\" encoding=\"utf-8\"?><package><metadata><id>{Xml(manifest.PackageId)}</id><version>{Xml(manifest.PackageVersion)}</version><authors>{Xml(manifest.Publisher)}</authors><description>PowerForge PowerShell compilation provider metadata.</description><license type=\"expression\">{Xml(manifest.LicenseExpression)}</license><licenseUrl>{Xml(licenseUrl)}</licenseUrl><dependencies><group targetFramework=\"net10.0\">{dependencies}</group></dependencies></metadata></package>";
+        var repository = hasRepositoryUrl
+            ? $"<repository type=\"git\" url=\"{Xml(repositoryUrl!.Trim())}\" commit=\"{Xml(repositoryCommit!.Trim())}\" />"
+            : string.Empty;
+        return $"<?xml version=\"1.0\" encoding=\"utf-8\"?><package><metadata><id>{Xml(manifest.PackageId)}</id><version>{Xml(manifest.PackageVersion)}</version><authors>{Xml(manifest.Publisher)}</authors><description>PowerForge PowerShell compilation provider metadata.</description><license type=\"expression\">{Xml(manifest.LicenseExpression)}</license><licenseUrl>{Xml(licenseUrl)}</licenseUrl>{repository}<dependencies><group targetFramework=\"net10.0\">{dependencies}</group></dependencies></metadata></package>";
     }
 
     private static string Xml(string value) => System.Security.SecurityElement.Escape(value) ?? string.Empty;

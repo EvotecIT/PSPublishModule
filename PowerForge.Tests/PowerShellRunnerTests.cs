@@ -293,6 +293,67 @@ public sealed class PowerShellRunnerTests
         Assert.Equal(2, requests.Count);
         Assert.Contains("$PSVersionTable.PSEdition", requests[0].Arguments);
         Assert.Contains("-File", requests[1].Arguments);
+        Assert.All(requests, request =>
+        {
+            Assert.NotNull(request.EnvironmentVariables);
+            Assert.True(request.EnvironmentVariables!.ContainsKey("PSModulePath"));
+            Assert.Null(request.EnvironmentVariables["PSModulePath"]);
+        });
+    }
+
+    [Fact]
+    public void Run_WindowsPowerShellRequired_PreservesExplicitModulePath()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        using var directory = new TemporaryDirectory();
+        var executablePath = Path.Combine(directory.Path, "powershell.exe");
+        File.WriteAllText(executablePath, string.Empty);
+        var requests = new List<ProcessRunRequest>();
+        var processRunner = new StubProcessRunner(request =>
+        {
+            requests.Add(request);
+            var output = request.Arguments.Contains("$PSVersionTable.PSEdition") ? "Desktop" : "ok";
+            return new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var runner = new PowerShellRunner(processRunner);
+        var environment = new Dictionary<string, string?> { ["psmodulepath"] = @"C:\WindowsPowerShell\Modules" };
+
+        var result = runner.Run(new PowerShellRunRequest(
+            scriptPath: @"C:\repo\sign.ps1",
+            arguments: Array.Empty<string>(),
+            timeout: TimeSpan.FromMinutes(1),
+            preferPwsh: false,
+            hostRequirement: PowerShellHostRequirement.WindowsPowerShell,
+            environmentVariables: environment,
+            executableOverride: executablePath));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.All(requests, request =>
+            Assert.Equal(@"C:\WindowsPowerShell\Modules", request.EnvironmentVariables!["psmodulepath"]));
+    }
+
+    [Fact]
+    public void Run_WindowsPowerShellRequired_LoadsNativeCertificateProvider()
+    {
+        if (Path.DirectorySeparatorChar != '\\')
+            return;
+
+        using var directory = new TemporaryDirectory();
+        var scriptPath = Path.Combine(directory.Path, "cert-provider.ps1");
+        File.WriteAllText(scriptPath, "Get-PSDrive Cert -ErrorAction Stop | Out-Null; 'ready'");
+        var runner = new PowerShellRunner();
+
+        var result = runner.Run(new PowerShellRunRequest(
+            scriptPath: scriptPath,
+            arguments: Array.Empty<string>(),
+            timeout: TimeSpan.FromSeconds(30),
+            preferPwsh: false,
+            hostRequirement: PowerShellHostRequirement.WindowsPowerShell));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("ready", result.StdOut, StringComparison.Ordinal);
     }
 
     private static string CreateStubExecutablePath()

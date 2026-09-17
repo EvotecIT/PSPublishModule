@@ -855,7 +855,7 @@ internal static partial class ModuleBootstrapperGenerator
         => System.Security.SecurityElement.Escape(value) ?? string.Empty;
 
     private static ProcessRunResult RunProcess(string fileName, string workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout)
-        => Task.Run(() => new ProcessRunner().RunAsync(new ProcessRunRequest(fileName, workingDirectory, arguments, timeout)))
+        => Task.Run(() => new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(fileName, workingDirectory, arguments, timeout)))
             .GetAwaiter()
             .GetResult();
 

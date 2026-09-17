@@ -206,6 +206,38 @@ public sealed class PowerForgeReleaseRequestMapperTests
     }
 
     [Fact]
+    public void Build_MapsExplicitModuleHostPath()
+    {
+        string moduleHostPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "PSPublishModule.dll");
+
+        PowerForgeReleaseRequest request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            Path.Combine(Path.GetTempPath(), "release.json"),
+            defaults: null,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions
+            {
+                ModuleHostPath = moduleHostPath
+            });
+
+        Assert.Equal(moduleHostPath, request.ModuleHostPath);
+    }
+
+    [Fact]
+    public void Build_PreservesDefaultModuleHostPath()
+    {
+        var defaults = new PowerForgeReleaseRequest
+        {
+            ModuleHostPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "default", "PSPublishModule.dll")
+        };
+
+        PowerForgeReleaseRequest request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+            Path.Combine(Path.GetTempPath(), "release.json"),
+            defaults,
+            new PSPublishModule.PowerForgeReleaseInvocationOptions());
+
+        Assert.Equal(defaults.ModuleHostPath, request.ModuleHostPath);
+    }
+
+    [Fact]
     public void Build_MapsModuleReleaseOverrides()
     {
         var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(

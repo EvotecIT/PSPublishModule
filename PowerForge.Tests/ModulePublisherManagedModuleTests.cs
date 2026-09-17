@@ -29,6 +29,9 @@ public sealed partial class ModulePublisherManagedModuleTests
                 }
                 """);
             File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(stagingRoot, "PowerForge.ReleaseProvenance.psd1"),
+                "@{ SourceRevision = '0123456789abcdef' }");
 
             var publisher = new ModulePublisher(
                 new NullLogger(),

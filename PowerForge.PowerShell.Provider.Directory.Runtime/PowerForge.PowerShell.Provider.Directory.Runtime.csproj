@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <VersionPrefix>3.0.143</VersionPrefix>
+    <VersionPrefix>3.0.145</VersionPrefix>
     <PackageId>PowerForge.PowerShell.Provider.Directory.Runtime</PackageId>
     <Description>Executable win-x64 LDAP provider package for runtime-free PowerForge artifacts.</Description>
     <PackageTags>powershell;compiler;provider;ldap;directory;powerforge</PackageTags>
@@ -27,7 +27,7 @@
       <DotNetHostFileName Condition="'$(DotNetHostFileName)' == ''">dotnet</DotNetHostFileName>
       <DotNetHostExecutable>$([System.IO.Path]::Combine('$(NetCoreRoot)', '$(DotNetHostFileName)'))</DotNetHostExecutable>
     </PropertyGroup>
-    <Exec Command="&quot;$(DotNetHostExecutable)&quot; &quot;$(TargetPath)&quot; &quot;$(ProviderPackageOutputPath)&quot; &quot;$(PackageVersion)&quot;" />
+    <Exec Command="&quot;$(DotNetHostExecutable)&quot; &quot;$(TargetPath)&quot; &quot;$(ProviderPackageOutputPath)&quot; &quot;$(PackageVersion)&quot; &quot;$(RepositoryUrl)&quot; &quot;$(RepositoryCommit)&quot;" />
   </Target>
 
 </Project>

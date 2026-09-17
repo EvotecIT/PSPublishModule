@@ -223,8 +223,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "vC+noxhSbXvKj4hCljPA8+wxzEZNkhUEF7YLpsxHX+GypB/Yofc38KhoJ+hEfSES73lkwmiWcQKnf1lc4YcS3A=="
+        "resolved": "3.4.2",
+        "contentHash": "DU/BT5ANp2aX4aUtukIVkU82w8PrmSzX2YbGCv3gJ6U4Qqhk+tsD7oWKX2vke4+T10EZMTsWXY+TWFkKVC3PeA=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
@@ -238,10 +238,10 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "Arfz7sg5ngtPaksl9EKMHyEOk1SHbAxqgwYvWDtO+PAPRbTHR+TJNdI3Dd79RVJpIpxAQc5Q0lfyfF5oCAtO0g==",
+        "resolved": "3.4.2",
+        "contentHash": "IDmmNZ9cAMOFA4xBWXAO0Mks1pfosQU7Y0+F80xsshqs4PdCm8JsikY0knx+ZUSIwY+9NMGOY7C96XtpHycfBw==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.1"
+          "OfficeIMO.Core": "3.4.2"
         }
       },
       "OfficeIMO.Markdown.Html": {
@@ -313,8 +313,8 @@
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "y74NfbISp+FLjGdsaTi23Oe3xxPPwCeEMWdUlkujE23lQH5Un6gU4tWmQZ6kI1CFW7IsB1Ii045Ay7lMeoMHqA=="
+        "resolved": "10.0.12",
+        "contentHash": "Bsop0fosps100BOj1s9uIM3XaUpoLok5s0LTuEeKXvKse1XvpYvnzeC/7AZXCs3MkFurRkLe9k9XwKNZz2retw=="
       },
       "System.Management": {
         "type": "Transitive",
@@ -326,18 +326,18 @@
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "NbsfNbQ7E6aRhBtogseM6dGWwUgrgyska+CXnlsIEgJNmgGh1s8ps8fKDMSgwE6hMIsU3TP8BKfRlvOOSpxV+g=="
+        "resolved": "10.0.12",
+        "contentHash": "+DWu1fzj75I1FgdHSg3crgeZmfF2z55x1+OXF2IO2Lcq/iNgM9tL734pxAG0vo5iE82FVPHwbqUt31o8ipPBWg=="
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "8IV+rI3xN/Mkq9MsSX7VZTv9T9Wt+tyhHLwBX9VNZBk8m8kknEs1JeTSjI2x9M2L/fSja+c2WSE5n5Yy0GXdoQ=="
+        "resolved": "10.0.12",
+        "contentHash": "W6BsawU2tB2qy6u4+3cBOSOmiTUgYWW365b5WMVA1bDxQwZZeNWD+qufKJkDQNKzAKq4b6Q04DDKhmr2SNJ1eg=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "PNoxCTPb+Tlux+GJyq4c89ddYdpioVSqfGx8pqOF6shCSKwUNNctXhQtRkCICjbJmGrJJsW8NY52kVYO/b8mlQ=="
+        "resolved": "10.0.12",
+        "contentHash": "wO0W8VDMeRJZakRySOmemAnrBZMwEFRlbfBtATxUiLf2I3IhSRnCp1Vt157NWptdE4IJ7eftd5n8q9LtaKHFTQ=="
       },
       "VirusTotalAnalyzer": {
         "type": "Transitive",
@@ -354,10 +354,10 @@
         "dependencies": {
           "NuGet.Configuration": "[7.9.0, )",
           "NuGet.Packaging": "[7.9.0, )",
-          "System.IO.Packaging": "[10.0.11, )",
-          "System.Reflection.MetadataLoadContext": "[10.0.11, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.11, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
+          "System.IO.Packaging": "[10.0.12, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.12, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.12, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
@@ -367,8 +367,8 @@
           "Google.Apis.Auth": "[1.76.0, )",
           "HtmlTinkerX": "[3.0.1, )",
           "Magick.NET-Q8-AnyCPU": "[14.17.1, )",
-          "OfficeIMO.Markdown": "[3.4.1, )",
-          "PowerForge": "[3.0.142, )",
+          "OfficeIMO.Markdown": "[3.4.2, )",
+          "PowerForge": "[3.0.145, )",
           "Scriban": "[7.4.0, )",
           "YamlDotNet": "[18.1.0, )"
         }

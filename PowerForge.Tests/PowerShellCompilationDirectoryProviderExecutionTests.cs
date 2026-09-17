@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.DirectoryServices.Protocols;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.IO.Compression;
+using System.Xml.Linq;
 using PowerForge;
 using Xunit;
 
@@ -11,6 +13,9 @@ namespace PowerForge.Tests;
 [Collection(ProcessEnvironmentCollection.Name)]
 public sealed class PowerShellCompilationDirectoryProviderExecutionTests
 {
+    private const string PackageRepositoryUrl = "https://github.com/EvotecIT/PSPublishModule";
+    private static readonly string PackageRepositoryCommit = new('a', 40);
+
     [WindowsFact]
     public async Task ReleaseProjectPacksExecutableDirectoryProviderPackage()
     {
@@ -28,14 +33,19 @@ public sealed class PowerShellCompilationDirectoryProviderExecutionTests
                 "PowerForge.PowerShell.Provider.Directory.Runtime",
                 "PowerForge.PowerShell.Provider.Directory.Runtime.csproj");
             Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("dotnet", out var dotNetPath));
-            var pack = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+            var pack = await new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
                 dotNetPath,
                 repoRoot,
-                new[] { "pack", project, "-c", "Release", "--no-build", "--no-restore", "-o", output, "--nologo" },
+                new[]
+                {
+                    "pack", project, "-c", "Release", "--no-build", "--no-restore", "-o", output, "--nologo",
+                    $"-p:RepositoryUrl={PackageRepositoryUrl}", $"-p:RepositoryCommit={PackageRepositoryCommit}"
+                },
                 TimeSpan.FromMinutes(2),
                 new Dictionary<string, string?> { ["PATH"] = string.Empty }));
             Assert.True(pack.Succeeded, pack.StdErr + Environment.NewLine + pack.StdOut);
             var package = Assert.Single(Directory.GetFiles(output, PowerShellDirectoryRuntimeProviderPackage.PackageId + ".*.nupkg"));
+            AssertPackageRepositoryProvenance(package);
             var resolution = new PowerShellCompilationProviderPackageReader().Resolve(
                 new[] { new PowerShellCompilationProviderPackageReference(package) },
                 runtimeIdentifier: "win-x64");
@@ -338,6 +348,18 @@ public sealed class PowerShellCompilationDirectoryProviderExecutionTests
             throw new TimeoutException($"Directory provider executable exceeded {timeout}.");
         }
         return new ProcessResult(process.ExitCode, await standardOutput, await standardError);
+    }
+
+    private static void AssertPackageRepositoryProvenance(string packagePath)
+    {
+        using var archive = ZipFile.OpenRead(packagePath);
+        var nuspec = Assert.Single(archive.Entries, static entry =>
+            entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
+        using var stream = nuspec.Open();
+        var repository = Assert.Single(XDocument.Load(stream).Descendants(), static element =>
+            element.Name.LocalName == "repository");
+        Assert.Equal(PackageRepositoryUrl, repository.Attribute("url")?.Value);
+        Assert.Equal(PackageRepositoryCommit, repository.Attribute("commit")?.Value);
     }
 
     private sealed class DirectoryProviderFixture : IDisposable

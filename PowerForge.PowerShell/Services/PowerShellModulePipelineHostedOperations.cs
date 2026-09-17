@@ -271,61 +271,26 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         };
 
         var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
+        var useWindowsPowerShellStoreCertificate =
+            _isWindows &&
+            !string.IsNullOrWhiteSpace(signing.CertificateThumbprint) &&
+            string.IsNullOrWhiteSpace(signing.CertificatePFXPath) &&
+            string.IsNullOrWhiteSpace(signing.CertificatePFXBase64);
         PowerShellRunResult result;
         ModuleSigningResult? summary;
         ModuleSigningResult? attemptSummary;
-        PowerShellRunResult? initialFailedResult = null;
-        ModuleSigningResult? initialFailedSummary = null;
         try
         {
             result = RunScript(
                 script,
                 args,
                 CalculateSigningTimeout(normalizedPackageFilePaths.Length),
-                preferPwsh: true);
+                preferPwsh: !useWindowsPowerShellStoreCertificate,
+                hostRequirement: useWindowsPowerShellStoreCertificate
+                    ? PowerShellHostRequirement.WindowsPowerShell
+                    : PowerShellHostRequirement.Any);
             attemptSummary = TryExtractSigningSummary(result.StdOut);
             summary = attemptSummary;
-
-            if (TryGetWindowsPowerShellRetryFiles(
-                    result,
-                    attemptSummary,
-                    signing,
-                    rootPath,
-                    normalizedPackageFilePaths,
-                    out var retryFilePaths))
-            {
-                initialFailedResult = result;
-                initialFailedSummary = summary;
-                _logger.Warn(
-                    $"Authenticode signing with '{DescribePowerShellHost(result.Executable)}' returned a retryable provider result for every failed file. " +
-                    "Retrying once with Windows PowerShell preferred for compatibility with the Windows certificate provider.");
-
-                var retryPackageFileListPath = WriteTemporaryLineFile(retryFilePaths);
-                temporaryPackageFileLists.Add(retryPackageFileListPath);
-                var retryArgs = args.ToArray();
-                retryArgs[1] = retryPackageFileListPath;
-                retryArgs[8] = "1";
-
-                result = RunScript(
-                    script,
-                    retryArgs,
-                    CalculateSigningTimeout(retryFilePaths.Length),
-                    preferPwsh: false,
-                    hostRequirement: PowerShellHostRequirement.WindowsPowerShell);
-                attemptSummary = TryExtractSigningSummary(result.StdOut);
-                if (attemptSummary is null && result.ExitCode == 0)
-                {
-                    attemptSummary = new ModuleSigningResult
-                    {
-                        Attempted = retryFilePaths.Length,
-                        SignedNew = ParseSignedCount(result.StdOut)
-                    };
-                }
-
-                summary = attemptSummary is null
-                    ? initialFailedSummary
-                    : MergeSigningRetrySummaries(initialFailedSummary!, attemptSummary);
-            }
         }
         finally
         {
@@ -338,14 +303,6 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         if (result.ExitCode != 0 || (attemptSummary?.Failed ?? 0) > 0)
         {
             var full = FormatSigningFailure(result, attemptSummary);
-            if (initialFailedResult is not null)
-            {
-                full = $"Signing failed after the Windows PowerShell compatibility retry. " +
-                       $"Initial attempt: {FormatSigningFailure(initialFailedResult, initialFailedSummary)} " +
-                       $"Retry: {full}";
-                LogSigningDiagnostics(initialFailedResult);
-            }
-
             LogSigningDiagnostics(result);
 
             throw new ModuleSigningException(full, summary);
@@ -375,86 +332,6 @@ internal sealed class PowerShellModulePipelineHostedOperations :
 
         return summary;
     }
-
-    private bool TryGetWindowsPowerShellRetryFiles(
-        PowerShellRunResult result,
-        ModuleSigningResult? summary,
-        SigningOptionsConfiguration signing,
-        string rootPath,
-        IReadOnlyList<string> packageFilePaths,
-        out string[] retryFilePaths)
-    {
-        retryFilePaths = Array.Empty<string>();
-        if (!_isWindows || summary is null || summary.Failed <= 0 || summary.PrecheckFailure > 0 ||
-            summary.UnknownError + summary.SigningException != summary.Failed)
-            return false;
-        if (string.IsNullOrWhiteSpace(signing.CertificateThumbprint))
-            return false;
-        if (!string.IsNullOrWhiteSpace(signing.CertificatePFXPath) || !string.IsNullOrWhiteSpace(signing.CertificatePFXBase64))
-            return false;
-
-        if (!string.Equals(
-                Path.GetFileNameWithoutExtension(result.Executable),
-                "pwsh",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (summary.FailedFilePaths is not { } failedFilePaths || failedFilePaths.Length != summary.Failed)
-            return false;
-
-        try
-        {
-            var packageSet = new HashSet<string>(
-                packageFilePaths
-                    .Where(static path => !string.IsNullOrWhiteSpace(path))
-                    .Select(path => Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(rootPath, path))),
-                StringComparer.OrdinalIgnoreCase);
-            retryFilePaths = failedFilePaths
-                .Where(static path => !string.IsNullOrWhiteSpace(path))
-                .Select(Path.GetFullPath)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            return retryFilePaths.Length == summary.Failed && retryFilePaths.All(packageSet.Contains);
-        }
-        catch
-        {
-            retryFilePaths = Array.Empty<string>();
-            return false;
-        }
-    }
-
-    private static ModuleSigningResult MergeSigningRetrySummaries(
-        ModuleSigningResult initial,
-        ModuleSigningResult retry)
-        => new()
-        {
-            TotalMatched = initial.TotalMatched,
-            TotalAfterExclude = initial.TotalAfterExclude,
-            AlreadySignedByThisCert = initial.AlreadySignedByThisCert,
-            AlreadySignedOther = initial.AlreadySignedOther,
-            Attempted = initial.Attempted,
-            SignedNew = initial.SignedNew + retry.SignedNew,
-            Resigned = initial.Resigned + retry.Resigned,
-            Failed = retry.Failed,
-            PrecheckFailure = retry.PrecheckFailure,
-            UnknownError = retry.UnknownError,
-            SigningException = retry.SigningException,
-            CertificateThumbprint = retry.CertificateThumbprint ?? initial.CertificateThumbprint,
-            FailedFiles = retry.FailedFiles ?? Array.Empty<string>(),
-            FailedFilePaths = retry.FailedFilePaths ?? Array.Empty<string>(),
-            VerifiedFilePaths = (initial.VerifiedFilePaths ?? Array.Empty<string>())
-                .Concat(retry.VerifiedFilePaths ?? Array.Empty<string>())
-                .Distinct(StringComparer.Ordinal)
-                .ToArray(),
-            PreservedThirdPartySignatures = (initial.PreservedThirdPartySignatures ?? Array.Empty<ModuleSigningPreservedSignature>())
-                .Concat(retry.PreservedThirdPartySignatures ?? Array.Empty<ModuleSigningPreservedSignature>())
-                .GroupBy(signature => signature.FilePath, StringComparer.Ordinal)
-                .Select(group => group.Last())
-                .ToArray()
-        };
 
     private void LogSigningDiagnostics(PowerShellRunResult result)
     {

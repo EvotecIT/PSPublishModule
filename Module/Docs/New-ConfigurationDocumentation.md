@@ -11,7 +11,7 @@ Enables or disables creation of documentation from the module using PowerForge.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [<CommonParameters>]
+New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -191,9 +191,41 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -StartClean
+Legacy compatibility switch. Documentation builds clean stale generated files by default.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -SyncExternalHelpToProjectRoot
 When enabled, the generated external help file is also synced
 back to the project root (e.g. en-US\<ModuleName>-help.xml).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UpdateWhenNew
+Legacy compatibility switch. Documentation builds update the project documentation path by default.
 
 ```yaml
 Type: SwitchParameter

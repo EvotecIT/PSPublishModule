@@ -47,28 +47,28 @@
       },
       "System.DirectoryServices.Protocols": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "Q4DEPB0wfAMAM6zjCjioFQoDZGC6uCeAZMU30sdjMgVtKbSuSBjhASVlxVOTYmQKCdUqZInnDwZ3W/ZTWB4m3Q=="
+        "resolved": "10.0.12",
+        "contentHash": "L2PHm7ewfjQYgbhBUB+lXiewxoNo+rhn06geWeUJP3qYCDnkL+Qibv6TEPMlMsF/zab4cU2bE8BWTBqzHZYiYg=="
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "y74NfbISp+FLjGdsaTi23Oe3xxPPwCeEMWdUlkujE23lQH5Un6gU4tWmQZ6kI1CFW7IsB1Ii045Ay7lMeoMHqA=="
+        "resolved": "10.0.12",
+        "contentHash": "Bsop0fosps100BOj1s9uIM3XaUpoLok5s0LTuEeKXvKse1XvpYvnzeC/7AZXCs3MkFurRkLe9k9XwKNZz2retw=="
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "NbsfNbQ7E6aRhBtogseM6dGWwUgrgyska+CXnlsIEgJNmgGh1s8ps8fKDMSgwE6hMIsU3TP8BKfRlvOOSpxV+g=="
+        "resolved": "10.0.12",
+        "contentHash": "+DWu1fzj75I1FgdHSg3crgeZmfF2z55x1+OXF2IO2Lcq/iNgM9tL734pxAG0vo5iE82FVPHwbqUt31o8ipPBWg=="
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "8IV+rI3xN/Mkq9MsSX7VZTv9T9Wt+tyhHLwBX9VNZBk8m8kknEs1JeTSjI2x9M2L/fSja+c2WSE5n5Yy0GXdoQ=="
+        "resolved": "10.0.12",
+        "contentHash": "W6BsawU2tB2qy6u4+3cBOSOmiTUgYWW365b5WMVA1bDxQwZZeNWD+qufKJkDQNKzAKq4b6Q04DDKhmr2SNJ1eg=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "PNoxCTPb+Tlux+GJyq4c89ddYdpioVSqfGx8pqOF6shCSKwUNNctXhQtRkCICjbJmGrJJsW8NY52kVYO/b8mlQ=="
+        "resolved": "10.0.12",
+        "contentHash": "wO0W8VDMeRJZakRySOmemAnrBZMwEFRlbfBtATxUiLf2I3IhSRnCp1Vt157NWptdE4IJ7eftd5n8q9LtaKHFTQ=="
       },
       "VirusTotalAnalyzer": {
         "type": "Transitive",
@@ -80,23 +80,23 @@
         "dependencies": {
           "NuGet.Configuration": "[7.9.0, )",
           "NuGet.Packaging": "[7.9.0, )",
-          "System.IO.Packaging": "[10.0.11, )",
-          "System.Reflection.MetadataLoadContext": "[10.0.11, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.11, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
+          "System.IO.Packaging": "[10.0.12, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.12, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.12, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
       "powerforge.powershell.provider.directory": {
         "type": "Project",
         "dependencies": {
-          "System.DirectoryServices.Protocols": "[10.0.11, )"
+          "System.DirectoryServices.Protocols": "[10.0.12, )"
         }
       },
       "powerforge.powershell.providersdk": {
         "type": "Project",
         "dependencies": {
-          "PowerForge": "[3.0.142, )"
+          "PowerForge": "[3.0.145, )"
         }
       }
     }

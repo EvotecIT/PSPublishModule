@@ -5,6 +5,52 @@ namespace PowerForge.Tests;
 public sealed class ProcessRunnerEnvironmentTests
 {
     [Theory]
+    [InlineData(DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable, "0")]
+    [InlineData(DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable, null)]
+    [InlineData(DotNetProcessLifetime.DisableCliMsBuildServerEnvironmentVariable, "1")]
+    [InlineData(DotNetProcessLifetime.DisableCliMsBuildServerEnvironmentVariable, null)]
+    public void BuildStartInfo_preserves_explicit_dotnet_build_server_override(string variableName, string? explicitValue)
+    {
+        var request = new ProcessRunRequest(
+            "dotnet",
+            Path.GetTempPath(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30),
+            new Dictionary<string, string?>
+            {
+                [variableName] = explicitValue
+            });
+        var buildStartInfo = typeof(ProcessRunner).GetMethod(
+            "BuildStartInfo",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        var startInfo = Assert.IsType<System.Diagnostics.ProcessStartInfo>(buildStartInfo!.Invoke(null, new object[] { request }));
+
+        if (explicitValue is null)
+            Assert.False(startInfo.EnvironmentVariables.ContainsKey(variableName));
+        else
+            Assert.Equal(explicitValue, startInfo.EnvironmentVariables[variableName]);
+    }
+
+    [Fact]
+    public void BuildStartInfo_disables_reusable_dotnet_build_servers_by_default()
+    {
+        var request = new ProcessRunRequest(
+            "dotnet",
+            Path.GetTempPath(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30));
+        var buildStartInfo = typeof(ProcessRunner).GetMethod(
+            "BuildStartInfo",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        var startInfo = Assert.IsType<System.Diagnostics.ProcessStartInfo>(buildStartInfo!.Invoke(null, new object[] { request }));
+
+        Assert.Equal("1", startInfo.EnvironmentVariables[DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable]);
+        Assert.Equal("0", startInfo.EnvironmentVariables[DotNetProcessLifetime.DisableCliMsBuildServerEnvironmentVariable]);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task RunAsync_exposes_started_process_before_external_work_boundary(bool ownProcessTree)

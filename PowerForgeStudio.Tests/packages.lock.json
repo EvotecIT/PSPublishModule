@@ -10,12 +10,12 @@
       },
       "Microsoft.NET.Test.Sdk": {
         "type": "Direct",
-        "requested": "[18.9.0, )",
-        "resolved": "18.9.0",
-        "contentHash": "xIzVXa/VpKXqDWzyC/5Hw8JbFY5u9k3Jc53CpcjBiOXvkQGio484LD9FNwOiGUSMDcYL3Rcw9sNgGi5WrswlPQ==",
+        "requested": "[18.10.0, )",
+        "resolved": "18.10.0",
+        "contentHash": "0CZZ688UBvpQFB9HKo7wrNJNVe+AOM4UtipgwpER3TTM+d2DDM6QyKkIJZTR3mpbn9/zFbZEtAgVIz4SPTjQZQ==",
         "dependencies": {
-          "Microsoft.CodeCoverage": "18.9.0",
-          "Microsoft.TestPlatform.TestHost": "18.9.0"
+          "Microsoft.CodeCoverage": "18.10.0",
+          "Microsoft.TestPlatform.TestHost": "18.10.0"
         }
       },
       "xunit": {
@@ -37,38 +37,38 @@
       },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
-        "resolved": "18.9.0",
-        "contentHash": "MtegCIKGuG0r/LCdIjoR1HgzCGIUBhR3aNdbtQpts5vMXQuqBDZ2Jsd2uFKoHFM2XrQV6ZrDf3F5oLi3SLTp8w=="
+        "resolved": "18.10.0",
+        "contentHash": "zo1hqV+Nz6FlIwdc+aPfrvGzqfKAPPaZ6OPj1W8C0QQE2xH951AZwTUytL3K7XX8brVBUFd7MhrLDl3CtK3U/A=="
       },
       "Microsoft.Data.Sqlite": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "7je7UELzm131GiLYc4PpZvfKXIgIyzPM+v+tjcd/nbnuWRfgcONYKzDTqJlURxwVCFsVnlpmq6y6yn4qvR8QXQ==",
+        "resolved": "10.0.12",
+        "contentHash": "xUq9xUc653ue7ac2rMfCaf8UQN+U3zS8poWYlugycpvJllplMM0Mk7v/+MM0CTlu9zGvbGML4BPH8YWhrUOfGw==",
         "dependencies": {
-          "Microsoft.Data.Sqlite.Core": "10.0.11",
+          "Microsoft.Data.Sqlite.Core": "10.0.12",
           "SQLitePCLRaw.bundle_e_sqlite3": "2.1.12",
           "SQLitePCLRaw.core": "2.1.12"
         }
       },
       "Microsoft.Data.Sqlite.Core": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "hubA20AGenQ4Sx0ElWaPpB8DISjXpdx463+1zOGRslsT0e/t/06ITv+pHsop8CcJ0d8PZLfgnT7juCDVD79Dkw==",
+        "resolved": "10.0.12",
+        "contentHash": "2aL9eL5HQr0V4b8V909SD+jQAx6qnTTl7sT/v3D8dIvmr2UGdpZIQxqm1pj2Js3e4EYTvpw0oMH7DjapJJuPPw==",
         "dependencies": {
           "SQLitePCLRaw.core": "2.1.12"
         }
       },
       "Microsoft.TestPlatform.ObjectModel": {
         "type": "Transitive",
-        "resolved": "18.9.0",
-        "contentHash": "Fz/qXC52VXXopzHj7v2reCKcCqSxkTDCkEDfkNAH0vni/7qK/KLMiEYtRmnUanxO2F2g2zZZ60qCpxF0AF7URA=="
+        "resolved": "18.10.0",
+        "contentHash": "aXA7DDbnt6MYu3eLBEDksNdl09QxJ/PpMzrFcSxqEOk3RvRGJzhKI5mezVCEOcvveRhjfw/mvn6xVXC/rTaOog=="
       },
       "Microsoft.TestPlatform.TestHost": {
         "type": "Transitive",
-        "resolved": "18.9.0",
-        "contentHash": "Oq+Pma/J86aZL72t71bcESvDszDsTjUfl6PIsuDdPoKTHZfNMhKamCfLD5fKx51W/u0KozXtJo2/3fnt0sgPxg==",
+        "resolved": "18.10.0",
+        "contentHash": "Spu6C7bgz1PmWN+Y7wS0PfGCw9Kwv5RvJbCwyQaEWjcwpMire+qYMrcZ7qk8agjy6nd0sdHLc3ugCSrGuSbZdw==",
         "dependencies": {
-          "Microsoft.TestPlatform.ObjectModel": "18.9.0"
+          "Microsoft.TestPlatform.ObjectModel": "18.10.0"
         }
       },
       "Newtonsoft.Json": {
@@ -151,23 +151,23 @@
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "y74NfbISp+FLjGdsaTi23Oe3xxPPwCeEMWdUlkujE23lQH5Un6gU4tWmQZ6kI1CFW7IsB1Ii045Ay7lMeoMHqA=="
+        "resolved": "10.0.12",
+        "contentHash": "Bsop0fosps100BOj1s9uIM3XaUpoLok5s0LTuEeKXvKse1XvpYvnzeC/7AZXCs3MkFurRkLe9k9XwKNZz2retw=="
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "NbsfNbQ7E6aRhBtogseM6dGWwUgrgyska+CXnlsIEgJNmgGh1s8ps8fKDMSgwE6hMIsU3TP8BKfRlvOOSpxV+g=="
+        "resolved": "10.0.12",
+        "contentHash": "+DWu1fzj75I1FgdHSg3crgeZmfF2z55x1+OXF2IO2Lcq/iNgM9tL734pxAG0vo5iE82FVPHwbqUt31o8ipPBWg=="
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "8IV+rI3xN/Mkq9MsSX7VZTv9T9Wt+tyhHLwBX9VNZBk8m8kknEs1JeTSjI2x9M2L/fSja+c2WSE5n5Yy0GXdoQ=="
+        "resolved": "10.0.12",
+        "contentHash": "W6BsawU2tB2qy6u4+3cBOSOmiTUgYWW365b5WMVA1bDxQwZZeNWD+qufKJkDQNKzAKq4b6Q04DDKhmr2SNJ1eg=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "PNoxCTPb+Tlux+GJyq4c89ddYdpioVSqfGx8pqOF6shCSKwUNNctXhQtRkCICjbJmGrJJsW8NY52kVYO/b8mlQ=="
+        "resolved": "10.0.12",
+        "contentHash": "wO0W8VDMeRJZakRySOmemAnrBZMwEFRlbfBtATxUiLf2I3IhSRnCp1Vt157NWptdE4IJ7eftd5n8q9LtaKHFTQ=="
       },
       "VirusTotalAnalyzer": {
         "type": "Transitive",
@@ -231,10 +231,10 @@
         "dependencies": {
           "NuGet.Configuration": "[7.9.0, )",
           "NuGet.Packaging": "[7.9.0, )",
-          "System.IO.Packaging": "[10.0.11, )",
-          "System.Reflection.MetadataLoadContext": "[10.0.11, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.11, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
+          "System.IO.Packaging": "[10.0.12, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.12, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.12, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
@@ -246,8 +246,8 @@
         "dependencies": {
           "DBAClientX.Core": "[1.0.8, )",
           "DBAClientX.SQLite": "[1.0.8, )",
-          "Microsoft.Data.Sqlite": "[10.0.11, )",
-          "PowerForge": "[3.0.142, )",
+          "Microsoft.Data.Sqlite": "[10.0.12, )",
+          "PowerForge": "[3.0.145, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
       }

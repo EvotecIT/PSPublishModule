@@ -460,13 +460,14 @@ public sealed class PowerShellRunner : IPowerShellRunner, ICancellablePowerShell
         }
 
         var arguments = BuildArguments(request);
+        var environmentVariables = ResolveEnvironmentVariables(request);
         var processResult = await _processRunner.RunAsync(
             new ProcessRunRequest(
                 exe,
                 request.WorkingDirectory ?? Environment.CurrentDirectory,
                 arguments,
                 request.Timeout,
-                request.EnvironmentVariables,
+                environmentVariables,
                 request.CaptureOutput,
                 request.CaptureError,
                 request.OutputLineReceived,
@@ -605,13 +606,34 @@ public sealed class PowerShellRunner : IPowerShellRunner, ICancellablePowerShell
                 request.WorkingDirectory ?? Environment.CurrentDirectory,
                 probeArguments,
                 TimeSpan.FromSeconds(15),
-                request.EnvironmentVariables,
+                ResolveEnvironmentVariables(request),
                 captureOutput: true,
                 captureError: true)).GetAwaiter().GetResult();
 
         return probeResult.Succeeded && probeResult.StdOut
             .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
             .Any(line => string.Equals(line.Trim(), "Desktop", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyDictionary<string, string?>? ResolveEnvironmentVariables(PowerShellRunRequest request)
+    {
+        if (request.HostRequirement != PowerShellHostRequirement.WindowsPowerShell)
+            return request.EnvironmentVariables;
+
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (request.EnvironmentVariables is not null)
+        {
+            foreach (var entry in request.EnvironmentVariables)
+                environment[entry.Key] = entry.Value;
+        }
+
+        // A Windows PowerShell child launched by pwsh inherits pwsh's PSModulePath.
+        // Without it, Windows PowerShell reconstructs its own edition-specific paths.
+        // Preserve an explicit caller override when one was supplied.
+        if (!environment.ContainsKey("PSModulePath"))
+            environment["PSModulePath"] = null;
+
+        return environment;
     }
 
     /// <summary>

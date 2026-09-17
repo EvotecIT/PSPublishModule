@@ -10,12 +10,12 @@
       },
       "OfficeIMO.MarkdownRenderer.Wpf": {
         "type": "Direct",
-        "requested": "[3.4.1, )",
-        "resolved": "3.4.1",
-        "contentHash": "wdlb8CdkPZFpgIeqtYdlPc2sPlutYvrsSiced/zFkjW67gwDFyMDy5gOXSrxg6RCyxDrgJLwP7zFrI2NzI1o4g==",
+        "requested": "[3.4.2, )",
+        "resolved": "3.4.2",
+        "contentHash": "6oYf9pb08gCEstc4lBtVnfmOpYf7IHLBhhPfJ7svdXNNmTK33h/kjLEfoKAldGGoNv70KtYeK9fuMQG332rcZQ==",
         "dependencies": {
           "Microsoft.Web.WebView2": "1.0.3912.50",
-          "OfficeIMO.MarkdownRenderer": "3.4.1"
+          "OfficeIMO.MarkdownRenderer": "3.4.2"
         }
       },
       "AngleSharp": {
@@ -33,18 +33,18 @@
       },
       "Microsoft.Data.Sqlite": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "7je7UELzm131GiLYc4PpZvfKXIgIyzPM+v+tjcd/nbnuWRfgcONYKzDTqJlURxwVCFsVnlpmq6y6yn4qvR8QXQ==",
+        "resolved": "10.0.12",
+        "contentHash": "xUq9xUc653ue7ac2rMfCaf8UQN+U3zS8poWYlugycpvJllplMM0Mk7v/+MM0CTlu9zGvbGML4BPH8YWhrUOfGw==",
         "dependencies": {
-          "Microsoft.Data.Sqlite.Core": "10.0.11",
+          "Microsoft.Data.Sqlite.Core": "10.0.12",
           "SQLitePCLRaw.bundle_e_sqlite3": "2.1.12",
           "SQLitePCLRaw.core": "2.1.12"
         }
       },
       "Microsoft.Data.Sqlite.Core": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "hubA20AGenQ4Sx0ElWaPpB8DISjXpdx463+1zOGRslsT0e/t/06ITv+pHsop8CcJ0d8PZLfgnT7juCDVD79Dkw==",
+        "resolved": "10.0.12",
+        "contentHash": "2aL9eL5HQr0V4b8V909SD+jQAx6qnTTl7sT/v3D8dIvmr2UGdpZIQxqm1pj2Js3e4EYTvpw0oMH7DjapJJuPPw==",
         "dependencies": {
           "SQLitePCLRaw.core": "2.1.12"
         }
@@ -92,43 +92,43 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "vC+noxhSbXvKj4hCljPA8+wxzEZNkhUEF7YLpsxHX+GypB/Yofc38KhoJ+hEfSES73lkwmiWcQKnf1lc4YcS3A=="
+        "resolved": "3.4.2",
+        "contentHash": "DU/BT5ANp2aX4aUtukIVkU82w8PrmSzX2YbGCv3gJ6U4Qqhk+tsD7oWKX2vke4+T10EZMTsWXY+TWFkKVC3PeA=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "fmnDnf1gC9Fp/1cHRRL1q+zn5PbZ/4thuyn7AsxduIeqqU8XIGGlp9gcaYSSCkLDRn11gaW9upRbccJQ5oNqWA==",
+        "resolved": "3.4.2",
+        "contentHash": "aUV9+0+32ubhn/T5mBJsc1J/CCs6+Df0K845d7sab0jsTNWliNw3CWhDrhipGAbaraZA7SghblQf9qmqmaO90g==",
         "dependencies": {
           "AngleSharp": "1.7.1",
           "AngleSharp.Css": "1.0.1",
-          "OfficeIMO.Core": "3.4.1"
+          "OfficeIMO.Core": "3.4.2"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "Arfz7sg5ngtPaksl9EKMHyEOk1SHbAxqgwYvWDtO+PAPRbTHR+TJNdI3Dd79RVJpIpxAQc5Q0lfyfF5oCAtO0g==",
+        "resolved": "3.4.2",
+        "contentHash": "IDmmNZ9cAMOFA4xBWXAO0Mks1pfosQU7Y0+F80xsshqs4PdCm8JsikY0knx+ZUSIwY+9NMGOY7C96XtpHycfBw==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.1"
+          "OfficeIMO.Core": "3.4.2"
         }
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "FfRMy4J+DE21rmc7V5gPvQF5Sp4mJLh8zHFI+f3wSShC1+uaRwcprR1/L+eK3E+LAuhXid5FSzFOpENdWVhFxA==",
+        "resolved": "3.4.2",
+        "contentHash": "q/3KL54kLN6u5sMN233g/RenXuqRwlPAMQMQuTNE5mDcoOb6k5CS+EHulAWpdWQsOxLTF0lO2wfsS4lwT6Db1g==",
         "dependencies": {
-          "OfficeIMO.Html": "3.4.1",
-          "OfficeIMO.Markdown": "3.4.1"
+          "OfficeIMO.Html": "3.4.2",
+          "OfficeIMO.Markdown": "3.4.2"
         }
       },
       "OfficeIMO.MarkdownRenderer": {
         "type": "Transitive",
-        "resolved": "3.4.1",
-        "contentHash": "VDnXDhVc7fWVjg7VhM8yBqCkJ4OM5QWKwvXhBInO9/966lDmikXdGttRGOOAUh4e2gmatyyPpJ84xodYueL/RA==",
+        "resolved": "3.4.2",
+        "contentHash": "8QOAYNQN1HAcJoenMOIsML6f4HzHaCzAcJgp4XovOKOszTQp1EnX5w+TbZ+azexEcuJBT9R5OF/srl1xh5vbJA==",
         "dependencies": {
-          "OfficeIMO.Markdown": "3.4.1",
-          "OfficeIMO.Markdown.Html": "3.4.1"
+          "OfficeIMO.Markdown": "3.4.2",
+          "OfficeIMO.Markdown.Html": "3.4.2"
         }
       },
       "SQLite": {
@@ -168,8 +168,8 @@
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "NbsfNbQ7E6aRhBtogseM6dGWwUgrgyska+CXnlsIEgJNmgGh1s8ps8fKDMSgwE6hMIsU3TP8BKfRlvOOSpxV+g=="
+        "resolved": "10.0.12",
+        "contentHash": "+DWu1fzj75I1FgdHSg3crgeZmfF2z55x1+OXF2IO2Lcq/iNgM9tL734pxAG0vo5iE82FVPHwbqUt31o8ipPBWg=="
       },
       "VirusTotalAnalyzer": {
         "type": "Transitive",
@@ -193,7 +193,7 @@
         "dependencies": {
           "NuGet.Configuration": "[7.9.0, )",
           "NuGet.Packaging": "[7.9.0, )",
-          "System.Reflection.MetadataLoadContext": "[10.0.11, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
@@ -205,8 +205,8 @@
         "dependencies": {
           "DBAClientX.Core": "[1.0.8, )",
           "DBAClientX.SQLite": "[1.0.8, )",
-          "Microsoft.Data.Sqlite": "[10.0.11, )",
-          "PowerForge": "[3.0.142, )",
+          "Microsoft.Data.Sqlite": "[10.0.12, )",
+          "PowerForge": "[3.0.145, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
       }

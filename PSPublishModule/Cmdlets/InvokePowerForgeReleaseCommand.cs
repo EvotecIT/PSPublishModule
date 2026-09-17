@@ -128,6 +128,12 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     public string[]? SourceInputPath { get; set; }
 
     /// <summary>
+    /// Exact PSPublishModule binary used to host the module lane while the release source remains separately pinned.
+    /// </summary>
+    [Parameter(DontShow = true)]
+    public string? ModuleHostPath { get; set; }
+
+    /// <summary>
     /// Target framework used by the native module-release lane.
     /// </summary>
     [Parameter]
@@ -842,6 +848,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             SourceRepositoryRoot = NormalizeNullable(SourceRepositoryRoot),
             ExpectedSourceRevision = NormalizeNullable(ExpectedSourceRevision),
             SourceInputPaths = SourceInputPath ?? Array.Empty<string>(),
+            ModuleHostPath = NormalizeNullable(ModuleHostPath),
             ReleaseVersion = NormalizeNullable(ReleaseVersion),
             ModuleVersion = NormalizeNullable(ModuleVersion),
             ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),
