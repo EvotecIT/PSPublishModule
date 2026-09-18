@@ -13,6 +13,17 @@ public sealed class MissingFunctionsOptions
     /// </summary>
     public string[] ApprovedModules { get; }
 
+    /// <summary>
+    /// Concrete paths selected for approved modules. When present, analysis imports from these paths instead of
+    /// resolving the module by name from the current session or <c>PSModulePath</c>.
+    /// </summary>
+    public ApprovedModuleSource[] ApprovedModuleSources { get; }
+
+    /// <summary>
+    /// Whether every approved module must have a concrete source binding before it can contribute inline helpers.
+    /// </summary>
+    public bool RequireApprovedModuleSources { get; }
+
     /// <summary>Function/command names to ignore when computing the missing set.</summary>
     public string[] IgnoreFunctions { get; }
 
@@ -26,12 +37,15 @@ public sealed class MissingFunctionsOptions
         string[]? knownFunctions = null,
         string[]? approvedModules = null,
         string[]? ignoreFunctions = null,
-        bool includeFunctionsRecursively = false)
+        bool includeFunctionsRecursively = false,
+        ApprovedModuleSource[]? approvedModuleSources = null,
+        bool requireApprovedModuleSources = false)
     {
         KnownFunctions = knownFunctions ?? System.Array.Empty<string>();
         ApprovedModules = approvedModules ?? System.Array.Empty<string>();
+        ApprovedModuleSources = approvedModuleSources ?? System.Array.Empty<ApprovedModuleSource>();
+        RequireApprovedModuleSources = requireApprovedModuleSources;
         IgnoreFunctions = ignoreFunctions ?? System.Array.Empty<string>();
         IncludeFunctionsRecursively = includeFunctionsRecursively;
     }
 }
-

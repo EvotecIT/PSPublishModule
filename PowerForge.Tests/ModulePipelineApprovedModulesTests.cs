@@ -34,7 +34,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_RemovesApprovedModulesFromManifest_WhenMergeMissingEnabled()
+    public void Run_KeepsApprovedModulesInManifest_WhenMergeMissingFindsNoFunctionsToInline()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -50,7 +50,7 @@ public sealed class ModulePipelineApprovedModulesTests
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
 
             Assert.Contains("PSWriteHTML", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -84,7 +84,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_ClearsSourceRequiredModules_WhenAllConfiguredRequiredAreFilteredByMergeMissing()
+    public void Run_ClearsStaleSourceDependencies_ButKeepsApprovedDependencyWhenNothingWasInlined()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -149,7 +149,52 @@ public sealed class ModulePipelineApprovedModulesTests
             Assert.DoesNotContain("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
             // Source manifest dependencies are not authoritative; build configuration owns the generated manifest.
             Assert.DoesNotContain("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_RemovesApprovedDependencyOnlyAfterAnalysisProvesItWasFullyInlined()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string approvedModule = "Graphimo";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var analysis = new ModulePipelineMissingAnalysisServiceTests.RecordingMissingFunctionAnalysisService(
+                new MissingFunctionAnalysisResult(
+                    summary: new[]
+                    {
+                        new MissingCommandReference(
+                            "Get-GraphThing",
+                            approvedModule,
+                            "Function",
+                            isAlias: false,
+                            isPrivate: true,
+                            error: string.Empty)
+                    },
+                    summaryFiltered: Array.Empty<MissingCommandReference>(),
+                    functions: new[] { "function Get-GraphThing { 'ok' }" },
+                    functionsTopLevelOnly: new[] { "function Get-GraphThing { 'ok' }" },
+                    fullyInlinedApprovedModules: new[] { approvedModule }));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                powerShellRunner: null,
+                moduleDependencyMetadataProvider: null,
+                missingFunctionAnalysisService: analysis);
+            var spec = BuildSpec(root.FullName, moduleName, mergeMissing: true);
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
+            Assert.Contains("PSWriteHTML", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(approvedModule, requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

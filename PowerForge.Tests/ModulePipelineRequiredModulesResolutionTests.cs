@@ -42,7 +42,8 @@ public sealed class ModulePipelineRequiredModulesResolutionTests
                         {
                             ModuleName = dependencyName,
                             ModuleVersion = "0.25.0",
-                            Guid = "Auto"
+                            Guid = "Auto",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }
@@ -102,7 +103,8 @@ public sealed class ModulePipelineRequiredModulesResolutionTests
                         {
                             ModuleName = dependencyName,
                             ModuleVersion = "0.25.0",
-                            Guid = "Auto"
+                            Guid = "Auto",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }

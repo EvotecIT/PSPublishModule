@@ -31,9 +31,9 @@ namespace PSPublishModule;
 /// modules, not gallery-resolvable dependencies.
 /// </para>
 /// <para>
-/// Version and Guid values set to <c>Auto</c> or <c>Latest</c> are resolved from installed modules by default. When
-/// <c>New-ConfigurationBuild -ResolveMissingModulesOnline</c> is enabled, repository results can be used without
-/// installing the dependency first.
+/// Dependencies resolve from installed modules by default. Select <c>-VersionSource PSGallery</c> or
+/// <c>-VersionSource PublishRepository</c> when repository state must be authoritative. Select
+/// <c>-VersionSource Auto</c> explicitly when an installed-first, repository-fallback policy is desired.
 /// </para>
 /// <para>
 /// Choose only one versioning style per dependency: a minimum version (<c>-Version</c> or
@@ -74,8 +74,8 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Declare a dependency whose version can be resolved online later</summary>
 /// <prefix>PS&gt; </prefix>
-/// <code>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'</code>
-/// <para>Pairs well with New-ConfigurationBuild -ResolveMissingModulesOnline when the module is not installed locally.</para>
+/// <code>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto' -VersionSource PSGallery</code>
+/// <para>Resolves repository metadata explicitly instead of allowing an installed local build to win.</para>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationModule")]
 public sealed class NewConfigurationModuleCommand : PSCmdlet
@@ -125,10 +125,10 @@ public sealed class NewConfigurationModuleCommand : PSCmdlet
     public string? Guid { get; set; }
 
     /// <summary>
-    /// Source used when resolving <c>Auto</c>/<c>Latest</c> version values.
+    /// Source used when resolving dependency versions. Installed modules are used by default.
     /// </summary>
     [Parameter]
-    public PowerForge.ModuleDependencyVersionSource VersionSource { get; set; } = PowerForge.ModuleDependencyVersionSource.Auto;
+    public PowerForge.ModuleDependencyVersionSource VersionSource { get; set; } = PowerForge.ModuleDependencyVersionSource.Installed;
 
     /// <summary>Emits module dependency configuration objects.</summary>
     protected override void ProcessRecord()

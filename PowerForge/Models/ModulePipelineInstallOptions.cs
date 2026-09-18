@@ -12,7 +12,7 @@ public sealed class ModulePipelineInstallOptions
 
     /// <summary>
     /// Installation strategy used when installing. When null, falls back to any value provided by configuration
-    /// segments and then to <see cref="InstallationStrategy.AutoRevision"/>.
+    /// segments and then to <see cref="InstallationStrategy.Exact"/>.
     /// </summary>
     public InstallationStrategy? Strategy { get; set; }
 

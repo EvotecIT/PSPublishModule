@@ -10,7 +10,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePipelineHostedOperationsTests
+public sealed partial class ModulePipelineHostedOperationsTests
 {
     [Fact]
     public void DefaultRunnerServices_ReuseProvidedPowerShellRunner()
@@ -256,7 +256,8 @@ public sealed class ModulePipelineHostedOperationsTests
                         Configuration = new ModuleDependencyConfiguration
                         {
                             ModuleName = "Pester",
-                            RequiredVersion = "5.6.1"
+                            RequiredVersion = "5.6.1",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }
@@ -277,6 +278,118 @@ public sealed class ModulePipelineHostedOperationsTests
             Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.DependencyCalls[0]).Name);
             Assert.Equal("Pester", hostedOperations.LastDependencies.Single().Name);
             Assert.Null(hostedOperations.LastRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_DefaultInstalledSourceUsesTheInstalledModuleWithoutRepositoryCalls()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { InstallMissingModules = true }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Pester",
+                            RequiredVersion = "5.6.1"
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var provider = new FakeMetadataProvider(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Pester"] = "5.6.1" });
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                hostedOperations);
+
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, runner.Plan(spec));
+
+            var satisfied = Assert.Single(result);
+            Assert.Equal(ModuleDependencyInstallStatus.Satisfied, satisfied.Status);
+            Assert.Equal("5.6.1", satisfied.InstalledVersion);
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_DefaultInstalledSourceFailsInsteadOfDownloadingAMissingModule()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0"
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { InstallMissingModules = true }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Pester",
+                            RequiredVersion = "5.6.1"
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+            var plan = runner.Plan(spec);
+
+            var exception = Assert.Throws<TargetInvocationException>(
+                () => InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan));
+
+            var failure = Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("Installed dependency source", failure.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PSGallery", failure.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
         }
         finally
         {
@@ -366,7 +479,8 @@ public sealed class ModulePipelineHostedOperationsTests
                         Kind = ModuleDependencyKind.ExternalModule,
                         Configuration = new ModuleDependencyConfiguration
                         {
-                            ModuleName = "Az.Accounts"
+                            ModuleName = "Az.Accounts",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }
@@ -425,7 +539,8 @@ public sealed class ModulePipelineHostedOperationsTests
                         Configuration = new ModuleDependencyConfiguration
                         {
                             ModuleName = "Microsoft.Graph.Authentication",
-                            RequiredVersion = "2.25.0"
+                            RequiredVersion = "2.25.0",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }
@@ -486,7 +601,8 @@ public sealed class ModulePipelineHostedOperationsTests
                         Configuration = new ModuleDependencyConfiguration
                         {
                             ModuleName = "Tools.Dependency",
-                            RequiredVersion = "1.0.0"
+                            RequiredVersion = "1.0.0",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     },
                     new ConfigurationModuleSegment
@@ -495,7 +611,8 @@ public sealed class ModulePipelineHostedOperationsTests
                         Configuration = new ModuleDependencyConfiguration
                         {
                             ModuleName = "Tools.Dependency",
-                            RequiredVersion = "2.0.0"
+                            RequiredVersion = "2.0.0",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }
@@ -563,7 +680,8 @@ public sealed class ModulePipelineHostedOperationsTests
                         Configuration = new ModuleDependencyConfiguration
                         {
                             ModuleName = "Pester",
-                            RequiredVersion = "5.6.1"
+                            RequiredVersion = "5.6.1",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }
@@ -687,7 +805,8 @@ public sealed class ModulePipelineHostedOperationsTests
                         Configuration = new ModuleDependencyConfiguration
                         {
                             ModuleName = "Pester",
-                            RequiredVersion = "1.0.0"
+                            RequiredVersion = "1.0.0",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }
@@ -1796,6 +1915,231 @@ public sealed class ModulePipelineHostedOperationsTests
         }
     }
 
+    [Theory]
+    [InlineData(ModuleDependencyVersionSource.PSGallery, false, 1)]
+    [InlineData(ModuleDependencyVersionSource.Auto, true, 0)]
+    public void RunPreflight_BootstrapsRepositoryToolOnlyWhenApprovedDonorNeedsRepository(
+        ModuleDependencyVersionSource versionSource,
+        bool donorInstalled,
+        int expectedInstallCalls)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string donorName = "Approved.Donor";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = donorName,
+                            MinimumVersion = "1.0.0",
+                            VersionSource = versionSource
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var provider = donorInstalled ? new FakeMetadataProvider(donorName) : new FakeMetadataProvider();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(expectedInstallCalls, hostedOperations.DependencyInstallCalls);
+            if (expectedInstallCalls > 0)
+                Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunPreflight_InstallsPSResourceGetForRepositoryDonorWhenOnlyPowerShellGetIsInstalled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0", CsprojPath = null },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Approved.Donor",
+                            VersionSource = ModuleDependencyVersionSource.PSGallery
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider("PowerShellGet"),
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunPreflight_AutoApprovedDonorUsesInheritedConstraintBeforeChoosingLocalSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string donorName = "Approved.Donor";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = donorName,
+                            MinimumVersion = "2.0.0"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = donorName,
+                            VersionSource = ModuleDependencyVersionSource.Auto
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var provider = new FakeMetadataProvider(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [donorName] = "1.0.0"
+            });
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RunPreflight_AutoApprovedDonorStillPrefersInstalledWhenPublishRepositoryIsConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string donorName = "Approved.Donor";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = donorName,
+                            MinimumVersion = "1.0.0",
+                            VersionSource = ModuleDependencyVersionSource.Auto
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Enabled = true,
+                            Destination = PublishDestination.PowerShellGallery,
+                            Tool = PublishTool.Auto,
+                            ApiKey = "test-api-key",
+                            UseAsDependencyVersionSource = true
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(donorName),
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Run_WithPrecomputedPlanInstallsPSResourceGetBeforeOnlineRequiredModuleResolution()
     {
@@ -1913,7 +2257,7 @@ public sealed class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
-    public void EnsureBuildDependenciesInstalledIfNeeded_UsesFilteredPackagingModulesForRequiredModuleArtefact()
+    public void EnsureBuildDependenciesInstalledIfNeeded_KeepsApprovedPackagingDependencyAvailableUntilMergeRuns()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1956,8 +2300,73 @@ public sealed class ModulePipelineHostedOperationsTests
             var plan = runner.Plan(spec);
             var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, plan);
 
-            Assert.Empty(result);
-            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+            Assert.Single(result);
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(ModuleDependencyKind.RequiredModule)]
+    [InlineData(ModuleDependencyKind.ExternalModule)]
+    public void EnsureBuildDependenciesInstalledIfNeeded_PreservesInstalledVersionAndGuidConstraints(ModuleDependencyKind kind)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "Dependency.Tools";
+            const string dependencyGuid = "11111111-1111-1111-1111-111111111111";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { InstallMissingModules = true }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = kind,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            MinimumVersion = "2.0.0",
+                            Guid = dependencyGuid,
+                            VersionSource = ModuleDependencyVersionSource.Installed
+                        }
+                    }
+                }
+            };
+            var provider = new CapturingVersionedMetadataProvider(
+                new InstalledModuleMetadata(dependencyName, "2.5.0", dependencyGuid, Path.Combine(root.FullName, dependencyName)));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                new FakeHostedOperations());
+
+            var results = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, runner.Plan(spec));
+
+            Assert.Single(results);
+            var reference = Assert.Single(provider.LastReferences);
+            Assert.Equal(dependencyName, reference.ModuleName);
+            Assert.Equal("2.0.0", reference.ModuleVersion);
+            Assert.Equal(dependencyGuid, reference.Guid);
         }
         finally
         {
@@ -2976,12 +3385,50 @@ public sealed class ModulePipelineHostedOperationsTests
         }
     }
 
+    private sealed class CapturingVersionedMetadataProvider : IModuleDependencyVersionedMetadataProvider
+    {
+        private readonly InstalledModuleMetadata _installed;
+
+        internal IReadOnlyList<RequiredModuleReference> LastReferences { get; private set; } = Array.Empty<RequiredModuleReference>();
+
+        internal CapturingVersionedMetadataProvider(InstalledModuleMetadata installed)
+        {
+            _installed = installed;
+        }
+
+        public IReadOnlyDictionary<string, InstalledModuleMetadata> GetInstalledModules(IReadOnlyList<RequiredModuleReference> references)
+        {
+            LastReferences = references?.ToArray() ?? Array.Empty<RequiredModuleReference>();
+            return new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                [_installed.Name] = _installed
+            };
+        }
+
+        public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
+            => new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                [_installed.Name] = _installed
+            };
+
+        public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
+            => Array.Empty<RequiredModuleReference>();
+
+        public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
+            IReadOnlyCollection<string> names,
+            string? repository,
+            RepositoryCredential? credential,
+            bool prerelease)
+            => new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+    }
+
     private sealed class FakeHostedOperations : IModulePipelineHostedOperations
     {
         public int DependencyInstallCalls { get; private set; }
         public List<IReadOnlyList<ModuleDependency>> DependencyCalls { get; } = new();
         public IReadOnlyList<ModuleDependency> LastDependencies { get; private set; } = Array.Empty<ModuleDependency>();
         public string? LastRepository { get; private set; }
+        public RepositoryCredential? LastCredential { get; private set; }
         public ModuleSkipConfiguration? LastSkipModules { get; private set; }
         public ModuleTestSuiteResult? NextTestSuiteResult { get; set; }
         public List<ModulePipelineActionContext> ActionContexts { get; } = new();
@@ -3003,6 +3450,7 @@ public sealed class ModulePipelineHostedOperationsTests
             LastDependencies = dependencies ?? Array.Empty<ModuleDependency>();
             DependencyCalls.Add(LastDependencies);
             LastRepository = repository;
+            LastCredential = credential;
             LastSkipModules = skipModules;
             return LastDependencies
                 .Select(dependency => new ModuleDependencyInstallResult(

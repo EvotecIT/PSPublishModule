@@ -18,17 +18,25 @@ public sealed class MissingFunctionAnalysisResult
     public string[] FunctionsTopLevelOnly { get; }
 
     /// <summary>
+    /// Approved modules for which every referenced command was resolved to an inlineable PowerShell function.
+    /// A module is listed only when at least one of its functions was referenced.
+    /// </summary>
+    public string[] FullyInlinedApprovedModules { get; }
+
+    /// <summary>
     /// Creates a new <see cref="MissingFunctionAnalysisResult"/> instance.
     /// </summary>
     public MissingFunctionAnalysisResult(
         MissingCommandReference[] summary,
         MissingCommandReference[] summaryFiltered,
         string[] functions,
-        string[] functionsTopLevelOnly)
+        string[] functionsTopLevelOnly,
+        string[]? fullyInlinedApprovedModules = null)
     {
         Summary = summary ?? System.Array.Empty<MissingCommandReference>();
         SummaryFiltered = summaryFiltered ?? System.Array.Empty<MissingCommandReference>();
         Functions = functions ?? System.Array.Empty<string>();
         FunctionsTopLevelOnly = functionsTopLevelOnly ?? System.Array.Empty<string>();
+        FullyInlinedApprovedModules = fullyInlinedApprovedModules ?? System.Array.Empty<string>();
     }
 }
