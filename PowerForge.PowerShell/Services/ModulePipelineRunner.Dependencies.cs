@@ -29,19 +29,18 @@ public sealed partial class ModulePipelineRunner
 
         if (plan.ExternalModuleDependencies is { Length: > 0 })
         {
-            var known = new HashSet<string>(depList.Select(d => d.Name), StringComparer.OrdinalIgnoreCase);
             foreach (var name in plan.ExternalModuleDependencies)
             {
                 if (string.IsNullOrWhiteSpace(name)) continue;
                 var trimmed = name.Trim();
-                if (known.Contains(trimmed)) continue;
-                known.Add(trimmed);
                 var source = ResolveDependencySourceByName(dependencySources, trimmed);
-                depList.Add(new ModuleDependency(
+                var dependency = new ModuleDependency(
                     trimmed,
                     requiredVersion: source?.RequiredVersion,
                     minimumVersion: source?.MinimumVersion,
-                    maximumVersion: null));
+                    maximumVersion: null);
+                if (HasEquivalentDependencyInstallRequest(depList, dependency)) continue;
+                depList.Add(dependency);
             }
         }
 

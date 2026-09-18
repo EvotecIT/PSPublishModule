@@ -598,6 +598,9 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
 
     [Theory]
     [InlineData("Import-Module {0} -ErrorAction Stop")]
+    [InlineData("Import-Module -Force {0} -ErrorAction Stop")]
+    [InlineData("Import-Module -Force -Global {0}")]
+    [InlineData("Import-Module -Prefix PF {0}")]
     [InlineData("Import-Module -Name '{0}' -ErrorAction Stop")]
     [InlineData("Microsoft.PowerShell.Core\\Import-Module -FullyQualifiedName @{{ ModuleName = '{0}'; RequiredVersion = '1.0.0' }}")]
     public void Analyze_RetainsDonorImportedExplicitlyAtRuntime(string importTemplate)
@@ -608,6 +611,33 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
             const string moduleName = "PowerForge.RuntimeImportedDonor";
             var modulePath = WriteModule(root.FullName, moduleName, "1.0.0", "runtime-import");
             var code = string.Format(importTemplate, moduleName) + Environment.NewLine + "Get-PowerForgeBoundThing";
+
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(
+                filePath: null,
+                code: code,
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "1.0.0", modulePath) },
+                    requireApprovedModuleSources: true));
+
+            Assert.NotEmpty(result.Functions);
+            Assert.Empty(result.FullyInlinedApprovedModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_RetainsDonorDeclaredByRequiresModules()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.RequiresDonor";
+            var modulePath = WriteModule(root.FullName, moduleName, "1.0.0", "requires-module");
+            var code = $"#requires -Modules @{{ ModuleName = '{moduleName}'; RequiredVersion = '1.0.0' }}{Environment.NewLine}Get-PowerForgeBoundThing";
 
             var result = new PowerShellMissingFunctionAnalysisService().Analyze(
                 filePath: null,

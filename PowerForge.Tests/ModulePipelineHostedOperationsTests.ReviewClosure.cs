@@ -112,6 +112,77 @@ public sealed partial class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_ValidatesSameNamedExternalConstraintIndependently()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = CreateDependencySpec(
+                root.FullName,
+                moduleName,
+                CreateModuleSegment(ModuleDependencyKind.RequiredModule, "1.0.0", ModuleDependencyVersionSource.Installed),
+                CreateModuleSegment(ModuleDependencyKind.ExternalModule, "2.0.0", ModuleDependencyVersionSource.Installed));
+            var provider = new FixedVersionedMetadataProvider(
+                new InstalledModuleMetadata("Dependency.Tools", "1.0.0", null, Path.Combine(root.FullName, "Dependency.Tools")));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                new FakeHostedOperations());
+
+            var exception = Assert.Throws<TargetInvocationException>(
+                () => InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, runner.Plan(spec)));
+
+            var failure = Assert.IsType<InvalidOperationException>(exception.InnerException);
+            Assert.Contains("no installed version satisfies", failure.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(2, provider.Requests.Count);
+            Assert.All(provider.Requests, request => Assert.Single(request));
+            Assert.Equal("1.0.0", provider.Requests[0][0].RequiredVersion);
+            Assert.Equal("2.0.0", provider.Requests[1][0].RequiredVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_DeduplicatesEquivalentSameNamedExternalConstraint()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = CreateDependencySpec(
+                root.FullName,
+                moduleName,
+                CreateModuleSegment(ModuleDependencyKind.RequiredModule, "1.0.0", ModuleDependencyVersionSource.Installed),
+                CreateModuleSegment(ModuleDependencyKind.ExternalModule, "1.0.0", ModuleDependencyVersionSource.Installed));
+            var provider = new FixedVersionedMetadataProvider(
+                new InstalledModuleMetadata("Dependency.Tools", "1.0.0", null, Path.Combine(root.FullName, "Dependency.Tools")));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                new FakeHostedOperations());
+
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, runner.Plan(spec));
+
+            Assert.Single(result);
+            Assert.Single(provider.Requests);
+            Assert.Single(provider.Requests[0]);
+            Assert.Equal("1.0.0", provider.Requests[0][0].RequiredVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void EnsureBuildDependenciesInstalledIfNeeded_RejectsConflictingSourcesForEquivalentDeclarations()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

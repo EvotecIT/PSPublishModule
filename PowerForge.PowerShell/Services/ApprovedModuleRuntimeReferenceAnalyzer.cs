@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation.Language;
 using System.Text.RegularExpressions;
+using Microsoft.PowerShell.Commands;
 
 namespace PowerForge;
 
@@ -13,6 +14,22 @@ namespace PowerForge;
 /// </summary>
 internal static class ApprovedModuleRuntimeReferenceAnalyzer
 {
+    private static readonly HashSet<string> ImportModuleSwitchParameters = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AsCustomObject",
+        "Confirm",
+        "Debug",
+        "DisableNameChecking",
+        "Force",
+        "Global",
+        "NoClobber",
+        "PassThru",
+        "SkipEditionCheck",
+        "UseWindowsPowerShell",
+        "Verbose",
+        "WhatIf"
+    };
+
     internal static string[] Find(
         ScriptBlockAst ast,
         IEnumerable<string> commandNames,
@@ -37,6 +54,13 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                  .Cast<UsingStatementAst>())
         {
             var referencedModule = GetUsingModuleName(statement);
+            if (referencedModule is not null && approvedModuleSources.ContainsKey(referencedModule))
+                blocked.Add(referencedModule);
+        }
+
+        foreach (var requiredModule in ast.ScriptRequirements?.RequiredModules.AsEnumerable() ?? Enumerable.Empty<ModuleSpecification>())
+        {
+            var referencedModule = NormalizeModuleReferenceName(requiredModule.Name);
             if (referencedModule is not null && approvedModuleSources.ContainsKey(referencedModule))
                 blocked.Add(referencedModule);
         }
@@ -114,31 +138,43 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
             yield break;
         }
 
-        if (command.CommandElements.Count > 1 && command.CommandElements[1] is ExpressionAst positional)
-        {
-            foreach (var name in GetStaticModuleNames(positional))
-                yield return name;
-        }
-
+        var positionalFound = false;
         for (var index = 1; index < command.CommandElements.Count; index++)
         {
-            if (command.CommandElements[index] is not CommandParameterAst parameter ||
-                (!parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase) &&
-                 !parameter.ParameterName.Equals("FullyQualifiedName", StringComparison.OrdinalIgnoreCase)))
+            if (command.CommandElements[index] is not CommandParameterAst parameter)
             {
+                if (!positionalFound && command.CommandElements[index] is ExpressionAst positional)
+                {
+                    foreach (var name in GetStaticModuleNames(positional))
+                        yield return name;
+                    positionalFound = true;
+                }
                 continue;
             }
 
-            if (parameter.Argument is not null)
+            var isModuleNameParameter =
+                parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
+                parameter.ParameterName.Equals("FullyQualifiedName", StringComparison.OrdinalIgnoreCase);
+            if (isModuleNameParameter && parameter.Argument is not null)
             {
                 foreach (var name in GetStaticModuleNames(parameter.Argument))
                     yield return name;
             }
-            else if (index + 1 < command.CommandElements.Count &&
+            else if (isModuleNameParameter &&
+                     index + 1 < command.CommandElements.Count &&
                      command.CommandElements[index + 1] is ExpressionAst argument)
             {
                 foreach (var name in GetStaticModuleNames(argument))
                     yield return name;
+                index++;
+            }
+            else if (parameter.Argument is null &&
+                     !ImportModuleSwitchParameters.Contains(parameter.ParameterName) &&
+                     index + 1 < command.CommandElements.Count &&
+                     command.CommandElements[index + 1] is ExpressionAst)
+            {
+                // A value belonging to another named parameter is not the positional module name.
+                index++;
             }
         }
     }
