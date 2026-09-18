@@ -161,7 +161,11 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
 
         var installed = _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
-            ? versionedProvider.GetInstalledModules(installedCandidates.Select(static resolution => resolution.Constraint).ToArray())
+            ? versionedProvider.GetInstalledModules(installedCandidates
+                .Select(static resolution => (RequiredModuleReference)new ApprovedModuleInstalledReference(
+                    resolution.Constraint,
+                    resolution.MatchPrereleaseByBaseVersion))
+                .ToArray())
             : new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
 
         try
@@ -191,7 +195,9 @@ public sealed partial class ModulePipelineRunner
                 var candidates = client.Find(
                     new PSResourceFindOptions(
                         names: new[] { resolution.Name },
-                        version: RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(resolution.Constraint),
+                        version: BuildApprovedModuleRepositoryQueryVersion(
+                            resolution.Constraint,
+                            resolution.MatchPrereleaseByBaseVersion),
                         prerelease: resolution.Prerelease || RequiredModuleRepositoryPublisher.AllowsPrerelease(resolution.Constraint),
                         repositories: new[] { repository },
                         credential: resolution.Credential),
@@ -251,6 +257,13 @@ public sealed partial class ModulePipelineRunner
 
         return new ApprovedModuleSourceLease(_logger, sources.ToArray(), temporaryRoots.ToArray());
     }
+
+    internal static string? BuildApprovedModuleRepositoryQueryVersion(
+        RequiredModuleReference constraint,
+        bool matchPrereleaseByBaseVersion)
+        => matchPrereleaseByBaseVersion
+            ? null
+            : RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(constraint);
 
     internal static PSResourceInfo? SelectApprovedModuleRepositoryCandidate(
         RequiredModuleReference constraint,

@@ -1120,6 +1120,53 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void PowerShellProvider_EnforcesInstalledPrereleaseIdentityAndSupportsApprovedBaseMatching()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleName = "PowerForge.PrereleaseConstraint." + Guid.NewGuid().ToString("N");
+            WriteInstalledModule(root.FullName, moduleName, "2.0.0", "beta.1");
+            WriteInstalledModule(root.FullName, moduleName, "3.0.0", prerelease: null);
+            var inheritedModulePath = Environment.GetEnvironmentVariable("PSModulePath") ?? string.Empty;
+            var provider = new PowerShellModuleDependencyMetadataProvider(
+                new EnvironmentPowerShellRunner(root.FullName + Path.PathSeparator + inheritedModulePath),
+                new NullLogger());
+
+            var exactPrerelease = provider.GetInstalledModules(new[]
+            {
+                new RequiredModuleReference(moduleName, requiredVersion: "2.0.0-beta.1")
+            });
+            var approvedBaseMatch = provider.GetInstalledModules(new RequiredModuleReference[]
+            {
+                new ApprovedModuleInstalledReference(
+                    new RequiredModuleReference(moduleName, requiredVersion: "2.0.0"),
+                    matchPrereleaseByBaseVersion: true)
+            });
+
+            Assert.Equal("2.0.0-beta.1", Assert.Single(exactPrerelease).Value.Version);
+            Assert.Equal("2.0.0-beta.1", Assert.Single(approvedBaseMatch).Value.Version);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static void WriteInstalledModule(string root, string moduleName, string version, string? prerelease)
+    {
+        var modulePath = Path.Combine(root, moduleName, version);
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(Path.Combine(modulePath, moduleName + ".psm1"), string.Empty);
+        var prereleaseData = string.IsNullOrWhiteSpace(prerelease)
+            ? string.Empty
+            : $"; PrivateData = @{{ PSData = @{{ Prerelease = '{prerelease}' }} }}";
+        File.WriteAllText(
+            Path.Combine(modulePath, moduleName + ".psd1"),
+            $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '{version}'{prereleaseData} }}");
+    }
+
+    [Fact]
     public void Plan_IgnoresRuntimeProvidedTransitiveDependenciesForPackaging_WhenParentRemainsRequired()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

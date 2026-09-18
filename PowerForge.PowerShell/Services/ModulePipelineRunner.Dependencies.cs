@@ -698,13 +698,19 @@ public sealed partial class ModulePipelineRunner
 
             var reference = new RequiredModuleReference(
                 effective.ModuleName.Trim(),
-                string.IsNullOrWhiteSpace(effective.MinimumVersion) ? effective.ModuleVersion : effective.MinimumVersion,
-                effective.RequiredVersion,
+                NormalizeLocatorVersionArgument(string.IsNullOrWhiteSpace(effective.MinimumVersion) ? effective.ModuleVersion : effective.MinimumVersion),
+                NormalizeLocatorVersionArgument(effective.RequiredVersion),
                 maximumVersion: null,
                 effective.Guid);
-            var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[] { reference.ModuleName });
+            var installedReference = new ApprovedModuleInstalledReference(
+                reference,
+                HasAutoOrLatestConstraint(effective));
+            IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
+                _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
+                    ? versionedProvider.GetInstalledModules(new RequiredModuleReference[] { installedReference })
+                    : _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[] { reference.ModuleName });
             if (!installed.TryGetValue(reference.ModuleName, out var metadata) ||
-                !IsInstalledModuleAvailable(metadata, reference))
+                !IsInstalledModuleAvailable(metadata, installedReference))
             {
                 return true;
             }
@@ -1015,7 +1021,11 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            return ManagedModuleVersionSelector.IsMatch(metadata.Version!, versionRange);
+            var candidateVersion = reference is ApprovedModuleInstalledReference approved &&
+                                   approved.MatchPrereleaseByBaseVersion
+                ? metadata.Version!.Split(new[] { '-' }, 2)[0]
+                : metadata.Version!;
+            return ManagedModuleVersionSelector.IsMatch(candidateVersion, versionRange);
         }
         catch (ArgumentException)
         {

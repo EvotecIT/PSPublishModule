@@ -215,6 +215,52 @@ public sealed partial class ModulePipelineHostedOperationsTests
         }
     }
 
+    [Fact]
+    public void RunPreflight_AutoApprovedDonorChecksAllInstalledVersionsBeforeBootstrapping()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string donorName = "Approved.Donor";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0", CsprojPath = null },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = donorName,
+                            RequiredVersion = "1.0.0",
+                            VersionSource = ModuleDependencyVersionSource.Auto
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var provider = new FixedVersionedMetadataProvider(
+                new InstalledModuleMetadata(donorName, "1.0.0", null, Path.Combine(root.FullName, "1.0.0")),
+                new InstalledModuleMetadata(donorName, "2.0.0", null, Path.Combine(root.FullName, "2.0.0")));
+            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider, hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(0, hostedOperations.DependencyInstallCalls);
+            Assert.Contains(provider.Requests.SelectMany(static request => request), reference =>
+                string.Equals(reference.ModuleName, donorName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(reference.RequiredVersion, "1.0.0", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec CreateDependencySpec(
         string root,
         string moduleName,
@@ -258,12 +304,16 @@ public sealed partial class ModulePipelineHostedOperationsTests
     private sealed class FixedVersionedMetadataProvider : IModuleDependencyVersionedMetadataProvider
     {
         private readonly InstalledModuleMetadata _installed;
+        private readonly InstalledModuleMetadata _latest;
 
         internal List<RequiredModuleReference[]> Requests { get; } = new();
 
-        internal FixedVersionedMetadataProvider(InstalledModuleMetadata installed)
+        internal FixedVersionedMetadataProvider(
+            InstalledModuleMetadata installed,
+            InstalledModuleMetadata? latest = null)
         {
             _installed = installed;
+            _latest = latest ?? installed;
         }
 
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetInstalledModules(IReadOnlyList<RequiredModuleReference> references)
@@ -278,7 +328,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
             => new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
             {
-                [_installed.Name] = _installed
+                [_latest.Name] = _latest
             };
 
         public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)

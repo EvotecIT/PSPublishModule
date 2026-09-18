@@ -269,6 +269,21 @@ public sealed class ModulePipelineDefaultPolicyTests
     }
 
     [Fact]
+    public void ApprovedModuleRepositoryQuery_DoesNotPreFilterAutoResolvedPrereleaseByStableBase()
+    {
+        var constraint = new RequiredModuleReference("Approved.Donor", requiredVersion: "2.0.0");
+
+        Assert.Null(ModulePipelineRunner.BuildApprovedModuleRepositoryQueryVersion(
+            constraint,
+            matchPrereleaseByBaseVersion: true));
+        Assert.Equal(
+            "[2.0.0]",
+            ModulePipelineRunner.BuildApprovedModuleRepositoryQueryVersion(
+                constraint,
+                matchPrereleaseByBaseVersion: false));
+    }
+
+    [Fact]
     public void Plan_CarriesDefaultInstalledSourceForExternalModules()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

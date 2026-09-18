@@ -41,6 +41,18 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                 blocked.Add(referencedModule);
         }
 
+        foreach (var command in ast.FindAll(
+                     static node => node is CommandAst,
+                     searchNestedScriptBlocks: true)
+                 .Cast<CommandAst>())
+        {
+            foreach (var importedModule in GetStaticImportModuleNames(command))
+            {
+                if (approvedModuleSources.ContainsKey(importedModule))
+                    blocked.Add(importedModule);
+            }
+        }
+
         foreach (var typeName in ast.FindAll(
                      static node => node is TypeConstraintAst || node is TypeExpressionAst,
                      searchNestedScriptBlocks: true)
@@ -91,6 +103,99 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
         }
 
         return trimmed;
+    }
+
+    private static IEnumerable<string> GetStaticImportModuleNames(CommandAst command)
+    {
+        var commandName = command.GetCommandName();
+        if (string.IsNullOrWhiteSpace(commandName) ||
+            !commandName!.Split('\\').Last().Equals("Import-Module", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        if (command.CommandElements.Count > 1 && command.CommandElements[1] is ExpressionAst positional)
+        {
+            foreach (var name in GetStaticModuleNames(positional))
+                yield return name;
+        }
+
+        for (var index = 1; index < command.CommandElements.Count; index++)
+        {
+            if (command.CommandElements[index] is not CommandParameterAst parameter ||
+                (!parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase) &&
+                 !parameter.ParameterName.Equals("FullyQualifiedName", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            if (parameter.Argument is not null)
+            {
+                foreach (var name in GetStaticModuleNames(parameter.Argument))
+                    yield return name;
+            }
+            else if (index + 1 < command.CommandElements.Count &&
+                     command.CommandElements[index + 1] is ExpressionAst argument)
+            {
+                foreach (var name in GetStaticModuleNames(argument))
+                    yield return name;
+            }
+        }
+    }
+
+    private static IEnumerable<string> GetStaticModuleNames(ExpressionAst expression)
+    {
+        if (expression is StringConstantExpressionAst literal)
+        {
+            var normalized = NormalizeModuleReferenceName(literal.Value);
+            if (normalized is not null)
+                yield return normalized;
+            yield break;
+        }
+
+        if (expression is ExpandableStringExpressionAst expandable && expandable.NestedExpressions.Count == 0)
+        {
+            var normalized = NormalizeModuleReferenceName(expandable.Value);
+            if (normalized is not null)
+                yield return normalized;
+            yield break;
+        }
+
+        if (expression is ArrayLiteralAst array)
+        {
+            foreach (var element in array.Elements)
+            foreach (var name in GetStaticModuleNames(element))
+                yield return name;
+            yield break;
+        }
+
+        if (expression is not HashtableAst hashtable)
+            yield break;
+
+        foreach (var pair in hashtable.KeyValuePairs)
+        {
+            if (pair.Item1 is not StringConstantExpressionAst key ||
+                !key.Value.Equals("ModuleName", StringComparison.OrdinalIgnoreCase) ||
+                GetHashtableValueExpression(pair.Item2) is not { } value)
+            {
+                continue;
+            }
+
+            foreach (var name in GetStaticModuleNames(value))
+                yield return name;
+        }
+    }
+
+    private static ExpressionAst? GetHashtableValueExpression(StatementAst value)
+    {
+        if (value is not PipelineAst pipeline ||
+            pipeline.PipelineElements.Count != 1 ||
+            pipeline.PipelineElements[0] is not CommandExpressionAst expression)
+        {
+            return null;
+        }
+
+        return expression.Expression;
     }
 
     private static bool TypeBelongsToApprovedModule(ITypeName typeName, ApprovedModuleSource source)
