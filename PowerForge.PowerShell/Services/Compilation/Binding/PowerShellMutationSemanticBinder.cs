@@ -107,6 +107,30 @@ internal static partial class PowerShellMutationSemanticBinder
         }
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             return BindNativeAssignment(document, syntax, variable, target, bindExpression, diagnostics);
+        if (PowerShellClosedValueAlternativePolicy.TryGetAssignmentType(
+                target.Type, syntax, out var closedAlternativeType))
+        {
+            if (!syntax.Operator.ToString().Equals("Equals", StringComparison.Ordinal)) return null;
+            var alternativeValue = bindExpression(syntax.Right, closedAlternativeType);
+            if (alternativeValue is null || alternativeValue.Type.ClrType != closedAlternativeType ||
+                !PowerShellClosedValueAlternativePolicy.TryGetAlternativeIndex(
+                    target.Type, syntax.Left.Extent.Text, alternativeValue.Type.ClrType, out var alternativeIndex))
+                return null;
+            var envelope = new PowerShellBoundRegionValueAlternativeExpression(
+                PowerShellSourceParser.GetSpan(document, syntax.Right.Extent),
+                alternativeIndex,
+                alternativeValue,
+                target.Type);
+            return new PowerShellBoundMutationExpression(
+                PowerShellSourceParser.GetSpan(document, syntax.Extent),
+                target.Symbol,
+                target.Type.ClrType,
+                PowerShellBoundMutationOperator.Assign,
+                envelope,
+                target.Type,
+                normalizeNullString: false,
+                PowerShellIntegralMutationSemantics.None);
+        }
         if (!PowerShellAssignmentTargetPolicy.PreservesConstraint(syntax.Left, target.Type))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2414",

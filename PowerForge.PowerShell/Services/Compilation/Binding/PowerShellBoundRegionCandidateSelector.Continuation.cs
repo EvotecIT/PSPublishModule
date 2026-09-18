@@ -79,12 +79,37 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         var selected = new List<PowerShellBoundStatement>();
         var locals = new List<PowerShellBoundLocal>();
         var transfers = new List<PowerShellCompiledRegionLocal>();
-        var regionParameters = parameters.Select(ProjectParameterContract).ToArray();
+        var conditionOnlySwitches = authoredStatements
+            .OfType<IfStatementAst>()
+            .Select(statement => PowerShellClosedValueAlternativePolicy.TryMatch(statement, out var initializer)
+                ? initializer.ConditionVariableName
+                : string.Empty)
+            .Where(name => parameters.Any(parameter => parameter.Contract.IsSwitch &&
+                parameter.Symbol.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var regionParameters = parameters
+            .Select(parameter => ProjectParameterContract(
+                parameter,
+                conditionOnlySwitches.Contains(parameter.Symbol.Name)))
+            .ToArray();
         var nextIndex = bindings[0].AuthoredStatementIndex;
         foreach (var binding in bindings)
         {
-            var statement = PowerShellBoundRegionLocalProjection.Project(binding.Statement, regionParameters, locals, functionLocals);
+            var statement = PowerShellBoundRegionLocalProjection.Project(
+                binding.Statement,
+                regionParameters,
+                locals,
+                functionLocals,
+                conditionOnlyBooleanParameters: conditionOnlySwitches);
             if (statement is null) break;
+            var retainedOnlyAlternativeKeys = locals
+                .Where(static local => PowerShellRegionTransferTypePolicy.IsClosedValueAlternative(local.Type))
+                .Select(static local => local.Symbol.StableKey)
+                .ToHashSet(StringComparer.Ordinal);
+            if (retainedOnlyAlternativeKeys.Count > 0 &&
+                PowerShellBoundRegionOpportunitySelector.EnumerateWrittenSymbols(new[] { statement })
+                    .Any(symbol => retainedOnlyAlternativeKeys.Contains(symbol.StableKey)))
+                break;
             // The helper ABI already carries native stopping. Its checkpoint is the only
             // host effect allowed here; the ordinary promotion policy still checks errors.
             var stopping = statement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStopping);
@@ -105,6 +130,17 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                     break;
                 candidateLocals.Add(new PowerShellBoundLocal(assignment.Target, assignment.Value.Type));
                 newTransfers.Add(newTransfer!);
+            }
+            else if (statement is PowerShellBoundIfStatement conditional &&
+                     TryCreateClosedAlternativeLocal(
+                         conditional,
+                         authoredStatements[binding.AuthoredStatementIndex],
+                         functionLocals,
+                         out var alternativeLocal,
+                         out var alternativeTransfer))
+            {
+                candidateLocals.Add(alternativeLocal!);
+                newTransfers.Add(alternativeTransfer!);
             }
             else if (statement is PowerShellBoundOutputCaptureStatement
                      {
@@ -142,13 +178,16 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             }
             var nested = PowerShellSemanticAnalyzer.EnumerateStatements(
                 new PowerShellBoundBlock(statement.Span, new[] { statement })).ToArray();
+            var hasClosedAlternativeTransfer = newTransfers.Any(static transfer =>
+                transfer.Contract?.Shape == PowerShellRegionTransferShape.ClosedValueAlternative);
             if (nested.OfType<PowerShellBoundAssignmentStatement>().Any(update =>
                     !candidateLocals.Any(local => local.Symbol.StableKey == update.Target.StableKey &&
                                                   local.Type.ClrType == update.Value.Type.ClrType)) ||
                 authoredStatements[binding.AuthoredStatementIndex].FindAll(
                     static node => node is AssignmentStatementAst { Left: AttributedExpressionAst },
                     searchNestedScriptBlocks: false).Any(node =>
-                    newTransfers.Count == 0 || !ReferenceEquals(node, authoredStatements[binding.AuthoredStatementIndex])))
+                    !hasClosedAlternativeTransfer &&
+                    (newTransfers.Count == 0 || !ReferenceEquals(node, authoredStatements[binding.AuthoredStatementIndex]))))
                 break;
             if (nested.Any(static statement => statement is PowerShellBoundReturnStatement or PowerShellBoundThrowStatement) ||
                 PowerShellBoundRegionOpportunitySelector.EnumerateWrittenSymbols(new[] { statement })
@@ -184,14 +223,26 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         IReadOnlyList<StatementAst> authoredStatements,
         int statementIndex)
     {
-        if (statementIndex < 0 || statementIndex >= authoredStatements.Count ||
-            authoredStatements[statementIndex] is not AssignmentStatementAst assignment)
+        if (statementIndex < 0 || statementIndex >= authoredStatements.Count)
             return false;
-        Ast target = assignment.Left;
-        if (target is AttributedExpressionAst attributed) target = attributed.Child;
-        if (target is not VariableExpressionAst variable || !variable.VariablePath.IsUnqualified)
+        string name;
+        if (authoredStatements[statementIndex] is AssignmentStatementAst assignment)
+        {
+            Ast target = assignment.Left;
+            if (target is AttributedExpressionAst attributed) target = attributed.Child;
+            if (target is not VariableExpressionAst variable || !variable.VariablePath.IsUnqualified)
+                return false;
+            name = variable.VariablePath.UserPath;
+        }
+        else if (authoredStatements[statementIndex] is IfStatementAst conditional &&
+                 PowerShellClosedValueAlternativePolicy.TryMatch(conditional, out var initializer))
+        {
+            name = initializer.Name;
+        }
+        else
+        {
             return false;
-        var name = variable.VariablePath.UserPath;
+        }
         return !authoredStatements.Take(statementIndex).Any(statement => statement.FindAll(node =>
                 node is VariableExpressionAst prior && prior.VariablePath.IsUnqualified &&
                 prior.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase),
@@ -199,7 +250,20 @@ internal static partial class PowerShellBoundRegionCandidateSelector
     }
 
     private static PowerShellBoundParameter ProjectParameterContract(PowerShellBoundParameter parameter)
+        => ProjectParameterContract(parameter, projectSwitchTruthiness: false);
+
+    private static PowerShellBoundParameter ProjectParameterContract(
+        PowerShellBoundParameter parameter,
+        bool projectSwitchTruthiness)
     {
+        if (parameter.Contract.IsSwitch && projectSwitchTruthiness)
+            return new PowerShellBoundParameter(
+                parameter.Symbol,
+                new PowerShellTypeFact(
+                    typeof(bool),
+                    PowerShellTypeFactProvenance.Explicit,
+                    "The retained PowerShell parameter binder resolves SwitchParameter.IsPresent before the detached region call."),
+                new PowerShellCompilationParameter(parameter.Symbol.Name, typeof(bool).FullName!, hasDefaultValue: false));
         if (parameter.Type.Provenance != PowerShellTypeFactProvenance.Unknown ||
             !parameter.Contract.TypeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod) ||
             Type.GetType(parameter.Contract.TypeName, throwOnError: false) is not { } contractType ||
@@ -212,6 +276,59 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 PowerShellTypeFactProvenance.Explicit,
                 "The detached region receives this value after the retained PowerShell function applies its authored parameter contract."),
             parameter.Contract);
+    }
+
+    private static bool TryCreateClosedAlternativeLocal(
+        PowerShellBoundIfStatement conditional,
+        StatementAst authoredStatement,
+        IReadOnlyList<PowerShellBoundLocal> functionLocals,
+        out PowerShellBoundLocal? local,
+        out PowerShellCompiledRegionLocal? transfer)
+    {
+        local = null;
+        transfer = null;
+        if (authoredStatement is not IfStatementAst authoredConditional ||
+            !PowerShellClosedValueAlternativePolicy.TryMatch(authoredConditional, out var initializer))
+            return false;
+        var assignments = PowerShellSemanticAnalyzer.EnumerateStatements(
+                new PowerShellBoundBlock(conditional.Span, new PowerShellBoundStatement[] { conditional }))
+            .OfType<PowerShellBoundAssignmentStatement>()
+            .ToArray();
+        if (assignments.Length != initializer.Alternatives.Length ||
+            assignments.Select(static assignment => assignment.Target.StableKey).Distinct(StringComparer.Ordinal).Count() != 1 ||
+            assignments.Any(static assignment =>
+                assignment.Value is not PowerShellBoundRegionValueAlternativeExpression))
+            return false;
+        var target = assignments[0].Target;
+        var functionLocal = functionLocals.SingleOrDefault(candidate =>
+            candidate.Symbol.StableKey == target.StableKey);
+        if (functionLocal is null || !PowerShellRegionTransferTypePolicy.IsClosedValueAlternative(functionLocal.Type) ||
+            !functionLocal.Type.ClosedAlternativeTypes.SequenceEqual(
+                initializer.Alternatives.Select(static alternative => alternative.Type)))
+            return false;
+
+        var alternatives = initializer.Alternatives.Select(alternative =>
+            new PowerShellCompiledRegionLocalAlternative(
+                alternative.Type.FullName ?? alternative.Type.Name,
+                alternative.ConstraintSyntax,
+                PowerShellRegionTransferTypePolicy.Describe(
+                    alternative.Type,
+                    PowerShellRegionTransferDirection.LiveOut,
+                    PowerShellRegionTransferOwnership.GuardedFresh,
+                    PowerShellRegionTransferMutation.RetainedOnly))).ToArray();
+        var contract = PowerShellRegionTransferTypePolicy.DescribeClosedValueAlternative(
+            PowerShellRegionTransferDirection.LiveOut,
+            PowerShellRegionTransferOwnership.GuardedFresh,
+            PowerShellRegionTransferMutation.RetainedOnly);
+        local = new PowerShellBoundLocal(target, functionLocal.Type);
+        transfer = new PowerShellCompiledRegionLocal(
+            target.Name,
+            functionLocal.Type.ClrType.FullName ?? functionLocal.Type.ClrType.Name,
+            hasTypeConstraint: false,
+            typeConstraintSyntax: string.Empty,
+            contract: contract,
+            alternatives: alternatives);
+        return true;
     }
 
     private static bool TryCreateContinuationLocal(

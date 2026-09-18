@@ -7,7 +7,7 @@ public sealed class PowerShellCompiledRegionLocal
 {
     /// <summary>Creates immutable metadata using the original local-value transfer contract.</summary>
     public PowerShellCompiledRegionLocal(string name, string typeName, bool hasTypeConstraint, string typeConstraintSyntax = "")
-        : this(name, typeName, hasTypeConstraint, typeConstraintSyntax, contract: null)
+        : this(name, typeName, hasTypeConstraint, typeConstraintSyntax, contract: null, alternatives: null)
     {
     }
 
@@ -18,13 +18,15 @@ public sealed class PowerShellCompiledRegionLocal
         string typeName,
         bool hasTypeConstraint,
         string typeConstraintSyntax,
-        PowerShellRegionTransferContract? contract)
+        PowerShellRegionTransferContract? contract,
+        IReadOnlyList<PowerShellCompiledRegionLocalAlternative>? alternatives = null)
     {
         Name = name ?? string.Empty;
         TypeName = typeName ?? string.Empty;
         HasTypeConstraint = hasTypeConstraint;
         TypeConstraintSyntax = typeConstraintSyntax ?? string.Empty;
         Contract = contract;
+        Alternatives = Array.AsReadOnly((alternatives ?? Array.Empty<PowerShellCompiledRegionLocalAlternative>()).ToArray());
     }
 
     /// <summary>Unqualified authored local variable name.</summary>
@@ -37,4 +39,6 @@ public sealed class PowerShellCompiledRegionLocal
     public string TypeConstraintSyntax { get; }
     /// <summary>Generalized direction, ownership, output, and mutation contract for this local crossing.</summary>
     public PowerShellRegionTransferContract? Contract { get; }
+    /// <summary>Exact branch-dependent constraints carried by a closed alternative envelope.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocalAlternative> Alternatives { get; }
 }

@@ -31,11 +31,14 @@ internal static class PowerShellTypedRegionPromotionPolicy
         var returnContract = transfersMultipleLocals
             ? null
             : candidate.ControlFlowContract?.ReturnValue ?? candidate.TerminalTransferContract ??
+              candidate.ContinuationLocals.SingleOrDefault()?.Contract ??
               PowerShellRegionTransferTypePolicy.Describe(lowered.ReturnType);
         // The analyzer can prove compile-time array enumeration. System.Array and list-like
         // references are enumerated by the retained PowerShell invocation boundary instead.
         var expectedCardinality = candidate.ControlFlowContract is not null
             ? PowerShellOutputCardinality.None
+            : candidate.ContinuationLocals.Length > 0
+            ? PowerShellOutputCardinality.Scalar
             : returnContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.None
             ? PowerShellOutputCardinality.None
             : candidate.ContinuationLocals.Length == 0 &&
@@ -62,7 +65,15 @@ internal static class PowerShellTypedRegionPromotionPolicy
                       ElementContract: PowerShellRegionTransferElementContract.None,
                       OutputBehavior: PowerShellRegionTransferOutputBehavior.Atomic,
                       Supported: true
-                  }) || PowerShellRegionTransferTypePolicy.IsSupported(lowered.ReturnType);
+                  }) ||
+                  (lowered.ReturnType == typeof(PowerForge.Generated.Runtime.PowerShellRegionValueAlternative) &&
+                   returnContract is
+                   {
+                       Shape: PowerShellRegionTransferShape.ClosedValueAlternative,
+                       ElementContract: PowerShellRegionTransferElementContract.StableScalar,
+                       Supported: true
+                   }) ||
+                  PowerShellRegionTransferTypePolicy.IsSupported(lowered.ReturnType);
         if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !supportedReturnType)
             return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a supported region transfer type.");
         if (lowered.RequiresPowerShellStreams)
@@ -135,7 +146,7 @@ internal static class PowerShellTypedRegionPromotionPolicy
         return values.Length == candidate.ContinuationLocals.Length && values.Select((value, index) =>
             value is PowerShellBoundVariableExpression variable && variable.Symbol.Kind == PowerShellSymbolKind.Local &&
             variable.Symbol.Name.Equals(candidate.ContinuationLocals[index].Name, StringComparison.OrdinalIgnoreCase) &&
-            PowerShellRegionTransferTypePolicy.IsSupported(variable.Type.ClrType) &&
+            PowerShellRegionTransferTypePolicy.IsSupported(variable.Type) &&
             (variable.Type.ClrType.FullName ?? variable.Type.ClrType.Name) == candidate.ContinuationLocals[index].TypeName).All(static valid => valid);
     }
 

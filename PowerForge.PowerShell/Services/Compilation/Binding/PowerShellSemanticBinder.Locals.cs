@@ -14,6 +14,7 @@ internal sealed partial class PowerShellSemanticBinder
         int? excludedTailOffset = null)
     {
         var locals = new List<PowerShellBoundLocal>();
+        var closedAlternatives = PowerShellClosedValueAlternativePolicy.Find(function);
         var assignments = GetFunctionStatements(function.Body)
             .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
             .Cast<AssignmentStatementAst>()
@@ -34,7 +35,9 @@ internal sealed partial class PowerShellSemanticBinder
                 continue;
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
-            var type = ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
+            var type = closedAlternatives.TryGetValue(name, out var closedAlternative)
+                ? closedAlternative.CreateTypeFact()
+                : ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
             if (type.Provenance == PowerShellTypeFactProvenance.Unknown &&
                 UnwrapExpression(assignment.Right) is VariableExpressionAst copied &&
                 symbols.TryGetValue(copied.VariablePath.UserPath, out var copiedSymbol) &&

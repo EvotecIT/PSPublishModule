@@ -70,7 +70,8 @@ internal sealed class PowerShellTypeFact
         string explanation,
         IReadOnlyDictionary<string, PowerShellTypeFact>? knownProperties = null,
         PowerShellDictionaryValueKind dictionaryValueKind = PowerShellDictionaryValueKind.None,
-        PowerShellInt32Range? int32Range = null)
+        PowerShellInt32Range? int32Range = null,
+        IReadOnlyList<Type>? closedAlternativeTypes = null)
     {
         ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
         Provenance = provenance;
@@ -78,6 +79,7 @@ internal sealed class PowerShellTypeFact
         KnownProperties = CopyKnownProperties(knownProperties);
         DictionaryValueKind = dictionaryValueKind;
         Int32Range = clrType == typeof(int) ? int32Range : null;
+        ClosedAlternativeTypes = Array.AsReadOnly((closedAlternativeTypes ?? Array.Empty<Type>()).ToArray());
     }
 
     internal Type ClrType { get; }
@@ -86,9 +88,14 @@ internal sealed class PowerShellTypeFact
     internal IReadOnlyDictionary<string, PowerShellTypeFact> KnownProperties { get; }
     internal PowerShellDictionaryValueKind DictionaryValueKind { get; }
     internal PowerShellInt32Range? Int32Range { get; }
+    /// <summary>
+    /// Exact authored CLR alternatives carried by a compiler-owned envelope. Empty for ordinary
+    /// PowerShell values; the general object/ETS path never acquires this evidence.
+    /// </summary>
+    internal IReadOnlyList<Type> ClosedAlternativeTypes { get; }
 
     internal PowerShellTypeFact WithInt32Range(PowerShellInt32Range range)
-        => new(ClrType, Provenance, Explanation, KnownProperties, DictionaryValueKind, range);
+        => new(ClrType, Provenance, Explanation, KnownProperties, DictionaryValueKind, range, ClosedAlternativeTypes);
 
     internal bool TryGetKnownProperty(string name, out PowerShellTypeFact property)
         => KnownProperties.TryGetValue(name, out property!);
@@ -97,7 +104,7 @@ internal sealed class PowerShellTypeFact
     {
         var properties = CopyKnownProperties(KnownProperties);
         properties[name] = property;
-        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind, Int32Range);
+        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind, Int32Range, ClosedAlternativeTypes);
     }
 
     private static Dictionary<string, PowerShellTypeFact> CopyKnownProperties(

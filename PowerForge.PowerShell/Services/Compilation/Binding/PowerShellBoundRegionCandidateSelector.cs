@@ -101,7 +101,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         if (selectedLocals.Any(local =>
                 local.Type.Provenance == PowerShellTypeFactProvenance.Unknown ||
                 continuationLocals is { Length: > 0 } && local.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble ||
-                !PowerShellRegionTransferTypePolicy.IsSupported(local.Type.ClrType) && local.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble))
+                !PowerShellRegionTransferTypePolicy.IsSupported(local.Type) && local.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble))
             return false;
 
         var helperName = CreateHelperName(sourceFunction, span);

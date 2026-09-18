@@ -96,7 +96,13 @@ internal sealed partial class PowerShellSemanticBinder
                     diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501", "Collected arrays with traps retain their native statement handlers.", span));
                     return null;
                 }
-                if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && array.SubExpression.Statements.Count > 0)
+                var closedTypedVector = contextualType is { IsArray: true } vectorType &&
+                                        vectorType.GetArrayRank() == 1 &&
+                                        vectorType.GetElementType() is { } vectorElement &&
+                                        vectorType == vectorElement.MakeArrayType() &&
+                                        PowerShellStableScalarTypePolicy.IsSupported(vectorElement);
+                if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                    array.SubExpression.Statements.Count > 0 && !closedTypedVector)
                     return PowerShellArraySemanticBinder.BindNativeCollection(document, array, contextualType,
                         (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType, targetFramework, capabilities),
                         _semanticProfile, diagnostics);

@@ -8,6 +8,8 @@ internal static class PowerShellCommandHostRuntimeSource
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
         var requiresRegionHost = typed.PromotedRegions.Any(static region => region.RequiresLocalOwnershipGuard);
         var requiresRegionControlFlow = typed.PromotedRegions.Any(static region => region.ControlFlowContract is not null);
+        var requiresRegionValueAlternative = typed.PromotedRegions.Any(static region =>
+            region.ContinuationLocals.Any(static local => local.Alternatives.Count > 0));
         if (requiresRegionControlFlow)
         {
             using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
@@ -15,6 +17,14 @@ internal static class PowerShellCommandHostRuntimeSource
                 ?? throw new InvalidOperationException("Missing retained region control-flow runtime source.");
             using var reader = new StreamReader(stream);
             sources.Add("RegionControlFlow.g.cs", "#nullable enable\n" + reader.ReadToEnd());
+        }
+        if (requiresRegionValueAlternative)
+        {
+            using var stream = typeof(PowerShellCommandHostRuntimeSource).Assembly.GetManifestResourceStream(
+                "PowerForge.PowerShell.Compilation.PowerShellRegionValueAlternative.cs")
+                ?? throw new InvalidOperationException("Missing retained region value-alternative runtime source.");
+            using var reader = new StreamReader(stream);
+            sources.Add("RegionValueAlternative.g.cs", "#nullable enable\n" + reader.ReadToEnd());
         }
         if (requiresRegionHost)
         {

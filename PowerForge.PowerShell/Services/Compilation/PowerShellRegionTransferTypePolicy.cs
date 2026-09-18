@@ -9,7 +9,8 @@ namespace PowerForge;
 internal static class PowerShellRegionTransferTypePolicy
 {
     internal static bool IsSupported(PowerShellTypeFact type)
-        => type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble || IsSupported(type.ClrType);
+        => type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble ||
+           IsClosedValueAlternative(type) || IsSupported(type.ClrType);
 
     internal static bool IsSupported(Type type)
         => Describe(type).Supported;
@@ -75,9 +76,36 @@ internal static class PowerShellRegionTransferTypePolicy
             PowerShellRegionTransferMutation.None,
             supported: true);
 
+    /// <summary>Describes a compiler-owned envelope whose exact authored alternatives remain closed.</summary>
+    internal static PowerShellRegionTransferContract DescribeClosedValueAlternative(
+        PowerShellRegionTransferDirection direction,
+        PowerShellRegionTransferOwnership ownership,
+        PowerShellRegionTransferMutation mutation)
+        => new(
+            PowerShellRegionTransferShape.ClosedValueAlternative,
+            PowerShellRegionTransferElementContract.StableScalar,
+            direction,
+            ownership,
+            PowerShellRegionTransferOutputBehavior.Atomic,
+            mutation,
+            supported: mutation != PowerShellRegionTransferMutation.CompiledOwned);
+
     internal static bool IsAtomicDictionaryReference(Type type)
         => type == typeof(System.Collections.Hashtable) ||
            type == typeof(System.Collections.Specialized.OrderedDictionary);
+
+    internal static bool IsClosedValueAlternative(PowerShellTypeFact type)
+    {
+        if (type.ClrType != typeof(PowerForge.Generated.Runtime.PowerShellRegionValueAlternative) ||
+            type.ClosedAlternativeTypes.Count != 2)
+            return false;
+        var scalar = type.ClosedAlternativeTypes.SingleOrDefault(PowerShellStableScalarTypePolicy.IsSupported);
+        var vector = type.ClosedAlternativeTypes.SingleOrDefault(candidate =>
+            candidate.IsArray && candidate.GetArrayRank() == 1 && candidate.GetElementType() is { } element &&
+            candidate == element.MakeArrayType() && PowerShellStableScalarTypePolicy.IsSupported(element));
+        return scalar is not null && vector?.GetElementType() == scalar &&
+               type.ClosedAlternativeTypes.Distinct().Count() == 2;
+    }
 
     private static PowerShellRegionTransferShape GetShape(Type type)
     {

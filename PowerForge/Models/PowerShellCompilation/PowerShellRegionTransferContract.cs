@@ -16,7 +16,9 @@ public enum PowerShellRegionTransferShape
     /// <summary>No CLR value or PowerShell success record crosses the boundary.</summary>
     NoValue,
     /// <summary>A statically known null CLR value crosses as exactly one PowerShell success record.</summary>
-    NullValue
+    NullValue,
+    /// <summary>A compiler-owned envelope containing one proved stable scalar or matching vector alternative.</summary>
+    ClosedValueAlternative
 }
 
 /// <summary>Element-level contract carried by a region transfer.</summary>
@@ -136,7 +138,7 @@ public sealed class PowerShellRegionTransferContract
     }
 
     /// <summary>Contract schema version.</summary>
-    public int SchemaVersion => 3;
+    public int SchemaVersion => 4;
     /// <summary>CLR storage shape.</summary>
     public PowerShellRegionTransferShape Shape { get; }
     /// <summary>Element-level contract.</summary>

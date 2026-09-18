@@ -156,6 +156,12 @@ internal sealed class PowerShellBoundOptimizer
 
     private PowerShellBoundExpression OptimizeExpression(PowerShellBoundExpression expression)
     {
+        if (expression is PowerShellBoundRegionValueAlternativeExpression alternative)
+            return new PowerShellBoundRegionValueAlternativeExpression(
+                alternative.Span,
+                alternative.AlternativeIndex,
+                OptimizeExpression(alternative.Value),
+                alternative.Type);
         if (expression is PowerShellBoundRegionControlFlowExpression controlFlow)
             return new PowerShellBoundRegionControlFlowExpression(
                 controlFlow.Span,

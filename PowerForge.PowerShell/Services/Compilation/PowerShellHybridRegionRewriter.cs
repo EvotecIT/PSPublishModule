@@ -80,7 +80,11 @@ internal static class PowerShellHybridRegionRewriter
             }
             else
             {
-                if (region.ContinuationLocals.Count == 0 &&
+                if (region.ContinuationLocals.Any(static local => local.Alternatives.Count > 0))
+                {
+                    invocation = RenderClosedAlternativeRestore(region, call);
+                }
+                else if (region.ContinuationLocals.Count == 0 &&
                     region.TerminalTransferContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.None)
                 {
                     invocation = call + "; return";
@@ -137,8 +141,8 @@ internal static class PowerShellHybridRegionRewriter
                 "), [string[]]@(" + string.Join(", ", replacements.SelectMany(static item => item.Region.InputLocals).Select(local => Quote(local.Name))) +
                 "), [string[]]@(" + string.Join(", ", replacements.SelectMany(static item => item.Region.InputLocals).Select(local => Quote(local.TypeName))) +
                 "), [int[]]@(" + string.Join(", ", replacements.Select(static item => item.Region.InputLocals.Count)) +
-                "), [string[]]@(" + string.Join(", ", replacements.Where(static item => item.Region.ControlFlowContract is not null)
-                    .Select(static item => Quote(GetControlFlowTemporary(item.Region)))) +
+                "), [string[]]@(" + string.Join(", ", replacements.SelectMany(static item => GetSyntheticLocalNames(item.Region))
+                    .Select(Quote)) +
                 "), [string[]]@(" + string.Join(", ", replacements.Where(static item => item.Region.RequiresLocalOwnershipGuard)
                     .SelectMany(static item => item.Region.ContinuationLocals).Select(local => Quote(local.Name))) + "))) { }\n";
             edits.Add(new PowerShellHybridSourceEdit(owner.Extent.StartOffset,
@@ -153,6 +157,67 @@ internal static class PowerShellHybridRegionRewriter
 
     private static string GetControlFlowTemporary(PowerShellCompiledRegion region)
         => "__PowerForgeRegionFlow_" + region.GeneratedName.TrimStart('_');
+
+    private static string GetValueAlternativeTemporary(PowerShellCompiledRegion region)
+        => "__PowerForgeRegionValue_" + region.GeneratedName.TrimStart('_');
+
+    private static IEnumerable<string> GetSyntheticLocalNames(PowerShellCompiledRegion region)
+    {
+        if (region.ControlFlowContract is not null) yield return GetControlFlowTemporary(region);
+        if (region.ContinuationLocals.Any(static local => local.Alternatives.Count > 0))
+            yield return GetValueAlternativeTemporary(region);
+    }
+
+    private static string RenderClosedAlternativeRestore(PowerShellCompiledRegion region, string call)
+    {
+        var alternatives = region.ContinuationLocals
+            .Select((local, index) => new { Local = local, Index = index })
+            .Where(static item => item.Local.Alternatives.Count > 0)
+            .ToArray();
+        if (alternatives.Length != 1)
+            throw new InvalidOperationException(
+                $"Promoted region '{region.RegionId}' must carry exactly one closed value-alternative local.");
+        var alternativeLocal = alternatives[0];
+        if (alternativeLocal.Local.Contract is not
+            {
+                Shape: PowerShellRegionTransferShape.ClosedValueAlternative,
+                Direction: PowerShellRegionTransferDirection.LiveOut,
+                Ownership: PowerShellRegionTransferOwnership.GuardedFresh,
+                Mutation: PowerShellRegionTransferMutation.RetainedOnly,
+                Supported: true
+            } ||
+            alternativeLocal.Local.Alternatives.Count != 2 ||
+            alternativeLocal.Local.Alternatives.Any(static alternative =>
+                string.IsNullOrWhiteSpace(alternative.TypeConstraintSyntax) ||
+                !alternative.Contract.Supported ||
+                alternative.Contract.Shape is not (PowerShellRegionTransferShape.StableScalar or
+                    PowerShellRegionTransferShape.StableScalarVector)))
+            throw new InvalidOperationException(
+                $"Promoted region '{region.RegionId}' has an incomplete closed value-alternative contract.");
+
+        var temporary = GetValueAlternativeTemporary(region);
+        var first = alternativeLocal.Local.Alternatives[0];
+        var second = alternativeLocal.Local.Alternatives[1];
+        var capture = "@(" + call + ")";
+        var selected = "${" + temporary + "}[" + alternativeLocal.Index.ToString(
+            System.Globalization.CultureInfo.InvariantCulture) + "]";
+        return "if (((${" + temporary + "} = " + capture + ")[" +
+               alternativeLocal.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+               "].AlternativeIndex -eq 0)) { " + RenderRestores(first) + " } " +
+               "elseif (" + selected + ".AlternativeIndex -eq 1) { " + RenderRestores(second) + " } " +
+               "else { throw 'The compiled region returned an invalid closed value alternative.' }";
+
+        string RenderRestores(PowerShellCompiledRegionLocalAlternative selectedAlternative)
+            => string.Join("; ", region.ContinuationLocals.Select((local, index) =>
+            {
+                var constraint = local.Alternatives.Count > 0
+                    ? selectedAlternative.TypeConstraintSyntax
+                    : local.HasTypeConstraint ? local.TypeConstraintSyntax : string.Empty;
+                var value = "${" + temporary + "}[" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]" +
+                            (local.Alternatives.Count > 0 ? ".Value" : string.Empty);
+                return constraint + "${" + local.Name + "} = " + value;
+            }));
+    }
 
     private static bool HasInputLocalProvenance(
         IReadOnlyList<PowerShellCompiledRegion> regions,

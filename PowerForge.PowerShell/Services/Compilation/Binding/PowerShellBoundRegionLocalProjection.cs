@@ -9,13 +9,14 @@ internal static class PowerShellBoundRegionLocalProjection
     internal static PowerShellBoundStatement? Project(PowerShellBoundStatement statement,
         IReadOnlyList<PowerShellBoundParameter> parameters, IReadOnlyList<PowerShellBoundLocal> initializedLocals,
         IReadOnlyList<PowerShellBoundLocal> functionLocals,
-        bool includeControlFlow = false)
+        bool includeControlFlow = false,
+        ISet<string>? conditionOnlyBooleanParameters = null)
     {
         if (!statement.Capabilities.HasFlag(PowerShellRequiredCapability.NativeFunctionBinding)) return statement;
         var values = parameters.Select(static parameter => (parameter.Symbol, parameter.Type))
             .Concat(initializedLocals.Select(static local => (local.Symbol, local.Type)))
             .ToDictionary(static value => value.Symbol.Name, StringComparer.OrdinalIgnoreCase);
-        var targets = functionLocals.ToDictionary(static local => local.Symbol.Name, static local => local.Symbol, StringComparer.OrdinalIgnoreCase);
+        var targets = functionLocals.ToDictionary(static local => local.Symbol.Name, StringComparer.OrdinalIgnoreCase);
         return Statement(statement);
 
         PowerShellBoundStatement? Statement(PowerShellBoundStatement current)
@@ -23,7 +24,7 @@ internal static class PowerShellBoundRegionLocalProjection
             if (current is PowerShellBoundStatementErrorBoundary boundary)
                 return boundary.Body.Statements.Length == 1 ? Statement(boundary.Body.Statements[0]) : null;
             if (current is PowerShellBoundNativeAssignmentStatement { Operation: PowerShellBoundMutationOperator.Assign } assigned)
-                return Assignment(assigned.Span, assigned.Name, assigned.Value);
+                return Assignment(assigned.Span, assigned.Name, assigned.Value, assigned.Target);
             if (includeControlFlow && current is PowerShellBoundReturnStatement returned)
             {
                 var value = returned.Expression is null ? null : Expression(returned.Expression);
@@ -51,7 +52,7 @@ internal static class PowerShellBoundRegionLocalProjection
                 var clauses = new List<PowerShellBoundConditionalClause>();
                 foreach (var clause in conditional.Clauses)
                 {
-                    var condition = Expression(clause.Condition);
+                    var condition = Expression(clause.Condition, allowConditionOnlyBoolean: true);
                     var body = Block(clause.Body);
                     if (condition?.Type.ClrType != typeof(bool) || body is null) return null;
                     clauses.Add(new PowerShellBoundConditionalClause(condition, body));
@@ -75,27 +76,45 @@ internal static class PowerShellBoundRegionLocalProjection
             return new PowerShellBoundBlock(block.Span, statements.ToArray());
         }
 
-        PowerShellBoundAssignmentStatement? Assignment(SourceSpan span, string name, PowerShellBoundExpression source)
+        PowerShellBoundAssignmentStatement? Assignment(
+            SourceSpan span,
+            string name,
+            PowerShellBoundExpression source,
+            PowerShellNativeAssignmentTarget? authoredTarget = null)
         {
             if (name.IndexOf(':') >= 0 || !targets.TryGetValue(name, out var target)) return null;
             var value = Expression(source);
-            if (value is null || !PowerShellRegionTransferTypePolicy.IsSupported(value.Type) ||
+            if (value is null) return null;
+            if (target.Type.ClosedAlternativeTypes.Count > 0)
+            {
+                if (authoredTarget is null ||
+                    !PowerShellClosedValueAlternativePolicy.TryGetAlternativeIndex(
+                        target.Type, authoredTarget.Text, value.Type.ClrType, out var alternativeIndex))
+                    return null;
+                value = new PowerShellBoundRegionValueAlternativeExpression(
+                    span, alternativeIndex, value, target.Type);
+            }
+            if (!PowerShellRegionTransferTypePolicy.IsSupported(value.Type) ||
                 values.TryGetValue(name, out var existing) && existing.Type.ClrType != value.Type.ClrType)
                 return null;
-            return new PowerShellBoundAssignmentStatement(span, target, value);
+            return new PowerShellBoundAssignmentStatement(span, target.Symbol, value);
         }
 
-        PowerShellBoundExpression? Expression(PowerShellBoundExpression expression)
+        PowerShellBoundExpression? Expression(
+            PowerShellBoundExpression expression,
+            bool allowConditionOnlyBoolean = false)
         {
             if (expression is PowerShellBoundNativeVariableExpression { DirectLocal: true } variable)
             {
                 if (variable.Name.IndexOf(':') >= 0 || !values.TryGetValue(variable.Name, out var value) ||
+                    conditionOnlyBooleanParameters?.Contains(variable.Name) == true && !allowConditionOnlyBoolean ||
+                    value.Type.ClosedAlternativeTypes.Count > 0 ||
                     !PowerShellRegionTransferTypePolicy.IsSupported(value.Type)) return null;
                 return new PowerShellBoundVariableExpression(variable.Span, value.Symbol, value.Type);
             }
             if (expression is PowerShellBoundConversionExpression conversion)
             {
-                var operand = Expression(conversion.Operand);
+                var operand = Expression(conversion.Operand, allowConditionOnlyBoolean);
                 // Only identity conversion is closed here. Other conversion, truthiness,
                 // or constraint-transition rules stay with their existing native operation.
                 if (operand is null || operand.Type.ClrType != conversion.Type.ClrType) return null;

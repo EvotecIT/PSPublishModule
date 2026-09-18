@@ -320,6 +320,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             PowerShellBoundRuntimeStateExpression runtime => runtime.Arguments,
             PowerShellBoundConversionExpression conversion => new[] { conversion.Operand },
+            PowerShellBoundRegionValueAlternativeExpression alternative => new[] { alternative.Value },
             PowerShellBoundRegionControlFlowExpression { Value: not null } controlFlow => new[] { controlFlow.Value },
             PowerShellBoundCommandAvailabilityExpression discovery => new[] { discovery.Name },
             PowerShellBoundHostedBooleanCommandExpression hostedBoolean => hostedBoolean.Arguments

@@ -264,6 +264,13 @@ internal sealed partial class PowerShellSemanticBinder
             return null;
         }
 
+        // Closed scalar/vector alternatives are a synthetic region-transfer representation,
+        // not a PowerShell-visible whole-function value. Keep the authored function as the
+        // runtime owner even when every statement bound successfully; promoted region helpers
+        // are compiled independently from the candidates recorded above.
+        if (locals.Any(static local => PowerShellRegionTransferTypePolicy.IsClosedValueAlternative(local.Type)))
+            return null;
+
         var body = new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent), statements.ToArray());
         var scopeSymbols = parameters.Select(static parameter => parameter.Symbol)
             .Concat(locals.Select(static local => local.Symbol))

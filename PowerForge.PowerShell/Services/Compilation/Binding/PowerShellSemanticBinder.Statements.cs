@@ -95,11 +95,15 @@ internal sealed partial class PowerShellSemanticBinder
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                 PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } nativeVariable)
             {
-                if (assignment.Left is VariableExpressionAst &&
+                Type? nativeContext = null;
+                if (symbols.TryGetValue(nativeVariable.VariablePath.UserPath, out var nativeTarget) &&
+                    PowerShellClosedValueAlternativePolicy.TryGetAssignmentType(nativeTarget.Type, assignment, out var alternativeType))
+                    nativeContext = alternativeType;
+                if ((assignment.Left is VariableExpressionAst || nativeContext is not null) &&
                     PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator) is { } nativeOperation)
                 {
                     var nativeValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
-                        targetFramework: targetFramework, capabilities: capabilities);
+                        contextualType: nativeContext, targetFramework: targetFramework, capabilities: capabilities);
                     if (nativeValue is null || nativeValue.Type.ClrType == typeof(void)) return null;
                     return new PowerShellBoundNativeAssignmentStatement(
                         PowerShellSourceParser.GetSpan(document, assignment.Extent), nativeVariable.VariablePath.UserPath,

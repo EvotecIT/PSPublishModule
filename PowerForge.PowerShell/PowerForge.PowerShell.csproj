@@ -67,6 +67,7 @@
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellStringParameterAttribute.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellStringParameterAttribute.cs" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellRegionLocalOwnership.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellRegionLocalOwnership.cs" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellRegionControlFlowEnvelope.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellRegionControlFlowEnvelope.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellRegionValueAlternative.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellRegionValueAlternative.cs" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellHybridRegionHost.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellHybridRegionHost.cs" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellNativeFunction*.cs" LogicalName="PowerForge.PowerShell.Compilation.%(Filename)%(Extension)" WithCulture="false" />
     <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellNativeOutput.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellNativeOutput.cs" WithCulture="false" />
