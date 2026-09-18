@@ -103,7 +103,11 @@ internal sealed class RequiredModuleResolutionEngine
                     availableGuid = onlineInfo.Guid;
             }
 
-            var required = ResolveAutoOrLatest(draft.RequiredVersion, availableVersion);
+            // PowerShell manifest dependency fields accept System.Version values only. Keep the
+            // prerelease label for repository selection and donor identity, but never write it
+            // into ModuleVersion or RequiredVersion.
+            var manifestAvailableVersion = NormalizeManifestVersion(availableVersion);
+            var required = ResolveAutoOrLatest(draft.RequiredVersion, manifestAvailableVersion);
             var minimumSource = !string.IsNullOrWhiteSpace(draft.MinimumVersion) ? draft.MinimumVersion : draft.ModuleVersion;
             if (!string.IsNullOrWhiteSpace(draft.MinimumVersion) &&
                 !string.IsNullOrWhiteSpace(draft.ModuleVersion) &&
@@ -112,7 +116,7 @@ internal sealed class RequiredModuleResolutionEngine
                 _logger.Warn($"Module dependency '{draft.ModuleName}' specifies both MinimumVersion and ModuleVersion; using MinimumVersion '{draft.MinimumVersion}'.");
             }
 
-            var moduleVersion = ResolveAutoOrLatest(minimumSource, availableVersion);
+            var moduleVersion = ResolveAutoOrLatest(minimumSource, manifestAvailableVersion);
             var guid = ResolveAutoGuid(draft.Guid, availableGuid);
 
             if (IsAutoOrLatest(draft.RequiredVersion) && string.IsNullOrWhiteSpace(required))
@@ -388,6 +392,18 @@ internal sealed class RequiredModuleResolutionEngine
         }
 
         return trimmed;
+    }
+
+    private static string? NormalizeManifestVersion(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return null;
+        var normalized = version!.Trim();
+        var separator = normalized.IndexOfAny(new[] { '-', '+' });
+        var baseVersion = separator > 0 ? normalized.Substring(0, separator) : normalized;
+        if (!Version.TryParse(baseVersion, out var parsed) || parsed is null)
+            return version!.Trim();
+        return parsed.ToString();
     }
 
     private static string? ResolveAutoGuid(string? value, string? installedGuid)

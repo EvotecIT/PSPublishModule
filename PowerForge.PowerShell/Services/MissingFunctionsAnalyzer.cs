@@ -95,7 +95,8 @@ public sealed class MissingFunctionsAnalyzer
         IReadOnlyList<ApprovedModuleSource> approvedModuleSourceOrder,
         bool requireApprovedModuleSources,
         HashSet<string> ignoreFunctions,
-        bool includeFunctionsRecursively)
+        bool includeFunctionsRecursively,
+        ApprovedModuleSource? preferredApprovedModuleSource = null)
     {
         var parsed = ParseInput(filePath, code, approvedModuleSources);
 
@@ -108,7 +109,8 @@ public sealed class MissingFunctionsAnalyzer
             .Where(n => !knownFunctions.Contains(n) || ApprovedDonorDefinesCommand(
                 n,
                 approvedModuleSources,
-                approvedModuleSourceOrder))
+                approvedModuleSourceOrder,
+                preferredApprovedModuleSource))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -121,7 +123,8 @@ public sealed class MissingFunctionsAnalyzer
                 approvedModules,
                 approvedModuleSources,
                 approvedModuleSourceOrder,
-                requireApprovedModuleSources);
+                requireApprovedModuleSources,
+                preferredApprovedModuleSource);
             if (string.Equals(info.Source, "Microsoft.PowerShell.Core", StringComparison.OrdinalIgnoreCase))
                 continue;
 
@@ -143,27 +146,41 @@ public sealed class MissingFunctionsAnalyzer
             foreach (var n in listCommands.Select(o => o.Name).Where(s => !string.IsNullOrWhiteSpace(s)))
                 ignoreNext.Add(n);
 
-            var nested = AnalyzeInternal(
-                filePath: null,
-                code: string.Join(Environment.NewLine, functionsTop),
-                // Inlined donor functions execute in the completed consumer module, so references to
-                // consumer-local functions are already satisfied even though those declarations are not
-                // repeated in this recursive analysis fragment.
-                knownFunctions: consumerFunctionsForNestedAnalysis,
-                approvedModules: approvedModules,
-                approvedModuleSources: approvedModuleSources,
-                approvedModuleSourceOrder: approvedModuleSourceOrder,
-                requireApprovedModuleSources: requireApprovedModuleSources,
-                ignoreFunctions: ignoreNext,
-                includeFunctionsRecursively: includeFunctionsRecursively);
+            // Analyze each donor's functions in that donor's scope. Otherwise an unqualified
+            // private helper can be stolen by an earlier approved module that happens to use
+            // the same command name.
+            var inlineableCommands = listCommands
+                .Where(command => command.ScriptBlock is not null &&
+                                  !string.IsNullOrWhiteSpace(command.Source) &&
+                                  approvedModules.Contains(command.Source))
+                .GroupBy(command => command.Source, StringComparer.OrdinalIgnoreCase);
+            foreach (var donorGroup in inlineableCommands)
+            {
+                approvedModuleSources.TryGetValue(donorGroup.Key, out var donorSource);
+                var donorFunctions = BuildInlineFunctions(donorGroup, approvedModules);
+                var nested = AnalyzeInternal(
+                    filePath: null,
+                    code: string.Join(Environment.NewLine, donorFunctions),
+                    // Inlined donor functions execute in the completed consumer module, so references to
+                    // consumer-local functions are already satisfied even though those declarations are not
+                    // repeated in this recursive analysis fragment.
+                    knownFunctions: consumerFunctionsForNestedAnalysis,
+                    approvedModules: approvedModules,
+                    approvedModuleSources: approvedModuleSources,
+                    approvedModuleSourceOrder: approvedModuleSourceOrder,
+                    requireApprovedModuleSources: requireApprovedModuleSources,
+                    ignoreFunctions: ignoreNext,
+                    includeFunctionsRecursively: includeFunctionsRecursively,
+                    preferredApprovedModuleSource: donorSource);
 
-            combinedSummary.AddRange(nested.Summary);
-            combinedSummaryFiltered.AddRange(nested.SummaryFiltered);
-            analysisComplete &= nested.AnalysisComplete;
-            nonInlineableApprovedModules.UnionWith(nested.NonInlineableApprovedModules);
+                combinedSummary.AddRange(nested.Summary);
+                combinedSummaryFiltered.AddRange(nested.SummaryFiltered);
+                analysisComplete &= nested.AnalysisComplete;
+                nonInlineableApprovedModules.UnionWith(nested.NonInlineableApprovedModules);
 
-            if (includeFunctionsRecursively)
-                combinedFunctions.AddRange(nested.Functions);
+                if (includeFunctionsRecursively)
+                    combinedFunctions.AddRange(nested.Functions);
+            }
         }
 
         return new MissingFunctionsReport(
@@ -379,7 +396,8 @@ public sealed class MissingFunctionsAnalyzer
         HashSet<string> approvedModules,
         IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
         IReadOnlyList<ApprovedModuleSource> approvedModuleSourceOrder,
-        bool requireApprovedModuleSources)
+        bool requireApprovedModuleSources,
+        ApprovedModuleSource? preferredApprovedModuleSource)
     {
         var isAlias = false;
 
@@ -401,7 +419,9 @@ public sealed class MissingFunctionsAnalyzer
 
             if (qualifier is null && approvedModuleSources.Count > 0)
             {
-                foreach (var source in approvedModuleSourceOrder)
+                foreach (var source in EnumerateApprovedModuleSources(
+                             approvedModuleSourceOrder,
+                             preferredApprovedModuleSource))
                 {
                     var donorCommand = GetCommandFromModuleScopeCached(source, lookupName);
                     if (donorCommand is null)
@@ -525,7 +545,8 @@ public sealed class MissingFunctionsAnalyzer
     private bool ApprovedDonorDefinesCommand(
         string name,
         IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
-        IReadOnlyList<ApprovedModuleSource> approvedModuleSourceOrder)
+        IReadOnlyList<ApprovedModuleSource> approvedModuleSourceOrder,
+        ApprovedModuleSource? preferredApprovedModuleSource)
     {
         var qualifier = GetModuleQualifier(name);
         var lookupName = GetUnqualifiedCommandName(name);
@@ -535,8 +556,28 @@ public sealed class MissingFunctionsAnalyzer
                    GetCommandFromModuleScopeCached(qualifiedSource, lookupName) is not null;
         }
 
-        return approvedModuleSourceOrder.Any(source =>
+        return EnumerateApprovedModuleSources(approvedModuleSourceOrder, preferredApprovedModuleSource).Any(source =>
             GetCommandFromModuleScopeCached(source, lookupName) is not null);
+    }
+
+    private static IEnumerable<ApprovedModuleSource> EnumerateApprovedModuleSources(
+        IReadOnlyList<ApprovedModuleSource> sources,
+        ApprovedModuleSource? preferred)
+    {
+        if (preferred is not null)
+            yield return preferred;
+
+        foreach (var source in sources ?? Array.Empty<ApprovedModuleSource>())
+        {
+            if (preferred is not null &&
+                string.Equals(source.Name, preferred.Name, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(source.ModuleBasePath, preferred.ModuleBasePath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            yield return source;
+        }
     }
 
     private static MissingFunctionCommand CreateResolution(CommandInfo command, bool isAlias, bool isPrivate)
@@ -630,7 +671,7 @@ public sealed class MissingFunctionsAnalyzer
 
     private ModuleScopeSession GetOrCreateModuleScopeSession(ApprovedModuleSource source)
     {
-        var key = source.Name.Trim() + "|" + (source.Version ?? string.Empty) + "|" + source.ModuleBasePath;
+        var key = source.Name.Trim() + "|" + (source.Version ?? string.Empty) + "|" + source.ModuleBasePath + "|" + (source.ModuleSearchRoot ?? string.Empty);
         if (_moduleScopeSessions.TryGetValue(key, out var existing))
             return existing;
 
@@ -640,6 +681,18 @@ public sealed class MissingFunctionsAnalyzer
         runspace.Open();
         try
         {
+            if (!string.IsNullOrWhiteSpace(source.ModuleSearchRoot))
+            {
+                using var pathPowerShell = PowerShell.Create();
+                pathPowerShell.Runspace = runspace;
+                pathPowerShell
+                    .AddScript("$env:PSModulePath = $args[0] + [IO.Path]::PathSeparator + $env:PSModulePath")
+                    .AddArgument(source.ModuleSearchRoot);
+                pathPowerShell.Invoke();
+                if (pathPowerShell.HadErrors)
+                    throw new InvalidOperationException($"Approved module search root '{source.ModuleSearchRoot}' could not be added to PSModulePath.");
+            }
+
             using var ps = PowerShell.Create();
             ps.Runspace = runspace;
             var moduleReference = ResolveModuleReference(source);
@@ -728,15 +781,16 @@ public sealed class MissingFunctionsAnalyzer
         if (string.IsNullOrWhiteSpace(source.ModuleBasePath))
             return source.Name;
 
-        var manifestPath = Path.Combine(source.ModuleBasePath, source.Name + ".psd1");
-        if (!File.Exists(manifestPath))
+        foreach (var extension in new[] { ".psd1", ".psm1", ".dll" })
         {
-            throw new FileNotFoundException(
-                $"The selected approved module '{source.Name}' manifest was not found at '{manifestPath}'.",
-                manifestPath);
+            var modulePath = Path.Combine(source.ModuleBasePath, source.Name + extension);
+            if (File.Exists(modulePath))
+                return modulePath;
         }
 
-        return manifestPath;
+        throw new FileNotFoundException(
+            $"The selected approved module '{source.Name}' entry point was not found under '{source.ModuleBasePath}'. Expected {source.Name}.psd1, {source.Name}.psm1, or {source.Name}.dll.",
+            source.ModuleBasePath);
     }
 
     private void DisposeModuleScopeSessions()

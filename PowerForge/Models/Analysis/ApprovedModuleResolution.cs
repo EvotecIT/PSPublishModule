@@ -11,6 +11,7 @@ internal sealed class ApprovedModuleResolution
     internal string? Repository { get; }
     internal RepositoryCredential? Credential { get; }
     internal bool Prerelease { get; }
+    internal bool MatchPrereleaseByBaseVersion { get; }
 
     internal ApprovedModuleResolution(
         string name,
@@ -18,7 +19,8 @@ internal sealed class ApprovedModuleResolution
         ModuleDependencyVersionSource versionSource,
         string? repository,
         RepositoryCredential? credential,
-        bool prerelease)
+        bool prerelease,
+        bool matchPrereleaseByBaseVersion)
     {
         Name = name;
         Constraint = constraint;
@@ -26,5 +28,6 @@ internal sealed class ApprovedModuleResolution
         Repository = string.IsNullOrWhiteSpace(repository) ? null : repository!.Trim();
         Credential = credential;
         Prerelease = prerelease;
+        MatchPrereleaseByBaseVersion = matchPrereleaseByBaseVersion;
     }
 }

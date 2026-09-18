@@ -79,7 +79,8 @@ public sealed partial class ModulePipelineRunner
                 effective.VersionSource,
                 effectiveRepository,
                 effectiveCredential,
-                prerelease));
+                prerelease,
+                HasAutoOrLatestConstraint(effective)));
         }
 
         return output
@@ -93,6 +94,16 @@ public sealed partial class ModulePipelineRunner
            !string.IsNullOrWhiteSpace(draft.MinimumVersion) ||
            !string.IsNullOrWhiteSpace(draft.RequiredVersion) ||
            !string.IsNullOrWhiteSpace(draft.Guid);
+
+    private static bool HasAutoOrLatestConstraint(RequiredModuleDraft draft)
+        => IsAutoOrLatestConstraintValue(draft.ModuleVersion) ||
+           IsAutoOrLatestConstraintValue(draft.MinimumVersion) ||
+           IsAutoOrLatestConstraintValue(draft.RequiredVersion);
+
+    private static bool IsAutoOrLatestConstraintValue(string? value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           (value!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase) ||
+            value.Trim().Equals("Latest", StringComparison.OrdinalIgnoreCase));
 
     private static ModuleDependencySourceResolution[] ResolveDependencySourceResolutions(
         IEnumerable<RequiredModuleDraft> drafts,
@@ -185,7 +196,11 @@ public sealed partial class ModulePipelineRunner
                         repositories: new[] { repository },
                         credential: resolution.Credential),
                     timeout: TimeSpan.FromMinutes(2));
-                var selected = SelectApprovedModuleRepositoryCandidate(resolution.Constraint, candidates);
+                var selected = SelectApprovedModuleRepositoryCandidate(
+                    resolution.Constraint,
+                    candidates,
+                    resolution.Prerelease,
+                    resolution.MatchPrereleaseByBaseVersion);
                 if (selected is null)
                 {
                     throw new InvalidOperationException(
@@ -202,7 +217,7 @@ public sealed partial class ModulePipelineRunner
                         destinationPath: temporaryRoot,
                         version: selectedVersion,
                         repository: repository,
-                        prerelease: RequiredModuleRepositoryPublisher.AllowsPrerelease(resolution.Constraint),
+                        prerelease: resolution.Prerelease || RequiredModuleRepositoryPublisher.AllowsPrerelease(resolution.Constraint),
                         trustRepository: true,
                         skipDependencyCheck: false,
                         acceptLicense: true,
@@ -220,7 +235,12 @@ public sealed partial class ModulePipelineRunner
                         $"Approved module '{resolution.Name}' {selectedVersion} was downloaded from '{repository}', but its manifest was not found in the temporary source.");
                 }
 
-                sources.Add(new ApprovedModuleSource(resolution.Name, selectedVersion, modulePath, selected.Guid));
+                sources.Add(new ApprovedModuleSource(
+                    resolution.Name,
+                    selectedVersion,
+                    modulePath,
+                    selected.Guid,
+                    moduleSearchRoot: temporaryRoot));
             }
         }
         catch
@@ -234,12 +254,18 @@ public sealed partial class ModulePipelineRunner
 
     internal static PSResourceInfo? SelectApprovedModuleRepositoryCandidate(
         RequiredModuleReference constraint,
-        IEnumerable<PSResourceInfo> candidates)
+        IEnumerable<PSResourceInfo> candidates,
+        bool allowPrerelease = false,
+        bool matchPrereleaseByBaseVersion = false)
     {
         var matchingCandidates = (candidates ?? Array.Empty<PSResourceInfo>())
             .Where(candidate => candidate is not null && ModuleGuidMatches(candidate.Guid, constraint.Guid))
             .ToArray();
-        return RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(constraint, matchingCandidates);
+        return RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
+            constraint,
+            matchingCandidates,
+            allowPrerelease,
+            matchPrereleaseByBaseVersion);
     }
 
     private static bool ModuleGuidMatches(string? candidateGuid, string? requiredGuid)

@@ -111,6 +111,71 @@ public sealed partial class ModulePipelineHostedOperationsTests
         }
     }
 
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_RejectsConflictingSourcesForEquivalentDeclarations()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = CreateDependencySpec(
+                root.FullName,
+                moduleName,
+                CreateModuleSegment(ModuleDependencyKind.RequiredModule, "1.0.0", ModuleDependencyVersionSource.PSGallery),
+                CreateModuleSegment(ModuleDependencyKind.EmbeddedModule, "1.0.0", ModuleDependencyVersionSource.Installed));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                new FakeHostedOperations());
+
+            var exception = Assert.Throws<TargetInvocationException>(
+                () => InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, runner.Plan(spec)));
+
+            Assert.Contains("Conflicting dependency source policies", Assert.IsType<InvalidOperationException>(exception.InnerException).Message);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureBuildDependenciesInstalledIfNeeded_RejectsRepositoryResultWithWrongGuid()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string expectedGuid = "11111111-1111-1111-1111-111111111111";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var dependency = CreateModuleSegment(ModuleDependencyKind.RequiredModule, "1.0.0", ModuleDependencyVersionSource.PSGallery);
+            dependency.Configuration!.Guid = expectedGuid;
+            var spec = CreateDependencySpec(root.FullName, moduleName, dependency);
+            var provider = new FixedVersionedMetadataProvider(
+                new InstalledModuleMetadata(
+                    "Dependency.Tools",
+                    "1.0.0",
+                    "22222222-2222-2222-2222-222222222222",
+                    Path.Combine(root.FullName, "Dependency.Tools")));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                new FakeHostedOperations());
+
+            var exception = Assert.Throws<TargetInvocationException>(
+                () => InvokeEnsureBuildDependenciesInstalledIfNeeded(runner, runner.Plan(spec)));
+
+            Assert.Contains("declared GUID", Assert.IsType<InvalidOperationException>(exception.InnerException).Message);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec CreateDependencySpec(
         string root,
         string moduleName,

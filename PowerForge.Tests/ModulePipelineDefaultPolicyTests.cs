@@ -239,6 +239,36 @@ public sealed class ModulePipelineDefaultPolicyTests
     }
 
     [Fact]
+    public void SelectApprovedModuleRepositoryCandidate_HonorsExplicitPrereleaseOptIn()
+    {
+        var constraint = new RequiredModuleReference("Approved.Donor", moduleVersion: "1.0.0");
+        var stable = new PSResourceInfo("Approved.Donor", "2.0.0", "PSGallery", null, null, null);
+        var preview = new PSResourceInfo("Approved.Donor", "3.0.0-beta.1", "PSGallery", null, null, null);
+
+        var selected = ModulePipelineRunner.SelectApprovedModuleRepositoryCandidate(
+            constraint,
+            new[] { stable, preview },
+            allowPrerelease: true);
+
+        Assert.Same(preview, selected);
+    }
+
+    [Fact]
+    public void SelectApprovedModuleRepositoryCandidate_PreservesAutoResolvedPrereleaseIdentity()
+    {
+        var constraint = new RequiredModuleReference("Approved.Donor", requiredVersion: "2.0.0");
+        var preview = new PSResourceInfo("Approved.Donor", "2.0.0-beta.1", "PSGallery", null, null, null);
+
+        var selected = ModulePipelineRunner.SelectApprovedModuleRepositoryCandidate(
+            constraint,
+            new[] { preview },
+            allowPrerelease: true,
+            matchPrereleaseByBaseVersion: true);
+
+        Assert.Same(preview, selected);
+    }
+
+    [Fact]
     public void Plan_CarriesDefaultInstalledSourceForExternalModules()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

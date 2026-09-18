@@ -56,6 +56,35 @@ public sealed class RequiredModuleResolutionEngineTests
         Assert.Equal("PSWriteHTML", filtered[0].ModuleName);
     }
 
+    [Theory]
+    [InlineData("2.0.0-beta.1")]
+    [InlineData("2.0.0+build.42")]
+    [InlineData("2.0.0-beta.1+build.42")]
+    public void ResolveRequiredModules_StripsSemVerMetadataFromManifestVersionFields(string installedVersion)
+    {
+        var engine = new RequiredModuleResolutionEngine(new CollectingLogger());
+        var resolved = engine.ResolveRequiredModules(
+            new[]
+            {
+                new RequiredModuleDraftDescriptor(
+                    "Preview.Tools",
+                    moduleVersion: "Auto",
+                    minimumVersion: null,
+                    requiredVersion: null,
+                    guid: null,
+                    versionSource: ModuleDependencyVersionSource.Installed)
+            },
+            new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Preview.Tools"] = (installedVersion, null)
+            },
+            onlineLookup: null,
+            resolveMissingModulesOnline: false,
+            warnIfRequiredModulesOutdated: false);
+
+        Assert.Equal("2.0.0", Assert.Single(resolved).ModuleVersion);
+    }
+
     private sealed class CollectingLogger : ILogger
     {
         public List<string> Infos { get; } = new();

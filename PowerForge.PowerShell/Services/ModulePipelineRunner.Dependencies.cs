@@ -16,6 +16,7 @@ public sealed partial class ModulePipelineRunner
         if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
 
         var dependencySources = plan.DependencySourceResolutions ?? Array.Empty<ModuleDependencySourceResolution>();
+        ValidateDependencySourcePolicyConflicts(dependencySources);
         var required = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
         var depList = required
             .Where(r => !string.IsNullOrWhiteSpace(r.ModuleName))
@@ -130,6 +131,8 @@ public sealed partial class ModulePipelineRunner
         if (failures.Length > 0)
             throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
 
+        ValidateRepositoryDependencyGuids(installable, dependencySources, plan.ModuleSkip);
+
         if (results.Count > 0)
         {
             var installed = results.Count(r => r.Status == ModuleDependencyInstallStatus.Installed);
@@ -140,6 +143,74 @@ public sealed partial class ModulePipelineRunner
         }
 
         return results.ToArray();
+    }
+
+    private static void ValidateDependencySourcePolicyConflicts(
+        IReadOnlyList<ModuleDependencySourceResolution> sources)
+    {
+        var conflicts = (sources ?? Array.Empty<ModuleDependencySourceResolution>())
+            .GroupBy(
+                static source => $"{source.Name}|{source.RequiredVersion}|{source.MinimumVersion}",
+                StringComparer.OrdinalIgnoreCase)
+            .Where(group => group
+                .Select(static source => new DependencySourcePolicy(source))
+                .Distinct()
+                .Skip(1)
+                .Any())
+            .Select(static group => group.First().Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (conflicts.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Conflicting dependency source policies were declared for: {string.Join(", ", conflicts)}. Give each dependency identity one explicit source policy instead of assigning different repositories or installed/repository policies to equivalent declarations.");
+        }
+    }
+
+    private void ValidateRepositoryDependencyGuids(
+        IReadOnlyList<ModuleDependency> dependencies,
+        IReadOnlyList<ModuleDependencySourceResolution> sources,
+        ModuleSkipConfiguration? skipModules)
+    {
+        var constrained = (dependencies ?? Array.Empty<ModuleDependency>())
+            .Select(dependency => (Dependency: dependency, Source: ResolveDependencySource(sources, dependency)))
+            .Where(item => item.Source is not null &&
+                           item.Source.VersionSource != ModuleDependencyVersionSource.Installed &&
+                           !string.IsNullOrWhiteSpace(item.Source.Guid) &&
+                           !item.Source.Guid!.Equals("Auto", StringComparison.OrdinalIgnoreCase) &&
+                           !IsModuleSkipped(skipModules, item.Dependency.Name))
+            .ToArray();
+        if (constrained.Length == 0)
+            return;
+
+        var mismatched = new List<string>();
+        foreach (var item in constrained)
+        {
+            var reference = new RequiredModuleReference(
+                item.Dependency.Name,
+                item.Dependency.MinimumVersion,
+                item.Dependency.RequiredVersion,
+                item.Dependency.MaximumVersion,
+                item.Source!.Guid);
+            IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
+                _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
+                    ? versionedProvider.GetInstalledModules(new[] { reference })
+                    : _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[] { item.Dependency.Name });
+
+            if (!installed.TryGetValue(item.Dependency.Name, out var metadata) ||
+                !IsInstalledModuleAvailable(metadata, reference))
+            {
+                mismatched.Add(item.Dependency.Name);
+            }
+        }
+
+        if (mismatched.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Repository dependency installation did not produce a module matching the declared GUID for: {string.Join(", ", mismatched.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase))}.");
+        }
     }
 
     private static ModuleDependencySourceResolution? ResolveDependencySource(
@@ -234,6 +305,34 @@ public sealed partial class ModulePipelineRunner
         public override int GetHashCode()
             => (StringComparer.OrdinalIgnoreCase.GetHashCode(Repository ?? string.Empty) * 397) ^
                (Credential?.GetHashCode() ?? 0);
+    }
+
+    private readonly struct DependencySourcePolicy : IEquatable<DependencySourcePolicy>
+    {
+        private readonly ModuleDependencyVersionSource _versionSource;
+        private readonly string _repository;
+        private readonly RepositoryCredential? _credential;
+        private readonly string _guid;
+
+        internal DependencySourcePolicy(ModuleDependencySourceResolution source)
+        {
+            _versionSource = source.VersionSource;
+            _repository = source.Repository ?? string.Empty;
+            _credential = source.Credential;
+            _guid = source.Guid ?? string.Empty;
+        }
+
+        public bool Equals(DependencySourcePolicy other)
+            => _versionSource == other._versionSource &&
+               string.Equals(_repository, other._repository, StringComparison.OrdinalIgnoreCase) &&
+               ReferenceEquals(_credential, other._credential) &&
+               string.Equals(_guid, other._guid, StringComparison.OrdinalIgnoreCase);
+
+        public override bool Equals(object? obj) => obj is DependencySourcePolicy other && Equals(other);
+
+        public override int GetHashCode()
+            => (((int)_versionSource * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(_repository)) * 397 ^
+               (_credential?.GetHashCode() ?? 0) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(_guid);
     }
 
     private static bool HasEquivalentDependencyInstallRequest(
