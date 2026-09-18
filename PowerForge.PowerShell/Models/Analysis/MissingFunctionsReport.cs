@@ -24,6 +24,12 @@ public sealed class MissingFunctionsReport
     public bool AnalysisComplete { get; }
 
     /// <summary>
+    /// Approved modules that remain runtime dependencies because the analyzed source contains a
+    /// module-qualified command, using-module declaration, or owned type reference.
+    /// </summary>
+    public string[] NonInlineableApprovedModules { get; }
+
+    /// <summary>
     /// Creates a new <see cref="MissingFunctionsReport"/> instance.
     /// </summary>
     public MissingFunctionsReport(
@@ -31,12 +37,14 @@ public sealed class MissingFunctionsReport
         MissingFunctionCommand[] summaryFiltered,
         string[] functions,
         string[] functionsTopLevelOnly,
-        bool analysisComplete = true)
+        bool analysisComplete = true,
+        string[]? nonInlineableApprovedModules = null)
     {
         Summary = summary ?? System.Array.Empty<MissingFunctionCommand>();
         SummaryFiltered = summaryFiltered ?? System.Array.Empty<MissingFunctionCommand>();
         Functions = functions ?? System.Array.Empty<string>();
         FunctionsTopLevelOnly = functionsTopLevelOnly ?? System.Array.Empty<string>();
         AnalysisComplete = analysisComplete;
+        NonInlineableApprovedModules = nonInlineableApprovedModules ?? System.Array.Empty<string>();
     }
 }

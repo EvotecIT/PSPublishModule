@@ -9,6 +9,7 @@ internal sealed class ModuleDependencySourceResolution
     internal RepositoryCredential? Credential { get; }
     internal string? RequiredVersion { get; }
     internal string? MinimumVersion { get; }
+    internal string? Guid { get; }
 
     internal ModuleDependencySourceResolution(
         string name,
@@ -16,7 +17,8 @@ internal sealed class ModuleDependencySourceResolution
         string? repository,
         RepositoryCredential? credential,
         string? requiredVersion,
-        string? minimumVersion)
+        string? minimumVersion,
+        string? guid)
     {
         Name = name;
         VersionSource = versionSource;
@@ -24,6 +26,7 @@ internal sealed class ModuleDependencySourceResolution
         Credential = credential;
         RequiredVersion = string.IsNullOrWhiteSpace(requiredVersion) ? null : requiredVersion!.Trim();
         MinimumVersion = string.IsNullOrWhiteSpace(minimumVersion) ? null : minimumVersion!.Trim();
+        Guid = string.IsNullOrWhiteSpace(guid) ? null : guid!.Trim();
     }
 
     internal bool Matches(ModuleDependency dependency)

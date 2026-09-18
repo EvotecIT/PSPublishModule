@@ -979,6 +979,34 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void PowerShellProvider_PreservesInstalledPrereleaseLabel()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleName = "PowerForge.PrereleaseMetadata." + Guid.NewGuid().ToString("N");
+            var modulePath = Path.Combine(root.FullName, moduleName, "2.0.0");
+            Directory.CreateDirectory(modulePath);
+            File.WriteAllText(Path.Combine(modulePath, moduleName + ".psm1"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(modulePath, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '2.0.0'; PrivateData = @{{ PSData = @{{ Prerelease = 'beta.1' }} }} }}");
+            var inheritedModulePath = Environment.GetEnvironmentVariable("PSModulePath") ?? string.Empty;
+            var runner = new EnvironmentPowerShellRunner(
+                root.FullName + Path.PathSeparator + inheritedModulePath);
+            var provider = new PowerShellModuleDependencyMetadataProvider(runner, new NullLogger());
+
+            var installed = provider.GetLatestInstalledModules(new[] { moduleName });
+
+            Assert.Equal("2.0.0-beta.1", Assert.Single(installed).Value.Version);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_IgnoresRuntimeProvidedTransitiveDependenciesForPackaging_WhenParentRemainsRequired()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -1507,6 +1535,36 @@ public sealed class Marker
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => _run(request);
+    }
+
+    private sealed class EnvironmentPowerShellRunner : IPowerShellRunner
+    {
+        private readonly string _modulePath;
+        private readonly PowerShellRunner _inner = new();
+
+        internal EnvironmentPowerShellRunner(string modulePath)
+        {
+            _modulePath = modulePath;
+        }
+
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+        {
+            var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in request.EnvironmentVariables ?? new Dictionary<string, string?>())
+                environment[pair.Key] = pair.Value;
+            environment["PSModulePath"] = _modulePath;
+
+            return _inner.Run(new PowerShellRunRequest(
+                request.ScriptPath!,
+                request.Arguments,
+                request.Timeout,
+                request.PreferPwsh,
+                request.WorkingDirectory,
+                environment,
+                request.ExecutableOverride,
+                request.CaptureOutput,
+                request.CaptureError));
+        }
     }
 
     private sealed class CollectingLogger : ILogger

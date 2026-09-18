@@ -14,11 +14,15 @@ public sealed class ApprovedModuleSource
     /// <summary>Absolute module base path containing the module manifest.</summary>
     public string ModuleBasePath { get; }
 
+    /// <summary>Concrete selected module GUID, when constrained or discovered.</summary>
+    public string? Guid { get; }
+
     /// <summary>Creates a concrete approved-module source.</summary>
-    public ApprovedModuleSource(string name, string? version, string moduleBasePath)
+    public ApprovedModuleSource(string name, string? version, string moduleBasePath, string? guid = null)
     {
         Name = name?.Trim() ?? string.Empty;
         Version = string.IsNullOrWhiteSpace(version) ? null : version!.Trim();
         ModuleBasePath = moduleBasePath?.Trim() ?? string.Empty;
+        Guid = string.IsNullOrWhiteSpace(guid) ? null : guid!.Trim();
     }
 }

@@ -57,7 +57,13 @@ foreach ($ref in $references) {
     }
 
     $m = $modules | Sort-Object Version -Descending | Select-Object -First 1
-    $ver = if ($m) { [string]$m.Version } else { '' }
+    $ver = if ($m) {
+      $baseVersion = [string]$m.Version
+      $prerelease = ''
+      try { $prerelease = [string]$m.PrivateData.PSData.Prerelease } catch { $prerelease = '' }
+      $prerelease = $prerelease.Trim().TrimStart('-')
+      if ([string]::IsNullOrWhiteSpace($prerelease)) { $baseVersion } else { $baseVersion + '-' + $prerelease }
+    } else { '' }
     $guid = if ($m) { [string]$m.Guid } else { '' }
     $moduleBase = if ($m) { [string]$m.ModuleBase } else { '' }
     $fields = @($n, $ver, $guid, $moduleBase) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }

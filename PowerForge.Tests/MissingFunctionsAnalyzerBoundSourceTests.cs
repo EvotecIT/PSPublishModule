@@ -196,6 +196,184 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
         }
     }
 
+    [Fact]
+    public void Analyze_PrefersBoundDonorOverAmbientCommandCollision()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.CollisionDonor";
+            var modulePath = WriteModuleBody(
+                root.FullName,
+                moduleName,
+                "2.0.0",
+                "function Get-Date { 'bound-donor' }",
+                functionsToExport: new[] { "Get-Date" });
+            var service = new PowerShellMissingFunctionAnalysisService();
+
+            var result = service.Analyze(
+                filePath: null,
+                code: "Get-Date",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "2.0.0", modulePath) },
+                    requireApprovedModuleSources: true));
+
+            Assert.Contains(result.Functions, function => function.Contains("bound-donor", StringComparison.Ordinal));
+            Assert.Equal(new[] { moduleName }, result.FullyInlinedApprovedModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_UsesApprovedSourceOrderWhenDonorsExportTheSameCommand()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string firstModule = "PowerForge.FirstCollisionDonor";
+            const string secondModule = "PowerForge.SecondCollisionDonor";
+            var firstPath = WriteModuleBody(
+                root.FullName,
+                firstModule,
+                "2.0.0",
+                "function Get-PowerForgeBoundThing { 'first-donor' }");
+            var secondPath = WriteModuleBody(
+                root.FullName,
+                secondModule,
+                "2.0.0",
+                "function Get-PowerForgeBoundThing { 'second-donor' }");
+            var service = new PowerShellMissingFunctionAnalysisService();
+
+            var result = service.Analyze(
+                filePath: null,
+                code: "Get-PowerForgeBoundThing",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { firstModule, secondModule },
+                    approvedModuleSources: new[]
+                    {
+                        new ApprovedModuleSource(firstModule, "2.0.0", firstPath),
+                        new ApprovedModuleSource(secondModule, "2.0.0", secondPath)
+                    },
+                    requireApprovedModuleSources: true));
+
+            Assert.Contains(result.Functions, function => function.Contains("first-donor", StringComparison.Ordinal));
+            Assert.DoesNotContain(result.Functions, function => function.Contains("second-donor", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_ContinuesPastApprovedSourceThatDoesNotExportTheCommand()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string emptyModule = "PowerForge.EmptyDonor";
+            const string matchingModule = "PowerForge.MatchingDonor";
+            var emptyPath = WriteModuleBody(
+                root.FullName,
+                emptyModule,
+                "2.0.0",
+                "function Get-PowerForgeOtherThing { 'other' }",
+                functionsToExport: new[] { "Get-PowerForgeOtherThing" });
+            var matchingPath = WriteModule(
+                root.FullName,
+                matchingModule,
+                "2.0.0",
+                "matching-donor");
+            var service = new PowerShellMissingFunctionAnalysisService();
+
+            var result = service.Analyze(
+                filePath: null,
+                code: "Get-PowerForgeBoundThing",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { emptyModule, matchingModule },
+                    approvedModuleSources: new[]
+                    {
+                        new ApprovedModuleSource(emptyModule, "2.0.0", emptyPath),
+                        new ApprovedModuleSource(matchingModule, "2.0.0", matchingPath)
+                    },
+                    requireApprovedModuleSources: true));
+
+            Assert.Contains(result.Functions, function => function.Contains("matching-donor", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData("PowerForge.RuntimeDonor\\Get-PowerForgeBoundThing")]
+    [InlineData("using module PowerForge.RuntimeDonor\nGet-PowerForgeBoundThing")]
+    [InlineData("param([PowerForge.RuntimeDonor.Widget]$Value)\nGet-PowerForgeBoundThing")]
+    public void Analyze_KeepsDonorDependencyForNonInlineableModuleReferences(string consumerCode)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.RuntimeDonor";
+            var modulePath = WriteModule(root.FullName, moduleName, "2.0.0", "runtime-reference");
+            var service = new PowerShellMissingFunctionAnalysisService();
+
+            var result = service.Analyze(
+                filePath: null,
+                code: consumerCode,
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "2.0.0", modulePath) },
+                    requireApprovedModuleSources: true));
+
+            Assert.NotEmpty(result.Functions);
+            Assert.Empty(result.FullyInlinedApprovedModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_RejectsBoundModuleWhoseGuidDoesNotMatch()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.GuidDonor";
+            const string actualGuid = "11111111-1111-1111-1111-111111111111";
+            const string expectedGuid = "22222222-2222-2222-2222-222222222222";
+            var modulePath = WriteModuleBody(
+                root.FullName,
+                moduleName,
+                "2.0.0",
+                "function Get-PowerForgeBoundThing { 'guid' }",
+                guid: actualGuid);
+            var analyzer = new MissingFunctionsAnalyzer();
+
+            var result = analyzer.Analyze(
+                filePath: null,
+                code: "Get-PowerForgeBoundThing",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "2.0.0", modulePath, expectedGuid) },
+                    requireApprovedModuleSources: true));
+
+            Assert.Empty(result.Functions);
+            Assert.Contains(result.Summary, command => command.Error.Contains("GUID", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData("function Get-PowerForgeBoundThing { $helper = 'Get-PowerForgePrivateThing'; Invoke-Expression $helper }", "Invoke-Expression")]
     [InlineData("function Get-PowerForgeBoundThing { $helper = 'Get-PowerForgePrivateThing'; iex $helper }", "iex")]
@@ -238,7 +416,14 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
             version,
             $"function Get-PowerForgeBoundThing {{ '{marker}' }}{Environment.NewLine}");
 
-    private static string WriteModuleBody(string root, string moduleName, string version, string moduleBody, string? prerelease = null)
+    private static string WriteModuleBody(
+        string root,
+        string moduleName,
+        string version,
+        string moduleBody,
+        string? prerelease = null,
+        string? guid = null,
+        string[]? functionsToExport = null)
     {
         var modulePath = Path.Combine(root, moduleName, version);
         Directory.CreateDirectory(modulePath);
@@ -248,9 +433,11 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
         var privateData = string.IsNullOrWhiteSpace(prerelease)
             ? string.Empty
             : $"; PrivateData = @{{ PSData = @{{ Prerelease = '{prerelease}' }} }}";
+        var guidEntry = string.IsNullOrWhiteSpace(guid) ? string.Empty : $"; GUID = '{guid}'";
+        var exports = string.Join(", ", (functionsToExport ?? new[] { "Get-PowerForgeBoundThing" }).Select(static name => $"'{name}'"));
         File.WriteAllText(
             Path.Combine(modulePath, moduleName + ".psd1"),
-            $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '{version}'; FunctionsToExport = @('Get-PowerForgeBoundThing'){privateData} }}{Environment.NewLine}");
+            $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '{version}'; FunctionsToExport = @({exports}){guidEntry}{privateData} }}{Environment.NewLine}");
         return modulePath;
     }
 }

@@ -116,6 +116,54 @@ public sealed class ModulePipelineDefaultPolicyTests
     }
 
     [Fact]
+    public void Plan_ApprovedModuleInheritsRequiredConstraintWithoutLosingExplicitSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteMinimalModule(root.FullName, "DefaultPolicyModule");
+            var spec = CreateSpec(root.FullName);
+            spec.Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.RequiredModule,
+                    Configuration = new ModuleDependencyConfiguration
+                    {
+                        ModuleName = "PSEventViewer",
+                        MinimumVersion = "1.0.22",
+                        VersionSource = ModuleDependencyVersionSource.Installed
+                    }
+                },
+                new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.ApprovedModule,
+                    Configuration = new ModuleDependencyConfiguration
+                    {
+                        ModuleName = "PSEventViewer",
+                        VersionSource = ModuleDependencyVersionSource.PSGallery
+                    }
+                }
+            };
+            var provider = new ModulePipelineMissingAnalysisServiceTests.FakeDependencyMetadataProvider();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ModulePipelineMissingAnalysisServiceTests.ThrowingPowerShellRunner(),
+                provider);
+
+            var donor = Assert.Single(runner.Plan(spec).ApprovedModuleResolutions);
+
+            Assert.Equal("1.0.22", donor.Constraint.ModuleVersion);
+            Assert.Equal(ModuleDependencyVersionSource.PSGallery, donor.VersionSource);
+            Assert.Equal("PSGallery", donor.Repository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_AutoApprovedModuleKeepsConfiguredFallbackRepository()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -155,6 +203,39 @@ public sealed class ModulePipelineDefaultPolicyTests
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    [Fact]
+    public void RepositoryApprovedModuleSelectionEnforcesGuidConstraint()
+    {
+        const string expectedGuid = "11111111-1111-1111-1111-111111111111";
+        var constraint = new RequiredModuleReference(
+            "Approved.Donor",
+            requiredVersion: "2.0.0",
+            guid: expectedGuid);
+        var wrongIdentity = new PSResourceInfo(
+            "Approved.Donor",
+            "2.0.0",
+            "PSGallery",
+            author: null,
+            description: null,
+            guid: "22222222-2222-2222-2222-222222222222");
+        var expectedIdentity = new PSResourceInfo(
+            "Approved.Donor",
+            "2.0.0",
+            "PSGallery",
+            author: null,
+            description: null,
+            guid: expectedGuid);
+
+        var selected = ModulePipelineRunner.SelectApprovedModuleRepositoryCandidate(
+            constraint,
+            new[] { wrongIdentity, expectedIdentity });
+
+        Assert.Same(expectedIdentity, selected);
+        Assert.Null(ModulePipelineRunner.SelectApprovedModuleRepositoryCandidate(
+            constraint,
+            new[] { wrongIdentity }));
     }
 
     [Fact]

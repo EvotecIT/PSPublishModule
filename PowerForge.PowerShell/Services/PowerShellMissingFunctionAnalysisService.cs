@@ -30,11 +30,16 @@ internal sealed class PowerShellMissingFunctionAnalysisService : IMissingFunctio
                 .Where(static name => !string.IsNullOrWhiteSpace(name))
                 .Select(static name => name.Trim()),
             StringComparer.OrdinalIgnoreCase);
+        var nonInlineable = new HashSet<string>(
+            report.NonInlineableApprovedModules ?? Array.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
 
         return (report.Summary ?? Array.Empty<MissingFunctionCommand>())
             .Where(command => !string.IsNullOrWhiteSpace(command.Source) && approved.Contains(command.Source))
             .GroupBy(command => command.Source.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Where(group => group.Any() && group.All(command => command.ScriptBlock is not null))
+            .Where(group => !nonInlineable.Contains(group.Key) &&
+                            group.Any() &&
+                            group.All(command => command.ScriptBlock is not null))
             .Select(group => group.Key)
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();

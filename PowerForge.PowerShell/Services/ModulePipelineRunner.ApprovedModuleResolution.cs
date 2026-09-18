@@ -34,10 +34,20 @@ public sealed partial class ModulePipelineRunner
             var inheritsRequiredDeclaration = !HasApprovedModuleConstraint(approved) &&
                                              requiredByName.TryGetValue(approved.ModuleName, out requiredDraft);
             if (inheritsRequiredDeclaration)
-                effective = requiredDraft!;
+            {
+                effective = new RequiredModuleDraft(
+                    approved.ModuleName,
+                    requiredDraft!.ModuleVersion,
+                    requiredDraft.MinimumVersion,
+                    requiredDraft.RequiredVersion,
+                    requiredDraft.Guid,
+                    approved.VersionSource);
+            }
 
             RequiredModuleReference constraint;
-            if (inheritsRequiredDeclaration && resolvedRequiredByName.TryGetValue(approved.ModuleName, out var resolvedRequired))
+            if (inheritsRequiredDeclaration &&
+                requiredDraft!.VersionSource == approved.VersionSource &&
+                resolvedRequiredByName.TryGetValue(approved.ModuleName, out var resolvedRequired))
             {
                 constraint = resolvedRequired;
             }
@@ -99,10 +109,11 @@ public sealed partial class ModulePipelineRunner
                     source.Repository,
                     source.Credential,
                     draft.RequiredVersion,
-                    string.IsNullOrWhiteSpace(draft.MinimumVersion) ? draft.ModuleVersion : draft.MinimumVersion);
+                    string.IsNullOrWhiteSpace(draft.MinimumVersion) ? draft.ModuleVersion : draft.MinimumVersion,
+                    draft.Guid);
             })
             .GroupBy(
-                static resolution => $"{resolution.Name}|{resolution.RequiredVersion}|{resolution.MinimumVersion}",
+                static resolution => $"{resolution.Name}|{resolution.RequiredVersion}|{resolution.MinimumVersion}|{resolution.Guid}|{resolution.VersionSource}|{resolution.Repository}",
                 StringComparer.OrdinalIgnoreCase)
             .Select(static group => group.Last())
             .ToArray();
@@ -153,7 +164,8 @@ public sealed partial class ModulePipelineRunner
                     sources.Add(new ApprovedModuleSource(
                         resolution.Name,
                         installedModule.Version,
-                        Path.GetFullPath(installedModule.ModuleBasePath!)));
+                        Path.GetFullPath(installedModule.ModuleBasePath!),
+                        installedModule.Guid));
                     continue;
                 }
 
@@ -173,7 +185,7 @@ public sealed partial class ModulePipelineRunner
                         repositories: new[] { repository },
                         credential: resolution.Credential),
                     timeout: TimeSpan.FromMinutes(2));
-                var selected = RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(resolution.Constraint, candidates);
+                var selected = SelectApprovedModuleRepositoryCandidate(resolution.Constraint, candidates);
                 if (selected is null)
                 {
                     throw new InvalidOperationException(
@@ -208,7 +220,7 @@ public sealed partial class ModulePipelineRunner
                         $"Approved module '{resolution.Name}' {selectedVersion} was downloaded from '{repository}', but its manifest was not found in the temporary source.");
                 }
 
-                sources.Add(new ApprovedModuleSource(resolution.Name, selectedVersion, modulePath));
+                sources.Add(new ApprovedModuleSource(resolution.Name, selectedVersion, modulePath, selected.Guid));
             }
         }
         catch
@@ -218,6 +230,29 @@ public sealed partial class ModulePipelineRunner
         }
 
         return new ApprovedModuleSourceLease(_logger, sources.ToArray(), temporaryRoots.ToArray());
+    }
+
+    internal static PSResourceInfo? SelectApprovedModuleRepositoryCandidate(
+        RequiredModuleReference constraint,
+        IEnumerable<PSResourceInfo> candidates)
+    {
+        var matchingCandidates = (candidates ?? Array.Empty<PSResourceInfo>())
+            .Where(candidate => candidate is not null && ModuleGuidMatches(candidate.Guid, constraint.Guid))
+            .ToArray();
+        return RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(constraint, matchingCandidates);
+    }
+
+    private static bool ModuleGuidMatches(string? candidateGuid, string? requiredGuid)
+    {
+        if (string.IsNullOrWhiteSpace(requiredGuid) ||
+            requiredGuid!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return System.Guid.TryParse(candidateGuid, out var candidate) &&
+               System.Guid.TryParse(requiredGuid, out var required) &&
+               candidate == required;
     }
 
     private sealed class ApprovedModuleSourceLease : IDisposable
