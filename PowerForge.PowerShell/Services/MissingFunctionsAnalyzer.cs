@@ -406,14 +406,14 @@ public sealed class MissingFunctionsAnalyzer
         ApprovedModuleSource? preferredApprovedModuleSource)
     {
         var isAlias = false;
+        var qualifier = GetModuleQualifier(name);
+        var lookupName = GetUnqualifiedCommandName(name);
 
         try
         {
-            var qualifier = GetModuleQualifier(name);
-            var lookupName = GetUnqualifiedCommandName(name);
             if (qualifier is not null && approvedModuleSources.TryGetValue(qualifier, out var qualifiedSource))
             {
-                var qualifiedCommand = GetCommandFromModuleScopeCached(qualifiedSource, lookupName);
+                var qualifiedCommand = GetCommandFromModuleScopeCached(qualifiedSource, lookupName, includePrivate: false);
                 if (qualifiedCommand is null)
                 {
                     throw new CommandNotFoundException(
@@ -423,13 +423,23 @@ public sealed class MissingFunctionsAnalyzer
                 return CreateResolution(qualifiedCommand, isAlias: qualifiedCommand is AliasInfo, isPrivate: true);
             }
 
+            if (qualifier is null && preferredApprovedModuleSource is not null)
+            {
+                var preferredCommand = GetCommandFromModuleScopeCached(
+                    preferredApprovedModuleSource,
+                    lookupName,
+                    includePrivate: true);
+                if (preferredCommand is not null)
+                    return CreateResolution(preferredCommand, isAlias: preferredCommand is AliasInfo, isPrivate: true);
+            }
+
             if (qualifier is null && approvedModuleSources.Count > 0)
             {
                 foreach (var source in EnumerateApprovedModuleSources(
-                             approvedModuleSourceOrder,
-                             preferredApprovedModuleSource))
+                              approvedModuleSourceOrder,
+                              preferredApprovedModuleSource))
                 {
-                    var donorCommand = GetCommandFromModuleScopeCached(source, lookupName);
+                    var donorCommand = GetCommandFromModuleScopeCached(source, lookupName, includePrivate: false);
                     if (donorCommand is null)
                         continue;
 
@@ -468,7 +478,7 @@ public sealed class MissingFunctionsAnalyzer
             if (!string.IsNullOrWhiteSpace(cmd.Source) &&
                 approvedModuleSources.TryGetValue(cmd.Source, out var selectedSource))
             {
-                var selectedCommand = GetCommandFromModuleScopeCached(selectedSource, name);
+                var selectedCommand = GetCommandFromModuleScopeCached(selectedSource, name, includePrivate: false);
                 if (selectedCommand is null)
                 {
                     throw new CommandNotFoundException(
@@ -517,7 +527,11 @@ public sealed class MissingFunctionsAnalyzer
                     var source = approvedModuleSources.TryGetValue(modName, out var selectedSource)
                         ? selectedSource
                         : new ApprovedModuleSource(modName, version: null, moduleBasePath: string.Empty);
-                    var cmd = GetCommandFromModuleScopeCached(source, name);
+                    // Approved donors may intentionally contribute unexported helpers to the merged
+                    // consumer, but only after normal ambient/exported resolution has failed. This
+                    // preserves the merge contract without letting a donor-private command shadow a
+                    // real consumer command such as Get-Date.
+                    var cmd = GetCommandFromModuleScopeCached(source, name, includePrivate: qualifier is null);
                     if (cmd is null)
                         continue;
 
@@ -559,11 +573,17 @@ public sealed class MissingFunctionsAnalyzer
         if (qualifier is not null)
         {
             return approvedModuleSources.TryGetValue(qualifier, out var qualifiedSource) &&
-                   GetCommandFromModuleScopeCached(qualifiedSource, lookupName) is not null;
+                   GetCommandFromModuleScopeCached(qualifiedSource, lookupName, includePrivate: false) is not null;
+        }
+
+        if (preferredApprovedModuleSource is not null &&
+            GetCommandFromModuleScopeCached(preferredApprovedModuleSource, lookupName, includePrivate: true) is not null)
+        {
+            return true;
         }
 
         return EnumerateApprovedModuleSources(approvedModuleSourceOrder, preferredApprovedModuleSource).Any(source =>
-            GetCommandFromModuleScopeCached(source, lookupName) is not null);
+            GetCommandFromModuleScopeCached(source, lookupName, includePrivate: false) is not null);
     }
 
     private static IEnumerable<ApprovedModuleSource> EnumerateApprovedModuleSources(
@@ -608,12 +628,19 @@ public sealed class MissingFunctionsAnalyzer
         return resolved;
     }
 
-    private CommandInfo? GetCommandFromModuleScopeCached(ApprovedModuleSource source, string commandName)
+    private CommandInfo? GetCommandFromModuleScopeCached(
+        ApprovedModuleSource source,
+        string commandName,
+        bool includePrivate = true)
     {
         if (source is null || string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(commandName))
             return null;
 
-        var key = source.Name.Trim() + "|" + (source.Version ?? string.Empty) + "|" + source.ModuleBasePath + "|" + commandName.Trim();
+        var session = GetOrCreateModuleScopeSession(source);
+        if (!includePrivate && !session.ExportedCommandNames.Contains(commandName))
+            return null;
+
+        var key = source.Name.Trim() + "|" + (source.Version ?? string.Empty) + "|" + source.ModuleBasePath + "|" + commandName.Trim() + "|" + includePrivate;
         if (_moduleScopeCommandCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -777,7 +804,10 @@ try {
                     $"Imported module '{source.Name}' version '{FormatImportedModuleVersion(imported)}' does not match expected version '{source.Version}'.");
             }
 
-            var created = new ModuleScopeSession(runspace, imported.ModuleBase);
+            var created = new ModuleScopeSession(
+                runspace,
+                imported.ModuleBase,
+                imported.ExportedCommands.Keys);
             _moduleScopeSessions[key] = created;
             return created;
         }
@@ -861,11 +891,18 @@ try {
     {
         internal Runspace Runspace { get; }
         internal string ModuleBase { get; }
+        internal HashSet<string> ExportedCommandNames { get; }
 
-        internal ModuleScopeSession(Runspace runspace, string moduleBase)
+        internal ModuleScopeSession(
+            Runspace runspace,
+            string moduleBase,
+            IEnumerable<string> exportedCommandNames)
         {
             Runspace = runspace;
             ModuleBase = moduleBase;
+            ExportedCommandNames = new HashSet<string>(
+                exportedCommandNames ?? Array.Empty<string>(),
+                StringComparer.OrdinalIgnoreCase);
         }
 
         public void Dispose() => Runspace.Dispose();

@@ -1139,7 +1139,7 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
             });
             var approvedBaseMatch = provider.GetInstalledModules(new RequiredModuleReference[]
             {
-                new ApprovedModuleInstalledReference(
+                new ModuleInstalledReference(
                     new RequiredModuleReference(moduleName, requiredVersion: "2.0.0"),
                     matchPrereleaseByBaseVersion: true)
             });

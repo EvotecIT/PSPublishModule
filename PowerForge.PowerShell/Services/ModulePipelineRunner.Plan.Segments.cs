@@ -115,7 +115,7 @@ public sealed partial class ModulePipelineRunner
         var embeddedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var externalModules = new List<string>();
         var externalModulesDraft = new List<RequiredModuleDraft>();
-        var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var externalIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         var segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
             .Where(static segment => segment is not null)
@@ -321,15 +321,29 @@ public sealed partial class ModulePipelineRunner
 
                     if (moduleSeg.Kind == ModuleDependencyKind.ExternalModule)
                     {
-                        if (!TryAddExternalModuleDependency(name, externalIndex, externalModules))
+                        if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(name))
+                        {
+                            _logger.Info($"Skipping built-in PowerShell module '{name}' from manifest dependency output.");
                             break;
-                        externalModulesDraft.Add(new RequiredModuleDraft(
+                        }
+
+                        var externalDraft = new RequiredModuleDraft(
                             moduleName: name,
                             moduleVersion: md.ModuleVersion,
                             minimumVersion: md.MinimumVersion,
                             requiredVersion: md.RequiredVersion,
                             guid: md.Guid,
-                            versionSource: md.VersionSource));
+                            versionSource: md.VersionSource);
+                        if (externalIndex.TryGetValue(name, out var externalIdx))
+                        {
+                            externalModulesDraft[externalIdx] = externalDraft;
+                        }
+                        else
+                        {
+                            externalIndex[name] = externalModulesDraft.Count;
+                            externalModules.Add(name);
+                            externalModulesDraft.Add(externalDraft);
+                        }
                         break;
                     }
 

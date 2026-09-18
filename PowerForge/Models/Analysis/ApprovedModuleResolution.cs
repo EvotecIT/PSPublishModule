@@ -33,14 +33,14 @@ internal sealed class ApprovedModuleResolution
 }
 
 /// <summary>
-/// Carries the donor-only rule that an Auto/Latest prerelease may be represented by its
-/// manifest-safe base version while the installed module still retains its prerelease label.
+/// Carries the rule that an Auto/Latest prerelease may be represented by its manifest-safe
+/// base version while the installed module still retains its prerelease label.
 /// </summary>
-internal sealed class ApprovedModuleInstalledReference : RequiredModuleReference
+internal sealed class ModuleInstalledReference : RequiredModuleReference
 {
     internal bool MatchPrereleaseByBaseVersion { get; }
 
-    internal ApprovedModuleInstalledReference(
+    internal ModuleInstalledReference(
         RequiredModuleReference reference,
         bool matchPrereleaseByBaseVersion)
         : base(

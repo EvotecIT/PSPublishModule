@@ -59,8 +59,8 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
             reference.RequiredVersion,
             reference.MaximumVersion,
             reference.Guid,
-            MatchPrereleaseByBaseVersion = reference is ApprovedModuleInstalledReference approved &&
-                                           approved.MatchPrereleaseByBaseVersion
+            MatchPrereleaseByBaseVersion = reference is ModuleInstalledReference installedReference &&
+                                           installedReference.MatchPrereleaseByBaseVersion
         }));
 
         var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-InstalledModuleInfo.ps1");

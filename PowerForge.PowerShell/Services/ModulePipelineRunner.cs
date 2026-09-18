@@ -53,6 +53,7 @@ public sealed partial class ModulePipelineRunner
         public string? RequiredVersion { get; }
         public string? Guid { get; }
         public ModuleDependencyVersionSource VersionSource { get; }
+        public bool MatchPrereleaseByBaseVersion { get; }
 
         public RequiredModuleDraft(string moduleName, string? moduleVersion, string? minimumVersion, string? requiredVersion, string? guid)
             : this(moduleName, moduleVersion, minimumVersion, requiredVersion, guid, ModuleDependencyVersionSource.Installed)
@@ -65,7 +66,8 @@ public sealed partial class ModulePipelineRunner
             string? minimumVersion,
             string? requiredVersion,
             string? guid,
-            ModuleDependencyVersionSource versionSource)
+            ModuleDependencyVersionSource versionSource,
+            bool matchPrereleaseByBaseVersion = false)
         {
             ModuleName = moduleName;
             ModuleVersion = moduleVersion;
@@ -73,6 +75,7 @@ public sealed partial class ModulePipelineRunner
             RequiredVersion = requiredVersion;
             Guid = guid;
             VersionSource = versionSource;
+            MatchPrereleaseByBaseVersion = matchPrereleaseByBaseVersion;
         }
     }
 

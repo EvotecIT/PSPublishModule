@@ -121,7 +121,8 @@ public sealed partial class ModulePipelineRunner
                     source.Credential,
                     draft.RequiredVersion,
                     string.IsNullOrWhiteSpace(draft.MinimumVersion) ? draft.ModuleVersion : draft.MinimumVersion,
-                    draft.Guid);
+                    draft.Guid,
+                    draft.MatchPrereleaseByBaseVersion);
             })
             .GroupBy(
                 static resolution => $"{resolution.Name}|{resolution.RequiredVersion}|{resolution.MinimumVersion}|{resolution.Guid}|{resolution.VersionSource}|{resolution.Repository}",
@@ -132,8 +133,14 @@ public sealed partial class ModulePipelineRunner
 
     private static RequiredModuleDraft[] CreateResolvedDependencyDrafts(
         IEnumerable<RequiredModuleReference> modules,
-        IReadOnlyDictionary<string, ModuleDependencyVersionSource> versionSources)
+        IReadOnlyDictionary<string, ModuleDependencyVersionSource> versionSources,
+        IReadOnlyList<RequiredModuleDraft> sourceDrafts)
     {
+        var sourceDraftsByName = (sourceDrafts ?? Array.Empty<RequiredModuleDraft>())
+            .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
+            .GroupBy(static draft => draft.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
+
         return (modules ?? Array.Empty<RequiredModuleReference>())
             .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
             .Select(module => new RequiredModuleDraft(
@@ -144,7 +151,9 @@ public sealed partial class ModulePipelineRunner
                 guid: module.Guid,
                 versionSource: versionSources is not null && versionSources.TryGetValue(module.ModuleName, out var source)
                     ? source
-                    : ModuleDependencyVersionSource.Installed))
+                    : ModuleDependencyVersionSource.Installed,
+                matchPrereleaseByBaseVersion: sourceDraftsByName.TryGetValue(module.ModuleName, out var sourceDraft) &&
+                                              HasAutoOrLatestConstraint(sourceDraft)))
             .ToArray();
     }
 
@@ -162,7 +171,7 @@ public sealed partial class ModulePipelineRunner
 
         var installed = _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
             ? versionedProvider.GetInstalledModules(installedCandidates
-                .Select(static resolution => (RequiredModuleReference)new ApprovedModuleInstalledReference(
+                .Select(static resolution => (RequiredModuleReference)new ModuleInstalledReference(
                     resolution.Constraint,
                     resolution.MatchPrereleaseByBaseVersion))
                 .ToArray())

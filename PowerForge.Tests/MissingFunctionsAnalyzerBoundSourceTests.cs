@@ -263,6 +263,39 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
     }
 
     [Fact]
+    public void Analyze_PrefersAmbientCommandOverPrivateDonorCollision()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.PrivateCollisionDonor";
+            var modulePath = WriteModuleBody(
+                root.FullName,
+                moduleName,
+                "2.0.0",
+                "function Get-Date { 'private-donor' }\nfunction Get-PowerForgeBoundThing { 'exported' }");
+            var service = new PowerShellMissingFunctionAnalysisService();
+
+            var result = service.Analyze(
+                filePath: null,
+                code: "Get-Date",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "2.0.0", modulePath) },
+                    requireApprovedModuleSources: true));
+
+            Assert.Empty(result.Functions);
+            Assert.Contains(result.Summary, command =>
+                string.Equals(command.Name, "Get-Date", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(command.Source, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Analyze_UsesApprovedSourceOrderWhenDonorsExportTheSameCommand()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

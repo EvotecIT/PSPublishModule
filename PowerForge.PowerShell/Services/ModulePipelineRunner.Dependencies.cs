@@ -245,12 +245,14 @@ public sealed partial class ModulePipelineRunner
         foreach (var dependency in dependencies)
         {
             var source = ResolveDependencySource(sources, dependency);
-            var reference = new RequiredModuleReference(
+            RequiredModuleReference reference = new RequiredModuleReference(
                 dependency.Name,
                 dependency.MinimumVersion,
                 dependency.RequiredVersion,
                 dependency.MaximumVersion,
                 source?.Guid);
+            if (source?.MatchPrereleaseByBaseVersion == true)
+                reference = new ModuleInstalledReference(reference, matchPrereleaseByBaseVersion: true);
             IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
                 _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
                     ? versionedProvider.GetInstalledModules(new[] { reference })
@@ -701,7 +703,7 @@ public sealed partial class ModulePipelineRunner
                 NormalizeLocatorVersionArgument(effective.RequiredVersion),
                 maximumVersion: null,
                 effective.Guid);
-            var installedReference = new ApprovedModuleInstalledReference(
+            var installedReference = new ModuleInstalledReference(
                 reference,
                 HasAutoOrLatestConstraint(effective));
             IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
@@ -1020,8 +1022,8 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            var candidateVersion = reference is ApprovedModuleInstalledReference approved &&
-                                   approved.MatchPrereleaseByBaseVersion
+            var candidateVersion = reference is ModuleInstalledReference installedReference &&
+                                   installedReference.MatchPrereleaseByBaseVersion
                 ? metadata.Version!.Split(new[] { '-' }, 2)[0]
                 : metadata.Version!;
             return ManagedModuleVersionSelector.IsMatch(candidateVersion, versionRange);

@@ -286,6 +286,96 @@ public sealed partial class ModulePipelineHostedOperationsTests
         }
     }
 
+    [Theory]
+    [InlineData(ModuleDependencyKind.RequiredModule)]
+    [InlineData(ModuleDependencyKind.EmbeddedModule)]
+    [InlineData(ModuleDependencyKind.ExternalModule)]
+    public void EnsureBuildDependenciesInstalledIfNeeded_MatchesAutoResolvedInstalledPrereleaseByBaseVersion(
+        ModuleDependencyKind dependencyKind)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var dependency = CreateModuleSegment(
+                dependencyKind,
+                "Auto",
+                ModuleDependencyVersionSource.Installed);
+            var provider = new FixedVersionedMetadataProvider(
+                new InstalledModuleMetadata(
+                    "Dependency.Tools",
+                    "2.0.0-beta.1",
+                    null,
+                    Path.Combine(root.FullName, "Dependency.Tools", "2.0.0")));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                new FakeHostedOperations());
+
+            var result = InvokeEnsureBuildDependenciesInstalledIfNeeded(
+                runner,
+                runner.Plan(CreateDependencySpec(root.FullName, moduleName, dependency)));
+
+            Assert.Single(result);
+            var request = Assert.Single(provider.Requests.SelectMany(static item => item));
+            Assert.True(Assert.IsType<ModuleInstalledReference>(request).MatchPrereleaseByBaseVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_DuplicateExternalModuleUsesLastDeclarationWithoutResolvingSupersededSource()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var provider = new FixedVersionedMetadataProvider(
+                new InstalledModuleMetadata(
+                    "Dependency.Tools",
+                    "2.0.0",
+                    null,
+                    Path.Combine(root.FullName, "Dependency.Tools", "2.0.0")));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                new FakeHostedOperations());
+            var superseded = CreateModuleSegment(
+                ModuleDependencyKind.ExternalModule,
+                "1.0.0",
+                ModuleDependencyVersionSource.PSGallery);
+            superseded.Configuration!.Guid = "11111111-1111-1111-1111-111111111111";
+            var winner = CreateModuleSegment(
+                ModuleDependencyKind.ExternalModule,
+                "2.0.0",
+                ModuleDependencyVersionSource.Installed);
+            winner.Configuration!.Guid = "22222222-2222-2222-2222-222222222222";
+
+            var plan = runner.Plan(CreateDependencySpec(
+                root.FullName,
+                moduleName,
+                superseded,
+                winner));
+
+            var source = Assert.Single(plan.DependencySourceResolutions);
+            Assert.Equal("2.0.0", source.RequiredVersion);
+            Assert.Equal("22222222-2222-2222-2222-222222222222", source.Guid);
+            Assert.Equal(ModuleDependencyVersionSource.Installed, source.VersionSource);
+            Assert.Equal(0, provider.OnlineLookupCalls);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void RunPreflight_AutoApprovedDonorChecksAllInstalledVersionsBeforeBootstrapping()
     {
@@ -378,6 +468,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
         private readonly InstalledModuleMetadata _latest;
 
         internal List<RequiredModuleReference[]> Requests { get; } = new();
+        internal int OnlineLookupCalls { get; private set; }
 
         internal FixedVersionedMetadataProvider(
             InstalledModuleMetadata installed,
@@ -410,6 +501,9 @@ public sealed partial class ModulePipelineHostedOperationsTests
             string? repository,
             RepositoryCredential? credential,
             bool prerelease)
-            => new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+        {
+            OnlineLookupCalls++;
+            return new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 }
