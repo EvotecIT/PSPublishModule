@@ -69,8 +69,24 @@ public sealed partial class ModulePipelineRunner
         }
 
         var results = new List<ModuleDependencyInstallResult>();
+        var skippedInstalledOnly = deps
+            .Where(dependency =>
+                ResolveDependencySource(dependencySources, dependency)?.VersionSource == ModuleDependencyVersionSource.Installed &&
+                IsModuleSkipped(plan.ModuleSkip, dependency.Name))
+            .ToArray();
+        results.AddRange(skippedInstalledOnly.Select(dependency => new ModuleDependencyInstallResult(
+            dependency.Name,
+            installedVersion: null,
+            resolvedVersion: null,
+            requestedVersion: dependency.RequiredVersion ?? dependency.MinimumVersion,
+            ModuleDependencyInstallStatus.Skipped,
+            installer: null,
+            message: "Dependency was skipped by ModuleSkip configuration.")));
+
         var installedOnly = deps
-            .Where(dependency => ResolveDependencySource(dependencySources, dependency)?.VersionSource == ModuleDependencyVersionSource.Installed)
+            .Where(dependency =>
+                ResolveDependencySource(dependencySources, dependency)?.VersionSource == ModuleDependencyVersionSource.Installed &&
+                !IsModuleSkipped(plan.ModuleSkip, dependency.Name))
             .ToArray();
         results.AddRange(ValidateInstalledOnlyDependencies(installedOnly, dependencySources));
 
@@ -93,7 +109,9 @@ public sealed partial class ModulePipelineRunner
                 var sourceRepository = sourceKind == ModuleDependencyVersionSource.PSGallery
                     ? "PSGallery"
                     : source?.Repository ?? plan.InstallMissingModulesRepository;
-                var sourceCredential = source?.Credential ?? plan.InstallMissingModulesCredential;
+                var sourceCredential = sourceKind == ModuleDependencyVersionSource.PSGallery
+                    ? null
+                    : source?.Credential ?? plan.InstallMissingModulesCredential;
                 return new DependencyInstallSource(sourceRepository, sourceCredential);
             });
 
@@ -152,49 +170,47 @@ public sealed partial class ModulePipelineRunner
         if (dependencies is null || dependencies.Count == 0)
             return Array.Empty<ModuleDependencyInstallResult>();
 
-        var references = dependencies
-            .Select(dependency =>
-            {
-                var source = ResolveDependencySource(sources, dependency);
-                return new RequiredModuleReference(
-                    dependency.Name,
-                    dependency.MinimumVersion,
-                    dependency.RequiredVersion,
-                    dependency.MaximumVersion,
-                    source?.Guid);
-            })
-            .ToArray();
-        IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
-            _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
-                ? versionedProvider.GetInstalledModules(references)
-                : _moduleDependencyMetadataProvider.GetLatestInstalledModules(dependencies.Select(static dependency => dependency.Name).ToArray());
-
-        var missing = dependencies
-            .Where(dependency => !installed.TryGetValue(dependency.Name, out var metadata) ||
-                                 string.IsNullOrWhiteSpace(metadata.Version))
-            .Select(static dependency => dependency.Name)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (missing.Length > 0)
+        var satisfied = new List<(ModuleDependency Dependency, InstalledModuleMetadata Metadata)>();
+        var missing = new List<string>();
+        foreach (var dependency in dependencies)
         {
-            throw new InvalidOperationException(
-                $"Installed dependency source was selected, but no installed version satisfies the declared constraint for: {string.Join(", ", missing)}. Install the module locally or explicitly select VersionSource PSGallery, PublishRepository, or Auto.");
+            var source = ResolveDependencySource(sources, dependency);
+            var reference = new RequiredModuleReference(
+                dependency.Name,
+                dependency.MinimumVersion,
+                dependency.RequiredVersion,
+                dependency.MaximumVersion,
+                source?.Guid);
+            IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
+                _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
+                    ? versionedProvider.GetInstalledModules(new[] { reference })
+                    : _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[] { dependency.Name });
+
+            if (!installed.TryGetValue(dependency.Name, out var metadata) ||
+                !IsInstalledModuleAvailable(metadata, reference))
+            {
+                missing.Add(dependency.Name);
+                continue;
+            }
+
+            satisfied.Add((dependency, metadata));
         }
 
-        return dependencies
-            .Select(dependency =>
-            {
-                installed.TryGetValue(dependency.Name, out var metadata);
-                return new ModuleDependencyInstallResult(
-                    dependency.Name,
-                    metadata?.Version,
-                    metadata?.Version,
-                    dependency.RequiredVersion ?? dependency.MinimumVersion,
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Installed dependency source was selected, but no installed version satisfies the declared constraint for: {string.Join(", ", missing.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase))}. Install the module locally or explicitly select VersionSource PSGallery, PublishRepository, or Auto.");
+        }
+
+        return satisfied
+            .Select(item => new ModuleDependencyInstallResult(
+                    item.Dependency.Name,
+                    item.Metadata.Version,
+                    item.Metadata.Version,
+                    item.Dependency.RequiredVersion ?? item.Dependency.MinimumVersion,
                     ModuleDependencyInstallStatus.Satisfied,
                     installer: null,
-                    message: "Using the explicitly selected installed dependency source.");
-            })
+                    message: "Using the explicitly selected installed dependency source."))
             .ToArray();
     }
 

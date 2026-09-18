@@ -105,7 +105,10 @@ public sealed class MissingFunctionsAnalyzer
 
         var commandNames = parsed.CommandNames.Where(n => !ignoreFunctions.Contains(n)).ToArray();
         var filteredNames = commandNames
-            .Where(n => !knownFunctions.Contains(n))
+            .Where(n => !knownFunctions.Contains(n) || ApprovedDonorDefinesCommand(
+                n,
+                approvedModuleSources,
+                approvedModuleSourceOrder))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -517,6 +520,23 @@ public sealed class MissingFunctionsAnalyzer
 
             return resolution;
         }
+    }
+
+    private bool ApprovedDonorDefinesCommand(
+        string name,
+        IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
+        IReadOnlyList<ApprovedModuleSource> approvedModuleSourceOrder)
+    {
+        var qualifier = GetModuleQualifier(name);
+        var lookupName = GetUnqualifiedCommandName(name);
+        if (qualifier is not null)
+        {
+            return approvedModuleSources.TryGetValue(qualifier, out var qualifiedSource) &&
+                   GetCommandFromModuleScopeCached(qualifiedSource, lookupName) is not null;
+        }
+
+        return approvedModuleSourceOrder.Any(source =>
+            GetCommandFromModuleScopeCached(source, lookupName) is not null);
     }
 
     private static MissingFunctionCommand CreateResolution(CommandInfo command, bool isAlias, bool isPrivate)

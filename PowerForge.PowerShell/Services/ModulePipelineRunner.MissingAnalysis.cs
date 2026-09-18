@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation.Language;
+using System.Management.Automation.Runspaces;
 using System.Text;
 using System.Text.Json;
 
@@ -542,8 +543,20 @@ public sealed partial class ModulePipelineRunner
             "Write-Warning"
         };
 
+    private static readonly HashSet<string> DefaultPowerShellCommandNames = CreateDefaultPowerShellCommandNames();
+
+    private static HashSet<string> CreateDefaultPowerShellCommandNames()
+    {
+        var initialSessionState = InitialSessionState.CreateDefault();
+        return new HashSet<string>(
+            initialSessionState.Commands
+                .Where(static command => !string.IsNullOrWhiteSpace(command.Name))
+                .Select(static command => command.Name),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
     private static bool IsBuiltInCommand(string name)
-        => BuiltInCommandNames.Contains(name);
+        => BuiltInCommandNames.Contains(name) || DefaultPowerShellCommandNames.Contains(name);
 
     private sealed class MergeExecutionResult
     {

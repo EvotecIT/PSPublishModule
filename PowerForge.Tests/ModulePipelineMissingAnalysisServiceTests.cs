@@ -168,6 +168,45 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("Out-Null")]
+    [InlineData("Set-Alias")]
+    public void ValidateMissingFunctions_IgnoresCommandsProvidedByTheDefaultPowerShellSession(string commandName)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var report = new MissingFunctionAnalysisResult(
+                summary: new[] { new MissingCommandReference(commandName, string.Empty, string.Empty, false, false, "not resolved in build host") },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+            var method = typeof(ModulePipelineRunner).GetMethod("ValidateMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            method!.Invoke(runner, new object?[] { report, runner.Plan(spec), null });
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void ValidateMissingFunctions_FailsByDefault_WhenModuleIsNotRequiredOrSkipped()
     {

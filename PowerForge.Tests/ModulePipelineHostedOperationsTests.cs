@@ -10,7 +10,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePipelineHostedOperationsTests
+public sealed partial class ModulePipelineHostedOperationsTests
 {
     [Fact]
     public void DefaultRunnerServices_ReuseProvidedPowerShellRunner()
@@ -3385,6 +3385,7 @@ public sealed class ModulePipelineHostedOperationsTests
         public List<IReadOnlyList<ModuleDependency>> DependencyCalls { get; } = new();
         public IReadOnlyList<ModuleDependency> LastDependencies { get; private set; } = Array.Empty<ModuleDependency>();
         public string? LastRepository { get; private set; }
+        public RepositoryCredential? LastCredential { get; private set; }
         public ModuleSkipConfiguration? LastSkipModules { get; private set; }
         public ModuleTestSuiteResult? NextTestSuiteResult { get; set; }
         public List<ModulePipelineActionContext> ActionContexts { get; } = new();
@@ -3406,6 +3407,7 @@ public sealed class ModulePipelineHostedOperationsTests
             LastDependencies = dependencies ?? Array.Empty<ModuleDependency>();
             DependencyCalls.Add(LastDependencies);
             LastRepository = repository;
+            LastCredential = credential;
             LastSkipModules = skipModules;
             return LastDependencies
                 .Select(dependency => new ModuleDependencyInstallResult(

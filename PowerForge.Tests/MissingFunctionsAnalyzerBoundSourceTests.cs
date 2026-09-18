@@ -100,6 +100,39 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
     }
 
     [Fact]
+    public void Analyze_RecursiveDonorAnalysisPrefersDonorHelperOverSameNamedConsumerFunction()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.BoundDonor";
+            var modulePath = WriteModuleBody(
+                root.FullName,
+                moduleName,
+                "2.0.0",
+                "function Get-PowerForgeBoundThing { Get-CollidingHelper }\nfunction Get-CollidingHelper { 'donor-helper' }");
+            var service = new PowerShellMissingFunctionAnalysisService();
+
+            var result = service.Analyze(
+                filePath: null,
+                code: "function Get-CollidingHelper { 'consumer-helper' }\nGet-PowerForgeBoundThing",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    includeFunctionsRecursively: true,
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "2.0.0", modulePath) }));
+
+            Assert.Equal(2, result.Functions.Length);
+            Assert.Contains(result.Functions, function => function.Contains("donor-helper", StringComparison.Ordinal));
+            Assert.DoesNotContain(result.Functions, function => function.Contains("consumer-helper", StringComparison.Ordinal));
+            Assert.Equal(new[] { moduleName }, result.FullyInlinedApprovedModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Analyze_RequiredBindingsDoNotFallBackToAnApprovedModuleOnPSModulePath()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
