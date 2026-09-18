@@ -68,9 +68,7 @@ public sealed class MissingFunctionsAnalyzer
     {
         var parsed = ParseInput(filePath, code);
 
-        var declaredFunctions = parsed.FunctionNames;
         var excludeFunctions = new HashSet<string>(knownFunctions, StringComparer.OrdinalIgnoreCase);
-        foreach (var fn in declaredFunctions) excludeFunctions.Add(fn);
 
         var commandNames = parsed.CommandNames.Where(n => !ignoreFunctions.Contains(n)).ToArray();
         var filteredNames = commandNames
@@ -171,19 +169,33 @@ public sealed class MissingFunctionsAnalyzer
             ast = Parser.ParseInput(text, out tokens, out errors);
         }
 
+        var functionDeclarationsByName = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: true)
+            .Cast<FunctionDefinitionAst>()
+            .Where(f => !string.IsNullOrWhiteSpace(f.Name))
+            .GroupBy(
+                f => NestedFunctionVisibilityAnalyzer.NormalizeDeclaredFunctionName(f.Name),
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+
         var declaredFunctions = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()
-            .Select(f => f.Name)
+            .Select(f => NestedFunctionVisibilityAnalyzer.NormalizeDeclaredFunctionName(f.Name))
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var commandNames = ExtractCommandNames(ast).ToArray();
+        var visibilityAnalyzer = new NestedFunctionVisibilityAnalyzer(ast, functionDeclarationsByName);
+        var commandNames = ExtractCommandNames(ast, visibilityAnalyzer).ToArray();
 
         return new ParsedInput(effectiveFilePath, declaredFunctions, commandNames);
     }
 
-    private static IEnumerable<string> ExtractCommandNames(ScriptBlockAst ast)
+    private static IEnumerable<string> ExtractCommandNames(
+        ScriptBlockAst ast,
+        NestedFunctionVisibilityAnalyzer visibilityAnalyzer)
     {
         var adCmdlets = new HashSet<string>(new[]
         {
@@ -245,6 +257,8 @@ public sealed class MissingFunctionsAnalyzer
             if (reserved.Contains(name) || redirection.Contains(name))
                 continue;
             if (!LooksLikeCommandName(name))
+                continue;
+            if (visibilityAnalyzer.IsDeclaredInVisibleScope(cmd, name))
                 continue;
 
             set.Add(name);
