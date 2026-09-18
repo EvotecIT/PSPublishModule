@@ -103,7 +103,8 @@ internal sealed class PowerShellBoundOptimizer
             PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellBoundModuleVariableAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
             PowerShellBoundNativeAssignmentStatement assignment => new PowerShellBoundNativeAssignmentStatement(
-                assignment.Span, assignment.Name, OptimizeExpression(assignment.Value), assignment.Operation, assignment.Target),
+                assignment.Span, assignment.Name, OptimizeExpression(assignment.Value), assignment.Operation, assignment.Target,
+                assignment.ClosesNativeLocalCallBinding),
             PowerShellBoundRegionControlFlowReturnStatement controlFlow =>
                 new PowerShellBoundRegionControlFlowReturnStatement(
                     controlFlow.Span,

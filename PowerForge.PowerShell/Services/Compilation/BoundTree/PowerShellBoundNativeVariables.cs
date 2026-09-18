@@ -26,7 +26,8 @@ internal sealed class PowerShellBoundNativeVariableExpression : PowerShellBoundE
 internal sealed class PowerShellBoundNativeAssignmentStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundNativeAssignmentStatement(SourceSpan span, string name, PowerShellBoundExpression value,
-        PowerShellBoundMutationOperator operation, PowerShellNativeAssignmentTarget target)
+        PowerShellBoundMutationOperator operation, PowerShellNativeAssignmentTarget target,
+        bool closesNativeLocalCallBinding = false)
         : base(span, value.Effects | PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError,
             value.Capabilities | PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost |
             PowerShellRequiredCapability.PowerShellStatementErrors)
@@ -35,10 +36,12 @@ internal sealed class PowerShellBoundNativeAssignmentStatement : PowerShellBound
         Value = value;
         Target = target;
         Operation = operation;
+        ClosesNativeLocalCallBinding = closesNativeLocalCallBinding;
     }
 
     internal string Name { get; }
     internal PowerShellBoundExpression Value { get; }
     internal PowerShellNativeAssignmentTarget Target { get; }
     internal PowerShellBoundMutationOperator Operation { get; }
+    internal bool ClosesNativeLocalCallBinding { get; }
 }

@@ -32,28 +32,32 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "net10.0",
             PowerShellCompilationCapabilities.HybridModule);
 
-        var expectedConsumers = new[]
+        var expectedCompiledConsumers = new[]
         {
-            "Get-ObjectPropertiesAdvanced",
             "New-SqlQuery",
             "New-SqlQueryAlterTable",
             "New-SqlQueryCreateTable"
         };
-        foreach (var consumer in expectedConsumers)
+        Assert.All(expectedCompiledConsumers, consumer =>
         {
-            var regions = typed.PromotedRegions.Where(region =>
-                region.SourceName.Equals(consumer, StringComparison.OrdinalIgnoreCase) &&
-                region.LocalCalls.Any(static call => call.SourceName == "New-ArrayList")).ToArray();
-            Assert.NotEmpty(regions);
-            Assert.All(regions, static region =>
-            {
-                var call = Assert.Single(region.LocalCalls);
-                Assert.Equal(PowerShellRegionTransferOwnership.CompiledCalleeFresh, call.ResultContract.Ownership);
-                Assert.Equal(PowerShellRegionTransferOutputBehavior.NoEnumerate, call.ResultContract.OutputBehavior);
-                Assert.Equal(PowerShellRegionEnumerationOwner.None, call.ResultContract.EnumerationOwner);
-                Assert.Equal(PowerShellRegionEnumeratorLifetime.None, call.ResultContract.EnumeratorLifetime);
-            });
-        }
+            Assert.Contains(typed.Methods, method =>
+                method.SourceName.Equals(consumer, StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(typed.PromotedRegions, region =>
+                region.SourceName.Equals(consumer, StringComparison.OrdinalIgnoreCase));
+        });
+
+        var retainedConsumerRegions = typed.PromotedRegions.Where(region =>
+            region.SourceName.Equals("Get-ObjectPropertiesAdvanced", StringComparison.OrdinalIgnoreCase) &&
+            region.LocalCalls.Any(static call => call.SourceName == "New-ArrayList")).ToArray();
+        Assert.NotEmpty(retainedConsumerRegions);
+        Assert.All(retainedConsumerRegions, static region =>
+        {
+            var call = Assert.Single(region.LocalCalls);
+            Assert.Equal(PowerShellRegionTransferOwnership.CompiledCalleeFresh, call.ResultContract.Ownership);
+            Assert.Equal(PowerShellRegionTransferOutputBehavior.NoEnumerate, call.ResultContract.OutputBehavior);
+            Assert.Equal(PowerShellRegionEnumerationOwner.None, call.ResultContract.EnumerationOwner);
+            Assert.Equal(PowerShellRegionEnumeratorLifetime.None, call.ResultContract.EnumeratorLifetime);
+        });
     }
 
     [Fact]
@@ -164,6 +168,196 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             region.SourceName == "Get-UnprovedList" && region.LocalCalls.Count > 0);
         Assert.DoesNotContain(typed.RegionCandidates, static candidate =>
             candidate.SourceName == "Get-UnprovedList" && candidate.LocalCalls.Count > 0 && candidate.Promoted);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void CompleteWorkflow_ClosedLocalCollectionFactoryClosesNativeConsumers(
+        string framework,
+        string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function New-ClosedList {
+                [CmdletBinding()]
+                param()
+                $List = [System.Collections.ArrayList]::new()
+                return , $List
+            }
+            function Get-ClosedList {
+                [CmdletBinding()]
+                param([string] $Value = 'seed')
+                $Items = New-ClosedList
+                [void] $Items.Add($Value)
+                return , $Items
+            }
+            Export-ModuleMember -Function Get-ClosedList
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "Generated.ClosedLocalCollectionFactoryConsumer",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.PromotedTypedRegions);
+        var consumer = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
+            static unit => unit.Name == "Get-ClosedList");
+        Assert.True(consumer.EmittedClrMethod);
+        Assert.True(consumer.UsesNativeFunctionBinding);
+        Assert.False(consumer.RetainedHostedSource);
+        Assert.Empty(consumer.DiagnosticChain);
+
+        const string probe = """
+            $faults = @()
+            $firstRecords = @(Get-ClosedList -Value 'alpha' -ErrorVariable +faults)
+            $first = $firstRecords[0]
+            $second = Get-ClosedList -Value 'beta' -ErrorVariable +faults
+            [void] $first.Add('caller-mutation')
+            [pscustomobject]@{
+                phase = 'shape'
+                records = $firstRecords.Count
+                type = $first.GetType().FullName
+                firstValues = @($first)
+                secondValues = @($second)
+                fresh = -not [object]::ReferenceEquals($first, $second)
+                errors = $faults.Count
+            } | ConvertTo-Json -Depth 6 -Compress
+            $stopped = @(1..5 | ForEach-Object { Get-ClosedList -Value ([string] $_) } | Select-Object -First 1)
+            $reused = Get-ClosedList -Value 'reused'
+            [pscustomobject]@{ phase = 'stop-reuse'; stopped = $stopped.Count; reused = @($reused) } |
+                ConvertTo-Json -Depth 6 -Compress
+            Remove-Module $module -Force
+            $module = Import-Module $modulePath -PassThru -Force
+            $reimported = Get-ClosedList -Value 'reimported'
+            [pscustomobject]@{ phase = 'reimport'; type = $reimported.GetType().FullName; values = @($reimported) } |
+                ConvertTo-Json -Depth 6 -Compress
+            """;
+        var original = RunStatementErrorProbe(host,
+            "$modulePath='" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; $module=Import-Module $modulePath -PassThru -Force; " + probe,
+            fixture.RootPath,
+            "closed-local-collection-factory-consumer-original");
+        var compiled = RunStatementErrorProbe(host,
+            "$modulePath='" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; $module=Import-Module $modulePath -PassThru -Force; " + probe,
+            fixture.RootPath,
+            "closed-local-collection-factory-consumer-compiled");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Contains("\"records\":1", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("\"fresh\":true", original.StandardOutput, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"errors\":0", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
+    [Theory]
+    [InlineData("$Error")]
+    [InlineData("$PSItem")]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Transpile_ClosedLocalCollectionFactoryDoesNotCloseNativeConsumersWithRuntimeOwnedAssignments(string target)
+    {
+        using var fixture = ArtifactFixture.Create($$"""
+            function New-ClosedList {
+                [CmdletBinding()]
+                param()
+                $List = [System.Collections.ArrayList]::new()
+                return , $List
+            }
+            function Get-UnprovedList {
+                [CmdletBinding()]
+                param()
+                {{target}} = New-ClosedList
+                return 1
+            }
+            Export-ModuleMember -Function Get-UnprovedList
+            """, ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.Compiled",
+            "RuntimeOwnedCollectionFactoryAssignmentMethods",
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Get-UnprovedList");
+    }
+
+    [Theory]
+    [InlineData("$Items = [System.Collections.ArrayList]::new(); $Items += New-ClosedList; return $Holder.$Name")]
+    [InlineData("$Items = @(New-ClosedList); return $Holder.$Name")]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Transpile_ClosedLocalCollectionFactoryDoesNotCloseNonExactNativeAssignments(string body)
+    {
+        using var fixture = ArtifactFixture.Create($$"""
+            function New-ClosedList {
+                [CmdletBinding()]
+                param()
+                $List = [System.Collections.ArrayList]::new()
+                return , $List
+            }
+            function Get-UnprovedList {
+                [CmdletBinding()]
+                param([object] $Holder, [string] $Name = 'Items')
+                {{body}}
+            }
+            Export-ModuleMember -Function Get-UnprovedList
+            """, ".psm1");
+
+        var compilation = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { PowerShellSourceParser.ParseFile(fixture.ScriptPath) },
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.DoesNotContain(compilation.Analyzed.Functions,
+            static function => function.Symbol.Name == "Get-UnprovedList");
+        Assert.DoesNotContain(compilation.Emitted.Methods,
+            static method => method.GeneratedName == "Get_UnprovedList");
+    }
+
+    [Theory]
+    [InlineData("New-ClosedList; return $Holder.$Name")]
+    [InlineData("$null = New-ClosedList; return $Holder.$Name")]
+    [InlineData("$Holder.$Name = New-ClosedList; return 1")]
+    [InlineData("$Holder[$Name] = New-ClosedList; return 1")]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Transpile_NonAssignmentFactoryCallsStayOnNativeCommandPath(string body)
+    {
+        using var fixture = ArtifactFixture.Create($$"""
+            function New-ClosedList {
+                [CmdletBinding()]
+                param()
+                $List = [System.Collections.ArrayList]::new()
+                return , $List
+            }
+            function Get-NativeList {
+                [CmdletBinding()]
+                param([object] $Holder, [string] $Name = 'Items')
+                {{body}}
+            }
+            Export-ModuleMember -Function Get-NativeList
+            """, ".psm1");
+
+        var compilation = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { PowerShellSourceParser.ParseFile(fixture.ScriptPath) },
+            "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+        var consumer = Assert.Single(compilation.Analyzed.Functions,
+            static function => function.Symbol.Name == "Get-NativeList");
+        var statements = PowerShellSemanticAnalyzer.EnumerateStatements(consumer.Body).ToArray();
+        var expressions = statements
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .ToArray();
+
+        Assert.Equal(PowerShellExecutionDispositionKind.Typed, consumer.Disposition.Kind);
+        Assert.True(
+            statements.Any(static statement => statement is PowerShellBoundCommandRegionStatement) ||
+            expressions.Any(static expression => expression is PowerShellBoundNativeCommandExpression));
+        Assert.DoesNotContain(expressions, static expression => expression is PowerShellBoundInvocationExpression
+            { ResultProjection: PowerShellLocalCallResultProjection.ClosedCollectionFactory });
+        Assert.Contains(compilation.Emitted.Methods,
+            static method => method.GeneratedName == "Get_NativeList" && method.NativeFunctionBinding is not null);
     }
 
     [Theory]

@@ -101,7 +101,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         $"Typed non-void unit '{function.Symbol.Name}' must end with an explicit return statement on every reachable path."));
                 }
                 var shouldProcessTarget = GetCallees(function, lookup).FirstOrDefault(ContainsShouldProcess);
-                var nativeBindingTarget = GetCallees(function, lookup).FirstOrDefault(static callee => callee.NativeFunctionBinding is not null);
+                var nativeBindingTarget = GetNativeBindingTargetRequiringClrCall(function, lookup);
                 if (nativeBindingTarget is not null)
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
@@ -139,6 +139,26 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 return ApplyFallbackCallDisposition(function, lookup, program.Diagnostics);
             }, static (left, right) => left.Disposition.Kind == right.Disposition.Kind && left.Disposition.ReasonCode == right.Disposition.ReasonCode);
             return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
+        }
+
+        private static PowerShellBoundFunction? GetNativeBindingTargetRequiringClrCall(
+            PowerShellBoundFunction function,
+            IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        {
+            foreach (var statement in EnumerateStatements(function.Body))
+            foreach (var invocation in EnumerateDirectExpressions(statement).SelectMany(EnumerateInvocations))
+            {
+                if (statement is PowerShellBoundNativeAssignmentStatement
+                    {
+                        ClosesNativeLocalCallBinding: true,
+                        Value: var assignedValue
+                    } && ReferenceEquals(assignedValue, invocation))
+                    continue;
+                if (functions.TryGetValue(invocation.Target.StableKey, out var callee) &&
+                    callee.NativeFunctionBinding is not null)
+                    return callee;
+            }
+            return null;
         }
 
         // Qualified statement errors use the native error bridge. Their conservative

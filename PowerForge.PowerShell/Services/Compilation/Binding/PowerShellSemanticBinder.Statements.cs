@@ -95,6 +95,41 @@ internal sealed partial class PowerShellSemanticBinder
                             .Cast<VariableExpressionAst>().Select(static variable => variable.VariablePath.UserPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
             }
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                closedCollectionFactoryAssignment &&
+                assignment.Operator == TokenKind.Equals &&
+                assignment.Left is VariableExpressionAst { VariablePath.IsUnqualified: true } factoryTarget &&
+                !PowerShellAssignmentTargetPolicy.IsAutomaticVariable(factoryTarget.VariablePath.UserPath))
+            {
+                var factoryValue = BindExpression(
+                    document,
+                    assignment.Right,
+                    symbols,
+                    functions,
+                    diagnostics,
+                    targetFramework: targetFramework,
+                    capabilities: capabilities & ~PowerShellCompilationCapability.NativeFunctionBinding);
+                if (factoryValue is not PowerShellBoundInvocationExpression
+                    {
+                        ResultProjection: PowerShellLocalCallResultProjection.ClosedCollectionFactory,
+                        ClosedCollectionFactory: not null
+                    } factoryInvocation ||
+                    factoryInvocation.Type.ClrType != typeof(System.Collections.ArrayList))
+                    return null;
+                return new PowerShellBoundNativeAssignmentStatement(
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent),
+                    factoryTarget.VariablePath.UserPath,
+                    factoryInvocation,
+                    PowerShellBoundMutationOperator.Assign,
+                    new PowerShellNativeAssignmentTarget(
+                        assignment.Left.Extent.Text,
+                        document.Path,
+                        document.Text,
+                        PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
+                        assignment.Left.Extent.StartOffset,
+                        assignment.Left.Extent.EndOffset),
+                    closesNativeLocalCallBinding: true);
+            }
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                 !closedCollectionFactoryAssignment &&
                 PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } nativeVariable)
             {
