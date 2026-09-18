@@ -155,7 +155,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                     item is PowerShellBoundReturnStatement && !(terminalOutput && ReferenceEquals(item, statement))) ||
                 nested.SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                     .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
-                    .Any(static expression => expression is PowerShellBoundInvocationExpression))
+                    .OfType<PowerShellBoundInvocationExpression>()
+                    .Any(static invocation => !IsClosedCollectionFactoryInvocation(invocation)))
                 return false;
             projected.Add(statement);
         }

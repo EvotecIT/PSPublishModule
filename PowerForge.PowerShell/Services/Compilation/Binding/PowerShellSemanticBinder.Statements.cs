@@ -67,7 +67,9 @@ internal sealed partial class PowerShellSemanticBinder
         bool allowNonTerminalSuccessOutput = false,
         Type? nonTerminalSuccessOutputType = null)
     {
-        if (PowerShellCommandRegionSemanticBinder.TryBindNativePipeline(document, statement, _commandResolver,
+        var closedCollectionFactoryAssignment = IsClosedCollectionFactoryAssignment(statement, functions);
+        if (!closedCollectionFactoryAssignment &&
+            PowerShellCommandRegionSemanticBinder.TryBindNativePipeline(document, statement, _commandResolver,
             functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), capabilities, out var nativeRegion))
             return nativeRegion;
         if (statement is AssignmentStatementAst assignment)
@@ -93,6 +95,7 @@ internal sealed partial class PowerShellSemanticBinder
                             .Cast<VariableExpressionAst>().Select(static variable => variable.VariablePath.UserPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
             }
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                !closedCollectionFactoryAssignment &&
                 PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } nativeVariable)
             {
                 Type? nativeContext = null;
@@ -197,12 +200,16 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities,
                     diagnostics);
             }
+            var assignmentCapabilities = closedCollectionFactoryAssignment
+                ? capabilities & ~PowerShellCompilationCapability.NativeFunctionBinding
+                : capabilities;
             var mutation = PowerShellMutationSemanticBinder.BindAssignment(
                 document,
                 assignment,
                 symbols,
-                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
-                diagnostics, capabilities);
+                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, assignmentCapabilities),
+                diagnostics,
+                assignmentCapabilities);
             return mutation is null
                 ? null
                 : new PowerShellBoundAssignmentStatement(
@@ -473,6 +480,18 @@ internal sealed partial class PowerShellSemanticBinder
                     requiresOutputContinuation: emitsOutput && !isTerminal && !allowNonTerminalSuccessOutput);
         }
         return null;
+    }
+
+    private static bool IsClosedCollectionFactoryAssignment(
+        StatementAst statement,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
+    {
+        if (statement is not AssignmentStatementAst assignment) return false;
+        var commands = assignment.Right.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false)
+            .OfType<CommandAst>()
+            .ToArray();
+        return commands.Length == 1 && commands[0].GetCommandName() is { } name &&
+               functions.TryGetValue(name, out var signature) && signature.ClosedCollectionFactory is not null;
     }
 
     private PowerShellBoundBlock? BindBlock(

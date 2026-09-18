@@ -35,7 +35,7 @@ public sealed class PowerShellCompilationRegionTransferContractTests
         Assert.Equal(output, contract.OutputBehavior);
         Assert.Equal(PowerShellRegionTransferDirection.LiveIn, contract.Direction);
         Assert.Equal(PowerShellRegionTransferOwnership.ParameterBorrowed, contract.Ownership);
-        Assert.Equal(4, contract.SchemaVersion);
+        Assert.Equal(5, contract.SchemaVersion);
         if (output == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel)
         {
             Assert.Equal(PowerShellRegionEnumerationOwner.RetainedPowerShell, contract.EnumerationOwner);
@@ -67,7 +67,7 @@ public sealed class PowerShellCompilationRegionTransferContractTests
         Assert.Equal(PowerShellRegionEnumerationOwner.None, contract.EnumerationOwner);
         Assert.Equal(PowerShellRegionEnumerationFailureBehavior.None, contract.EnumerationFailureBehavior);
         Assert.Equal(PowerShellRegionEnumeratorLifetime.None, contract.EnumeratorLifetime);
-        Assert.Equal(4, contract.SchemaVersion);
+        Assert.Equal(5, contract.SchemaVersion);
         Assert.Equal(0, (int)PowerShellRegionTransferShape.Unsupported);
         Assert.Equal(1, (int)PowerShellRegionTransferShape.StableScalar);
         Assert.Equal(2, (int)PowerShellRegionTransferShape.AtomicMap);
@@ -99,7 +99,7 @@ public sealed class PowerShellCompilationRegionTransferContractTests
         Assert.Equal(PowerShellRegionEnumerationOwner.None, contract.EnumerationOwner);
         Assert.Equal(PowerShellRegionEnumerationFailureBehavior.None, contract.EnumerationFailureBehavior);
         Assert.Equal(PowerShellRegionEnumeratorLifetime.None, contract.EnumeratorLifetime);
-        Assert.Equal(4, contract.SchemaVersion);
+        Assert.Equal(5, contract.SchemaVersion);
         Assert.False(PowerShellRegionTransferTypePolicy.IsSupported(typeof(object)));
     }
 

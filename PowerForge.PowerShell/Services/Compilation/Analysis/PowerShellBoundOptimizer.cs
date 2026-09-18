@@ -214,7 +214,11 @@ internal sealed class PowerShellBoundOptimizer
             return new PowerShellBoundInvocationExpression(invocation.Span, invocation.Target,
                 invocation.Arguments.Select(OptimizeExpression).ToArray(), invocation.Type,
                 invocation.AuthoredEvaluationOrder.ToArray(), invocation.BoundParameterNames.ToArray(),
-                invocation.ReturnsModuleStateDerived, invocation.CapturesSuccessOutput);
+                invocation.ReturnsModuleStateDerived, invocation.CapturesSuccessOutput,
+                invocation.ResultProjection, invocation.ClosedCollectionFactory);
+        if (expression is PowerShellBoundClosedCollectionFactoryResultExpression factoryResult)
+            return new PowerShellBoundClosedCollectionFactoryResultExpression(
+                (PowerShellBoundVariableExpression)OptimizeExpression(factoryResult.Value));
         if (expression is PowerShellBoundMutationExpression mutation)
             return new PowerShellBoundMutationExpression(mutation.Span, mutation.Target, mutation.TargetClrType, mutation.Operation,
                 mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString,

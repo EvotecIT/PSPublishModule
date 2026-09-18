@@ -85,7 +85,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             System.Text.Json.JsonSerializer.Serialize(region));
         Assert.NotNull(roundTrip);
         var restored = Assert.Single(roundTrip!.ContinuationLocals);
-        Assert.Equal(4, Assert.IsType<PowerShellRegionTransferContract>(restored.Contract).SchemaVersion);
+        Assert.Equal(5, Assert.IsType<PowerShellRegionTransferContract>(restored.Contract).SchemaVersion);
         Assert.Equal(2, restored.Alternatives.Count);
     }
 

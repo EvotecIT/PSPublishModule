@@ -203,6 +203,20 @@ internal sealed partial class PowerShellTypedLowerer
                     ? names.Allocate("pf_value")
                     : string.Empty),
             PowerShellBoundClrInvocationExpression invocation => LowerClrInvocation(invocation, functions, names, targetCapabilities),
+            PowerShellBoundInvocationExpression
+            {
+                ResultProjection: PowerShellLocalCallResultProjection.ClosedCollectionFactory,
+                Arguments.Length: 0
+            } factoryCall => new PowerShellLoweredClrInvocationExpression(
+                factoryCall.Span,
+                typeof(System.Collections.ArrayList),
+                typeof(System.Collections.ArrayList),
+                ".ctor",
+                PowerShellClrInvocationKind.Constructor,
+                receiver: null,
+                PowerShellClrReceiverBehavior.None,
+                Array.Empty<PowerShellLoweredExpression>(),
+                Type.EmptyTypes),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,
@@ -226,6 +240,8 @@ internal sealed partial class PowerShellTypedLowerer
                     invocation.CapturesSuccessOutput,
                     invocation.CapturesSuccessOutput ? names.Allocate("pf_call_output") : string.Empty,
                     invocation.CapturesSuccessOutput && target.Function.ReturnType.ClrType != typeof(void)),
+            PowerShellBoundClosedCollectionFactoryResultExpression factoryResult =>
+                LowerExpression(factoryResult.Value, functions, names, targetCapabilities),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
 

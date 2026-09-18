@@ -79,10 +79,17 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             first.StartColumn,
             last.EndLine,
             last.EndColumn);
-        if (PowerShellSemanticAnalyzer.EnumerateStatements(new PowerShellBoundBlock(first, statements))
+        var localCalls = PowerShellSemanticAnalyzer.EnumerateStatements(new PowerShellBoundBlock(first, statements))
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
-            .Any(static expression => expression is PowerShellBoundInvocationExpression))
+            .OfType<PowerShellBoundInvocationExpression>()
+            .ToArray();
+        var localCallAssignments = PowerShellSemanticAnalyzer.EnumerateStatements(new PowerShellBoundBlock(first, statements))
+            .OfType<PowerShellBoundAssignmentStatement>()
+            .ToArray();
+        if (localCalls.Any(invocation =>
+                !IsClosedCollectionFactoryInvocation(invocation) ||
+                !localCallAssignments.Any(assignment => ReferenceEquals(assignment.Value, invocation))))
             return false;
         var usedSymbols = CollectUsedSymbolKeys(statements);
         var selectedParameters = parameters.Where(parameter => usedSymbols.Contains(parameter.Symbol.StableKey)).ToArray();
@@ -154,9 +161,36 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             inputLocals,
             allowsPrefixOwnedInputLocals,
             terminalTransferContract,
-            controlFlowContract);
+            controlFlowContract,
+            localCalls.Select(static invocation => invocation.ClosedCollectionFactory!)
+                .GroupBy(static call => call.SourceName, StringComparer.OrdinalIgnoreCase)
+                .Select(static group => group.First())
+                .OrderBy(static call => call.SourceName, StringComparer.OrdinalIgnoreCase)
+                .ToArray());
         return true;
     }
+
+    private static bool IsClosedCollectionFactoryInvocation(PowerShellBoundInvocationExpression invocation)
+        => invocation.ResultProjection == PowerShellLocalCallResultProjection.ClosedCollectionFactory &&
+           invocation.ClosedCollectionFactory is
+           {
+               ParameterTypes.Count: 0,
+               LoweredReturnType: "System.Collections.ArrayList",
+               ProjectedReturnType: "System.Collections.ArrayList",
+               ResultContract:
+               {
+                   Shape: PowerShellRegionTransferShape.ListSequence,
+                   ElementContract: PowerShellRegionTransferElementContract.OpaqueReference,
+                   Direction: PowerShellRegionTransferDirection.LiveOut,
+                   Ownership: PowerShellRegionTransferOwnership.CompiledCalleeFresh,
+                   OutputBehavior: PowerShellRegionTransferOutputBehavior.NoEnumerate,
+                   Mutation: PowerShellRegionTransferMutation.RetainedOnly,
+                   Supported: true
+               }
+           } &&
+           invocation.Arguments.Length == 0 &&
+           !invocation.CapturesSuccessOutput &&
+           !invocation.ReturnsModuleStateDerived;
 
     private static bool AlwaysReturns(PowerShellBoundStatement statement)
         => statement switch
@@ -263,7 +297,8 @@ internal sealed class PowerShellBoundRegionCandidate
         PowerShellCompiledRegionLocal[]? inputLocals = null,
         bool allowsPrefixOwnedInputLocals = false,
         PowerShellRegionTransferContract? terminalTransferContract = null,
-        PowerShellRegionControlFlowContract? controlFlowContract = null)
+        PowerShellRegionControlFlowContract? controlFlowContract = null,
+        PowerShellCompiledRegionLocalCall[]? localCalls = null)
     {
         RegionId = regionId;
         SourceSha256 = sourceSha256;
@@ -279,6 +314,7 @@ internal sealed class PowerShellBoundRegionCandidate
         AllowsPrefixOwnedInputLocals = allowsPrefixOwnedInputLocals;
         TerminalTransferContract = terminalTransferContract;
         ControlFlowContract = controlFlowContract;
+        LocalCalls = localCalls ?? Array.Empty<PowerShellCompiledRegionLocalCall>();
     }
 
     internal string RegionId { get; }
@@ -295,4 +331,5 @@ internal sealed class PowerShellBoundRegionCandidate
     internal bool AllowsPrefixOwnedInputLocals { get; }
     internal PowerShellRegionTransferContract? TerminalTransferContract { get; }
     internal PowerShellRegionControlFlowContract? ControlFlowContract { get; }
+    internal PowerShellImmutableArray<PowerShellCompiledRegionLocalCall> LocalCalls { get; }
 }

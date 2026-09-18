@@ -20,7 +20,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
         var unresolvedCall = EnumerateStatements(function.Body)
             .SelectMany(EnumerateDirectExpressions)
             .SelectMany(EnumerateInvocations)
-            .FirstOrDefault(invocation => !functions.ContainsKey(invocation.Target.StableKey));
+            .FirstOrDefault(invocation => invocation.ResultProjection == PowerShellLocalCallResultProjection.None &&
+                                          !functions.ContainsKey(invocation.Target.StableKey));
         if (unresolvedCall is not null)
             return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                 PowerShellExecutionDispositionKind.Fallback, "call.binding.unavailable",

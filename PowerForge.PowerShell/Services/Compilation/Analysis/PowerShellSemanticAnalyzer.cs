@@ -176,15 +176,6 @@ internal sealed partial class PowerShellSemanticAnalyzer
             .Where(static callee => callee is not null)
             .Cast<PowerShellBoundFunction>();
 
-    private static IEnumerable<(PowerShellSymbolId Target, SourceSpan Span)> EnumerateFunctionReferences(PowerShellBoundExpression root)
-    {
-        foreach (var expression in EnumerateExpressions(root))
-        {
-            if (expression is PowerShellBoundInvocationExpression call) yield return (call.Target, call.Span);
-            else if (expression is PowerShellBoundNativeScriptBlockExpression block) yield return (block.Target, block.Span);
-        }
-    }
-
     private static PowerShellBoundFunction? GetValidationCallInsideTypeDiscriminatingTry(
         PowerShellBoundFunction function,
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
@@ -222,7 +213,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
 
         PowerShellBoundFunction? FindConsumedCall(PowerShellBoundExpression expression, bool consumesValue)
         {
-            if (consumesValue && expression is PowerShellBoundInvocationExpression { CapturesSuccessOutput: false } invocation &&
+            if (consumesValue && expression is PowerShellBoundInvocationExpression
+                { CapturesSuccessOutput: false, ResultProjection: PowerShellLocalCallResultProjection.None } invocation &&
                 functions.TryGetValue(invocation.Target.StableKey, out var target) &&
                 (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
                  HasSuccessStreamOutput(target, functions)))
@@ -327,6 +319,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 .Where(static argument => argument.Value is not null)
                 .Select(static argument => argument.Value!),
             PowerShellBoundInvocationExpression invocation => invocation.Arguments,
+            PowerShellBoundClosedCollectionFactoryResultExpression factoryResult => new[] { factoryResult.Value },
             PowerShellBoundBinaryExpression binary => new[] { binary.Left, binary.Right },
             PowerShellBoundUnaryExpression unary => new[] { unary.Operand },
             PowerShellBoundTypeTestExpression typeTest => new[] { typeTest.Operand },
@@ -362,6 +355,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         => expression switch
         {
             PowerShellBoundInvocationExpression { CapturesSuccessOutput: true } invocation => invocation.Type,
+            PowerShellBoundInvocationExpression { ResultProjection: not PowerShellLocalCallResultProjection.None } invocation => invocation.Type,
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) => target.ReturnType,
             _ => expression.Type
         };
@@ -528,6 +522,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(argument))
                 yield return read;
         }
+        if (expression is PowerShellBoundClosedCollectionFactoryResultExpression factoryResult)
+            foreach (var read in EnumerateVariableReads(factoryResult.Value)) yield return read;
         if (expression is PowerShellBoundBinaryExpression binary)
         {
             foreach (var read in EnumerateVariableReads(binary.Left)) yield return read;
@@ -671,6 +667,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var nested in EnumerateInvocations(argument))
                 yield return nested;
         }
+        if (expression is PowerShellBoundClosedCollectionFactoryResultExpression factoryResult)
+            foreach (var nested in EnumerateInvocations(factoryResult.Value)) yield return nested;
         if (expression is PowerShellBoundConversionExpression conversion)
         {
             foreach (var nested in EnumerateInvocations(conversion.Operand)) yield return nested;

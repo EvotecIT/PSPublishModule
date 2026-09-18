@@ -193,6 +193,9 @@ internal sealed partial class PowerShellSemanticBinder
             statements.Add(bound);
             statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, bound));
         }
+        if (functions[function.Name].ClosedCollectionFactory is not null && bodyIsValid &&
+            !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            PowerShellClosedLocalCollectionFactoryPolicy.NormalizeBoundReturn(statements, statementBindings);
         var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
         locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
         // A fully bound body may still need its authored PowerShell header after cmdlet shaping.

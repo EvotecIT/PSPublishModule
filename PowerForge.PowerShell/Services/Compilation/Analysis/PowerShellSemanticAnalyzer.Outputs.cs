@@ -104,7 +104,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             if (expression is PowerShellBoundInvocationExpression invocation &&
                 functions.TryGetValue(invocation.Target.StableKey, out var target))
-                return target.OutputCardinality;
+                return invocation.ResultProjection == PowerShellLocalCallResultProjection.ClosedCollectionFactory
+                    ? PowerShellOutputCardinality.Scalar
+                    : target.OutputCardinality;
             return expression.Type.ClrType.IsArray ? PowerShellOutputCardinality.Collection : expression.Cardinality;
         }
     }

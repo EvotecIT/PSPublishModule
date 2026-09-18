@@ -101,6 +101,7 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
         PowerShellBoundFunction function,
         PowerShellBoundExpression expression)
         => expression.ValueState == PowerShellValueState.Null ||
+           expression is PowerShellBoundClosedCollectionFactoryResultExpression ||
            PowerShellStableScalarTypePolicy.IsSupported(expression.Type) ||
            expression is PowerShellBoundVariableExpression variable &&
            PowerShellRegionTransferTypePolicy.IsSupported(expression.Type) &&

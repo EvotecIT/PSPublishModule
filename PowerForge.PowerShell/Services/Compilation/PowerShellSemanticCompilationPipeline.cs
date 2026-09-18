@@ -71,7 +71,7 @@ internal sealed class PowerShellSemanticCompilationPipeline
         }
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
-        var regions = CompileRegions(binding.RegionCandidates, bound.Documents, capabilities, bound.SemanticHostFamily);
+        var regions = CompileRegions(binding.RegionCandidates, analyzed, capabilities, bound.SemanticHostFamily);
         var regionOpportunities = new PowerShellBoundRegionOpportunityAnalyzer(_optimizer, _analyzer, _lowerer).Analyze(
             binding.RegionOpportunities,
             bound,
@@ -97,6 +97,7 @@ internal sealed class PowerShellSemanticCompilationPipeline
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
             .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions).OfType<PowerShellBoundInvocationExpression>())
         {
+            if (call.ResultProjection != PowerShellLocalCallResultProjection.None) continue;
             if (!functions.TryGetValue(call.Target.StableKey, out var target) || target.NativeFunctionBinding is not null ||
                 target.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown) continue;
             // The call's value contract is independent of the generated method's CLR return.
@@ -122,22 +123,39 @@ internal sealed class PowerShellSemanticCompilationPipeline
 
     private PowerShellRegionCompilationResult CompileRegions(
         IReadOnlyList<PowerShellBoundRegionCandidate> candidates,
-        IReadOnlyList<PowerShellBoundSourceDocument> documents,
+        PowerShellBoundProgram callableProgram,
         PowerShellCompilationCapability capabilities,
         PowerShellCompilationSemanticHostFamily semanticHostFamily)
     {
         if (candidates.Count == 0) return PowerShellRegionCompilationResult.Empty;
+        var callable = callableProgram.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var eligible = new List<PowerShellBoundRegionCandidate>();
+        var decisions = new Dictionary<string, PowerShellRegionCandidateDecision>(StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+        {
+            if (!HasResolvedClosedRegionCalls(candidate, callable))
+            {
+                decisions[candidate.RegionId] = new PowerShellRegionCandidateDecision(
+                    candidate,
+                    new PowerShellTypedRegionPromotionDecision(false, "region.local-call-closure",
+                        "The candidate local-call closure is missing, recursive, unresolved, or outside its closed result contract."),
+                    emission: null);
+                continue;
+            }
+            eligible.Add(candidate);
+        }
+        if (eligible.Count == 0)
+            return new PowerShellRegionCompilationResult(Array.Empty<PowerShellPromotedRegionEmission>(), decisions.Values.ToArray());
         var candidateProgram = new PowerShellBoundProgram(
-            documents.ToArray(),
-            candidates.Select(static candidate => candidate.RegionFunction).ToArray(),
+            callableProgram.Documents.ToArray(),
+            eligible.Select(static candidate => candidate.RegionFunction).ToArray(),
             Array.Empty<PowerShellSemanticDiagnostic>(), targetCapabilities: capabilities, semanticHostFamily: semanticHostFamily);
         var optimized = _optimizer.Optimize(candidateProgram);
         var analyzed = _analyzer.Analyze(optimized.Program);
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
-        var byKey = candidates.ToDictionary(static candidate => candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal);
+        var byKey = eligible.ToDictionary(static candidate => candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal);
         var analyzedByKey = analyzed.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
-        var decisions = new Dictionary<string, PowerShellRegionCandidateDecision>(StringComparer.Ordinal);
         var promoted = new List<PowerShellPromotedRegionEmission>();
         for (var index = 0; index < lowered.Functions.Length && index < emitted.Methods.Length; index++)
         {
@@ -170,6 +188,38 @@ internal sealed class PowerShellSemanticCompilationPipeline
         return new PowerShellRegionCompilationResult(
             promoted.OrderBy(static region => region.Candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
             decisions.Values.OrderBy(static decision => decision.Candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal).ToArray());
+    }
+
+    private static bool HasResolvedClosedRegionCalls(
+        PowerShellBoundRegionCandidate candidate,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> callable)
+    {
+        var calls = PowerShellSemanticAnalyzer.EnumerateStatements(candidate.RegionFunction.Body)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundInvocationExpression>()
+            .ToArray();
+        if (calls.Select(static call => call.Target.StableKey).Distinct(StringComparer.Ordinal).Count() != candidate.LocalCalls.Count ||
+            calls.Any(call =>
+                call.ResultProjection != PowerShellLocalCallResultProjection.ClosedCollectionFactory ||
+                call.ClosedCollectionFactory is null ||
+                call.Arguments.Length != 0 ||
+                !callable.TryGetValue(call.Target.StableKey, out var target) ||
+                target.Parameters.Count != 0 ||
+                !target.Symbol.Name.Equals(call.ClosedCollectionFactory.SourceName, StringComparison.OrdinalIgnoreCase) ||
+                PowerShellSemanticAnalyzer.EnumerateStatements(target.Body)
+                    .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+                    .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+                    .OfType<PowerShellBoundInvocationExpression>()
+                    .Any()))
+            return false;
+
+        var evidenceNames = candidate.LocalCalls.Select(static call => call.SourceName)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase);
+        var resolvedNames = calls.Select(static call => call.ClosedCollectionFactory!.SourceName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase);
+        return evidenceNames.SequenceEqual(resolvedNames, StringComparer.OrdinalIgnoreCase);
     }
 }
 

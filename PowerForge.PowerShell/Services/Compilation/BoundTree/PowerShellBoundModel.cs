@@ -334,6 +334,12 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
     internal bool UseNativeCustomObjectConversion { get; }
 }
 
+internal enum PowerShellLocalCallResultProjection
+{
+    None,
+    ClosedCollectionFactory
+}
+
 internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpression
 {
     internal PowerShellBoundInvocationExpression(
@@ -344,7 +350,9 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
         int[]? authoredEvaluationOrder = null,
         string[]? boundParameterNames = null,
         bool returnsModuleStateDerived = false,
-        bool capturesSuccessOutput = false)
+        bool capturesSuccessOutput = false,
+        PowerShellLocalCallResultProjection resultProjection = PowerShellLocalCallResultProjection.None,
+        PowerShellCompiledRegionLocalCall? closedCollectionFactory = null)
         : base(
             span,
             returnType,
@@ -359,6 +367,8 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
         BoundParameterNames = boundParameterNames ?? Array.Empty<string>();
         ReturnsModuleStateDerived = returnsModuleStateDerived;
         CapturesSuccessOutput = capturesSuccessOutput;
+        ResultProjection = resultProjection;
+        ClosedCollectionFactory = closedCollectionFactory;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -367,6 +377,20 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
     internal PowerShellImmutableArray<string> BoundParameterNames { get; }
     internal bool ReturnsModuleStateDerived { get; }
     internal bool CapturesSuccessOutput { get; }
+    internal PowerShellLocalCallResultProjection ResultProjection { get; }
+    internal PowerShellCompiledRegionLocalCall? ClosedCollectionFactory { get; }
+}
+
+/// <summary>One proved non-enumerated record returned by a closed local collection factory.</summary>
+internal sealed class PowerShellBoundClosedCollectionFactoryResultExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundClosedCollectionFactoryResultExpression(PowerShellBoundVariableExpression value)
+        : base(value.Span, value.Type, value.ValueState, value.Effects, value.Capabilities)
+    {
+        Value = value;
+    }
+
+    internal PowerShellBoundVariableExpression Value { get; }
 }
 
 internal class PowerShellBoundReturnStatement : PowerShellBoundStatement

@@ -61,7 +61,9 @@ public enum PowerShellRegionTransferOwnership
     /// <summary>A guarded typed prefix created fresh invocation-local storage.</summary>
     GuardedFresh,
     /// <summary>An earlier promoted region established the same invocation-local storage.</summary>
-    EarlierRegion
+    EarlierRegion,
+    /// <summary>A closed compiled callee created fresh storage for this invocation.</summary>
+    CompiledCalleeFresh
 }
 
 /// <summary>Observable PowerShell success-output behavior of a transferred value.</summary>
@@ -138,7 +140,7 @@ public sealed class PowerShellRegionTransferContract
     }
 
     /// <summary>Contract schema version.</summary>
-    public int SchemaVersion => 4;
+    public int SchemaVersion => 5;
     /// <summary>CLR storage shape.</summary>
     public PowerShellRegionTransferShape Shape { get; }
     /// <summary>Element-level contract.</summary>

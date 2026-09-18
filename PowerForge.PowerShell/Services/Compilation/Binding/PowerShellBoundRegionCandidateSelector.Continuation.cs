@@ -195,7 +195,8 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 break;
             var expressions = nested.SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                 .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions).ToArray();
-            if (expressions.Any(static expression => expression is PowerShellBoundInvocationExpression) ||
+            if (expressions.OfType<PowerShellBoundInvocationExpression>()
+                    .Any(static invocation => !IsClosedCollectionFactoryInvocation(invocation)) ||
                 expressions.OfType<PowerShellBoundVariableExpression>().Any(read =>
                     read.Symbol.Kind == PowerShellSymbolKind.Local &&
                     !candidateLocals.Any(local => local.Symbol.StableKey == read.Symbol.StableKey &&

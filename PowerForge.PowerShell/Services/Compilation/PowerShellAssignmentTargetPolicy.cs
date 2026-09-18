@@ -30,6 +30,37 @@ internal static class PowerShellAssignmentTargetPolicy
         "true"
     };
 
+    private static readonly HashSet<string> RuntimeOwnedAutomaticVariables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "^",
+        "$",
+        "_",
+        "args",
+        "Error",
+        "Event",
+        "EventArgs",
+        "EventSubscriber",
+        "foreach",
+        "input",
+        "LASTEXITCODE",
+        "Matches",
+        "MyInvocation",
+        "NestedPromptLevel",
+        "null",
+        "PROFILE",
+        "PSBoundParameters",
+        "PSCmdlet",
+        "PSCommandPath",
+        "PSDebugContext",
+        "PSItem",
+        "PSScriptRoot",
+        "PSSenderInfo",
+        "PWD",
+        "StackTrace",
+        "switch",
+        "this"
+    };
+
     /// <summary>Returns the directly assigned local variable, including an explicit typed declaration.</summary>
     internal static VariableExpressionAst? FindDirectVariable(ExpressionAst left, bool nativeAttributes = false)
     {
@@ -51,6 +82,13 @@ internal static class PowerShellAssignmentTargetPolicy
     /// <summary>Returns whether the name is a non-shadowable PowerShell read-only or constant automatic variable.</summary>
     internal static bool IsReadOnlyAutomaticVariable(string name)
         => ReadOnlyAutomaticVariables.Contains(GetUnscopedVariableName(name));
+
+    /// <summary>Returns whether the name is owned by the PowerShell runtime rather than ordinary local storage.</summary>
+    internal static bool IsAutomaticVariable(string name)
+    {
+        var unscoped = GetUnscopedVariableName(name);
+        return ReadOnlyAutomaticVariables.Contains(unscoped) || RuntimeOwnedAutomaticVariables.Contains(unscoped);
+    }
 
     /// <summary>Removes PowerShell scope qualifiers without changing provider-drive variable names.</summary>
     internal static string GetUnscopedVariableName(string name)

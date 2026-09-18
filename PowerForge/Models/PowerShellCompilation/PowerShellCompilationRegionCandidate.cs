@@ -118,7 +118,8 @@ public sealed class PowerShellCompilationRegionCandidate
         bool requiresLocalOwnershipGuard,
         IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals,
         PowerShellRegionTransferContract? terminalTransferContract,
-        PowerShellRegionControlFlowContract? controlFlowContract)
+        PowerShellRegionControlFlowContract? controlFlowContract,
+        IReadOnlyList<PowerShellCompiledRegionLocalCall>? localCalls = null)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -142,6 +143,7 @@ public sealed class PowerShellCompilationRegionCandidate
         RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
         TerminalTransferContract = terminalTransferContract;
         ControlFlowContract = controlFlowContract;
+        LocalCalls = Array.AsReadOnly((localCalls ?? Array.Empty<PowerShellCompiledRegionLocalCall>()).ToArray());
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -191,4 +193,6 @@ public sealed class PowerShellCompilationRegionCandidate
     public PowerShellRegionTransferContract? TerminalTransferContract { get; }
     /// <summary>Return-or-fallthrough behavior, or null for ordinary transfer regions.</summary>
     public PowerShellRegionControlFlowContract? ControlFlowContract { get; }
+    /// <summary>Closed local-call results required by this candidate.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocalCall> LocalCalls { get; }
 }

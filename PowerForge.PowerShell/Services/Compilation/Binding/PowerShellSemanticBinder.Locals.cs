@@ -162,6 +162,13 @@ internal sealed partial class PowerShellSemanticBinder
             memberName.Equals("new", StringComparison.OrdinalIgnoreCase) &&
             constructedType.TypeName.GetReflectionType() is { } constructorType)
             return new PowerShellTypeFact(constructorType, PowerShellTypeFactProvenance.Inferred, "The assignment invokes one statically named CLR constructor.");
+        if (expression is CommandAst localCall && localCall.GetCommandName() is { } localName &&
+            functions.TryGetValue(localName, out var localSignature) &&
+            localSignature.ClosedCollectionFactory is not null)
+            return new PowerShellTypeFact(
+                typeof(System.Collections.ArrayList),
+                PowerShellTypeFactProvenance.CommandContract,
+                "The closed local collection factory returns one exact fresh ArrayList record.");
         if (expression is CommandAst runtimeStateCommand &&
             PowerShellRuntimeStateCommandSemanticBinder.TryGetResultType(
                 runtimeStateCommand,

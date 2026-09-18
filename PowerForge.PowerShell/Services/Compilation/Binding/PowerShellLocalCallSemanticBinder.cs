@@ -25,6 +25,7 @@ internal sealed class PowerShellLocalCallSignature
         PowerShellCompilationCommandBinding commandBinding,
         Type? declaredReturnType,
         PowerShellBoundHelpMetadata? help,
+        PowerShellCompiledRegionLocalCall? closedCollectionFactory = null,
         int pipelineLifecycleParameterIndex = -1,
         bool pipelineLifecycleRequiresNonNullInput = false)
     {
@@ -34,6 +35,7 @@ internal sealed class PowerShellLocalCallSignature
         CommandBinding = commandBinding;
         DeclaredReturnType = declaredReturnType;
         Help = help;
+        ClosedCollectionFactory = closedCollectionFactory;
         PipelineLifecycleParameterIndex = pipelineLifecycleParameterIndex;
         PipelineLifecycleRequiresNonNullInput = pipelineLifecycleRequiresNonNullInput;
     }
@@ -44,6 +46,7 @@ internal sealed class PowerShellLocalCallSignature
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredReturnType { get; private set; }
     internal PowerShellBoundHelpMetadata? Help { get; }
+    internal PowerShellCompiledRegionLocalCall? ClosedCollectionFactory { get; }
     internal int PipelineLifecycleParameterIndex { get; }
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
     internal bool PipelineLifecycleReturnsCollection { get; private set; }
@@ -105,7 +108,10 @@ internal static class PowerShellLocalCallSemanticBinder
             out var outputTypeContract,
             out _,
             out _);
-        var declaredReturnType = outputTypeContract.SemanticType;
+        PowerShellClosedLocalCollectionFactoryPolicy.TryCreate(function, symbol, parameters, out var closedCollectionFactory);
+        var declaredReturnType = closedCollectionFactory is null
+            ? outputTypeContract.SemanticType
+            : typeof(System.Collections.ArrayList);
         if (declaredReturnType == typeof(void)) declaredReturnType = null;
         declaredReturnType ??= InferReturnType(function, parameters);
         var pipelineLifecycleParameterIndex = PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(
@@ -124,6 +130,7 @@ internal static class PowerShellLocalCallSemanticBinder
             PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             declaredReturnType,
             PowerShellCommentHelpBinder.Bind(function, symbol),
+            closedCollectionFactory,
             pipelineLifecycleParameterIndex,
             pipelineLifecycleParameterIndex >= 0 && PowerShellRuntimeFreePipelineLifecyclePolicy.RequiresNonNullCollection(
                 parameters[pipelineLifecycleParameterIndex].Type, capabilities));
@@ -383,7 +390,9 @@ internal static class PowerShellLocalCallSemanticBinder
                 return Reject(diagnostics, "PSB2809", $"Mandatory local function parameter '-{parameter.Contract.Name}' was not supplied.", span);
             arguments[index] = DefaultValue(span, parameter.Type);
         }
-        var invocationReturnType = signature.DeclaredReturnType is not null && signature.PipelineLifecycleReturnsCollection
+        var invocationReturnType = signature.ClosedCollectionFactory is not null
+            ? typeof(System.Collections.ArrayList)
+            : signature.DeclaredReturnType is not null && signature.PipelineLifecycleReturnsCollection
             ? signature.DeclaredReturnType.MakeArrayType()
             : signature.DeclaredReturnType;
         var returnType = signature.AnalyzedReturnType ?? (invocationReturnType is null
@@ -403,7 +412,11 @@ internal static class PowerShellLocalCallSemanticBinder
             authoredOrder.ToArray(),
             bound.Keys.Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray(),
             signature.ReturnsModuleStateDerived,
-            capturesSuccessOutput);
+            capturesSuccessOutput,
+            signature.ClosedCollectionFactory is null
+                ? PowerShellLocalCallResultProjection.None
+                : PowerShellLocalCallResultProjection.ClosedCollectionFactory,
+            signature.ClosedCollectionFactory);
     }
 
     private static int[] GetPositionalParameters(PowerShellLocalCallSignature signature)
