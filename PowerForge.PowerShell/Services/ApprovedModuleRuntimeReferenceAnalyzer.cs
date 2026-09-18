@@ -73,7 +73,17 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
             if (!IsImportModuleCommand(command))
                 continue;
 
-            foreach (var target in GetImportModuleTargetExpressions(command))
+            var targets = GetImportModuleTargetExpressions(command).ToArray();
+            if (targets.Length == 0)
+            {
+                // Import-Module can receive its name from pipeline input. With no target in the
+                // command AST, the runtime module cannot be proven and every approved donor must
+                // remain available to the generated module.
+                blocked.UnionWith(approvedModuleSources.Keys);
+                continue;
+            }
+
+            foreach (var target in targets)
             {
                 foreach (var importedModule in GetStaticModuleNames(target))
                 {
@@ -98,15 +108,37 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                  .Where(static typeName => typeName is not null)
                  .Cast<ITypeName>())
         {
-            foreach (var source in approvedModuleSources.Values)
+            foreach (var candidateType in EnumerateTypeNames(typeName))
             {
-                if (TypeBelongsToApprovedModule(typeName, source) ||
-                    (typeOwnershipResolver?.Invoke(source, typeName.FullName ?? string.Empty) ?? false))
-                    blocked.Add(source.Name);
+                foreach (var source in approvedModuleSources.Values)
+                {
+                    if (TypeBelongsToApprovedModule(candidateType, source) ||
+                        (typeOwnershipResolver?.Invoke(source, candidateType.FullName ?? string.Empty) ?? false))
+                    {
+                        blocked.Add(source.Name);
+                    }
+                }
             }
         }
 
         return blocked.ToArray();
+    }
+
+    private static IEnumerable<ITypeName> EnumerateTypeNames(ITypeName typeName)
+    {
+        yield return typeName;
+
+        if (typeName is GenericTypeName generic)
+        {
+            foreach (var argument in generic.GenericArguments)
+            foreach (var nested in EnumerateTypeNames(argument))
+                yield return nested;
+        }
+        else if (typeName is ArrayTypeName array)
+        {
+            foreach (var nested in EnumerateTypeNames(array.ElementType))
+                yield return nested;
+        }
     }
 
     private static string? GetUsingModuleName(UsingStatementAst statement)

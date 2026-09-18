@@ -695,6 +695,43 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
         }
     }
 
+    [Fact]
+    public void Analyze_RetainsBinaryDonorForTypeNestedInGenericArgument()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.GenericBinaryTypeDonor";
+            const string assemblyName = "Contoso.Generic.Types";
+            const string typeName = "ContosoGenericWidget";
+            var modulePath = Path.Combine(root.FullName, moduleName, "1.0.0");
+            Directory.CreateDirectory(modulePath);
+            var assemblyPath = BuildTypeFixture(root.FullName, assemblyName, typeName);
+            File.Copy(assemblyPath, Path.Combine(modulePath, assemblyName + ".dll"));
+            File.WriteAllText(
+                Path.Combine(modulePath, moduleName + ".psm1"),
+                $"Add-Type -Path (Join-Path $PSScriptRoot '{assemblyName}.dll')\nfunction Get-PowerForgeBoundThing {{ 'generic-binary-type' }}\n");
+            File.WriteAllText(
+                Path.Combine(modulePath, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-PowerForgeBoundThing') }}\n");
+
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(
+                filePath: null,
+                code: $"param([System.Collections.Generic.List[{typeName}]]$Value)\nGet-PowerForgeBoundThing",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "1.0.0", modulePath) },
+                    requireApprovedModuleSources: true));
+
+            Assert.NotEmpty(result.Functions);
+            Assert.Empty(result.FullyInlinedApprovedModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData("Import-Module {0} -ErrorAction Stop")]
     [InlineData("Import-Module -Force {0} -ErrorAction Stop")]
@@ -763,6 +800,7 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
     [InlineData("$name = '{0}'\nImport-Module 'Unrelated.Static.Module', $name")]
     [InlineData("$name = '{0}'\nipmo $name")]
     [InlineData("$params = @{{ Name = '{0}' }}\nImport-Module @params")]
+    [InlineData("'{0}' | Import-Module")]
     public void Analyze_RetainsDonorWhenImportModuleTargetIsDynamic(string importTemplate)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -789,14 +827,17 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
         }
     }
 
-    private static string BuildTypeFixture(string root)
+    private static string BuildTypeFixture(
+        string root,
+        string assemblyName = "Contoso.Types",
+        string typeName = "ContosoWidget")
     {
-        var projectRoot = Path.Combine(root, "Contoso.Types.Source");
+        var projectRoot = Path.Combine(root, assemblyName + ".Source");
         Directory.CreateDirectory(projectRoot);
         File.WriteAllText(
             Path.Combine(projectRoot, "Contoso.Types.csproj"),
-            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyName>Contoso.Types</AssemblyName></PropertyGroup></Project>");
-        File.WriteAllText(Path.Combine(projectRoot, "ContosoWidget.cs"), "public sealed class ContosoWidget { }");
+            $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyName>{assemblyName}</AssemblyName></PropertyGroup></Project>");
+        File.WriteAllText(Path.Combine(projectRoot, typeName + ".cs"), $"public sealed class {typeName} {{ }}");
         var start = new ProcessStartInfo("dotnet", "build -c Release --nologo")
         {
             WorkingDirectory = projectRoot,
@@ -810,7 +851,7 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
         var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
         Assert.True(process.ExitCode == 0, stdout + Environment.NewLine + stderr);
-        return Path.Combine(projectRoot, "bin", "Release", "net8.0", "Contoso.Types.dll");
+        return Path.Combine(projectRoot, "bin", "Release", "net8.0", assemblyName + ".dll");
     }
 
     private static string WriteModuleBody(
