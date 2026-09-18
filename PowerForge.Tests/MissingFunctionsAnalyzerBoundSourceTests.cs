@@ -296,6 +296,39 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
     }
 
     [Fact]
+    public void Analyze_UsesPrivateBoundDonorAfterAmbientResolutionFails()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.PrivateHelperDonor";
+            var modulePath = WriteModuleBody(
+                root.FullName,
+                moduleName,
+                "2.0.0",
+                "function Get-PowerForgePrivateHelper { 'private-helper' }\n" +
+                "function Get-PowerForgeExportedThing { 'exported' }",
+                functionsToExport: new[] { "Get-PowerForgeExportedThing" });
+            var service = new PowerShellMissingFunctionAnalysisService();
+
+            var result = service.Analyze(
+                filePath: null,
+                code: "Get-PowerForgePrivateHelper",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "2.0.0", modulePath) },
+                    requireApprovedModuleSources: true));
+
+            Assert.Contains(result.Functions, function => function.Contains("private-helper", StringComparison.Ordinal));
+            Assert.Equal(new[] { moduleName }, result.FullyInlinedApprovedModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Analyze_UsesApprovedSourceOrderWhenDonorsExportTheSameCommand()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -587,6 +620,39 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
 
             Assert.Contains(result.Functions, function => function.Contains("Get-PowerForgeDependencyValue", StringComparison.Ordinal));
             Assert.Equal(originalModulePath, Environment.GetEnvironmentVariable("PSModulePath"));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Analyze_AcceptsImportedDonorThatHandledAnOptionalDependencyFailure()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.OptionalDependencyDonor";
+            var modulePath = WriteModuleBody(
+                root.FullName,
+                moduleName,
+                "1.0.0",
+                "try { Import-Module PowerForge.OptionalDependency.ThatDoesNotExist -ErrorAction Stop } catch { }\n" +
+                "function Get-PowerForgeBoundThing { 'optional-dependency-handled' }");
+
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(
+                filePath: null,
+                code: "Get-PowerForgeBoundThing",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "1.0.0", modulePath) },
+                    requireApprovedModuleSources: true));
+
+            Assert.Contains(
+                result.Functions,
+                function => function.Contains("optional-dependency-handled", StringComparison.Ordinal));
+            Assert.Equal(new[] { moduleName }, result.FullyInlinedApprovedModules);
         }
         finally
         {

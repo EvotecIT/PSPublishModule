@@ -504,6 +504,43 @@ public sealed class MissingFunctionsAnalyzer
             if (approvedModules.Count == 0)
                 return resolution;
 
+            if (qualifier is null)
+            {
+                foreach (var source in EnumerateApprovedModuleSources(
+                             approvedModuleSourceOrder,
+                             preferredApprovedModuleSource))
+                {
+                    if (!approvedModules.Contains(source.Name))
+                        continue;
+
+                    try
+                    {
+                        // Private donor helpers are eligible only after exported-donor and ambient
+                        // command resolution failed. Iterate the selected source order so this
+                        // fallback remains deterministic when more than one donor defines a helper.
+                        var privateCommand = GetCommandFromModuleScopeCached(source, lookupName, includePrivate: true);
+                        if (privateCommand is null)
+                            continue;
+
+                        return CreateResolution(
+                            privateCommand,
+                            isAlias: privateCommand is AliasInfo,
+                            isPrivate: true);
+                    }
+                    catch (Exception moduleScopeException)
+                    {
+                        resolution = new MissingFunctionCommand(
+                            name: name,
+                            source: source.Name,
+                            commandType: string.Empty,
+                            isAlias: isAlias,
+                            isPrivate: true,
+                            error: moduleScopeException.Message,
+                            scriptBlock: null);
+                    }
+                }
+            }
+
             foreach (var modName in approvedModules)
             {
                 if (approvedModuleSources.ContainsKey(modName))
@@ -524,9 +561,7 @@ public sealed class MissingFunctionsAnalyzer
 
                 try
                 {
-                    var source = approvedModuleSources.TryGetValue(modName, out var selectedSource)
-                        ? selectedSource
-                        : new ApprovedModuleSource(modName, version: null, moduleBasePath: string.Empty);
+                    var source = new ApprovedModuleSource(modName, version: null, moduleBasePath: string.Empty);
                     // Approved donors may intentionally contribute unexported helpers to the merged
                     // consumer, but only after normal ambient/exported resolution has failed. This
                     // preserves the merge contract without letting a donor-private command shadow a
@@ -788,7 +823,11 @@ try {
                 .Select(static result => result.BaseObject)
                 .OfType<PSModuleInfo>()
                 .LastOrDefault();
-            if (ps.HadErrors || imported is null)
+            // PowerShell.HadErrors is sticky across nested pipelines, including failures that
+            // a module deliberately catches for optional dependencies. Treat the import as
+            // failed only when the outer Import-Module pipeline emitted an error or did not
+            // return a module; otherwise healthy donors such as ADEssentials are discarded.
+            if (ps.Streams.Error.Count > 0 || imported is null)
                 throw new InvalidOperationException($"Approved module '{source.Name}' could not be imported from '{moduleReference}'.");
             if (!string.Equals(imported.Name, source.Name, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Imported module '{imported.Name}' does not match expected module '{source.Name}'.");
