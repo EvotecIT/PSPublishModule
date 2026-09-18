@@ -91,20 +91,31 @@ public sealed partial class ModulePipelineRunner
         results.AddRange(ValidateInstalledOnlyDependencies(installedOnly, dependencySources));
 
         var installable = deps
-            .Where(dependency => ResolveDependencySource(dependencySources, dependency)?.VersionSource != ModuleDependencyVersionSource.Installed)
+            .Select(dependency => new
+            {
+                Dependency = dependency,
+                Source = ResolveDependencySource(dependencySources, dependency)
+            })
+            .Where(item => item.Source?.VersionSource != ModuleDependencyVersionSource.Installed)
+            .Select(item => new
+            {
+                item.Dependency,
+                item.Source,
+                InstallRequest = CreateRepositoryDependencyInstallRequest(item.Dependency, item.Source)
+            })
             .ToArray();
         if (installable.Length == 0)
             return results.ToArray();
 
-        _logger.Info($"Installing missing modules ({installable.Length}): {string.Join(", ", installable.Select(d => d.Name))}");
+        _logger.Info($"Installing missing modules ({installable.Length}): {string.Join(", ", installable.Select(item => item.Dependency.Name))}");
 
-        if (RequiredModuleInstallNeedsRepositoryTool(plan, installable))
+        if (RequiredModuleInstallNeedsRepositoryTool(plan, installable.Select(item => item.InstallRequest).ToArray()))
             results.AddRange(EnsureRepositoryToolDependencyInstalledForAuto(plan));
 
         var installGroups = installable
-            .GroupBy(dependency =>
+            .GroupBy(item =>
             {
-                var source = ResolveDependencySource(dependencySources, dependency);
+                var source = item.Source;
                 var sourceKind = source?.VersionSource ?? ModuleDependencyVersionSource.Auto;
                 var sourceRepository = sourceKind == ModuleDependencyVersionSource.PSGallery
                     ? "PSGallery"
@@ -118,7 +129,7 @@ public sealed partial class ModulePipelineRunner
         foreach (var group in installGroups)
         {
             results.AddRange(_hostedOperations.EnsureDependenciesInstalled(
-                dependencies: group.ToArray(),
+                dependencies: group.Select(item => item.InstallRequest).ToArray(),
                 force: plan.InstallMissingModulesForce,
                 repository: group.Key.Repository,
                 credential: group.Key.Credential,
@@ -130,7 +141,9 @@ public sealed partial class ModulePipelineRunner
         if (failures.Length > 0)
             throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
 
-        ValidateRepositoryDependencyGuids(installable, dependencySources, plan.ModuleSkip);
+        ValidateRepositoryDependencyGuids(
+            installable.Select(item => (item.Dependency, item.InstallRequest, item.Source)).ToArray(),
+            plan.ModuleSkip);
 
         if (results.Count > 0)
         {
@@ -144,10 +157,32 @@ public sealed partial class ModulePipelineRunner
         return results.ToArray();
     }
 
+    private static ModuleDependency CreateRepositoryDependencyInstallRequest(
+        ModuleDependency dependency,
+        ModuleDependencySourceResolution? source)
+    {
+        if (source is null ||
+            (string.IsNullOrWhiteSpace(source.ResolvedVersion) &&
+             string.IsNullOrWhiteSpace(source.ResolvedMinimumVersion)))
+        {
+            return dependency;
+        }
+
+        return new ModuleDependency(
+            dependency.Name,
+            requiredVersion: source.ResolvedVersion,
+            minimumVersion: source.ResolvedVersion is null ? source.ResolvedMinimumVersion : null,
+            maximumVersion: null,
+            installScope: dependency.InstallScope,
+            minimumVersionInclusive: dependency.MinimumVersionInclusive,
+            maximumVersionInclusive: dependency.MaximumVersionInclusive);
+    }
+
     private static void ValidateDependencySourcePolicyConflicts(
         IReadOnlyList<ModuleDependencySourceResolution> sources)
     {
-        var conflicts = (sources ?? Array.Empty<ModuleDependencySourceResolution>())
+        var sourceList = sources ?? Array.Empty<ModuleDependencySourceResolution>();
+        var policyConflicts = sourceList
             .GroupBy(
                 static source => $"{source.Name}|{source.RequiredVersion}|{source.MinimumVersion}",
                 StringComparer.OrdinalIgnoreCase)
@@ -157,6 +192,9 @@ public sealed partial class ModulePipelineRunner
                 .Skip(1)
                 .Any())
             .Select(static group => group.First().Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var conflicts = policyConflicts
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -169,12 +207,10 @@ public sealed partial class ModulePipelineRunner
     }
 
     private void ValidateRepositoryDependencyGuids(
-        IReadOnlyList<ModuleDependency> dependencies,
-        IReadOnlyList<ModuleDependencySourceResolution> sources,
+        IReadOnlyList<(ModuleDependency Dependency, ModuleDependency InstallRequest, ModuleDependencySourceResolution? Source)> dependencies,
         ModuleSkipConfiguration? skipModules)
     {
-        var constrained = (dependencies ?? Array.Empty<ModuleDependency>())
-            .Select(dependency => (Dependency: dependency, Source: ResolveDependencySource(sources, dependency)))
+        var constrained = (dependencies ?? Array.Empty<(ModuleDependency Dependency, ModuleDependency InstallRequest, ModuleDependencySourceResolution? Source)>())
             .Where(item => item.Source is not null &&
                            item.Source.VersionSource != ModuleDependencyVersionSource.Installed &&
                            !string.IsNullOrWhiteSpace(item.Source.Guid) &&
@@ -189,9 +225,9 @@ public sealed partial class ModulePipelineRunner
         {
             var reference = new RequiredModuleReference(
                 item.Dependency.Name,
-                item.Dependency.MinimumVersion,
-                item.Dependency.RequiredVersion,
-                item.Dependency.MaximumVersion,
+                item.InstallRequest.MinimumVersion,
+                item.InstallRequest.RequiredVersion,
+                item.InstallRequest.MaximumVersion,
                 item.Source!.Guid);
             IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
                 _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
@@ -245,12 +281,24 @@ public sealed partial class ModulePipelineRunner
         foreach (var dependency in dependencies)
         {
             var source = ResolveDependencySource(sources, dependency);
-            RequiredModuleReference reference = new RequiredModuleReference(
-                dependency.Name,
-                dependency.MinimumVersion,
-                dependency.RequiredVersion,
-                dependency.MaximumVersion,
-                source?.Guid);
+            RequiredModuleReference reference = source is not null &&
+                                                (!string.IsNullOrWhiteSpace(source.ResolvedVersion) ||
+                                                 !string.IsNullOrWhiteSpace(source.ResolvedMinimumVersion))
+                ? new ResolvedRequiredModuleReference(
+                    dependency.Name,
+                    dependency.MinimumVersion,
+                    dependency.RequiredVersion,
+                    dependency.MaximumVersion,
+                    source.Guid,
+                    source.ResolvedVersion,
+                    source.ResolvedMinimumVersion,
+                    source.MatchPrereleaseByBaseVersion)
+                : new RequiredModuleReference(
+                    dependency.Name,
+                    dependency.MinimumVersion,
+                    dependency.RequiredVersion,
+                    dependency.MaximumVersion,
+                    source?.Guid);
             if (source?.MatchPrereleaseByBaseVersion == true)
                 reference = new ModuleInstalledReference(reference, matchPrereleaseByBaseVersion: true);
             IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
@@ -314,6 +362,9 @@ public sealed partial class ModulePipelineRunner
         private readonly string _repository;
         private readonly RepositoryCredential? _credential;
         private readonly string _guid;
+        private readonly bool _matchPrereleaseByBaseVersion;
+        private readonly string _resolvedVersion;
+        private readonly string _resolvedMinimumVersion;
 
         internal DependencySourcePolicy(ModuleDependencySourceResolution source)
         {
@@ -321,19 +372,36 @@ public sealed partial class ModulePipelineRunner
             _repository = source.Repository ?? string.Empty;
             _credential = source.Credential;
             _guid = source.Guid ?? string.Empty;
+            _matchPrereleaseByBaseVersion = source.MatchPrereleaseByBaseVersion;
+            _resolvedVersion = source.ResolvedVersion ?? string.Empty;
+            _resolvedMinimumVersion = source.ResolvedMinimumVersion ?? string.Empty;
         }
 
         public bool Equals(DependencySourcePolicy other)
             => _versionSource == other._versionSource &&
                string.Equals(_repository, other._repository, StringComparison.OrdinalIgnoreCase) &&
                ReferenceEquals(_credential, other._credential) &&
-               string.Equals(_guid, other._guid, StringComparison.OrdinalIgnoreCase);
+               string.Equals(_guid, other._guid, StringComparison.OrdinalIgnoreCase) &&
+               _matchPrereleaseByBaseVersion == other._matchPrereleaseByBaseVersion &&
+               string.Equals(_resolvedVersion, other._resolvedVersion, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(_resolvedMinimumVersion, other._resolvedMinimumVersion, StringComparison.OrdinalIgnoreCase);
 
         public override bool Equals(object? obj) => obj is DependencySourcePolicy other && Equals(other);
 
         public override int GetHashCode()
-            => (((int)_versionSource * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(_repository)) * 397 ^
-               (_credential?.GetHashCode() ?? 0) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(_guid);
+        {
+            unchecked
+            {
+                var hash = (int)_versionSource;
+                hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(_repository);
+                hash = (hash * 397) ^ (_credential?.GetHashCode() ?? 0);
+                hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(_guid);
+                hash = (hash * 397) ^ _matchPrereleaseByBaseVersion.GetHashCode();
+                hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(_resolvedVersion);
+                hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(_resolvedMinimumVersion);
+                return hash;
+            }
+        }
     }
 
     private static bool HasEquivalentDependencyInstallRequest(
@@ -1014,7 +1082,17 @@ public sealed partial class ModulePipelineRunner
             return false;
         }
 
-        var versionRange = RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(reference);
+        var resolvedVersion = reference is ResolvedRequiredModuleReference resolvedReference
+            ? resolvedReference.ResolvedVersion
+            : reference is ModuleInstalledReference installedReference ? installedReference.ResolvedVersion : null;
+        var resolvedMinimumVersion = reference is ResolvedRequiredModuleReference resolvedMinimumReference
+            ? resolvedMinimumReference.ResolvedMinimumVersion
+            : reference is ModuleInstalledReference installedMinimumReference ? installedMinimumReference.ResolvedMinimumVersion : null;
+        var versionRange = !string.IsNullOrWhiteSpace(resolvedVersion)
+            ? $"[{resolvedVersion}]"
+            : !string.IsNullOrWhiteSpace(resolvedMinimumVersion)
+                ? $"[{resolvedMinimumVersion},)"
+                : RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(reference);
         if (string.IsNullOrWhiteSpace(versionRange))
             return true;
         if (string.IsNullOrWhiteSpace(metadata.Version))
@@ -1022,8 +1100,10 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            var candidateVersion = reference is ModuleInstalledReference installedReference &&
-                                   installedReference.MatchPrereleaseByBaseVersion
+            var candidateVersion = string.IsNullOrWhiteSpace(resolvedVersion) &&
+                                   string.IsNullOrWhiteSpace(resolvedMinimumVersion) &&
+                                   reference is ModuleInstalledReference baseMatchingReference &&
+                                   baseMatchingReference.MatchPrereleaseByBaseVersion
                 ? metadata.Version!.Split(new[] { '-' }, 2)[0]
                 : metadata.Version!;
             return ManagedModuleVersionSelector.IsMatch(candidateVersion, versionRange);

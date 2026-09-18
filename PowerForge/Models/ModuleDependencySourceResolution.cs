@@ -11,6 +11,8 @@ internal sealed class ModuleDependencySourceResolution
     internal string? MinimumVersion { get; }
     internal string? Guid { get; }
     internal bool MatchPrereleaseByBaseVersion { get; }
+    internal string? ResolvedVersion { get; }
+    internal string? ResolvedMinimumVersion { get; }
 
     internal ModuleDependencySourceResolution(
         string name,
@@ -20,7 +22,9 @@ internal sealed class ModuleDependencySourceResolution
         string? requiredVersion,
         string? minimumVersion,
         string? guid,
-        bool matchPrereleaseByBaseVersion)
+        bool matchPrereleaseByBaseVersion,
+        string? resolvedVersion,
+        string? resolvedMinimumVersion)
     {
         Name = name;
         VersionSource = versionSource;
@@ -30,6 +34,8 @@ internal sealed class ModuleDependencySourceResolution
         MinimumVersion = string.IsNullOrWhiteSpace(minimumVersion) ? null : minimumVersion!.Trim();
         Guid = string.IsNullOrWhiteSpace(guid) ? null : guid!.Trim();
         MatchPrereleaseByBaseVersion = matchPrereleaseByBaseVersion;
+        ResolvedVersion = string.IsNullOrWhiteSpace(resolvedVersion) ? null : resolvedVersion!.Trim();
+        ResolvedMinimumVersion = string.IsNullOrWhiteSpace(resolvedMinimumVersion) ? null : resolvedMinimumVersion!.Trim();
     }
 
     internal bool Matches(ModuleDependency dependency)

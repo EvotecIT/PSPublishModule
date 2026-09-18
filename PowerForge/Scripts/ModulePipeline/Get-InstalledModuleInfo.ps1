@@ -94,6 +94,10 @@ function Compare-ComparableModuleVersion($left, $right) {
 function Test-ModuleVersionConstraint([string]$candidateText, $reference) {
   $candidate = Convert-ComparableModuleVersion $candidateText
   if (-not $candidate) { return $false }
+  $resolved = Convert-ComparableModuleVersion ([string]$reference.ResolvedVersion)
+  if ($resolved -and (Compare-ComparableModuleVersion $candidate $resolved) -ne 0) { return $false }
+  $resolvedMinimum = Convert-ComparableModuleVersion ([string]$reference.ResolvedMinimumVersion)
+  if ($resolvedMinimum -and (Compare-ComparableModuleVersion $candidate $resolvedMinimum) -lt 0) { return $false }
   $matchPrereleaseByBaseVersion = [bool]$reference.MatchPrereleaseByBaseVersion
   $required = Convert-ComparableModuleVersion ([string]$reference.RequiredVersion)
   $minimum = Convert-ComparableModuleVersion ([string]$reference.ModuleVersion)

@@ -122,38 +122,36 @@ public sealed partial class ModulePipelineRunner
                     draft.RequiredVersion,
                     string.IsNullOrWhiteSpace(draft.MinimumVersion) ? draft.ModuleVersion : draft.MinimumVersion,
                     draft.Guid,
-                    draft.MatchPrereleaseByBaseVersion);
+                    draft.MatchPrereleaseByBaseVersion,
+                    draft.ResolvedVersion,
+                    draft.ResolvedMinimumVersion);
             })
-            .GroupBy(
-                static resolution => $"{resolution.Name}|{resolution.RequiredVersion}|{resolution.MinimumVersion}|{resolution.Guid}|{resolution.VersionSource}|{resolution.Repository}",
-                StringComparer.OrdinalIgnoreCase)
-            .Select(static group => group.Last())
             .ToArray();
     }
 
     private static RequiredModuleDraft[] CreateResolvedDependencyDrafts(
         IEnumerable<RequiredModuleReference> modules,
-        IReadOnlyDictionary<string, ModuleDependencyVersionSource> versionSources,
-        IReadOnlyList<RequiredModuleDraft> sourceDrafts)
+        IReadOnlyDictionary<string, ModuleDependencyVersionSource> versionSources)
     {
-        var sourceDraftsByName = (sourceDrafts ?? Array.Empty<RequiredModuleDraft>())
-            .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
-            .GroupBy(static draft => draft.ModuleName, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
-
         return (modules ?? Array.Empty<RequiredModuleReference>())
             .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
-            .Select(module => new RequiredModuleDraft(
-                moduleName: module.ModuleName,
-                moduleVersion: module.ModuleVersion,
-                minimumVersion: module.ModuleVersion,
-                requiredVersion: module.RequiredVersion,
-                guid: module.Guid,
-                versionSource: versionSources is not null && versionSources.TryGetValue(module.ModuleName, out var source)
-                    ? source
-                    : ModuleDependencyVersionSource.Installed,
-                matchPrereleaseByBaseVersion: sourceDraftsByName.TryGetValue(module.ModuleName, out var sourceDraft) &&
-                                              HasAutoOrLatestConstraint(sourceDraft)))
+            .Select(module =>
+            {
+                var resolved = module as ResolvedRequiredModuleReference;
+                var matchPrereleaseByBaseVersion = resolved?.MatchPrereleaseByBaseVersion == true;
+                return new RequiredModuleDraft(
+                    moduleName: module.ModuleName,
+                    moduleVersion: module.ModuleVersion,
+                    minimumVersion: module.ModuleVersion,
+                    requiredVersion: module.RequiredVersion,
+                    guid: module.Guid,
+                    versionSource: versionSources is not null && versionSources.TryGetValue(module.ModuleName, out var source)
+                        ? source
+                        : ModuleDependencyVersionSource.Installed,
+                    matchPrereleaseByBaseVersion: matchPrereleaseByBaseVersion,
+                    resolvedVersion: resolved?.ResolvedVersion,
+                    resolvedMinimumVersion: resolved?.ResolvedMinimumVersion);
+            })
             .ToArray();
     }
 
@@ -207,7 +205,7 @@ public sealed partial class ModulePipelineRunner
                         version: BuildApprovedModuleRepositoryQueryVersion(
                             resolution.Constraint,
                             resolution.MatchPrereleaseByBaseVersion),
-                        prerelease: resolution.Prerelease || RequiredModuleRepositoryPublisher.AllowsPrerelease(resolution.Constraint),
+                        prerelease: resolution.Prerelease || AllowsResolvedPrerelease(resolution.Constraint) || RequiredModuleRepositoryPublisher.AllowsPrerelease(resolution.Constraint),
                         repositories: new[] { repository },
                         credential: resolution.Credential),
                     timeout: TimeSpan.FromMinutes(2));
@@ -232,7 +230,7 @@ public sealed partial class ModulePipelineRunner
                         destinationPath: temporaryRoot,
                         version: selectedVersion,
                         repository: repository,
-                        prerelease: resolution.Prerelease || RequiredModuleRepositoryPublisher.AllowsPrerelease(resolution.Constraint),
+                        prerelease: resolution.Prerelease || AllowsResolvedPrerelease(resolution.Constraint) || RequiredModuleRepositoryPublisher.AllowsPrerelease(resolution.Constraint),
                         trustRepository: true,
                         skipDependencyCheck: false,
                         acceptLicense: true,
@@ -270,9 +268,11 @@ public sealed partial class ModulePipelineRunner
     internal static string? BuildApprovedModuleRepositoryQueryVersion(
         RequiredModuleReference constraint,
         bool matchPrereleaseByBaseVersion)
-        => matchPrereleaseByBaseVersion
-            ? null
-            : RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(constraint);
+        => constraint is ResolvedRequiredModuleReference resolved && !string.IsNullOrWhiteSpace(resolved.ResolvedVersion)
+            ? $"[{resolved.ResolvedVersion}]"
+            : matchPrereleaseByBaseVersion
+                ? null
+                : RequiredModuleRepositoryPublisher.BuildPSResourceGetVersionRange(constraint);
 
     internal static PSResourceInfo? SelectApprovedModuleRepositoryCandidate(
         RequiredModuleReference constraint,
@@ -282,6 +282,9 @@ public sealed partial class ModulePipelineRunner
     {
         var matchingCandidates = (candidates ?? Array.Empty<PSResourceInfo>())
             .Where(candidate => candidate is not null && ModuleGuidMatches(candidate.Guid, constraint.Guid))
+            .Where(candidate => constraint is not ResolvedRequiredModuleReference resolved ||
+                                string.IsNullOrWhiteSpace(resolved.ResolvedVersion) ||
+                                string.Equals(ModulePublisher.GetRepositoryVersionText(candidate), resolved.ResolvedVersion, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         return RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
             constraint,
@@ -289,6 +292,11 @@ public sealed partial class ModulePipelineRunner
             allowPrerelease,
             matchPrereleaseByBaseVersion);
     }
+
+    private static bool AllowsResolvedPrerelease(RequiredModuleReference constraint)
+        => constraint is ResolvedRequiredModuleReference resolved &&
+           !string.IsNullOrWhiteSpace(resolved.ResolvedVersion) &&
+           resolved.ResolvedVersion!.IndexOf('-') > 0;
 
     private static bool ModuleGuidMatches(string? candidateGuid, string? requiredGuid)
     {

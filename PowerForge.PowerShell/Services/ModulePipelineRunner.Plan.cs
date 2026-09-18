@@ -464,10 +464,10 @@ public sealed partial class ModulePipelineRunner
             .GroupBy(static draft => draft.ModuleName, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.Last().VersionSource, StringComparer.OrdinalIgnoreCase);
         var dependencySourceResolutions = ResolveDependencySourceResolutions(
-            CreateResolvedDependencyDrafts(requiredModules, requiredModuleSets.DependencyVersionSources, requiredModulesDraft)
-                .Concat(CreateResolvedDependencyDrafts(requiredModulesForPackaging, requiredModuleSets.DependencyVersionSources, requiredModulesDraftForPackaging))
-                .Concat(CreateResolvedDependencyDrafts(embeddedModules, embeddedVersionSources, embeddedModulesDraft))
-                .Concat(CreateResolvedDependencyDrafts(resolvedExternalModules, externalVersionSources, externalModulesDraft)),
+            CreateResolvedDependencyDrafts(requiredModules, requiredModuleSets.DependencyVersionSources)
+                .Concat(CreateResolvedDependencyDrafts(requiredModulesForPackaging, requiredModuleSets.DependencyVersionSources))
+                .Concat(CreateResolvedDependencyDrafts(embeddedModules, embeddedVersionSources))
+                .Concat(CreateResolvedDependencyDrafts(resolvedExternalModules, externalVersionSources)),
             dependencyVersionSourceRepository);
 
         var executionSurface = FinalizePlanExecutionSurface(new ModulePlanExecutionSurface

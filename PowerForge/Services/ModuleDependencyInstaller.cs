@@ -60,7 +60,9 @@ public sealed partial class ModuleDependencyInstaller
     {
         var list = (dependencies ?? Array.Empty<ModuleDependency>())
             .Where(d => d is not null && !string.IsNullOrWhiteSpace(d.Name))
-            .GroupBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(
+                static d => $"{d.Name}|{d.RequiredVersion}|{d.MinimumVersion}|{d.MaximumVersion}|{d.InstallScope}|{d.MinimumVersionInclusive}|{d.MaximumVersionInclusive}",
+                StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
             .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -73,7 +75,7 @@ public sealed partial class ModuleDependencyInstaller
                 .Select(s => s.Trim()),
             StringComparer.OrdinalIgnoreCase);
 
-        var names = list.Select(d => d.Name).ToArray();
+        var names = list.Select(d => d.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var before = GetLatestInstalledModuleVersions(names);
 
         var actions = new List<ActionItem>(list.Length);

@@ -1153,6 +1153,42 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
         }
     }
 
+    [Fact]
+    public void PowerShellProvider_UsesResolvedPrereleaseIdentityForTransitiveManifestLookup()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleName = "PowerForge.TransitivePrerelease." + Guid.NewGuid().ToString("N");
+            var beta1Root = Path.Combine(root.FullName, "beta1");
+            var beta2Root = Path.Combine(root.FullName, "beta2");
+            WriteInstalledModuleWithRequiredModule(beta1Root, moduleName, "2.0.0", "beta.1", "Child.Beta1");
+            WriteInstalledModuleWithRequiredModule(beta2Root, moduleName, "2.0.0", "beta.2", "Child.Beta2");
+            var inheritedModulePath = Environment.GetEnvironmentVariable("PSModulePath") ?? string.Empty;
+            var provider = new PowerShellModuleDependencyMetadataProvider(
+                new EnvironmentPowerShellRunner(
+                    beta1Root + Path.PathSeparator + beta2Root + Path.PathSeparator + inheritedModulePath),
+                new NullLogger());
+            var reference = new ResolvedRequiredModuleReference(
+                moduleName,
+                moduleVersion: null,
+                requiredVersion: "2.0.0",
+                maximumVersion: null,
+                guid: null,
+                resolvedVersion: "2.0.0-beta.1",
+                resolvedMinimumVersion: null,
+                matchPrereleaseByBaseVersion: true);
+
+            var required = provider.GetRequiredModulesForInstalledModule(reference);
+
+            Assert.Equal("Child.Beta1", Assert.Single(required).ModuleName);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteInstalledModule(string root, string moduleName, string version, string? prerelease)
     {
         var modulePath = Path.Combine(root, moduleName, version);
@@ -1164,6 +1200,21 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
         File.WriteAllText(
             Path.Combine(modulePath, moduleName + ".psd1"),
             $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '{version}'{prereleaseData} }}");
+    }
+
+    private static void WriteInstalledModuleWithRequiredModule(
+        string root,
+        string moduleName,
+        string version,
+        string prerelease,
+        string requiredModule)
+    {
+        var modulePath = Path.Combine(root, moduleName, version);
+        Directory.CreateDirectory(modulePath);
+        File.WriteAllText(Path.Combine(modulePath, moduleName + ".psm1"), string.Empty);
+        File.WriteAllText(
+            Path.Combine(modulePath, moduleName + ".psd1"),
+            $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '{version}'; RequiredModules = @('{requiredModule}'); PrivateData = @{{ PSData = @{{ Prerelease = '{prerelease}' }} }} }}");
     }
 
     [Fact]

@@ -39,6 +39,8 @@ internal sealed class ApprovedModuleResolution
 internal sealed class ModuleInstalledReference : RequiredModuleReference
 {
     internal bool MatchPrereleaseByBaseVersion { get; }
+    internal string? ResolvedVersion { get; }
+    internal string? ResolvedMinimumVersion { get; }
 
     internal ModuleInstalledReference(
         RequiredModuleReference reference,
@@ -51,5 +53,10 @@ internal sealed class ModuleInstalledReference : RequiredModuleReference
             reference.Guid)
     {
         MatchPrereleaseByBaseVersion = matchPrereleaseByBaseVersion;
+        if (reference is ResolvedRequiredModuleReference resolved)
+        {
+            ResolvedVersion = resolved.ResolvedVersion;
+            ResolvedMinimumVersion = resolved.ResolvedMinimumVersion;
+        }
     }
 }

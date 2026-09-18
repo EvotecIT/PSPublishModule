@@ -315,12 +315,22 @@ public sealed partial class ModulePipelineRunner
             if (discoveredByName.TryGetValue(module.ModuleName, out var original) &&
                 !string.IsNullOrWhiteSpace(original.MaximumVersion))
             {
-                output.Add(new RequiredModuleReference(
-                    module.ModuleName,
-                    module.ModuleVersion,
-                    module.RequiredVersion,
-                    original.MaximumVersion,
-                    module.Guid));
+                output.Add(module is ResolvedRequiredModuleReference resolvedReference
+                    ? new ResolvedRequiredModuleReference(
+                        module.ModuleName,
+                        module.ModuleVersion,
+                        module.RequiredVersion,
+                        original.MaximumVersion,
+                        module.Guid,
+                        resolvedReference.ResolvedVersion,
+                        resolvedReference.ResolvedMinimumVersion,
+                        resolvedReference.MatchPrereleaseByBaseVersion)
+                    : new RequiredModuleReference(
+                        module.ModuleName,
+                        module.ModuleVersion,
+                        module.RequiredVersion,
+                        original.MaximumVersion,
+                        module.Guid));
                 continue;
             }
 
