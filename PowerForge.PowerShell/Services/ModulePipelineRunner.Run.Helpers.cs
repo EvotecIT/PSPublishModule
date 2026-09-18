@@ -13,7 +13,9 @@ public sealed partial class ModulePipelineRunner
             var results = new List<ModuleDependencyInstallResult>();
             if (plan.InstallMissingModules)
                 results.AddRange(EnsureBuildDependenciesInstalled(plan));
-            var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);
+            // Dependencies are installed before merge analysis. Keep every declared module available here;
+            // output filtering happens only after the merge proves a donor module was fully inlined.
+            var packagingRequiredModules = plan.RequiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>();
             results.AddRange(EnsureFeatureToolDependenciesInstalled(plan, packagingRequiredModules));
             return results.ToArray();
         }

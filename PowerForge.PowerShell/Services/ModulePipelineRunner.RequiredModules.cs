@@ -157,6 +157,11 @@ public sealed partial class ModulePipelineRunner
     {
         var requiredSourceDrafts = BuildRequiredModuleDraftMap(requiredModulesDraft);
         var requiredPackagingSourceDrafts = BuildRequiredModuleDraftMap(requiredModulesDraftForPackaging);
+        var dependencyVersionSources = requiredModulesDraft
+            .Concat(requiredModulesDraftForPackaging)
+            .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
+            .GroupBy(static draft => draft.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last().VersionSource, StringComparer.OrdinalIgnoreCase);
 
         var requiredModules = ResolveRequiredModules(
             requiredModulesDraft,
@@ -181,7 +186,8 @@ public sealed partial class ModulePipelineRunner
                 prerelease,
                 repository,
                 credential,
-                publishVersionSource);
+                publishVersionSource,
+                dependencyVersionSources);
         }
 
         if (importModules?.PreferBinaryConflictOrder == true)
@@ -213,9 +219,10 @@ public sealed partial class ModulePipelineRunner
             prerelease,
             repository,
             credential,
-            publishVersionSource);
+            publishVersionSource,
+            dependencyVersionSources);
 
-        return new RequiredModuleSetResolution(requiredModules, requiredModulesForPackaging);
+        return new RequiredModuleSetResolution(requiredModules, requiredModulesForPackaging, dependencyVersionSources);
     }
 
     private static Dictionary<string, RequiredModuleDraft> BuildRequiredModuleDraftMap(IEnumerable<RequiredModuleDraft> drafts)
@@ -234,7 +241,8 @@ public sealed partial class ModulePipelineRunner
         bool prerelease,
         string? repository,
         RepositoryCredential? credential,
-        DependencyVersionSourceRepository? publishVersionSource = null)
+        DependencyVersionSourceRepository? publishVersionSource = null,
+        IDictionary<string, ModuleDependencyVersionSource>? dependencyVersionSources = null)
     {
         var output = (modules ?? Array.Empty<RequiredModuleReference>())
             .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
@@ -254,11 +262,11 @@ public sealed partial class ModulePipelineRunner
 
         foreach (var root in NormalizeStringArray(rootModules))
         {
-            var source = ResolveInheritedDependencyVersionSource(root, sourceDrafts, ModuleDependencyVersionSource.Auto);
+            var source = ResolveInheritedDependencyVersionSource(root, sourceDrafts, ModuleDependencyVersionSource.Installed);
             var rootReference = rootsByName.TryGetValue(root, out var resolvedRoot)
                 ? resolvedRoot
                 : new RequiredModuleReference(root);
-            CollectTransitiveRequiredModules(rootReference, source, sourceDrafts, ignored, known, discoveredIndex, visited, discovered);
+            CollectTransitiveRequiredModules(rootReference, source, sourceDrafts, ignored, known, discoveredIndex, visited, discovered, dependencyVersionSources);
         }
 
         if (discovered.Count == 0)
@@ -327,7 +335,8 @@ public sealed partial class ModulePipelineRunner
         HashSet<string> known,
         HashSet<string> discoveredIndex,
         HashSet<string> visited,
-        List<(RequiredModuleReference Reference, ModuleDependencyVersionSource VersionSource)> discovered)
+        List<(RequiredModuleReference Reference, ModuleDependencyVersionSource VersionSource)> discovered,
+        IDictionary<string, ModuleDependencyVersionSource>? dependencyVersionSources)
     {
         if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
             return;
@@ -348,6 +357,8 @@ public sealed partial class ModulePipelineRunner
                 continue;
 
             var childVersionSource = ResolveInheritedDependencyVersionSource(depName, sourceDrafts, inheritedVersionSource);
+            if (dependencyVersionSources is not null && !dependencyVersionSources.ContainsKey(depName))
+                dependencyVersionSources[depName] = childVersionSource;
             if (!known.Contains(depName) && discoveredIndex.Add(depName))
             {
                 discovered.Add((
@@ -360,7 +371,7 @@ public sealed partial class ModulePipelineRunner
                     childVersionSource));
             }
 
-            CollectTransitiveRequiredModules(dep, childVersionSource, sourceDrafts, ignoredModules, known, discoveredIndex, visited, discovered);
+            CollectTransitiveRequiredModules(dep, childVersionSource, sourceDrafts, ignoredModules, known, discoveredIndex, visited, discovered, dependencyVersionSources);
         }
     }
 
@@ -478,13 +489,17 @@ public sealed partial class ModulePipelineRunner
     {
         public RequiredModuleReference[] RequiredModules { get; }
         public RequiredModuleReference[] RequiredModulesForPackaging { get; }
+        public IReadOnlyDictionary<string, ModuleDependencyVersionSource> DependencyVersionSources { get; }
 
         public RequiredModuleSetResolution(
             RequiredModuleReference[] requiredModules,
-            RequiredModuleReference[] requiredModulesForPackaging)
+            RequiredModuleReference[] requiredModulesForPackaging,
+            IReadOnlyDictionary<string, ModuleDependencyVersionSource> dependencyVersionSources)
         {
             RequiredModules = requiredModules ?? Array.Empty<RequiredModuleReference>();
             RequiredModulesForPackaging = requiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>();
+            DependencyVersionSources = dependencyVersionSources ??
+                new Dictionary<string, ModuleDependencyVersionSource>(StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -515,10 +530,10 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static RequiredModuleReference[] ResolveOutputRequiredModules(
-        RequiredModuleReference[] modules,
+        RequiredModuleReference[]? modules,
         bool mergeMissing,
-        IReadOnlyCollection<string> approvedModules)
-        => RequiredModuleResolutionEngine.ResolveOutputRequiredModules(modules, mergeMissing, approvedModules);
+        IReadOnlyCollection<string> fullyInlinedModules)
+        => RequiredModuleResolutionEngine.ResolveOutputRequiredModules(modules, mergeMissing, fullyInlinedModules);
 
     private static RequiredModuleDraftDescriptor[] ToRequiredModuleDraftDescriptors(IEnumerable<RequiredModuleDraft> drafts)
     {

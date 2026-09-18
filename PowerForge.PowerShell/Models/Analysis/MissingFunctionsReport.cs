@@ -20,6 +20,9 @@ public sealed class MissingFunctionsReport
     /// <summary>Inlineable helper function definitions for the top-level analysis only.</summary>
     public string[] FunctionsTopLevelOnly { get; }
 
+    /// <summary>Whether every command invocation was statically identifiable for closure analysis.</summary>
+    public bool AnalysisComplete { get; }
+
     /// <summary>
     /// Creates a new <see cref="MissingFunctionsReport"/> instance.
     /// </summary>
@@ -27,12 +30,13 @@ public sealed class MissingFunctionsReport
         MissingFunctionCommand[] summary,
         MissingFunctionCommand[] summaryFiltered,
         string[] functions,
-        string[] functionsTopLevelOnly)
+        string[] functionsTopLevelOnly,
+        bool analysisComplete = true)
     {
         Summary = summary ?? System.Array.Empty<MissingFunctionCommand>();
         SummaryFiltered = summaryFiltered ?? System.Array.Empty<MissingFunctionCommand>();
         Functions = functions ?? System.Array.Empty<string>();
         FunctionsTopLevelOnly = functionsTopLevelOnly ?? System.Array.Empty<string>();
+        AnalysisComplete = analysisComplete;
     }
 }
-

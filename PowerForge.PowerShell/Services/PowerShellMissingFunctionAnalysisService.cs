@@ -14,7 +14,30 @@ internal sealed class PowerShellMissingFunctionAnalysisService : IMissingFunctio
             summary: Map(report.Summary),
             summaryFiltered: Map(report.SummaryFiltered),
             functions: report.Functions ?? Array.Empty<string>(),
-            functionsTopLevelOnly: report.FunctionsTopLevelOnly ?? Array.Empty<string>());
+            functionsTopLevelOnly: report.FunctionsTopLevelOnly ?? Array.Empty<string>(),
+            fullyInlinedApprovedModules: ResolveFullyInlinedApprovedModules(report, options));
+    }
+
+    private static string[] ResolveFullyInlinedApprovedModules(
+        MissingFunctionsReport report,
+        MissingFunctionsOptions options)
+    {
+        if (!report.AnalysisComplete)
+            return Array.Empty<string>();
+
+        var approved = new HashSet<string>(
+            options.ApprovedModules
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Select(static name => name.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        return (report.Summary ?? Array.Empty<MissingFunctionCommand>())
+            .Where(command => !string.IsNullOrWhiteSpace(command.Source) && approved.Contains(command.Source))
+            .GroupBy(command => command.Source.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Any() && group.All(command => command.ScriptBlock is not null))
+            .Select(group => group.Key)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static MissingCommandReference[] Map(MissingFunctionCommand[]? commands)

@@ -212,7 +212,7 @@ public enum ModuleDependencyKind
 /// </summary>
 public enum ModuleDependencyVersionSource
 {
-    /// <summary>Use the build default: installed metadata, with online lookup only when enabled or needed.</summary>
+    /// <summary>Explicitly opt into adaptive resolution: use an installed match first, then an enabled repository fallback.</summary>
     Auto,
     /// <summary>Resolve from locally installed module metadata.</summary>
     Installed,

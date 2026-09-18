@@ -42,7 +42,8 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                         {
                             ModuleName = dependencyName,
                             ModuleVersion = "0.25.0",
-                            Guid = "Auto"
+                            Guid = "Auto",
+                            VersionSource = ModuleDependencyVersionSource.Auto
                         }
                     }
                 }
@@ -97,7 +98,8 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                         Configuration = new ModuleDependencyConfiguration
                         {
                             ModuleName = dependencyName,
-                            ModuleVersion = "Latest"
+                            ModuleVersion = "Latest",
+                            VersionSource = ModuleDependencyVersionSource.PublishRepository
                         }
                     },
                     new ConfigurationPublishSegment
@@ -610,8 +612,12 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                     }
                 });
 
-            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
-            var result = runner.Run(CreateApprovedParentSpec(root.FullName, moduleName));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                missingFunctionAnalysisService: CreateFullyInlinedAnalysis("Parent.Tools"));
+            var result = runner.Run(CreateApprovedParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Installed));
 
             Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
             var requiredModules = required!;
@@ -649,7 +655,7 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                     }
                 });
 
-            var spec = CreateApprovedParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.PSGallery);
+            var spec = CreateApprovedParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Installed);
             spec.Segments = spec.Segments
                 .Concat(new IConfigurationSegment[]
                 {
@@ -664,7 +670,11 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                 .ToArray();
 
             var logger = new CollectingLogger();
-            var result = new ModulePipelineRunner(logger, new ThrowingPowerShellRunner(), provider).Run(spec);
+            var result = new ModulePipelineRunner(
+                logger,
+                new ThrowingPowerShellRunner(),
+                provider,
+                missingFunctionAnalysisService: CreateFullyInlinedAnalysis("Parent.Tools")).Run(spec);
 
             Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
             Assert.DoesNotContain(required!, module => string.Equals(module.ModuleName, "Parent.Tools", StringComparison.OrdinalIgnoreCase));
@@ -801,8 +811,12 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                     }
                 });
 
-            var runner = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider);
-            var result = runner.Run(CreateApprovedParentSpec(root.FullName, moduleName));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                provider,
+                missingFunctionAnalysisService: CreateFullyInlinedAnalysis("Parent.Tools"));
+            var result = runner.Run(CreateApprovedParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Installed));
 
             Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out RequiredModuleReference[]? required));
             var requiredModules = required!;
@@ -1033,7 +1047,43 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
             var child = Assert.Single(plan.RequiredModulesForPackaging, module => string.Equals(module.ModuleName, "Child.Tools", StringComparison.OrdinalIgnoreCase));
             Assert.Equal("2.5.0", child.ModuleVersion);
             Assert.Equal("55555555-5555-5555-5555-555555555555", child.Guid);
+            Assert.Equal(
+                ModuleDependencyVersionSource.PSGallery,
+                Assert.Single(plan.DependencySourceResolutions, source => string.Equals(source.Name, "Child.Tools", StringComparison.OrdinalIgnoreCase)).VersionSource);
             Assert.Equal("PSGallery", provider.LastOnlineRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_CarriesInstalledSourceToTransitiveRequiredModuleInstallation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var provider = new FakeModuleDependencyMetadataProvider(
+                installedModules: new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new("Parent.Tools", "1.0.0", null, Path.Combine(root.FullName, "Parent.Tools")),
+                    ["Child.Tools"] = new("Child.Tools", "2.0.0", null, Path.Combine(root.FullName, "Child.Tools"))
+                },
+                onlineModules: new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase),
+                installedRequiredModules: new Dictionary<string, IReadOnlyList<RequiredModuleReference>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Parent.Tools"] = new[] { new RequiredModuleReference("Child.Tools", moduleVersion: "2.0.0") }
+                });
+
+            var plan = new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider)
+                .Plan(CreateRequiredParentSpec(root.FullName, moduleName, ModuleDependencyVersionSource.Installed));
+
+            Assert.Equal(
+                ModuleDependencyVersionSource.Installed,
+                Assert.Single(plan.DependencySourceResolutions, source => string.Equals(source.Name, "Child.Tools", StringComparison.OrdinalIgnoreCase)).VersionSource);
         }
         finally
         {
@@ -1196,6 +1246,24 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
                 }
             }
         };
+
+    private static IMissingFunctionAnalysisService CreateFullyInlinedAnalysis(string moduleName)
+        => new ModulePipelineMissingAnalysisServiceTests.RecordingMissingFunctionAnalysisService(
+            new MissingFunctionAnalysisResult(
+                summary: new[]
+                {
+                    new MissingCommandReference(
+                        "Get-ApprovedThing",
+                        moduleName,
+                        "Function",
+                        isAlias: false,
+                        isPrivate: true,
+                        error: string.Empty)
+                },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: new[] { "function Get-ApprovedThing { 'ok' }" },
+                functionsTopLevelOnly: new[] { "function Get-ApprovedThing { 'ok' }" },
+                fullyInlinedApprovedModules: new[] { moduleName }));
 
     private static ModulePipelineSpec CreateApprovedParentSpec(
         string sourcePath,

@@ -49,6 +49,7 @@ public sealed partial class ModulePipelineRunner
         var installMissingModulesPrerelease = inputs.InstallMissingModulesPrerelease;
         var resolveMissingModulesOnline = inputs.ResolveMissingModulesOnline;
         var warnIfRequiredModulesOutdated = inputs.WarnIfRequiredModulesOutdated;
+        var autoSwitchExactOnPublish = inputs.AutoSwitchExactOnPublish;
         var installMissingModulesRepository = inputs.InstallMissingModulesRepository;
         var installMissingModulesCredential = inputs.InstallMissingModulesCredential;
         var signModule = inputs.SignModule;
@@ -108,6 +109,7 @@ public sealed partial class ModulePipelineRunner
         var releaseProtection = inputs.ReleaseProtection;
         var gateMode = inputs.GateMode;
         var approvedModules = inputs.ApprovedModules;
+        var approvedModulesDraft = inputs.ApprovedModulesDraft;
         var moduleSkipIgnoreModules = inputs.ModuleSkipIgnoreModules;
         var moduleSkipIgnoreFunctions = inputs.ModuleSkipIgnoreFunctions;
         var moduleSkipForce = inputs.ModuleSkipForce;
@@ -117,6 +119,7 @@ public sealed partial class ModulePipelineRunner
         var requiredModulesDraftForPackaging = inputs.RequiredModulesDraftForPackaging;
         var embeddedModulesDraft = inputs.EmbeddedModulesDraft;
         var externalModules = inputs.ExternalModules;
+        var externalModulesDraft = inputs.ExternalModulesDraft;
 
         if (spec.Build.PreReleaseTag is not null)
         {
@@ -343,7 +346,12 @@ public sealed partial class ModulePipelineRunner
         var installEnabled = spec.Install?.Enabled ?? true;
         var strategy = spec.Install?.Strategy
                        ?? installStrategyFromSegments
-                       ?? InstallationStrategy.AutoRevision;
+                       ?? InstallationStrategy.Exact;
+        if (autoSwitchExactOnPublish && gateMode == ConfigurationGateMode.Publish && strategy != InstallationStrategy.Exact)
+        {
+            strategy = InstallationStrategy.Exact;
+            _logger.Info("AutoSwitchExactOnPublish enabled: using Exact installation for the Publish gate.");
+        }
         var keep = spec.Install?.KeepVersions
                    ?? keepVersionsFromSegments
                    ?? 3;
@@ -401,6 +409,16 @@ public sealed partial class ModulePipelineRunner
             dependencyVersionSourceRepository);
         var requiredModules = requiredModuleSets.RequiredModules;
         var requiredModulesForPackaging = requiredModuleSets.RequiredModulesForPackaging;
+        var approvedModuleResolutions = ResolveApprovedModuleResolutions(
+            approvedModulesDraft,
+            requiredModulesDraft,
+            requiredModules,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            dependencyVersionSourceRepository);
         var embeddedModules = ResolveRequiredModules(
             embeddedModulesDraft,
             resolveMissingModulesOnline,
@@ -410,6 +428,10 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesCredential,
             dependencyVersionSourceRepository);
         var embeddedSourceDrafts = BuildRequiredModuleDraftMap(embeddedModulesDraft);
+        var embeddedVersionSources = embeddedModulesDraft
+            .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
+            .GroupBy(static draft => draft.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last().VersionSource, StringComparer.OrdinalIgnoreCase);
         var embeddedRoots = embeddedModulesDraft
             .Select(static draft => draft.ModuleName)
             .Where(static name => !string.IsNullOrWhiteSpace(name))
@@ -425,8 +447,15 @@ public sealed partial class ModulePipelineRunner
             installMissingModulesPrerelease,
             installMissingModulesRepository,
             installMissingModulesCredential,
-            dependencyVersionSourceRepository);
+            dependencyVersionSourceRepository,
+            embeddedVersionSources);
         embeddedModules = OrderRequiredModulesByDependenciesFirst(embeddedModules);
+        var dependencySourceResolutions = ResolveDependencySourceResolutions(
+            CreateResolvedDependencyDrafts(requiredModules, requiredModuleSets.DependencyVersionSources)
+                .Concat(CreateResolvedDependencyDrafts(requiredModulesForPackaging, requiredModuleSets.DependencyVersionSources))
+                .Concat(CreateResolvedDependencyDrafts(embeddedModules, embeddedVersionSources))
+                .Concat(externalModulesDraft),
+            dependencyVersionSourceRepository);
 
         var executionSurface = FinalizePlanExecutionSurface(new ModulePlanExecutionSurface
         {
@@ -558,6 +587,8 @@ public sealed partial class ModulePipelineRunner
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
         plan.ReleaseCheckpoint = spec.ReleaseCheckpoint;
+        plan.ApprovedModuleResolutions = approvedModuleResolutions;
+        plan.DependencySourceResolutions = dependencySourceResolutions;
         ApplyReleaseSourceProtection(spec, plan, localVersioning, releaseProtection, gateMode);
         return plan;
     }

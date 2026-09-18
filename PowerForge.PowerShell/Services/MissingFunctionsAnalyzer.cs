@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -20,6 +21,9 @@ public sealed class MissingFunctionsAnalyzer
     private readonly Dictionary<string, CommandInfo?> _moduleScopeCommandCache =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly Dictionary<string, ModuleScopeSession> _moduleScopeSessions =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Analyzes a script file or code and returns a typed report with resolved command references and
     /// inlineable helper definitions.
@@ -37,6 +41,13 @@ public sealed class MissingFunctionsAnalyzer
                 .Select(m => m.Trim()),
             StringComparer.OrdinalIgnoreCase);
 
+        var approvedSources = (options.ApprovedModuleSources ?? Array.Empty<ApprovedModuleSource>())
+            .Where(static source => source is not null &&
+                                    !string.IsNullOrWhiteSpace(source.Name) &&
+                                    !string.IsNullOrWhiteSpace(source.ModuleBasePath))
+            .GroupBy(static source => source.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
+
         var ignore = new HashSet<string>(
             (options.IgnoreFunctions ?? Array.Empty<string>())
                 .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -49,13 +60,22 @@ public sealed class MissingFunctionsAnalyzer
                 .Select(n => n.Trim()),
             StringComparer.OrdinalIgnoreCase);
 
-        return AnalyzeInternal(
-            filePath: filePath,
-            code: code,
-            knownFunctions: known,
-            approvedModules: approved,
-            ignoreFunctions: ignore,
-            includeFunctionsRecursively: options.IncludeFunctionsRecursively);
+        try
+        {
+            return AnalyzeInternal(
+                filePath: filePath,
+                code: code,
+                knownFunctions: known,
+                approvedModules: approved,
+                approvedModuleSources: approvedSources,
+                requireApprovedModuleSources: options.RequireApprovedModuleSources,
+                ignoreFunctions: ignore,
+                includeFunctionsRecursively: options.IncludeFunctionsRecursively);
+        }
+        finally
+        {
+            DisposeModuleScopeSessions();
+        }
     }
 
     private MissingFunctionsReport AnalyzeInternal(
@@ -63,16 +83,20 @@ public sealed class MissingFunctionsAnalyzer
         string? code,
         HashSet<string> knownFunctions,
         HashSet<string> approvedModules,
+        IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
+        bool requireApprovedModuleSources,
         HashSet<string> ignoreFunctions,
         bool includeFunctionsRecursively)
     {
         var parsed = ParseInput(filePath, code);
 
-        var excludeFunctions = new HashSet<string>(knownFunctions, StringComparer.OrdinalIgnoreCase);
+        var consumerFunctionsForNestedAnalysis = new HashSet<string>(knownFunctions, StringComparer.OrdinalIgnoreCase);
+        foreach (var functionName in parsed.FunctionNames)
+            consumerFunctionsForNestedAnalysis.Add(functionName);
 
         var commandNames = parsed.CommandNames.Where(n => !ignoreFunctions.Contains(n)).ToArray();
         var filteredNames = commandNames
-            .Where(n => !excludeFunctions.Contains(n))
+            .Where(n => !knownFunctions.Contains(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -80,7 +104,7 @@ public sealed class MissingFunctionsAnalyzer
         var listCommands = new List<MissingFunctionCommand>();
         foreach (var name in filteredNames)
         {
-            var info = ResolveCommand(name, approvedModules);
+            var info = ResolveCommand(name, approvedModules, approvedModuleSources, requireApprovedModuleSources);
             if (string.Equals(info.Source, "Microsoft.PowerShell.Core", StringComparison.OrdinalIgnoreCase))
                 continue;
 
@@ -91,6 +115,7 @@ public sealed class MissingFunctionsAnalyzer
         var combinedSummary = new List<MissingFunctionCommand>(listCommands);
         var combinedSummaryFiltered = new List<MissingFunctionCommand>(listCommands);
         var combinedFunctions = new List<string>(functionsTop);
+        var analysisComplete = !parsed.HasDynamicCommandInvocation;
 
         if (functionsTop.Count > 0)
         {
@@ -101,13 +126,19 @@ public sealed class MissingFunctionsAnalyzer
             var nested = AnalyzeInternal(
                 filePath: null,
                 code: string.Join(Environment.NewLine, functionsTop),
-                knownFunctions: new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                // Inlined donor functions execute in the completed consumer module, so references to
+                // consumer-local functions are already satisfied even though those declarations are not
+                // repeated in this recursive analysis fragment.
+                knownFunctions: consumerFunctionsForNestedAnalysis,
                 approvedModules: approvedModules,
+                approvedModuleSources: approvedModuleSources,
+                requireApprovedModuleSources: requireApprovedModuleSources,
                 ignoreFunctions: ignoreNext,
                 includeFunctionsRecursively: includeFunctionsRecursively);
 
             combinedSummary.AddRange(nested.Summary);
             combinedSummaryFiltered.AddRange(nested.SummaryFiltered);
+            analysisComplete &= nested.AnalysisComplete;
 
             if (includeFunctionsRecursively)
                 combinedFunctions.AddRange(nested.Functions);
@@ -117,7 +148,8 @@ public sealed class MissingFunctionsAnalyzer
             summary: combinedSummary.ToArray(),
             summaryFiltered: combinedSummaryFiltered.ToArray(),
             functions: combinedFunctions.ToArray(),
-            functionsTopLevelOnly: functionsTop.ToArray());
+            functionsTopLevelOnly: functionsTop.ToArray(),
+            analysisComplete: analysisComplete);
     }
 
     private static List<string> BuildInlineFunctions(IEnumerable<MissingFunctionCommand> commands, HashSet<string> approvedModules)
@@ -188,13 +220,39 @@ public sealed class MissingFunctionsAnalyzer
             .ToArray();
 
         var visibilityAnalyzer = new NestedFunctionVisibilityAnalyzer(ast, functionDeclarationsByName);
-        var commandNames = ExtractCommandNames(ast, visibilityAnalyzer).ToArray();
+        var allCommands = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .ToArray();
+        var commandNames = ExtractCommandNames(allCommands, visibilityAnalyzer).ToArray();
+        var hasDynamicCommandInvocation = allCommands.Any(static command =>
+            (string.IsNullOrWhiteSpace(command.GetCommandName()) &&
+             (command.CommandElements.Count == 0 || command.CommandElements[0] is not StringConstantExpressionAst)) ||
+            string.Equals(command.GetCommandName(), "Invoke-Expression", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(command.GetCommandName(), "iex", StringComparison.OrdinalIgnoreCase));
+        if (!hasDynamicCommandInvocation)
+        {
+            hasDynamicCommandInvocation = ast.FindAll(static node =>
+                    node is InvokeMemberExpressionAst invocation && IsRuntimeCodeInvocation(invocation),
+                    searchNestedScriptBlocks: true)
+                .Any();
+        }
 
-        return new ParsedInput(effectiveFilePath, declaredFunctions, commandNames);
+        return new ParsedInput(effectiveFilePath, declaredFunctions, commandNames, hasDynamicCommandInvocation);
+    }
+
+    private static bool IsRuntimeCodeInvocation(InvokeMemberExpressionAst invocation)
+    {
+        var memberName = invocation.Member?.Extent?.Text?.Trim(' ', '\'', '"');
+        return string.Equals(memberName, "Invoke", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(memberName, "InvokeReturnAsIs", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(memberName, "InvokeWithContext", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(memberName, "InvokeScript", StringComparison.OrdinalIgnoreCase) ||
+               (string.Equals(memberName, "Create", StringComparison.OrdinalIgnoreCase) &&
+                invocation.Expression?.Extent?.Text?.IndexOf("scriptblock", StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     private static IEnumerable<string> ExtractCommandNames(
-        ScriptBlockAst ast,
+        IEnumerable<CommandAst> allCommands,
         NestedFunctionVisibilityAnalyzer visibilityAnalyzer)
     {
         var adCmdlets = new HashSet<string>(new[]
@@ -214,7 +272,6 @@ public sealed class MissingFunctionsAnalyzer
 
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var allCommands = ast.FindAll(a => a is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>();
         foreach (var cmd in allCommands)
         {
             var excludedByParent = false;
@@ -267,7 +324,11 @@ public sealed class MissingFunctionsAnalyzer
         return set.OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
     }
 
-    private MissingFunctionCommand ResolveCommand(string name, HashSet<string> approvedModules)
+    private MissingFunctionCommand ResolveCommand(
+        string name,
+        HashSet<string> approvedModules,
+        IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
+        bool requireApprovedModuleSources)
     {
         var isAlias = false;
 
@@ -290,6 +351,28 @@ public sealed class MissingFunctionsAnalyzer
                 var resolved = GetCommandFromCurrentSessionCached(def);
                 if (resolved != null)
                     cmd = resolved;
+            }
+
+            if (requireApprovedModuleSources &&
+                !string.IsNullOrWhiteSpace(cmd.Source) &&
+                approvedModules.Contains(cmd.Source) &&
+                !approvedModuleSources.ContainsKey(cmd.Source))
+            {
+                throw new InvalidOperationException(
+                    $"Approved module '{cmd.Source}' has no concrete source binding for deterministic helper analysis.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(cmd.Source) &&
+                approvedModuleSources.TryGetValue(cmd.Source, out var selectedSource))
+            {
+                var selectedCommand = GetCommandFromModuleScopeCached(selectedSource, name);
+                if (selectedCommand is null)
+                {
+                    throw new CommandNotFoundException(
+                        $"The command '{name}' was not found in the selected module '{selectedSource.Name}' {selectedSource.Version ?? "(version unknown)"} at '{selectedSource.ModuleBasePath}'.");
+                }
+
+                cmd = selectedCommand;
             }
 
             return new MissingFunctionCommand(
@@ -317,9 +400,25 @@ public sealed class MissingFunctionsAnalyzer
 
             foreach (var modName in approvedModules)
             {
+                if (requireApprovedModuleSources && !approvedModuleSources.ContainsKey(modName))
+                {
+                    resolution = new MissingFunctionCommand(
+                        name: name,
+                        source: modName,
+                        commandType: string.Empty,
+                        isAlias: isAlias,
+                        isPrivate: true,
+                        error: $"Approved module '{modName}' has no concrete source binding for deterministic helper analysis.",
+                        scriptBlock: null);
+                    continue;
+                }
+
                 try
                 {
-                    var cmd = GetCommandFromModuleScopeCached(modName, name);
+                    var source = approvedModuleSources.TryGetValue(modName, out var selectedSource)
+                        ? selectedSource
+                        : new ApprovedModuleSource(modName, version: null, moduleBasePath: string.Empty);
+                    var cmd = GetCommandFromModuleScopeCached(source, name);
                     if (cmd is null)
                         continue;
 
@@ -333,9 +432,16 @@ public sealed class MissingFunctionsAnalyzer
                         scriptBlock: (cmd as FunctionInfo)?.ScriptBlock);
                     break;
                 }
-                catch
+                catch (Exception moduleScopeException)
                 {
-                    // keep trying other modules
+                    resolution = new MissingFunctionCommand(
+                        name: name,
+                        source: modName,
+                        commandType: string.Empty,
+                        isAlias: isAlias,
+                        isPrivate: true,
+                        error: moduleScopeException.Message,
+                        scriptBlock: null);
                 }
             }
 
@@ -355,16 +461,16 @@ public sealed class MissingFunctionsAnalyzer
         return resolved;
     }
 
-    private CommandInfo? GetCommandFromModuleScopeCached(string moduleName, string commandName)
+    private CommandInfo? GetCommandFromModuleScopeCached(ApprovedModuleSource source, string commandName)
     {
-        if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(commandName))
+        if (source is null || string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(commandName))
             return null;
 
-        var key = moduleName.Trim() + "|" + commandName.Trim();
+        var key = source.Name.Trim() + "|" + (source.Version ?? string.Empty) + "|" + source.ModuleBasePath + "|" + commandName.Trim();
         if (_moduleScopeCommandCache.TryGetValue(key, out var cached))
             return cached;
 
-        var resolved = GetCommandFromModuleScope(moduleName, commandName);
+        var resolved = GetCommandFromModuleScope(source, commandName);
         _moduleScopeCommandCache[key] = resolved;
         return resolved;
     }
@@ -402,29 +508,167 @@ public sealed class MissingFunctionsAnalyzer
         return results[0].BaseObject as CommandInfo;
     }
 
-    private static CommandInfo? GetCommandFromModuleScope(string moduleName, string commandName)
+    private static bool CommandBelongsToModule(CommandInfo? command, string moduleName)
+        => command is not null &&
+           (string.Equals(command.Source, moduleName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(command.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase));
+
+    private CommandInfo? GetCommandFromModuleScope(ApprovedModuleSource source, string commandName)
     {
-        using var ps = CreatePowerShell();
+        var session = GetOrCreateModuleScopeSession(source);
+        using var ps = PowerShell.Create();
+        ps.Runspace = session.Runspace;
         var script = EmbeddedScripts.Load("Scripts/Analysis/Get-CommandFromModuleScope.ps1");
-        ps.AddScript(script).AddArgument(moduleName).AddArgument(commandName);
+        ps.AddScript(script).AddArgument(session.ModuleBase).AddArgument(commandName);
         var results = ps.Invoke();
         if (ps.HadErrors || results.Count == 0)
             return null;
 
-        return results[0].BaseObject as CommandInfo;
+        var command = results[0].BaseObject as CommandInfo;
+        return CommandBelongsToModule(command, source.Name) ? command : null;
+    }
+
+    private ModuleScopeSession GetOrCreateModuleScopeSession(ApprovedModuleSource source)
+    {
+        var key = source.Name.Trim() + "|" + (source.Version ?? string.Empty) + "|" + source.ModuleBasePath;
+        if (_moduleScopeSessions.TryGetValue(key, out var existing))
+            return existing;
+
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.AuthorizationManager = new AuthorizationManager("PowerForge");
+        var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        try
+        {
+            using var ps = PowerShell.Create();
+            ps.Runspace = runspace;
+            var moduleReference = ResolveModuleReference(source);
+            var imported = ps.AddCommand("Import-Module")
+                .AddParameter("Name", moduleReference)
+                .AddParameter("PassThru", true)
+                .AddParameter("Force", true)
+                .AddParameter("ErrorAction", "Stop")
+                .AddParameter("Verbose", false)
+                .Invoke()
+                .Select(static result => result.BaseObject)
+                .OfType<PSModuleInfo>()
+                .LastOrDefault();
+            if (ps.HadErrors || imported is null)
+                throw new InvalidOperationException($"Approved module '{source.Name}' could not be imported from '{moduleReference}'.");
+            if (!string.Equals(imported.Name, source.Name, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Imported module '{imported.Name}' does not match expected module '{source.Name}'.");
+            if (!string.IsNullOrWhiteSpace(source.Version) && !ModuleVersionMatches(imported, source.Version!))
+            {
+                throw new InvalidOperationException(
+                    $"Imported module '{source.Name}' version '{FormatImportedModuleVersion(imported)}' does not match expected version '{source.Version}'.");
+            }
+
+            var created = new ModuleScopeSession(runspace, imported.ModuleBase);
+            _moduleScopeSessions[key] = created;
+            return created;
+        }
+        catch
+        {
+            runspace.Dispose();
+            throw;
+        }
+    }
+
+    private static bool ModuleVersionMatches(PSModuleInfo module, string expectedVersion)
+    {
+        var expected = (expectedVersion ?? string.Empty).Trim();
+        var metadataSeparator = expected.IndexOf('+');
+        if (metadataSeparator >= 0)
+            expected = expected.Substring(0, metadataSeparator);
+
+        var prereleaseSeparator = expected.IndexOf('-');
+        var expectedBase = prereleaseSeparator >= 0 ? expected.Substring(0, prereleaseSeparator) : expected;
+        var expectedPrerelease = prereleaseSeparator >= 0 ? expected.Substring(prereleaseSeparator + 1) : string.Empty;
+        if (!Version.TryParse(expectedBase, out var parsedExpected) || module.Version is null || module.Version != parsedExpected)
+            return false;
+
+        return string.Equals(GetModulePrerelease(module), expectedPrerelease, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string FormatImportedModuleVersion(PSModuleInfo module)
+    {
+        var baseVersion = module.Version?.ToString() ?? string.Empty;
+        var prerelease = GetModulePrerelease(module);
+        return string.IsNullOrWhiteSpace(prerelease) ? baseVersion : $"{baseVersion}-{prerelease}";
+    }
+
+    private static string GetModulePrerelease(PSModuleInfo module)
+    {
+        if (module.PrivateData is not IDictionary privateData)
+            return string.Empty;
+        var psData = GetDictionaryValue(privateData, "PSData") as IDictionary;
+        var prerelease = psData is null ? null : GetDictionaryValue(psData, "Prerelease")?.ToString();
+        return (prerelease ?? string.Empty).Trim().TrimStart('-');
+    }
+
+    private static object? GetDictionaryValue(IDictionary dictionary, string key)
+    {
+        foreach (DictionaryEntry entry in dictionary)
+        {
+            if (string.Equals(entry.Key?.ToString(), key, StringComparison.OrdinalIgnoreCase))
+                return entry.Value;
+        }
+
+        return null;
+    }
+
+    private static string ResolveModuleReference(ApprovedModuleSource source)
+    {
+        if (string.IsNullOrWhiteSpace(source.ModuleBasePath))
+            return source.Name;
+
+        var manifestPath = Path.Combine(source.ModuleBasePath, source.Name + ".psd1");
+        if (!File.Exists(manifestPath))
+        {
+            throw new FileNotFoundException(
+                $"The selected approved module '{source.Name}' manifest was not found at '{manifestPath}'.",
+                manifestPath);
+        }
+
+        return manifestPath;
+    }
+
+    private void DisposeModuleScopeSessions()
+    {
+        foreach (var session in _moduleScopeSessions.Values)
+            session.Dispose();
+        _moduleScopeSessions.Clear();
+        _moduleScopeCommandCache.Clear();
+        _currentSessionCommandCache.Clear();
+    }
+
+    private sealed class ModuleScopeSession : IDisposable
+    {
+        internal Runspace Runspace { get; }
+        internal string ModuleBase { get; }
+
+        internal ModuleScopeSession(Runspace runspace, string moduleBase)
+        {
+            Runspace = runspace;
+            ModuleBase = moduleBase;
+        }
+
+        public void Dispose() => Runspace.Dispose();
     }
 
     private sealed class ParsedInput
     {
-        public ParsedInput(string? filePath, string[] functionNames, string[] commandNames)
+        public ParsedInput(string? filePath, string[] functionNames, string[] commandNames, bool hasDynamicCommandInvocation)
         {
             FilePath = filePath;
             FunctionNames = functionNames;
             CommandNames = commandNames;
+            HasDynamicCommandInvocation = hasDynamicCommandInvocation;
         }
 
         public string? FilePath { get; }
         public string[] FunctionNames { get; }
         public string[] CommandNames { get; }
+        public bool HasDynamicCommandInvocation { get; }
     }
 }

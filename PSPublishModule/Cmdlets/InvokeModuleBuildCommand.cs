@@ -363,7 +363,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 
     /// <summary>Installation strategy used when installing the module.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
-    public InstallationStrategy InstallStrategy { get; set; } = InstallationStrategy.AutoRevision;
+    public InstallationStrategy InstallStrategy { get; set; } = InstallationStrategy.Exact;
 
     /// <summary>Number of versions to keep per module root when installing.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]

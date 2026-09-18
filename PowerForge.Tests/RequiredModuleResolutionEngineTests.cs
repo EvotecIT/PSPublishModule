@@ -50,7 +50,7 @@ public sealed class RequiredModuleResolutionEngineTests
         var filtered = RequiredModuleResolutionEngine.ResolveOutputRequiredModules(
             modules,
             mergeMissing: true,
-            approvedModules: new[] { "Graphimo" });
+            fullyInlinedModules: new[] { "Graphimo" });
 
         Assert.Single(filtered);
         Assert.Equal("PSWriteHTML", filtered[0].ModuleName);

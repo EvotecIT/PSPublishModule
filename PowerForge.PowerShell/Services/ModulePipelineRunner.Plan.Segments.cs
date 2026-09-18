@@ -98,11 +98,14 @@ public sealed partial class ModulePipelineRunner
         ReleaseProtectionConfiguration? releaseProtection = null;
         ConfigurationGateMode? gateMode = null;
         var approvedModules = new List<string>();
+        var approvedModulesDraft = new List<RequiredModuleDraft>();
+        var approvedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var moduleSkipIgnoreModules = new List<string>();
         var moduleSkipIgnoreFunctions = new List<string>();
         bool moduleSkipForce = false;
         bool moduleSkipFailOnMissingCommands = false;
         bool resolveMissingModulesOnlineSet = false;
+        bool autoSwitchExactOnPublish = false;
 
         var requiredModulesDraft = new List<RequiredModuleDraft>();
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -111,6 +114,7 @@ public sealed partial class ModulePipelineRunner
         var embeddedModulesDraft = new List<RequiredModuleDraft>();
         var embeddedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var externalModules = new List<string>();
+        var externalModulesDraft = new List<RequiredModuleDraft>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
@@ -210,6 +214,7 @@ public sealed partial class ModulePipelineRunner
                         resolveMissingModulesOnlineSet = true;
                     }
                     if (b.WarnIfRequiredModulesOutdated.HasValue) warnIfRequiredModulesOutdated = b.WarnIfRequiredModulesOutdated.Value;
+                    if (b.AutoSwitchExactOnPublish.HasValue) autoSwitchExactOnPublish = b.AutoSwitchExactOnPublish.Value;
                     if (!string.IsNullOrWhiteSpace(b.InstallMissingModulesRepository)) installMissingModulesRepository = b.InstallMissingModulesRepository;
                     if (b.InstallMissingModulesCredential is not null) installMissingModulesCredential = b.InstallMissingModulesCredential;
                     if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
@@ -297,6 +302,20 @@ public sealed partial class ModulePipelineRunner
                     if (moduleSeg.Kind == ModuleDependencyKind.ApprovedModule)
                     {
                         approvedModules.Add(name);
+                        var approvedDraft = new RequiredModuleDraft(
+                            moduleName: name,
+                            moduleVersion: md.ModuleVersion,
+                            minimumVersion: md.MinimumVersion,
+                            requiredVersion: md.RequiredVersion,
+                            guid: md.Guid,
+                            versionSource: md.VersionSource);
+                        if (approvedIndex.TryGetValue(name, out var approvedIdx))
+                            approvedModulesDraft[approvedIdx] = approvedDraft;
+                        else
+                        {
+                            approvedIndex[name] = approvedModulesDraft.Count;
+                            approvedModulesDraft.Add(approvedDraft);
+                        }
                         break;
                     }
 
@@ -304,6 +323,13 @@ public sealed partial class ModulePipelineRunner
                     {
                         if (!TryAddExternalModuleDependency(name, externalIndex, externalModules))
                             break;
+                        externalModulesDraft.Add(new RequiredModuleDraft(
+                            moduleName: name,
+                            moduleVersion: md.ModuleVersion,
+                            minimumVersion: md.MinimumVersion,
+                            requiredVersion: md.RequiredVersion,
+                            guid: md.Guid,
+                            versionSource: md.VersionSource));
                         break;
                     }
 
@@ -566,6 +592,7 @@ public sealed partial class ModulePipelineRunner
             InstallMissingModulesPrerelease = installMissingModulesPrerelease,
             ResolveMissingModulesOnline = resolveMissingModulesOnline,
             WarnIfRequiredModulesOutdated = warnIfRequiredModulesOutdated,
+            AutoSwitchExactOnPublish = autoSwitchExactOnPublish,
             InstallMissingModulesRepository = installMissingModulesRepository,
             InstallMissingModulesCredential = installMissingModulesCredential,
             SignModule = signModule,
@@ -625,6 +652,7 @@ public sealed partial class ModulePipelineRunner
             ReleaseProtection = releaseProtection,
             GateMode = gateMode,
             ApprovedModules = approvedModules,
+            ApprovedModulesDraft = approvedModulesDraft,
             ModuleSkipIgnoreModules = moduleSkipIgnoreModules,
             ModuleSkipIgnoreFunctions = moduleSkipIgnoreFunctions,
             ModuleSkipForce = moduleSkipForce,
@@ -634,6 +662,7 @@ public sealed partial class ModulePipelineRunner
             RequiredModulesDraftForPackaging = requiredModulesDraftForPackaging,
             EmbeddedModulesDraft = embeddedModulesDraft,
             ExternalModules = externalModules,
+            ExternalModulesDraft = externalModulesDraft,
         };
     }
 
@@ -659,6 +688,7 @@ public sealed partial class ModulePipelineRunner
         internal bool InstallMissingModulesPrerelease { get; init; } = default!;
         internal bool ResolveMissingModulesOnline { get; init; } = default!;
         internal bool WarnIfRequiredModulesOutdated { get; init; } = default!;
+        internal bool AutoSwitchExactOnPublish { get; init; } = default!;
         internal string? InstallMissingModulesRepository { get; init; } = default!;
         internal RepositoryCredential? InstallMissingModulesCredential { get; init; } = default!;
         internal bool SignModule { get; init; } = default!;
@@ -718,6 +748,7 @@ public sealed partial class ModulePipelineRunner
         internal ReleaseProtectionConfiguration? ReleaseProtection { get; init; } = default!;
         internal ConfigurationGateMode? GateMode { get; init; } = default!;
         internal List<string> ApprovedModules { get; init; } = default!;
+        internal List<RequiredModuleDraft> ApprovedModulesDraft { get; init; } = default!;
         internal List<string> ModuleSkipIgnoreModules { get; init; } = default!;
         internal List<string> ModuleSkipIgnoreFunctions { get; init; } = default!;
         internal bool ModuleSkipForce { get; init; } = default!;
@@ -727,5 +758,6 @@ public sealed partial class ModulePipelineRunner
         internal List<RequiredModuleDraft> RequiredModulesDraftForPackaging { get; init; } = default!;
         internal List<RequiredModuleDraft> EmbeddedModulesDraft { get; init; } = default!;
         internal List<string> ExternalModules { get; init; } = default!;
+        internal List<RequiredModuleDraft> ExternalModulesDraft { get; init; } = default!;
     }
 }

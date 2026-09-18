@@ -189,19 +189,19 @@ internal sealed class RequiredModuleResolutionEngine
     }
 
     internal static RequiredModuleReference[] ResolveOutputRequiredModules(
-        RequiredModuleReference[] modules,
+        RequiredModuleReference[]? modules,
         bool mergeMissing,
-        IReadOnlyCollection<string> approvedModules)
+        IReadOnlyCollection<string> fullyInlinedModules)
     {
         if (!mergeMissing)
             return modules ?? Array.Empty<RequiredModuleReference>();
 
         if (modules is null || modules.Length == 0)
             return Array.Empty<RequiredModuleReference>();
-        if (approvedModules is null || approvedModules.Count == 0)
+        if (fullyInlinedModules is null || fullyInlinedModules.Count == 0)
             return modules;
 
-        var approved = new HashSet<string>(approvedModules, StringComparer.OrdinalIgnoreCase);
+        var approved = new HashSet<string>(fullyInlinedModules, StringComparer.OrdinalIgnoreCase);
         return modules
             .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
             .Where(module => !approved.Contains(module.ModuleName!))

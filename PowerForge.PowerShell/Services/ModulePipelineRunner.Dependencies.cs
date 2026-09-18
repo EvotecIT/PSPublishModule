@@ -62,18 +62,46 @@ public sealed partial class ModulePipelineRunner
             return Array.Empty<ModuleDependencyInstallResult>();
         }
 
-        _logger.Info($"Installing missing modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
-
         var results = new List<ModuleDependencyInstallResult>();
-        if (RequiredModuleInstallNeedsRepositoryTool(plan, deps))
+        var dependencySources = plan.DependencySourceResolutions ?? Array.Empty<ModuleDependencySourceResolution>();
+        var installedOnly = deps
+            .Where(dependency => ResolveDependencySource(dependencySources, dependency)?.VersionSource == ModuleDependencyVersionSource.Installed)
+            .ToArray();
+        results.AddRange(ValidateInstalledOnlyDependencies(installedOnly));
+
+        var installable = deps
+            .Where(dependency => ResolveDependencySource(dependencySources, dependency)?.VersionSource != ModuleDependencyVersionSource.Installed)
+            .ToArray();
+        if (installable.Length == 0)
+            return results.ToArray();
+
+        _logger.Info($"Installing missing modules ({installable.Length}): {string.Join(", ", installable.Select(d => d.Name))}");
+
+        if (RequiredModuleInstallNeedsRepositoryTool(plan, installable))
             results.AddRange(EnsureRepositoryToolDependencyInstalledForAuto(plan));
-        results.AddRange(_hostedOperations.EnsureDependenciesInstalled(
-            dependencies: deps,
-            force: plan.InstallMissingModulesForce,
-            repository: plan.InstallMissingModulesRepository,
-            credential: plan.InstallMissingModulesCredential,
-            prerelease: plan.InstallMissingModulesPrerelease,
-            skipModules: plan.ModuleSkip));
+
+        var installGroups = installable
+            .GroupBy(dependency =>
+            {
+                var source = ResolveDependencySource(dependencySources, dependency);
+                var sourceKind = source?.VersionSource ?? ModuleDependencyVersionSource.Auto;
+                var sourceRepository = sourceKind == ModuleDependencyVersionSource.PSGallery
+                    ? "PSGallery"
+                    : source?.Repository ?? plan.InstallMissingModulesRepository;
+                var sourceCredential = source?.Credential ?? plan.InstallMissingModulesCredential;
+                return new DependencyInstallSource(sourceRepository, sourceCredential);
+            });
+
+        foreach (var group in installGroups)
+        {
+            results.AddRange(_hostedOperations.EnsureDependenciesInstalled(
+                dependencies: group.ToArray(),
+                force: plan.InstallMissingModulesForce,
+                repository: group.Key.Repository,
+                credential: group.Key.Credential,
+                prerelease: plan.InstallMissingModulesPrerelease,
+                skipModules: plan.ModuleSkip));
+        }
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
@@ -89,6 +117,90 @@ public sealed partial class ModulePipelineRunner
         }
 
         return results.ToArray();
+    }
+
+    private static ModuleDependencySourceResolution? ResolveDependencySource(
+        IReadOnlyList<ModuleDependencySourceResolution> sources,
+        ModuleDependency dependency)
+    {
+        var exact = (sources ?? Array.Empty<ModuleDependencySourceResolution>())
+            .LastOrDefault(source => source.Matches(dependency));
+        if (exact is not null)
+            return exact;
+
+        var sameName = (sources ?? Array.Empty<ModuleDependencySourceResolution>())
+            .Where(source => string.Equals(source.Name, dependency.Name, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return sameName.Length == 1 ? sameName[0] : null;
+    }
+
+    private ModuleDependencyInstallResult[] ValidateInstalledOnlyDependencies(
+        IReadOnlyList<ModuleDependency> dependencies)
+    {
+        if (dependencies is null || dependencies.Count == 0)
+            return Array.Empty<ModuleDependencyInstallResult>();
+
+        var references = dependencies
+            .Select(static dependency => new RequiredModuleReference(
+                dependency.Name,
+                dependency.MinimumVersion,
+                dependency.RequiredVersion,
+                dependency.MaximumVersion))
+            .ToArray();
+        IReadOnlyDictionary<string, InstalledModuleMetadata> installed =
+            _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
+                ? versionedProvider.GetInstalledModules(references)
+                : _moduleDependencyMetadataProvider.GetLatestInstalledModules(dependencies.Select(static dependency => dependency.Name).ToArray());
+
+        var missing = dependencies
+            .Where(dependency => !installed.TryGetValue(dependency.Name, out var metadata) ||
+                                 string.IsNullOrWhiteSpace(metadata.Version))
+            .Select(static dependency => dependency.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Installed dependency source was selected, but no installed version satisfies the declared constraint for: {string.Join(", ", missing)}. Install the module locally or explicitly select VersionSource PSGallery, PublishRepository, or Auto.");
+        }
+
+        return dependencies
+            .Select(dependency =>
+            {
+                installed.TryGetValue(dependency.Name, out var metadata);
+                return new ModuleDependencyInstallResult(
+                    dependency.Name,
+                    metadata?.Version,
+                    metadata?.Version,
+                    dependency.RequiredVersion ?? dependency.MinimumVersion,
+                    ModuleDependencyInstallStatus.Satisfied,
+                    installer: null,
+                    message: "Using the explicitly selected installed dependency source.");
+            })
+            .ToArray();
+    }
+
+    private readonly struct DependencyInstallSource : IEquatable<DependencyInstallSource>
+    {
+        internal string? Repository { get; }
+        internal RepositoryCredential? Credential { get; }
+
+        internal DependencyInstallSource(string? repository, RepositoryCredential? credential)
+        {
+            Repository = string.IsNullOrWhiteSpace(repository) ? null : repository!.Trim();
+            Credential = credential;
+        }
+
+        public bool Equals(DependencyInstallSource other)
+            => string.Equals(Repository, other.Repository, StringComparison.OrdinalIgnoreCase) &&
+               ReferenceEquals(Credential, other.Credential);
+
+        public override bool Equals(object? obj) => obj is DependencyInstallSource other && Equals(other);
+
+        public override int GetHashCode()
+            => (StringComparer.OrdinalIgnoreCase.GetHashCode(Repository ?? string.Empty) * 397) ^
+               (Credential?.GetHashCode() ?? 0);
     }
 
     private static bool HasEquivalentDependencyInstallRequest(

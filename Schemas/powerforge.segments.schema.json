@@ -355,7 +355,8 @@
         "ModuleVersion": { "type": ["string", "null"] },
         "MinimumVersion": { "type": ["string", "null"] },
         "RequiredVersion": { "type": ["string", "null"] },
-        "Guid": { "type": ["string", "null"] }
+        "Guid": { "type": ["string", "null"] },
+        "VersionSource": { "$ref": "powerforge.common.schema.json#/$defs/ModuleDependencyVersionSource" }
       }
     },
 

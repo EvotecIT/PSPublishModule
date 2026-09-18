@@ -281,7 +281,7 @@ public static class LegacySegmentAdapter
                     RequiredVersion = GetString(d, "RequiredVersion"),
                     Guid = GetString(d, "Guid"),
                     VersionSource = TryParseModuleDependencyVersionSource(GetString(d, "VersionSource"))
-                        ?? ModuleDependencyVersionSource.Auto
+                        ?? ModuleDependencyVersionSource.Installed
                 }
             });
             return;

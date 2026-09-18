@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Management.Automation.Language;
 using System.Text;
 using System.Text.Json;
 
@@ -14,12 +15,16 @@ public sealed partial class ModulePipelineRunner
             return null;
 
         var approved = plan.ApprovedModules ?? Array.Empty<string>();
-        var options = new MissingFunctionsOptions(
-            approvedModules: approved,
-            ignoreFunctions: Array.Empty<string>(),
-            includeFunctionsRecursively: true);
+        using var sources = ResolveApprovedModuleSources(plan);
         try
         {
+            var options = new MissingFunctionsOptions(
+                knownFunctions: ResolveConsumerModuleFunctionNames(filePath, code),
+                approvedModules: approved,
+                ignoreFunctions: Array.Empty<string>(),
+                includeFunctionsRecursively: true,
+                approvedModuleSources: sources.Sources,
+                requireApprovedModuleSources: true);
             return _missingFunctionAnalysisService.Analyze(filePath, code, options);
         }
         catch (Exception ex)
@@ -27,6 +32,34 @@ public sealed partial class ModulePipelineRunner
             _logger.Warn($"Missing function analysis failed. {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             return null;
+        }
+    }
+
+    private static string[] ResolveConsumerModuleFunctionNames(string? filePath, string? code)
+    {
+        try
+        {
+            Token[] tokens;
+            ParseError[] errors;
+            var ast = !string.IsNullOrWhiteSpace(filePath)
+                ? Parser.ParseFile(Path.GetFullPath(filePath!.Trim().Trim('"')), out tokens, out errors)
+                : Parser.ParseInput(code ?? string.Empty, out tokens, out errors);
+
+            return ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                .Cast<FunctionDefinitionAst>()
+                .Where(static function => !string.IsNullOrWhiteSpace(function.Name))
+                // A private-scoped function is deliberately unavailable to child scopes and must remain
+                // visible to the lexical analyzer. Ordinary module-level functions are shared consumer code.
+                .Where(static function => !function.Name.StartsWith("private:", StringComparison.OrdinalIgnoreCase))
+                .Select(static function => NestedFunctionVisibilityAnalyzer.NormalizeDeclaredFunctionName(function.Name))
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch
+        {
+            return Array.Empty<string>();
         }
     }
 
@@ -90,6 +123,8 @@ public sealed partial class ModulePipelineRunner
         {
             var moduleName = group.Key ?? string.Empty;
             if (string.IsNullOrWhiteSpace(moduleName))
+                continue;
+            if (string.Equals(moduleName, plan.ModuleName, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (IsBuiltInModule(moduleName))
                 continue;
@@ -517,6 +552,7 @@ public sealed partial class ModulePipelineRunner
             usedExistingPsm1: false,
             requiredModules: Array.Empty<RequiredModuleReference>(),
             approvedModules: Array.Empty<string>(),
+            fullyInlinedApprovedModules: Array.Empty<string>(),
             dependentModules: Array.Empty<string>(),
             topLevelInlinedFunctions: 0,
             totalInlinedFunctions: 0,
@@ -529,6 +565,7 @@ public sealed partial class ModulePipelineRunner
         internal bool UsedExistingPsm1 { get; }
         internal RequiredModuleReference[] RequiredModules { get; }
         internal string[] ApprovedModules { get; }
+        internal string[] FullyInlinedApprovedModules { get; }
         internal string[] DependentModules { get; }
         internal int TopLevelInlinedFunctions { get; }
         internal int TotalInlinedFunctions { get; }
@@ -542,6 +579,7 @@ public sealed partial class ModulePipelineRunner
             bool usedExistingPsm1,
             RequiredModuleReference[] requiredModules,
             string[] approvedModules,
+            string[] fullyInlinedApprovedModules,
             string[] dependentModules,
             int topLevelInlinedFunctions,
             int totalInlinedFunctions,
@@ -554,6 +592,7 @@ public sealed partial class ModulePipelineRunner
             UsedExistingPsm1 = usedExistingPsm1;
             RequiredModules = requiredModules ?? Array.Empty<RequiredModuleReference>();
             ApprovedModules = approvedModules ?? Array.Empty<string>();
+            FullyInlinedApprovedModules = fullyInlinedApprovedModules ?? Array.Empty<string>();
             DependentModules = dependentModules ?? Array.Empty<string>();
             TopLevelInlinedFunctions = topLevelInlinedFunctions;
             TotalInlinedFunctions = totalInlinedFunctions;
