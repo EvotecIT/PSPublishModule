@@ -86,6 +86,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(static node => node is PipelineAst pipeline &&
                PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline) && IsCapturedPipeline(pipeline),
                searchNestedScriptBlocks: false) is not null ||
+           function.Body.Find(static node => node is PipelineAst pipeline &&
+               PowerShellCommandRegionSemanticBinder.RequiresNativePipelineBinding(pipeline),
+               searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is MemberExpressionAst member && node is not InvokeMemberExpressionAst &&
                member.Member is not StringConstantExpressionAst, searchNestedScriptBlocks: false) is not null ||
            PowerShellParameterSyntax.GetParameters(function.Body).Any(parameter => parameter.DefaultValue is not null and not ConstantExpressionAst and not StringConstantExpressionAst ||

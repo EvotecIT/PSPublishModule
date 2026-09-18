@@ -14,6 +14,53 @@ internal static class PowerShellCommandRegionSemanticBinder
     internal static bool RequiresPipelineSyntax(PipelineAst pipeline)
         => pipeline.PipelineElements.Count != 1 || pipeline.PipelineElements[0] is CommandAst || HasPipelineOperators(pipeline);
 
+    /// <summary>
+    /// Identifies a complete authored pipeline whose command binding, stream routing, script-block state,
+    /// and retained mutations must remain owned by the active PowerShell invocation.
+    /// </summary>
+    internal static bool RequiresNativePipelineBinding(PipelineAst pipeline)
+        => pipeline.PipelineElements.Count > 1 &&
+           pipeline.PipelineElements.Any(static element => element is CommandAst) &&
+           !BeginsWithTypedInvocationCandidate(pipeline) &&
+           !TerminatesInExplicitSuccessStreamSink(pipeline);
+
+    /// <summary>
+    /// Preserves the established typed-continuation candidate when an invocation supplies a downstream
+    /// hosted pipeline. Transparent parentheses do not change that ownership decision. The semantic binder
+    /// still decides whether the invocation is actually compilable; otherwise the path remains fail-closed.
+    /// </summary>
+    private static bool BeginsWithTypedInvocationCandidate(PipelineAst pipeline)
+    {
+        Ast syntax = pipeline.PipelineElements[0];
+        while (true)
+        {
+            switch (syntax)
+            {
+                case CommandExpressionAst command:
+                    syntax = command.Expression;
+                    continue;
+                case ParenExpressionAst { Pipeline: PipelineAst { PipelineElements.Count: 1 } innerPipeline }:
+                    syntax = innerPipeline.PipelineElements[0];
+                    continue;
+                default:
+                    return syntax is InvokeMemberExpressionAst;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Keeps explicit success-stream suppression under its existing fail-closed contract instead of
+    /// treating the sink as an ordinary output-producing pipeline stage.
+    /// </summary>
+    private static bool TerminatesInExplicitSuccessStreamSink(PipelineAst pipeline)
+    {
+        if (pipeline.PipelineElements.LastOrDefault() is not CommandAst command ||
+            command.GetCommandName() is not { } commandName) return false;
+        var separator = commandName.LastIndexOf('\\');
+        var leafName = separator < 0 ? commandName : commandName.Substring(separator + 1);
+        return string.Equals(leafName, "Out-Null", StringComparison.OrdinalIgnoreCase);
+    }
+
     internal static PowerShellBoundNativeCommandExpression BindNativeCapture(ParsedSourceDocument document, Ast syntax,
         Ast authoredSyntax, PowerShellCommandSemanticResolver commandResolver, ISet<string>? localFunctionNames,
         PowerShellCompilationCapability capabilities)
@@ -42,7 +89,7 @@ internal static class PowerShellCommandRegionSemanticBinder
             statement is not PipelineAst pipeline) return false;
         var commands = pipeline.PipelineElements.OfType<CommandAst>().ToArray();
         var hasPipelineOperator = HasPipelineOperators(pipeline);
-        if (!hasPipelineOperator && (commands.Length == 0 || commands.All(command =>
+        if (!hasPipelineOperator && !RequiresNativePipelineBinding(pipeline) && (commands.Length == 0 || commands.All(command =>
                 commandResolver.IsRuntimeFreeCompilerIntrinsic(command, localFunctionNames, capabilities)))) return false;
         region = new PowerShellBoundCommandRegionStatement(PowerShellSourceParser.GetSpan(document, pipeline.Extent),
             pipeline.Extent.Text, Array.Empty<PowerShellBoundCommandRegionArgument>(),
