@@ -70,10 +70,19 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                      searchNestedScriptBlocks: true)
                  .Cast<CommandAst>())
         {
-            foreach (var importedModule in GetStaticImportModuleNames(command))
+            if (!IsImportModuleCommand(command))
+                continue;
+
+            foreach (var target in GetImportModuleTargetExpressions(command))
             {
-                if (approvedModuleSources.ContainsKey(importedModule))
-                    blocked.Add(importedModule);
+                foreach (var importedModule in GetStaticModuleNames(target))
+                {
+                    if (approvedModuleSources.ContainsKey(importedModule))
+                        blocked.Add(importedModule);
+                }
+
+                if (!IsFullyStaticModuleReference(target))
+                    blocked.UnionWith(approvedModuleSources.Keys);
             }
         }
 
@@ -129,15 +138,19 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
         return trimmed;
     }
 
-    private static IEnumerable<string> GetStaticImportModuleNames(CommandAst command)
+    private static bool IsImportModuleCommand(CommandAst command)
     {
         var commandName = command.GetCommandName();
-        if (string.IsNullOrWhiteSpace(commandName) ||
-            !commandName!.Split('\\').Last().Equals("Import-Module", StringComparison.OrdinalIgnoreCase))
-        {
-            yield break;
-        }
+        if (string.IsNullOrWhiteSpace(commandName))
+            return false;
 
+        var leafName = commandName!.Split('\\').Last();
+        return leafName.Equals("Import-Module", StringComparison.OrdinalIgnoreCase) ||
+               leafName.Equals("ipmo", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<ExpressionAst> GetImportModuleTargetExpressions(CommandAst command)
+    {
         var positionalFound = false;
         for (var index = 1; index < command.CommandElements.Count; index++)
         {
@@ -145,8 +158,7 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
             {
                 if (!positionalFound && command.CommandElements[index] is ExpressionAst positional)
                 {
-                    foreach (var name in GetStaticModuleNames(positional))
-                        yield return name;
+                    yield return positional;
                     positionalFound = true;
                 }
                 continue;
@@ -157,15 +169,13 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                 parameter.ParameterName.Equals("FullyQualifiedName", StringComparison.OrdinalIgnoreCase);
             if (isModuleNameParameter && parameter.Argument is not null)
             {
-                foreach (var name in GetStaticModuleNames(parameter.Argument))
-                    yield return name;
+                yield return parameter.Argument;
             }
             else if (isModuleNameParameter &&
                      index + 1 < command.CommandElements.Count &&
                      command.CommandElements[index + 1] is ExpressionAst argument)
             {
-                foreach (var name in GetStaticModuleNames(argument))
-                    yield return name;
+                yield return argument;
                 index++;
             }
             else if (parameter.Argument is null &&
@@ -177,6 +187,44 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                 index++;
             }
         }
+    }
+
+    private static bool IsFullyStaticModuleReference(ExpressionAst expression)
+    {
+        if (expression is StringConstantExpressionAst literal)
+            return NormalizeModuleReferenceName(literal.Value) is not null;
+
+        if (expression is ExpandableStringExpressionAst expandable)
+            return expandable.NestedExpressions.Count == 0 &&
+                   NormalizeModuleReferenceName(expandable.Value) is not null;
+
+        if (expression is ArrayLiteralAst array)
+            return array.Elements.Count > 0 && array.Elements.All(IsFullyStaticModuleReference);
+
+        if (expression is ArrayExpressionAst arrayExpression)
+        {
+            var elements = arrayExpression.SubExpression.Statements
+                .Select(GetHashtableValueExpression)
+                .ToArray();
+            return elements.Length > 0 &&
+                   elements.All(static element => element is not null) &&
+                   elements.Cast<ExpressionAst>().All(IsFullyStaticModuleReference);
+        }
+
+        if (expression is not HashtableAst hashtable)
+            return false;
+
+        foreach (var pair in hashtable.KeyValuePairs)
+        {
+            if (pair.Item1 is StringConstantExpressionAst key &&
+                key.Value.Equals("ModuleName", StringComparison.OrdinalIgnoreCase))
+            {
+                return GetHashtableValueExpression(pair.Item2) is { } value &&
+                       IsFullyStaticModuleReference(value);
+            }
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> GetStaticModuleNames(ExpressionAst expression)
@@ -202,6 +250,19 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
             foreach (var element in array.Elements)
             foreach (var name in GetStaticModuleNames(element))
                 yield return name;
+            yield break;
+        }
+
+        if (expression is ArrayExpressionAst arrayExpression)
+        {
+            foreach (var statement in arrayExpression.SubExpression.Statements)
+            {
+                if (GetHashtableValueExpression(statement) is not { } element)
+                    continue;
+
+                foreach (var name in GetStaticModuleNames(element))
+                    yield return name;
+            }
             yield break;
         }
 
