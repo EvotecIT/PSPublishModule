@@ -6,7 +6,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
         => type is null ? "null" : "typeof(" + PowerShellCSharpSymbolRenderer.TypeName(type) + ")";
 
     private string EmitNativeMember(PowerShellLoweredNativeMemberExpression member)
-        => "__nativeFunction.ReadMember(" + EmitExpression(member.Receiver) + ", " + PowerShellCSharpLiteral.QuoteString(member.Name) + ")";
+        => member.NameExpression is null
+            ? "__nativeFunction.ReadMember(" + EmitExpression(member.Receiver!) + ", " + PowerShellCSharpLiteral.QuoteString(member.Name!) + ")"
+            : "__nativeFunction.ReadDynamicMember(" +
+              (member.Receiver is null ? EmitNativeTypeConstraint(member.LiteralTargetType) : EmitExpression(member.Receiver)) + ", " +
+              EmitExpression(member.NameExpression) + ", " + (member.IsStatic ? "true" : "false") + ")";
 
     private string EmitNativeIndex(PowerShellLoweredNativeIndexExpression index)
         => "__nativeFunction.ReadIndex(" + EmitExpression(index.Receiver) + ", new object[] { " +

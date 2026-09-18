@@ -226,7 +226,12 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundArrayExpression array)
             return new PowerShellBoundArrayExpression(array.Span, array.Type.ClrType, array.Kind, array.Elements.Select(OptimizeExpression).ToArray());
         if (expression is PowerShellBoundNativeMemberExpression memberRead)
-            return new PowerShellBoundNativeMemberExpression(memberRead.Span, OptimizeExpression(memberRead.Receiver), memberRead.Name);
+            return new PowerShellBoundNativeMemberExpression(memberRead.Span,
+                memberRead.Receiver is null ? null : OptimizeExpression(memberRead.Receiver),
+                memberRead.LiteralTargetType,
+                memberRead.NameExpression is null ? null : OptimizeExpression(memberRead.NameExpression),
+                memberRead.Name,
+                memberRead.IsStatic);
         if (expression is PowerShellBoundNativeInvocationExpression nativeInvocation)
             return new PowerShellBoundNativeInvocationExpression(nativeInvocation.Span,
                 nativeInvocation.Receiver is null ? null : OptimizeExpression(nativeInvocation.Receiver),

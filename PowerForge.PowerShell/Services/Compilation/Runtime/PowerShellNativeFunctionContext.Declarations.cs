@@ -77,7 +77,7 @@ namespace PowerForge.Generated.Runtime
             => expression switch
             {
                 VariableExpressionAst => true,
-                MemberExpressionAst { Static: false, Member: StringConstantExpressionAst } member => IsNativeAssignmentAccess(member.Expression),
+                MemberExpressionAst { Static: false } member => IsNativeAssignmentAccess(member.Expression),
                 IndexExpressionAst { Index: ConstantExpressionAst or StringConstantExpressionAst or VariableExpressionAst } index => IsNativeAssignmentAccess(index.Target),
                 _ => false
             };

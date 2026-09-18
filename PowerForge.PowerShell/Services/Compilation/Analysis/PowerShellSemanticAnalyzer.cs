@@ -334,7 +334,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 .Concat(mutation.NativeTargetRead is null || mutation.Operation == PowerShellBoundMutationOperator.Assign
                     ? Array.Empty<PowerShellBoundExpression>() : new PowerShellBoundExpression[] { mutation.NativeTargetRead }),
             PowerShellBoundArrayExpression array => array.Elements,
-            PowerShellBoundNativeMemberExpression memberRead => new[] { memberRead.Receiver },
+            PowerShellBoundNativeMemberExpression memberRead =>
+                (memberRead.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { memberRead.Receiver })
+                .Concat(memberRead.NameExpression is null ? Array.Empty<PowerShellBoundExpression>() : new[] { memberRead.NameExpression }),
             PowerShellBoundNativeInvocationExpression nativeInvocation =>
                 (nativeInvocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { nativeInvocation.Receiver }).Concat(nativeInvocation.Arguments),
             PowerShellBoundNativeIndexExpression nativeIndex => new[] { nativeIndex.Receiver }.Concat(nativeIndex.Arguments),
@@ -586,9 +588,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 yield return read;
         }
         if (expression is PowerShellBoundNativeMemberExpression memberRead)
-        {
-            foreach (var read in EnumerateVariableReads(memberRead.Receiver)) yield return read;
-        }
+        foreach (var child in EnumerateExpressionChildren(memberRead))
+        foreach (var read in EnumerateVariableReads(child)) yield return read;
         if (expression is PowerShellBoundNativeIndexExpression or PowerShellBoundNativeInvocationExpression)
         {
             foreach (var child in EnumerateExpressionChildren(expression))
@@ -735,9 +736,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var nested in EnumerateInvocations(copy.Source)) yield return nested;
         }
         if (expression is PowerShellBoundNativeMemberExpression memberRead)
-        {
-            foreach (var nested in EnumerateInvocations(memberRead.Receiver)) yield return nested;
-        }
+        foreach (var child in EnumerateExpressionChildren(memberRead))
+        foreach (var nested in EnumerateInvocations(child)) yield return nested;
         if (expression is PowerShellBoundNativeIndexExpression or PowerShellBoundNativeInvocationExpression)
         {
             foreach (var child in EnumerateExpressionChildren(expression))

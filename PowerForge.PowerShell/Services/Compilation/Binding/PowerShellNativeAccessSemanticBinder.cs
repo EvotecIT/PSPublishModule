@@ -6,18 +6,42 @@ namespace PowerForge;
 internal static class PowerShellNativeAccessSemanticBinder
 {
     internal static PowerShellBoundExpression? BindMember(ParsedSourceDocument document, MemberExpressionAst syntax,
-        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression, string? targetFramework,
+        PowerShellCompilationCapability capabilities, ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
-        if (syntax.GetType().GetProperty("NullConditional")?.GetValue(syntax) is true ||
-            syntax.Member is not StringConstantExpressionAst name)
+        if (syntax.GetType().GetProperty("NullConditional")?.GetValue(syntax) is true)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2630",
-                "Native computed member names and null-conditional reads retain their PowerShell expression boundary.", span));
+                "Native null-conditional member reads retain their PowerShell expression boundary.", span));
             return null;
         }
-        var receiver = bindExpression(syntax.Expression, null);
-        return receiver is null ? null : new PowerShellBoundNativeMemberExpression(span, receiver, name.Value);
+        if (syntax.Member is StringConstantExpressionAst name && !syntax.Static)
+        {
+            var literalReceiver = bindExpression(syntax.Expression, null);
+            return literalReceiver is null ? null : new PowerShellBoundNativeMemberExpression(span, literalReceiver, name.Value);
+        }
+
+        Type? literalTargetType = null;
+        PowerShellBoundExpression? receiver = null;
+        if (syntax.Expression is TypeExpressionAst typeSyntax)
+        {
+            literalTargetType = typeSyntax.TypeName.GetReflectionType();
+            if (literalTargetType is null || !PowerShellCompilationParameterTypePolicy.CanUseInMethod(literalTargetType, targetFramework, capabilities))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2611",
+                    $"CLR type '{typeSyntax.TypeName.FullName}' is not available in the generated project reference set for the requested target.", span));
+                return null;
+            }
+        }
+        else
+        {
+            receiver = bindExpression(syntax.Expression, null);
+            if (receiver is null) return null;
+        }
+        var memberName = bindExpression(syntax.Member, null);
+        return memberName is null ? null : new PowerShellBoundNativeMemberExpression(
+            span, receiver, literalTargetType, memberName, syntax.Static);
     }
 
     internal static PowerShellBoundExpression? BindInvocation(ParsedSourceDocument document, InvokeMemberExpressionAst syntax,

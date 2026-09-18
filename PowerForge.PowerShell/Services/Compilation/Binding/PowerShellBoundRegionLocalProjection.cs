@@ -23,7 +23,8 @@ internal static class PowerShellBoundRegionLocalProjection
         {
             if (current is PowerShellBoundStatementErrorBoundary boundary)
                 return boundary.Body.Statements.Length == 1 ? Statement(boundary.Body.Statements[0]) : null;
-            if (current is PowerShellBoundNativeAssignmentStatement { Operation: PowerShellBoundMutationOperator.Assign } assigned)
+            if (current is PowerShellBoundNativeAssignmentStatement
+                { Operation: PowerShellBoundMutationOperator.Assign, Target.MutatesReceiver: false } assigned)
                 return Assignment(assigned.Span, assigned.Name, assigned.Value, assigned.Target);
             if (includeControlFlow && current is PowerShellBoundReturnStatement returned)
             {

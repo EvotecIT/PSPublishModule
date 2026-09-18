@@ -190,7 +190,8 @@ internal static class PowerShellLoweredTreeEnumerator
                 foreach (var element in array.Elements) yield return element;
                 break;
             case PowerShellLoweredNativeMemberExpression memberRead:
-                yield return memberRead.Receiver;
+                if (memberRead.Receiver is not null) yield return memberRead.Receiver;
+                if (memberRead.NameExpression is not null) yield return memberRead.NameExpression;
                 break;
             case PowerShellLoweredNativeInvocationExpression nativeInvocation:
                 if (nativeInvocation.Receiver is not null) yield return nativeInvocation.Receiver;

@@ -38,9 +38,11 @@ internal sealed partial class PowerShellSemanticBinder
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                 targetFramework, capabilities, diagnostics);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-            syntax is MemberExpressionAst { Static: false } nativeMember && syntax is not InvokeMemberExpressionAst)
+            syntax is MemberExpressionAst nativeMember && syntax is not InvokeMemberExpressionAst &&
+            (!nativeMember.Static || nativeMember.Member is not StringConstantExpressionAst))
             return PowerShellNativeAccessSemanticBinder.BindMember(document, nativeMember,
-                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), diagnostics);
+                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                targetFramework, capabilities, diagnostics);
         if (functionBody is not null &&
             !(syntax is VariableExpressionAst && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) &&
             PowerShellRuntimeStateSemanticBinder.TryBind(

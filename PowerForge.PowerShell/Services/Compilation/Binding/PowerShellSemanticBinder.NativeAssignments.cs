@@ -9,7 +9,7 @@ internal sealed partial class PowerShellSemanticBinder
     private static VariableExpressionAst? NativeAssignmentReceiver(ExpressionAst target)
         => target switch
         {
-            MemberExpressionAst { Static: false, Member: StringConstantExpressionAst } member => NativeReceiverRoot(member.Expression),
+            MemberExpressionAst { Static: false } member => NativeReceiverRoot(member.Expression),
             IndexExpressionAst { Index: ConstantExpressionAst or StringConstantExpressionAst or VariableExpressionAst } index => NativeReceiverRoot(index.Target),
             _ => null
         };
