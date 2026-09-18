@@ -15,6 +15,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class MissingFunctionsAnalyzer
 {
+    private static readonly object ModulePathImportLock = new();
+
     private readonly Dictionary<string, CommandInfo?> _currentSessionCommandCache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -225,7 +227,7 @@ public sealed class MissingFunctionsAnalyzer
         return output;
     }
 
-    private static ParsedInput ParseInput(
+    private ParsedInput ParseInput(
         string? filePath,
         string? code,
         IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources)
@@ -287,7 +289,11 @@ public sealed class MissingFunctionsAnalyzer
             declaredFunctions,
             commandNames,
             hasDynamicCommandInvocation,
-            ApprovedModuleRuntimeReferenceAnalyzer.Find(ast, commandNames, approvedModuleSources));
+            ApprovedModuleRuntimeReferenceAnalyzer.Find(
+                ast,
+                commandNames,
+                approvedModuleSources,
+                TypeBelongsToApprovedModuleInScope));
     }
 
     private static bool IsRuntimeCodeInvocation(InvokeMemberExpressionAst invocation)
@@ -669,6 +675,41 @@ public sealed class MissingFunctionsAnalyzer
         return CommandBelongsToModule(command, source.Name) ? command : null;
     }
 
+    private bool TypeBelongsToApprovedModuleInScope(ApprovedModuleSource source, string typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName) || string.IsNullOrWhiteSpace(source.ModuleBasePath))
+            return false;
+
+        try
+        {
+            var session = GetOrCreateModuleScopeSession(source);
+            using var ps = PowerShell.Create();
+            ps.Runspace = session.Runspace;
+            ps.AddScript(@"
+param($TypeName)
+try {
+    $resolvedType = [System.Management.Automation.LanguagePrimitives]::ConvertTo($TypeName, [type])
+    $resolvedType.Assembly.Location
+} catch {
+    $null
+}
+").AddArgument(typeName);
+            var assemblyPath = ps.Invoke()
+                .Select(static result => result.BaseObject?.ToString())
+                .FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path));
+            if (string.IsNullOrWhiteSpace(assemblyPath))
+                return false;
+
+            var moduleRoot = Path.GetFullPath(source.ModuleBasePath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return Path.GetFullPath(assemblyPath!).StartsWith(moduleRoot, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private ModuleScopeSession GetOrCreateModuleScopeSession(ApprovedModuleSource source)
     {
         var key = source.Name.Trim() + "|" + (source.Version ?? string.Empty) + "|" + source.ModuleBasePath + "|" + (source.ModuleSearchRoot ?? string.Empty);
@@ -681,28 +722,42 @@ public sealed class MissingFunctionsAnalyzer
         runspace.Open();
         try
         {
-            if (!string.IsNullOrWhiteSpace(source.ModuleSearchRoot))
-            {
-                using var pathPowerShell = PowerShell.Create();
-                pathPowerShell.Runspace = runspace;
-                pathPowerShell
-                    .AddScript("$env:PSModulePath = $args[0] + [IO.Path]::PathSeparator + $env:PSModulePath")
-                    .AddArgument(source.ModuleSearchRoot);
-                pathPowerShell.Invoke();
-                if (pathPowerShell.HadErrors)
-                    throw new InvalidOperationException($"Approved module search root '{source.ModuleSearchRoot}' could not be added to PSModulePath.");
-            }
-
             using var ps = PowerShell.Create();
             ps.Runspace = runspace;
             var moduleReference = ResolveModuleReference(source);
-            var imported = ps.AddCommand("Import-Module")
-                .AddParameter("Name", moduleReference)
-                .AddParameter("PassThru", true)
-                .AddParameter("Force", true)
-                .AddParameter("ErrorAction", "Stop")
-                .AddParameter("Verbose", false)
-                .Invoke()
+            System.Collections.ObjectModel.Collection<PSObject> importResults;
+            if (string.IsNullOrWhiteSpace(source.ModuleSearchRoot))
+            {
+                importResults = ps.AddCommand("Import-Module")
+                    .AddParameter("Name", moduleReference)
+                    .AddParameter("PassThru", true)
+                    .AddParameter("Force", true)
+                    .AddParameter("ErrorAction", "Stop")
+                    .AddParameter("Verbose", false)
+                    .Invoke();
+            }
+            else
+            {
+                ps.AddScript(@"
+param($ModuleReference, $ModuleSearchRoot)
+$previousModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Process')
+try {
+    [Environment]::SetEnvironmentVariable(
+        'PSModulePath',
+        $ModuleSearchRoot + [IO.Path]::PathSeparator + $previousModulePath,
+        'Process')
+    Import-Module -Name $ModuleReference -PassThru -Force -ErrorAction Stop -Verbose:$false
+} finally {
+    [Environment]::SetEnvironmentVariable('PSModulePath', $previousModulePath, 'Process')
+}
+")
+                    .AddArgument(moduleReference)
+                    .AddArgument(source.ModuleSearchRoot);
+                lock (ModulePathImportLock)
+                    importResults = ps.Invoke();
+            }
+
+            var imported = importResults
                 .Select(static result => result.BaseObject)
                 .OfType<PSModuleInfo>()
                 .LastOrDefault();

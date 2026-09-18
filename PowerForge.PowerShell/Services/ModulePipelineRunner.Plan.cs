@@ -373,7 +373,8 @@ public sealed partial class ModulePipelineRunner
         if (roots.Length == 0 && compatible is { Length: > 0 })
             roots = ModulePipelinePlanningHelpers.ResolveInstallRootsFromCompatiblePSEditions(compatible);
 
-        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(requiredModulesDraft.Concat(embeddedModulesDraft)))
+        if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(
+                requiredModulesDraft.Concat(embeddedModulesDraft).Concat(externalModulesDraft)))
         {
             resolveMissingModulesOnline = true;
             _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because module dependencies use Auto/Latest/Guid Auto.");
@@ -450,11 +451,23 @@ public sealed partial class ModulePipelineRunner
             dependencyVersionSourceRepository,
             embeddedVersionSources);
         embeddedModules = OrderRequiredModulesByDependenciesFirst(embeddedModules);
+        var resolvedExternalModules = ResolveRequiredModules(
+            externalModulesDraft,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential,
+            dependencyVersionSourceRepository);
+        var externalVersionSources = externalModulesDraft
+            .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
+            .GroupBy(static draft => draft.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last().VersionSource, StringComparer.OrdinalIgnoreCase);
         var dependencySourceResolutions = ResolveDependencySourceResolutions(
             CreateResolvedDependencyDrafts(requiredModules, requiredModuleSets.DependencyVersionSources)
                 .Concat(CreateResolvedDependencyDrafts(requiredModulesForPackaging, requiredModuleSets.DependencyVersionSources))
                 .Concat(CreateResolvedDependencyDrafts(embeddedModules, embeddedVersionSources))
-                .Concat(externalModulesDraft),
+                .Concat(CreateResolvedDependencyDrafts(resolvedExternalModules, externalVersionSources)),
             dependencyVersionSourceRepository);
 
         var executionSurface = FinalizePlanExecutionSurface(new ModulePlanExecutionSurface

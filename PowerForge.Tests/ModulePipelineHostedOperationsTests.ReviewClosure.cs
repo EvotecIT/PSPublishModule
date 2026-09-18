@@ -176,6 +176,45 @@ public sealed partial class ModulePipelineHostedOperationsTests
         }
     }
 
+    [Theory]
+    [InlineData("Auto")]
+    [InlineData("Latest")]
+    public void Plan_ResolvesExternalInstalledVersionTokensBeforeValidation(string token)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var dependency = new ConfigurationModuleSegment
+            {
+                Kind = ModuleDependencyKind.ExternalModule,
+                Configuration = new ModuleDependencyConfiguration
+                {
+                    ModuleName = "Dependency.Tools",
+                    ModuleVersion = token,
+                    VersionSource = ModuleDependencyVersionSource.Installed
+                }
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Dependency.Tools"] = "2.5.0"
+                }),
+                new FakeHostedOperations());
+
+            var source = Assert.Single(runner.Plan(CreateDependencySpec(root.FullName, moduleName, dependency)).DependencySourceResolutions);
+
+            Assert.Equal("2.5.0", source.MinimumVersion);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec CreateDependencySpec(
         string root,
         string moduleName,

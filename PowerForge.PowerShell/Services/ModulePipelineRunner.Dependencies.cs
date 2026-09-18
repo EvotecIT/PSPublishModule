@@ -498,6 +498,7 @@ public sealed partial class ModulePipelineRunner
         IReadOnlyList<RequiredModuleDraft> requiredModules,
         IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
         IReadOnlyList<RequiredModuleDraft> embeddedModules,
+        IReadOnlyList<RequiredModuleDraft> externalModules,
         IReadOnlyList<RequiredModuleDraft> approvedModules,
         IReadOnlyCollection<string> ignoredModules,
         bool resolveMissingModulesOnline,
@@ -508,10 +509,20 @@ public sealed partial class ModulePipelineRunner
         RepositoryCredential? credential,
         bool prerelease)
     {
+        requiredModules ??= Array.Empty<RequiredModuleDraft>();
+        requiredModulesForPackaging ??= Array.Empty<RequiredModuleDraft>();
+        embeddedModules ??= Array.Empty<RequiredModuleDraft>();
+        externalModules ??= Array.Empty<RequiredModuleDraft>();
+        approvedModules ??= Array.Empty<RequiredModuleDraft>();
+        var approvedNeedsRepositoryTool = ApprovedModulesNeedRepositoryTool(
+            approvedModules,
+            requiredModules.Concat(requiredModulesForPackaging),
+            publishVersionSource);
         if (!RequiresRequiredModuleOnlineResolutionTool(
                 requiredModules,
                 requiredModulesForPackaging,
                 embeddedModules,
+                externalModules,
                 approvedModules,
                 ignoredModules,
                 resolveMissingModulesOnline,
@@ -521,7 +532,9 @@ public sealed partial class ModulePipelineRunner
             return;
         }
 
-        if (IsRepositoryToolAvailable())
+        // Approved repository donors are resolved through PSResourceGetClient directly. PowerShellGet
+        // is a valid generic repository tool, but it cannot satisfy this specific path.
+        if (approvedNeedsRepositoryTool ? IsPSResourceGetAvailable() : IsRepositoryToolAvailable())
             return;
 
         EnsureFeatureToolDependenciesInstalled(
@@ -617,6 +630,7 @@ public sealed partial class ModulePipelineRunner
         IReadOnlyList<RequiredModuleDraft> requiredModules,
         IReadOnlyList<RequiredModuleDraft> requiredModulesForPackaging,
         IReadOnlyList<RequiredModuleDraft> embeddedModules,
+        IReadOnlyList<RequiredModuleDraft> externalModules,
         IReadOnlyList<RequiredModuleDraft> approvedModules,
         IReadOnlyCollection<string> ignoredModules,
         bool resolveMissingModulesOnline,
@@ -628,6 +642,7 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
         var drafts = declaredRequiredDrafts
             .Concat(embeddedModules ?? Array.Empty<RequiredModuleDraft>())
+            .Concat(externalModules ?? Array.Empty<RequiredModuleDraft>())
             .Where(static draft => draft is not null && !string.IsNullOrWhiteSpace(draft.ModuleName))
             .ToArray();
         if (drafts.Length == 0)
@@ -806,6 +821,7 @@ public sealed partial class ModulePipelineRunner
             input.RequiredModules,
             input.RequiredModulesForPackaging,
             input.EmbeddedModules,
+            input.ExternalModules,
             input.ApprovedModules,
             input.IgnoredModules,
             input.ResolveMissingModulesOnline,
@@ -1019,6 +1035,7 @@ public sealed partial class ModulePipelineRunner
             input.RequiredModules,
             input.RequiredModulesForPackaging,
             input.EmbeddedModules,
+            input.ExternalModules,
             input.ApprovedModules,
             input.IgnoredModules,
             input.ResolveMissingModulesOnline,
@@ -1041,6 +1058,8 @@ public sealed partial class ModulePipelineRunner
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var embeddedModulesDraft = new List<RequiredModuleDraft>();
         var embeddedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var externalModulesDraft = new List<RequiredModuleDraft>();
+        var externalIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var approvedModulesDraft = new List<RequiredModuleDraft>();
         var approvedIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var ignoredModules = new List<string>();
@@ -1090,6 +1109,7 @@ public sealed partial class ModulePipelineRunner
                     var cfg = moduleSeg.Configuration;
                     if ((moduleSeg.Kind != ModuleDependencyKind.RequiredModule &&
                          moduleSeg.Kind != ModuleDependencyKind.EmbeddedModule &&
+                         moduleSeg.Kind != ModuleDependencyKind.ExternalModule &&
                          moduleSeg.Kind != ModuleDependencyKind.ApprovedModule) ||
                         cfg is null ||
                         string.IsNullOrWhiteSpace(cfg.ModuleName) ||
@@ -1108,6 +1128,10 @@ public sealed partial class ModulePipelineRunner
                     if (moduleSeg.Kind == ModuleDependencyKind.EmbeddedModule)
                     {
                         AddOrReplaceRequiredModuleDraft(embeddedModulesDraft, embeddedIndex, draft);
+                    }
+                    else if (moduleSeg.Kind == ModuleDependencyKind.ExternalModule)
+                    {
+                        AddOrReplaceRequiredModuleDraft(externalModulesDraft, externalIndex, draft);
                     }
                     else if (moduleSeg.Kind == ModuleDependencyKind.ApprovedModule)
                     {
@@ -1142,7 +1166,7 @@ public sealed partial class ModulePipelineRunner
         }
 
         if (!resolveMissingModulesOnlineSet && HasOnlineResolvableAutoRequiredModules(
-                requiredModulesDraft.Concat(embeddedModulesDraft).Concat(approvedModulesDraft)))
+                requiredModulesDraft.Concat(embeddedModulesDraft).Concat(externalModulesDraft).Concat(approvedModulesDraft)))
             resolveMissingModulesOnline = true;
 
         var dependencyVersionSourceRepository = ResolvePublishDependencyVersionSource(
@@ -1160,6 +1184,7 @@ public sealed partial class ModulePipelineRunner
             requiredModulesDraft.ToArray(),
             requiredModulesDraftForPackaging.ToArray(),
             embeddedModulesDraft.ToArray(),
+            externalModulesDraft.ToArray(),
             approvedModulesDraft.ToArray(),
             NormalizeStringArray(ignoredModules));
     }
@@ -1196,6 +1221,7 @@ public sealed partial class ModulePipelineRunner
             requiredModules: Array.Empty<RequiredModuleDraft>(),
             requiredModulesForPackaging: Array.Empty<RequiredModuleDraft>(),
             embeddedModules: Array.Empty<RequiredModuleDraft>(),
+            externalModules: Array.Empty<RequiredModuleDraft>(),
             approvedModules: Array.Empty<RequiredModuleDraft>(),
             ignoredModules: Array.Empty<string>());
 
@@ -1210,6 +1236,7 @@ public sealed partial class ModulePipelineRunner
         public RequiredModuleDraft[] RequiredModules { get; }
         public RequiredModuleDraft[] RequiredModulesForPackaging { get; }
         public RequiredModuleDraft[] EmbeddedModules { get; }
+        public RequiredModuleDraft[] ExternalModules { get; }
         public RequiredModuleDraft[] ApprovedModules { get; }
         public string[] IgnoredModules { get; }
 
@@ -1225,6 +1252,7 @@ public sealed partial class ModulePipelineRunner
             RequiredModuleDraft[] requiredModules,
             RequiredModuleDraft[] requiredModulesForPackaging,
             RequiredModuleDraft[] embeddedModules,
+            RequiredModuleDraft[] externalModules,
             RequiredModuleDraft[] approvedModules,
             string[] ignoredModules)
         {
@@ -1239,6 +1267,7 @@ public sealed partial class ModulePipelineRunner
             RequiredModules = requiredModules ?? Array.Empty<RequiredModuleDraft>();
             RequiredModulesForPackaging = requiredModulesForPackaging ?? Array.Empty<RequiredModuleDraft>();
             EmbeddedModules = embeddedModules ?? Array.Empty<RequiredModuleDraft>();
+            ExternalModules = externalModules ?? Array.Empty<RequiredModuleDraft>();
             ApprovedModules = approvedModules ?? Array.Empty<RequiredModuleDraft>();
             IgnoredModules = ignoredModules ?? Array.Empty<string>();
         }
@@ -1331,6 +1360,15 @@ public sealed partial class ModulePipelineRunner
 
         return IsInstalledModuleAvailable(installed, "Microsoft.PowerShell.PSResourceGet") ||
                IsInstalledModuleAvailable(installed, "PowerShellGet", PowerShellGetMinimumVersion);
+    }
+
+    private bool IsPSResourceGetAvailable()
+    {
+        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(new[]
+        {
+            "Microsoft.PowerShell.PSResourceGet"
+        });
+        return IsInstalledModuleAvailable(installed, "Microsoft.PowerShell.PSResourceGet");
     }
 
     private static bool IsInstalledModuleAvailable(

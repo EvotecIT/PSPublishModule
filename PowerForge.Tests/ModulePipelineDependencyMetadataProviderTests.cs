@@ -140,6 +140,119 @@ public sealed class ModulePipelineDependencyMetadataProviderTests
     }
 
     [Fact]
+    public void Plan_AutoKeepsInstalledVersionFirstWhenPublishRepositoryIsConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSWriteHTML";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            ModuleVersion = "Latest",
+                            VersionSource = ModuleDependencyVersionSource.Auto
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Destination = PublishDestination.PowerShellGallery,
+                            Enabled = true,
+                            RepositoryName = "PSGallery",
+                            UseAsDependencyVersionSource = true
+                        }
+                    }
+                }
+            };
+            var provider = new FakeModuleDependencyMetadataProvider(
+                new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = new(dependencyName, "1.41.0.5", null, @"C:\Modules\PSWriteHTML\1.41.0.5")
+                },
+                new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("1.42.0", null)
+                });
+
+            var required = Assert.Single(new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec).RequiredModules);
+
+            Assert.Equal("1.41.0.5", required.ModuleVersion);
+            Assert.Null(provider.LastOnlineRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Plan_AutoUsesConfiguredPublishRepositoryAsFallbackWhenNoInstalledVersionExists()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            const string dependencyName = "PSWriteHTML";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = dependencyName,
+                            ModuleVersion = "Latest",
+                            VersionSource = ModuleDependencyVersionSource.Auto
+                        }
+                    },
+                    new ConfigurationPublishSegment
+                    {
+                        Configuration = new PublishConfiguration
+                        {
+                            Destination = PublishDestination.PowerShellGallery,
+                            Enabled = true,
+                            RepositoryName = "InternalModules",
+                            UseAsDependencyVersionSource = true
+                        }
+                    }
+                }
+            };
+            var provider = new FakeModuleDependencyMetadataProvider(
+                new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [dependencyName] = ("1.42.0", null)
+                });
+
+            var required = Assert.Single(new ModulePipelineRunner(new NullLogger(), new ThrowingPowerShellRunner(), provider).Plan(spec).RequiredModules);
+
+            Assert.Equal("1.42.0", required.ModuleVersion);
+            Assert.Equal("InternalModules", provider.LastOnlineRepository);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_GateBuild_UsesPublishRepositoryAsDependencyVersionSourceWithoutPublishing()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

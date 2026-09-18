@@ -58,8 +58,11 @@ public sealed partial class ModulePipelineRunner
             foreach (var group in list.GroupBy(draft => ResolveDependencyVersionSource(draft.VersionSource, publishVersionSource)))
             {
                 var source = group.Key;
-                var lookupRepository = source.PreferOnlineMetadata ? source.Repository : repository;
-                var lookupCredential = source.PreferOnlineMetadata ? source.Credential : credential;
+                var hasSourceRepository = !string.IsNullOrWhiteSpace(source.Repository);
+                var lookupRepository = hasSourceRepository ? source.Repository : repository;
+                var lookupCredential = hasSourceRepository || source.PreferOnlineMetadata
+                    ? source.Credential
+                    : credential;
                 var allowOnlineLookup = source.AllowOnlineLookup &&
                                         (resolveMissingModulesOnline || source.PreferOnlineMetadata);
                 var groupResult = ResolveRequiredModulesFromSingleSource(
@@ -555,8 +558,11 @@ public sealed partial class ModulePipelineRunner
     {
         return source switch
         {
-            ModuleDependencyVersionSource.Auto => publishVersionSource
-                ?? new DependencyVersionSourceRepository(null, null, preferOnlineMetadata: false, allowOnlineLookup: true),
+            ModuleDependencyVersionSource.Auto => new DependencyVersionSourceRepository(
+                publishVersionSource?.Repository,
+                publishVersionSource?.Credential,
+                preferOnlineMetadata: false,
+                allowOnlineLookup: true),
             ModuleDependencyVersionSource.Installed => new DependencyVersionSourceRepository(null, null, preferOnlineMetadata: false, allowOnlineLookup: false),
             ModuleDependencyVersionSource.PSGallery => new DependencyVersionSourceRepository("PSGallery", null, preferOnlineMetadata: true, allowOnlineLookup: true),
             ModuleDependencyVersionSource.PublishRepository => publishVersionSource

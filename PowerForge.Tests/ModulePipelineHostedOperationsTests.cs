@@ -1974,6 +1974,49 @@ public sealed partial class ModulePipelineHostedOperationsTests
     }
 
     [Fact]
+    public void RunPreflight_InstallsPSResourceGetForRepositoryDonorWhenOnlyPowerShellGetIsInstalled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0", CsprojPath = null },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Approved.Donor",
+                            VersionSource = ModuleDependencyVersionSource.PSGallery
+                        }
+                    }
+                }
+            };
+            var hostedOperations = new FakeHostedOperations();
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider("PowerShellGet"),
+                hostedOperations);
+
+            InvokeEnsureRequiredModuleOnlineResolutionToolInstalledIfNeededForRun(runner, spec);
+
+            Assert.Equal(1, hostedOperations.DependencyInstallCalls);
+            Assert.Equal("Microsoft.PowerShell.PSResourceGet", Assert.Single(hostedOperations.LastDependencies).Name);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void RunPreflight_AutoApprovedDonorUsesInheritedConstraintBeforeChoosingLocalSource()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

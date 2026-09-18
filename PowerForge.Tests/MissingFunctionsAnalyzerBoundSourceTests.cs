@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using Xunit;
 
@@ -542,6 +543,7 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
                 manifestPath,
                 $"@{{ RootModule = '{donorName}.psm1'; ModuleVersion = '2.0.0'; RequiredModules = @(@{{ ModuleName = '{dependencyName}'; RequiredVersion = '1.0.0' }}); FunctionsToExport = @('Get-PowerForgeBoundThing') }}\n");
 
+            var originalModulePath = Environment.GetEnvironmentVariable("PSModulePath");
             var result = new PowerShellMissingFunctionAnalysisService().Analyze(
                 filePath: null,
                 code: "Get-PowerForgeBoundThing",
@@ -551,11 +553,71 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
                     requireApprovedModuleSources: true));
 
             Assert.Contains(result.Functions, function => function.Contains("Get-PowerForgeDependencyValue", StringComparison.Ordinal));
+            Assert.Equal(originalModulePath, Environment.GetEnvironmentVariable("PSModulePath"));
         }
         finally
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    [Fact]
+    public void Analyze_RetainsBinaryDonorForTypeOutsideModuleNamespace()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "PowerForge.BinaryTypeDonor";
+            var modulePath = Path.Combine(root.FullName, moduleName, "1.0.0");
+            Directory.CreateDirectory(modulePath);
+            var assemblyPath = BuildTypeFixture(root.FullName);
+            File.Copy(assemblyPath, Path.Combine(modulePath, "Contoso.Types.dll"));
+            File.WriteAllText(
+                Path.Combine(modulePath, moduleName + ".psm1"),
+                "Add-Type -Path (Join-Path $PSScriptRoot 'Contoso.Types.dll')\nfunction Get-PowerForgeBoundThing { 'binary-type' }\n");
+            File.WriteAllText(
+                Path.Combine(modulePath, moduleName + ".psd1"),
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-PowerForgeBoundThing') }}\n");
+
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(
+                filePath: null,
+                code: "param([ContosoWidget]$Value)\nGet-PowerForgeBoundThing",
+                options: new MissingFunctionsOptions(
+                    approvedModules: new[] { moduleName },
+                    approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "1.0.0", modulePath) },
+                    requireApprovedModuleSources: true));
+
+            Assert.NotEmpty(result.Functions);
+            Assert.Empty(result.FullyInlinedApprovedModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static string BuildTypeFixture(string root)
+    {
+        var projectRoot = Path.Combine(root, "Contoso.Types.Source");
+        Directory.CreateDirectory(projectRoot);
+        File.WriteAllText(
+            Path.Combine(projectRoot, "Contoso.Types.csproj"),
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyName>Contoso.Types</AssemblyName></PropertyGroup></Project>");
+        File.WriteAllText(Path.Combine(projectRoot, "ContosoWidget.cs"), "public sealed class ContosoWidget { }");
+        var start = new ProcessStartInfo("dotnet", "build -c Release --nologo")
+        {
+            WorkingDirectory = projectRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, stdout + Environment.NewLine + stderr);
+        return Path.Combine(projectRoot, "bin", "Release", "net8.0", "Contoso.Types.dll");
     }
 
     private static string WriteModuleBody(

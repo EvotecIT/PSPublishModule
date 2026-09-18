@@ -16,7 +16,8 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
     internal static string[] Find(
         ScriptBlockAst ast,
         IEnumerable<string> commandNames,
-        IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources)
+        IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
+        Func<ApprovedModuleSource, string, bool>? typeOwnershipResolver = null)
     {
         if (approvedModuleSources is null || approvedModuleSources.Count == 0)
             return Array.Empty<string>();
@@ -54,7 +55,8 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
         {
             foreach (var source in approvedModuleSources.Values)
             {
-                if (TypeBelongsToApprovedModule(typeName, source))
+                if (TypeBelongsToApprovedModule(typeName, source) ||
+                    (typeOwnershipResolver?.Invoke(source, typeName.FullName ?? string.Empty) ?? false))
                     blocked.Add(source.Name);
             }
         }
