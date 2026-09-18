@@ -7,7 +7,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void CompleteWorkflow_PinnedIpConversionUsesSingleStatementPrefixWithoutChangingBehavior(
+    public void CompleteWorkflow_PinnedIpConversionUsesNativeMatchWithoutChangingBehavior(
         string framework,
         string host)
     {
@@ -28,12 +28,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "PinnedIpConversionMethods",
             framework,
             PowerShellCompilationCapabilities.HybridModule);
-        var region = Assert.Single(typed.PromotedRegions);
-        Assert.Equal("Convert-IPToBinary", region.SourceName);
-        Assert.Equal(25, region.StartLine);
-        Assert.Equal(25, region.EndLine);
-        Assert.True(region.RequiresLocalOwnershipGuard);
-        Assert.Equal(new[] { "IPv4Regex" }, region.ContinuationLocals.Select(static local => local.Name));
+        var method = Assert.Single(typed.Methods, static method => method.SourceName == "Convert-IPToBinary");
+        Assert.NotNull(method.NativeFunctionBinding);
+        Assert.Empty(typed.PromotedRegions);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -43,9 +40,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.PromotedTypedRegions);
-        Assert.Equal(1, Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
-            static entry => entry.Name == "Convert-IPToBinary").PromotedTypedRegions);
+        Assert.Equal(0, result.Manifest!.PromotedTypedRegions);
+        var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
+            static entry => entry.Name == "Convert-IPToBinary");
+        Assert.True(unit.EmittedClrMethod);
+        Assert.True(unit.UsesNativeFunctionBinding);
+        Assert.Equal(0, unit.PromotedTypedRegions);
 
         const string probe = """
             function Describe-RegionRecord($record) {

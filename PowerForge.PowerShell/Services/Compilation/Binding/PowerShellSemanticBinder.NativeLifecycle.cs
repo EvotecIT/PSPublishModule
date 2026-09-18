@@ -12,7 +12,7 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellBoundParameter[] parameters, PowerShellNativeFunctionBinding nativeBinding,
         Type? outputType, string outputTypeName, int diagnosticStart)
     {
-        var locals = DeclareLocals(document, function, symbols, functions, capabilities, _commandResolver);
+        var locals = DeclareLocals(document, function, symbols, functions, capabilities, targetFramework, _commandResolver);
         var clauses = new List<PowerShellBoundConditionalClause>();
         var blocks = new[] { function.Body.BeginBlock, function.Body.ProcessBlock, function.Body.EndBlock, GetCleanBlock(function.Body) };
         for (var clause = 0; clause < blocks.Length; clause++)

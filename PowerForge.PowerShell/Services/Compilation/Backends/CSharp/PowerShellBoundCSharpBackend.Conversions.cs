@@ -15,7 +15,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (conversion.UseNativeCustomObjectConversion)
             return $"__nativeFunction.ConvertCustomObject({EmitExpression(conversion.Operand)})";
         if (conversion.UseNativeConversion)
-            return $"({type})__nativeFunction.ConvertValue(typeof({type}), {EmitExpression(conversion.Operand)})!";
+        {
+            var target = conversion.NativeRuntimeTypeName is null
+                ? $"typeof({type})"
+                : "__nativeFunction.ResolveTypeName(" +
+                  PowerShellCSharpLiteral.QuoteString(conversion.NativeRuntimeTypeName) + ", " +
+                  PowerShellCSharpLiteral.QuoteString(conversion.NativeSourcePath ?? string.Empty) + ", " +
+                  conversion.Span.StartLine + ", " + conversion.Span.StartColumn + ", " +
+                  conversion.Span.EndLine + ", " + conversion.Span.EndColumn + ", " +
+                  PowerShellCSharpLiteral.QuoteString(conversion.NativeSourceText) + ")";
+            return $"({type})__nativeFunction.ConvertValue({target}, {EmitExpression(conversion.Operand)})!";
+        }
         if (conversion.UsePowerShellTruthiness)
             return $"global::System.Management.Automation.LanguagePrimitives.IsTrue((object?)({EmitExpression(conversion.Operand)}))";
         if (conversion.NormalizeNullString)

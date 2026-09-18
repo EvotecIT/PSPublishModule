@@ -37,7 +37,7 @@ internal sealed partial class PowerShellSemanticBinder
         var arrayType = sourceParameter.Type.ClrType.MakeArrayType();
         var requiresNonNullCollection = PowerShellRuntimeFreePipelineLifecyclePolicy.RequiresNonNullCollection(
             sourceParameter.Type.ClrType, capabilities);
-        var locals = DeclareLocals(document, function, symbols, functions, capabilities, _commandResolver)
+        var locals = DeclareLocals(document, function, symbols, functions, capabilities, targetFramework, _commandResolver)
             .Append(new PowerShellBoundLocal(sourceParameter.Symbol, sourceParameter.Type))
             .OrderBy(static local => local.Symbol.StableKey, StringComparer.Ordinal)
             .ToArray();

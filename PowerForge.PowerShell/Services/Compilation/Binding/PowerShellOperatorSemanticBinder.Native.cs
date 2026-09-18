@@ -14,8 +14,11 @@ internal static partial class PowerShellOperatorSemanticBinder
         {
             "Ilike" or "Clike" => PowerShellBoundBinaryOperator.NativeLike,
             "Inotlike" or "Cnotlike" => PowerShellBoundBinaryOperator.NativeNotLike,
+            "Match" or "Imatch" or "Cmatch" => PowerShellBoundBinaryOperator.NativeMatch,
+            "Notmatch" or "Inotmatch" or "Cnotmatch" => PowerShellBoundBinaryOperator.NativeNotMatch,
             "Isplit" or "Csplit" => PowerShellBoundBinaryOperator.NativeSplit,
             "Ireplace" or "Creplace" => PowerShellBoundBinaryOperator.NativeReplace,
+            "DotDot" => PowerShellBoundBinaryOperator.NativeRange,
             "Plus" => PowerShellBoundBinaryOperator.Add,
             "Minus" => PowerShellBoundBinaryOperator.Subtract,
             "Multiply" => PowerShellBoundBinaryOperator.Multiply,

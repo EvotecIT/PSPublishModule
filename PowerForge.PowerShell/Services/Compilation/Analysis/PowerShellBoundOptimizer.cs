@@ -209,7 +209,9 @@ internal sealed class PowerShellBoundOptimizer
             }
             if (conversion.UsePowerShellLanguageRuntime) _runtimeConversionSitesSpecialized++;
             return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime,
-                conversion.UsePowerShellTruthiness, conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText, conversion.NativePostTestCondition, conversion.UseNativeConversion, conversion.UseNativeCustomObjectConversion);
+                conversion.UsePowerShellTruthiness, conversion.NormalizeNullString, conversion.NativeSourcePath,
+                conversion.NativeSourceText, conversion.NativePostTestCondition, conversion.UseNativeConversion,
+                conversion.UseNativeCustomObjectConversion, conversion.NativeRuntimeTypeName);
         }
         if (expression is PowerShellBoundInvocationExpression invocation)
             return new PowerShellBoundInvocationExpression(invocation.Span, invocation.Target,

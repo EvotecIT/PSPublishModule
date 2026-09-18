@@ -10,6 +10,7 @@ internal sealed partial class PowerShellSemanticBinder
         IDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         PowerShellCompilationCapability capabilities,
+        string? targetFramework,
         PowerShellCommandSemanticResolver commandResolver,
         int? excludedTailOffset = null)
     {
@@ -37,7 +38,7 @@ internal sealed partial class PowerShellSemanticBinder
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
             var type = closedAlternatives.TryGetValue(name, out var closedAlternative)
                 ? closedAlternative.CreateTypeFact()
-                : ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
+                : ResolveAssignmentType(assignment, functions, capabilities, targetFramework, commandResolver);
             if (type.Provenance == PowerShellTypeFactProvenance.Unknown &&
                 UnwrapExpression(assignment.Right) is VariableExpressionAst copied &&
                 symbols.TryGetValue(copied.VariablePath.UserPath, out var copiedSymbol) &&
@@ -57,7 +58,8 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellNumericUnionPolicy.RequiresPromotion(function, name, assignments))
                 type = PowerShellNumericUnionPolicy.Int32OrDouble;
             if (type.Provenance == PowerShellTypeFactProvenance.Unknown &&
-                TryInferNullSeededReferenceType(name, assignment, assignments, functions, capabilities, commandResolver, out var inferred))
+                TryInferNullSeededReferenceType(name, assignment, assignments, functions, capabilities,
+                    targetFramework, commandResolver, out var inferred))
                 type = inferred;
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/local/" + name);
             var local = new PowerShellBoundLocal(symbol, type);
@@ -119,6 +121,7 @@ internal sealed partial class PowerShellSemanticBinder
         AssignmentStatementAst assignment,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         PowerShellCompilationCapability capabilities,
+        string? targetFramework,
         PowerShellCommandSemanticResolver commandResolver)
     {
         var expression = UnwrapExpression(assignment.Right);
@@ -150,9 +153,17 @@ internal sealed partial class PowerShellSemanticBinder
         if (expression is ConvertExpressionAst powerShellObject && PowerShellObjectConstructionPolicy.IsLiteral(powerShellObject))
             return PowerShellObjectSemanticBinder.InferLiteralType(powerShellObject);
         if (expression is ConvertExpressionAst conversion && conversion.StaticType != typeof(object))
+        {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                !PowerShellCompilationParameterTypePolicy.CanUseInMethod(conversion.StaticType, targetFramework, capabilities))
+                return PowerShellTypeFact.Unknown;
             // A cast constrains this value only. Later writes to the untyped local can change
             // its representation; only a type constraint on the assignment target persists.
             return new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Inferred, "The assignment value has an authored conversion; the local has no type constraint.");
+        }
+        if (expression is TypeExpressionAst)
+            return new PowerShellTypeFact(typeof(Type), PowerShellTypeFactProvenance.Inferred,
+                "A statically resolved type literal produces one System.Type value.");
         if (expression is InvokeMemberExpressionAst
             {
                 Static: true,
@@ -196,6 +207,7 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyList<AssignmentStatementAst> assignments,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         PowerShellCompilationCapability capabilities,
+        string? targetFramework,
         PowerShellCommandSemanticResolver commandResolver,
         out PowerShellTypeFact type)
     {
@@ -209,7 +221,7 @@ internal sealed partial class PowerShellSemanticBinder
             if (variable is null || !variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
             if (!assignment.Operator.ToString().Equals("Equals", StringComparison.Ordinal)) return false;
             if (IsNullAssignment(assignment)) continue;
-            var candidate = ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
+            var candidate = ResolveAssignmentType(assignment, functions, capabilities, targetFramework, commandResolver);
             if (candidate.Provenance == PowerShellTypeFactProvenance.Unknown ||
                 candidate.ClrType == typeof(object) ||
                 candidate.ClrType.IsValueType ||

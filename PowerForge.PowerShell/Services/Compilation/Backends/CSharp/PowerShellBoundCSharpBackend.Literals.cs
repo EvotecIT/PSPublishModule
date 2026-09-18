@@ -8,6 +8,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
     internal static string EmitLiteral(PowerShellLoweredLiteralExpression literal)
     {
         if (literal.Value is null) return "null";
+        if (literal.ClrType == typeof(Type) && literal.Value is Type typeValue)
+            return $"typeof({PowerShellCSharpSymbolRenderer.TypeName(typeValue)})";
         var nullableType = Nullable.GetUnderlyingType(literal.ClrType);
         if (nullableType is not null)
         {

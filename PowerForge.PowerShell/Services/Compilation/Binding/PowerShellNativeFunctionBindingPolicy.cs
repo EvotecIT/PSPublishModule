@@ -25,14 +25,16 @@ internal static class PowerShellNativeFunctionBindingPolicy
     }
 
     internal static HashSet<string> FindInvocationClosure(IEnumerable<FunctionDefinitionAst> functions,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        string? targetFramework)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) return result;
         var declarations = functions.GroupBy(static function => function.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() == 1)
             .ToDictionary(static group => group.Key, static group => group.Single(), StringComparer.OrdinalIgnoreCase);
-        var pending = new Queue<FunctionDefinitionAst>(declarations.Values.Where(RequiresNativeBinding));
+        var pending = new Queue<FunctionDefinitionAst>(declarations.Values.Where(function =>
+            RequiresNativeBinding(function, targetFramework, capabilities)));
         while (pending.Count > 0)
         {
             var function = pending.Dequeue();
@@ -45,13 +47,14 @@ internal static class PowerShellNativeFunctionBindingPolicy
     }
 
     internal static PowerShellNativeFunctionBinding? Select(FunctionDefinitionAst function, PowerShellCompilationCapability capabilities,
+        string? targetFramework,
         bool requiresNativeInvocation = false)
     {
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
             function.Body.DynamicParamBlock is not null)
             return null;
         var parameters = PowerShellParameterSyntax.GetParameters(function.Body).ToArray();
-        if (!requiresNativeInvocation && !RequiresNativeBinding(function)) return null;
+        if (!requiresNativeInvocation && !RequiresNativeBinding(function, targetFramework, capabilities)) return null;
         var declaration = function.Body.ParamBlock is { } block
             ? string.Join("\n", block.Attributes.Select(static attribute => attribute.Extent.Text).Concat(new[] { block.Extent.Text }))
             : "param(" + string.Join(",", parameters.Select(static parameter => parameter.Extent.Text)) + ")";
@@ -68,7 +71,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
             node is CommandBaseAst { Redirections.Count: > 0 } command &&
                 (includeCommandRedirections || command is CommandExpressionAst), searchNestedScriptBlocks: true);
 
-    private static bool RequiresNativeBinding(FunctionDefinitionAst function)
+    private static bool RequiresNativeBinding(FunctionDefinitionAst function, string? targetFramework,
+        PowerShellCompilationCapability capabilities)
         => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
            function.Body.Find(static node => node is ScriptBlockExpressionAst block && PowerShellSemanticBinder.IsAssignedScriptBlock(block), searchNestedScriptBlocks: true) is not null ||
            function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null ||
@@ -77,11 +81,16 @@ internal static class PowerShellNativeFunctionBindingPolicy
                node is ConvertExpressionAst conversion && conversion.Parent is CommandExpressionAst { Parent: PipelineAst discardPipeline } &&
                    PowerShellCompilationConversionPolicy.IsStatementDiscard(conversion) && IsCapturedPipeline(discardPipeline) ||
                node is SubExpressionAst or BinaryExpressionAst { Operator: TokenKind.Join or TokenKind.Ireplace or TokenKind.Creplace or
+                   TokenKind.Imatch or TokenKind.Cmatch or TokenKind.Inotmatch or TokenKind.Cnotmatch or TokenKind.DotDot or
                    TokenKind.Icontains or TokenKind.Ccontains or TokenKind.Inotcontains or TokenKind.Cnotcontains or
                    TokenKind.Iin or TokenKind.Cin or TokenKind.Inotin or TokenKind.Cnotin } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
+               searchNestedScriptBlocks: false) is not null ||
+           function.Body.Find(node => node is ConvertExpressionAst conversion &&
+               conversion.Type.TypeName.GetReflectionType() is { } targetType &&
+               !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities),
                searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is PipelineAst pipeline &&
                PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline) && IsCapturedPipeline(pipeline),

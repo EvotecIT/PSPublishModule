@@ -33,8 +33,17 @@ internal sealed partial class PowerShellSemanticBinder
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is IndexExpressionAst nativeIndex)
             return PowerShellNativeAccessSemanticBinder.BindIndex(document, nativeIndex,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), diagnostics);
-        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is InvokeMemberExpressionAst nativeInvocation)
-            return PowerShellNativeAccessSemanticBinder.BindInvocation(document, nativeInvocation,
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is InvokeMemberExpressionAst nativeInvocation &&
+            HasObservedCatchAncestor(nativeInvocation) && InvocationConsumesAuthoredTypeLiteral(nativeInvocation))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                PowerShellCompilationFeatureIds.ForSyntax(nameof(InvokeMemberExpressionAst)),
+                "Native method invocation inside an observed catch boundary remains hosted until method-invocation wrapper identity is closed.",
+                span));
+            return null;
+        }
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is InvokeMemberExpressionAst acceptedNativeInvocation)
+            return PowerShellNativeAccessSemanticBinder.BindInvocation(document, acceptedNativeInvocation,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                 targetFramework, capabilities, diagnostics);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
@@ -81,6 +90,23 @@ internal sealed partial class PowerShellSemanticBinder
                 return new PowerShellBoundLiteralExpression(span, text.Value, LiteralType(typeof(string), "String literal syntax determines the CLR representation."), PowerShellValueState.Known);
             case ConstantExpressionAst constant:
                 return new PowerShellBoundLiteralExpression(span, constant.Value, LiteralType(constant.Value?.GetType() ?? typeof(object), "Literal syntax determines the CLR representation."), constant.Value is null ? PowerShellValueState.Null : PowerShellValueState.Known);
+            case TypeExpressionAst typeExpression:
+                var typeValue = typeExpression.TypeName.GetReflectionType();
+                if (typeValue is null ||
+                    !PowerShellCompilationParameterTypePolicy.CanUseInMethod(typeValue, targetFramework, capabilities))
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic(
+                        PowerShellCompilationFeatureIds.ForSyntax(nameof(TypeExpressionAst)),
+                        $"CLR type literal '{typeExpression.TypeName.FullName}' is not statically available in the generated project reference set for the requested target.",
+                        span));
+                    return null;
+                }
+                return new PowerShellBoundLiteralExpression(
+                    span,
+                    typeValue,
+                    new PowerShellTypeFact(typeof(Type), PowerShellTypeFactProvenance.Literal,
+                        "A statically resolved type literal produces one System.Type value."),
+                    PowerShellValueState.Known);
             case ArrayLiteralAst array:
                 return PowerShellArraySemanticBinder.Bind(
                     document,
@@ -371,6 +397,56 @@ internal sealed partial class PowerShellSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", $"Expression '{syntax.GetType().Name}' is not yet represented by the bound pipeline.", span));
                 return null;
         }
+    }
+
+    private static bool HasObservedCatchAncestor(Ast expression)
+    {
+        for (Ast? ancestor = expression.Parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (ancestor is TryStatementAst { CatchClauses.Count: > 0 }) return true;
+            if (ancestor is FunctionDefinitionAst) return false;
+        }
+        return false;
+    }
+
+    private static bool InvocationConsumesAuthoredTypeLiteral(InvokeMemberExpressionAst invocation)
+    {
+        if (invocation.Arguments is not { } arguments) return false;
+        if (arguments.Any(static argument =>
+                argument.Find(static node => node is TypeExpressionAst, searchNestedScriptBlocks: false) is not null))
+            return true;
+
+        var referencedVariables = arguments
+            .SelectMany(static argument => argument.FindAll(static node => node is VariableExpressionAst,
+                searchNestedScriptBlocks: false).OfType<VariableExpressionAst>())
+            .Select(static variable => variable.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (referencedVariables.Count == 0) return false;
+
+        var body = FindOwningFunctionBody(invocation);
+        if (body is null) return false;
+        var assignments = body.FindAll(node => node is AssignmentStatementAst assignment &&
+                assignment.Extent.EndOffset <= invocation.Extent.StartOffset,
+                searchNestedScriptBlocks: false)
+            .OfType<AssignmentStatementAst>()
+            .OrderByDescending(static assignment => assignment.Extent.EndOffset)
+            .ToArray();
+        var resolvedVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var assignment in assignments)
+        {
+            var target = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, true);
+            if (target is null || !referencedVariables.Contains(target.VariablePath.UserPath) ||
+                !resolvedVariables.Add(target.VariablePath.UserPath))
+                continue;
+            if (assignment.Right.Find(static child => child is TypeExpressionAst,
+                    searchNestedScriptBlocks: false) is not null)
+                return true;
+            foreach (var source in assignment.Right.FindAll(static child => child is VariableExpressionAst,
+                         searchNestedScriptBlocks: false).OfType<VariableExpressionAst>())
+                if (!resolvedVariables.Contains(source.VariablePath.UserPath))
+                    referencedVariables.Add(source.VariablePath.UserPath);
+        }
+        return false;
     }
 
     private PowerShellCommandInvocationResolution ResolveCommand(

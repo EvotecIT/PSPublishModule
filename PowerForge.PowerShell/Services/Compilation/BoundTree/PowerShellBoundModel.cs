@@ -295,7 +295,8 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         bool usePowerShellTruthiness = false,
         bool normalizeNullString = false,
         string? nativeSourcePath = null,
-        string nativeSourceText = "", bool nativePostTestCondition = false, bool useNativeConversion = false, bool useNativeCustomObjectConversion = false)
+        string nativeSourceText = "", bool nativePostTestCondition = false, bool useNativeConversion = false,
+        bool useNativeCustomObjectConversion = false, string? nativeRuntimeTypeName = null)
         : base(
             span,
             targetType,
@@ -309,6 +310,8 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
             throw new ArgumentException("A bound conversion cannot select two PowerShell language conversion operations.");
         if (useNativeCustomObjectConversion && (!useNativeConversion || targetType.ClrType != typeof(object)))
             throw new ArgumentException("Custom-object conversion requires the native binder and an object result contract.");
+        if (nativeRuntimeTypeName is not null && (!useNativeConversion || targetType.ClrType != typeof(object)))
+            throw new ArgumentException("A runtime-resolved conversion target requires the native binder and an object result contract.");
         if (normalizeNullString && (usePowerShellLanguageRuntime || usePowerShellTruthiness ||
             targetType.ClrType != typeof(string) || operand.Type.ClrType != typeof(string)))
             throw new ArgumentException("Null-string normalization requires one CLR string operand and destination.");
@@ -321,6 +324,7 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         NativePostTestCondition = nativePostTestCondition;
         UseNativeConversion = useNativeConversion;
         UseNativeCustomObjectConversion = useNativeCustomObjectConversion;
+        NativeRuntimeTypeName = nativeRuntimeTypeName;
     }
 
     internal PowerShellBoundExpression Operand { get; }
@@ -332,6 +336,7 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
     internal bool NativePostTestCondition { get; }
     internal bool UseNativeConversion { get; }
     internal bool UseNativeCustomObjectConversion { get; }
+    internal string? NativeRuntimeTypeName { get; }
 }
 
 internal enum PowerShellLocalCallResultProjection

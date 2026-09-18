@@ -4,7 +4,18 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private string EmitNativeBinary(PowerShellLoweredBinaryExpression expression, string left, string right)
     {
+        if (expression.Operation == PowerShellBoundBinaryOperator.NativeRange)
+        {
+            var rangeFunction = _sourceFunction!;
+            var rangeExtent = expression.OperatorSpan ?? throw new InvalidOperationException("Native range extent is missing.");
+            var rangeSource = expression.OperatorSourceText ?? throw new InvalidOperationException("Native range source is missing.");
+            var location = PowerShellCSharpLiteral.QuoteString(rangeFunction.SourcePath) + ", " +
+                rangeExtent.StartLine + ", " + rangeExtent.StartColumn + ", " + rangeExtent.EndLine + ", " +
+                rangeExtent.EndColumn + ", " + PowerShellCSharpLiteral.QuoteString(rangeSource);
+            return "__nativeFunction.EvaluateRange(__nativeFunction.BeginRange(" + left + ", " + location + "), " + right + ")";
+        }
         if (expression.Operation is PowerShellBoundBinaryOperator.NativeLike or PowerShellBoundBinaryOperator.NativeNotLike or
+            PowerShellBoundBinaryOperator.NativeMatch or PowerShellBoundBinaryOperator.NativeNotMatch or
             PowerShellBoundBinaryOperator.NativeSplit or PowerShellBoundBinaryOperator.NativeReplace)
         {
             var function = _sourceFunction!;

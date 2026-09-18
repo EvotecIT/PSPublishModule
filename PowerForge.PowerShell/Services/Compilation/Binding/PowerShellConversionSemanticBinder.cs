@@ -36,8 +36,26 @@ internal static class PowerShellConversionSemanticBinder
                 $"Conversion target '{syntax.Type.TypeName.FullName}' requires runtime type resolution.", span));
             return null;
         }
-        if (targetType == typeof(void) || !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
+        if (targetType == typeof(void))
         {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2201", $"Conversion target '{targetType.FullName}' is not available in the generated target contract.", span));
+            return null;
+        }
+        if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
+        {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            {
+                var runtimeOperand = bindExpression(syntax.Child, typeof(object));
+                return runtimeOperand is null ? null : new PowerShellBoundConversionExpression(
+                    span,
+                    new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Explicit,
+                        "A target-incompatible CLR representation stays object-valued while the active PowerShell host resolves and applies the authored conversion."),
+                    runtimeOperand,
+                    nativeSourcePath: document.Path,
+                    nativeSourceText: PowerShellSourceParser.GetSourceLines(document, span),
+                    useNativeConversion: true,
+                    nativeRuntimeTypeName: syntax.Type.TypeName.FullName);
+            }
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2201", $"Conversion target '{targetType.FullName}' is not available in the generated target contract.", span));
             return null;
         }

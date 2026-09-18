@@ -53,8 +53,11 @@ internal enum PowerShellBoundBinaryOperator
     NativeStringConcatenate,
     NativeLike,
     NativeNotLike,
+    NativeMatch,
+    NativeNotMatch,
     NativeSplit,
-    NativeReplace
+    NativeReplace,
+    NativeRange
 }
 
 internal enum PowerShellBoundUnaryOperator

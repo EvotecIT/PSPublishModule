@@ -11,6 +11,15 @@ namespace PowerForge.Generated.Runtime
     {
         private static readonly ConcurrentDictionary<Type, Func<object?, object?>> ConversionSites = new();
         private static readonly Lazy<Func<object?, object?>> CustomObjectConversionSite = new(CreateCustomObjectConversionSite);
+        private static readonly Lazy<ConstructorInfo> RuntimeTypeNameConstructor = new(() => typeof(PSObject).Assembly
+            .GetType("System.Management.Automation.Language.TypeName", true)!
+            .GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
+                new[] { typeof(System.Management.Automation.Language.IScriptExtent), typeof(string) }, null)
+            ?? throw new NotSupportedException("PowerShell's authored type-name representation is unavailable."));
+        private static readonly Lazy<MethodInfo> ResolveRuntimeTypeName = new(() => typeof(PSObject).Assembly
+            .GetType("System.Management.Automation.TypeOps", true)!
+            .GetMethod("ResolveTypeName", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new NotSupportedException("PowerShell's native type-name resolver is unavailable."));
 
         /// <summary>Preserves the authored PSCustomObject alias, including dictionary-to-note-property conversion.</summary>
         public object? ConvertCustomObject(object? value)
@@ -39,6 +48,17 @@ namespace PowerForge.Generated.Runtime
             // Sending that sentinel through PSConvertBinder would create a null record.
             if (type == typeof(object)) return value;
             return ConversionSites.GetOrAdd(type, CreateConversionSite)(value);
+        }
+
+        /// <summary>Resolves the authored type name in the loaded PowerShell host before its operand is evaluated.</summary>
+        public Type ResolveTypeName(string typeName, string file, int line, int column,
+            int endLine, int endColumn, string sourceText)
+        {
+            EnsureActive();
+            var extent = PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, sourceText);
+            var authored = RuntimeTypeNameConstructor.Value.Invoke(new object[] { extent, typeName });
+            return (Type)PowerShellNativeFunctionHost.Invoke(ResolveRuntimeTypeName.Value, null,
+                new[] { authored, extent })!;
         }
 
         private static Func<object?, object?> CreateConversionSite(Type destination)

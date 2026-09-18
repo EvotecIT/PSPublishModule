@@ -49,7 +49,8 @@ internal sealed partial class PowerShellSemanticBinder
     {
         var functionDiagnosticStart = diagnostics.Count;
         ClearFunctionRegionEvidence(regionCandidates, regionOpportunities, document.Path, functionSymbol.Name);
-        var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(function, capabilities, requiresNativeInvocation);
+        var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(
+            function, capabilities, targetFramework, requiresNativeInvocation);
         if (new[] { function.Body.BeginBlock, function.Body.ProcessBlock, function.Body.EndBlock, GetCleanBlock(function.Body) }
             .FirstOrDefault(block => block?.Traps is { Count: > 0 }) is { } trappedBlock)
         {
@@ -120,7 +121,7 @@ internal sealed partial class PowerShellSemanticBinder
             ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames, capabilities, _commandResolver)
             : -1;
         var runtimeTailOffset = runtimeTailStart >= 0 ? authoredStatements[runtimeTailStart].Extent.StartOffset : (int?)null;
-        var locals = DeclareLocals(document, function, symbols, functions, capabilities, _commandResolver, runtimeTailOffset);
+        var locals = DeclareLocals(document, function, symbols, functions, capabilities, targetFramework, _commandResolver, runtimeTailOffset);
         var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
         var statements = new List<PowerShellBoundStatement>();

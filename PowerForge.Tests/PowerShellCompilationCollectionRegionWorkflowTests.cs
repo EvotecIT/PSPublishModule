@@ -92,7 +92,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(3, result.Manifest!.PromotedTypedRegions);
+        Assert.Equal(0, result.Manifest!.PromotedTypedRegions);
+        Assert.Equal(1, result.Manifest.CompiledMethods);
+        var disposition = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
+            static unit => unit.Name == "Split-Array");
+        Assert.True(disposition.UsesNativeFunctionBinding);
+        Assert.False(disposition.RetainedHostedSource);
 
         const string probe = """
             function Describe-Split($name, $arguments) {
@@ -131,40 +136,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Transpile_PinnedSplitArrayPromotesFreshConstructionAndTerminalTransfer()
+    public void Transpile_PinnedSplitArrayUsesCompleteNativeMethod()
     {
         var source = FindCompleteConversionWorkflow(
             "PSSharedGoods", "FullModule", "Public", "Objects", "Split-Array.ps1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { source }, "PowerForge.Compiled", "PinnedSplitArrayMethods", "net10.0",
             PowerShellCompilationCapabilities.HybridModule);
-        var regions = typed.PromotedRegions.Where(static region => region.SourceName == "Split-Array")
-            .OrderBy(static region => region.StartOffset).ToArray();
-
-        Assert.True(regions.Length == 3,
-            string.Join(Environment.NewLine, typed.RegionCandidates.Where(static candidate => candidate.SourceName == "Split-Array")
-                .Select(static candidate => candidate.StartLine + "-" + candidate.EndLine + " " + candidate.DecisionCode + ": " + candidate.Reason)) +
-            Environment.NewLine + string.Join(Environment.NewLine, typed.RegionOpportunities.Where(static opportunity => opportunity.SourceName == "Split-Array")
-                .Select(static opportunity => opportunity.StartLine + "-" + opportunity.EndLine + " " + opportunity.Continuation +
-                    " inputs=" + string.Join(",", opportunity.LiveInputs.Select(static input => input.Identity + ":" + input.TypeName)) +
-                    " outputs=" + string.Join(",", opportunity.LiveOutputs.Select(static output => output.Identity + ":" + output.TypeName)))));
-        Assert.Equal(new[] { 36, 44, 51 }, regions.Select(static region => region.StartLine));
-        var envelope = Assert.IsType<PowerShellRegionControlFlowContract>(regions[0].ControlFlowContract);
-        Assert.Equal(PowerShellRegionControlFlowBehavior.ReturnOrFallThrough, envelope.Behavior);
-        Assert.Equal(PowerShellRegionTransferOutputBehavior.EnumerateOneLevel, envelope.ReturnValue.OutputBehavior);
-        Assert.True(regions[1].RequiresLocalOwnershipGuard);
-        var fresh = Assert.IsType<PowerShellRegionTransferContract>(Assert.Single(regions[1].ContinuationLocals).Contract);
-        Assert.Equal(PowerShellRegionTransferShape.ListSequence, fresh.Shape);
-        Assert.Equal(PowerShellRegionTransferDirection.LiveOut, fresh.Direction);
-        Assert.Equal(PowerShellRegionTransferOwnership.GuardedFresh, fresh.Ownership);
-        Assert.Empty(regions[2].ContinuationLocals);
-        var input = Assert.Single(regions[2].InputLocals);
-        Assert.Equal("outArray", input.Name, ignoreCase: true);
-        var earlier = Assert.IsType<PowerShellRegionTransferContract>(input.Contract);
-        Assert.Equal(PowerShellRegionTransferDirection.LiveIn, earlier.Direction);
-        Assert.Equal(PowerShellRegionTransferOwnership.EarlierRegion, earlier.Ownership);
-        Assert.Equal(PowerShellRegionTransferOutputBehavior.NoEnumerate,
-            Assert.IsType<PowerShellRegionTransferContract>(regions[2].TerminalTransferContract).OutputBehavior);
+        var method = Assert.Single(typed.Methods, static candidate => candidate.SourceName == "Split-Array");
+        Assert.NotNull(method.NativeFunctionBinding);
+        Assert.DoesNotContain(typed.PromotedRegions, static region => region.SourceName == "Split-Array");
     }
 
     [Theory]

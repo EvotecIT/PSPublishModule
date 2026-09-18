@@ -16,11 +16,15 @@ internal static partial class PowerShellOperatorSemanticBinder
     {
         var operation = syntax.Operator.ToString();
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-            operation is "Ilike" or "Clike" or "Inotlike" or "Cnotlike" or "Isplit" or "Csplit" or "Ireplace" or "Creplace")
+            operation is "Ilike" or "Clike" or "Inotlike" or "Cnotlike" or
+                "Match" or "Imatch" or "Cmatch" or "Notmatch" or "Inotmatch" or "Cnotmatch" or
+                "Isplit" or "Csplit" or "Ireplace" or "Creplace" or "DotDot")
         {
             var nativeLeft = bindOperand(syntax.Left);
             var nativeRight = bindOperand(syntax.Right);
-            var operatorSpan = PowerShellSourceParser.GetSpan(document, syntax.ErrorPosition);
+            var operatorSpan = operation == "DotDot"
+                ? span
+                : PowerShellSourceParser.GetSpan(document, syntax.ErrorPosition);
             return nativeLeft is null || nativeRight is null ? null : BindNativeBinary(span, operation, nativeLeft, nativeRight, capabilities,
                 operatorSpan, PowerShellSourceParser.GetSourceLines(document, operatorSpan));
         }
