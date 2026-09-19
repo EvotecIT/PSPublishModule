@@ -1397,7 +1397,9 @@ internal static partial class WebPipelineRunner
             result.Warnings.Length > 0 &&
             (result.ReleaseCount == 0 || incompleteFetch) &&
             TryPreserveExistingReleaseHub(existingOutputContent, outPath,
-                options.RetainLatestStableTagPrefixes.Concat(options.RetainAllStableTagPrefixes)))
+                options.RetainLatestStableTagPrefixes.Concat(options.RetainAllStableTagPrefixes),
+                requireCompleteHistory: options.RetainAllStableTagPrefixes.Any(
+                    static prefix => !string.IsNullOrWhiteSpace(prefix))))
         {
             var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
             result = new WebReleaseHubResult
@@ -1468,8 +1470,12 @@ internal static partial class WebPipelineRunner
     internal static bool TryPreserveExistingReleaseHub(
         string existingJson,
         string outputPath,
-        IEnumerable<string>? requiredStableTagPrefixes = null)
+        IEnumerable<string>? requiredStableTagPrefixes = null,
+        bool requireCompleteHistory = false)
     {
+        // An old document contains no proof that it retained every historical release.
+        if (requireCompleteHistory)
+            return false;
         if (string.IsNullOrWhiteSpace(existingJson) || !File.Exists(outputPath))
             return false;
 

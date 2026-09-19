@@ -104,6 +104,8 @@ public class WebPipelineRunnerReleaseHubTests
 
             Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
             Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["OfficeIMO-v"]));
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath,
+                ["OfficeIMO-v"], requireCompleteHistory: true));
         }
         finally
         {

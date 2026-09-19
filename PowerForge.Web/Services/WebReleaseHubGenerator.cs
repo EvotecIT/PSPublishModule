@@ -572,6 +572,7 @@ public static class WebReleaseHubGenerator
                                     options.RetainAllStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix));
         bool fetchedAllAvailableReleases = false;
         bool fetchFailed = false;
+        bool anonymousAfterTokenFailure = false;
 
         for (var page = 1;
              page <= maxPages && (results.Count < maxReleases || retainStablePrefixes);
@@ -581,7 +582,7 @@ public static class WebReleaseHubGenerator
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                if (!string.IsNullOrWhiteSpace(options.Token))
+                if (!anonymousAfterTokenFailure && !string.IsNullOrWhiteSpace(options.Token))
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Token);
 
                 using var response = GitHubClient.Send(request);
@@ -589,11 +590,18 @@ public static class WebReleaseHubGenerator
                 {
                     if (ShouldRetryGitHubWithoutAuthorization(request, response))
                     {
+                        if (page > 1)
+                        {
+                            warnings.Add($"GitHub release authorization changed after page 1 for {owner}/{repo}; refusing to mix pagination offsets.");
+                            fetchFailed = true;
+                            break;
+                        }
                         using var retryRequest = CloneRequestWithoutAuthorization(request);
                         using var retryResponse = GitHubClient.Send(retryRequest);
                         if (retryResponse.IsSuccessStatusCode)
                         {
                             warnings.Add($"GitHub release fetch retried without Authorization after token auth failed for {owner}/{repo}.");
+                            anonymousAfterTokenFailure = true;
                             using var retryStream = retryResponse.Content.ReadAsStream();
                             using var retryDoc = JsonDocument.Parse(retryStream);
                             if (retryDoc.RootElement.ValueKind != JsonValueKind.Array)
@@ -666,32 +674,20 @@ public static class WebReleaseHubGenerator
             {
                 var url = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page={pageSize}&page={maxPages + 1}";
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                if (!string.IsNullOrWhiteSpace(options.Token))
+                if (!anonymousAfterTokenFailure && !string.IsNullOrWhiteSpace(options.Token))
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Token);
                 using var response = GitHubClient.Send(request);
-                HttpResponseMessage? retry = null;
-                try
+                // A failed authenticated sentinel must not be retried anonymously after
+                // previous pages were fetched with a different release visibility set.
+                if (!response.IsSuccessStatusCode)
+                    fetchFailed = true;
+                else
                 {
-                    if (!response.IsSuccessStatusCode && ShouldRetryGitHubWithoutAuthorization(request, response))
-                    {
-                        using var retryRequest = CloneRequestWithoutAuthorization(request);
-                        retry = GitHubClient.Send(retryRequest);
-                    }
-                    var effective = retry ?? response;
-                    if (!effective.IsSuccessStatusCode)
-                        fetchFailed = true;
-                    else
-                    {
-                        using var stream = effective.Content.ReadAsStream();
-                        using var doc = JsonDocument.Parse(stream);
-                        fetchedAllAvailableReleases = doc.RootElement.ValueKind == JsonValueKind.Array &&
-                                                     doc.RootElement.GetArrayLength() == 0;
-                        fetchFailed = doc.RootElement.ValueKind != JsonValueKind.Array;
-                    }
-                }
-                finally
-                {
-                    retry?.Dispose();
+                    using var stream = response.Content.ReadAsStream();
+                    using var doc = JsonDocument.Parse(stream);
+                    fetchedAllAvailableReleases = doc.RootElement.ValueKind == JsonValueKind.Array &&
+                                                 doc.RootElement.GetArrayLength() == 0;
+                    fetchFailed = doc.RootElement.ValueKind != JsonValueKind.Array;
                 }
             }
             catch (Exception ex)
