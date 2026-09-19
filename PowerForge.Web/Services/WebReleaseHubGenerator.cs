@@ -568,13 +568,13 @@ public static class WebReleaseHubGenerator
         var pageSize = Math.Clamp(options.PageSize <= 0 ? 100 : options.PageSize, 1, 100);
         var maxPages = options.MaxPages <= 0 ? 5 : options.MaxPages;
         var maxReleases = options.MaxReleases is > 0 ? options.MaxReleases.Value : int.MaxValue;
+        bool retainStablePrefixes = options.RetainLatestStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix)) ||
+                                    options.RetainAllStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix));
         bool fetchedAllAvailableReleases = false;
         bool fetchFailed = false;
 
         for (var page = 1;
-             page <= maxPages && (results.Count < maxReleases ||
-                                  !HasAllRetainedStableTagPrefixes(results, options.RetainLatestStableTagPrefixes) ||
-                                  options.RetainAllStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix)));
+             page <= maxPages && (results.Count < maxReleases || retainStablePrefixes);
              page++)
         {
             var url = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page={pageSize}&page={page}";
@@ -660,9 +660,8 @@ public static class WebReleaseHubGenerator
 
         if (fetchFailed)
             warnings.Add($"Incomplete GitHub release fetch for {owner}/{repo}.");
-        if (!fetchedAllAvailableReleases &&
-            options.RetainAllStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix)))
-            warnings.Add($"Incomplete GitHub release fetch for all stable tag prefixes in {owner}/{repo}; increase MaxPages.");
+        if (!fetchedAllAvailableReleases && retainStablePrefixes)
+            warnings.Add($"Incomplete GitHub release fetch for retained stable tag prefixes in {owner}/{repo}; increase MaxPages.");
 
         foreach (string prefix in options.RetainLatestStableTagPrefixes
                      .Where(static value => !string.IsNullOrWhiteSpace(value)))
@@ -674,12 +673,6 @@ public static class WebReleaseHubGenerator
 
         return results;
     }
-
-    private static bool HasAllRetainedStableTagPrefixes(
-        IReadOnlyList<WebReleaseHubRelease> releases,
-        IReadOnlyList<string> prefixes)
-        => prefixes.All(prefix => string.IsNullOrWhiteSpace(prefix) ||
-                                  releases.Any(release => IsStableReleaseWithTagPrefix(release, prefix)));
 
     private static bool IsStableReleaseWithTagPrefix(WebReleaseHubRelease release, string prefix)
         => !release.IsDraft && !release.IsPrerelease &&

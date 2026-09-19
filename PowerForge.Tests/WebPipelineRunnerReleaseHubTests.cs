@@ -71,6 +71,70 @@ public class WebPipelineRunnerReleaseHubTests
     }
 
     [Fact]
+    public void ReleaseHubFallback_RejectsOutputFromAnotherRepository()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-repo-mismatch-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputPath = Path.Combine(root, "release-hub.json");
+            const string existing = """{"repo":"EvotecIT/Old","releases":[{"tag":"v1","assets":[]}]}""";
+            const string generated = """{"repo":"EvotecIT/New","releases":[{"tag":"v2","assets":[]}]}""";
+            File.WriteAllText(outputPath, generated);
+
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath));
+            Assert.Equal(generated, File.ReadAllText(outputPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ReleaseHubRefresh_InvalidatesLaterCachedSiteBuildWithoutExplicitDependency()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-live-hub-build-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "pages"));
+        Directory.CreateDirectory(Path.Combine(root, "themes", "base", "layouts"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "pages", "index.md"), "---\ntitle: Home\n---\nHome.");
+            File.WriteAllText(Path.Combine(root, "themes", "base", "layouts", "page.html"),
+                "<!doctype html><html><head><title>{{TITLE}}</title></head><body>{{CONTENT}}</body></html>");
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                { "name": "Live release site", "baseUrl": "https://example.test", "contentRoot": "content",
+                  "themesRoot": "themes", "defaultTheme": "base",
+                  "collections": [{ "name": "pages", "input": "content/pages", "output": "/", "defaultLayout": "page" }] }
+                """);
+            var releasesPath = Path.Combine(root, "releases.json");
+            File.WriteAllText(releasesPath, """[{"tag_name":"v1","published_at":"2026-04-01T00:00:00Z","assets":[]}]""");
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                { "cache": true, "steps": [
+                  { "task": "release-hub", "source": "file", "releasesPath": "./releases.json", "out": "./data/release-hub.json" },
+                  { "task": "build", "config": "./site.json", "out": "./site", "clean": true }
+                ] }
+                """);
+
+            var first = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(first.Success);
+            File.WriteAllText(releasesPath, """[{"tag_name":"v2","published_at":"2026-04-02T00:00:00Z","assets":[]}]""");
+            var second = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(second.Success);
+            Assert.False(second.Steps[1].Cached);
+            Assert.Contains("v2", File.ReadAllText(Path.Combine(root, "data", "release-hub.json")), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ReleaseHub_RetainsOlderStableProductReleaseBeyondTimelineLimit()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-retained-release-" + Guid.NewGuid().ToString("N"));

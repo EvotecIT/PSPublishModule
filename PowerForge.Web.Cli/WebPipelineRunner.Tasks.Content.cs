@@ -1478,7 +1478,8 @@ internal static partial class WebPipelineRunner
         if (existing is null || generated is null)
             return false;
 
-        if (existing.Releases.Count <= 0)
+        if (existing.Releases.Count <= 0 ||
+            !string.Equals(existing.Repo, generated.Repo, StringComparison.OrdinalIgnoreCase))
             return false;
 
         File.WriteAllText(outputPath, existingJson);
