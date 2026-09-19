@@ -162,6 +162,62 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void VerifySharedReleaseSourceCommit_accepts_authorized_external_config_with_head_marker()
+    {
+        var root = CreatePublicReleaseSourceSandbox(out var commit, out var configPath, out _, out _, out var evidenceRoot);
+        try
+        {
+            var exactConfig = File.ReadAllText(configPath);
+            var headConfig = exactConfig.Replace($"\"Commitish\":\"{commit}\"", "\"Commitish\":\"HEAD\"");
+            Assert.NotEqual(exactConfig, headConfig);
+            File.WriteAllText(configPath, headConfig);
+
+            Assert.Equal(commit, PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, "HEAD", configPath));
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, commit, configPath));
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(evidenceRoot);
+        }
+    }
+
+    [Fact]
+    public void ValidateHeadSourceSelection_RejectsPublishingWithoutSelectedDotNetCheckout()
+    {
+        var spec = new PowerForgeReleaseSpec { GitHub = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD", Publish = true } };
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateHeadSourceSelection(spec,
+                willRunTools: false, publishUnifiedGitHub: true, dotNetSpec: null, dotNetConfigPath: null));
+        PowerForgeReleaseService.ValidateHeadSourceSelection(spec,
+            willRunTools: true, publishUnifiedGitHub: true,
+            dotNetSpec: new DotNetPublishSpec(), dotNetConfigPath: "publish.json");
+    }
+
+    [Fact]
+    public void ValidateDraftWingetSubmission_RejectsIncompatibleReleaseBeforePublication()
+    {
+        var spec = new PowerForgeReleaseSpec
+        {
+            GitHub = new PowerForgeReleaseGitHubOptions { IsDraft = true },
+            Winget = new PowerForgeReleaseWingetOptions { Submit = true }
+        };
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateDraftWingetSubmission(spec, new PowerForgeReleaseRequest()));
+        PowerForgeReleaseService.ValidateDraftWingetSubmission(spec,
+            new PowerForgeReleaseRequest { SubmitWinget = false });
+        spec.Winget!.Submit = false;
+        spec.Winget.Submission.Enabled = true;
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateDraftWingetSubmission(spec, new PowerForgeReleaseRequest()));
+        spec.Winget = null;
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateDraftWingetSubmission(spec,
+                new PowerForgeReleaseRequest { SubmitWinget = true }));
+    }
+
+    [Fact]
     public void VerifySharedReleaseSourceCommit_rejects_public_release_inputs_without_the_authorized_config_path()
     {
         var root = CreatePublicReleaseSourceSandbox(out var commit, out _, out _, out _, out var evidenceRoot);

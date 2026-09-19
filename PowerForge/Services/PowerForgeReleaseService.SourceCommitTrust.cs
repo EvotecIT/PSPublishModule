@@ -6,6 +6,17 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    internal static void ValidateHeadSourceSelection(
+        PowerForgeReleaseSpec spec, bool willRunTools, bool publishUnifiedGitHub,
+        DotNetPublishSpec? dotNetSpec, string? dotNetConfigPath)
+    {
+        if (spec.GitHub is not { Commitish: "HEAD" } || (!willRunTools && !publishUnifiedGitHub))
+            return;
+        if (!willRunTools || dotNetSpec is null || string.IsNullOrWhiteSpace(dotNetConfigPath))
+            throw new InvalidOperationException(
+                "GitHub.Commitish HEAD requires a selected DotNet publish source checkout before any release publication.");
+    }
+
     internal static string ResolveDotNetSourceRootForPreflight(DotNetPublishSpec spec, string configPath)
     {
         var resolved = DotNetPublishPipelineRunner.ResolveProfile(spec);
@@ -14,7 +25,7 @@ internal sealed partial class PowerForgeReleaseService
         var configuredRoot = resolved.DotNet.ProjectRoot;
         return string.IsNullOrWhiteSpace(configuredRoot)
             ? configDirectory
-            : DotNetPublishPipelineRunner.ResolvePath(configDirectory, configuredRoot);
+            : DotNetPublishPipelineRunner.ResolvePath(configDirectory, configuredRoot!);
     }
 
     internal static void BindBuiltDotNetSourceCommit(
@@ -30,10 +41,10 @@ internal sealed partial class PowerForgeReleaseService
                 builtResult.DotNetSourceCommitSha, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The built DotNet release plan source revision does not match its verified checkpoint commit.");
 
-        VerifySharedReleaseSourceCommit(
-            builtResult.DotNetToolPlan.ProjectRoot,
-            builtResult.DotNetSourceCommitSha,
-            configPath);
+        var currentCommit = VerifySharedReleaseSourceCommit(
+            builtResult.DotNetToolPlan.ProjectRoot, "HEAD", configPath);
+        if (!string.Equals(currentCommit, builtResult.DotNetSourceCommitSha, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The DotNet source checkout changed after the release checkpoint was built.");
         spec.GitHub.Commitish = builtResult.DotNetSourceCommitSha;
     }
 
@@ -187,7 +198,8 @@ internal sealed partial class PowerForgeReleaseService
         var allowedGeneratedPaths = ResolveAuthorizedPublicReleaseGeneratedPaths(
             root,
             releaseConfigPath,
-            expectedCommit!);
+            expectedCommit!,
+            resolveHead);
         var unexpectedChanges = ParseGitStatusPaths(status.StdOut)
             .Where(entry => !entry.IsUntracked || !allowedGeneratedPaths.Contains(entry.Path))
             .ToArray();
@@ -203,7 +215,8 @@ internal sealed partial class PowerForgeReleaseService
     private static HashSet<string> ResolveAuthorizedPublicReleaseGeneratedPaths(
         string projectRoot,
         string? releaseConfigPath,
-        string expectedCommit)
+        string expectedCommit,
+        bool allowHeadCommitish)
     {
         var allowed = new HashSet<string>(
             RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -224,7 +237,8 @@ internal sealed partial class PowerForgeReleaseService
         using var config = JsonDocument.Parse(File.ReadAllText(configPath));
         var root = config.RootElement;
         var configuredCommit = GetRequiredNestedString(root, "GitHub", "Commitish");
-        if (!string.Equals(configuredCommit, expectedCommit, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(configuredCommit, expectedCommit, StringComparison.OrdinalIgnoreCase) &&
+            !(allowHeadCommitish && string.Equals(configuredCommit, "HEAD", StringComparison.Ordinal)))
             throw new InvalidOperationException("The public release authorization config does not bind the expected commit.");
 
         var provenancePath = Path.Combine(projectRoot, "Module", "PowerForge.ReleaseProvenance.json");

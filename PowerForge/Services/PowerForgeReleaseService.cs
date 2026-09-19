@@ -407,6 +407,9 @@ internal sealed partial class PowerForgeReleaseService
         var publishUnifiedGitHub = !explicitAppleAction &&
                                    ShouldPublishUnifiedGitHub(spec, request, runModule);
 
+        if (publishUnifiedGitHub)
+            ValidateDraftWingetSubmission(spec, request);
+
         ValidateVersionCoordinationConfiguration(spec, runModule);
 
         var willRunTools = runTools && ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
@@ -465,11 +468,14 @@ internal sealed partial class PowerForgeReleaseService
 
         // Resolve and validate HEAD before any version reservation or other remote side effect.
         // Planning below verifies that the selected DotNet project belongs to this same checkout.
-        if (willRunTools && spec.GitHub is { Commitish: "HEAD" } &&
-            dotNetSpecForTools is not null && dotNetSourcePathForTools is not null)
+        ValidateHeadSourceSelection(
+            spec, willRunTools, publishUnifiedGitHub, dotNetSpecForTools, dotNetSourcePathForTools);
+        if (spec.GitHub is { Commitish: "HEAD" } && (willRunTools || publishUnifiedGitHub))
+        {
             result.DotNetSourceCommitSha = VerifySharedReleaseSourceCommit(
-                ResolveDotNetSourceRootForPreflight(dotNetSpecForTools, dotNetSourcePathForTools),
+                ResolveDotNetSourceRootForPreflight(dotNetSpecForTools!, dotNetSourcePathForTools!),
                 "HEAD", expectedLoadedConfigurationPath);
+        }
 
         if (runWorkspaceValidation)
         {
@@ -744,8 +750,11 @@ internal sealed partial class PowerForgeReleaseService
                     var verifiedSourceCommit = ApplySharedReleaseVersion(
                         dotNetPlan,
                         sharedReleaseVersion,
-                        result.DotNetSourceCommitSha ?? spec.GitHub?.Commitish,
+                        spec.GitHub?.Commitish,
                         request.EffectiveConfigurationPath ?? configPath);
+                    if (result.DotNetSourceCommitSha is not null &&
+                        !string.Equals(result.DotNetSourceCommitSha, verifiedSourceCommit, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("The DotNet source checkout changed between preflight and planning.");
                     result.DotNetSourceCommitSha = verifiedSourceCommit;
                     if (spec.GitHub is { Commitish: "HEAD" } && verifiedSourceCommit is not null)
                         spec.GitHub.Commitish = verifiedSourceCommit;
@@ -1228,6 +1237,9 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        if (ShouldPublishUnifiedGitHub(spec, request,
+                spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly))
+            ValidateDraftWingetSubmission(spec, request);
         BindBuiltDotNetSourceCommit(spec, builtResult, request.EffectiveConfigurationPath ?? configPath);
         var publishVirusTotalMonitor = ShouldPublishVirusTotalMonitorFromCheckpoint(
             spec,
@@ -3756,6 +3768,18 @@ internal sealed partial class PowerForgeReleaseService
         return value is { Length: <= 128 } &&
                Regex.IsMatch(value, @"^[^.\s\\/:*?""<>|\x01-\x1f]{1,32}(\.[^.\s\\/:*?""<>|\x01-\x1f]{1,32}){1,7}$", RegexOptions.CultureInvariant) &&
                value.Split('.').All(IsSafeWingetManifestPathSegment);
+    }
+
+    internal static void ValidateDraftWingetSubmission(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
+    {
+        var winget = spec.Winget;
+        if (spec.GitHub?.IsDraft != true)
+            return;
+        var submissionEnabled = request.SubmitWinget ??
+            (winget?.Submit == true || winget?.Submission?.Enabled == true);
+        if (submissionEnabled)
+            throw new InvalidOperationException(
+                "WinGet submission requires a published GitHub release; draft assets are unavailable to public installer validation.");
     }
 
     private void SubmitWingetOutputs(
