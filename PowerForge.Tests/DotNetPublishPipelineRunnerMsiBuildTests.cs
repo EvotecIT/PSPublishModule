@@ -2872,8 +2872,11 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         }
     }
 
-    [Fact]
-    public void ResolveOrPrepareInstallerProjectPath_GeneratesWixProjectFromAuthoring()
+    [Theory]
+    [InlineData("win-x64", "x64")]
+    [InlineData("win-x86", "x86")]
+    [InlineData("win-arm64", "arm64")]
+    public void ResolveOrPrepareInstallerProjectPath_GeneratesWixProjectFromAuthoring(string runtime, string platform)
     {
         var root = CreateTempRoot();
         try
@@ -2906,7 +2909,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 InstallerId = "app.msi",
                 TargetName = "app",
                 Framework = "net10.0",
-                Runtime = "win-x64",
+                Runtime = runtime,
                 Style = DotNetPublishStyle.Portable
             };
             var prepare = new DotNetPublishMsiPrepareResult
@@ -2914,7 +2917,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 InstallerId = "app.msi",
                 Target = "app",
                 Framework = "net10.0",
-                Runtime = "win-x64",
+                Runtime = runtime,
                 Style = DotNetPublishStyle.Portable,
                 StagingDir = staging,
                 ManifestPath = Path.Combine(root, "Artifacts", "prepare.manifest.json"),
@@ -2936,6 +2939,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Contains("2.3.4", File.ReadAllText(sourcePath), StringComparison.Ordinal);
             var projectXml = File.ReadAllText(projectPath);
             Assert.Contains("Product.wxs", projectXml, StringComparison.Ordinal);
+            Assert.Contains($"<Platform>{platform}</Platform>", projectXml, StringComparison.Ordinal);
             Assert.Contains(harvestPath, projectXml, StringComparison.Ordinal);
             Assert.Contains("PayloadDir=", projectXml, StringComparison.Ordinal);
             Assert.Contains(staging, projectXml, StringComparison.Ordinal);

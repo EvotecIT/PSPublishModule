@@ -247,7 +247,8 @@ public sealed partial class DotNetPublishPipelineRunner
             SourceFileName = "Product.wxs",
             ProjectFileName = SanitizeWixIdentifier(installerId, "Installer") + ".wixproj",
             Configuration = plan.Configuration,
-            NoRestore = plan.Restore
+            NoRestore = plan.Restore,
+            Platform = ResolveWixInstallerPlatform(step.Runtime)
         };
         AddGeneratedInstallerDefineConstants(request, prepare);
         if (!string.IsNullOrWhiteSpace(prepare.HarvestPath))
@@ -258,6 +259,15 @@ public sealed partial class DotNetPublishPipelineRunner
         _logger.Info($"Generated WiX installer project for '{installerId}' -> {workspace.ProjectPath}");
         return workspace.ProjectPath;
     }
+
+    private static string ResolveWixInstallerPlatform(string? runtime)
+        => runtime?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "win-x64" => "x64",
+            "win-x86" => "x86",
+            "win-arm64" => "arm64",
+            _ => throw new InvalidOperationException($"Cannot determine WiX installer platform for runtime '{runtime}'.")
+        };
 
     private static void ResolveGeneratedInstallerAuthoringPaths(
         DotNetPublishPlan plan,
