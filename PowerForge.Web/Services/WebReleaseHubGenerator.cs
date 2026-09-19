@@ -81,7 +81,19 @@ public static class WebReleaseHubGenerator
             .ToList();
 
         if (options.MaxReleases is { } max && max > 0 && releases.Count > max)
-            releases = releases.Take(max).ToList();
+        {
+            var retained = options.RetainLatestStableTagPrefixes
+                .Where(static prefix => !string.IsNullOrWhiteSpace(prefix))
+                .Select(prefix => releases.FirstOrDefault(release => IsStableReleaseWithTagPrefix(release, prefix)))
+                .OfType<WebReleaseHubRelease>()
+                .ToArray();
+            releases = releases.Take(max)
+                .Concat(retained)
+                .DistinctBy(static release => release.Tag, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(ResolveReleaseTimestamp)
+                .ThenByDescending(static release => release.Tag, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
 
         ClassifyAssets(releases, options, products);
         MarkLatest(releases, out var latestStableTag, out var latestPrereleaseTag);
@@ -551,7 +563,9 @@ public static class WebReleaseHubGenerator
         var maxPages = options.MaxPages <= 0 ? 5 : options.MaxPages;
         var maxReleases = options.MaxReleases is > 0 ? options.MaxReleases.Value : int.MaxValue;
 
-        for (var page = 1; page <= maxPages && results.Count < maxReleases; page++)
+        for (var page = 1;
+             page <= maxPages && (results.Count < maxReleases || !HasAllRetainedStableTagPrefixes(results, options.RetainLatestStableTagPrefixes));
+             page++)
         {
             var url = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page={pageSize}&page={page}";
             try
@@ -616,6 +630,16 @@ public static class WebReleaseHubGenerator
 
         return results;
     }
+
+    private static bool HasAllRetainedStableTagPrefixes(
+        IReadOnlyList<WebReleaseHubRelease> releases,
+        IReadOnlyList<string> prefixes)
+        => prefixes.All(prefix => string.IsNullOrWhiteSpace(prefix) ||
+                                  releases.Any(release => IsStableReleaseWithTagPrefix(release, prefix)));
+
+    private static bool IsStableReleaseWithTagPrefix(WebReleaseHubRelease release, string prefix)
+        => !release.IsDraft && !release.IsPrerelease &&
+           release.Tag?.StartsWith(prefix.Trim(), StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool ShouldRetryGitHubWithoutAuthorization(HttpRequestMessage request, HttpResponseMessage response)
     {

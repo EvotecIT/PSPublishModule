@@ -19,6 +19,8 @@ public sealed class WebReleaseHubOptions
     public string? Token { get; set; }
     /// <summary>Maximum number of releases to include.</summary>
     public int? MaxReleases { get; set; }
+    /// <summary>Keep the newest stable release for each tag prefix even when it falls outside the timeline limit.</summary>
+    public List<string> RetainLatestStableTagPrefixes { get; set; } = new();
     /// <summary>GitHub page size (max 100).</summary>
     public int PageSize { get; set; } = 100;
     /// <summary>Maximum number of pages to fetch from GitHub.</summary>

@@ -3221,6 +3221,8 @@
         "max": { "type": ["string", "integer"] },
         "maxReleases": { "type": ["string", "integer"] },
         "max-releases": { "type": ["string", "integer"] },
+        "retainLatestStableTagPrefixes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "retain-latest-stable-tag-prefixes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "pageSize": { "type": ["string", "integer"] },
         "page-size": { "type": ["string", "integer"] },
         "maxPages": { "type": ["string", "integer"] },

@@ -7,6 +7,45 @@ using Xunit;
 public class WebPipelineRunnerReleaseHubTests
 {
     [Fact]
+    public void RunPipeline_ReleaseHub_RetainsOlderStableProductReleaseBeyondTimelineLimit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-retained-release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "releases.json"),
+                """
+                [
+                  { "tag_name": "OfficeIMO-v4", "published_at": "2026-04-04T00:00:00Z", "draft": false, "prerelease": false, "assets": [] },
+                  { "tag_name": "OfficeIMO-v3", "published_at": "2026-04-03T00:00:00Z", "draft": false, "prerelease": false, "assets": [] },
+                  { "tag_name": "OfficeIMO-v2", "published_at": "2026-04-02T00:00:00Z", "draft": false, "prerelease": false, "assets": [] },
+                  { "tag_name": "Studio-v0.1.9", "published_at": "2026-04-01T00:00:00Z", "draft": false, "prerelease": false,
+                    "assets": [{ "name": "OfficeIMO-Studio-0.1.9-win-x64.msi", "browser_download_url": "https://example.test/Studio-v0.1.9/OfficeIMO-Studio-0.1.9-win-x64.msi" }] }
+                ]
+                """);
+            File.WriteAllText(Path.Combine(root, "pipeline.json"),
+                """
+                { "steps": [{ "task": "release-hub", "source": "file", "releasesPath": "./releases.json",
+                  "maxReleases": 2, "retainLatestStableTagPrefixes": ["Studio-v"],
+                  "out": "./data/release-hub.json" }] }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(Path.Combine(root, "pipeline.json"), logger: null);
+            Assert.True(result.Success);
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "data", "release-hub.json")));
+            var releases = doc.RootElement.GetProperty("releases");
+            Assert.Equal(3, releases.GetArrayLength());
+            Assert.Equal("Studio-v0.1.9", releases[2].GetProperty("tag").GetString());
+            Assert.Equal("OfficeIMO-Studio-0.1.9-win-x64.msi",
+                releases[2].GetProperty("assets")[0].GetProperty("name").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ReleaseHub_GeneratesOutputFromLocalReleasesJson()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-release-hub-" + Guid.NewGuid().ToString("N"));
