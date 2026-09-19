@@ -22,6 +22,15 @@ namespace PowerForge.Generated.Runtime
                 CreateInvocationSite)(receiver, arguments);
         }
 
+        /// <summary>Copies a native reference argument back to its caller slot only after successful invocation.</summary>
+        public object? InvokeMemberWithReferenceWriteback(object? receiver, string name, bool isStatic, object?[] arguments,
+            Type? targetConstraint, Type?[] argumentConstraints, int referenceArgumentIndex, string referenceVariableName)
+        {
+            var result = InvokeMember(receiver, name, isStatic, arguments, targetConstraint, argumentConstraints);
+            SetVariable(referenceVariableName, ((PSReference)arguments[referenceArgumentIndex]!).Value);
+            return result;
+        }
+
         private static Func<object?, object?[], object?> CreateInvocationSite(InvocationSiteKey key)
         {
             var assembly = typeof(PSObject).Assembly;

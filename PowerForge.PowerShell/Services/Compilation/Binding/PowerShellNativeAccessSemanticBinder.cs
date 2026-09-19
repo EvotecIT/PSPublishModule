@@ -76,14 +76,61 @@ internal static class PowerShellNativeAccessSemanticBinder
         }
         var argumentSyntax = syntax.Arguments?.ToArray() ?? Array.Empty<ExpressionAst>();
         var arguments = new List<PowerShellBoundExpression>();
-        foreach (var argument in argumentSyntax)
+        int? referenceArgumentIndex = null;
+        string? referenceVariableName = null;
+        for (var index = 0; index < argumentSyntax.Length; index++)
         {
+            var argument = argumentSyntax[index];
+            var referenceConversions = argument.FindAll(static node => node is ConvertExpressionAst conversion &&
+                conversion.Type.TypeName.GetReflectionType() == typeof(System.Management.Automation.PSReference),
+                searchNestedScriptBlocks: false).OfType<ConvertExpressionAst>().ToArray();
+            if (referenceConversions.Length > 0)
+            {
+                if (referenceArgumentIndex is not null || referenceConversions.Length != 1 ||
+                    !ReferenceEquals(referenceConversions[0], argument) ||
+                    referenceConversions[0].Child is not VariableExpressionAst variable ||
+                    !PowerShellNativeVariableAnalysis.IsDirectLocal(variable))
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2633",
+                        "Native reference arguments currently require one direct local variable and retain other reference shapes in PowerShell.", span));
+                    return null;
+                }
+                referenceArgumentIndex = index;
+                referenceVariableName = variable.VariablePath.UserPath;
+            }
             var value = bindExpression(argument, null);
             if (value is null) return null;
             arguments.Add(value);
         }
+        if (referenceArgumentIndex is not null &&
+            (referenceArgumentIndex.Value != argumentSyntax.Length - 1 || !syntax.Static || literalTargetType is null ||
+             !HasUnambiguousTrailingByReferenceOverload(literalTargetType, name.Value, argumentSyntax.Length)))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2633",
+                "Native reference arguments currently require a trailing direct local and an unambiguous static CLR by-reference overload.", span));
+            return null;
+        }
         return new PowerShellBoundNativeInvocationExpression(span, receiver, literalTargetType, name.Value, syntax.Static,
-            arguments.ToArray(), GetConstraint(syntax.Expression), argumentSyntax.Select(GetConstraint).ToArray());
+            arguments.ToArray(), GetConstraint(syntax.Expression), argumentSyntax.Select(GetConstraint).ToArray(),
+            referenceArgumentIndex, referenceVariableName);
+    }
+
+    // A trailing reference is evaluated after all other arguments; only a real CLR by-ref
+    // parameter may write it back. Optional and params overloads keep the call hosted.
+    private static bool HasUnambiguousTrailingByReferenceOverload(Type type, string name, int argumentCount)
+    {
+        var candidates = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static |
+                                         System.Reflection.BindingFlags.FlattenHierarchy)
+            .Where(method => method.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            .Select(method => method.GetParameters())
+            .Where(parameters => parameters.Length == argumentCount ||
+                                 parameters.Length > argumentCount && parameters.Skip(argumentCount).All(parameter => parameter.IsOptional) ||
+                                 parameters.Length > 0 && parameters[parameters.Length - 1].GetCustomAttributes(
+                                     typeof(ParamArrayAttribute), inherit: false).Length > 0 &&
+                                 argumentCount >= parameters.Length - 1)
+            .ToArray();
+        return candidates.Length > 0 && candidates.All(parameters => parameters.Length == argumentCount &&
+            parameters[parameters.Length - 1].ParameterType.IsByRef);
     }
 
     internal static PowerShellBoundExpression? BindIndex(ParsedSourceDocument document, IndexExpressionAst syntax,
