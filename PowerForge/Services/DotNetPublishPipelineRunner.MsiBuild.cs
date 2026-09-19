@@ -821,13 +821,16 @@ public sealed partial class DotNetPublishPipelineRunner
         return plan.MsiVersions.TryGetValue(key, out var version) ? version : null;
     }
 
-    private static string BuildMsiVersionKey(
+    internal static string BuildMsiVersionKey(
         string? installerId,
         string? targetName,
         string? framework,
         string? runtime,
         DotNetPublishStyle style)
     {
+        if (new[] { installerId, targetName, framework, runtime }
+            .Any(static part => part?.Contains('|') == true))
+            throw new ArgumentException("MSI version key components cannot contain '|'.");
         return string.Join(
             "|",
             installerId?.Trim() ?? string.Empty,

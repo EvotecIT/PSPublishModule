@@ -33,11 +33,18 @@ internal sealed partial class PowerForgeReleaseService
             string releaseVersion = sharedReleaseVersion!;
             foreach (KeyValuePair<string, DotNetPublishMsiVersionPlan> resolvedVersion in plan.MsiVersions ?? new Dictionary<string, DotNetPublishMsiVersionPlan>())
             {
-                var separator = resolvedVersion.Key.IndexOf('|');
-                var installerId = separator < 0 ? resolvedVersion.Key : resolvedVersion.Key.Substring(0, separator);
+                string[] keyParts = resolvedVersion.Key.Split('|');
+                if (keyParts.Length != 5 ||
+                    string.IsNullOrWhiteSpace(keyParts[0]) ||
+                    string.IsNullOrWhiteSpace(keyParts[1]) ||
+                    string.IsNullOrWhiteSpace(keyParts[4]))
+                    throw new InvalidOperationException($"MSI version plan '{resolvedVersion.Key}' has an invalid key.");
+                string installerId = keyParts[0];
                 var installer = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
                     .FirstOrDefault(candidate => string.Equals(candidate.Id, installerId, StringComparison.OrdinalIgnoreCase));
-                if (installer?.Versioning is not { Enabled: true, ApplyToPublish: true })
+                if (installer is null)
+                    throw new InvalidOperationException($"MSI version plan '{resolvedVersion.Key}' has no matching installer.");
+                if (installer.Versioning is not { Enabled: true, ApplyToPublish: true })
                     continue;
                 if (string.Equals(resolvedVersion.Value.Version?.Trim(), releaseVersion.Trim(), StringComparison.Ordinal))
                     continue;

@@ -5514,14 +5514,28 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private static string? ResolveDotNetArtefactVersion(DotNetPublishArtefactResult artifact, DotNetPublishPlan? plan, string? sharedReleaseVersion)
-        => !string.IsNullOrWhiteSpace(sharedReleaseVersion)
-            ? sharedReleaseVersion
-            : plan is not null
-                ? DotNetPublishPipelineRunner.ResolvePublishReleaseVersion(plan, artifact.Target, artifact.Framework, artifact.Runtime, artifact.Style)
-                  ?? ResolveDotNetTargetVersion(artifact.Target, plan, null)
-                : null;
+        => ResolveDotNetCombinationVersion(
+            artifact.Target, artifact.Framework, artifact.Runtime, artifact.Style, plan, sharedReleaseVersion);
 
-    private static string? ResolveDotNetTargetVersion(string targetName, DotNetPublishPlan? plan, string? sharedReleaseVersion)
+    private static string? ResolveDotNetCombinationVersion(
+        string targetName,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style,
+        DotNetPublishPlan? plan,
+        string? sharedReleaseVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
+            return sharedReleaseVersion;
+        if (plan is null)
+            return null;
+
+        return DotNetPublishPipelineRunner.ResolvePublishReleaseVersion(plan, targetName, framework, runtime, style)
+               ?? (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).FirstOrDefault(candidate =>
+                   string.Equals(candidate.Name, targetName, StringComparison.OrdinalIgnoreCase))?.Version;
+    }
+
+    internal static string? ResolveDotNetTargetVersion(string targetName, DotNetPublishPlan? plan, string? sharedReleaseVersion)
     {
         if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
             return sharedReleaseVersion;
@@ -5535,12 +5549,12 @@ internal sealed partial class PowerForgeReleaseService
             return null;
 
         var publishVersions = target.Combinations
-            .Select(combo => DotNetPublishPipelineRunner.ResolvePublishReleaseVersion(plan, target.Name, combo.Framework, combo.Runtime, combo.Style))
-            .Where(version => !string.IsNullOrWhiteSpace(version))
+            .Select(combo => ResolveDotNetCombinationVersion(
+                target.Name, combo.Framework, combo.Runtime, combo.Style, plan, null)?.Trim() ?? string.Empty)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (publishVersions.Length > 1)
-            throw new InvalidOperationException($"DotNet publish target '{target.Name}' resolved multiple release versions.");
+            throw new InvalidOperationException($"DotNet publish target '{target.Name}' resolved multiple effective release versions across its publish combinations.");
         if (publishVersions.Length == 1)
             return publishVersions[0];
 
