@@ -34,11 +34,12 @@ internal sealed partial class PowerShellSemanticBinder
             return PowerShellNativeAccessSemanticBinder.BindIndex(document, nativeIndex,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), diagnostics);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is InvokeMemberExpressionAst nativeInvocation &&
-            HasObservedCatchAncestor(nativeInvocation) && InvocationConsumesAuthoredTypeLiteral(nativeInvocation))
+            HasObservedCatchAncestor(nativeInvocation) && InvocationConsumesAuthoredTypeLiteral(nativeInvocation) &&
+            !HasClosedDirectTypeArgumentCatchAll(nativeInvocation))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.ForSyntax(nameof(InvokeMemberExpressionAst)),
-                "Native method invocation inside an observed catch boundary remains hosted until method-invocation wrapper identity is closed.",
+                "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
                 span));
             return null;
         }
@@ -407,6 +408,23 @@ internal sealed partial class PowerShellSemanticBinder
             if (ancestor is FunctionDefinitionAst) return false;
         }
         return false;
+    }
+
+    private static bool HasClosedDirectTypeArgumentCatchAll(InvokeMemberExpressionAst invocation)
+    {
+        // Hoisted type values and nested casts have different storage/evaluation contracts.
+        // The admitted shape is one authored type literal consumed by catch-all handling.
+        if (invocation.Arguments is not { Count: 1 } arguments || arguments[0] is not TypeExpressionAst)
+            return false;
+        var observed = false;
+        for (Ast? ancestor = invocation.Parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (ancestor is FunctionDefinitionAst) break;
+            if (ancestor is not TryStatementAst { CatchClauses.Count: > 0 } attempted) continue;
+            observed = true;
+            if (attempted.CatchClauses.Any(static clause => clause.CatchTypes.Count != 0)) return false;
+        }
+        return observed;
     }
 
     private static bool InvocationConsumesAuthoredTypeLiteral(InvokeMemberExpressionAst invocation)

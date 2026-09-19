@@ -106,8 +106,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(unit.RetainedHostedSource);
     }
 
-    [Fact]
-    public void ObservedInvocation_TransitivelyHoistedTypeLiteralRemainsHosted()
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void ObservedInvocation_TransitivelyHoistedTypeLiteralRemainsHosted(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""
             function Convert-HoistedIdentity {
@@ -117,19 +119,29 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 $alias = $targetType
                 $forwarded = $alias
                 try { ([System.Security.Principal.NTAccount]$Value).Translate($forwarded) }
-                catch { 'failed' }
+                catch { '{0}|{1}|{2}|{3}' -f $_.Exception.GetType().FullName,$_.Exception.Message,$_.FullyQualifiedErrorId,$_.Exception.InnerException.GetType().FullName }
             }
             """, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.HoistedTypeLiteral",
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
-            allowUnreviewedDependencyResolution: true) { TargetFramework = "net10.0" });
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
         Assert.False(unit.EmittedClrMethod);
         Assert.True(unit.RetainedHostedSource);
         Assert.Contains(unit.DiagnosticChain, static diagnostic =>
             diagnostic.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("InvokeMemberExpressionAst") &&
-            diagnostic.Message.Contains("method-invocation wrapper identity", StringComparison.Ordinal));
+            diagnostic.Message.Contains("caught-error identity", StringComparison.Ordinal));
+        const string probe = "Convert-HoistedIdentity -Value '__PowerForge_Missing_Hoisted_A__'; Convert-HoistedIdentity -Value '__PowerForge_Missing_Hoisted_B__'";
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "hoisted-type-original");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "hoisted-type-compiled");
+        Assert.Equal(0, original.ExitCode);
+        Assert.Equal((original.StandardOutput, original.StandardError),
+            (compiled.StandardOutput, compiled.StandardError));
     }
 }

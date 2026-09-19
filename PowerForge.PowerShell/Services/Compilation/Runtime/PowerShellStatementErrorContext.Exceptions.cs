@@ -88,7 +88,17 @@ namespace PowerForge.Generated.Runtime
             var tuple = _contract.CreateTuple("_", null);
             var handler = (int)NativeContract.Invoke(_contract.FindMatchingHandler, null,
                 tuple, runtimeError, nativeTypes, _context)!;
-            caughtRecord = handler < 0 ? null : (ErrorRecord)NativeContract.Invoke(_contract.GetTupleValue, tuple, 0)!;
+            var matchedRecord = handler < 0 ? null : (ErrorRecord)NativeContract.Invoke(_contract.GetTupleValue, tuple, 0)!;
+            // Method invocation can carry a base record whose exception is only
+            // ParentContainsErrorRecordException. Catch-all $_ must expose the
+            // actual invocation wrapper, but other records (including remoting
+            // records with origin metadata) retain the native matcher's identity.
+            caughtRecord = handler >= 0 && exceptionTypes[handler] is null &&
+                runtimeError is MethodInvocationException &&
+                runtimeError.ErrorRecord.GetType() == typeof(ErrorRecord) &&
+                runtimeError.ErrorRecord.Exception is ParentContainsErrorRecordException
+                ? new ErrorRecord(runtimeError.ErrorRecord, runtimeError)
+                : matchedRecord;
             return handler < 0 ? -1 : clauseIndices[handler];
         }
 
