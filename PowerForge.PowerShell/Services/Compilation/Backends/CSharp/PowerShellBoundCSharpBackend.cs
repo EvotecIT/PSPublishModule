@@ -448,6 +448,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredNativeInvocationExpression nativeInvocation => EmitNativeInvocation(nativeInvocation),
             PowerShellLoweredNativeIndexExpression nativeIndex => EmitNativeIndex(nativeIndex),
             PowerShellLoweredNativeCollectionExpression collection => EmitNativeCollection(collection),
+            PowerShellLoweredNativeConditionalValueExpression conditionalValue => EmitNativeConditionalValue(conditionalValue),
             PowerShellLoweredArrayCopyExpression copy => EmitArrayCopy(copy),
             PowerShellLoweredArrayConcatenationExpression concatenation => EmitArrayConcatenation(concatenation),
             PowerShellLoweredDictionaryExpression dictionary => EmitDictionary(dictionary),

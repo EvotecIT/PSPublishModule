@@ -306,6 +306,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 (nativeInvocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { nativeInvocation.Receiver }).Concat(nativeInvocation.Arguments),
             PowerShellBoundNativeIndexExpression nativeIndex => new[] { nativeIndex.Receiver }.Concat(nativeIndex.Arguments),
             PowerShellBoundNativeCollectionExpression collection => collection.Items.Select(static item => item.Value),
+            PowerShellBoundNativeConditionalValueExpression conditionalValue =>
+                conditionalValue.Clauses.SelectMany(static clause => new[] { clause.Condition, clause.Value })
+                    .Concat(new[] { conditionalValue.Otherwise }),
             PowerShellBoundArrayCopyExpression copy => new[] { copy.Source },
             PowerShellBoundArrayConcatenationExpression concatenation => new[] { concatenation.Left, concatenation.Right },
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.SelectMany(static entry => new[] { entry.Key, entry.Value }),
@@ -565,6 +568,11 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var item in collection.Items)
             foreach (var read in EnumerateVariableReads(item.Value)) yield return read;
         }
+        if (expression is PowerShellBoundNativeConditionalValueExpression conditionalValue)
+        {
+            foreach (var child in EnumerateExpressionChildren(conditionalValue))
+            foreach (var read in EnumerateVariableReads(child)) yield return read;
+        }
         if (expression is PowerShellBoundArrayCopyExpression copy)
         {
             foreach (var read in EnumerateVariableReads(copy.Source)) yield return read;
@@ -712,6 +720,11 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             foreach (var item in collection.Items)
             foreach (var nested in EnumerateInvocations(item.Value)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeConditionalValueExpression conditionalValue)
+        {
+            foreach (var child in EnumerateExpressionChildren(conditionalValue))
+            foreach (var nested in EnumerateInvocations(child)) yield return nested;
         }
         if (expression is PowerShellBoundArrayConcatenationExpression concatenation)
         {

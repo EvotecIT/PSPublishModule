@@ -76,6 +76,9 @@ internal sealed partial class PowerShellSemanticBinder
             return knownProperty;
         switch (syntax)
         {
+            case IfStatementAst conditional when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
+                return BindNativeConditionalValue(document, conditional, symbols, functions, diagnostics,
+                    targetFramework, capabilities, contextualType == typeof(object));
             case SubExpressionAst subexpression when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
                 return PowerShellArraySemanticBinder.BindNativeSubexpression(document, subexpression,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
@@ -163,6 +166,7 @@ internal sealed partial class PowerShellSemanticBinder
                     ordered: false,
                     contextualType,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
                     diagnostics);
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase):
                 return new PowerShellBoundLiteralExpression(span, true, LiteralType(typeof(bool), "$true is a Boolean literal."), PowerShellValueState.Known);
@@ -216,6 +220,7 @@ internal sealed partial class PowerShellSemanticBinder
                     ordered: true,
                     contextualType,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
                     diagnostics);
             case ConvertExpressionAst conversion when PowerShellObjectConstructionPolicy.IsLiteral(conversion):
                 return PowerShellObjectSemanticBinder.Bind(

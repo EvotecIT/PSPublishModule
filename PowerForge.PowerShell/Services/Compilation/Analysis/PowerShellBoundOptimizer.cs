@@ -248,6 +248,11 @@ internal sealed class PowerShellBoundOptimizer
             return new PowerShellBoundNativeCollectionExpression(collection.Span, collection.SourcePath,
                 collection.Items.Select(item => new PowerShellBoundNativeCollectionItem(item.Span, item.SourceText,
                     OptimizeExpression(item.Value), item.SetSuccess, item.EmitsOutput, item.IsPipelineStatement)).ToArray(), collection.ShareEmptyResult, collection.SingleExpression, collection.CollapseResult);
+        if (expression is PowerShellBoundNativeConditionalValueExpression conditionalValue)
+            return new PowerShellBoundNativeConditionalValueExpression(conditionalValue.Span,
+                conditionalValue.Clauses.Select(clause => new PowerShellBoundNativeConditionalValueClause(
+                    OptimizeExpression(clause.Condition), OptimizeExpression(clause.Value))).ToArray(),
+                OptimizeExpression(conditionalValue.Otherwise), conditionalValue.PreserveRecords);
         if (expression is PowerShellBoundArrayCopyExpression copy)
             return new PowerShellBoundArrayCopyExpression(copy.Span, OptimizeExpression(copy.Source), copy.ShareEmptyResult);
         return expression;

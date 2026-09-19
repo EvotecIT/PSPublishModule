@@ -12,7 +12,7 @@ public sealed class RandomWorkflowStopState {
 $configure = {
     param($path, $state, $commandName)
     $target = Import-Module $path -PassThru
-    foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword') {
+    foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword', 'Get-RandomStringName') {
         if (!$target.ExportedCommands.ContainsKey($name)) { throw ('The selected module does not export ' + $name) }
     }
     & $target {
@@ -39,7 +39,7 @@ $configure = {
     if ($selected.Module.Path -ne $target.Path) { throw 'Command lookup selected a different module.' }
     $qualifiedName
 }
-foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword') {
+foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword', 'Get-RandomStringName') {
     $state = [RandomWorkflowStopState]::new()
     $ps = [powershell]::Create()
     try {

@@ -49,12 +49,18 @@ internal static class PowerShellObjectSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2902", "Typed [pscustomobject] literals require non-empty literal string property names.", PowerShellSourceParser.GetSpan(document, pair.Item1.Extent)));
                 return null;
             }
-            if (pair.Item2 is not PipelineAst { PipelineElements.Count: 1 } pipeline || pipeline.PipelineElements[0] is not CommandExpressionAst command)
+            Ast? valueSyntax = pair.Item2 is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+                               pipeline.PipelineElements[0] is CommandExpressionAst command
+                ? command.Expression
+                : capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && pair.Item2 is IfStatementAst
+                    ? pair.Item2
+                    : null;
+            if (valueSyntax is null)
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2903", "Typed [pscustomobject] note-property values must be one scalar expression.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2903", "[pscustomobject] note-property values require one expression or a native-hosted conditional value.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
                 return null;
             }
-            var value = bindExpression(command.Expression, null);
+            var value = bindExpression(valueSyntax, null);
             if (value is null || value.Type.ClrType == typeof(void)) return null;
             properties.Add(new PowerShellBoundNoteProperty(key.Value, value));
         }

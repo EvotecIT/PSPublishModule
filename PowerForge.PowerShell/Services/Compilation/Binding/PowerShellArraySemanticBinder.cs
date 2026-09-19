@@ -17,6 +17,13 @@ internal static class PowerShellArraySemanticBinder
         PowerShellCompilationSemanticOracleProfile semanticProfile, ICollection<PowerShellSemanticDiagnostic> diagnostics)
         => BindNativeStatements(document, syntax, syntax.SubExpression, null, bindExpression, semanticProfile, diagnostics, true);
 
+    /// <summary>Collapses the records of one conditional branch using the same native expression owner as $().</summary>
+    internal static PowerShellBoundExpression? BindNativeStatementValue(ParsedSourceDocument document, StatementBlockAst statements,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationSemanticOracleProfile semanticProfile, ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        bool preserveRecords)
+        => BindNativeStatements(document, statements, statements, null, bindExpression, semanticProfile, diagnostics, !preserveRecords);
+
     private static PowerShellBoundExpression? BindNativeStatements(ParsedSourceDocument document, Ast syntax,
         StatementBlockAst statements, Type? contextualType, Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         PowerShellCompilationSemanticOracleProfile semanticProfile, ICollection<PowerShellSemanticDiagnostic> diagnostics, bool collapseResult)
@@ -28,7 +35,7 @@ internal static class PowerShellArraySemanticBinder
             return null;
         }
         // An empty authored $() is an ordinary null literal; nonempty captures with no output use AutomationNull.
-        if (collapseResult && statements.Statements.Count == 0)
+        if (collapseResult && syntax is SubExpressionAst && statements.Statements.Count == 0)
             return new PowerShellBoundLiteralExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent), null,
                 PowerShellTypeFact.Unknown, PowerShellValueState.Null);
         var windowsPowerShell = semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51;
@@ -45,6 +52,16 @@ internal static class PowerShellArraySemanticBinder
                     PowerShellSourceParser.GetSourceLines(document, assignmentSpan), assigned,
                     PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(assignment, windowsPowerShell),
                     false, false));
+                continue;
+            }
+            if (statement is IfStatementAst conditional)
+            {
+                var conditionalValue = bindExpression(conditional, typeof(object));
+                if (conditionalValue is null) return null;
+                var statementSpan = PowerShellSourceParser.GetSpan(document, statement.Extent);
+                items.Add(new PowerShellBoundNativeCollectionItem(statementSpan,
+                    PowerShellSourceParser.GetSourceLines(document, statementSpan), conditionalValue,
+                    PowerShellNativeStatementStatusPolicy.NeedsSuccessWrite(statement, windowsPowerShell)));
                 continue;
             }
             if (statement is not PipelineAst pipeline)

@@ -21,6 +21,17 @@ namespace PowerForge.Generated.Runtime
             _hasNativeSequencePoint = true;
         }
 
+        /// <summary>Preserves the extra error-variable observation of an escaping single-expression if value.</summary>
+        internal void AppendEscapingConditionalError(Exception error)
+        {
+            ThrowIfDisposed();
+            if (_nativeFunction is null) throw new InvalidOperationException("Conditional-value error routing requires a native function.");
+            // The routed RuntimeException may wrap the authored command error. Appending the
+            // wrapper itself creates an extra entry with no error ID on both supported hosts.
+            NativeContract.Invoke(_contract.AppendErrorToVariables, _runtime,
+                error is RuntimeException { ErrorRecord: { } record } ? record : error);
+        }
+
         /// <summary>Tracks native expression sequence points without handling or reclassifying an error.</summary>
         internal T EvaluateNativeExpression<T>(Func<T> expression, string file, int line, int column,
             int endLine, int endColumn, string sourceText, bool postTestCondition = false)

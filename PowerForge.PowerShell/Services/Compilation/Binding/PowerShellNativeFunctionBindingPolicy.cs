@@ -87,6 +87,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
            RequiresNativeObjectParameterForEach(function) ||
            RequiresNativeDictionaryKeyForEach(function) ||
+           RequiresNativeStatementValue(function) ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
@@ -108,6 +109,13 @@ internal static class PowerShellNativeFunctionBindingPolicy
                 parameter.StaticType == typeof(string) && attribute.TypeName.Name.Equals("Parameter", StringComparison.OrdinalIgnoreCase) &&
                 attribute.NamedArguments.Any(argument => argument.ArgumentName.Equals("ValueFromPipeline", StringComparison.OrdinalIgnoreCase) ||
                     argument.ArgumentName.Equals("ValueFromPipelineByPropertyName", StringComparison.OrdinalIgnoreCase))));
+
+    /// <summary>Selects invocation-owned cardinality only when an if is itself consumed as a literal or collection value.</summary>
+    private static bool RequiresNativeStatementValue(FunctionDefinitionAst function)
+        => function.Body.Find(static node => node is IfStatementAst conditional &&
+            (conditional.Parent is HashtableAst ||
+             conditional.Parent is StatementBlockAst { Parent: ArrayExpressionAst or SubExpressionAst }),
+            searchNestedScriptBlocks: false) is not null;
 
     private static bool RequiresNativeObjectParameterForEach(FunctionDefinitionAst function)
     {

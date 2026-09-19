@@ -12,12 +12,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         using var fixture = ArtifactFixture.Create("""
             . "$PSScriptRoot/Get-RandomCharacters.ps1"
             . "$PSScriptRoot/Get-RandomPassword.ps1"
+            . "$PSScriptRoot/Get-RandomStringName.ps1"
             """, ".psm1");
         foreach (var source in new[] {
-            ("Get-RandomCharacters.ps1", "e6a8113feeeddd18398e73c7556125ff92d238610a84ac241e558cb5c14e0a5d"),
-            ("Get-RandomPassword.ps1", "36500278fbbe5eff90b8d7a79cf05e51604e83db71a000f8e7e24511aff0edb1") })
+            ("Get-RandomCharacters.ps1", "e6a8113feeeddd18398e73c7556125ff92d238610a84ac241e558cb5c14e0a5d", "Get-RandomCharacters.ps1"),
+            ("Get-RandomPassword.ps1", "36500278fbbe5eff90b8d7a79cf05e51604e83db71a000f8e7e24511aff0edb1", "Get-RandomPassword.ps1"),
+            ("Get-RandomStringName.ps1", "d561d1985fbbe26e214d2d35fb1f01f575119037c3e167acf88c909b1c966c29", "FullModule/Public/Random/Get-RandomStringName.ps1") })
         {
-            var path = FindCompleteConversionWorkflow("PSSharedGoods", source.Item1);
+            var path = FindCompleteConversionWorkflow("PSSharedGoods", source.Item3);
             Assert.Equal(source.Item2, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant());
             File.Copy(path, Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, source.Item1));
         }
@@ -33,9 +35,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             ModuleManifestPath = resolved.ModuleManifestPath
         });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.CompiledMethods == 2, string.Join(Environment.NewLine,
+        Assert.True(result.Manifest!.CompiledMethods == 3, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
-        foreach (var name in new[] { "Get-RandomCharacters", "Get-RandomPassword" })
+        foreach (var name in new[] { "Get-RandomCharacters", "Get-RandomPassword", "Get-RandomStringName" })
         {
             var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, item => item.Name == name);
             Assert.True(unit.EmittedClrMethod);
@@ -51,7 +53,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         var expected = original.StandardOutput.Split('\n');
         var actual = compiled.StandardOutput.Split('\n');
-        Assert.Equal(289, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
+        Assert.Equal(379, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
         Assert.Contains("later:abc", original.StandardOutput, StringComparison.Ordinal);
         Assert.Equal(expected.Length, actual.Length);
         Assert.True(expected.SequenceEqual(actual), string.Join(Environment.NewLine, expected.Zip(actual)
@@ -71,8 +73,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
         Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
         Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
-        Assert.Equal(4, original.StandardOutput.Split('\n').Count(line => !string.IsNullOrWhiteSpace(line)));
-        Assert.Equal(2, original.StandardOutput.Split('\n').Count(line => line.Contains("\"state\":\"Stopped\",\"calls\":1,\"cleanups\":1", StringComparison.Ordinal)));
+        Assert.Equal(6, original.StandardOutput.Split('\n').Count(line => !string.IsNullOrWhiteSpace(line)));
+        Assert.Equal(3, original.StandardOutput.Split('\n').Count(line => line.Contains("\"state\":\"Stopped\",\"calls\":1,\"cleanups\":1", StringComparison.Ordinal)));
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
     }
 }

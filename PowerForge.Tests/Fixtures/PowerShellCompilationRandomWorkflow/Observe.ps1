@@ -1,6 +1,6 @@
 # The caller imports the original or generated module into $module.
 # Replace only its random provider with a deterministic, traced boundary.
-foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword') {
+foreach ($name in 'Get-RandomCharacters', 'Get-RandomPassword', 'Get-RandomStringName') {
     if (!$module.ExportedCommands.ContainsKey($name)) { throw ('The selected module does not export ' + $name) }
 }
 & $module {
@@ -73,6 +73,11 @@ $cases = @(
     @{ name = 'password-negative'; command = 'Get-RandomPassword'; arguments = @{ LettersLowerCase = -1 } }
     @{ name = 'password-malformed'; command = 'Get-RandomPassword'; arguments = @{ Numbers = 'bad' } }
     @{ name = 'password-null'; command = 'Get-RandomPassword'; arguments = @{ Numbers = $null } }
+    @{ name = 'name-default'; command = 'Get-RandomStringName'; arguments = @{ Size = 4 } }
+    @{ name = 'name-letters'; command = 'Get-RandomStringName'; arguments = @{ Size = 4; LettersOnly = $true } }
+    @{ name = 'name-lower'; command = 'Get-RandomStringName'; arguments = @{ Size = 4; ToLower = $true } }
+    @{ name = 'name-upper'; command = 'Get-RandomStringName'; arguments = @{ Size = 4; ToUpper = $true } }
+    @{ name = 'name-malformed'; command = 'Get-RandomStringName'; arguments = @{ Size = 'bad' } }
 )
 foreach ($case in $cases) {
     foreach ($fault in 'none', 'error', 'throw') {

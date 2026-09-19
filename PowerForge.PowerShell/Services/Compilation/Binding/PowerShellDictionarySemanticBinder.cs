@@ -13,16 +13,20 @@ internal static class PowerShellDictionarySemanticBinder
         bool ordered,
         Type? contextualType,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var objectValues = UsesObjectRepresentation(syntax, contextualType);
         var entries = new List<PowerShellBoundDictionaryEntry>();
         foreach (var pair in syntax.KeyValuePairs)
         {
-            var valueSyntax = GetValueExpression(pair.Item2);
+            Ast? valueSyntax = GetValueExpression(pair.Item2);
+            if (valueSyntax is null && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                pair.Item2 is IfStatementAst)
+                valueSyntax = pair.Item2;
             if (valueSyntax is null)
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2701", "Typed dictionary values must be one side-effect-free scalar expression.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2701", "Dictionary values require one expression or a native-hosted conditional value.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
                 return null;
             }
             var key = bindExpression(pair.Item1, typeof(string));

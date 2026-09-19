@@ -165,6 +165,12 @@ internal sealed partial class PowerShellTypedLowerer
                     LowerExpression(item.Value, functions, names, targetCapabilities), item.SetSuccess,
                     names.Allocate("pf_collection_value"), names.Allocate("pf_collection_error"), item.EmitsOutput, item.IsPipelineStatement)).ToArray(),
                 collection.ShareEmptyResult, names.Allocate("pf_collection_result"), collection.SingleExpression, collection.CollapseResult),
+            PowerShellBoundNativeConditionalValueExpression conditionalValue => new PowerShellLoweredNativeConditionalValueExpression(
+                conditionalValue.Span,
+                conditionalValue.Clauses.Select(clause => new PowerShellLoweredNativeConditionalValueClause(
+                    LowerExpression(clause.Condition, functions, names, targetCapabilities),
+                    LowerExpression(clause.Value, functions, names, targetCapabilities))).ToArray(),
+                LowerExpression(conditionalValue.Otherwise, functions, names, targetCapabilities), conditionalValue.PreserveRecords),
             PowerShellBoundArrayConcatenationExpression concatenation => new PowerShellLoweredArrayConcatenationExpression(
                 concatenation.Span,
                 LowerExpression(concatenation.Left, functions, names, targetCapabilities),

@@ -13,11 +13,20 @@ internal sealed partial class PowerShellBoundCSharpBackend
         finally { _nativeRegionPartialOutputSink = previous; }
     }
 
-    private string EmitNativeCollection(PowerShellLoweredNativeCollectionExpression collection)
+    private string EmitNativeCollection(PowerShellLoweredNativeCollectionExpression collection, bool conditionalBranch = false)
     {
         if (collection.SingleExpression)
         {
             var value = collection.Items[0].Value;
+            if (conditionalBranch)
+            {
+                // A single captured expression has an additional authored if-value error boundary.
+                // Direct pipeline statements and multi-statement branches already route their own errors.
+                var expression = EmitNativeCollection(collection);
+                return "new global::System.Func<object?[]>(() => { try { return " + expression +
+                    "; } catch (global::System.Exception __pfConditionalError) when (" + StatementErrorContextType +
+                    ".IsOperationFailure(__pfConditionalError)) { __statementErrors.AppendEscapingConditionalError(__pfConditionalError); throw; } })()";
+            }
             if (!collection.Items[0].EmitsOutput && value.ClrType != typeof(void))
                 return "new global::System.Func<object?[]>(() => { " + PowerShellCSharpSymbolRenderer.TypeName(value.ClrType) + " " + collection.Items[0].ValueTemporary + " = " + EmitNativeCollectedValue(value, null) +
                     "; return __nativeFunction.CollectValue(global::System.Management.Automation.Internal.AutomationNull.Value); })()";
@@ -60,7 +69,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(PowerShellCSharpLiteral.QuoteString(collection.SourcePath)).Append(", ")
                 .Append(item.Span.StartLine).Append(", ").Append(item.Span.StartColumn).Append(", ")
                 .Append(item.Span.EndLine).Append(", ").Append(item.Span.EndColumn).Append(", ")
-                .Append(PowerShellCSharpLiteral.QuoteString(item.SourceText)).Append("); } ");
+                .Append(PowerShellCSharpLiteral.QuoteString(item.SourceText)).Append("); ");
+            body.Append("} ");
         }
         if (collection.CollapseResult)
         {
@@ -73,4 +83,21 @@ internal sealed partial class PowerShellBoundCSharpBackend
         body.Append("return ").Append(result).Append(".ToArray(); })()");
         return body.ToString();
     }
+
+    private string EmitNativeConditionalValue(PowerShellLoweredNativeConditionalValueExpression conditionalValue)
+    {
+        var returnType = conditionalValue.PreserveRecords ? "object?[]" : "object?";
+        var body = new StringBuilder("new global::System.Func<" + returnType + ">(() => { ");
+        foreach (var clause in conditionalValue.Clauses)
+            body.Append("if (").Append(EmitExpression(clause.Condition)).Append(") return (").Append(returnType).Append(')')
+                .Append(EmitConditionalBranchValue(clause.Value)).Append("; ");
+        body.Append("return (").Append(returnType).Append(')').Append(EmitConditionalBranchValue(conditionalValue.Otherwise))
+            .Append("; })()");
+        return body.ToString();
+    }
+
+    private string EmitConditionalBranchValue(PowerShellLoweredExpression value)
+        => value is PowerShellLoweredNativeCollectionExpression collection
+            ? EmitNativeCollection(collection, conditionalBranch: true)
+            : EmitExpression(value);
 }
