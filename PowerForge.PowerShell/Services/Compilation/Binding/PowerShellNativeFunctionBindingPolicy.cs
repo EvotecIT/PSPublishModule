@@ -85,6 +85,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                    TokenKind.Icontains or TokenKind.Ccontains or TokenKind.Inotcontains or TokenKind.Cnotcontains or
                    TokenKind.Iin or TokenKind.Cin or TokenKind.Inotin or TokenKind.Cnotin } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
+           RequiresNativeObjectParameterForEach(function) ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
@@ -106,6 +107,18 @@ internal static class PowerShellNativeFunctionBindingPolicy
                 parameter.StaticType == typeof(string) && attribute.TypeName.Name.Equals("Parameter", StringComparison.OrdinalIgnoreCase) &&
                 attribute.NamedArguments.Any(argument => argument.ArgumentName.Equals("ValueFromPipeline", StringComparison.OrdinalIgnoreCase) ||
                     argument.ArgumentName.Equals("ValueFromPipelineByPropertyName", StringComparison.OrdinalIgnoreCase))));
+
+    private static bool RequiresNativeObjectParameterForEach(FunctionDefinitionAst function)
+    {
+        var untypedParameters = PowerShellParameterSyntax.GetParameters(function.Body)
+            .Where(static parameter => parameter.StaticType == typeof(object))
+            .Select(static parameter => parameter.Name.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return untypedParameters.Count > 0 && function.Body.Find(node =>
+            node is ForEachStatementAst loop &&
+            loop.Condition.GetPureExpression() is VariableExpressionAst source &&
+            untypedParameters.Contains(source.VariablePath.UserPath), searchNestedScriptBlocks: false) is not null;
+    }
 
     /// <summary>Identifies command results consumed by an expression or assignment in this invocation.</summary>
     private static bool IsCapturedPipeline(PipelineAst pipeline)
