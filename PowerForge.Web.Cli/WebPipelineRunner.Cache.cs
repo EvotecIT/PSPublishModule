@@ -180,6 +180,47 @@ internal static partial class WebPipelineRunner
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    internal static string? ComputeOutputStamp(string[] outputs)
+    {
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            foreach (var path in outputs
+                         .Distinct(WebCliHelpers.FileSystemPathComparer)
+                         .OrderBy(path => path, WebCliHelpers.FileSystemPathComparer))
+            {
+                if (File.Exists(path))
+                {
+                    hash.AppendData(Encoding.UTF8.GetBytes(BuildPathStamp(path) + "\n"));
+                    continue;
+                }
+
+                if (!Directory.Exists(path))
+                {
+                    hash.AppendData(Encoding.UTF8.GetBytes($"m|{path}\n"));
+                    continue;
+                }
+
+                hash.AppendData(Encoding.UTF8.GetBytes($"d|{path}\n"));
+                // Unlike the bounded input discovery stamp, output integrity
+                // must account for every generated file in a large site.
+                foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                             .OrderBy(file => file, WebCliHelpers.FileSystemPathComparer))
+                {
+                    var info = new FileInfo(file);
+                    hash.AppendData(Encoding.UTF8.GetBytes($"{file}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
+                }
+            }
+
+            return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        }
+        catch
+        {
+            // An unreadable output cannot validate a cache hit.
+            return null;
+        }
+    }
+
     private static IEnumerable<string> EnumerateFingerprintPaths(string baseDir, JsonElement step)
     {
         if (step.ValueKind != JsonValueKind.Object)

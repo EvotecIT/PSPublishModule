@@ -86,6 +86,7 @@ internal static partial class WebPipelineRunner
     private sealed class WebPipelineCacheEntry
     {
         public string Fingerprint { get; set; } = string.Empty;
+        public string? OutputStamp { get; set; }
         public string? Message { get; set; }
     }
 
@@ -142,6 +143,7 @@ internal static partial class WebPipelineRunner
         var steps = BuildStepDefinitions(stepsElement);
         var totalSteps = steps.Count;
         var stepResultsByIndex = new Dictionary<int, WebPipelineStepResult>();
+        var cacheOutputs = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
         // Allows fast mode to scope optimize/audit to just the pages touched by the last build step.
         var lastBuildOutPath = string.Empty;
@@ -188,13 +190,14 @@ internal static partial class WebPipelineRunner
             var dependencyMiss = definition.DependencyIndexes.Any(index =>
                 !stepResultsByIndex.TryGetValue(index, out var dependencyResult) || !dependencyResult.Cached);
             if (steps.Any(prior => prior.Index < stepIndex &&
-                                   prior.Task.Equals("release-hub", StringComparison.OrdinalIgnoreCase) &&
+                                   (prior.Task.Equals("release-hub", StringComparison.OrdinalIgnoreCase) ||
+                                    prior.Task.Equals("build", StringComparison.OrdinalIgnoreCase)) &&
                                    stepResultsByIndex.TryGetValue(prior.Index, out var priorResult) &&
                                    priorResult.Success && !priorResult.Cached &&
                                    priorResult.Message?.StartsWith("skipped (", StringComparison.OrdinalIgnoreCase) != true))
             {
-                // A live release refresh can change data consumed by later build, verify, audit,
-                // and publish preparation steps without changing their declared inputs.
+                // A release refresh or site build can change data consumed by later
+                // verify, audit, and publish preparation without explicit dependencies.
                 dependencyMiss = true;
             }
             var cacheStateLocal = cacheState;
@@ -206,7 +209,10 @@ internal static partial class WebPipelineRunner
                 if (cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
                     !dependencyMiss &&
-                    AreExpectedOutputsPresent(expectedOutputs))
+                    AreExpectedOutputsPresent(expectedOutputs) &&
+                    (expectedOutputs.Length == 0 ||
+                     (ComputeOutputStamp(expectedOutputs) is { } currentOutputStamp &&
+                      string.Equals(cacheEntry.OutputStamp, currentOutputStamp, StringComparison.Ordinal))))
                 {
                     stepResult.Success = true;
                     stepResult.Cached = true;
@@ -220,6 +226,7 @@ internal static partial class WebPipelineRunner
                     }
                     result.Steps.Add(stepResult);
                     stepResultsByIndex[stepIndex] = stepResult;
+                    cacheOutputs[cacheKey] = expectedOutputs;
                     if (profileEnabled)
                         logger?.Info($"Finished {label} (cache hit) in {FormatDuration(stopwatch.Elapsed)}");
                     continue;
@@ -242,8 +249,8 @@ internal static partial class WebPipelineRunner
                 result.StepCount = result.Steps.Count;
                 result.Success = false;
                 result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
-                if (cacheEnabled && cacheState is not null && cacheUpdated)
-                    SavePipelineCache(cachePath, cacheState, logger);
+                // Keep the previous successful cache. A later failing step may
+                // have modified an earlier step's output before throwing.
                 // Intentionally asymmetric:
                 // - Success: write profile only when profile is enabled (to avoid noise/overhead).
                 // - Failure: write profile when profile is enabled OR profileOnFail is true (default),
@@ -258,7 +265,7 @@ internal static partial class WebPipelineRunner
 
             stepResult.Message = AppendDuration(stepResult.Message, stopwatch);
             stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
-            if (cacheable && !string.IsNullOrWhiteSpace(stepFingerprint))
+            if (cacheable && stepResult.Success && !string.IsNullOrWhiteSpace(stepFingerprint))
             {
                 cacheStateLocal!.Entries[cacheKey] = new WebPipelineCacheEntry
                 {
@@ -266,6 +273,7 @@ internal static partial class WebPipelineRunner
                     Message = stepResult.Message
                 };
                 cacheUpdated = true;
+                cacheOutputs[cacheKey] = expectedOutputs;
             }
             result.Steps.Add(stepResult);
             stepResultsByIndex[stepIndex] = stepResult;
@@ -277,8 +285,17 @@ internal static partial class WebPipelineRunner
         result.StepCount = result.Steps.Count;
         result.Success = result.Steps.All(s => s.Success);
         result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
-        if (cacheEnabled && cacheState is not null && cacheUpdated)
+        if (result.Success && cacheEnabled && cacheState is not null && cacheUpdated)
+        {
+            // Record output integrity after every step has finished. Later steps
+            // may add files to an earlier build directory (for example sitemap).
+            foreach (var output in cacheOutputs)
+            {
+                if (cacheState.Entries.TryGetValue(output.Key, out var entry))
+                    entry.OutputStamp = ComputeOutputStamp(output.Value);
+            }
             SavePipelineCache(cachePath, cacheState, logger);
+        }
         if (!string.IsNullOrWhiteSpace(profilePath) && profileEnabled)
         {
             WritePipelineProfile(profilePath, result, logger);

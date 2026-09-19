@@ -74,6 +74,14 @@ public static class WebReleaseHubGenerator
             }
         }
 
+        var observedNonStableTags = releases
+            .Where(static release => release.IsDraft || release.IsPrerelease)
+            .Select(static release => release.Tag)
+            .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(static tag => tag!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         releases = releases
             .Where(release => ShouldIncludeRelease(release, options))
             .OrderByDescending(ResolveReleaseTimestamp)
@@ -143,7 +151,8 @@ public static class WebReleaseHubGenerator
             ReleaseCount = releases.Count,
             AssetCount = assetCount,
             Source = source,
-            Warnings = document.Warnings.ToArray()
+            Warnings = document.Warnings.ToArray(),
+            ObservedNonStableTags = observedNonStableTags
         };
     }
 

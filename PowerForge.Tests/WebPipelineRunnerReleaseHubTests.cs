@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using PowerForge.Web;
 using PowerForge.Web.Cli;
 using Xunit;
 
@@ -137,9 +138,81 @@ public class WebPipelineRunnerReleaseHubTests
             Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existingWithTwoAssets, outputPath, ["Studio-v"]));
             Assert.Equal(observedWithoutArm64, File.ReadAllText(outputPath));
 
+            const string reclassifiedAsPrerelease = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","isPrerelease":true,"assets":[]}]}""";
+            File.WriteAllText(outputPath, reclassifiedAsPrerelease);
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+            Assert.Equal(reclassifiedAsPrerelease, File.ReadAllText(outputPath));
+
+            const string reclassifiedAsDraft = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","isDraft":true,"assets":[]}]}""";
+            File.WriteAllText(outputPath, reclassifiedAsDraft);
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+            Assert.Equal(reclassifiedAsDraft, File.ReadAllText(outputPath));
+
+            const string correctedEarlierDate = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-07-31T00:00:00Z","assets":[]}]}""";
+            File.WriteAllText(outputPath, correctedEarlierDate);
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+            Assert.Equal(correctedEarlierDate, File.ReadAllText(outputPath));
+
             File.WriteAllText(outputPath,
                 """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.0.9","publishedAt":"2026-07-01T00:00:00Z","assets":[]}]}""");
             Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ReleaseHubFallback_RejectsDraftTagFilteredFromGeneratedOutput()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-filtered-draft-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var releasesPath = Path.Combine(root, "releases.json");
+            var outputPath = Path.Combine(root, "release-hub.json");
+            File.WriteAllText(releasesPath,
+                """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","isDraft":true,"isPrerelease":false,"assets":[]},{"tag":"OfficeIMO-v1.0.0","isDraft":false,"isPrerelease":false,"assets":[]}]}""");
+            var result = WebReleaseHubGenerator.Generate(new WebReleaseHubOptions
+            {
+                Source = WebChangelogSource.File,
+                ReleasesPath = releasesPath,
+                OutputPath = outputPath,
+                Repo = "EvotecIT/OfficeIMO"
+            });
+            Assert.Contains("Studio-v0.1.0", result.ObservedNonStableTags);
+            Assert.DoesNotContain("Studio-v0.1.0", File.ReadAllText(outputPath), StringComparison.Ordinal);
+            Assert.Equal(1, result.ReleaseCount);
+
+            const string existing = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[]}]}""";
+            var filteredOutput = File.ReadAllText(outputPath);
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"],
+                observedNonStableTags: result.ObservedNonStableTags));
+            Assert.Equal(filteredOutput, File.ReadAllText(outputPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void PipelineOutputStamp_TracksFilesBeyondInputStampLimit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-output-stamp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            for (var index = 0; index < 1002; index++)
+                File.WriteAllText(Path.Combine(root, $"page-{index:D4}.html"), "page");
+
+            var before = WebPipelineRunner.ComputeOutputStamp([root]);
+            File.Delete(Path.Combine(root, "page-1001.html"));
+            var after = WebPipelineRunner.ComputeOutputStamp([root]);
+            Assert.NotNull(before);
+            Assert.NotNull(after);
+            Assert.NotEqual(before, after);
         }
         finally
         {
@@ -182,6 +255,17 @@ public class WebPipelineRunnerReleaseHubTests
             var unchanged = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
             Assert.True(unchanged.Success);
             Assert.All(unchanged.Steps, step => Assert.True(step.Cached, step.Task));
+
+            var builtPage = Path.Combine(root, "site", "index.html");
+            Assert.True(File.Exists(builtPage));
+            File.Delete(builtPage);
+            var afterDeletedPage = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(afterDeletedPage.Success);
+            Assert.True(afterDeletedPage.Steps[0].Cached);
+            Assert.False(afterDeletedPage.Steps[1].Cached);
+            Assert.False(afterDeletedPage.Steps[2].Cached);
+            Assert.True(File.Exists(builtPage));
+
             File.WriteAllText(releasesPath, """[{"tag_name":"v2","published_at":"2026-04-02T00:00:00Z","assets":[]}]""");
             var second = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
 

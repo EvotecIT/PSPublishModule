@@ -1399,7 +1399,8 @@ internal static partial class WebPipelineRunner
             TryPreserveExistingReleaseHub(existingOutputContent, outPath,
                 options.RetainLatestStableTagPrefixes.Concat(options.RetainAllStableTagPrefixes),
                 requireCompleteHistory: options.RetainAllStableTagPrefixes.Any(
-                    static prefix => !string.IsNullOrWhiteSpace(prefix))))
+                    static prefix => !string.IsNullOrWhiteSpace(prefix)),
+                observedNonStableTags: result.ObservedNonStableTags))
         {
             var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
             result = new WebReleaseHubResult
@@ -1471,7 +1472,8 @@ internal static partial class WebPipelineRunner
         string existingJson,
         string outputPath,
         IEnumerable<string>? requiredStableTagPrefixes = null,
-        bool requireCompleteHistory = false)
+        bool requireCompleteHistory = false,
+        IEnumerable<string>? observedNonStableTags = null)
     {
         // An old document contains no proof that it retained every historical release.
         if (requireCompleteHistory)
@@ -1489,6 +1491,8 @@ internal static partial class WebPipelineRunner
             !string.Equals(existing.Repo, generated.Repo, StringComparison.OrdinalIgnoreCase))
             return false;
 
+        var nonStableTags = new HashSet<string>(observedNonStableTags ?? [], StringComparer.OrdinalIgnoreCase);
+
         foreach (var prefix in requiredStableTagPrefixes?
                      .Where(static value => !string.IsNullOrWhiteSpace(value)) ?? [])
         {
@@ -1500,6 +1504,16 @@ internal static partial class WebPipelineRunner
                 .ThenByDescending(release => release.Tag, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
             if (preserved is null)
+                return false;
+
+            if (preserved.Tag is not null && nonStableTags.Contains(preserved.Tag))
+                return false;
+
+            // A matching tag seen as a draft or prerelease is a reclassification,
+            // not an absent stable release hidden by incomplete pagination.
+            if (generated.Releases.Any(release =>
+                    string.Equals(release.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
+                    (release.IsDraft || release.IsPrerelease)))
                 return false;
 
             var observed = generated.Releases
@@ -1516,7 +1530,12 @@ internal static partial class WebPipelineRunner
                 (!string.Equals(observed.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
                  (observedTime is null || preservedTime is null || observedTime == preservedTime)) ||
                 (string.Equals(observed.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
-                 !HaveSameReleaseAssets(observed.Assets, preserved.Assets)))
+                 (observed.PublishedAt != preserved.PublishedAt ||
+                  observed.CreatedAt != preserved.CreatedAt ||
+                  !string.Equals(observed.Title, preserved.Title, StringComparison.Ordinal) ||
+                  !string.Equals(observed.Url, preserved.Url, StringComparison.Ordinal) ||
+                  !string.Equals(observed.BodyMarkdown, preserved.BodyMarkdown, StringComparison.Ordinal) ||
+                  !HaveSameReleaseAssets(observed.Assets, preserved.Assets))))
                 return false;
         }
 
