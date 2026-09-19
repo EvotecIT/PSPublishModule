@@ -114,6 +114,34 @@ public class WebPipelineRunnerReleaseHubTests
     }
 
     [Fact]
+    public void ReleaseHubFallback_RejectsOlderStableProductWhenPartialRefreshObservedNewerRelease()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-newer-product-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputPath = Path.Combine(root, "release-hub.json");
+            const string existing = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[]}]}""";
+            const string newer = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.2.0","publishedAt":"2026-09-01T00:00:00Z","assets":[]}]}""";
+            File.WriteAllText(outputPath, newer);
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+            Assert.Equal(newer, File.ReadAllText(outputPath));
+
+            File.WriteAllText(outputPath,
+                """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[{"name":"Studio-arm64.msi","downloadUrl":"https://example.invalid/Studio-arm64.msi"}]}]}""");
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+
+            File.WriteAllText(outputPath,
+                """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.0.9","publishedAt":"2026-07-01T00:00:00Z","assets":[]}]}""");
+            Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ReleaseHubRefresh_InvalidatesLaterCachedSiteBuildWithoutExplicitDependency()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-live-hub-build-" + Guid.NewGuid().ToString("N"));

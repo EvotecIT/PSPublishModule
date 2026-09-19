@@ -1489,12 +1489,38 @@ internal static partial class WebPipelineRunner
             !string.Equals(existing.Repo, generated.Repo, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (requiredStableTagPrefixes is not null && requiredStableTagPrefixes
-            .Where(static prefix => !string.IsNullOrWhiteSpace(prefix))
-            .Any(prefix => !existing.Releases.Any(release =>
-                !release.IsDraft && !release.IsPrerelease &&
-                release.Tag?.StartsWith(prefix.Trim(), StringComparison.OrdinalIgnoreCase) == true)))
-            return false;
+        foreach (var prefix in requiredStableTagPrefixes?
+                     .Where(static value => !string.IsNullOrWhiteSpace(value)) ?? [])
+        {
+            var normalizedPrefix = prefix.Trim();
+            var preserved = existing.Releases
+                .Where(release => !release.IsDraft && !release.IsPrerelease &&
+                    release.Tag?.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase) == true)
+                .OrderByDescending(release => release.PublishedAt ?? release.CreatedAt)
+                .ThenByDescending(release => release.Tag, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            if (preserved is null)
+                return false;
+
+            var observed = generated.Releases
+                .Where(release => !release.IsDraft && !release.IsPrerelease &&
+                    release.Tag?.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase) == true)
+                .OrderByDescending(release => release.PublishedAt ?? release.CreatedAt)
+                .ThenByDescending(release => release.Tag, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            if (observed is null)
+                continue;
+            var observedTime = observed.PublishedAt ?? observed.CreatedAt;
+            var preservedTime = preserved.PublishedAt ?? preserved.CreatedAt;
+            if ((observedTime is not null && preservedTime is null) || observedTime > preservedTime ||
+                (!string.Equals(observed.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
+                 (observedTime is null || preservedTime is null || observedTime == preservedTime)) ||
+                (string.Equals(observed.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
+                 observed.Assets.Any(asset => !preserved.Assets.Any(previous =>
+                     string.Equals(previous.Name, asset.Name, StringComparison.OrdinalIgnoreCase) &&
+                     string.Equals(previous.DownloadUrl, asset.DownloadUrl, StringComparison.Ordinal)))))
+                return false;
+        }
 
         File.WriteAllText(outputPath, existingJson);
         return true;
