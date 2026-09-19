@@ -340,14 +340,17 @@ internal sealed class PowerShellLoweredProgram
     internal PowerShellLoweredProgram(
         PowerShellLoweredFunction[] functions,
         PowerShellSemanticDiagnostic[] diagnostics,
-        PowerShellCompilationCapability targetCapabilities)
+        PowerShellCompilationCapability targetCapabilities,
+        PowerShellCompilationSemanticHostFamily semanticHostFamily)
     {
         Functions = functions;
         Diagnostics = diagnostics;
         TargetCapabilities = targetCapabilities;
+        SemanticHostFamily = semanticHostFamily;
     }
 
     internal PowerShellImmutableArray<PowerShellLoweredFunction> Functions { get; }
     internal PowerShellImmutableArray<PowerShellSemanticDiagnostic> Diagnostics { get; }
     internal PowerShellCompilationCapability TargetCapabilities { get; }
+    internal PowerShellCompilationSemanticHostFamily SemanticHostFamily { get; }
 }

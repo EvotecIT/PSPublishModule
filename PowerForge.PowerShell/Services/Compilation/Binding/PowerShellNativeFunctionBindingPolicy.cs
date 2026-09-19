@@ -86,6 +86,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                    TokenKind.Iin or TokenKind.Cin or TokenKind.Inotin or TokenKind.Cnotin } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
            RequiresNativeObjectParameterForEach(function) ||
+           RequiresNativeDictionaryKeyForEach(function) ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
@@ -119,6 +120,17 @@ internal static class PowerShellNativeFunctionBindingPolicy
             loop.Condition.GetPureExpression() is VariableExpressionAst source &&
             untypedParameters.Contains(source.VariablePath.UserPath), searchNestedScriptBlocks: false) is not null;
     }
+
+    private static bool RequiresNativeDictionaryKeyForEach(FunctionDefinitionAst function)
+        => function.Body.Find(static node =>
+            node is ForEachStatementAst loop &&
+            loop.Condition.GetPureExpression() is MemberExpressionAst
+            {
+                Expression: VariableExpressionAst,
+                Member: StringConstantExpressionAst member
+            } &&
+            member.Value.Equals("Keys", StringComparison.OrdinalIgnoreCase),
+            searchNestedScriptBlocks: false) is not null;
 
     /// <summary>Identifies command results consumed by an expression or assignment in this invocation.</summary>
     private static bool IsCapturedPipeline(PipelineAst pipeline)

@@ -128,7 +128,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         foreach (var source in sources)
         {
             var method = typed.Methods.SingleOrDefault(method => method.SourceName == source.Name);
-            Assert.Equal(source.Emitted, method is not null);
+            Assert.True(source.Emitted == (method is not null), source.Name + ": " +
+                string.Join(" | ", typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
             if (source.Emitted) Assert.NotNull(method!.NativeFunctionBinding);
         }
         Assert.Contains("ReadDynamicMember", typed.SourceCode, StringComparison.Ordinal);

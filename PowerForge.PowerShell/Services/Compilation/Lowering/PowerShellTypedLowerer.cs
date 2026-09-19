@@ -258,7 +258,8 @@ internal sealed partial class PowerShellTypedLowerer
                 .ThenBy(static diagnostic => diagnostic.Span.StartOffset)
                 .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
                 .ToArray(),
-            targetCapabilities);
+            targetCapabilities,
+            program.SemanticHostFamily);
     }
 
     private static void CloseLoweringDependencies(List<PowerShellLoweredFunction> functions,

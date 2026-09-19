@@ -64,7 +64,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         PowerShellExecutionDispositionKind.Fallback,
                         "control.finally.stream-stop",
                         "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve."));
-                if (ReturnsCompilerDictionary(function))
+                if (ReturnsCompilerDictionary(function) && !HasQualifiedNativeDictionaryOutput(function))
                 {
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,

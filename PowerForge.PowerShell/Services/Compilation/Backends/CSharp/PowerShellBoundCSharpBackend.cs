@@ -9,13 +9,18 @@ namespace PowerForge;
 internal sealed partial class PowerShellBoundCSharpBackend
 {
     private PowerShellLoweredFunction? _sourceFunction;
+    private PowerShellCompilationSemanticHostFamily _semanticHostFamily;
     private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
         // Each function owns its temporary names and generated helper registry.
         var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
-        var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend { _functions = functions }.EmitFunction(function, program.TargetCapabilities)).ToArray();
+        var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend
+        {
+            _functions = functions,
+            _semanticHostFamily = program.SemanticHostFamily
+        }.EmitFunction(function, program.TargetCapabilities)).ToArray();
         return new PowerShellBoundCSharpResult(methods, program.Diagnostics.ToArray());
     }
 
@@ -532,12 +537,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)
     {
         var entries = string.Join(", ", dictionary.Entries.Select(entry => $"{{ {EmitExpression(entry.Key)}, {EmitExpression(entry.Value)} }}"));
+        var comparer = _semanticHostFamily == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51
+            ? "global::System.StringComparer.InvariantCultureIgnoreCase"
+            : "global::System.StringComparer.OrdinalIgnoreCase";
         return dictionary.Kind switch
         {
             PowerShellBoundDictionaryKind.OrderedStringDictionary or PowerShellBoundDictionaryKind.OrderedObjectDictionary =>
-                $"new global::System.Collections.Specialized.OrderedDictionary(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}",
+                $"new global::System.Collections.Specialized.OrderedDictionary({comparer}) {{ {entries} }}",
             PowerShellBoundDictionaryKind.ObjectDictionary or PowerShellBoundDictionaryKind.StringHashtable =>
-                $"new global::System.Collections.Hashtable(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}",
+                $"new global::System.Collections.Hashtable({comparer}) {{ {entries} }}",
             _ => $"new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}"
         };
     }

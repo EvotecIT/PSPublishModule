@@ -77,9 +77,172 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(original.StandardError, compiled.StandardError);
     }
 
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void NativeDictionaryOutput_UsesHostLiteralKeyComparer(string framework, string host)
+    {
+        const string source = """
+            function Read-CultureMap {
+                [CmdletBinding()] param([switch]$AsMap)
+                $map = [ordered]@{ 'ß' = 'sharp'; 'I' = 'latin' }
+                foreach ($key in $map.Keys) { $null = $key }
+                if ($AsMap) { $map } else { $map['ss']; $map['i'] }
+            }
+            """;
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        File.WriteAllText(fixture.ScriptPath, source, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.NativeCultureMap",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(unit.EmittedClrMethod,
+            string.Join(" | ", unit.DiagnosticChain.Select(static diagnostic => diagnostic.Message)));
+        Assert.True(unit.UsesNativeFunctionBinding);
+        const string probe = """
+            $oldCulture = [Threading.Thread]::CurrentThread.CurrentCulture
+            try {
+                [Threading.Thread]::CurrentThread.CurrentCulture = [Globalization.CultureInfo]'tr-TR'
+                $records = @(Read-CultureMap -AsMap)
+                [pscustomobject]@{ count=$records.Count; type=$records[0].GetType().FullName;
+                    keys=@($records[0].Keys); lookup=@(Read-CultureMap) } |
+                    ConvertTo-Json -Depth 5 -Compress
+            } finally { [Threading.Thread]::CurrentThread.CurrentCulture = $oldCulture }
+            """;
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "culture-map-original");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "culture-map-compiled");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void NativeHashtableOutput_PreservesLiteralAndBorrowedMapIdentity(string framework, string host)
+    {
+        const string source = """
+            function Read-CultureHashtable {
+                [CmdletBinding()] param([switch]$AsMap, [hashtable]$Borrowed)
+                $map = @{ 'ß' = 'sharp'; 'I' = 'latin' }
+                foreach ($key in $map.Keys) { $null = $key }
+                $map['Extra'] = 'added'
+                if ($Borrowed) { $map = $Borrowed }
+                if ($AsMap) { $map } else { $map['ss']; $map['i'] }
+            }
+            """;
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        File.WriteAllText(fixture.ScriptPath, source, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.NativeHashtableOutput",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(unit.EmittedClrMethod,
+            string.Join(" | ", unit.DiagnosticChain.Select(static diagnostic => diagnostic.Message)));
+        Assert.True(unit.UsesNativeFunctionBinding);
+        const string probe = """
+            $oldCulture = [Threading.Thread]::CurrentThread.CurrentCulture
+            try {
+                [Threading.Thread]::CurrentThread.CurrentCulture = [Globalization.CultureInfo]'tr-TR'
+                $borrowed = @{ Name = 'existing' }
+                $created = @(Read-CultureHashtable -AsMap)
+                $returned = @(Read-CultureHashtable -AsMap -Borrowed $borrowed)
+                [pscustomobject]@{ createdCount=$created.Count; createdType=$created[0].GetType().FullName;
+                    createdKeys=@($created[0].Keys | Sort-Object); createdExtra=$created[0]['Extra'];
+                    lookup=@(Read-CultureHashtable);
+                    borrowedSame=[object]::ReferenceEquals($returned[0],$borrowed) } |
+                    ConvertTo-Json -Depth 5 -Compress
+            } finally { [Threading.Thread]::CurrentThread.CurrentCulture = $oldCulture }
+            """;
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "hashtable-output-original");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "hashtable-output-compiled");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Contains("\"borrowedSame\":true", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void NativeUnknownForEach_KeepsOrderedMapLoopHosted()
+    public void DictionaryOutput_KeepsNonNativeHashtableEscapeHosted()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Read-UnqualifiedMap {
+                [CmdletBinding()] param()
+                $map = @{ Name = 'value' }
+                $map
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.UnqualifiedMap",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = "net10.0" });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.False(unit.EmittedClrMethod);
+        Assert.True(unit.RetainedHostedSource);
+        Assert.Contains(unit.DiagnosticChain, static diagnostic =>
+            diagnostic.Message.Contains("dictionary literals are lookup-only locals", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void NativeDictionaryOutput_PreservesCollectedMapCardinality(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Read-CollectedMap {
+                [CmdletBinding()] param()
+                $map = [ordered]@{ Name = 'value' }
+                foreach ($key in $map.Keys) { $null = $key }
+                @($map)
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.CollectedMap",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(unit.EmittedClrMethod,
+            string.Join(" | ", unit.DiagnosticChain.Select(static diagnostic => diagnostic.Message)));
+        Assert.True(unit.UsesNativeFunctionBinding);
+        const string probe = """
+            $records = @(Read-CollectedMap)
+            [pscustomobject]@{count=$records.Count;type=$records[0].GetType().FullName;
+                keys=@($records[0].Keys)} | ConvertTo-Json -Depth 5 -Compress
+            """;
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "collected-map-original");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "collected-map-compiled");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Contains("\"count\":1", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void NativeUnknownForEach_EmitsOrderedMapLoopWithOriginalRecords(string framework, string host)
     {
         var path = FindCompleteConversionWorkflow("PSSharedGoods", "FullModule", "Public", "Get-ProtocolDefaults.ps1");
         Assert.Equal("ad58cb0a843a952dcc6deb530c0afab650397f02ff8d7aed3ac419171602ee5a",
@@ -88,14 +251,50 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.OrderedMapForeach",
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
-            allowUnreviewedDependencyResolution: true) { TargetFramework = "net10.0" });
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
-        Assert.False(unit.EmittedClrMethod);
-        Assert.True(unit.RetainedHostedSource);
-        Assert.Equal(1, unit.PromotedTypedRegions);
-        Assert.Contains(unit.DiagnosticChain, static diagnostic =>
-            diagnostic.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("ForEachStatementAst"));
+        Assert.True(unit.EmittedClrMethod,
+            string.Join(" | ", unit.DiagnosticChain.Select(static diagnostic => diagnostic.Message)));
+        Assert.True(unit.UsesNativeFunctionBinding);
+        Assert.False(unit.RetainedHostedSource);
+
+        const string probe = """
+            function Describe-Record($record) {
+                $keys = if ($record -is [System.Collections.IDictionary]) { @($record.Keys) }
+                    else { @($record.PSObject.Properties.Name) }
+                [pscustomobject]@{ type=$record.GetType().FullName; keys=$keys;
+                    values=@($keys | ForEach-Object { [string]$record.$_ }) }
+            }
+            for ($round = 0; $round -lt 2; $round++) {
+                if ($round -gt 0) { Remove-Module $module.Name; $module = Import-Module $modulePath -PassThru }
+                foreach ($version in 'Windows Server 2022','windows server 2022','No such Windows') {
+                    $records = @(Get-ProtocolDefaults -WindowsVersion $version)
+                    [pscustomobject]@{ round=$round; version=$version; count=$records.Count;
+                        records=@($records | ForEach-Object { Describe-Record $_ }) } |
+                        ConvertTo-Json -Depth 8 -Compress
+                }
+                $records = @(Get-ProtocolDefaults -AsList)
+                [pscustomobject]@{ round=$round; mode='list'; count=$records.Count;
+                    records=@($records | ForEach-Object { Describe-Record $_ }) } |
+                    ConvertTo-Json -Depth 8 -Compress
+            }
+            """;
+        var original = RunStatementErrorProbe(host,
+            "$modulePath='" + EscapeStatementErrorPath(fixture.ScriptPath) +
+            "'; $module=Import-Module $modulePath -PassThru; " + probe,
+            fixture.RootPath, "ordered-map-original");
+        var compiled = RunStatementErrorProbe(host,
+            "$modulePath='" + EscapeStatementErrorPath(result.ArtifactPath!) +
+            "'; $module=Import-Module $modulePath -PassThru; " + probe,
+            fixture.RootPath, "ordered-map-compiled");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Equal(8, original.StandardOutput.Split('\n').Count(static line => !string.IsNullOrWhiteSpace(line)));
+        Assert.Contains("\"count\":26", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("System.Collections.Specialized.OrderedDictionary", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
     }
 
     [Theory]
