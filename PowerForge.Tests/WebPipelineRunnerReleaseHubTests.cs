@@ -131,6 +131,12 @@ public class WebPipelineRunnerReleaseHubTests
                 """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[{"name":"Studio-arm64.msi","downloadUrl":"https://example.invalid/Studio-arm64.msi"}]}]}""");
             Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
 
+            const string existingWithTwoAssets = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[{"name":"Studio-x64.msi","downloadUrl":"https://example.invalid/Studio-x64.msi"},{"name":"Studio-arm64.msi","downloadUrl":"https://example.invalid/Studio-arm64.msi"}]}]}""";
+            const string observedWithoutArm64 = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[{"name":"Studio-x64.msi","downloadUrl":"https://example.invalid/Studio-x64.msi"}]}]}""";
+            File.WriteAllText(outputPath, observedWithoutArm64);
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existingWithTwoAssets, outputPath, ["Studio-v"]));
+            Assert.Equal(observedWithoutArm64, File.ReadAllText(outputPath));
+
             File.WriteAllText(outputPath,
                 """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.0.9","publishedAt":"2026-07-01T00:00:00Z","assets":[]}]}""");
             Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
@@ -172,10 +178,15 @@ public class WebPipelineRunnerReleaseHubTests
 
             var first = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
             Assert.True(first.Success);
+            Assert.All(first.Steps, step => Assert.False(step.Cached));
+            var unchanged = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(unchanged.Success);
+            Assert.All(unchanged.Steps, step => Assert.True(step.Cached, step.Task));
             File.WriteAllText(releasesPath, """[{"tag_name":"v2","published_at":"2026-04-02T00:00:00Z","assets":[]}]""");
             var second = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
 
             Assert.True(second.Success);
+            Assert.False(second.Steps[0].Cached);
             Assert.False(second.Steps[1].Cached);
             Assert.False(second.Steps[2].Cached);
             Assert.Contains("v2", File.ReadAllText(Path.Combine(root, "data", "release-hub.json")), StringComparison.Ordinal);

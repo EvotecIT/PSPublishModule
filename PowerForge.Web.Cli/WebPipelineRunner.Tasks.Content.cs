@@ -1516,14 +1516,43 @@ internal static partial class WebPipelineRunner
                 (!string.Equals(observed.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
                  (observedTime is null || preservedTime is null || observedTime == preservedTime)) ||
                 (string.Equals(observed.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
-                 observed.Assets.Any(asset => !preserved.Assets.Any(previous =>
-                     string.Equals(previous.Name, asset.Name, StringComparison.OrdinalIgnoreCase) &&
-                     string.Equals(previous.DownloadUrl, asset.DownloadUrl, StringComparison.Ordinal)))))
+                 !HaveSameReleaseAssets(observed.Assets, preserved.Assets)))
                 return false;
         }
 
         File.WriteAllText(outputPath, existingJson);
         return true;
+    }
+
+    private static bool HaveSameReleaseAssets(List<WebReleaseHubAsset>? observed, List<WebReleaseHubAsset>? preserved)
+    {
+        if (observed is null || preserved is null || observed.Count != preserved.Count)
+            return false;
+
+        // Match as a multiset so a missing asset cannot be hidden by an extra
+        // copy of another asset or by a different order from the API.
+        var remaining = new List<WebReleaseHubAsset>(preserved);
+        foreach (var asset in observed)
+        {
+            if (asset is null)
+                return false;
+            var index = remaining.FindIndex(previous => previous is not null &&
+                string.Equals(previous.Name, asset.Name, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(previous.DownloadUrl, asset.DownloadUrl, StringComparison.Ordinal) &&
+                string.Equals(previous.Product, asset.Product, StringComparison.Ordinal) &&
+                string.Equals(previous.Channel, asset.Channel, StringComparison.Ordinal) &&
+                string.Equals(previous.Platform, asset.Platform, StringComparison.Ordinal) &&
+                string.Equals(previous.Arch, asset.Arch, StringComparison.Ordinal) &&
+                string.Equals(previous.Kind, asset.Kind, StringComparison.Ordinal) &&
+                string.Equals(previous.Sha256, asset.Sha256, StringComparison.Ordinal) &&
+                previous.Size == asset.Size &&
+                string.Equals(previous.ContentType, asset.ContentType, StringComparison.Ordinal));
+            if (index < 0)
+                return false;
+            remaining.RemoveAt(index);
+        }
+
+        return remaining.Count == 0;
     }
 
     private static WebReleaseHubDocument? TryReadReleaseHubDocument(string? json)

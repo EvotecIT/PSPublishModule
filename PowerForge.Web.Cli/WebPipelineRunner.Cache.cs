@@ -45,8 +45,6 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("sources-sync", StringComparison.OrdinalIgnoreCase))
             return false;
-        if (task.Equals("release-hub", StringComparison.OrdinalIgnoreCase))
-            return false;
         if (task.Equals("wordpress-media-sync", StringComparison.OrdinalIgnoreCase))
             return false;
         if (task.Equals("wordpress-sync-media", StringComparison.OrdinalIgnoreCase))
@@ -73,6 +71,13 @@ internal static partial class WebPipelineRunner
     {
         if (!IsCacheableTask(task))
             return false;
+
+        if (task.Equals("release-hub", StringComparison.OrdinalIgnoreCase))
+        {
+            // Only explicit file input is deterministic. Auto and GitHub can fetch
+            // newer releases without any local file changing.
+            return string.Equals(GetString(step, "source"), "file", StringComparison.OrdinalIgnoreCase);
+        }
 
         if (task.Equals("audit", StringComparison.OrdinalIgnoreCase) &&
             (GetBool(step, "checkAgentContentSecurity") ?? GetBool(step, "check-agent-content-security") ?? false))
@@ -189,6 +194,12 @@ internal static partial class WebPipelineRunner
         foreach (var property in step.EnumerateObject())
         {
             if (!FingerprintPathKeys.Contains(property.Name))
+                continue;
+            // Output locations are already represented by the step JSON and
+            // checked for presence. Stamping generated content makes the first
+            // cache entry stale immediately after the task runs.
+            if (property.Name.Equals("out", StringComparison.OrdinalIgnoreCase) ||
+                property.Name.Equals("output", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (isLlmsSite &&
                 (string.Equals(property.Name, "packageFiles", StringComparison.OrdinalIgnoreCase) ||
