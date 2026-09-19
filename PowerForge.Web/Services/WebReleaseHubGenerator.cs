@@ -82,10 +82,18 @@ public static class WebReleaseHubGenerator
 
         if (options.MaxReleases is { } max && max > 0 && releases.Count > max)
         {
-            var retained = options.RetainLatestStableTagPrefixes
+            // Keep global channel markers in the document even when the timeline cap
+            // contains only another channel and product retention adds an older release.
+            var globalLatest = new[]
+                {
+                    releases.FirstOrDefault(static release => !release.IsDraft && !release.IsPrerelease),
+                    releases.FirstOrDefault(static release => !release.IsDraft && release.IsPrerelease)
+                }
+                .OfType<WebReleaseHubRelease>();
+            var retained = globalLatest.Concat(options.RetainLatestStableTagPrefixes
                 .Where(static prefix => !string.IsNullOrWhiteSpace(prefix))
                 .Select(prefix => releases.FirstOrDefault(release => IsStableReleaseWithTagPrefix(release, prefix)))
-                .OfType<WebReleaseHubRelease>()
+                .OfType<WebReleaseHubRelease>())
                 .Concat(releases.Where(release => options.RetainAllStableTagPrefixes.Any(prefix =>
                     !string.IsNullOrWhiteSpace(prefix) && IsStableReleaseWithTagPrefix(release, prefix))))
                 .ToArray();
@@ -434,14 +442,14 @@ public static class WebReleaseHubGenerator
             release.IsLatestPrerelease = false;
         }
 
-        var latestStable = releases.FirstOrDefault(static release => !release.IsPrerelease);
+        var latestStable = releases.FirstOrDefault(static release => !release.IsDraft && !release.IsPrerelease);
         if (latestStable is not null)
         {
             latestStable.IsLatestStable = true;
             latestStableTag = latestStable.Tag;
         }
 
-        var latestPreview = releases.FirstOrDefault(static release => release.IsPrerelease);
+        var latestPreview = releases.FirstOrDefault(static release => !release.IsDraft && release.IsPrerelease);
         if (latestPreview is not null)
         {
             latestPreview.IsLatestPrerelease = true;

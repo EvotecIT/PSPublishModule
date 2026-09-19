@@ -187,14 +187,14 @@ internal static partial class WebPipelineRunner
 
             var dependencyMiss = definition.DependencyIndexes.Any(index =>
                 !stepResultsByIndex.TryGetValue(index, out var dependencyResult) || !dependencyResult.Cached);
-            if (task.Equals("build", StringComparison.OrdinalIgnoreCase) &&
-                steps.Any(prior => prior.Index < stepIndex &&
+            if (steps.Any(prior => prior.Index < stepIndex &&
                                    prior.Task.Equals("release-hub", StringComparison.OrdinalIgnoreCase) &&
                                    stepResultsByIndex.TryGetValue(prior.Index, out var priorResult) &&
                                    priorResult.Success && !priorResult.Cached &&
                                    priorResult.Message?.StartsWith("skipped (", StringComparison.OrdinalIgnoreCase) != true))
             {
-                // A live release refresh can change a site's data without changing the build step's own inputs.
+                // A live release refresh can change data consumed by later build, verify, audit,
+                // and publish preparation steps without changing their declared inputs.
                 dependencyMiss = true;
             }
             var cacheStateLocal = cacheState;

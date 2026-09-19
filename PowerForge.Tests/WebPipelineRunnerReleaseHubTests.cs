@@ -165,7 +165,8 @@ public class WebPipelineRunnerReleaseHubTests
                 """
                 { "cache": true, "steps": [
                   { "task": "release-hub", "source": "file", "releasesPath": "./releases.json", "out": "./data/release-hub.json" },
-                  { "task": "build", "config": "./site.json", "out": "./site", "clean": true }
+                  { "task": "build", "config": "./site.json", "out": "./site", "clean": true },
+                  { "task": "verify", "config": "./site.json" }
                 ] }
                 """);
 
@@ -176,6 +177,7 @@ public class WebPipelineRunnerReleaseHubTests
 
             Assert.True(second.Success);
             Assert.False(second.Steps[1].Cached);
+            Assert.False(second.Steps[2].Cached);
             Assert.Contains("v2", File.ReadAllText(Path.Combine(root, "data", "release-hub.json")), StringComparison.Ordinal);
         }
         finally

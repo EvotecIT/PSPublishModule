@@ -3219,7 +3219,7 @@
         "tokenEnv": { "type": "string" },
         "token-env": { "type": "string" },
         "max": { "type": ["string", "integer"] },
-        "maxReleases": { "type": ["string", "integer"] },
+        "maxReleases": { "type": ["string", "integer"], "description": "Timeline limit. Global latest stable and prerelease markers and retained product releases may add entries beyond this limit." },
         "max-releases": { "type": ["string", "integer"] },
         "retainLatestStableTagPrefixes": { "type": "array", "description": "Keep the newest published stable release for each tag prefix outside the maxReleases timeline. GitHub pagination must reach the end of the release list.", "items": { "type": "string", "minLength": 1 } },
         "retainAllStableTagPrefixes": { "type": "array", "description": "Keep every published stable release for each tag prefix. An incomplete GitHub scan fails; prior output cannot prove complete history.", "items": { "type": "string", "minLength": 1 } },
