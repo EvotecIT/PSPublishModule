@@ -177,6 +177,7 @@
           "description": "Exact commit SHA used to create and verify the unified GitHub release tag."
         },
         "GenerateReleaseNotes": { "type": "boolean" },
+        "IsDraft": { "type": "boolean", "description": "Create the unified GitHub release as a draft; promote the same qualified asset set after validation." },
         "IsPreRelease": { "type": "boolean" },
         "ReuseExistingRelease": {
           "type": "boolean",

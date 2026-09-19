@@ -3630,7 +3630,8 @@ internal sealed partial class PowerForgeReleaseService
             if (string.IsNullOrWhiteSpace(package.PackageIdentifier))
                 throw new InvalidOperationException("Winget package PackageIdentifier is required.");
             if (!Regex.IsMatch(package.PackageIdentifier, @"^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant)
-                || package.PackageIdentifier.Contains("..", StringComparison.Ordinal))
+                || package.PackageIdentifier.Contains("..", StringComparison.Ordinal)
+                || !IsSafeWingetManifestPathSegment(package.PackageIdentifier))
                 throw new InvalidOperationException($"Winget package identifier '{package.PackageIdentifier}' cannot be used as a manifest directory name.");
             if (!packageIdentifiers.Add(package.PackageIdentifier))
                 throw new InvalidOperationException($"Winget manifest already written for '{package.PackageIdentifier}'. PackageIdentifier values must be unique within a release config.");
@@ -3963,6 +3964,7 @@ internal sealed partial class PowerForgeReleaseService
                     Commitish = gitHub.Commitish,
                     ExpectedTagCommitSha = gitHub.Commitish,
                     GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
+                    IsDraft = gitHub.IsDraft,
                     IsPreRelease = gitHub.IsPreRelease,
                     ReuseExistingReleaseOnConflict = gitHub.ReuseExistingRelease,
                     RequireExpectedExistingRelease = gitHub.RequireExpectedExistingRelease,

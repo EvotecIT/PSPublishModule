@@ -858,6 +858,9 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public bool GenerateReleaseNotes { get; set; } = true;
 
+    /// <summary>Create the unified GitHub release as a draft so its exact assets can be qualified before promotion.</summary>
+    public bool IsDraft { get; set; }
+
     public bool IsPreRelease { get; set; }
 
     public bool ReuseExistingRelease { get; set; }

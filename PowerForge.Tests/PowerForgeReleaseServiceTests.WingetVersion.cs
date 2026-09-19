@@ -9,6 +9,8 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("1.2.3:bad", false)]
     [InlineData("1.2.3.", false)]
     [InlineData("CON.1", false)]
+    [InlineData("COM1.Tool", false)]
+    [InlineData("EvotecIT.OfficeIMO.Studio", true)]
     public void WingetManifestVersion_AcceptsOnlyPortablePathSegments(string version, bool expected)
         => Assert.Equal(expected, PowerForgeReleaseService.IsSafeWingetManifestPathSegment(version));
 
