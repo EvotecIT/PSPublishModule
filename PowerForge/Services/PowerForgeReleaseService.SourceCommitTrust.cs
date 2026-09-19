@@ -28,6 +28,17 @@ internal sealed partial class PowerForgeReleaseService
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
 
+        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
+        {
+            foreach (var (key, msiVersion) in plan.MsiVersions ?? new Dictionary<string, DotNetPublishMsiVersionPlan>())
+            {
+                if (string.Equals(msiVersion.Version?.Trim(), sharedReleaseVersion.Trim(), StringComparison.Ordinal))
+                    continue;
+                throw new InvalidOperationException(
+                    $"MSI installer '{key}' version '{msiVersion.Version}' does not match release version '{sharedReleaseVersion}'.");
+            }
+        }
+
         foreach (DotNetPublishInstallerPlan installer in plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
         {
             string? nativeVersion = installer.Kind switch

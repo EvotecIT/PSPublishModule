@@ -964,6 +964,8 @@ internal sealed class PowerForgeWingetManifestArtifact
 
     public string ManifestPath { get; set; } = string.Empty;
 
+    public string? ManifestDirectory { get; set; }
+
     public string[] InstallerUrls { get; set; } = Array.Empty<string>();
 }
 

@@ -60,6 +60,24 @@ public sealed class NativeInstallerReleaseSafetyTests
     }
 
     [Fact]
+    public void SharedReleaseVersion_RejectsMsiMismatchBeforeReservation()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+            {
+                ["studio.msi|studio|net10.0|win-x64|PortableCompat"] = new() { Version = "0.1.9758" }
+            }
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateNativeInstallerReleaseVersions(plan, "0.1.9759"));
+
+        Assert.Contains("studio.msi", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("0.1.9758", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MacAppExecutionBoundary_RejectsMutatedDistributionIdentity()
     {
         var options = new DotNetPublishMacAppOptions

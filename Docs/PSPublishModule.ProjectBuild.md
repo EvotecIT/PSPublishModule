@@ -232,7 +232,8 @@ Example Winget generation from staged assets:
 - `{FileName}` resolves to the staged filename after any `*NameTemplate` rewrite, not the raw internal artifact filename
 - when `--stage-root` (or `Outputs.Staging.RootPath`) is active, a relative `Winget.OutputPath` is resolved under that active staged release root so per-run `UploadReady\<release-id>\Winget` layouts work without hard-coded absolute paths
 - set `NestedInstallerType` explicitly for archive-based installers when you want a reusable config that is not implicitly “portable zip only”
-- `Winget.Submission.Mode: "Manifest"` submits the generated YAML via `wingetcreate submit <manifest>`, while `"Update"` calls `wingetcreate update <PackageIdentifier> --urls ... --version ... --submit` for existing Winget packages
+- PowerForge writes a version, installer, and default-locale YAML file together under `Winget/<PackageIdentifier>/<PackageVersion>/`. The three files are included in staged release assets and use the same package identifier and version.
+- `Winget.Submission.Mode: "Manifest"` submits that directory via `wingetcreate submit <manifest-directory>`, while `"Update"` calls `wingetcreate update <PackageIdentifier> --urls ... --version ... --submit` for existing Winget packages
 - `Winget.Submission.TokenEnvName` defaults to `WINGET_CREATE_GITHUB_TOKEN`; `TokenFilePath` is also supported, and inline `Token` exists only for temporary/manual use because command-line token arguments can be logged by external tooling
 - `Winget.Submission.NoOpen` defaults to `true` so CI runs do not try to open a browser; pass `--winget-open-browser` for interactive desktop runs
 - command-line overrides include `--submit-winget`, `--skip-winget-submit`, `--winget-submit-mode Manifest|Update`, `--winget-tool-path`, `--winget-token-env`, `--winget-token-file`, `--winget-pr-title`, `--winget-replace [version]`, `--winget-open-browser`, and `--winget-allow-interactive-auth`
