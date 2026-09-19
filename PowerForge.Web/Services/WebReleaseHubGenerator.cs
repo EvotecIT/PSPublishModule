@@ -658,6 +658,49 @@ public static class WebReleaseHubGenerator
             }
         }
 
+        // A full last page can be the exact end of the timeline. Probe the next page
+        // without including its releases, so a real truncation remains fail-closed.
+        if (!fetchFailed && !fetchedAllAvailableReleases && retainStablePrefixes)
+        {
+            try
+            {
+                var url = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page={pageSize}&page={maxPages + 1}";
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                if (!string.IsNullOrWhiteSpace(options.Token))
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Token);
+                using var response = GitHubClient.Send(request);
+                HttpResponseMessage? retry = null;
+                try
+                {
+                    if (!response.IsSuccessStatusCode && ShouldRetryGitHubWithoutAuthorization(request, response))
+                    {
+                        using var retryRequest = CloneRequestWithoutAuthorization(request);
+                        retry = GitHubClient.Send(retryRequest);
+                    }
+                    var effective = retry ?? response;
+                    if (!effective.IsSuccessStatusCode)
+                        fetchFailed = true;
+                    else
+                    {
+                        using var stream = effective.Content.ReadAsStream();
+                        using var doc = JsonDocument.Parse(stream);
+                        fetchedAllAvailableReleases = doc.RootElement.ValueKind == JsonValueKind.Array &&
+                                                     doc.RootElement.GetArrayLength() == 0;
+                        fetchFailed = doc.RootElement.ValueKind != JsonValueKind.Array;
+                    }
+                }
+                finally
+                {
+                    retry?.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"GitHub release pagination probe failed for {owner}/{repo}: {ex.GetType().Name}: {ex.Message}");
+                fetchFailed = true;
+            }
+        }
+
         if (fetchFailed)
             warnings.Add($"Incomplete GitHub release fetch for {owner}/{repo}.");
         if (!fetchedAllAvailableReleases && retainStablePrefixes)

@@ -92,6 +92,26 @@ public class WebPipelineRunnerReleaseHubTests
     }
 
     [Fact]
+    public void ReleaseHubFallback_RejectsOldOutputMissingRequiredStableProduct()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-retention-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputPath = Path.Combine(root, "release-hub.json");
+            const string existing = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"OfficeIMO-v4","assets":[]}]}""";
+            File.WriteAllText(outputPath, """{"repo":"EvotecIT/OfficeIMO","releases":[]}""");
+
+            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+            Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["OfficeIMO-v"]));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ReleaseHubRefresh_InvalidatesLaterCachedSiteBuildWithoutExplicitDependency()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-live-hub-build-" + Guid.NewGuid().ToString("N"));

@@ -1396,7 +1396,8 @@ internal static partial class WebPipelineRunner
         if (!string.IsNullOrWhiteSpace(existingOutputContent) &&
             result.Warnings.Length > 0 &&
             (result.ReleaseCount == 0 || incompleteFetch) &&
-            TryPreserveExistingReleaseHub(existingOutputContent, outPath))
+            TryPreserveExistingReleaseHub(existingOutputContent, outPath,
+                options.RetainLatestStableTagPrefixes.Concat(options.RetainAllStableTagPrefixes)))
         {
             var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
             result = new WebReleaseHubResult
@@ -1421,9 +1422,8 @@ internal static partial class WebPipelineRunner
                 File.Delete(outPath);
             else
                 File.WriteAllText(outPath, existingOutputContent);
-            stepResult.Success = false;
-            stepResult.Message = $"Release hub fetch for '{outPath}' was incomplete; no complete prior output was available.";
-            return;
+            throw new InvalidOperationException(
+                $"Release hub fetch for '{outPath}' was incomplete; no complete prior output was available.");
         }
 
         var note = result.Source != WebChangelogSource.Auto ? $" ({result.Source.ToString().ToLowerInvariant()})" : string.Empty;
@@ -1467,7 +1467,8 @@ internal static partial class WebPipelineRunner
 
     internal static bool TryPreserveExistingReleaseHub(
         string existingJson,
-        string outputPath)
+        string outputPath,
+        IEnumerable<string>? requiredStableTagPrefixes = null)
     {
         if (string.IsNullOrWhiteSpace(existingJson) || !File.Exists(outputPath))
             return false;
@@ -1480,6 +1481,13 @@ internal static partial class WebPipelineRunner
 
         if (existing.Releases.Count <= 0 ||
             !string.Equals(existing.Repo, generated.Repo, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (requiredStableTagPrefixes is not null && requiredStableTagPrefixes
+            .Where(static prefix => !string.IsNullOrWhiteSpace(prefix))
+            .Any(prefix => !existing.Releases.Any(release =>
+                !release.IsDraft && !release.IsPrerelease &&
+                release.Tag?.StartsWith(prefix.Trim(), StringComparison.OrdinalIgnoreCase) == true)))
             return false;
 
         File.WriteAllText(outputPath, existingJson);
