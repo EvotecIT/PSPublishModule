@@ -34,8 +34,10 @@ internal sealed partial class PowerShellSemanticBinder
             return PowerShellNativeAccessSemanticBinder.BindIndex(document, nativeIndex,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), diagnostics);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is InvokeMemberExpressionAst nativeInvocation &&
-            HasObservedCatchAncestor(nativeInvocation) && InvocationConsumesAuthoredTypeLiteral(nativeInvocation) &&
-            !HasClosedDirectTypeArgumentCatchAll(nativeInvocation))
+            HasObservedCatchAncestor(nativeInvocation) &&
+            (InvocationConsumesAuthoredTypeLiteral(nativeInvocation) || InvocationConsumesBoundTypeVariable(nativeInvocation, symbols)) &&
+            !HasClosedDirectTypeArgumentCatchAll(nativeInvocation) &&
+            !HasClosedBoundTypeVariableCatchAll(nativeInvocation, symbols))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.ForSyntax(nameof(InvokeMemberExpressionAst)),
@@ -417,19 +419,11 @@ internal sealed partial class PowerShellSemanticBinder
 
     private static bool HasClosedDirectTypeArgumentCatchAll(InvokeMemberExpressionAst invocation)
     {
-        // Hoisted type values and nested casts have different storage/evaluation contracts.
-        // The admitted shape is one authored type literal consumed by catch-all handling.
+        // Nested casts have a different evaluation contract. Direct literals
+        // and bound Type variables share catch-all record handling below.
         if (invocation.Arguments is not { Count: 1 } arguments || arguments[0] is not TypeExpressionAst)
             return false;
-        var observed = false;
-        for (Ast? ancestor = invocation.Parent; ancestor is not null; ancestor = ancestor.Parent)
-        {
-            if (ancestor is FunctionDefinitionAst) break;
-            if (ancestor is not TryStatementAst { CatchClauses.Count: > 0 } attempted) continue;
-            observed = true;
-            if (attempted.CatchClauses.Any(static clause => clause.CatchTypes.Count != 0)) return false;
-        }
-        return observed;
+        return HasCatchAllObservation(invocation);
     }
 
     private static bool InvocationConsumesAuthoredTypeLiteral(InvokeMemberExpressionAst invocation)
@@ -439,6 +433,9 @@ internal sealed partial class PowerShellSemanticBinder
                 argument.Find(static node => node is TypeExpressionAst, searchNestedScriptBlocks: false) is not null))
             return true;
 
+        // A Type literal can flow through aliases even when a later assignment
+        // widens the bound variable. Such a call must not bypass the observed-
+        // catch guard solely because its current CLR type is no longer Type.
         var referencedVariables = arguments
             .SelectMany(static argument => argument.FindAll(static node => node is VariableExpressionAst,
                 searchNestedScriptBlocks: false).OfType<VariableExpressionAst>())
@@ -470,6 +467,77 @@ internal sealed partial class PowerShellSemanticBinder
                     referencedVariables.Add(source.VariablePath.UserPath);
         }
         return false;
+    }
+
+    private static bool InvocationConsumesBoundTypeVariable(
+        InvokeMemberExpressionAst invocation,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols)
+    {
+        if (invocation.Arguments is not { } arguments) return false;
+        return arguments.Any(argument => argument.FindAll(static node => node is VariableExpressionAst,
+                searchNestedScriptBlocks: false).OfType<VariableExpressionAst>()
+            .Any(variable => symbols.TryGetValue(variable.VariablePath.UserPath, out var binding) &&
+                binding.Type.ClrType == typeof(Type)));
+    }
+
+    private static bool HasClosedBoundTypeVariableCatchAll(
+        InvokeMemberExpressionAst invocation,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols)
+    {
+        if (invocation.Arguments is not { Count: 1 } arguments ||
+            arguments[0] is not VariableExpressionAst variable ||
+            !symbols.TryGetValue(variable.VariablePath.UserPath, out var binding) ||
+            binding.Type.ClrType != typeof(Type))
+            return false;
+        var body = FindOwningFunctionBody(invocation);
+        return HasCatchAllObservation(invocation) && body is not null &&
+            HasClosedTypeWrites(body, variable.VariablePath.UserPath, invocation.Extent.StartOffset,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static bool HasClosedTypeWrites(
+        ScriptBlockAst body,
+        string variableName,
+        int beforeOffset,
+        HashSet<string> visiting)
+    {
+        if (!visiting.Add(variableName)) return false;
+        var writes = body.FindAll(node => node is AssignmentStatementAst assignment &&
+                assignment.Extent.EndOffset <= beforeOffset &&
+                PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, true)?.VariablePath.UserPath
+                    .Equals(variableName, StringComparison.OrdinalIgnoreCase) == true,
+                searchNestedScriptBlocks: false)
+            .OfType<AssignmentStatementAst>()
+            .ToArray();
+        if (writes.Length == 0) return false;
+        foreach (var write in writes)
+        {
+            // Branch-dependent writes and computed values need a separate
+            // argument-evaluation proof. Only linear Type/alias writes close
+            // this observed-catch shape.
+            if (body.EndBlock?.Statements.Any(statement => ReferenceEquals(statement, write)) != true)
+                return false;
+            var value = UnwrapExpression(write.Right);
+            if (value is TypeExpressionAst) continue;
+            if (value is not VariableExpressionAst alias ||
+                !HasClosedTypeWrites(body, alias.VariablePath.UserPath, write.Extent.StartOffset, visiting))
+                return false;
+        }
+        visiting.Remove(variableName);
+        return true;
+    }
+
+    private static bool HasCatchAllObservation(InvokeMemberExpressionAst invocation)
+    {
+        var observed = false;
+        for (Ast? ancestor = invocation.Parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (ancestor is FunctionDefinitionAst) break;
+            if (ancestor is not TryStatementAst { CatchClauses.Count: > 0 } attempted) continue;
+            observed = true;
+            if (attempted.CatchClauses.Any(static clause => clause.CatchTypes.Count != 0)) return false;
+        }
+        return observed;
     }
 
     private PowerShellCommandInvocationResolution ResolveCommand(

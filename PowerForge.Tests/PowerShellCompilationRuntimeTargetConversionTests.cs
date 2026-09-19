@@ -109,7 +109,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void ObservedInvocation_TransitivelyHoistedTypeLiteralRemainsHosted(string framework, string host)
+    public void ObservedInvocation_TransitivelyHoistedTypeLiteralPreservesCaughtRecord(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""
             function Convert-HoistedIdentity {
@@ -128,11 +128,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
-        Assert.False(unit.EmittedClrMethod);
-        Assert.True(unit.RetainedHostedSource);
-        Assert.Contains(unit.DiagnosticChain, static diagnostic =>
-            diagnostic.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("InvokeMemberExpressionAst") &&
-            diagnostic.Message.Contains("caught-error identity", StringComparison.Ordinal));
+        Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
+        Assert.False(unit.RetainedHostedSource);
         const string probe = "Convert-HoistedIdentity -Value '__PowerForge_Missing_Hoisted_A__'; Convert-HoistedIdentity -Value '__PowerForge_Missing_Hoisted_B__'";
         var original = RunStatementErrorProbe(host,
             "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
@@ -140,6 +137,101 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var compiled = RunStatementErrorProbe(host,
             "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
             fixture.RootPath, "hoisted-type-compiled");
+        Assert.Equal(0, original.ExitCode);
+        Assert.Equal((original.StandardOutput, original.StandardError),
+            (compiled.StandardOutput, compiled.StandardError));
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void ObservedInvocation_HoistedTypeVariablePreservesSuccessAndFailure(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function New-HoistedBuilder {
+                [CmdletBinding()] param([string]$Value)
+                $null = $Value -match '.'
+                $typeValue = [System.Text.StringBuilder]
+                $forwarded = $typeValue
+                try { $null = [Activator]::CreateInstance($forwarded); "ok:$Value" }
+                catch { '{0}|{1}|{2}' -f $_.Exception.GetType().FullName,$_.FullyQualifiedErrorId,$_.Exception.InnerException.GetType().FullName }
+            }
+            function New-HoistedFailure {
+                [CmdletBinding()] param([string]$Value)
+                $null = $Value -match '.'
+                $typeValue = [System.IO.FileInfo]
+                $forwarded = $typeValue
+                try { [Activator]::CreateInstance($forwarded) }
+                catch { '{0}|{1}|{2}' -f $_.Exception.GetType().FullName,$_.FullyQualifiedErrorId,$_.Exception.InnerException.GetType().FullName }
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.HoistedTypeVariable",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var units = result.Manifest!.UnitDispositionLedger!.Entries;
+        Assert.Equal(2, units.Count);
+        Assert.All(units, unit => Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit)));
+        const string probe = "New-HoistedBuilder -Value A; New-HoistedFailure -Value B; New-HoistedBuilder -Value C; New-HoistedFailure -Value D";
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "hoisted-type-variable-original");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "hoisted-type-variable-compiled");
+        Assert.Equal(0, original.ExitCode);
+        Assert.Contains("ok:A", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("ok:C", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("MethodInvocationException", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal((original.StandardOutput, original.StandardError),
+            (compiled.StandardOutput, compiled.StandardError));
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void ObservedInvocation_CollectedTypeArgumentRemainsHosted(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function New-CollectedType {
+                [CmdletBinding()] param([string]$Value)
+                $null = $Value -match '.'
+                $types = @([System.IO.FileInfo])
+                try { [Activator]::CreateInstance($types[0]) }
+                catch { $_.FullyQualifiedErrorId }
+            }
+            function New-ReassignedType {
+                [CmdletBinding()] param([string]$Value)
+                $null = $Value -match '.'
+                $target = [System.Text.StringBuilder]
+                $target = @([System.IO.FileInfo])
+                try { [Activator]::CreateInstance($target) }
+                catch { $_.FullyQualifiedErrorId }
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.CollectedTypeArgument",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var units = result.Manifest!.UnitDispositionLedger!.Entries;
+        Assert.Equal(2, units.Count);
+        Assert.All(units, unit =>
+        {
+            Assert.False(unit.EmittedClrMethod);
+            Assert.True(unit.RetainedHostedSource);
+            Assert.Contains(unit.DiagnosticChain, static diagnostic =>
+                diagnostic.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("InvokeMemberExpressionAst") &&
+                diagnostic.Message.Contains("caught-error identity", StringComparison.Ordinal));
+        });
+        const string probe = "New-CollectedType -Value A; New-ReassignedType -Value B";
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "collected-type-original");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "collected-type-compiled");
         Assert.Equal(0, original.ExitCode);
         Assert.Equal((original.StandardOutput, original.StandardError),
             (compiled.StandardOutput, compiled.StandardError));
