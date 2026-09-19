@@ -87,9 +87,13 @@ public static class WebReleaseHubGenerator
                 .Select(prefix => releases.FirstOrDefault(release => IsStableReleaseWithTagPrefix(release, prefix)))
                 .OfType<WebReleaseHubRelease>()
                 .ToArray();
-            releases = releases.Take(max)
-                .Concat(retained)
-                .DistinctBy(static release => release.Tag, StringComparer.OrdinalIgnoreCase)
+            var timeline = releases.Take(max).ToList();
+            foreach (WebReleaseHubRelease release in retained)
+            {
+                if (!timeline.Any(candidate => ReferenceEquals(candidate, release)))
+                    timeline.Add(release);
+            }
+            releases = timeline
                 .OrderByDescending(ResolveReleaseTimestamp)
                 .ThenByDescending(static release => release.Tag, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -562,6 +566,7 @@ public static class WebReleaseHubGenerator
         var pageSize = Math.Clamp(options.PageSize <= 0 ? 100 : options.PageSize, 1, 100);
         var maxPages = options.MaxPages <= 0 ? 5 : options.MaxPages;
         var maxReleases = options.MaxReleases is > 0 ? options.MaxReleases.Value : int.MaxValue;
+        bool fetchedAllAvailableReleases = false;
 
         for (var page = 1;
              page <= maxPages && (results.Count < maxReleases || !HasAllRetainedStableTagPrefixes(results, options.RetainLatestStableTagPrefixes));
@@ -591,12 +596,18 @@ public static class WebReleaseHubGenerator
 
                             var retryPageItems = ParseReleaseArray(retryDoc.RootElement, owner, repo, sourceIsGitHubApi: true);
                             if (retryPageItems.Count == 0)
+                            {
+                                fetchedAllAvailableReleases = true;
                                 break;
+                            }
 
                             results.AddRange(retryPageItems);
 
                             if (retryPageItems.Count < pageSize)
+                            {
+                                fetchedAllAvailableReleases = true;
                                 break;
+                            }
 
                             continue;
                         }
@@ -613,12 +624,18 @@ public static class WebReleaseHubGenerator
 
                 var pageItems = ParseReleaseArray(doc.RootElement, owner, repo, sourceIsGitHubApi: true);
                 if (pageItems.Count == 0)
+                {
+                    fetchedAllAvailableReleases = true;
                     break;
+                }
 
                 results.AddRange(pageItems);
 
                 if (pageItems.Count < pageSize)
+                {
+                    fetchedAllAvailableReleases = true;
                     break;
+                }
             }
             catch (Exception ex)
             {
@@ -626,6 +643,14 @@ public static class WebReleaseHubGenerator
                 Trace.TraceWarning($"GitHub release fetch failed for {owner}/{repo}: {ex.GetType().Name}: {ex.Message}");
                 break;
             }
+        }
+
+        foreach (string prefix in options.RetainLatestStableTagPrefixes
+                     .Where(static value => !string.IsNullOrWhiteSpace(value)))
+        {
+            if (!fetchedAllAvailableReleases &&
+                !results.Any(release => IsStableReleaseWithTagPrefix(release, prefix)))
+                warnings.Add($"Incomplete GitHub release fetch for retained tag prefix '{prefix}'.");
         }
 
         return results;

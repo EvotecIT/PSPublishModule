@@ -7,6 +7,67 @@ using Xunit;
 public class WebPipelineRunnerReleaseHubTests
 {
     [Fact]
+    public void RunPipeline_ReleaseHub_KeepsDistinctTaglessTimelineEntriesWithRetention()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-tagless-release-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "releases.json"),
+                """
+                [
+                  { "name": "First", "published_at": "2026-04-04T00:00:00Z", "assets": [] },
+                  { "name": "Second", "published_at": "2026-04-03T00:00:00Z", "assets": [] },
+                  { "tag_name": "Studio-v0.1.9", "published_at": "2026-04-01T00:00:00Z", "assets": [] }
+                ]
+                """);
+            File.WriteAllText(Path.Combine(root, "pipeline.json"),
+                """
+                { "steps": [{ "task": "release-hub", "source": "file", "releasesPath": "./releases.json",
+                  "maxReleases": 2, "retainLatestStableTagPrefixes": ["Studio-v"],
+                  "out": "./data/release-hub.json" }] }
+                """);
+
+            Assert.True(WebPipelineRunner.RunPipeline(Path.Combine(root, "pipeline.json"), logger: null).Success);
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "data", "release-hub.json")));
+            var releases = doc.RootElement.GetProperty("releases");
+            Assert.Equal(3, releases.GetArrayLength());
+            Assert.Equal("First", releases[0].GetProperty("title").GetString());
+            Assert.Equal("Second", releases[1].GetProperty("title").GetString());
+            Assert.Equal("Studio-v0.1.9", releases[2].GetProperty("tag").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ReleaseHubFallback_KeepsPublishedProductWhenRefreshMissesRetainedTag()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-release-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string outputPath = Path.Combine(root, "release-hub.json");
+            const string existing = """
+                { "releases": [{ "tag": "Studio-v0.1.9", "isDraft": false, "isPrerelease": false, "assets": [] }] }
+                """;
+            File.WriteAllText(outputPath,
+                """
+                { "releases": [{ "tag": "OfficeIMO-v4", "isDraft": false, "isPrerelease": false, "assets": [] }] }
+                """);
+
+            Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+            Assert.Equal(existing, File.ReadAllText(outputPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ReleaseHub_RetainsOlderStableProductReleaseBeyondTimelineLimit()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-retained-release-" + Guid.NewGuid().ToString("N"));
@@ -149,10 +210,6 @@ public class WebPipelineRunnerReleaseHubTests
                 }
                 """);
 
-            var preserveMethod = typeof(WebPipelineRunner)
-                .GetMethod("TryPreserveExistingReleaseHub", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            Assert.NotNull(preserveMethod);
-
             var generatedPath = Path.Combine(root, "generated.json");
             File.WriteAllText(generatedPath,
                 """
@@ -168,7 +225,8 @@ public class WebPipelineRunnerReleaseHubTests
                 }
                 """);
 
-            var preserved = Assert.IsType<bool>(preserveMethod!.Invoke(null, new object?[] { File.ReadAllText(outputPath), generatedPath }));
+            var preserved = WebPipelineRunner.TryPreserveExistingReleaseHub(
+                File.ReadAllText(outputPath), generatedPath, Array.Empty<string>());
             Assert.True(preserved);
 
             using var doc = JsonDocument.Parse(File.ReadAllText(generatedPath));
