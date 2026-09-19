@@ -296,7 +296,9 @@ public sealed partial class GitHubReleasePublisher
             parsed.Body,
             parsed.Draft,
             parsed.Prerelease,
-            parsed.PublishedAt);
+            parsed.PublishedAt,
+            parsed.TargetCommitish,
+            parsed.TagName);
     }
 
     private GitHubReleaseApiResponse GetReleaseByTag(
@@ -334,7 +336,32 @@ public sealed partial class GitHubReleasePublisher
             parsed.Body,
             parsed.Draft,
             parsed.Prerelease,
-            parsed.PublishedAt);
+            parsed.PublishedAt,
+            parsed.TargetCommitish,
+            parsed.TagName);
+    }
+
+    private GitHubReleaseApiResponse GetReleaseById(
+        string owner, string repo, string token, string apiBaseUrl, long releaseId,
+        CancellationToken cancellationToken)
+    {
+        var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases/{releaseId}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var response = SharedClient.SendAsync(request, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+        var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+            throw new GitHubApiRequestException(
+                $"GitHub get-release-by-id failed for release {releaseId} ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
+                response.StatusCode,
+                GetAssetRetryAfterDelay(response, responseText));
+
+        var parsed = Deserialize<CreateReleaseResponse>(responseText);
+        if (string.IsNullOrWhiteSpace(parsed.UploadUrl))
+            throw new InvalidOperationException($"GitHub get-release-by-id succeeded for release {releaseId} but upload_url was empty.");
+        return new GitHubReleaseApiResponse(parsed.Id, parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl!,
+            reusedExistingRelease: true, parsed.Body, parsed.Draft, parsed.Prerelease,
+            parsed.PublishedAt, parsed.TargetCommitish, parsed.TagName);
     }
 
     private IReadOnlyList<string> UploadAssets(
@@ -730,6 +757,12 @@ public sealed partial class GitHubReleasePublisher
     [DataContract]
     private sealed class CreateReleaseResponse
     {
+        [DataMember(Name = "tag_name")]
+        public string? TagName { get; set; }
+
+        [DataMember(Name = "target_commitish")]
+        public string? TargetCommitish { get; set; }
+
         [DataMember(Name = "html_url")]
         public string? HtmlUrl { get; set; }
 
@@ -801,7 +834,9 @@ public sealed partial class GitHubReleasePublisher
             string? body = null,
             bool isDraft = false,
             bool isPreRelease = false,
-            string? publishedAt = null)
+            string? publishedAt = null,
+            string? targetCommitish = null,
+            string? tagName = null)
         {
             Id = id;
             HtmlUrl = htmlUrl;
@@ -811,6 +846,8 @@ public sealed partial class GitHubReleasePublisher
             IsDraft = isDraft;
             IsPreRelease = isPreRelease;
             PublishedAt = publishedAt;
+            TargetCommitish = targetCommitish;
+            TagName = tagName;
         }
 
         public long Id { get; }
@@ -821,5 +858,7 @@ public sealed partial class GitHubReleasePublisher
         public bool IsDraft { get; }
         public bool IsPreRelease { get; }
         public string? PublishedAt { get; }
+        public string? TargetCommitish { get; }
+        public string? TagName { get; }
     }
 }

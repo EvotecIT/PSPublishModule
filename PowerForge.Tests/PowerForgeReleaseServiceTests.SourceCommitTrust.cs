@@ -43,6 +43,73 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void VerifySharedReleaseSourceCommit_RejectsChangesOutsideNestedConfigDirectory()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var configDirectory = Path.Combine(root, "Build");
+            Directory.CreateDirectory(configDirectory);
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+
+            Assert.NotNull(PowerForgeReleaseService.VerifySharedReleaseSourceCommit(configDirectory, "HEAD"));
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Changed { }");
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(configDirectory, "HEAD"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void BindBuiltDotNetSourceCommit_RecoversExactHeadAcrossSerializedCheckpoint()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var sha = RunSnapshotGit(root, "rev-parse", "HEAD").Trim().ToLowerInvariant();
+            var checkpoint = new PowerForgeReleaseResult
+            {
+                DotNetSourceCommitSha = sha,
+                DotNetToolPlan = new DotNetPublishPlan { ProjectRoot = root, SourceRevision = sha }
+            };
+            var restored = JsonSerializer.Deserialize<PowerForgeReleaseResult>(JsonSerializer.Serialize(checkpoint))!;
+            var spec = new PowerForgeReleaseSpec { GitHub = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD" } };
+
+            PowerForgeReleaseService.BindBuiltDotNetSourceCommit(spec, restored, Path.Combine(root, "release.json"));
+            Assert.Equal(sha, spec.GitHub.Commitish);
+
+            var missing = new PowerForgeReleaseSpec { GitHub = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD" } };
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.BindBuiltDotNetSourceCommit(missing,
+                    new PowerForgeReleaseResult { DotNetToolPlan = restored.DotNetToolPlan },
+                    Path.Combine(root, "release.json")));
+            var changedPlan = new PowerForgeReleaseSpec { GitHub = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD" } };
+            restored.DotNetToolPlan!.SourceRevision = new string('f', 40);
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.BindBuiltDotNetSourceCommit(changedPlan, restored,
+                    Path.Combine(root, "release.json")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void VerifySharedReleaseSourceCommit_accepts_only_validated_public_release_inputs()
     {
         var root = CreatePublicReleaseSourceSandbox(out var commit, out var configPath, out _, out _, out var evidenceRoot);

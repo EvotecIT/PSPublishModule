@@ -58,10 +58,27 @@ public sealed partial class GitHubReleasePublisher {
             string.IsNullOrWhiteSpace(expectedTagCommitSha) &&
             !requirePublishedStableRelease) return;
 
-        var currentRelease = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true, cancellationToken);
+        // A draft has no tag ref yet. Its API target_commitish is the source binding until publication.
+        GitHubReleaseApiResponse currentRelease;
+        try
+        {
+            currentRelease = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true, cancellationToken);
+        }
+        catch (GitHubApiRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            currentRelease = GetReleaseById(owner, repo, token, apiBaseUrl, releaseId, cancellationToken);
+            if (!currentRelease.IsDraft)
+                throw new InvalidOperationException($"Published GitHub release {releaseId} is no longer reachable by tag '{tagName}'.", ex);
+        }
+        if (currentRelease.IsDraft && !string.Equals(currentRelease.TagName, tagName, StringComparison.Ordinal))
+            throw new InvalidOperationException($"GitHub draft release {releaseId} changed its tag before asset mutation.");
+        if (currentRelease.IsDraft && requirePublishedStableRelease)
+            ValidatePublishedStableRelease(tagName, requirePublishedStableRelease, currentRelease);
         var currentTagCommitSha = string.IsNullOrWhiteSpace(expectedTagCommitSha)
             ? null
-            : GetTagCommitSha(owner, repo, token, apiBaseUrl, tagName, cancellationToken);
+            : currentRelease.IsDraft
+                ? currentRelease.TargetCommitish
+                : GetTagCommitSha(owner, repo, token, apiBaseUrl, tagName, cancellationToken);
         ValidateExpectedReleaseState(
             tagName,
             releaseId,

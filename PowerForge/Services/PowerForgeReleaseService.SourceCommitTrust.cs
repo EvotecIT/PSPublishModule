@@ -6,6 +6,26 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    internal static void BindBuiltDotNetSourceCommit(
+        PowerForgeReleaseSpec spec, PowerForgeReleaseResult builtResult, string configPath)
+    {
+        if (spec.GitHub is not { Commitish: "HEAD" })
+            return;
+        if (builtResult.DotNetToolPlan is null ||
+            string.IsNullOrWhiteSpace(builtResult.DotNetSourceCommitSha))
+            throw new InvalidOperationException("The built DotNet release checkpoint has no verified source commit for GitHub.Commitish HEAD.");
+
+        if (!string.Equals(builtResult.DotNetToolPlan.SourceRevision,
+                builtResult.DotNetSourceCommitSha, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The built DotNet release plan source revision does not match its verified checkpoint commit.");
+
+        VerifySharedReleaseSourceCommit(
+            builtResult.DotNetToolPlan.ProjectRoot,
+            builtResult.DotNetSourceCommitSha,
+            configPath);
+        spec.GitHub.Commitish = builtResult.DotNetSourceCommitSha;
+    }
+
     private static string? ApplySharedReleaseVersion(
         DotNetPublishPlan plan,
         string? sharedReleaseVersion,
@@ -114,6 +134,11 @@ internal sealed partial class PowerForgeReleaseService
 
         var root = Path.GetFullPath(projectRoot);
         var git = GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        var checkout = git.RunRawAsync(root, ["rev-parse", "--show-toplevel"], TimeSpan.FromMinutes(2))
+            .GetAwaiter().GetResult();
+        if (!checkout.Succeeded || string.IsNullOrWhiteSpace(checkout.StdOut))
+            throw new InvalidOperationException("Unable to locate the DotNet publish Git checkout for source verification.");
+        root = Path.GetFullPath(checkout.StdOut.Trim());
         var result = git.RunRawAsync(root, ["rev-parse", "HEAD"], TimeSpan.FromMinutes(2))
             .GetAwaiter()
             .GetResult();

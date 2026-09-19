@@ -463,6 +463,12 @@ internal sealed partial class PowerForgeReleaseService
                 registryPublishingSkippedForVerifiedGitHubRecovery
         };
 
+        // Resolve and validate HEAD before any version reservation or other remote side effect.
+        // Planning below verifies that the selected DotNet project belongs to this same checkout.
+        if (willRunTools && spec.GitHub is { Commitish: "HEAD" })
+            result.DotNetSourceCommitSha = VerifySharedReleaseSourceCommit(
+                configDirectory, "HEAD", expectedLoadedConfigurationPath);
+
         if (runWorkspaceValidation)
         {
             var workspace = PrepareWorkspaceValidation(spec.WorkspaceValidation!, configPath, request, configurationOverride);
@@ -736,8 +742,9 @@ internal sealed partial class PowerForgeReleaseService
                     var verifiedSourceCommit = ApplySharedReleaseVersion(
                         dotNetPlan,
                         sharedReleaseVersion,
-                        spec.GitHub?.Commitish,
+                        result.DotNetSourceCommitSha ?? spec.GitHub?.Commitish,
                         request.EffectiveConfigurationPath ?? configPath);
+                    result.DotNetSourceCommitSha = verifiedSourceCommit;
                     if (spec.GitHub is { Commitish: "HEAD" } && verifiedSourceCommit is not null)
                         spec.GitHub.Commitish = verifiedSourceCommit;
                     ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
@@ -1219,6 +1226,7 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        BindBuiltDotNetSourceCommit(spec, builtResult, request.EffectiveConfigurationPath ?? configPath);
         var publishVirusTotalMonitor = ShouldPublishVirusTotalMonitorFromCheckpoint(
             spec,
             builtResult,

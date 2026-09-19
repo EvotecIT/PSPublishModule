@@ -338,6 +338,9 @@ internal sealed class PowerForgeReleaseResult
 
     public DotNetPublishResult? DotNetTools { get; set; }
 
+    /// <summary>Exact source commit bound to the built DotNet release and retained across publish checkpoints.</summary>
+    public string? DotNetSourceCommitSha { get; set; }
+
     public PowerForgeAppleReleasePlan? AppleAppPlan { get; set; }
 
     public PowerForgeAppleAppReleaseResult[] AppleApps { get; set; } = Array.Empty<PowerForgeAppleAppReleaseResult>();
