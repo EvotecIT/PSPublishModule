@@ -10,9 +10,24 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("1.2.3.", false)]
     [InlineData("CON.1", false)]
     [InlineData("COM1.Tool", false)]
+    [InlineData("COM¹.Tool", false)]
     [InlineData("EvotecIT.OfficeIMO.Studio", true)]
     public void WingetManifestVersion_AcceptsOnlyPortablePathSegments(string version, bool expected)
         => Assert.Equal(expected, PowerForgeReleaseService.IsSafeWingetManifestPathSegment(version));
+
+    [Theory]
+    [InlineData("Microsoft.VCRedist.2015+.x64", true)]
+    [InlineData("EvotecIT.OfficeIMO.Studio", true)]
+    [InlineData("CON.App", false)]
+    [InlineData("COM1.Tool", false)]
+    [InlineData("COM¹.Tool", false)]
+    [InlineData("Vendor.CON", false)]
+    [InlineData("Vendor.COM¹", false)]
+    [InlineData("Vendor.LPT²", false)]
+    [InlineData("Vendor..App", false)]
+    [InlineData("Vendor/App", false)]
+    public void WingetPackageIdentifier_UsesWingetGrammarAndSafePathSegments(string identifier, bool expected)
+        => Assert.Equal(expected, PowerForgeReleaseService.IsValidWingetPackageIdentifier(identifier));
 
     [Fact]
     public void WingetPackageVersion_RejectsMixedInstallerVersions()

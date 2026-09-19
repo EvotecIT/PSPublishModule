@@ -4955,6 +4955,56 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_PlanOnly_BindsHeadToExactUnifiedReleaseCommit()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+            var github = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD" };
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Targets = [new DotNetPublishTargetPlan { Name = "Studio", Version = "0.1.1" }]
+                },
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet publish should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec { DotNetPublish = new DotNetPublishSpec() },
+                    GitHub = github
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(commit, github.Commitish);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_LegacyToolPlan_rejects_dirty_source_before_stamping_exact_commit()
     {
         var root = CreateSandbox();
@@ -5920,7 +5970,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new PowerForgeReleaseWingetPackage
                             {
                                 PackageIdentifier = "EvotecIT.IntelligenceX.Tray",
-                                PackageVersion = "1.0.0",
+                                PackageVersion = " 1.0.0 ",
                                 Publisher = "Evotec",
                                 PackageName = "IntelligenceX Tray",
                                 License = "MIT",
@@ -5974,6 +6024,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             var manifest = Assert.Single(result.WingetManifests);
             Assert.Equal("EvotecIT.IntelligenceX.Tray", manifest.PackageIdentifier);
             Assert.Equal(2, manifest.InstallerUrls.Length);
+            Assert.All(manifest.InstallerUrls, url =>
+            {
+                Assert.Contains("/v1.0.0/", url, StringComparison.Ordinal);
+                Assert.DoesNotContain("%20", url, StringComparison.Ordinal);
+            });
             Assert.NotNull(result.WingetSubmissionPlan);
             Assert.Same(capturedWingetSubmissionPlan, result.WingetSubmissionPlan);
             var submitEntry = Assert.Single(result.WingetSubmissionPlan!.Entries);

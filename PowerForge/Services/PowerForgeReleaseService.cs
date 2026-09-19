@@ -733,11 +733,13 @@ internal sealed partial class PowerForgeReleaseService
                         request,
                         dotNetTargets,
                         () => _planDotNetTools(dotNetSpecForTools, dotNetSourcePathForTools, request, selectedToolOutputs));
-                    ApplySharedReleaseVersion(
+                    var verifiedSourceCommit = ApplySharedReleaseVersion(
                         dotNetPlan,
                         sharedReleaseVersion,
                         spec.GitHub?.Commitish,
                         request.EffectiveConfigurationPath ?? configPath);
+                    if (spec.GitHub is { Commitish: "HEAD" } && verifiedSourceCommit is not null)
+                        spec.GitHub.Commitish = verifiedSourceCommit;
                     ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
                     result.DotNetToolPlan = dotNetPlan;
 
@@ -3629,9 +3631,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (string.IsNullOrWhiteSpace(package.PackageIdentifier))
                 throw new InvalidOperationException("Winget package PackageIdentifier is required.");
-            if (!Regex.IsMatch(package.PackageIdentifier, @"^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant)
-                || package.PackageIdentifier.Contains("..", StringComparison.Ordinal)
-                || !IsSafeWingetManifestPathSegment(package.PackageIdentifier))
+            if (!IsValidWingetPackageIdentifier(package.PackageIdentifier))
                 throw new InvalidOperationException($"Winget package identifier '{package.PackageIdentifier}' cannot be used as a manifest directory name.");
             if (!packageIdentifiers.Add(package.PackageIdentifier))
                 throw new InvalidOperationException($"Winget manifest already written for '{package.PackageIdentifier}'. PackageIdentifier values must be unique within a release config.");
@@ -3722,6 +3722,11 @@ internal sealed partial class PowerForgeReleaseService
             return false;
 
         string deviceName = segment.Split('.')[0];
+        return !IsWindowsReservedDeviceName(deviceName);
+    }
+
+    private static bool IsWindowsReservedDeviceName(string deviceName)
+    {
         if (deviceName.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
             deviceName.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
             deviceName.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
@@ -3729,10 +3734,18 @@ internal sealed partial class PowerForgeReleaseService
             (deviceName.Length == 4 &&
              (deviceName.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
               deviceName.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
-             deviceName[3] >= '1' && deviceName[3] <= '9'))
-            return false;
+             (deviceName[3] is >= '1' and <= '9' or '¹' or '²' or '³')))
+            return true;
 
-        return true;
+        return false;
+    }
+
+    internal static bool IsValidWingetPackageIdentifier(string? value)
+    {
+        // Match WinGet's dot-separated identifier grammar without excluding valid characters such as '+'.
+        return value is { Length: <= 128 } &&
+               Regex.IsMatch(value, @"^[^.\s\\/:*?""<>|\x01-\x1f]{1,32}(\.[^.\s\\/:*?""<>|\x01-\x1f]{1,32}){1,7}$", RegexOptions.CultureInvariant) &&
+               value.Split('.').All(IsSafeWingetManifestPathSegment);
     }
 
     private void SubmitWingetOutputs(
@@ -3953,6 +3966,8 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
+            if (string.Equals(gitHub.Commitish, "HEAD", StringComparison.Ordinal))
+                throw new InvalidOperationException("GitHub.Commitish HEAD requires a verified DotNet publish source checkout before publishing.");
             var publishResult = _publishGitHubRelease(
                 new GitHubReleasePublishRequest
                 {
@@ -5434,7 +5449,7 @@ internal sealed partial class PowerForgeReleaseService
             throw new FileNotFoundException($"Winget asset does not exist on disk: {installerPath}");
 
         var fileName = Path.GetFileName(installerPath);
-        var version = package.PackageVersion ?? asset.Version ?? string.Empty;
+        var version = package.PackageVersion?.Trim() ?? asset.Version?.Trim() ?? string.Empty;
         var architecture = string.IsNullOrWhiteSpace(installer.Architecture)
             ? InferWingetArchitecture(asset.Runtime)
             : installer.Architecture!.Trim();

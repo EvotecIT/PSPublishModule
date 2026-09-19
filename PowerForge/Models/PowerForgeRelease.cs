@@ -853,7 +853,7 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public string? TokenEnvName { get; set; }
 
-    /// <summary>Optional exact commit used to create and verify the unified release tag.</summary>
+    /// <summary>Optional exact commit, or HEAD resolved and verified from the clean DotNet publish checkout, used for the unified release tag.</summary>
     public string? Commitish { get; set; }
 
     public bool GenerateReleaseNotes { get; set; } = true;

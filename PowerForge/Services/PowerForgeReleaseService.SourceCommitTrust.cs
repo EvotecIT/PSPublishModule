@@ -6,7 +6,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
-    private static void ApplySharedReleaseVersion(
+    private static string? ApplySharedReleaseVersion(
         DotNetPublishPlan plan,
         string? sharedReleaseVersion,
         string? sourceCommit,
@@ -17,10 +17,11 @@ internal sealed partial class PowerForgeReleaseService
         var verifiedSourceCommit = VerifySharedReleaseSourceCommit(plan.ProjectRoot, sourceCommit, releaseConfigPath);
         ValidateNativeInstallerReleaseVersions(plan, sharedReleaseVersion);
         if (string.IsNullOrWhiteSpace(sharedReleaseVersion))
-            return;
+            return verifiedSourceCommit;
 
         foreach (var entry in BuildSharedReleaseVersionProperties(sharedReleaseVersion!, verifiedSourceCommit))
             plan.MsBuildProperties[entry.Key] = entry.Value;
+        return verifiedSourceCommit;
     }
 
     internal static void ValidateNativeInstallerReleaseVersions(DotNetPublishPlan plan, string? sharedReleaseVersion)
@@ -98,8 +99,9 @@ internal sealed partial class PowerForgeReleaseService
         string? releaseConfigPath = null)
     {
         var expectedCommit = configuredCommit?.Trim();
-        if (string.IsNullOrWhiteSpace(expectedCommit) ||
-            !Regex.IsMatch(expectedCommit!, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant))
+        bool resolveHead = string.Equals(expectedCommit, "HEAD", StringComparison.Ordinal);
+        if (!resolveHead && (string.IsNullOrWhiteSpace(expectedCommit) ||
+            !Regex.IsMatch(expectedCommit!, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant)))
         {
             return null;
         }
@@ -125,6 +127,8 @@ internal sealed partial class PowerForgeReleaseService
         var observedCommit = result.StdOut.Trim();
         if (!Regex.IsMatch(observedCommit, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("The DotNet publish checkout did not report an exact 40-character Git commit SHA.");
+        if (resolveHead)
+            expectedCommit = observedCommit;
         if (!string.Equals(expectedCommit, observedCommit, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(

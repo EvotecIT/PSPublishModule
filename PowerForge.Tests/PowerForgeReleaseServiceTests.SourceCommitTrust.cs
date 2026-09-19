@@ -18,6 +18,31 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void VerifySharedReleaseSourceCommit_ResolvesHeadFromCleanCheckout()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+
+            Assert.Equal(commit, PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, "HEAD"));
+            File.WriteAllText(Path.Combine(root, "Injected.cs"), "internal sealed class Injected { }");
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, "HEAD"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void VerifySharedReleaseSourceCommit_accepts_only_validated_public_release_inputs()
     {
         var root = CreatePublicReleaseSourceSandbox(out var commit, out var configPath, out _, out _, out var evidenceRoot);
