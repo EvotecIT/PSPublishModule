@@ -110,6 +110,36 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void ResolveDotNetSourceRootForPreflight_UsesProjectCheckoutWhenConfigIsExternal()
+    {
+        var root = CreateSandbox();
+        var configRoot = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "source");
+            var configPath = Path.Combine(configRoot, "publish.json");
+            var spec = new DotNetPublishSpec { DotNet = new DotNetPublishDotNetOptions { ProjectRoot = root } };
+            var projectRoot = PowerForgeReleaseService.ResolveDotNetSourceRootForPreflight(spec, configPath);
+
+            Assert.Equal(Path.GetFullPath(root), projectRoot);
+            Assert.NotNull(PowerForgeReleaseService.VerifySharedReleaseSourceCommit(projectRoot, "HEAD", configPath));
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Modified { }");
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(projectRoot, "HEAD", configPath));
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(configRoot);
+        }
+    }
+
+    [Fact]
     public void VerifySharedReleaseSourceCommit_accepts_only_validated_public_release_inputs()
     {
         var root = CreatePublicReleaseSourceSandbox(out var commit, out var configPath, out _, out _, out var evidenceRoot);

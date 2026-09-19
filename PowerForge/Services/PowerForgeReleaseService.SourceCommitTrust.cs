@@ -6,6 +6,17 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    internal static string ResolveDotNetSourceRootForPreflight(DotNetPublishSpec spec, string configPath)
+    {
+        var resolved = DotNetPublishPipelineRunner.ResolveProfile(spec);
+        var configDirectory = Path.GetDirectoryName(Path.GetFullPath(configPath))
+            ?? Directory.GetCurrentDirectory();
+        var configuredRoot = resolved.DotNet.ProjectRoot;
+        return string.IsNullOrWhiteSpace(configuredRoot)
+            ? configDirectory
+            : DotNetPublishPipelineRunner.ResolvePath(configDirectory, configuredRoot);
+    }
+
     internal static void BindBuiltDotNetSourceCommit(
         PowerForgeReleaseSpec spec, PowerForgeReleaseResult builtResult, string configPath)
     {

@@ -465,9 +465,11 @@ internal sealed partial class PowerForgeReleaseService
 
         // Resolve and validate HEAD before any version reservation or other remote side effect.
         // Planning below verifies that the selected DotNet project belongs to this same checkout.
-        if (willRunTools && spec.GitHub is { Commitish: "HEAD" })
+        if (willRunTools && spec.GitHub is { Commitish: "HEAD" } &&
+            dotNetSpecForTools is not null && dotNetSourcePathForTools is not null)
             result.DotNetSourceCommitSha = VerifySharedReleaseSourceCommit(
-                configDirectory, "HEAD", expectedLoadedConfigurationPath);
+                ResolveDotNetSourceRootForPreflight(dotNetSpecForTools, dotNetSourcePathForTools),
+                "HEAD", expectedLoadedConfigurationPath);
 
         if (runWorkspaceValidation)
         {

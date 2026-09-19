@@ -79,6 +79,8 @@ public sealed partial class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(repo)) throw new ArgumentException("Repository is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("Token is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(tagName)) throw new ArgumentException("TagName is required.", nameof(request));
+        if (isDraft && requirePublishedStableRelease)
+            throw new InvalidOperationException("A draft release cannot require an already published stable release.");
         if (string.IsNullOrWhiteSpace(releaseName)) releaseName = tagName;
         var assets = (request.AssetFilePaths ?? Array.Empty<string>())
             .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -99,6 +101,15 @@ public sealed partial class GitHubReleasePublisher
                 index,
                 assets.Length,
                 GitHubReleaseAssetProgressState.Planned);
+        }
+
+        if (isDraft && !string.IsNullOrWhiteSpace(expectedTagCommitSha))
+        {
+            var existingTagCommit = TryGetTagCommitSha(owner, repo, token!, apiBaseUrl, tagName!, cancellationToken);
+            if (existingTagCommit is not null &&
+                !string.Equals(existingTagCommit, expectedTagCommitSha, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"GitHub tag '{tagName}' changed from expected commit {expectedTagCommitSha} to {existingTagCommit} before draft creation.");
         }
 
         var releaseWatch = Stopwatch.StartNew();

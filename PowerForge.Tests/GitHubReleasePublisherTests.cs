@@ -62,9 +62,10 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task PublishRelease_DraftBindsExactTargetBeforeAssetUploadWithoutTagRef(bool matchingTarget)
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task PublishRelease_DraftBindsExactTargetBeforeAssetUploadWithoutTagRef(bool matchingTarget, bool preexistingWrongTag)
     {
         var listener = new HttpListener();
         var apiBaseUrl = $"http://127.0.0.1:{GetAvailablePort()}/";
@@ -86,10 +87,13 @@ public sealed class GitHubReleasePublisherTests
                     var path = context.Request.Url!.AbsolutePath;
                     requests.Enqueue($"{context.Request.HttpMethod} {path}");
                     await context.Request.InputStream.CopyToAsync(Stream.Null, stop.Token);
-                    var status = path.Contains("/releases/tags/", StringComparison.Ordinal) ? 404 :
+                    var status = path.Contains("/releases/tags/", StringComparison.Ordinal) ||
+                                 path.Contains("/git/ref/tags/", StringComparison.Ordinal) && !preexistingWrongTag ? 404 :
                         context.Request.HttpMethod == "POST" ? 201 : 200;
                     var body = path.EndsWith("/assets", StringComparison.Ordinal) ?
                         $"[{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\",\"state\":\"uploaded\"}}]" :
+                        path.Contains("/git/ref/tags/", StringComparison.Ordinal) ?
+                            "{\"object\":{\"sha\":\"" + new string('f', 40) + "\",\"type\":\"commit\"}}" :
                         path == "/uploads" ?
                             $"{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\",\"state\":\"uploaded\"}}" :
                             $$"""{"id":42,"tag_name":"v1.2.3","target_commitish":"{{target}}","html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","draft":true} """;
@@ -112,7 +116,7 @@ public sealed class GitHubReleasePublisherTests
                 ApiBaseUrl = apiBaseUrl, TagName = "v1.2.3", Commitish = commit,
                 ExpectedTagCommitSha = commit, IsDraft = true, AssetFilePaths = [assetPath]
             };
-            if (matchingTarget)
+            if (matchingTarget && !preexistingWrongTag)
             {
                 var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(request);
                 Assert.True(result.Succeeded);
@@ -124,8 +128,10 @@ public sealed class GitHubReleasePublisherTests
                     new GitHubReleasePublisher(new NullLogger()).PublishRelease(request));
                 Assert.Contains("expected commit", error.Message, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain(requests, item => item == "POST /uploads");
+                if (preexistingWrongTag)
+                    Assert.DoesNotContain(requests, item => item == "POST /repos/EvotecIT/example/releases");
             }
-            Assert.DoesNotContain(requests, item => item.Contains("/git/ref/tags/", StringComparison.Ordinal));
+            Assert.Contains(requests, item => item.Contains("/git/ref/tags/", StringComparison.Ordinal));
         }
         finally
         {
@@ -135,6 +141,18 @@ public sealed class GitHubReleasePublisherTests
             await server.WaitAsync(TimeSpan.FromSeconds(10));
             File.Delete(assetPath);
         }
+    }
+
+    [Fact]
+    public void PublishRelease_RejectsDraftRequiringPublishedStableReleaseBeforeRemoteMutation()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new GitHubReleasePublisher(new NullLogger()).PublishRelease(new GitHubReleasePublishRequest
+            {
+                Owner = "EvotecIT", Repository = "example", Token = "token",
+                TagName = "v1.2.3", IsDraft = true, RequirePublishedStableRelease = true
+            }));
+        Assert.Contains("draft", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
