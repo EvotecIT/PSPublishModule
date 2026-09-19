@@ -1390,11 +1390,12 @@ internal static partial class WebPipelineRunner
         options.AssetRules.AddRange(rules);
 
         var result = WebReleaseHubGenerator.Generate(options);
+        bool incompleteFetch = result.Warnings.Any(warning =>
+            warning.StartsWith("Incomplete GitHub release fetch ", StringComparison.Ordinal));
         if (!string.IsNullOrWhiteSpace(existingOutputContent) &&
-            result.Warnings.Any(warning =>
-                result.ReleaseCount == 0 ||
-                warning.StartsWith("Incomplete GitHub release fetch for retained tag prefix ", StringComparison.Ordinal)) &&
-            TryPreserveExistingReleaseHub(existingOutputContent, outPath, options.RetainLatestStableTagPrefixes))
+            result.Warnings.Length > 0 &&
+            (result.ReleaseCount == 0 || incompleteFetch) &&
+            TryPreserveExistingReleaseHub(existingOutputContent, outPath))
         {
             var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
             result = new WebReleaseHubResult
@@ -1410,6 +1411,17 @@ internal static partial class WebPipelineRunner
             };
             stepResult.Success = true;
             stepResult.Message = $"Release hub fallback: preserved existing '{outPath}' after an incomplete refresh.";
+            return;
+        }
+
+        if (incompleteFetch)
+        {
+            if (existingOutputContent is null)
+                File.Delete(outPath);
+            else
+                File.WriteAllText(outPath, existingOutputContent);
+            stepResult.Success = false;
+            stepResult.Message = $"Release hub fetch for '{outPath}' was incomplete; no complete prior output was available.";
             return;
         }
 
@@ -1454,8 +1466,7 @@ internal static partial class WebPipelineRunner
 
     internal static bool TryPreserveExistingReleaseHub(
         string existingJson,
-        string outputPath,
-        IReadOnlyList<string> retainedStableTagPrefixes)
+        string outputPath)
     {
         if (string.IsNullOrWhiteSpace(existingJson) || !File.Exists(outputPath))
             return false;
@@ -1469,20 +1480,9 @@ internal static partial class WebPipelineRunner
         if (existing.Releases.Count <= 0)
             return false;
 
-        bool missingRetainedRelease = retainedStableTagPrefixes.Any(prefix =>
-            !string.IsNullOrWhiteSpace(prefix) &&
-            existing.Releases.Any(release => IsStableReleaseWithTagPrefix(release, prefix)) &&
-            !generated.Releases.Any(release => IsStableReleaseWithTagPrefix(release, prefix)));
-        if (generated.Releases.Count > 0 && !missingRetainedRelease)
-            return false;
-
         File.WriteAllText(outputPath, existingJson);
         return true;
     }
-
-    private static bool IsStableReleaseWithTagPrefix(WebReleaseHubRelease release, string prefix)
-        => !release.IsDraft && !release.IsPrerelease &&
-           release.Tag?.StartsWith(prefix.Trim(), StringComparison.OrdinalIgnoreCase) == true;
 
     private static WebReleaseHubDocument? TryReadReleaseHubDocument(string? json)
     {

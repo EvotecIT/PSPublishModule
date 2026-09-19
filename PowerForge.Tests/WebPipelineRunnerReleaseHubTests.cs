@@ -43,7 +43,7 @@ public class WebPipelineRunnerReleaseHubTests
     }
 
     [Fact]
-    public void ReleaseHubFallback_KeepsPublishedProductWhenRefreshMissesRetainedTag()
+    public void ReleaseHubFallback_KeepsCompleteOutputWhenRefreshHasPartialTimeline()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-release-fallback-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -51,14 +51,17 @@ public class WebPipelineRunnerReleaseHubTests
         {
             string outputPath = Path.Combine(root, "release-hub.json");
             const string existing = """
-                { "releases": [{ "tag": "Studio-v0.1.9", "isDraft": false, "isPrerelease": false, "assets": [] }] }
+                { "releases": [
+                    { "tag": "OfficeIMO-v4", "assets": [] },
+                    { "tag": "Studio-v0.1.9", "assets": [] }
+                  ] }
                 """;
             File.WriteAllText(outputPath,
                 """
                 { "releases": [{ "tag": "OfficeIMO-v4", "isDraft": false, "isPrerelease": false, "assets": [] }] }
                 """);
 
-            Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
+            Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath));
             Assert.Equal(existing, File.ReadAllText(outputPath));
         }
         finally
@@ -226,7 +229,7 @@ public class WebPipelineRunnerReleaseHubTests
                 """);
 
             var preserved = WebPipelineRunner.TryPreserveExistingReleaseHub(
-                File.ReadAllText(outputPath), generatedPath, Array.Empty<string>());
+                File.ReadAllText(outputPath), generatedPath);
             Assert.True(preserved);
 
             using var doc = JsonDocument.Parse(File.ReadAllText(generatedPath));

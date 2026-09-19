@@ -567,6 +567,7 @@ public static class WebReleaseHubGenerator
         var maxPages = options.MaxPages <= 0 ? 5 : options.MaxPages;
         var maxReleases = options.MaxReleases is > 0 ? options.MaxReleases.Value : int.MaxValue;
         bool fetchedAllAvailableReleases = false;
+        bool fetchFailed = false;
 
         for (var page = 1;
              page <= maxPages && (results.Count < maxReleases || !HasAllRetainedStableTagPrefixes(results, options.RetainLatestStableTagPrefixes));
@@ -592,7 +593,10 @@ public static class WebReleaseHubGenerator
                             using var retryStream = retryResponse.Content.ReadAsStream();
                             using var retryDoc = JsonDocument.Parse(retryStream);
                             if (retryDoc.RootElement.ValueKind != JsonValueKind.Array)
+                            {
+                                fetchFailed = true;
                                 break;
+                            }
 
                             var retryPageItems = ParseReleaseArray(retryDoc.RootElement, owner, repo, sourceIsGitHubApi: true);
                             if (retryPageItems.Count == 0)
@@ -614,13 +618,17 @@ public static class WebReleaseHubGenerator
                     }
 
                     warnings.Add($"GitHub release fetch failed ({(int)response.StatusCode}) for {owner}/{repo}.");
+                    fetchFailed = true;
                     break;
                 }
 
                 using var stream = response.Content.ReadAsStream();
                 using var doc = JsonDocument.Parse(stream);
                 if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    fetchFailed = true;
                     break;
+                }
 
                 var pageItems = ParseReleaseArray(doc.RootElement, owner, repo, sourceIsGitHubApi: true);
                 if (pageItems.Count == 0)
@@ -641,9 +649,13 @@ public static class WebReleaseHubGenerator
             {
                 warnings.Add($"GitHub release fetch failed for {owner}/{repo}: {ex.GetType().Name}: {ex.Message}");
                 Trace.TraceWarning($"GitHub release fetch failed for {owner}/{repo}: {ex.GetType().Name}: {ex.Message}");
+                fetchFailed = true;
                 break;
             }
         }
+
+        if (fetchFailed)
+            warnings.Add($"Incomplete GitHub release fetch for {owner}/{repo}.");
 
         foreach (string prefix in options.RetainLatestStableTagPrefixes
                      .Where(static value => !string.IsNullOrWhiteSpace(value)))
