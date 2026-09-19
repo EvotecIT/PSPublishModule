@@ -1,6 +1,6 @@
 # PowerShell compiler: next major milestones
 
-Updated: 2026-09-18.
+Updated: 2026-09-19.
 
 Execution status: M24 is active, with an M25 complete-pipeline slice now integrated through the existing Hybrid native command-region owner; M26 remains the next dependency-ordered module-scale goal. The continuation branch has completed its correctness/net8-retirement gate, bounded multiple-region and collection-transfer slices, return/cardinality families, one exact local collection-factory closure through both region and complete native-consumer paths, Hybrid-native computed members, complete hosted multi-stage pipelines with retained collection mutation, separate native range/match contracts, bounded target-compatible type literals, and a Hybrid-native runtime target-conversion contract. Region selection follows semantic, shape, element, direction, ownership, output, mutation, error, ordering, lifecycle, and continuation contracts rather than statement-count heuristics or a presumed performance payoff. Host-bound pipelines and ETS/member behavior remain separate from runtime-free typed transfer. This tranche includes remediation of existing and newly exposed compiler defects, with complete-workflow qualification across different source styles.
 
