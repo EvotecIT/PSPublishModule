@@ -86,6 +86,8 @@ public static class WebReleaseHubGenerator
                 .Where(static prefix => !string.IsNullOrWhiteSpace(prefix))
                 .Select(prefix => releases.FirstOrDefault(release => IsStableReleaseWithTagPrefix(release, prefix)))
                 .OfType<WebReleaseHubRelease>()
+                .Concat(releases.Where(release => options.RetainAllStableTagPrefixes.Any(prefix =>
+                    !string.IsNullOrWhiteSpace(prefix) && IsStableReleaseWithTagPrefix(release, prefix))))
                 .ToArray();
             var timeline = releases.Take(max).ToList();
             foreach (WebReleaseHubRelease release in retained)
@@ -570,7 +572,9 @@ public static class WebReleaseHubGenerator
         bool fetchFailed = false;
 
         for (var page = 1;
-             page <= maxPages && (results.Count < maxReleases || !HasAllRetainedStableTagPrefixes(results, options.RetainLatestStableTagPrefixes));
+             page <= maxPages && (results.Count < maxReleases ||
+                                  !HasAllRetainedStableTagPrefixes(results, options.RetainLatestStableTagPrefixes) ||
+                                  options.RetainAllStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix)));
              page++)
         {
             var url = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page={pageSize}&page={page}";
@@ -656,6 +660,9 @@ public static class WebReleaseHubGenerator
 
         if (fetchFailed)
             warnings.Add($"Incomplete GitHub release fetch for {owner}/{repo}.");
+        if (!fetchedAllAvailableReleases &&
+            options.RetainAllStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix)))
+            warnings.Add($"Incomplete GitHub release fetch for all stable tag prefixes in {owner}/{repo}; increase MaxPages.");
 
         foreach (string prefix in options.RetainLatestStableTagPrefixes
                      .Where(static value => !string.IsNullOrWhiteSpace(value)))

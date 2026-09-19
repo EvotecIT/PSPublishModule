@@ -1383,6 +1383,7 @@ internal static partial class WebPipelineRunner
             IncludePrerelease = GetBool(step, "includePrerelease") ?? GetBool(step, "include-prerelease") ?? true,
             MaxReleases = maxReleases is > 0 ? maxReleases : null,
             RetainLatestStableTagPrefixes = ReadStringList(step, "retainLatestStableTagPrefixes", "retain-latest-stable-tag-prefixes").ToList(),
+            RetainAllStableTagPrefixes = ReadStringList(step, "retainAllStableTagPrefixes", "retain-all-stable-tag-prefixes").ToList(),
             PageSize = pageSize is > 0 ? pageSize.Value : 100,
             MaxPages = maxPages is > 0 ? maxPages.Value : 5
         };
