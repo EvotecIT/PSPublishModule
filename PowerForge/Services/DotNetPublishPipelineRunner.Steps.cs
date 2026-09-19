@@ -863,10 +863,11 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         string[] versions = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
             .Where(installer =>
-                string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase) ||
-                (installer.Versioning?.AdditionalPublishTargets ?? Array.Empty<string>()).Contains(
-                    targetName,
-                    StringComparer.OrdinalIgnoreCase))
+                installer.Versioning is { Enabled: true, ApplyToPublish: true } &&
+                (string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase) ||
+                 (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>()).Contains(
+                     targetName,
+                     StringComparer.OrdinalIgnoreCase)))
             .Select(installer => FindResolvedMsiVersion(
                 plan,
                 installer.Id,

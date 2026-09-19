@@ -30,12 +30,19 @@ internal sealed partial class PowerForgeReleaseService
 
         if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
         {
-            foreach (var (key, msiVersion) in plan.MsiVersions ?? new Dictionary<string, DotNetPublishMsiVersionPlan>())
+            string releaseVersion = sharedReleaseVersion!;
+            foreach (KeyValuePair<string, DotNetPublishMsiVersionPlan> resolvedVersion in plan.MsiVersions ?? new Dictionary<string, DotNetPublishMsiVersionPlan>())
             {
-                if (string.Equals(msiVersion.Version?.Trim(), sharedReleaseVersion.Trim(), StringComparison.Ordinal))
+                var separator = resolvedVersion.Key.IndexOf('|');
+                var installerId = separator < 0 ? resolvedVersion.Key : resolvedVersion.Key.Substring(0, separator);
+                var installer = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+                    .FirstOrDefault(candidate => string.Equals(candidate.Id, installerId, StringComparison.OrdinalIgnoreCase));
+                if (installer?.Versioning is not { Enabled: true, ApplyToPublish: true })
+                    continue;
+                if (string.Equals(resolvedVersion.Value.Version?.Trim(), releaseVersion.Trim(), StringComparison.Ordinal))
                     continue;
                 throw new InvalidOperationException(
-                    $"MSI installer '{key}' version '{msiVersion.Version}' does not match release version '{sharedReleaseVersion}'.");
+                    $"MSI installer '{resolvedVersion.Key}' version '{resolvedVersion.Value.Version}' does not match release version '{releaseVersion}'.");
             }
         }
 

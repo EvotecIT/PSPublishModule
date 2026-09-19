@@ -2876,6 +2876,9 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
     [InlineData("win-x64", "x64")]
     [InlineData("win-x86", "x86")]
     [InlineData("win-arm64", "arm64")]
+    [InlineData("win10-x64", "x64")]
+    [InlineData("win7-x86", "x86")]
+    [InlineData("win10-arm64", "arm64")]
     public void ResolveOrPrepareInstallerProjectPath_GeneratesWixProjectFromAuthoring(string runtime, string platform)
     {
         var root = CreateTempRoot();

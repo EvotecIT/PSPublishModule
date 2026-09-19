@@ -3656,7 +3656,7 @@ internal sealed partial class PowerForgeReleaseService
 
             var packageVersion = ResolveWingetPackageVersion(package, installerEntries);
             var packageLocale = string.IsNullOrWhiteSpace(package.PackageLocale) ? (winget.PackageLocale ?? "en-US") : package.PackageLocale!;
-            if (!Regex.IsMatch(packageVersion!, @"^[0-9A-Za-z][0-9A-Za-z.+-]*$", RegexOptions.CultureInvariant)
+            if (!IsSafeWingetManifestPathSegment(packageVersion!)
                 || !Regex.IsMatch(packageLocale, @"^[A-Za-z0-9-]+$", RegexOptions.CultureInvariant))
                 throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' has a version or locale that cannot be used as a manifest path.");
 
@@ -3709,6 +3709,29 @@ internal sealed partial class PowerForgeReleaseService
             throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' version '{packageVersion}' does not match installer asset version '{installerVersions[0]}'.");
 
         return packageVersion!;
+    }
+
+    internal static bool IsSafeWingetManifestPathSegment(string? value)
+    {
+        string segment = value ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(segment) || segment != segment.Trim() ||
+            segment.EndsWith(".", StringComparison.Ordinal) ||
+            segment.IndexOfAny(new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*' }) >= 0 ||
+            segment.Any(char.IsControl) || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            return false;
+
+        string deviceName = segment.Split('.')[0];
+        if (deviceName.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
+            deviceName.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+            deviceName.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
+            deviceName.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+            (deviceName.Length == 4 &&
+             (deviceName.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
+              deviceName.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
+             deviceName[3] >= '1' && deviceName[3] <= '9'))
+            return false;
+
+        return true;
     }
 
     private void SubmitWingetOutputs(

@@ -64,6 +64,10 @@ public sealed class NativeInstallerReleaseSafetyTests
     {
         var plan = new DotNetPublishPlan
         {
+            Installers = new[] { new DotNetPublishInstallerPlan
+            {
+                Id = "studio.msi", Versioning = new DotNetPublishMsiVersionOptions { Enabled = true, ApplyToPublish = true }
+            } },
             MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
             {
                 ["studio.msi|studio|net10.0|win-x64|PortableCompat"] = new() { Version = "0.1.9758" }
@@ -75,6 +79,24 @@ public sealed class NativeInstallerReleaseSafetyTests
 
         Assert.Contains("studio.msi", exception.Message, StringComparison.Ordinal);
         Assert.Contains("0.1.9758", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SharedReleaseVersion_AllowsSeparateMsiVersionWhenNotAppliedToPublish()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Installers = new[] { new DotNetPublishInstallerPlan
+            {
+                Id = "studio.msi", Versioning = new DotNetPublishMsiVersionOptions { Enabled = true, ApplyToPublish = false }
+            } },
+            MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+            {
+                ["studio.msi|studio|net10.0|win-x64|PortableCompat"] = new() { Version = "0.1.9758" }
+            }
+        };
+
+        PowerForgeReleaseService.ValidateNativeInstallerReleaseVersions(plan, "0.1.0");
     }
 
     [Fact]

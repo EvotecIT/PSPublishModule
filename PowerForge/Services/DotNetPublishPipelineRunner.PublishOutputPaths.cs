@@ -82,7 +82,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 target.Name,
                 framework,
                 runtime,
-                style) ?? string.Empty
+                style) ?? target.Version ?? string.Empty
         };
 
     private static string ResolvePublishZipPath(

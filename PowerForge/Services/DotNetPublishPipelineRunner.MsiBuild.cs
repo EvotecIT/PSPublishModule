@@ -261,13 +261,19 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static string ResolveWixInstallerPlatform(string? runtime)
-        => runtime?.Trim().ToLowerInvariant() switch
-        {
-            null or "" or "win-x64" => "x64",
-            "win-x86" => "x86",
-            "win-arm64" => "arm64",
-            _ => throw new InvalidOperationException($"Cannot determine WiX installer platform for runtime '{runtime}'.")
-        };
+    {
+        string rid = runtime?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (rid.Length == 0)
+            return "x64";
+        if (!rid.StartsWith("win-", StringComparison.Ordinal) &&
+            !(rid.Length > 3 && rid.StartsWith("win", StringComparison.Ordinal) && char.IsDigit(rid[3])))
+            throw new InvalidOperationException($"Cannot determine WiX installer platform for runtime '{runtime}'.");
+
+        if (rid.EndsWith("-arm64", StringComparison.Ordinal)) return "arm64";
+        if (rid.EndsWith("-x64", StringComparison.Ordinal)) return "x64";
+        if (rid.EndsWith("-x86", StringComparison.Ordinal)) return "x86";
+        throw new InvalidOperationException($"Cannot determine WiX installer platform for runtime '{runtime}'.");
+    }
 
     private static void ResolveGeneratedInstallerAuthoringPaths(
         DotNetPublishPlan plan,

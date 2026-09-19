@@ -2,6 +2,16 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Theory]
+    [InlineData("2026.09_build1", true)]
+    [InlineData("1.2.3+preview~1", true)]
+    [InlineData("../1.2.3", false)]
+    [InlineData("1.2.3:bad", false)]
+    [InlineData("1.2.3.", false)]
+    [InlineData("CON.1", false)]
+    public void WingetManifestVersion_AcceptsOnlyPortablePathSegments(string version, bool expected)
+        => Assert.Equal(expected, PowerForgeReleaseService.IsSafeWingetManifestPathSegment(version));
+
     [Fact]
     public void WingetPackageVersion_RejectsMixedInstallerVersions()
     {

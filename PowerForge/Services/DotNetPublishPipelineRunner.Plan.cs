@@ -640,7 +640,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     target.Name,
                     combination.Framework,
                     combination.Runtime,
-                    combination.Style);
+                    combination.Style) ?? target.Version;
                 if (outputTemplate.IndexOf("{version}", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     if (string.IsNullOrWhiteSpace(releaseVersion))
