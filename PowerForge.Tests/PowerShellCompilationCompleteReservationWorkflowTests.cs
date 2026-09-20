@@ -14,7 +14,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict);
         var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             resolved.SourcePath, fixture.OutputPath, "ReservationBudget", resolved.Kind, resolved.Mode,
-            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework, EmitSource = true });
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
         var manifest = build.Manifest!;
         Assert.False(manifest.RequiresPowerShellRuntime);
@@ -36,12 +36,43 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         }
 
         var consumer = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "consumer")).FullName;
+        var feed = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "local-feed")).FullName;
+        var package = new PowerShellCompilationLibraryPackageBuilder().Build(
+            new PowerShellCompilationLibraryPackageBuildRequest(
+                build, Path.Combine(feed, "ReservationBudget.1.0.0.nupkg"), "ReservationBudget", "1.0.0")
+            {
+                CompatibilityBaseline = manifest.PublicAbi
+            });
+        Assert.Equal(manifest.PublicAbi.Sha256, package.PublicAbiSha256);
+        Assert.Contains("powerforge/compilation-manifest.json", package.Files);
+        using (var archive = System.IO.Compression.ZipFile.OpenRead(package.PackagePath))
+        using (var reader = new StreamReader(archive.GetEntry("lib/net10.0/ReservationBudget.xml")!.Open()))
+        {
+            var documentation = reader.ReadToEnd();
+            Assert.Contains("T:PowerForge.Compiled.ReservationBudgetMethods", documentation, StringComparison.Ordinal);
+            Assert.Contains("M:PowerForge.Compiled.ReservationBudgetMethods.#ctor(System.Int32)", documentation, StringComparison.Ordinal);
+            Assert.Contains("M:PowerForge.Compiled.ReservationBudgetMethods.Reset(System.Int32)", documentation, StringComparison.Ordinal);
+            Assert.Contains("M:PowerForge.Compiled.ReservationBudgetMethods.Dispose", documentation, StringComparison.Ordinal);
+            Assert.Contains("name=\"capacity\"", documentation, StringComparison.OrdinalIgnoreCase);
+        }
+        using (var archive = System.IO.Compression.ZipFile.OpenRead(package.PackagePath))
+        using (var reader = new StreamReader(archive.GetEntry("powerforge/public-abi.json")!.Open()))
+        {
+            var portableAbi = reader.ReadToEnd();
+            Assert.DoesNotContain(fixture.RootPath, portableAbi, StringComparison.OrdinalIgnoreCase);
+            using var document = System.Text.Json.JsonDocument.Parse(portableAbi);
+            var sourcePath = document.RootElement.GetProperty("moduleLifetime").GetProperty("sourcePath").GetString()!;
+            Assert.False(Path.IsPathRooted(sourcePath));
+            Assert.False(string.IsNullOrWhiteSpace(sourcePath));
+        }
         var project = Path.Combine(consumer, "ReservationConsumer.csproj");
         new System.Xml.Linq.XDocument(new System.Xml.Linq.XElement("Project", new System.Xml.Linq.XAttribute("Sdk", "Microsoft.NET.Sdk"),
             new System.Xml.Linq.XElement("PropertyGroup", new System.Xml.Linq.XElement("TargetFramework", framework),
-                new System.Xml.Linq.XElement("OutputType", "Exe"), new System.Xml.Linq.XElement("ImplicitUsings", "enable")),
-            new System.Xml.Linq.XElement("ItemGroup", new System.Xml.Linq.XElement("Reference", new System.Xml.Linq.XAttribute("Include", "ReservationBudget"),
-                new System.Xml.Linq.XElement("HintPath", build.ArtifactPath!))))).Save(project);
+                new System.Xml.Linq.XElement("OutputType", "Exe"), new System.Xml.Linq.XElement("ImplicitUsings", "enable"),
+                new System.Xml.Linq.XElement("RestoreSources", feed),
+                new System.Xml.Linq.XElement("RestorePackagesPath", Path.Combine(consumer, ".packages"))),
+            new System.Xml.Linq.XElement("ItemGroup", new System.Xml.Linq.XElement("PackageReference", new System.Xml.Linq.XAttribute("Include", "ReservationBudget"),
+                new System.Xml.Linq.XAttribute("Version", "1.0.0"))))).Save(project);
         File.WriteAllText(Path.Combine(consumer, "Program.cs"), "using Budget = global::" + manifest.PublicAbi.NamespaceName + "." + manifest.PublicAbi.TypeName + ";\n" + """
             static void Require(bool condition, string message) { if (!condition) throw new Exception(message); }
             static int Available(Budget budget) => Convert.ToInt32(budget.Get_AvailableCapacity());

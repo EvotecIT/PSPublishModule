@@ -2,9 +2,9 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private static void EmitNativeEntrySequencePoint(System.Text.StringBuilder builder, PowerShellLoweredFunction function)
+    private void EmitNativeEntrySequencePoint(System.Text.StringBuilder builder, PowerShellLoweredFunction function)
         => builder.Append("            __statementErrors.SetNativeSequencePoint(")
-            .Append(PowerShellCSharpLiteral.QuoteString(function.SourcePath)).Append(", ")
+            .Append(QuotePortableSourcePath(function.SourcePath)).Append(", ")
             .Append(function.Span.StartLine).Append(", ").Append(function.Span.StartColumn).Append(", ")
             .Append(function.Span.EndLine).Append(", ").Append(function.Span.EndColumn).Append(", ")
             .Append(PowerShellCSharpLiteral.QuoteString(function.SourceText)).AppendLine(");");
@@ -13,9 +13,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellBoundMutationOperator operation, PowerShellLoweredExpression? value, SourceSpan span, string sourceText, PowerShellNativeAssignmentTarget? assignmentTarget = null)
         => EmitNativeExpressionPosition(EmitNativeMutationValue(target, operation, value, assignmentTarget), span, target.SourcePath, sourceText);
 
-    private static string EmitNativeExpressionPosition(string value, SourceSpan span, string sourcePath, string sourceText, bool postTestCondition = false)
+    private string EmitNativeExpressionPosition(string value, SourceSpan span, string sourcePath, string sourceText, bool postTestCondition = false)
         => "__statementErrors.EvaluateNativeExpression(() => " + value + ", " +
-            PowerShellCSharpLiteral.QuoteString(sourcePath) + ", " + span.StartLine + ", " + span.StartColumn + ", " +
+            QuotePortableSourcePath(sourcePath) + ", " + span.StartLine + ", " + span.StartColumn + ", " +
             span.EndLine + ", " + span.EndColumn + ", " + PowerShellCSharpLiteral.QuoteString(sourceText) + (postTestCondition ? ", true)" : ")");
 
     private string EmitNativeMutationValue(PowerShellLoweredNativeVariableExpression target,
@@ -46,9 +46,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         => "__nativeFunction.AssignTarget(" + PowerShellCSharpLiteral.QuoteString(target.Text) + ", " +
             PowerShellCSharpLiteral.QuoteString(operation.ToString()) + ", ";
 
-    private static string EmitNativeAssignmentLocation(PowerShellNativeAssignmentTarget target)
+    private string EmitNativeAssignmentLocation(PowerShellNativeAssignmentTarget target)
         => ", " +
-            PowerShellCSharpLiteral.QuoteString(target.SourcePath) + ", " + target.Span.StartLine + ", " +
+            QuotePortableSourcePath(target.SourcePath) + ", " + target.Span.StartLine + ", " +
             target.Span.StartColumn + ", " + PowerShellCSharpLiteral.QuoteString(target.SourceDocument) + ", " +
             target.StartOffset + ", " + target.EndOffset + ")";
 }

@@ -154,7 +154,8 @@ internal static class PowerShellCompilationAbiBuilder
 
     private static PowerShellCompilationAbiMethod CreateMethod(PowerShellCompiledMethod method)
     {
-        var parameters = method.Parameters.Select(parameter => new PowerShellCompilationAbiParameter
+        var parameters = (method.NativeFunctionBinding is null ? method.Parameters : Array.Empty<PowerShellCompilationParameter>())
+            .Select(parameter => new PowerShellCompilationAbiParameter
         {
             PowerShellName = parameter.Name,
             ClrName = PowerShellClrSymbolMapper.MapIdentifier(parameter.Name),
@@ -172,6 +173,8 @@ internal static class PowerShellCompilationAbiBuilder
             AllowEmptyCollection = parameter.AllowEmptyCollection,
             SupportsWildcards = parameter.SupportsWildcards
         }).ToList();
+        if (method.NativeFunctionBinding is not null)
+            AddCompilerParameter(parameters, "__nativeFunction", "PowerForge.Generated.Runtime.PowerShellNativeFunctionContext", "NativeFunctionContext");
         AddCompilerParameters(method, parameters);
         var outputCardinality = string.IsNullOrWhiteSpace(method.OutputCardinality)
             ? GetLegacyCardinality(method.ReturnType)
@@ -220,6 +223,8 @@ internal static class PowerShellCompilationAbiBuilder
     {
         if (method.RequiresPowerShellStatementErrors)
             AddCompilerParameter(parameters, "__statementErrors", "PowerForge.Generated.Runtime.PowerShellStatementErrorContext", "PowerShellStatementErrors");
+        if (method.RequiresPowerShellStopping)
+            AddCompilerParameter(parameters, "__checkLoopInterrupts", "System.Action", "LoopInterruption");
         if (method.RequiresPowerShellStreams)
         {
             AddCompilerParameter(parameters, "__writeOutput", "System.Action<System.Object>", "SuccessStream");
@@ -232,7 +237,7 @@ internal static class PowerShellCompilationAbiBuilder
         }
         if (method.RequiresProviderCancellation)
             AddCompilerParameter(parameters, "__providerCancellationToken", "System.Threading.CancellationToken", "ProviderCancellation");
-        if (method.RequiresPowerShellCommandRegions)
+        if (method.RequiresPowerShellCommandRegions && method.NativeFunctionBinding is null)
         {
             AddCompilerParameter(parameters, "__invokePowerShellRegion", "System.Action<System.String,System.Object[]>", "HostedCommandRegion");
             AddCompilerParameter(parameters, "__invokePowerShellCapture", "System.Func<System.String,System.Object[],System.Object>", "HostedCommandCapture");
@@ -249,7 +254,7 @@ internal static class PowerShellCompilationAbiBuilder
             AddCompilerParameter(parameters, "__readPowerShellModuleVariable", "System.Func<System.String,System.Object>", "PowerShellModuleStateReader");
         if (method.RequiresPowerShellModuleStateWrite)
             AddCompilerParameter(parameters, "__writePowerShellModuleVariable", "System.Action<System.String,System.Object>", "PowerShellModuleStateWriter");
-        if (method.RequiresPowerShellBoundParameters)
+        if (method.RequiresPowerShellBoundParameters && method.NativeFunctionBinding is null)
             AddCompilerParameter(parameters, "__boundParameters", "System.Collections.Generic.ISet<System.String>", "BoundParameterNames");
     }
 

@@ -38,7 +38,7 @@ internal sealed class PowerShellRuntimeFreeArtifactContract
         return new PowerShellRuntimeFreeArtifactContract(profile, abi, ComputeGeneratedSourceSha256(workspace));
     }
 
-    private static string ComputeGeneratedSourceSha256(string workspace)
+    internal static string ComputeGeneratedSourceSha256(string workspace)
     {
         var normalized = new StringBuilder();
         foreach (var path in Directory.EnumerateFiles(workspace, "*.cs", SearchOption.TopDirectoryOnly)

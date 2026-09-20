@@ -38,7 +38,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "Generated.PinnedIpConversion",
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework, EmitSource = true });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.PromotedTypedRegions);
         var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
@@ -46,6 +46,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(unit.EmittedClrMethod);
         Assert.True(unit.UsesNativeFunctionBinding);
         Assert.Equal(0, unit.PromotedTypedRegions);
+        var methodAbi = Assert.Single(PowerShellCompilationAbiBuilder.Create(
+            typed.NamespaceName, typed.TypeName, new[] { method }).Methods);
+        var nativeContext = Assert.Single(methodAbi.Parameters,
+            static parameter => parameter.CompilerPurpose == "NativeFunctionContext");
+        Assert.Equal("__nativeFunction", nativeContext.ClrName);
+        Assert.Equal("PowerForge.Generated.Runtime.PowerShellNativeFunctionContext", nativeContext.TypeName);
+        Assert.DoesNotContain(methodAbi.Parameters,
+            static parameter => parameter.PowerShellName.Equals("IP", StringComparison.OrdinalIgnoreCase));
+        var generatedSource = string.Join(Environment.NewLine, Directory.EnumerateFiles(
+            result.GeneratedSourcePath!, "*.cs", SearchOption.AllDirectories).Select(File.ReadAllText));
+        Assert.Contains("<param name=\"__nativeFunction\">", generatedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("<param name=\"IP\">", generatedSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(fixture.RootPath, generatedSource, StringComparison.OrdinalIgnoreCase);
 
         const string probe = """
             function Describe-RegionRecord($record) {

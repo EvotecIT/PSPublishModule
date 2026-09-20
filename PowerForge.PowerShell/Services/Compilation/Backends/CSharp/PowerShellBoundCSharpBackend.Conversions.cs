@@ -20,7 +20,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 ? $"typeof({type})"
                 : "__nativeFunction.ResolveTypeName(" +
                   PowerShellCSharpLiteral.QuoteString(conversion.NativeRuntimeTypeName) + ", " +
-                  PowerShellCSharpLiteral.QuoteString(conversion.NativeSourcePath ?? string.Empty) + ", " +
+                  QuotePortableSourcePath(conversion.NativeSourcePath) + ", " +
                   conversion.Span.StartLine + ", " + conversion.Span.StartColumn + ", " +
                   conversion.Span.EndLine + ", " + conversion.Span.EndColumn + ", " +
                   PowerShellCSharpLiteral.QuoteString(conversion.NativeSourceText) + ")";

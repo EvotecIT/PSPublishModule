@@ -100,9 +100,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         IEnumerable<ProviderRuntimeNativeAsset> nativeAssets)
         => string.Join(Environment.NewLine,
             assemblies.Select(assembly =>
-                    $"<Reference Include=\"{EscapeXml(assembly.Evidence.AssemblyName)}\"><HintPath>{EscapeXml(assembly.Path)}</HintPath><Private>true</Private></Reference>")
+                    $"<Reference Include=\"{EscapeXml(assembly.Evidence.AssemblyName)}\"><HintPath>provider-runtime/{EscapeXml(Path.GetFileName(assembly.Path))}</HintPath><Private>true</Private></Reference>")
                 .Concat(nativeAssets.Select(asset =>
-                    $"<None Include=\"{EscapeXml(asset.Path)}\"><Link>{EscapeXml(asset.Evidence.FileName)}</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory><ExcludeFromSingleFile>true</ExcludeFromSingleFile></None>")));
+                    $"<None Include=\"provider-native-runtime/{EscapeXml(Path.GetFileName(asset.Path))}\"><Link>{EscapeXml(asset.Evidence.FileName)}</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory><ExcludeFromSingleFile>true</ExcludeFromSingleFile></None>")));
 
     private static PowerShellCompilationArtifactFile[] CopyProviderRuntimeAssemblies(
         PowerShellCompilationBuildSpec spec,

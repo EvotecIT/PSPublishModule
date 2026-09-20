@@ -78,7 +78,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("{");
         if (boundary.NativeSequencePoint)
             builder.Append(prefix).Append("    __statementErrors.SetNativeSequencePoint(")
-                .Append(PowerShellCSharpLiteral.QuoteString(boundary.SourcePath)).Append(", ")
+                .Append(QuotePortableSourcePath(boundary.SourcePath)).Append(", ")
                 .Append(boundary.Span.StartLine).Append(", ").Append(boundary.Span.StartColumn).Append(", ")
                 .Append(boundary.Span.EndLine).Append(", ").Append(boundary.Span.EndColumn).Append(", ")
                 .Append(PowerShellCSharpLiteral.QuoteString(boundary.SourceText)).AppendLine(");");
@@ -92,7 +92,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(boundary.ExceptionTemporary).AppendLine("))");
         builder.Append(prefix).AppendLine("{");
         builder.Append(prefix).Append("    __statementErrors.Handle(").Append(boundary.ExceptionTemporary)
-            .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(boundary.SourcePath))
+            .Append(", ").Append(QuotePortableSourcePath(boundary.SourcePath))
             .Append(", ").Append(boundary.Span.StartLine).Append(", ").Append(boundary.Span.StartColumn)
             .Append(", ").Append(boundary.Span.EndLine).Append(", ").Append(boundary.Span.EndColumn)
             .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(boundary.SourceText)).AppendLine(");");

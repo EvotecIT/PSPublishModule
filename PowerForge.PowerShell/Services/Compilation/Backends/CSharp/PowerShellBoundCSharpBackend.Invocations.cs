@@ -68,7 +68,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var function = _sourceFunction ?? throw new InvalidOperationException("Local invocation source requires its lowered function.");
         var text = string.Join("\n", function.SourceText.Replace("\r\n", "\n").Split('\n')
             .Skip(span.StartLine - function.Span.StartLine).Take(span.EndLine - span.StartLine + 1));
-        return PowerShellCSharpLiteral.QuoteString(function.SourcePath) + ", " +
+        return QuotePortableSourcePath(function.SourcePath) + ", " +
             $"{span.StartLine}, {span.StartColumn}, {span.EndLine}, {span.EndColumn}, " + PowerShellCSharpLiteral.QuoteString(text);
     }
 

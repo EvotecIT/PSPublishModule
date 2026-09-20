@@ -47,7 +47,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 continue;
             }
             body.Append("try { __statementErrors.SetNativeSequencePoint(")
-                .Append(PowerShellCSharpLiteral.QuoteString(collection.SourcePath)).Append(", ")
+                .Append(QuotePortableSourcePath(collection.SourcePath)).Append(", ")
                 .Append(item.Span.StartLine).Append(", ").Append(item.Span.StartColumn).Append(", ")
                 .Append(item.Span.EndLine).Append(", ").Append(item.Span.EndColumn).Append(", ")
                 .Append(PowerShellCSharpLiteral.QuoteString(item.SourceText)).Append("); ");
@@ -66,7 +66,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             body.Append("} catch (global::System.Exception ").Append(item.ExceptionTemporary).Append(") when (")
                 .Append(StatementErrorContextType).Append(".IsOperationFailure(").Append(item.ExceptionTemporary).Append(")) { ")
                 .Append("__statementErrors.Handle(").Append(item.ExceptionTemporary).Append(", ")
-                .Append(PowerShellCSharpLiteral.QuoteString(collection.SourcePath)).Append(", ")
+                .Append(QuotePortableSourcePath(collection.SourcePath)).Append(", ")
                 .Append(item.Span.StartLine).Append(", ").Append(item.Span.StartColumn).Append(", ")
                 .Append(item.Span.EndLine).Append(", ").Append(item.Span.EndColumn).Append(", ")
                 .Append(PowerShellCSharpLiteral.QuoteString(item.SourceText)).Append("); ");

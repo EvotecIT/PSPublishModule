@@ -238,7 +238,8 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 AllowedProviderIds = new[] { "generic.command.stream.notice" },
                 AllowedPublishers = new[] { "Generic Publisher" },
                 AllowedLicenseExpressions = new[] { "MIT" }
-            }
+            },
+            EmitSource = mode == PowerShellCompilationMode.Strict
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -279,6 +280,8 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         {
             loadContext.Unload();
         }
+        if (mode == PowerShellCompilationMode.Strict)
+            VerifyProviderFromLocalFeed(artifactFixture.RootPath, result);
     }
 
     [Theory]
@@ -344,8 +347,12 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             provider.ProviderId == "generic.command.cleanup.file.failure").Adapter.Cleanup = PowerShellCompilationProviderCleanup.Deterministic;
         var packagePath = providerFixture.PackagePath("matrix.nupkg");
         var resolution = providerFixture.BuildPackage("matrix.nupkg");
-        var cleanupPath = Path.Combine(providerFixture.RootPath, "owned-resource.bin");
-        var cancellationPath = Path.Combine(providerFixture.RootPath, "cancellation.started");
+        var providerOperationRoot = Path.Combine(Path.GetTempPath(), "PowerForgeProviderMatrixM27");
+        Directory.CreateDirectory(providerOperationRoot);
+        var cleanupPath = Path.Combine(providerOperationRoot, "owned-resource.bin");
+        var cancellationPath = Path.Combine(providerOperationRoot, "cancellation.started");
+        foreach (var stale in new[] { cleanupPath, cleanupPath + ".failure", cancellationPath })
+            if (File.Exists(stale)) File.Delete(stale);
         using var artifactFixture = ScriptFixture.Create("""
 function Invoke-ProviderMatrix {
     Write-PackageOutputCore 'value'
@@ -409,7 +416,8 @@ function Invoke-ProviderCleanupFailure {
                 AllowedProviderIds = providerIds,
                 AllowedPublishers = new[] { "Generic Publisher" },
                 AllowedLicenseExpressions = new[] { "MIT" }
-            }
+            },
+            EmitSource = mode == PowerShellCompilationMode.Strict
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -534,6 +542,8 @@ function Invoke-ProviderCleanupFailure {
         {
             loadContext.Unload();
         }
+        if (mode == PowerShellCompilationMode.Strict)
+            await VerifyProviderMatrixFromLocalFeed(artifactFixture.RootPath, result, cleanupPath, cancellationPath);
 
         static object[] EmptySinks() => new object[]
         {
@@ -595,12 +605,17 @@ function Invoke-ProviderCleanupFailure {
                 AllowedProviderIds = new[] { provider.ProviderId },
                 AllowedPublishers = new[] { "Generic Publisher" },
                 AllowedLicenseExpressions = new[] { "MIT" }
-            }
+            },
+            EmitSource = mode == PowerShellCompilationMode.Strict
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.Files.Count(static file => file.Role == "CompilerProviderRuntime"));
         Assert.Equal(2, Assert.Single(result.Manifest.ProviderLock!.Packages).Assemblies.Length);
+        if (mode == PowerShellCompilationMode.Strict)
+        {
+            VerifyDependencyProviderFromLocalFeed(artifactFixture.RootPath, result);
+        }
         var loadContext = new ArtifactLoadContext(Path.GetDirectoryName(result.ArtifactPath!)!);
         try
         {

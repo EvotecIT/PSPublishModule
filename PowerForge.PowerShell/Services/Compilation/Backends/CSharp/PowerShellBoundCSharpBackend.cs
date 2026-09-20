@@ -10,6 +10,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private PowerShellLoweredFunction? _sourceFunction;
     private PowerShellCompilationSemanticHostFamily _semanticHostFamily;
+    private PowerShellCompilationCapability _targetCapabilities;
     private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
@@ -19,7 +20,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend
         {
             _functions = functions,
-            _semanticHostFamily = program.SemanticHostFamily
+            _semanticHostFamily = program.SemanticHostFamily,
+            _targetCapabilities = program.TargetCapabilities
         }.EmitFunction(function, program.TargetCapabilities)).ToArray();
         return new PowerShellBoundCSharpResult(methods, program.Diagnostics.ToArray());
     }
@@ -56,6 +58,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var discardHelper = ContainsDiscardValue(function.Statements)
             ? GetTemporaryIdentifier("discardValue")
             : null;
+        if (!initializer && function.Symbol.Kind != PowerShellSymbolKind.NativeScriptBlock)
+            AppendPublicMethodDocumentation(builder, function);
         builder.Append(initializer ? "    private " : function.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock ? "    private static " : managedInstance ? "    public " : "    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
@@ -330,7 +334,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 return;
             case PowerShellLoweredThrowStatement { Expression: null, PreserveStatementErrors: true } thrown:
                 builder.Append(prefix).Append("throw __statementErrors.PrepareRethrow(")
-                    .Append(PowerShellCSharpLiteral.QuoteString(thrown.SourcePath))
+                    .Append(QuotePortableSourcePath(thrown.SourcePath))
                     .Append(", ").Append(thrown.Span.StartLine).Append(", ").Append(thrown.Span.StartColumn)
                     .Append(", ").Append(thrown.Span.EndLine).Append(", ").Append(thrown.Span.EndColumn)
                     .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(thrown.SourceText)).AppendLine(");");
@@ -340,7 +344,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 return;
             case PowerShellLoweredThrowStatement { PreserveStatementErrors: true } thrown:
                 builder.Append(prefix).Append("throw __statementErrors.PrepareThrow(").Append(EmitExpression(thrown.Expression!))
-                    .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(thrown.SourcePath))
+                    .Append(", ").Append(QuotePortableSourcePath(thrown.SourcePath))
                     .Append(", ").Append(thrown.Span.StartLine).Append(", ").Append(thrown.Span.StartColumn)
                     .Append(", ").Append(thrown.Span.EndLine).Append(", ").Append(thrown.Span.EndColumn)
                     .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(thrown.SourceText)).AppendLine(");");

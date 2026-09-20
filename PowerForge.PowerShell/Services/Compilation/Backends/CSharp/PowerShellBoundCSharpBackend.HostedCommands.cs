@@ -10,7 +10,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             builder.Append(prefix).Append("__nativeFunction.InvokeCommandRegion(")
                 .Append(PowerShellCSharpLiteral.QuoteString(region.HostedFallbackSource)).Append(", ")
-                .Append(PowerShellCSharpLiteral.QuoteString(region.NativeSourcePath)).Append(", ")
+                .Append(QuotePortableSourcePath(region.NativeSourcePath)).Append(", ")
                 .Append(region.Span.StartLine).Append(", ").Append(region.Span.StartColumn).Append(", ")
                 .Append(PowerShellCSharpLiteral.QuoteString(region.NativeSourceDocument!)).Append(", ")
                 .Append(region.Span.StartOffset).Append(", ").Append(region.Span.EndOffset).AppendLine(");");
@@ -29,12 +29,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitNativeCommandRecords(PowerShellLoweredNativeCommandExpression command, string sink)
         => $"__nativeFunction.InvokeCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
-           $"{PowerShellCSharpLiteral.QuoteString(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
+           $"{QuotePortableSourcePath(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
            $"{sink}, {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset})";
 
     private string EmitNativeCommandCapture(PowerShellLoweredNativeCommandExpression command)
         => $"__nativeFunction.CaptureCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
-           $"{PowerShellCSharpLiteral.QuoteString(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
+           $"{QuotePortableSourcePath(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
            $"{(command.PreservePartialOutput ? "true" : "false")}" +
            (_nativeRegionPartialOutputSink is null ? "" : ", " + _nativeRegionPartialOutputSink) +
            $", {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset})";

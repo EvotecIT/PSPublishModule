@@ -40,9 +40,22 @@ internal static class PowerShellGeneratedSourcePublisher
             foreach (var dependency in Directory.EnumerateFiles(embeddedDependencies, "*", SearchOption.TopDirectoryOnly))
                 File.Copy(dependency, Path.Combine(targetDependencies, Path.GetFileName(dependency)), overwrite: false);
         }
+        CopyGeneratedDirectory(workspace, sourceDirectory, "provider-runtime");
+        CopyGeneratedDirectory(workspace, sourceDirectory, "provider-native-runtime");
         PowerShellCompilationBuildIsolation.Write(sourceDirectory, requireSdkSelection: true, spec.OfflineRestore);
         WriteSourceMap(sourceDirectory, spec, methods);
         return sourceDirectory;
+    }
+
+    private static void CopyGeneratedDirectory(string workspace, string sourceDirectory, string name)
+    {
+        var source = Path.Combine(workspace, name);
+        if (!Directory.Exists(source)) return;
+        var target = Path.Combine(sourceDirectory, name);
+        Directory.CreateDirectory(target);
+        foreach (var path in Directory.EnumerateFiles(source, "*", SearchOption.TopDirectoryOnly)
+                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+            File.Copy(path, Path.Combine(target, Path.GetFileName(path)), overwrite: false);
     }
 
     private static void CopyMappedSources(string sourceDirectory, PowerShellCompilationBuildSpec spec)
@@ -142,7 +155,7 @@ internal static class PowerShellGeneratedSourcePublisher
 
     private static GeneratedMethodLocation FindGeneratedMethod(string sourceDirectory, string generatedName)
     {
-        var pattern = @"^\s*public\s+static\s+.*\s" +
+        var pattern = @"^\s*(?:public|private|internal)\s+(?:static\s+)?.*\s" +
                       System.Text.RegularExpressions.Regex.Escape(generatedName) + @"\s*\(";
         GeneratedMethodLocation? match = null;
         foreach (var path in Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.TopDirectoryOnly)

@@ -27,7 +27,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.CompleteTimeSpan",
             nativeCommand ? PowerShellCompilationArtifactKind.BinaryModule : PowerShellCompilationArtifactKind.Library,
             nativeCommand ? PowerShellCompilationMode.Hybrid : PowerShellCompilationMode.Strict,
-            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework, EmitSource = !nativeCommand });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.CompiledMethods == 1, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
@@ -152,6 +152,55 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     private static void VerifyTimeSpanFromIndependentConsumer(string root, PowerShellCompilationBuildResult result)
     {
+        var feed = Directory.CreateDirectory(Path.Combine(root, "local-feed")).FullName;
+        var packagePath = Path.Combine(feed, "Generated.CompleteTimeSpan.1.0.0.nupkg");
+        var package = new PowerShellCompilationLibraryPackageBuilder().Build(
+            new PowerShellCompilationLibraryPackageBuildRequest(
+                result, packagePath, "Generated.CompleteTimeSpan", "1.0.0"));
+        Assert.Equal(result.Manifest!.PublicAbi!.Sha256, package.PublicAbiSha256);
+        Assert.Contains("lib/net10.0/Generated.CompleteTimeSpan.dll", package.Files);
+        Assert.Contains("lib/net10.0/Generated.CompleteTimeSpan.xml", package.Files);
+        Assert.Contains("lib/net10.0/Generated.CompleteTimeSpan.pdb", package.Files);
+        Assert.Contains("powerforge/dependency-lock.json", package.Files);
+        Assert.Contains("powerforge/public-abi.json", package.Files);
+        Assert.Contains(package.Files, static path => path.StartsWith("powerforge/evidence/", StringComparison.Ordinal));
+        Assert.Contains(package.Files, static path => path.StartsWith("powerforge/generated-source/", StringComparison.Ordinal));
+        var generatedSource = string.Join(Environment.NewLine, Directory.EnumerateFiles(
+            result.GeneratedSourcePath!, "*.cs", SearchOption.AllDirectories).Select(File.ReadAllText));
+        Assert.DoesNotContain(root, generatedSource, StringComparison.OrdinalIgnoreCase);
+        using (var archive = System.IO.Compression.ZipFile.OpenRead(package.PackagePath))
+        using (var reader = new StreamReader(archive.GetEntry("powerforge/compilation-manifest.json")!.Open()))
+        {
+            var portableManifest = reader.ReadToEnd();
+            Assert.DoesNotContain(root, portableManifest, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"artifactPath\": \"lib/net10.0/Generated.CompleteTimeSpan.dll\"", portableManifest, StringComparison.Ordinal);
+        }
+        using (var archive = System.IO.Compression.ZipFile.OpenRead(package.PackagePath))
+        {
+            foreach (var entry in archive.Entries.Where(static entry =>
+                         entry.FullName.StartsWith("powerforge/generated-source/", StringComparison.Ordinal)))
+            {
+                using var reader = new StreamReader(entry.Open());
+                Assert.DoesNotContain(root, reader.ReadToEnd(), StringComparison.OrdinalIgnoreCase);
+            }
+            foreach (var entryName in new[]
+                     {
+                         "lib/net10.0/Generated.CompleteTimeSpan.dll",
+                         "lib/net10.0/Generated.CompleteTimeSpan.pdb"
+                     })
+            {
+                using var stream = archive.GetEntry(entryName)!.Open();
+                using var bytes = new MemoryStream();
+                stream.CopyTo(bytes);
+                Assert.DoesNotContain(root, System.Text.Encoding.UTF8.GetString(bytes.ToArray()), StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(root, System.Text.Encoding.Unicode.GetString(bytes.ToArray()), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        var repeat = new PowerShellCompilationLibraryPackageBuilder().Build(
+            new PowerShellCompilationLibraryPackageBuildRequest(
+                result, Path.Combine(feed, "repeat.nupkg"), "Generated.CompleteTimeSpan", "1.0.0"));
+        Assert.Equal(package.PackageSha256, repeat.PackageSha256);
+
         var directory = Path.Combine(root, "timespan-consumer");
         Directory.CreateDirectory(directory);
         var projectPath = Path.Combine(directory, "TimeSpanConsumer.csproj");
@@ -159,10 +208,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             new System.Xml.Linq.XElement("PropertyGroup",
                 new System.Xml.Linq.XElement("TargetFramework", "net10.0"),
                 new System.Xml.Linq.XElement("OutputType", "Exe"),
-                new System.Xml.Linq.XElement("ImplicitUsings", "enable")),
-            new System.Xml.Linq.XElement("ItemGroup", new System.Xml.Linq.XElement("Reference",
-                new System.Xml.Linq.XAttribute("Include", "GeneratedCompleteTimeSpan"),
-                new System.Xml.Linq.XElement("HintPath", result.ArtifactPath!))));
+                new System.Xml.Linq.XElement("ImplicitUsings", "enable"),
+                new System.Xml.Linq.XElement("RestoreSources", feed),
+                new System.Xml.Linq.XElement("RestorePackagesPath", Path.Combine(directory, ".packages"))),
+            new System.Xml.Linq.XElement("ItemGroup", new System.Xml.Linq.XElement("PackageReference",
+                new System.Xml.Linq.XAttribute("Include", "Generated.CompleteTimeSpan"),
+                new System.Xml.Linq.XAttribute("Version", "1.0.0"))));
         new System.Xml.Linq.XDocument(project).Save(projectPath);
         var abi = result.Manifest!.PublicAbi!;
         File.WriteAllText(Path.Combine(directory, "Program.cs"),

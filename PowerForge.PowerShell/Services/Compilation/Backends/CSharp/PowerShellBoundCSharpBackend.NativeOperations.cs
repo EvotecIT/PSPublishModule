@@ -9,7 +9,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             var rangeFunction = _sourceFunction!;
             var rangeExtent = expression.OperatorSpan ?? throw new InvalidOperationException("Native range extent is missing.");
             var rangeSource = expression.OperatorSourceText ?? throw new InvalidOperationException("Native range source is missing.");
-            var location = PowerShellCSharpLiteral.QuoteString(rangeFunction.SourcePath) + ", " +
+            var location = QuotePortableSourcePath(rangeFunction.SourcePath) + ", " +
                 rangeExtent.StartLine + ", " + rangeExtent.StartColumn + ", " + rangeExtent.EndLine + ", " +
                 rangeExtent.EndColumn + ", " + PowerShellCSharpLiteral.QuoteString(rangeSource);
             return "__nativeFunction.EvaluateRange(__nativeFunction.BeginRange(" + left + ", " + location + "), " + right + ")";
@@ -23,7 +23,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             var source = expression.OperatorSourceText ?? throw new InvalidOperationException("Native pattern operator source is missing.");
             return "__nativeFunction.EvaluatePattern(" + PowerShellCSharpLiteral.QuoteString(expression.Operation.ToString()) + ", " +
                 (expression.NativeIgnoreCase ? "true" : "false") + ", " + left + ", " + right + ", " +
-                PowerShellCSharpLiteral.QuoteString(function.SourcePath) + ", " + extent.StartLine + ", " + extent.StartColumn + ", " +
+                QuotePortableSourcePath(function.SourcePath) + ", " + extent.StartLine + ", " + extent.StartColumn + ", " +
                 extent.EndLine + ", " + extent.EndColumn + ", " + PowerShellCSharpLiteral.QuoteString(source) + ")";
         }
         var operation = expression.Operation switch

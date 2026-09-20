@@ -48,6 +48,7 @@ internal static class PowerShellRuntimeFreeModuleSourceGenerator
             .AppendLine("#nullable enable")
             .AppendLine("#nullable disable warnings")
             .Append("namespace ").Append(namespaceName).AppendLine(";")
+            .AppendLine("/// <summary>Owns the compiled module state and its deterministic lifetime.</summary>")
             .Append("public sealed class ").Append(typeName).AppendLine(" : global::System.IDisposable")
             .AppendLine("{")
             .AppendLine("    private sealed class __ModuleState")
@@ -59,12 +60,14 @@ internal static class PowerShellRuntimeFreeModuleSourceGenerator
             .AppendLine("    private readonly object __moduleSync = new object();")
             .AppendLine("    private __ModuleState __moduleState = new __ModuleState();")
             .AppendLine("    private bool __moduleDisposed;")
-            .AppendLine("    private int __moduleActiveCalls;")
-            .Append("    public ").Append(typeName).Append('(').Append(parameters).AppendLine(")")
+            .AppendLine("    private int __moduleActiveCalls;");
+        AppendLifecycleDocumentation(builder, "Creates and initializes a compiled module instance.", initializer.Parameters);
+        builder.Append("    public ").Append(typeName).Append('(').Append(parameters).AppendLine(")")
             .AppendLine("    {")
             .Append("        this.").Append(initializer.GeneratedName).Append('(').Append(InvocationArguments(initializer.Parameters.Length)).AppendLine(");")
-            .AppendLine("    }")
-            .Append("    public void Reset(").Append(parameters).AppendLine(")")
+            .AppendLine("    }");
+        AppendLifecycleDocumentation(builder, "Atomically resets this module instance to newly initialized state.", initializer.Parameters);
+        builder.Append("    public void Reset(").Append(parameters).AppendLine(")")
             .Append("        => this.__ResetCore(").Append(InvocationArguments(initializer.Parameters.Length)).AppendLine(");")
             .Append("    private void __ResetCore(").Append(coreParameters).AppendLine(")")
             .AppendLine("    {")
@@ -85,6 +88,7 @@ internal static class PowerShellRuntimeFreeModuleSourceGenerator
             .AppendLine("            }")
             .AppendLine("        }")
             .AppendLine("    }")
+            .AppendLine("    /// <summary>Disposes this module instance, clears its state, and rejects later calls.</summary>")
             .AppendLine("    public void Dispose()")
             .AppendLine("    {")
             .AppendLine("        lock (this.__moduleSync)")
@@ -107,13 +111,37 @@ internal static class PowerShellRuntimeFreeModuleSourceGenerator
         {
             var prefixParameters = string.Join(", ", initializer.Parameters.Take(count).Select(static parameter =>
                 PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType) + " " + PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name)));
+            var prefix = initializer.Parameters.Take(count).ToArray();
+            AppendLifecycleDocumentation(builder, "Creates and initializes a compiled module instance using authored defaults for omitted trailing parameters.", prefix);
             builder.Append("    public ").Append(typeName).Append('(').Append(prefixParameters).AppendLine(")")
                 .Append("        => this.").Append(initializer.GeneratedName).Append('(').Append(InvocationArguments(count)).AppendLine(");")
-                .Append("    public void Reset(").Append(prefixParameters).AppendLine(")")
+                ;
+            AppendLifecycleDocumentation(builder, "Atomically resets this module instance using authored defaults for omitted trailing parameters.", prefix);
+            builder.Append("    public void Reset(").Append(prefixParameters).AppendLine(")")
                 .Append("        => this.__ResetCore(").Append(InvocationArguments(count)).AppendLine(");");
         }
         builder.AppendLine(string.Join(Environment.NewLine + Environment.NewLine, methods))
             .AppendLine("}");
         return builder.ToString();
+    }
+
+    private static void AppendLifecycleDocumentation(
+        StringBuilder builder,
+        string summary,
+        IEnumerable<PowerShellLoweredParameter> parameters)
+    {
+        builder.Append("    /// <summary>")
+            .Append(System.Security.SecurityElement.Escape(summary))
+            .AppendLine("</summary>");
+        foreach (var parameter in parameters)
+        {
+            var name = PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name);
+            if (name.Length > 0 && name[0] == '@') name = name.Substring(1);
+            builder.Append("    /// <param name=\"")
+                .Append(name)
+                .Append("\">Value supplied to the module initializer parameter ")
+                .Append(System.Security.SecurityElement.Escape(parameter.Symbol.Name))
+                .AppendLine(".</param>");
+        }
     }
 }
