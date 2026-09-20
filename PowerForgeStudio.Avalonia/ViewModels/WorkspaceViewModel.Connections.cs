@@ -20,6 +20,7 @@ public sealed partial class WorkspaceViewModel
     private async Task ShowConnectionsAsync()
     {
         if (KeepReleaseVisible()) return;
+        IsActivityPage = false;
         IsStoragePage = false;
         IsAutomationsPage = false;
         IsReleasePage = false;

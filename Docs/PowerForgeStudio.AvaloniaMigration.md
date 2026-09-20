@@ -33,6 +33,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [ ] Add matching merged-PR-head fallback, broken-reference pruning and external process detection where available.
 - [x] Inventory Windows schedules and local GitHub workflow definitions with explicit provider evidence boundaries.
 - [x] Add secret-free GitHub, registry, Licensing, IntelligenceX and local-toolchain connection evidence.
+- [x] Add a cross-project Activity inbox over existing portfolio, release, GitHub issue/PR/CI and automation owners.
 - [ ] Connect GitHub automation runtime and a supported Codex adapter; add provider-owned configuration actions only where their owners expose safe APIs.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
@@ -167,6 +168,21 @@ Evidence:
 - Wide, compact-top and compact-list Skia renders were inspected: `Artifacts/StudioValidation/connections-inventory.png`, `connections-inventory-compact.png` and `connections-inventory-compact-list.png`. Compact mode retains the tree, collapses the inspector and scrolls the page above the output dock.
 
 This milestone does not edit connections, authenticate a new account, publish a package, retrieve licensing customer data, query download totals or open an IntelligenceX chat session. Those actions must remain in their existing owners and expose explicit capability/scope evidence before Studio enables them. Native Windows keyboard, pointer and credential-flow interaction remain unverified.
+
+### Activity and attention milestone
+
+The Activity rail route is a read-only cross-project inbox. It projects the existing repository catalog, local Git readiness, release drift, release inbox, GitHub issue/PR/CI reads and automation inventory instead of introducing another issue tracker or release state engine. Opening the page never executes a build script, schedule, publication action, issue mutation or pull-request mutation. External probes are bounded to eight repositories by default and three displayed issues per repository.
+
+Every row names its provider and observation time. Provider cards keep Available, Partial, Authentication required, Access denied, Rate limited, Unavailable and Absent states separate, so a failed or deferred probe cannot appear as an empty healthy inbox. The page states when its bounded display omits lower-priority rows instead of presenting a truncated list as complete. Filters expose actionable items, all observed activity, GitHub, releases, schedules and items hidden for the current Studio session. Open source is restricted to GitHub HTTPS links or existing non-linked paths inside the active workspace. Hide for this session changes only the current view and is labelled accordingly; it does not acknowledge or resolve provider content.
+
+Evidence:
+
+- Five focused shared tests pass. A disposable Git repository with a real build script proves Activity inspects the release contract without executing that script, while fake owner evidence contributes a failing CI run, pull request, issue and schedule. A second test proves an automation-provider failure remains visible without discarding local repository evidence. A bounded-timeout case proves a stalled GitHub resolver cannot discard local evidence or masquerade as an empty inbox. Two access cases keep a denied credential distinct from provider rate limiting.
+- Three focused Avalonia tests pass. They cover cancellation and immediate refresh after a workspace switch, route state, provider/source cards, counts, filters, selection, session-only hiding and restore, plus the external-open boundary for workspace paths and GitHub HTTPS links.
+- All 40 Avalonia tests pass on the final Activity candidate.
+- Wide, compact-top and compact-list Skia renders were inspected: `Artifacts/StudioValidation/activity-attention.png`, `activity-attention-compact.png` and `activity-attention-compact-list.png`. The compact shell keeps the project tree, collapses the right inspector and scrolls the inbox above the output dock.
+
+The Activity route currently reads open GitHub issues and aggregate pull-request/CI signals. It does not provide a global issue search, review submission, issue edits, persistent mute rules, GitHub workflow runtime history or durable Activity history. The existing selected-project GitHub page remains the detail owner. Native Windows pointer, keyboard and external-link opening remain unverified.
 
 ### Build inspection milestone
 

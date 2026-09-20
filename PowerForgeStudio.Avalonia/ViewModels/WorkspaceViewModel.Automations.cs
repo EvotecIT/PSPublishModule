@@ -7,7 +7,7 @@ public sealed partial class WorkspaceViewModel
 {
     public AutomationsViewModel Automations { get; private set; } = null!;
     [ObservableProperty] private bool _isAutomationsPage;
-    public bool IsWorkspaceUtilityPage => IsStoragePage || IsAutomationsPage || IsConnectionsPage;
+    public bool IsWorkspaceUtilityPage => IsActivityPage || IsStoragePage || IsAutomationsPage || IsConnectionsPage;
 
     partial void OnIsAutomationsPageChanged(bool value)
     {
@@ -21,6 +21,7 @@ public sealed partial class WorkspaceViewModel
     private async Task ShowAutomationsAsync()
     {
         if (KeepReleaseVisible()) return;
+        IsActivityPage = false;
         IsStoragePage = false;
         IsConnectionsPage = false;
         IsReleasePage = false;

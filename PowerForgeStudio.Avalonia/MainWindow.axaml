@@ -17,7 +17,7 @@
       <Border Background="#0B2745">
         <StackPanel Spacing="4" Margin="0,10">
           <Button Classes="rail" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsActivityPage}" Command="{Binding ShowActivityCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsGitHubPage}" Command="{Binding ShowGitHubCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsAutomationsPage}" Command="{Binding ShowAutomationsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Automations" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsStoragePage}" Command="{Binding ShowStorageCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
@@ -99,6 +99,7 @@
         <ContentControl Grid.Row="2" IsVisible="{Binding IsReleasePage}"><views:ReleaseView DataContext="{Binding Release}" /></ContentControl>
         <views:FilesView Grid.Row="2" IsVisible="{Binding IsFilesPage}" />
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
+        <views:ActivityView x:Name="ActivityPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsActivityPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Activity}" />
         <views:StorageView Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsStoragePage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Storage}" />
         <views:AutomationsView x:Name="AutomationsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsAutomationsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Automations}" />
         <views:ConnectionsView x:Name="ConnectionsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsConnectionsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Connections}" />
@@ -126,6 +127,28 @@
             <TextBlock Text="Local discovery" Classes="muted" />
             <TextBlock Text="Build outputs and package caches are hidden in the explorer." TextWrapping="Wrap" />
           </StackPanel>
+          <ScrollViewer IsVisible="{Binding IsActivityPage}">
+            <StackPanel Spacing="14" DataContext="{Binding Activity}">
+              <TextBlock Text="Activity evidence" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Text="{Binding SelectedEntry.Project}" Foreground="#0865FF" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SelectedEntry.Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SelectedEntry.State}" />
+              <TextBlock Text="Detail" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.Detail}" TextWrapping="Wrap" />
+              <TextBlock Text="Provider" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.Provider}" />
+              <TextBlock Text="Observed" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.ObservedDisplay}" />
+              <TextBlock Text="Source" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.SourceDisplay}" FontSize="11" TextWrapping="Wrap" />
+              <Button Content="Open source" Command="{Binding OpenSelectedCommand}" IsEnabled="{Binding CanOpenSelected}" />
+              <Button Content="Hide for this session" Command="{Binding MuteSelectedCommand}" IsEnabled="{Binding CanMuteSelected}" />
+              <Button Content="Restore hidden items" Command="{Binding RestoreMutedCommand}" IsVisible="{Binding HasMuted}" />
+              <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10">
+                <TextBlock Text="Hiding changes only this local view. It never closes, resolves, reruns or acknowledges provider content." TextWrapping="Wrap" />
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
           <ScrollViewer IsVisible="{Binding IsStoragePage}">
             <StackPanel Spacing="14" DataContext="{Binding Storage}">
               <TextBlock Text="Review evidence" FontWeight="SemiBold" FontSize="16" />
