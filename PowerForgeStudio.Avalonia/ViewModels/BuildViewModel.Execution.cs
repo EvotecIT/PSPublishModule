@@ -12,6 +12,7 @@ public sealed partial class BuildViewModel
     private int _buildVersion;
     [ObservableProperty] private bool _hasSuccessfulInspection;
     [ObservableProperty] private bool _isBuilding;
+    [ObservableProperty] private bool _wasBuildCancelled;
     [ObservableProperty] private string _buildRoot = "";
     [ObservableProperty] private string _buildStatus = "No build started.";
     [ObservableProperty] private string _buildOutput = "";
@@ -35,6 +36,7 @@ public sealed partial class BuildViewModel
         using var cancellation = new CancellationTokenSource();
         _buildCancellation = cancellation;
         BuildRoot = root;
+        WasBuildCancelled = false;
         BuildResult = null;
         BuildOutput = "";
         BuildStatus = "Building current configuration…";
@@ -63,6 +65,7 @@ public sealed partial class BuildViewModel
         catch (Exception ex) { if (!_disposed) BuildStatus = $"Build failed: {StudioOutputSanitizer.Sanitize(ex.Message)}"; }
         finally
         {
+            WasBuildCancelled = cancellation.IsCancellationRequested;
             if (ReferenceEquals(_buildCancellation, cancellation)) _buildCancellation = null;
             IsBuilding = false;
         }

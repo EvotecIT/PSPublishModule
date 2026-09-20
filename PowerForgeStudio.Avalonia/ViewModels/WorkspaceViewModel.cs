@@ -44,21 +44,27 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         };
         Build.PropertyChanged += (_, args) =>
         {
+            if (args.PropertyName is nameof(BuildViewModel.BuildResult) or nameof(BuildViewModel.IsBuilding) or nameof(BuildViewModel.WasBuildCancelled))
+                Release.SetBuild(Build.BuildResult, Build.IsBuilding, Build.WasBuildCancelled);
             if (args.PropertyName is nameof(BuildViewModel.BuildOutput) or nameof(BuildViewModel.HasBuild))
                 OnPropertyChanged(nameof(DisplayedOutput));
         };
     }
+    public ReleaseViewModel Release { get; } = new();
+    [ObservableProperty] private bool _isReleasePage;
+    partial void OnIsReleasePageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(OutputPaneHeight)); }
+    [RelayCommand] private void ShowRelease() { IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true; }
     public GitHubViewModel GitHub { get; }
     [ObservableProperty] private bool _isGitHubPage;
     partial void OnIsGitHubPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(OutputPaneHeight)); }
-    public global::Avalonia.Controls.GridLength OutputPaneHeight => new(IsGitHubPage ? 0 : 170);
-    [RelayCommand] private void ShowGitHub() { IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
+    public global::Avalonia.Controls.GridLength OutputPaneHeight => new(IsGitHubPage || IsReleasePage ? 0 : 170);
+    [RelayCommand] private void ShowGitHub() { IsReleasePage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
     partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(DisplayedOutput)); }
     [ObservableProperty] private bool _isBuildPage;
-    public bool IsFilesPage => !IsBuildPage && !IsChangesPage && !IsGitHubPage;
+    public bool IsFilesPage => !IsBuildPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;
     partial void OnIsBuildPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
@@ -66,9 +72,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     }
     public string DisplayedOutput => IsChangesPage ? Changes.LastOperation : IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;
     partial void OnOutputChanged(string value) => OnPropertyChanged(nameof(DisplayedOutput));
-    [RelayCommand] private void ShowFiles() { IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
-    [RelayCommand] private void ShowBuild() { IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
-    [RelayCommand] private void ShowChanges() { IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
+    [RelayCommand] private void ShowFiles() { IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
+    [RelayCommand] private void ShowBuild() { IsReleasePage = false; IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
+    [RelayCommand] private void ShowChanges() { IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
     public ObservableCollection<ExplorerNode> Projects { get; } = [];
     public ObservableCollection<FileItemViewModel> Files { get; } = [];
     [ObservableProperty] private string _workspaceRoot;
@@ -294,5 +300,5 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var text = Output + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
         Output = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); Changes.Dispose(); GitHub.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); Changes.Dispose(); GitHub.Dispose(); Release.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 }

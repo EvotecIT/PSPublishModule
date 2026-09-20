@@ -75,11 +75,33 @@ public sealed class BuildExecutionTests
                     Assert.NotNull(compact);
                     if (!string.IsNullOrEmpty(output)) compact.Save(Path.Combine(output, "build-result-compact.png"), PngBitmapEncoderOptions.Default);
 
+                    workspace.ShowReleaseCommand.Execute(null);
+                    Assert.True(workspace.Release.CanPrepare);
+                    await workspace.Release.PrepareAsync();
+                    Assert.True(workspace.Release.HasHandoff, workspace.Release.Status);
+                    Assert.Contains(workspace.Release.Artifacts, artifact => artifact.ArtifactPath == package);
+                    Assert.Equal(root, workspace.Release.Handoff!.Session.Items.Single().RootPath);
+                    Assert.False(workspace.IsFilesPage);
+                    foreach (var small in new[] { false, true })
+                    {
+                        window.Width = small ? 1050 : 1600; window.Height = small ? 720 : 1000;
+                        window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var releaseFrame = window.CaptureRenderedFrame(); Assert.NotNull(releaseFrame);
+                        if (!string.IsNullOrEmpty(output)) releaseFrame.Save(Path.Combine(output, small ? "release-prepare-compact.png" : "release-prepare.png"), PngBitmapEncoderOptions.Default);
+                    }
+                    File.Delete(package);
+                    await workspace.Release.PrepareAsync();
+                    Assert.False(workspace.Release.HasHandoff);
+                    Assert.Equal("Preparation failed", workspace.Release.Stage);
+                    workspace.ShowBuildCommand.Execute(null);
+
                     // A real compiler failure must return actionable diagnostics and re-enable the build action.
                     await File.WriteAllTextAsync(Path.Combine(root, "Fixture.cs"), "public class {");
                     await workspace.Build.BuildAsync();
                     Assert.NotNull(workspace.Build.BuildResult);
                     Assert.False(workspace.Build.BuildResult.Succeeded);
+                    Assert.False(workspace.Release.HasHandoff);
+                    Assert.False(workspace.Release.CanPrepare);
                     Assert.Contains(workspace.Build.BuildResult.AdapterResults, x => !string.IsNullOrWhiteSpace(x.ErrorTail));
                     Assert.True(workspace.Build.CanBuild);
                     window.UpdateLayout();

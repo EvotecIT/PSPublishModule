@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing"
+             x:Class="PowerForgeStudio.Avalonia.Views.ReleaseView" x:DataType="vm:ReleaseViewModel">
+  <Grid Margin="20" RowDefinitions="Auto,Auto,*" RowSpacing="16">
+    <StackPanel Spacing="8">
+      <TextBlock Text="Release workspace" FontSize="22" FontWeight="SemiBold" />
+      <TextBlock Text="Captured build working copy" Classes="muted" FontSize="12" />
+      <SelectableTextBlock Text="{Binding BuildRoot}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+    </StackPanel>
+    <WrapPanel Grid.Row="1">
+      <Button Content="Prepare built artifacts" Command="{Binding PrepareCommand}" IsEnabled="{Binding CanPrepare}" Background="#0865FF" Foreground="White" Margin="0,0,16,5" />
+      <TextBlock Text="{Binding Stage}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,0,5" />
+    </WrapPanel>
+    <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="10">
+      <TextBlock Text="Release artifacts" FontSize="16" FontWeight="SemiBold" />
+      <ListBox Grid.Row="1" ItemsSource="{Binding Artifacts}" Background="#F7F9FC">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="domain:ReleaseSigningArtifact">
+            <StackPanel Spacing="6" Margin="8">
+              <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding ArtifactPath}" TextWrapping="Wrap" FontSize="12" />
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <TextBlock Text="{Binding AdapterKind}" Foreground="#0865FF" FontSize="12" />
+                <TextBlock Text="{Binding ArtifactKind}" Classes="muted" FontSize="12" />
+              </StackPanel>
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </Grid>
+</UserControl>

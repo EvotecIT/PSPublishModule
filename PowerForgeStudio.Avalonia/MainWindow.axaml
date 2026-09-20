@@ -89,13 +89,14 @@
               <Button Content="Changes" Command="{Binding ShowChangesCommand}" Classes="pageTab" Classes.active="{Binding IsChangesPage}" />
               <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Classes="pageTab" Classes.active="{Binding IsBuildPage}" />
               <Button Content="GitHub" Command="{Binding ShowGitHubCommand}" Classes="pageTab" Classes.active="{Binding IsGitHubPage}" />
-              <TextBlock Text="Releases" Classes="muted" />
+              <Button Content="Releases" Command="{Binding ShowReleaseCommand}" Classes="pageTab" Classes.active="{Binding IsReleasePage}" />
               <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" Classes="pageTab" />
             </StackPanel>
           </StackPanel>
         </Border>
         <ContentControl Grid.Row="2" IsVisible="{Binding IsChangesPage}"><views:GitChangesView DataContext="{Binding Changes}" /></ContentControl>
         <ContentControl Grid.Row="2" IsVisible="{Binding IsGitHubPage}"><views:GitHubView DataContext="{Binding GitHub}" /></ContentControl>
+        <ContentControl Grid.Row="2" IsVisible="{Binding IsReleasePage}"><views:ReleaseView DataContext="{Binding Release}" /></ContentControl>
         <views:FilesView Grid.Row="2" IsVisible="{Binding IsFilesPage}" />
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
         <Border Grid.Row="3" Background="#0D2132">

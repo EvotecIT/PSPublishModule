@@ -19,6 +19,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [ ] Connect cancellation, live progress, artifacts and release receipts.
 - [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
+- [x] Prepare release artifacts from a captured successful build using the existing queue checkpoint owner.
 - [x] Connect Git status, diffs, staging, unstaging and local commits through the shared Git owner.
 - [ ] Complete issues, PR review actions and provider status through existing owners.
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
@@ -228,3 +229,14 @@ Evidence:
 Review submission is not yet implemented. The existing Open on GitHub action remains available from the discussion view. Authentication and HTTP response bounds remain owned by the shared GitHub service.
 
 Task-owned cleanup removed the disposable file-review harness and completed shared-test binaries (about 146 MiB) after containment, link, tracked-file and process checks. Active Avalonia outputs and small rendered evidence remain local.
+
+
+### Release preparation
+
+The Releases tab accepts the completed build's captured working copy and artifacts. It prepares the existing ReleaseQueueRunner signing checkpoint through ReleaseBuildHandoffService, then lists the canonical signing manifest. It does not infer a release from the project currently selected in the explorer. A newer build invalidates an existing handoff and late preparation results; cancelled builds cannot be prepared. Failed adapters, missing artifacts, relative artifact paths and empty manifests produce explicit errors.
+
+Preparation checks artifact existence, not content integrity or signing readiness. It performs no signing, feed publication or remote mutation. The handoff is currently in memory; durable release history and resume remain required. Signing, target preview, publication, verification and their receipts are the next release-workspace steps, using the existing shared executors rather than new UI-owned release rules.
+
+Evidence: the real JSON-only build test produced a NuGet package containing the expected assembly, prepared its canonical signing checkpoint, rendered the package and output directory at 1600 × 1000 and 1050 × 720, then removed the package and verified that preparation failed without retaining the prior handoff. A subsequent compiler failure disabled preparation. A controlled late-result test verified invalidation by a newer build and cancellation exclusion. The focused shared handoff test checks canonical checkpoint contents, missing/relative artifacts and failed/empty builds. Actual rendered evidence is in Artifacts/StudioValidation/release-prepare.png and release-prepare-compact.png; native Windows interaction remains unverified.
+
+This bounded read-only adapter used focused service, actual-build and rendered validation. No new independent review was requested for preparation alone; the forthcoming stage-execution and durable-state boundary requires its own risk-based review before publication. No public package, user certificate or user release configuration was modified.
