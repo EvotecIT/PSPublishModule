@@ -462,16 +462,6 @@ public sealed class MissingFunctionsAnalyzer
                 return CreateResolution(qualifiedCommand, isAlias: qualifiedCommand is AliasInfo, isPrivate: true);
             }
 
-            if (qualifier is null && runtimeModuleSources.Count > 0)
-            {
-                foreach (var source in runtimeModuleSourceOrder)
-                {
-                    var runtimeCommand = GetCommandFromModuleScopeCached(source, lookupName, includePrivate: false);
-                    if (runtimeCommand is not null)
-                        return CreateRuntimeResolution(runtimeCommand);
-                }
-            }
-
             if (qualifier is null && preferredApprovedModuleSource is not null)
             {
                 var preferredCommand = GetCommandFromModuleScopeCached(
@@ -480,6 +470,16 @@ public sealed class MissingFunctionsAnalyzer
                     includePrivate: true);
                 if (preferredCommand is not null)
                     return CreateResolution(preferredCommand, isAlias: preferredCommand is AliasInfo, isPrivate: true);
+            }
+
+            if (qualifier is null && runtimeModuleSources.Count > 0)
+            {
+                foreach (var source in runtimeModuleSourceOrder)
+                {
+                    var runtimeCommand = GetCommandFromModuleScopeCached(source, lookupName, includePrivate: false);
+                    if (runtimeCommand is not null)
+                        return CreateRuntimeResolution(runtimeCommand);
+                }
             }
 
             if (qualifier is null && approvedModuleSources.Count > 0)
