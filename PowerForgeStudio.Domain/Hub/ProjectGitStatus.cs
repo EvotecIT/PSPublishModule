@@ -15,6 +15,7 @@ public sealed record ProjectGitStatus(
     IReadOnlyList<string> Branches,
     IReadOnlyList<GitWorktreeEntry> Worktrees)
 {
+    public bool HasConflicts => StagedChanges.Any(x => x.Kind == GitChangeKind.Unmerged) || UnstagedChanges.Any(x => x.Kind == GitChangeKind.Unmerged);
     public bool IsDirty => StagedCount > 0 || UnstagedCount > 0 || UntrackedCount > 0;
 
     public string BranchDisplay => string.IsNullOrWhiteSpace(BranchName) ? "-" : BranchName;

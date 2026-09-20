@@ -29,13 +29,13 @@ public sealed class ProjectActionsViewModel : ViewModelBase
         Branches = new ObservableCollection<string>(gitStatus.Branches);
         Worktrees = new ObservableCollection<GitWorktreeEntry>(gitStatus.Worktrees);
 
-        StageFileCommand = new AsyncDelegateCommand(StageSelectedFileAsync);
-        UnstageFileCommand = new AsyncDelegateCommand(UnstageSelectedFileAsync);
-        StageAllCommand = new AsyncDelegateCommand(StageAllAsync);
-        CommitCommand = new AsyncDelegateCommand(CommitAsync, () => !_isCommitting && !string.IsNullOrWhiteSpace(_commitMessage));
-        CreateBranchCommand = new AsyncDelegateCommand(CreateBranchAsync, () => !string.IsNullOrWhiteSpace(_newBranchName));
-        SwitchBranchCommand = new AsyncDelegateCommand(SwitchBranchAsync);
-        RefreshStatusCommand = new AsyncDelegateCommand(RefreshStatusAsync);
+        StageFileCommand = new AsyncDelegateCommand(() => RunGitActionAsync(StageSelectedFileAsync));
+        UnstageFileCommand = new AsyncDelegateCommand(() => RunGitActionAsync(UnstageSelectedFileAsync));
+        StageAllCommand = new AsyncDelegateCommand(() => RunGitActionAsync(StageAllAsync));
+        CommitCommand = new AsyncDelegateCommand(() => RunGitActionAsync(CommitAsync), () => !_isCommitting && !string.IsNullOrWhiteSpace(_commitMessage));
+        CreateBranchCommand = new AsyncDelegateCommand(() => RunGitActionAsync(CreateBranchAsync), () => !string.IsNullOrWhiteSpace(_newBranchName));
+        SwitchBranchCommand = new AsyncDelegateCommand(() => RunGitActionAsync(SwitchBranchAsync));
+        RefreshStatusCommand = new AsyncDelegateCommand(() => RunGitActionAsync(RefreshStatusAsync));
     }
 
     public string BranchName => _gitStatus.BranchDisplay;
@@ -61,7 +61,7 @@ public sealed class ProjectActionsViewModel : ViewModelBase
         {
             if (SetProperty(ref _selectedFile, value) && value is not null)
             {
-                _ = LoadDiffAsync(value);
+                _ = RunGitActionAsync(() => LoadDiffAsync(value));
             }
         }
     }
@@ -128,10 +128,24 @@ public sealed class ProjectActionsViewModel : ViewModelBase
     public AsyncDelegateCommand SwitchBranchCommand { get; }
     public AsyncDelegateCommand RefreshStatusCommand { get; }
 
+    private string _operationError = string.Empty;
+    public string OperationError
+    {
+        get => _operationError;
+        private set => SetProperty(ref _operationError, value);
+    }
+
+    private async Task RunGitActionAsync(Func<Task> action)
+    {
+        OperationError = string.Empty;
+        try { await action().ConfigureAwait(true); }
+        catch (Exception ex) { OperationError = PowerForgeStudio.Orchestrator.Host.StudioOutputSanitizer.Sanitize(ex.Message); }
+    }
+
     private async Task LoadDiffAsync(GitFileChange file)
     {
         var isStagedFile = StagedChanges.Contains(file);
-        var diff = await _gitService.GetDiffAsync(_entry.RootPath, file.Path, staged: isStagedFile).ConfigureAwait(true);
+        var diff = await _gitService.GetDiffAsync(_entry.RootPath, file.Path, staged: isStagedFile, originalPath: file.OriginalPath).ConfigureAwait(true);
         DiffContent = string.IsNullOrWhiteSpace(diff) ? "(No diff available)" : diff;
     }
 
@@ -153,7 +167,7 @@ public sealed class ProjectActionsViewModel : ViewModelBase
             return;
         }
 
-        await _gitService.UnstageFileAsync(_entry.RootPath, _selectedFile.Path).ConfigureAwait(true);
+        await _gitService.UnstageFileAsync(_entry.RootPath, _selectedFile.Path, originalPath: _selectedFile.OriginalPath).ConfigureAwait(true);
         await RefreshStatusAsync().ConfigureAwait(true);
     }
 

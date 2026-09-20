@@ -24,6 +24,15 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public WorkspaceViewModel(string root)
     {
         WorkspaceRoot = Path.GetFullPath(root);
+        Changes.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(GitChangesViewModel.LastOperation)) OnPropertyChanged(nameof(DisplayedOutput));
+            if (args.PropertyName == nameof(GitChangesViewModel.Snapshot) && Changes.Snapshot is { } snapshot)
+            {
+                Branch = snapshot.BranchDisplay;
+                GitSummary = !snapshot.IsGitRepository ? "Not a Git working copy" : snapshot.HasConflicts ? "Merge conflicts need resolution" : snapshot.StatusSummary;
+            }
+        };
         Build.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName is nameof(BuildViewModel.BuildOutput) or nameof(BuildViewModel.HasBuild))
@@ -31,17 +40,21 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         };
     }
     public BuildViewModel Build { get; } = new();
+    public GitChangesViewModel Changes { get; } = new();
+    [ObservableProperty] private bool _isChangesPage;
+    partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(DisplayedOutput)); }
     [ObservableProperty] private bool _isBuildPage;
-    public bool IsFilesPage => !IsBuildPage;
+    public bool IsFilesPage => !IsBuildPage && !IsChangesPage;
     partial void OnIsBuildPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
         OnPropertyChanged(nameof(DisplayedOutput));
     }
-    public string DisplayedOutput => IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;
+    public string DisplayedOutput => IsChangesPage ? Changes.LastOperation : IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;
     partial void OnOutputChanged(string value) => OnPropertyChanged(nameof(DisplayedOutput));
-    [RelayCommand] private void ShowFiles() => IsBuildPage = false;
-    [RelayCommand] private void ShowBuild() => IsBuildPage = true;
+    [RelayCommand] private void ShowFiles() { IsBuildPage = false; IsChangesPage = false; }
+    [RelayCommand] private void ShowBuild() { IsChangesPage = false; IsBuildPage = true; }
+    [RelayCommand] private void ShowChanges() { IsBuildPage = false; IsChangesPage = true; }
     public ObservableCollection<ExplorerNode> Projects { get; } = [];
     public ObservableCollection<FileItemViewModel> Files { get; } = [];
     [ObservableProperty] private string _workspaceRoot;
@@ -68,6 +81,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     partial void OnActiveWorkingCopyRootChanged(string value)
     {
         Build.SetWorkingCopy(value);
+        Changes.SetWorkingCopy(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
         OnPropertyChanged(nameof(CanManageFiles));
     }
@@ -236,5 +250,5 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var text = Output + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
         Output = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); Changes.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 }

@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             x:Class="PowerForgeStudio.Avalonia.Views.GitChangesView" x:DataType="vm:GitChangesViewModel">
+  <Grid Margin="18">
+  <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10" MinHeight="560" Height="{Binding #PageScroll.Bounds.Height}">
+    <StackPanel Spacing="6">
+      <TextBlock Text="Changes" FontSize="22" FontWeight="SemiBold" />
+      <SelectableTextBlock Text="{Binding Root}" TextWrapping="Wrap" FontSize="12" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+    </StackPanel>
+    <WrapPanel Grid.Row="1">
+      <Button Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
+      <Button Content="Stage selected" Command="{Binding StageCommand}" IsEnabled="{Binding CanStage}" Margin="0,0,8,0" />
+      <Button Content="Unstage selected" Command="{Binding UnstageCommand}" IsEnabled="{Binding CanUnstage}" />
+    </WrapPanel>
+    <Grid Grid.Row="2" ColumnDefinitions="2*,5,3*">
+      <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding Selected, Mode=TwoWay}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:GitChangeRow">
+            <Grid ColumnDefinitions="24,*" RowDefinitions="Auto,Auto" Margin="2,5">
+              <TextBlock Text="{Binding Kind}" Foreground="#0865FF" FontWeight="SemiBold" />
+              <TextBlock Grid.Column="1" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding State}" Classes="muted" FontSize="12" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <Border Grid.Column="2" Background="#F7F9FC" Padding="10">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+          <SelectableTextBlock Text="{Binding Diff}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
+        </ScrollViewer>
+      </Border>
+    </Grid>
+    <StackPanel Grid.Row="3" Spacing="8">
+      <TextBlock Text="Commit all currently staged changes" FontWeight="SemiBold" />
+      <TextBox Text="{Binding CommitMessage}" PlaceholderText="Commit message" AcceptsReturn="True" MinHeight="58" MaxHeight="100" />
+      <Button Content="Commit staged changes" Command="{Binding CommitCommand}" IsEnabled="{Binding CanCommit}" Background="#0865FF" Foreground="White" HorizontalAlignment="Left" />
+    </StackPanel>
+  </Grid>
+  </ScrollViewer>
+  </Grid>
+</UserControl>

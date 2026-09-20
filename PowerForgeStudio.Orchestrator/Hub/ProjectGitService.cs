@@ -3,7 +3,7 @@ using PowerForgeStudio.Domain.Hub;
 
 namespace PowerForgeStudio.Orchestrator.Hub;
 
-public sealed class ProjectGitService
+public sealed partial class ProjectGitService
 {
     private readonly GitClient _gitClient;
 
@@ -20,71 +20,29 @@ public sealed class ProjectGitService
     public async Task<ProjectGitStatus> GetStatusAsync(string repositoryRoot, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
-
-        if (!Directory.Exists(repositoryRoot))
-        {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!Directory.Exists(repositoryRoot) || !Catalog.WorktreeDetector.IsGitRepository(repositoryRoot))
             return ProjectGitStatus.NotARepository;
-        }
-
-        try
-        {
-            // Use GitClient's existing porcelain status parsing for core data
-            var snapshot = await _gitClient.GetStatusAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
-            if (!snapshot.IsGitRepository)
-            {
-                return ProjectGitStatus.NotARepository;
-            }
-
-            // Get detailed file changes via git status --short (extends GitClient's data)
-            var shortResult = await _gitClient.RunRawAsync(
-                repositoryRoot, ["status", "--porcelain=2", "--branch"],
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-
-            List<GitFileChange> staged;
-            List<GitFileChange> unstaged;
-            List<GitFileChange> untracked;
-
-            if (shortResult.Succeeded)
-            {
-                (_, _, _, _, staged, unstaged, untracked) = ParseFileChanges(shortResult.StdOut);
-            }
-            else
-            {
-                staged = []; unstaged = []; untracked = [];
-            }
-
-            var branches = await GetBranchListAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
-            var worktrees = await GetWorktreeListAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
-
-            return new ProjectGitStatus(
-                IsGitRepository: true,
-                BranchName: snapshot.BranchName,
-                UpstreamBranch: snapshot.UpstreamBranch,
-                AheadCount: snapshot.AheadCount,
-                BehindCount: snapshot.BehindCount,
-                StagedCount: staged.Count,
-                UnstagedCount: unstaged.Count,
-                UntrackedCount: untracked.Count,
-                StagedChanges: staged,
-                UnstagedChanges: unstaged,
-                UntrackedFiles: untracked,
-                Branches: branches,
-                Worktrees: worktrees);
-        }
-        catch
-        {
-            return ProjectGitStatus.NotARepository;
-        }
+        var result = await _gitClient.RunRawAsync(repositoryRoot,
+            ["status", "--porcelain=2", "--branch", "--untracked-files=all", "-z"], cancellationToken: cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(result);
+        var (branch, upstream, ahead, behind, staged, unstaged, untracked) = ParseFileChanges(result.StdOut);
+        var branches = await GetBranchListAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
+        var worktrees = await GetWorktreeListAsync(repositoryRoot, cancellationToken).ConfigureAwait(false);
+        return new ProjectGitStatus(true, branch, upstream, ahead, behind, staged.Count, unstaged.Count,
+            untracked.Count, staged, unstaged, untracked, branches, worktrees);
     }
 
-    public async Task<string> GetDiffAsync(string repositoryRoot, string? filePath = null, bool staged = false, CancellationToken cancellationToken = default)
+    public async Task<string> GetDiffAsync(string repositoryRoot, string? filePath = null, bool staged = false, CancellationToken cancellationToken = default, string? originalPath = null)
     {
-        var args = new List<string> { "diff" };
+        var args = new List<string> { "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-color" };
         if (staged) args.Add("--cached");
-        if (!string.IsNullOrWhiteSpace(filePath)) { args.Add("--"); args.Add(filePath); }
+        if (!string.IsNullOrWhiteSpace(filePath)) { args.Add("--"); args.Add(ValidateFilePath(repositoryRoot, filePath)); }
+        if (staged && originalPath is not null && !string.IsNullOrWhiteSpace(filePath)) args.Add(ValidateFilePath(repositoryRoot, originalPath));
 
         var result = await _gitClient.RunRawAsync(repositoryRoot, args, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return result.Succeeded ? result.StdOut : string.Empty;
+        EnsureSuccess(result);
+        return result.StdOut.Length > 256 * 1024 ? result.StdOut[..(256 * 1024)] + "\n[Diff truncated at 256 KiB]" : result.StdOut;
     }
 
     public async Task<IReadOnlyList<GitLogEntry>> GetLogAsync(string repositoryRoot, int count = 15, CancellationToken cancellationToken = default)
@@ -118,17 +76,73 @@ public sealed class ProjectGitService
         return entries;
     }
 
-    public async Task<bool> StageFileAsync(string repositoryRoot, string filePath, CancellationToken cancellationToken = default)
-        => (await _gitClient.RunRawAsync(repositoryRoot, ["add", "--", filePath], cancellationToken: cancellationToken).ConfigureAwait(false)).Succeeded;
+    public Task<bool> StageFileAsync(string repositoryRoot, string filePath, CancellationToken cancellationToken = default)
+        => RunMutationAsync(repositoryRoot, ["--literal-pathspecs", "add", "--", ValidateFilePath(repositoryRoot, filePath)], cancellationToken);
 
-    public async Task<bool> UnstageFileAsync(string repositoryRoot, string filePath, CancellationToken cancellationToken = default)
-        => (await _gitClient.RunRawAsync(repositoryRoot, ["restore", "--staged", "--", filePath], cancellationToken: cancellationToken).ConfigureAwait(false)).Succeeded;
+    public async Task<bool> UnstageFileAsync(string repositoryRoot, string filePath, CancellationToken cancellationToken = default, string? originalPath = null)
+    {
+        var path = ValidateFilePath(repositoryRoot, filePath);
+        var head = await _gitClient.RunRawAsync(repositoryRoot, ["rev-parse", "--verify", "--quiet", "HEAD"], cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!head.Succeeded)
+        {
+            // Only a genuinely unborn branch may use index removal. A failed HEAD
+            // probe (including a missing object or process failure) is not permission.
+            EnsureExpectedAbsence(head);
+            var symbolic = await _gitClient.RunRawAsync(repositoryRoot, ["symbolic-ref", "HEAD"], cancellationToken: cancellationToken).ConfigureAwait(false);
+            EnsureSuccess(symbolic);
+            var reference = symbolic.StdOut.Trim();
+            if (!reference.StartsWith("refs/heads/", StringComparison.Ordinal))
+                throw new InvalidOperationException("Cannot unstage: HEAD does not identify a local branch.");
+            var exists = await _gitClient.RunRawAsync(repositoryRoot, ["show-ref", "--verify", "--quiet", reference], cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (exists.Succeeded)
+                throw new InvalidOperationException("Cannot unstage: the branch exists but HEAD could not be resolved. Inspect repository integrity.");
+            EnsureExpectedAbsence(exists);
+        }
+        var paths = originalPath is null ? new[] { path } : new[] { path, ValidateFilePath(repositoryRoot, originalPath) };
+        return await RunMutationAsync(repositoryRoot, head.Succeeded
+            ? ["--literal-pathspecs", "restore", "--staged", "--", .. paths]
+            : ["--literal-pathspecs", "rm", "--cached", "-f", "--", .. paths], cancellationToken).ConfigureAwait(false);
+    }
 
-    public async Task<bool> StageAllAsync(string repositoryRoot, CancellationToken cancellationToken = default)
-        => (await _gitClient.RunRawAsync(repositoryRoot, ["add", "-A"], cancellationToken: cancellationToken).ConfigureAwait(false)).Succeeded;
+    public Task<bool> StageAllAsync(string repositoryRoot, CancellationToken cancellationToken = default)
+        => RunMutationAsync(repositoryRoot, ["add", "-A"], cancellationToken);
 
-    public async Task<bool> CommitAsync(string repositoryRoot, string message, CancellationToken cancellationToken = default)
-        => (await _gitClient.RunRawAsync(repositoryRoot, ["commit", "-m", message], cancellationToken: cancellationToken).ConfigureAwait(false)).Succeeded;
+    public Task<bool> CommitAsync(string repositoryRoot, string message, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        return RunMutationAsync(repositoryRoot, ["commit", "-m", message], cancellationToken);
+    }
+
+    private async Task<bool> RunMutationAsync(string root, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    {
+        var result = await _gitClient.RunRawAsync(root, arguments, timeout: TimeSpan.FromMinutes(2), cancellationToken: cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(result);
+        return true;
+    }
+
+    private static void EnsureSuccess(ProcessRunResult result)
+    {
+        if (!result.Succeeded)
+            throw new InvalidOperationException(result.TimedOut ? "Git timed out. Refresh repository state before retrying."
+                : result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded ? "Git output exceeded the capture limit."
+                : "Git failed: " + Host.StudioOutputSanitizer.Sanitize(result.StdErr));
+    }
+
+    private static void EnsureExpectedAbsence(ProcessRunResult result)
+    {
+        if (result.ExitCode != 1 || result.StartFailed || result.TimedOut || result.StandardOutputLimitExceeded
+            || result.StandardErrorLimitExceeded || !string.IsNullOrWhiteSpace(result.StdErr))
+            EnsureSuccess(result);
+    }
+
+    private static string ValidateFilePath(string root, string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var relative = Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(path, Path.GetFullPath(root)));
+        if (relative == "." || relative == ".." || Path.IsPathRooted(relative) || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new ArgumentException("Select a file inside this working copy.", nameof(path));
+        return relative;
+    }
 
     public async Task<bool> CreateBranchAsync(string repositoryRoot, string branchName, CancellationToken cancellationToken = default)
         => (await _gitClient.CreateBranchAsync(repositoryRoot, branchName, cancellationToken).ConfigureAwait(false)).Succeeded;
@@ -159,67 +173,6 @@ public sealed class ProjectGitService
         var result = await _gitClient.RunRawAsync(repositoryRoot, ["worktree", "list", "--porcelain"], cancellationToken: cancellationToken).ConfigureAwait(false);
         if (!result.Succeeded) return [];
         return ParseWorktreeList(result.StdOut);
-    }
-
-    // File-change parsing extends GitClient's aggregate counts with per-file detail
-    private static (string? BranchName, string? Upstream, int Ahead, int Behind,
-        List<GitFileChange> Staged, List<GitFileChange> Unstaged, List<GitFileChange> Untracked)
-        ParseFileChanges(string output)
-    {
-        string? branchName = null;
-        string? upstream = null;
-        var ahead = 0;
-        var behind = 0;
-        var staged = new List<GitFileChange>();
-        var unstaged = new List<GitFileChange>();
-        var untracked = new List<GitFileChange>();
-
-        foreach (var line in output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (line.StartsWith("# branch.", StringComparison.Ordinal)) continue; // Skip header lines (GitClient handles these)
-            if (line.StartsWith("? ", StringComparison.Ordinal))
-            {
-                untracked.Add(new GitFileChange(line[2..], GitChangeKind.Untracked));
-                continue;
-            }
-
-            if (line.StartsWith("1 ", StringComparison.Ordinal) && line.Length > 4)
-            {
-                var xy = line.Substring(2, 2);
-                var pathStart = FindNthSpace(line, 8);
-                var path = pathStart >= 0 ? line[(pathStart + 1)..] : line;
-                if (xy[0] != '.') staged.Add(new GitFileChange(path, ParseChangeChar(xy[0])));
-                if (xy[1] != '.') unstaged.Add(new GitFileChange(path, ParseChangeChar(xy[1])));
-                continue;
-            }
-
-            if (line.StartsWith("2 ", StringComparison.Ordinal) && line.Length > 4)
-            {
-                var xy = line.Substring(2, 2);
-                var tabIndex = line.IndexOf('\t');
-                var path = tabIndex >= 0 ? line[(tabIndex + 1)..] : line;
-                if (xy[0] != '.') staged.Add(new GitFileChange(path, GitChangeKind.Renamed));
-                if (xy[1] != '.') unstaged.Add(new GitFileChange(path, GitChangeKind.Renamed));
-            }
-        }
-
-        return (branchName, upstream, ahead, behind, staged, unstaged, untracked);
-    }
-
-    private static GitChangeKind ParseChangeChar(char c) => c switch
-    {
-        'A' => GitChangeKind.Added, 'M' => GitChangeKind.Modified, 'D' => GitChangeKind.Deleted,
-        'R' => GitChangeKind.Renamed, 'C' => GitChangeKind.Copied, _ => GitChangeKind.Modified
-    };
-
-    private static int FindNthSpace(string text, int n)
-    {
-        var count = 0;
-        for (var i = 0; i < text.Length; i++)
-        {
-            if (text[i] == ' ' && ++count == n) return i;
-        }
-        return -1;
     }
 
     private static IReadOnlyList<GitWorktreeEntry> ParseWorktreeList(string output)

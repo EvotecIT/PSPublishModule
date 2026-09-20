@@ -65,18 +65,19 @@
             </Grid>
             <StackPanel Orientation="Horizontal" Spacing="25">
               <Button Content="Files" Command="{Binding ShowFilesCommand}" Padding="0" BorderThickness="0" Background="Transparent" />
-              <TextBlock Text="Changes" Classes="muted" />
+              <Button Content="Changes" Command="{Binding ShowChangesCommand}" Padding="0" BorderThickness="0" Background="Transparent" />
               <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Padding="0" BorderThickness="0" Background="Transparent" />
               <TextBlock Text="Releases" Classes="muted" />
             </StackPanel>
           </StackPanel>
         </Border>
+        <ContentControl Grid.Row="2" IsVisible="{Binding IsChangesPage}"><views:GitChangesView DataContext="{Binding Changes}" /></ContentControl>
         <views:FilesView Grid.Row="2" IsVisible="{Binding IsFilesPage}" />
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
         <Border Grid.Row="3" Background="#0D2132">
           <Grid RowDefinitions="38,*">
             <TextBlock Text="Output" Foreground="#E6F0FF" Margin="17,10" />
-            <ScrollViewer Grid.Row="1" Margin="17,5,17,12">
+            <ScrollViewer Grid.Row="1" Margin="17,5,17,12" HorizontalScrollBarVisibility="Auto">
               <SelectableTextBlock Text="{Binding DisplayedOutput}" Foreground="#D7E7F8" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
             </ScrollViewer>
           </Grid>
@@ -104,4 +105,3 @@
     </Border>
   </Grid>
 </Window>
-

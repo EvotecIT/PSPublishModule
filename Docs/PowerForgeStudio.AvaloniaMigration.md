@@ -16,7 +16,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [ ] Connect cancellation, live progress, artifacts and release receipts.
 - [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
-- [ ] Connect Git changes, issues, PRs and provider status through existing owners.
+- [x] Connect Git status, diffs, staging, unstaging and local commits through the shared Git owner.
+- [ ] Connect issues, PRs and provider status through existing owners.
 - [ ] Inventory and expose schedules, storage and optional licensing/IntelligenceX integration.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
@@ -46,7 +47,7 @@ The reviewed design uses a navy rail and title bar, white workspace, a persisten
 - The old generic ProjectBuildService resolves a detected script without explicit mode arguments. Do not wire it to a new one-click Build command without a reviewable execution plan.
 - The same service has a separate streaming process implementation; inspect cancellation, stdout/stderr lifetime and buffer bounds before reusing that path.
 - Workspace profile persistence still lives in WPF view-model services. Move reusable persistence into the orchestrator when the new host needs it.
-- Shared Git status currently maps exceptions to NotARepository. Preserve error meaning before presenting failures as a clean or empty repository.
+- Shared Git status now propagates failures and preserves merge conflicts. The GitHub service still returns empty/partial lists for some access failures; distinguish those states before connecting its inbox.
 
 ## Validation record
 
@@ -109,3 +110,23 @@ Evidence:
 An initially broad release-build test filter included Apple source-trust tests in unchanged code. Several expected exception types/messages differed from the current wrapper behavior, so that run was stopped and the changed execution contracts were tested separately. This milestone does not claim a green full Studio suite or verified Apple execution. Its 78 disposable Git fixture residues were removed after containment/attribute checks. The completed core test binary output (about 565 MiB) was also removed; the active app's build output remains available for continued development. No user project or public feed was modified.
 
 Remaining execution work includes complete module planning, inspectable plan contents, arbitrary executable/PowerShell task profiles, live raw process output where supported, durable activity/history and artifact provenance, release signing/publishing/verification controls, and native interaction proof. The earlier checklist remains the full replacement scope.
+
+### Git Changes milestone
+
+The Changes page separates staged, working-copy and untracked entries, with a text diff or bounded untracked preview. Stage and Unstage affect the selected literal path; Commit commits the current index. The shared status reader uses NUL-delimited porcelain records to preserve Unicode and unusual filenames, rename sources and merge conflicts. Failed Git status is reported as an error. Conflicts disable the Avalonia commit action, and Git rejects unresolved commits at execution.
+
+Unstaging before the first commit preserves working files and requires evidence of an unborn local branch. Failed, timed-out or unresolved HEAD probes do not authorize index removal. Staged rename diffs include both paths; unstaging a rename resets both index entries. Working-copy diffs compare the current indexed path. The legacy WPF host catches and displays the newly explicit shared-service failures while it remains available.
+
+Operations capture their starting working copy. Commit messages are retained separately per working copy for this application session. A commit completing after navigation clears only the matching original draft. Changing projects does not redirect a running operation. The page scrolls at short window heights so the file list, diff and commit controls remain usable.
+
+Evidence:
+
+- Five focused shared Git contract tests passed, including a real merge conflict and failed HEAD/status probes.
+- Seven Avalonia tests passed before the final rename correction; the focused Git workflows were rerun after correction, including an additional controlled navigation test that delays a real commit across a project switch.
+- The WPF host builds without warnings. Its native error presentation has not been visually verified.
+- Actual Avalonia Skia rendering was inspected at 1600 × 1000 and 1050 × 720, including the scrolled compact commit form. Evidence: Artifacts/StudioValidation/git-changes*.png. This does not establish native OS/input behavior.
+- Independent read-only review /root/review_git_changes covered the staged Git milestone against 6ae099822, fingerprint a2c1981079c0d0aa33c857cc769c3096a251e277. It found one P2: destination-only staged rename diffs hid the move. Both hosts now pass the source path and the real repository test checks the resulting rename diff. Boundary: candidate-reviewed; focused primary validation covers remediation, with no repeated full review.
+
+Remaining Git work includes refresh after external edits, branch/history and remote workflows, partial staging, and native interaction proof. Diffs displayed in the UI are capped at 256 KiB after capture; the shared Git runner's capture is not yet bounded by that display limit. The shared branch/worktree list helpers also still return empty lists on secondary probe failure. These limits are separate from the now-explicit primary status failures.
+
+No user repository was staged, committed, or published by the GUI validation. Disposable repositories were removed by their tests. Temporary WPF validation binaries were removed; active Avalonia outputs and small screenshots are retained.

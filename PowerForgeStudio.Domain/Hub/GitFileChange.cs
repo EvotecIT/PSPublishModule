@@ -3,7 +3,8 @@ namespace PowerForgeStudio.Domain.Hub;
 public sealed record GitFileChange(
     string Path,
     GitChangeKind Kind,
-    string? DiffContent = null)
+    string? DiffContent = null,
+    string? OriginalPath = null)
 {
     public string KindDisplay => Kind switch
     {
@@ -13,6 +14,7 @@ public sealed record GitFileChange(
         GitChangeKind.Renamed => "R",
         GitChangeKind.Copied => "C",
         GitChangeKind.Untracked => "?",
+        GitChangeKind.Unmerged => "U",
         _ => "?"
     };
 }

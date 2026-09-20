@@ -7,5 +7,6 @@ public enum GitChangeKind
     Deleted = 2,
     Renamed = 3,
     Copied = 4,
-    Untracked = 5
+    Untracked = 5,
+    Unmerged = 6
 }

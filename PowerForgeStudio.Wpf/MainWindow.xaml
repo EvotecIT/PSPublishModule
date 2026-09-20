@@ -816,6 +816,7 @@
                                                                Text="{Binding BranchName}" />
 
                                                     <!-- Commit Box -->
+                                                    <TextBlock Text="{Binding OperationError}" TextWrapping="Wrap" Foreground="{DynamicResource AppTextStrongBrush}" Margin="0,8,0,0" />
                                                     <TextBox Margin="0,14,0,0" MinHeight="50" AcceptsReturn="True"
                                                              TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
                                                              FontSize="12"
