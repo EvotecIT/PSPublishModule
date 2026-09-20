@@ -151,129 +151,102 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         var repository = _catalogScanner.InspectRepository(queueItem.RootPath);
         var receipts = new List<ReleasePublishReceipt>();
-        var unifiedValidation = PrepareUnifiedReleaseValidation(
-            repository,
-            signingResult,
-            cancellationToken);
-        if (unifiedValidation.Failure is not null)
+        try
         {
-            receipts.Add(unifiedValidation.Failure);
-            return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
-        }
-        var validatedUnifiedRelease = unifiedValidation.Result;
-        var unifiedOwnsGitHub = UnifiedReleaseOwnsGitHub(repository.UnifiedReleaseConfigPath);
-        var unifiedPreflightFailure = PrepareUnifiedReleaseVirusTotalPreflight(
-            repository,
-            signingResult,
-            cancellationToken);
-        if (unifiedPreflightFailure is not null)
-        {
-            receipts.Add(unifiedPreflightFailure);
-            return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
-        }
-
-        if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
-        {
-            var integrityFailure = ValidateUnifiedReleaseIntegrity(
-                repository,
-                validatedUnifiedRelease,
-                cancellationToken,
-                "Project package publication");
-            if (integrityFailure is not null)
-            {
-                receipts.Add(integrityFailure);
-                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
-            }
-            var projectReceipts = await ExecuteProjectPublishAsync(
+            var unifiedValidation = PrepareUnifiedReleaseValidation(
                 repository,
                 signingResult,
-                cancellationToken,
-                unifiedOwnsGitHub);
-            receipts.AddRange(projectReceipts);
-            if (projectReceipts.Any(static receipt =>
-                    receipt.Status == ReleasePublishReceiptStatus.Failed))
+                cancellationToken);
+            if (unifiedValidation.Failure is not null)
             {
+                receipts.Add(unifiedValidation.Failure);
                 return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
             }
-        }
-
-        if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
-        {
-            var integrityFailure = ValidateUnifiedReleaseIntegrity(
-                repository,
-                validatedUnifiedRelease,
-                cancellationToken,
-                "Module publication");
-            if (integrityFailure is not null)
-            {
-                receipts.Add(integrityFailure);
-                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
-            }
-            var moduleReceipts = await ExecuteModulePublishAsync(
+            var validatedUnifiedRelease = unifiedValidation.Result;
+            var unifiedOwnsGitHub = UnifiedReleaseOwnsGitHub(repository.UnifiedReleaseConfigPath);
+            var unifiedPreflightFailure = PrepareUnifiedReleaseVirusTotalPreflight(
                 repository,
                 signingResult,
-                cancellationToken,
-                unifiedOwnsGitHub);
-            receipts.AddRange(moduleReceipts);
-            if (moduleReceipts.Any(static receipt =>
-                    receipt.Status == ReleasePublishReceiptStatus.Failed))
+                cancellationToken);
+            if (unifiedPreflightFailure is not null)
             {
+                receipts.Add(unifiedPreflightFailure);
                 return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
             }
-        }
 
-        var checkpointedModulePackagePlans =
-            GetCheckpointedModulePackagePlans(signingResult);
-        if (string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
-            string.Equals(
-                Path.GetExtension(repository.ModuleBuildScriptPath),
-                ".json",
-                StringComparison.OrdinalIgnoreCase) &&
-            checkpointedModulePackagePlans.Length > 0)
-        {
-            var directModuleSpec = new PowerForgeReleaseSpec
-            {
-                Module = new PowerForgeModuleReleaseOptions
-                {
-                    ConfigPath = repository.ModuleBuildScriptPath,
-                    IncludesPackages = true
-                }
-            };
-            var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
-                repository,
-                directModuleSpec,
-                signingResult,
-                cancellationToken,
-                validatedUnifiedRelease: null);
-            receipts.AddRange(modulePackageReceipts);
-            if (modulePackageReceipts.Any(static receipt =>
-                    receipt.Status == ReleasePublishReceiptStatus.Failed))
-            {
-                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
-        {
-            var unifiedSpec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
-            if (checkpointedModulePackagePlans.Length > 0)
+            if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
             {
                 var integrityFailure = ValidateUnifiedReleaseIntegrity(
                     repository,
                     validatedUnifiedRelease,
                     cancellationToken,
-                    "Module-owned package publication");
+                    "Project package publication");
                 if (integrityFailure is not null)
                 {
                     receipts.Add(integrityFailure);
                     return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
                 }
-                var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
+                var projectReceipts = await ExecuteProjectPublishAsync(
                     repository,
-                    unifiedSpec,
                     signingResult,
                     cancellationToken,
-                    validatedUnifiedRelease);
+                    unifiedOwnsGitHub);
+                receipts.AddRange(projectReceipts);
+                if (projectReceipts.Any(static receipt =>
+                        receipt.Status == ReleasePublishReceiptStatus.Failed))
+                {
+                    return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
+            {
+                var integrityFailure = ValidateUnifiedReleaseIntegrity(
+                    repository,
+                    validatedUnifiedRelease,
+                    cancellationToken,
+                    "Module publication");
+                if (integrityFailure is not null)
+                {
+                    receipts.Add(integrityFailure);
+                    return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                }
+                var moduleReceipts = await ExecuteModulePublishAsync(
+                    repository,
+                    signingResult,
+                    cancellationToken,
+                    unifiedOwnsGitHub);
+                receipts.AddRange(moduleReceipts);
+                if (moduleReceipts.Any(static receipt =>
+                        receipt.Status == ReleasePublishReceiptStatus.Failed))
+                {
+                    return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                }
+            }
+
+            var checkpointedModulePackagePlans =
+                GetCheckpointedModulePackagePlans(signingResult);
+            if (string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
+                string.Equals(
+                    Path.GetExtension(repository.ModuleBuildScriptPath),
+                    ".json",
+                    StringComparison.OrdinalIgnoreCase) &&
+                checkpointedModulePackagePlans.Length > 0)
+            {
+                var directModuleSpec = new PowerForgeReleaseSpec
+                {
+                    Module = new PowerForgeModuleReleaseOptions
+                    {
+                        ConfigPath = repository.ModuleBuildScriptPath,
+                        IncludesPackages = true
+                    }
+                };
+                var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
+                    repository,
+                    directModuleSpec,
+                    signingResult,
+                    cancellationToken,
+                    validatedUnifiedRelease: null);
                 receipts.AddRange(modulePackageReceipts);
                 if (modulePackageReceipts.Any(static receipt =>
                         receipt.Status == ReleasePublishReceiptStatus.Failed))
@@ -281,29 +254,70 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                     return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
                 }
             }
-            var unifiedIntegrityFailure = ValidateUnifiedReleaseIntegrity(
-                repository,
-                validatedUnifiedRelease,
-                cancellationToken,
-                "Unified release publication");
-            if (unifiedIntegrityFailure is not null)
+
+            if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
             {
-                receipts.Add(unifiedIntegrityFailure);
-                return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                var unifiedSpec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
+                if (checkpointedModulePackagePlans.Length > 0)
+                {
+                    var integrityFailure = ValidateUnifiedReleaseIntegrity(
+                        repository,
+                        validatedUnifiedRelease,
+                        cancellationToken,
+                        "Module-owned package publication");
+                    if (integrityFailure is not null)
+                    {
+                        receipts.Add(integrityFailure);
+                        return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                    }
+                    var modulePackageReceipts = await ExecuteModuleOwnedPackagePublishAsync(
+                        repository,
+                        unifiedSpec,
+                        signingResult,
+                        cancellationToken,
+                        validatedUnifiedRelease);
+                    receipts.AddRange(modulePackageReceipts);
+                    if (modulePackageReceipts.Any(static receipt =>
+                            receipt.Status == ReleasePublishReceiptStatus.Failed))
+                    {
+                        return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                    }
+                }
+                var unifiedIntegrityFailure = ValidateUnifiedReleaseIntegrity(
+                    repository,
+                    validatedUnifiedRelease,
+                    cancellationToken,
+                    "Unified release publication");
+                if (unifiedIntegrityFailure is not null)
+                {
+                    receipts.Add(unifiedIntegrityFailure);
+                    return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+                }
+                receipts.AddRange(await ExecuteUnifiedPublishAsync(
+                    repository,
+                    signingResult,
+                    cancellationToken,
+                    validatedUnifiedRelease));
             }
-            receipts.AddRange(await ExecuteUnifiedPublishAsync(
-                repository,
-                signingResult,
-                cancellationToken,
-                validatedUnifiedRelease));
-        }
 
-        if (receipts.Count == 0)
+            if (receipts.Count == 0)
+            {
+                receipts.Add(FailedReceipt(queueItem.RootPath, queueItem.RepositoryName, "Publish", "Publish", null, "No publish-capable adapter execution was produced."));
+            }
+
+            return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+        }
+        catch (Exception ex)
         {
-            receipts.Add(FailedReceipt(queueItem.RootPath, queueItem.RepositoryName, "Publish", "Publish", null, "No publish-capable adapter execution was produced."));
+            if (ex is PublicationInterruptedException interruption) receipts.AddRange(interruption.Receipts);
+            var cause = ex is PublicationInterruptedException interrupted ? interrupted.InnerException! : ex;
+            var cancelled = cause is OperationCanceledException || cancellationToken.IsCancellationRequested;
+            receipts.Add(FailedReceipt(queueItem.RootPath, queueItem.RepositoryName, "Publish", "Interrupted publication", null,
+                cancelled ? "Publication was cancelled. The current remote operation may have completed; reconcile remote state before retrying."
+                    : "Publication stopped unexpectedly. The current remote operation may have completed; reconcile remote state before retrying."));
+            return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts) with { WasCancelled = cancelled, RequiresReconciliation = true };
         }
 
-        return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
     }
 
 }
@@ -317,6 +331,7 @@ public sealed partial class ReleasePublishExecutionService
         bool skipDuplicate,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var result = await _pushNuGetPackageAsync(
             new DotNetNuGetPushRequest(
                 packagePath: packagePath,
@@ -329,6 +344,7 @@ public sealed partial class ReleasePublishExecutionService
         if (result.Succeeded)
             return (true, null);
 
+        cancellationToken.ThrowIfCancellationRequested();
         return (false, result.ErrorMessage);
     }
 
@@ -344,35 +360,25 @@ public sealed partial class ReleasePublishExecutionService
         bool isPreRelease,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var result = await _publishGitHubReleaseAsync(
-                new GitHubReleasePublishRequest {
-                    Owner = owner,
-                    Repository = repo,
-                    Token = token,
-                    TagName = tag,
-                    ReleaseName = releaseName,
-                    GenerateReleaseNotes = generateReleaseNotes,
-                    IsPreRelease = isPreRelease,
-                    ReuseExistingReleaseOnConflict = true,
-                    AssetFilePaths = assetPaths
-                },
-                cancellationToken).ConfigureAwait(false);
+        var result = await _publishGitHubReleaseAsync(
+            new GitHubReleasePublishRequest {
+                Owner = owner,
+                Repository = repo,
+                Token = token,
+                TagName = tag,
+                ReleaseName = releaseName,
+                GenerateReleaseNotes = generateReleaseNotes,
+                IsPreRelease = isPreRelease,
+                ReuseExistingReleaseOnConflict = true,
+                AssetFilePaths = assetPaths
+            },
+            cancellationToken).ConfigureAwait(false);
 
-            return new GitHubReleaseExecutionResult(
-                result.Succeeded,
-                result.HtmlUrl,
-                result.Succeeded ? null : "GitHub publish failed.");
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return new GitHubReleaseExecutionResult(false, null, FirstLine(ex.Message) ?? "GitHub publish failed.");
-        }
+        if (!result.Succeeded) cancellationToken.ThrowIfCancellationRequested();
+        return new GitHubReleaseExecutionResult(
+            result.Succeeded,
+            result.HtmlUrl,
+            result.Succeeded ? null : "GitHub publish failed.");
     }
 
     private static bool IsPublishEnabled()
@@ -568,92 +574,99 @@ public sealed partial class ReleasePublishExecutionService
         var config = _projectBuildPublishHostService.LoadConfiguration(configPath);
         var receipts = new List<ReleasePublishReceipt>();
 
-        if (config.PublishNuget)
+        try
         {
-            if (string.IsNullOrWhiteSpace(config.PublishApiKey))
+            if (config.PublishNuget)
             {
-                receipts.Add(FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ProjectBuild.ToString(), "NuGet publish", config.PublishSource, "NuGet publishing is enabled but no API key was resolved."));
-            }
-            else
-            {
-                var packages = signingResult.Receipts
-                    .Where(receipt => string.Equals(receipt.AdapterKind, ReleaseBuildAdapterKind.ProjectBuild.ToString(), StringComparison.OrdinalIgnoreCase))
-                    .Where(receipt => receipt.Status == Domain.Signing.ReleaseSigningReceiptStatus.Signed)
-                    .Select(receipt => receipt.ArtifactPath)
-                    .Where(path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+                if (string.IsNullOrWhiteSpace(config.PublishApiKey))
                 {
-                    var checkpointedPlan = ReadCheckpointedProjectPlan(signingResult);
-                    if (checkpointedPlan is null)
-                    {
-                        packages.Clear();
-                    }
-                    else
-                    {
-                        var approvedPackageNames = checkpointedPlan.Projects
-                            .SelectMany(static project => project.Packages)
-                            .Select(Path.GetFileName)
-                            .Where(static name => !string.IsNullOrWhiteSpace(name))
-                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                        packages = packages
-                            .Where(path => approvedPackageNames.Contains(Path.GetFileName(path)))
-                            .ToList();
-                    }
-                }
-
-                if (packages.Count == 0)
-                {
-                    receipts.Add(FailedReceipt(
-                        repository.RootPath,
-                        repository.Name,
-                        ReleaseBuildAdapterKind.ProjectBuild.ToString(),
-                        "NuGet publish",
-                        config.PublishSource,
-                        string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath)
-                            ? "No signed .nupkg packages were found for publishing."
-                            : "No signed checkpointed .nupkg packages were found for publishing."));
+                    receipts.Add(FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ProjectBuild.ToString(), "NuGet publish", config.PublishSource, "NuGet publishing is enabled but no API key was resolved."));
                 }
                 else
                 {
-                    foreach (var package in packages)
+                    var packages = signingResult.Receipts
+                        .Where(receipt => string.Equals(receipt.AdapterKind, ReleaseBuildAdapterKind.ProjectBuild.ToString(), StringComparison.OrdinalIgnoreCase))
+                        .Where(receipt => receipt.Status == Domain.Signing.ReleaseSigningReceiptStatus.Signed)
+                        .Select(receipt => receipt.ArtifactPath)
+                        .Where(path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
                     {
-                        var result = await PublishNugetPackageAsync(
-                            package,
-                            config.PublishApiKey!,
-                            config.PublishSource,
-                            config.SkipDuplicate,
-                            cancellationToken);
-                        receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                        var checkpointedPlan = ReadCheckpointedProjectPlan(signingResult);
+                        if (checkpointedPlan is null)
+                        {
+                            packages.Clear();
+                        }
+                        else
+                        {
+                            var approvedPackageNames = checkpointedPlan.Projects
+                                .SelectMany(static project => project.Packages)
+                                .Select(Path.GetFileName)
+                                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                            packages = packages
+                                .Where(path => approvedPackageNames.Contains(Path.GetFileName(path)))
+                                .ToList();
+                        }
+                    }
+
+                    if (packages.Count == 0)
+                    {
+                        receipts.Add(FailedReceipt(
                             repository.RootPath,
                             repository.Name,
                             ReleaseBuildAdapterKind.ProjectBuild.ToString(),
-                            Path.GetFileName(package),
-                            "NuGet",
+                            "NuGet publish",
                             config.PublishSource,
-                            result.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                            result.Succeeded ? "Package pushed with dotnet nuget push." : result.ErrorMessage!,
-                            package));
-                        if (!result.Succeeded && config.PublishFailFast)
-                            break;
+                            string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath)
+                                ? "No signed .nupkg packages were found for publishing."
+                                : "No signed checkpointed .nupkg packages were found for publishing."));
+                    }
+                    else
+                    {
+                        foreach (var package in packages)
+                        {
+                            var result = await PublishNugetPackageAsync(
+                                package,
+                                config.PublishApiKey!,
+                                config.PublishSource,
+                                config.SkipDuplicate,
+                                cancellationToken);
+                            receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                                repository.RootPath,
+                                repository.Name,
+                                ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                                Path.GetFileName(package),
+                                "NuGet",
+                                config.PublishSource,
+                                result.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                                result.Succeeded ? "Package pushed with dotnet nuget push." : result.ErrorMessage!,
+                                package));
+                            if (!result.Succeeded && config.PublishFailFast)
+                                break;
+                        }
                     }
                 }
             }
-        }
 
-        if (config.PublishFailFast &&
-            receipts.Any(static receipt => receipt.Status == ReleasePublishReceiptStatus.Failed))
-        {
+            if (config.PublishFailFast &&
+                receipts.Any(static receipt => receipt.Status == ReleasePublishReceiptStatus.Failed))
+            {
+                return receipts;
+            }
+
+            if (config.PublishGitHub && !suppressGitHub)
+            {
+                receipts.AddRange(await ExecuteProjectGitHubPublishAsync(repository, config, signingResult, cancellationToken));
+                if (receipts.Any(receipt => receipt.Status == ReleasePublishReceiptStatus.Failed))
+                    cancellationToken.ThrowIfCancellationRequested();
+            }
+
             return receipts;
         }
+        catch (Exception ex) { throw new PublicationInterruptedException(receipts, ex); }
 
-        if (config.PublishGitHub && !suppressGitHub)
-        {
-            receipts.AddRange(await ExecuteProjectGitHubPublishAsync(repository, config, signingResult, cancellationToken));
-        }
-
-        return receipts;
     }
 
     private async Task<IReadOnlyList<ReleasePublishReceipt>> ExecuteProjectGitHubPublishAsync(
@@ -700,6 +713,7 @@ public sealed partial class ReleasePublishExecutionService
         if (integrityFailure is not null)
             return [FailedReceipt(repository.RootPath, repository.Name, "ProjectBuild", "GitHub release",
                 $"{owner}/{repoName}", integrityFailure)];
+        cancellationToken.ThrowIfCancellationRequested();
         var publishSummary = _projectBuildPublishHostService.PublishGitHub(config, plan);
 
         if (publishSummary.PerProject)

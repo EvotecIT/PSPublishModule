@@ -209,6 +209,7 @@ public sealed partial class ReleasePublishExecutionService
             ];
         }
 
+        var receipts = new List<ReleasePublishReceipt>();
         try
         {
             UnifiedReleaseConfigFingerprint.Validate(
@@ -227,8 +228,7 @@ public sealed partial class ReleasePublishExecutionService
                         cancellationToken),
                     cancellationToken)
                 .ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            var receipts = result.ToolGitHubReleases
+            receipts.AddRange(result.ToolGitHubReleases
                 .Select(release => ReleaseQueueReceiptFactory.CreatePublishReceipt(
                     repository.RootPath,
                     repository.Name,
@@ -239,7 +239,7 @@ public sealed partial class ReleasePublishExecutionService
                     release.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                     release.Success ? $"GitHub release {release.TagName} published." : release.ErrorMessage ?? "Tool GitHub release failed.",
                     release.AssetPaths.FirstOrDefault()))
-                .ToList();
+                .ToList());
 
             if (result.UnifiedGitHubRelease is { } unified)
             {
@@ -312,18 +312,10 @@ public sealed partial class ReleasePublishExecutionService
             if (!result.Success && receipts.All(receipt => receipt.Status != ReleasePublishReceiptStatus.Failed))
                 receipts.Add(FailedReceipt(repository.RootPath, repository.Name, "UnifiedRelease", "GitHub release", null, result.ErrorMessage ?? "Unified GitHub publishing failed."));
 
+            if (!result.Success) cancellationToken.ThrowIfCancellationRequested();
             return receipts;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return [
-                FailedReceipt(repository.RootPath, repository.Name, "UnifiedRelease", "GitHub release", null, FirstLine(ex.Message) ?? "Unified GitHub publishing failed.")
-            ];
-        }
+        catch (Exception ex) { throw new PublicationInterruptedException(receipts, ex); }
     }
 
     private ReleasePublishReceipt? PrepareUnifiedReleaseVirusTotalPreflight(

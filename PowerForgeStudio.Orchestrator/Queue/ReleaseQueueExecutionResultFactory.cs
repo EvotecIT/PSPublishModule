@@ -56,7 +56,11 @@ public static class ReleaseQueueExecutionResultFactory
             Succeeded: failed == 0,
             Summary: summary,
             SourceCheckpointStateJson: queueItem.CheckpointStateJson,
-            Receipts: receipts);
+            Receipts: receipts)
+        {
+            // Whole-stage replay would repeat completed targets; recovery must first reconcile the partial release.
+            RequiresReconciliation = published > 0 && failed > 0
+        };
     }
 
     public static ReleaseVerificationExecutionResult CreateVerificationResult(

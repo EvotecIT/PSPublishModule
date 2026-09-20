@@ -588,7 +588,10 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             cancellation.Cancel();
 
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+            var interrupted = await execution;
+            Assert.False(interrupted.Succeeded);
+            Assert.True(interrupted.WasCancelled);
+            Assert.True(interrupted.RequiresReconciliation);
         }
         finally
         {

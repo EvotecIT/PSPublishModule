@@ -403,6 +403,8 @@ public sealed class ReleaseQueueRunner
 
     private ReleaseQueueTransitionResult RetryPublish(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
     {
+        if (_checkpointSerializer.TryDeserialize<ReleasePublishExecutionResult>(entry.Item.CheckpointStateJson)?.RequiresReconciliation == true)
+            return new ReleaseQueueTransitionResult(session, false, "Publication completion is uncertain. Reconcile remote state before retrying.");
         var updatedItem = BuildRetryItem(entry.Item, timestamp);
         if (updatedItem is null)
         {
@@ -467,6 +469,7 @@ public sealed class ReleaseQueueRunner
     private ReleaseQueueItem? BuildPublishRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
     {
         var publishResult = _checkpointSerializer.TryDeserialize<ReleasePublishExecutionResult>(item.CheckpointStateJson);
+        if (publishResult?.RequiresReconciliation == true) return null;
         if (string.IsNullOrWhiteSpace(publishResult?.SourceCheckpointStateJson))
         {
             return null;

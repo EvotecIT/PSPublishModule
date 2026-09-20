@@ -54,114 +54,119 @@ public sealed partial class ReleasePublishExecutionService
         }
 
         var receipts = new List<ReleasePublishReceipt>();
-        foreach (var lane in lanes.Where(static lane => lane.PublishNuget || lane.PublishGitHub))
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            ValidateModulePublishCheckpoint(repository, signingResult);
-            var publishConfig = lane.Reference is not null
-                ? _projectBuildPublishHostService.LoadConfiguration(lane.Reference, lane.ConfigPath)
-                : _projectBuildPublishHostService.LoadConfiguration(lane.Inline!, lane.ResolutionConfigPath);
-
-            var plan = ModulePackageReleaseCheckpointService
-                .Restore(lane, unified.ModulePackagePlans)
-                .Release;
-            ApplySignedCheckpointArtifacts(plan, signingResult);
-
-            if (publishConfig.PublishNuget)
+            foreach (var lane in lanes.Where(static lane => lane.PublishNuget || lane.PublishGitHub))
             {
-                var packages = plan.Projects
-                    .SelectMany(static project => project.Packages)
-                    .Where(File.Exists)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                if (string.IsNullOrWhiteSpace(publishConfig.PublishApiKey))
+                cancellationToken.ThrowIfCancellationRequested();
+                ValidateModulePublishCheckpoint(repository, signingResult);
+                var publishConfig = lane.Reference is not null
+                    ? _projectBuildPublishHostService.LoadConfiguration(lane.Reference, lane.ConfigPath)
+                    : _projectBuildPublishHostService.LoadConfiguration(lane.Inline!, lane.ResolutionConfigPath);
+
+                var plan = ModulePackageReleaseCheckpointService
+                    .Restore(lane, unified.ModulePackagePlans)
+                    .Release;
+                ApplySignedCheckpointArtifacts(plan, signingResult);
+
+                if (publishConfig.PublishNuget)
                 {
-                    receipts.Add(FailedReceipt(
-                        repository.RootPath,
-                        repository.Name,
-                        "UnifiedRelease",
-                        "ModulePackages",
-                        publishConfig.PublishSource,
-                        $"{lane.Name}: NuGet publishing is enabled but no API key was resolved."));
-                }
-                else if (packages.Length == 0)
-                {
-                    receipts.Add(FailedReceipt(
-                        repository.RootPath,
-                        repository.Name,
-                        "UnifiedRelease",
-                        "ModulePackages",
-                        publishConfig.PublishSource,
-                        $"{lane.Name}: no signed checkpointed NuGet packages were found."));
-                }
-                else
-                {
-                    foreach (var package in packages)
+                    var packages = plan.Projects
+                        .SelectMany(static project => project.Packages)
+                        .Where(File.Exists)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    if (string.IsNullOrWhiteSpace(publishConfig.PublishApiKey))
                     {
-                        var publish = await PublishNugetPackageAsync(
-                            package,
-                            publishConfig.PublishApiKey!,
-                            publishConfig.PublishSource,
-                            publishConfig.SkipDuplicate,
-                            cancellationToken);
-                        receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                        receipts.Add(FailedReceipt(
                             repository.RootPath,
                             repository.Name,
                             "UnifiedRelease",
-                            Path.GetFileName(package),
                             "ModulePackages",
                             publishConfig.PublishSource,
-                            publish.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                            publish.Succeeded ? "Signed checkpointed package published without rebuilding." : publish.ErrorMessage!,
-                            package));
-                        if (!publish.Succeeded && publishConfig.PublishFailFast)
-                            break;
+                            $"{lane.Name}: NuGet publishing is enabled but no API key was resolved."));
+                    }
+                    else if (packages.Length == 0)
+                    {
+                        receipts.Add(FailedReceipt(
+                            repository.RootPath,
+                            repository.Name,
+                            "UnifiedRelease",
+                            "ModulePackages",
+                            publishConfig.PublishSource,
+                            $"{lane.Name}: no signed checkpointed NuGet packages were found."));
+                    }
+                    else
+                    {
+                        foreach (var package in packages)
+                        {
+                            var publish = await PublishNugetPackageAsync(
+                                package,
+                                publishConfig.PublishApiKey!,
+                                publishConfig.PublishSource,
+                                publishConfig.SkipDuplicate,
+                                cancellationToken);
+                            receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                                repository.RootPath,
+                                repository.Name,
+                                "UnifiedRelease",
+                                Path.GetFileName(package),
+                                "ModulePackages",
+                                publishConfig.PublishSource,
+                                publish.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                                publish.Succeeded ? "Signed checkpointed package published without rebuilding." : publish.ErrorMessage!,
+                                package));
+                            if (!publish.Succeeded && publishConfig.PublishFailFast)
+                                break;
+                        }
                     }
                 }
-            }
 
-            if (publishConfig.PublishFailFast &&
-                receipts.Any(static receipt => receipt.Status == ReleasePublishReceiptStatus.Failed))
-            {
-                return receipts;
-            }
-
-            if (publishConfig.PublishGitHub)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (string.IsNullOrWhiteSpace(publishConfig.GitHubToken))
+                if (publishConfig.PublishFailFast &&
+                    receipts.Any(static receipt => receipt.Status == ReleasePublishReceiptStatus.Failed))
                 {
-                    receipts.Add(FailedReceipt(
+                    return receipts;
+                }
+
+                if (publishConfig.PublishGitHub)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (string.IsNullOrWhiteSpace(publishConfig.GitHubToken))
+                    {
+                        receipts.Add(FailedReceipt(
+                            repository.RootPath,
+                            repository.Name,
+                            "UnifiedRelease",
+                            "ModulePackages",
+                            null,
+                            $"{lane.Name}: GitHub publishing is enabled but no access token was resolved."));
+                        continue;
+                    }
+
+                    var publishSummary = await Task.Run(
+                            () => _projectBuildPublishHostService.PublishGitHub(publishConfig, plan),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
                         repository.RootPath,
                         repository.Name,
                         "UnifiedRelease",
+                        $"{lane.Name} GitHub release",
                         "ModulePackages",
-                        null,
-                        $"{lane.Name}: GitHub publishing is enabled but no access token was resolved."));
-                    continue;
+                        publishSummary.SummaryReleaseUrl ?? $"{publishConfig.GitHubUsername}/{publishConfig.GitHubRepositoryName}",
+                        publishSummary.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                        publishSummary.Success
+                            ? "Signed checkpointed package release published without rebuilding."
+                            : publishSummary.ErrorMessage ?? "Package GitHub publishing failed.",
+                        plan.Projects.Select(static project => project.ReleaseZipPath).FirstOrDefault(File.Exists)));
+                    if (!publishSummary.Success) cancellationToken.ThrowIfCancellationRequested();
                 }
-
-                var publishSummary = await Task.Run(
-                        () => _projectBuildPublishHostService.PublishGitHub(publishConfig, plan),
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
-                receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                    repository.RootPath,
-                    repository.Name,
-                    "UnifiedRelease",
-                    $"{lane.Name} GitHub release",
-                    "ModulePackages",
-                    publishSummary.SummaryReleaseUrl ?? $"{publishConfig.GitHubUsername}/{publishConfig.GitHubRepositoryName}",
-                    publishSummary.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                    publishSummary.Success
-                        ? "Signed checkpointed package release published without rebuilding."
-                        : publishSummary.ErrorMessage ?? "Package GitHub publishing failed.",
-                    plan.Projects.Select(static project => project.ReleaseZipPath).FirstOrDefault(File.Exists)));
             }
-        }
 
-        return receipts;
+            return receipts;
+        }
+        catch (Exception ex) { throw new PublicationInterruptedException(receipts, ex); }
+
     }
 
     private async Task<IReadOnlyList<ModulePackageReleaseLane>> ResolveModuleOwnedPackageLanesAsync(

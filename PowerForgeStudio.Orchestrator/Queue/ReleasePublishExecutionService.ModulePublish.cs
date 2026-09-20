@@ -184,30 +184,36 @@ public sealed partial class ReleasePublishExecutionService
             publishSet.Context,
             cancellationToken);
         var receipts = new List<ReleasePublishReceipt>();
-        foreach (var publishConfig in publishSet.Configurations.Where(config => config.Enabled))
+        try
         {
-            if (publishConfig.Destination == PublishDestination.GitHub)
+            foreach (var publishConfig in publishSet.Configurations.Where(config => config.Enabled))
             {
-                if (suppressGitHub)
+                cancellationToken.ThrowIfCancellationRequested();
+                if (publishConfig.Destination == PublishDestination.GitHub)
+                {
+                    if (suppressGitHub)
+                        continue;
+                    receipts.Add(await ExecuteModuleGitHubPublishAsync(
+                        repository,
+                        publishConfig,
+                        publishSet.Context,
+                        packageDetails,
+                        cancellationToken));
                     continue;
-                receipts.Add(await ExecuteModuleGitHubPublishAsync(
+                }
+
+                receipts.Add(await ExecuteModuleRepositoryPublishAsync(
                     repository,
                     publishConfig,
                     publishSet.Context,
                     packageDetails,
                     cancellationToken));
-                continue;
             }
 
-            receipts.Add(await ExecuteModuleRepositoryPublishAsync(
-                repository,
-                publishConfig,
-                publishSet.Context,
-                packageDetails,
-                cancellationToken));
+            return receipts;
         }
+        catch (Exception ex) { throw new PublicationInterruptedException(receipts, ex); }
 
-        return receipts;
     }
 
     private async Task<ReleasePublishReceipt> ExecuteModuleRepositoryPublishAsync(
@@ -223,58 +229,40 @@ public sealed partial class ReleasePublishExecutionService
             return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "Module publish", destination, "No publishable module package path was captured from the build artefacts.");
         }
 
-        try
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var information = (moduleContext?.Spec.Segments ?? [])
-                .OfType<ConfigurationInformationSegment>()
-                .Select(segment => segment.Configuration)
-                .LastOrDefault(configuration => configuration is not null);
-            var delivery = (moduleContext?.Spec.Segments ?? [])
-                .OfType<ConfigurationOptionsSegment>()
-                .Select(segment => segment.Options?.Delivery)
-                .LastOrDefault(configuration => configuration is { Enable: true });
-            var publishResult = await _publishCheckpointedModuleAsync(
-                new ModuleCheckpointPublishRequest {
-                    Publish = publishConfig,
-                    ProjectRoot = moduleContext?.ProjectRoot ?? repository.RootPath,
-                    ModuleName = packageDetails.ModuleName,
-                    ModuleVersion = packageDetails.Version,
-                    PreRelease = packageDetails.PreRelease,
-                    ModulePath = packageDetails.PackagePath,
-                    Information = information,
-                    Delivery = delivery
-                },
-                cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
+        cancellationToken.ThrowIfCancellationRequested();
+        var information = (moduleContext?.Spec.Segments ?? [])
+            .OfType<ConfigurationInformationSegment>()
+            .Select(segment => segment.Configuration)
+            .LastOrDefault(configuration => configuration is not null);
+        var delivery = (moduleContext?.Spec.Segments ?? [])
+            .OfType<ConfigurationOptionsSegment>()
+            .Select(segment => segment.Options?.Delivery)
+            .LastOrDefault(configuration => configuration is { Enable: true });
+        var publishResult = await _publishCheckpointedModuleAsync(
+            new ModuleCheckpointPublishRequest {
+                Publish = publishConfig,
+                ProjectRoot = moduleContext?.ProjectRoot ?? repository.RootPath,
+                ModuleName = packageDetails.ModuleName,
+                ModuleVersion = packageDetails.Version,
+                PreRelease = packageDetails.PreRelease,
+                ModulePath = packageDetails.PackagePath,
+                Information = information,
+                Delivery = delivery
+            },
+            cancellationToken).ConfigureAwait(false);
 
-            return ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                repository.RootPath,
-                repository.Name,
-                ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-                packageDetails.ModuleName,
-                "PowerShellRepository",
-                publishResult.RepositoryName ?? destination,
-                ReleasePublishReceiptStatus.Published,
-                $"Module published to {publishResult.RepositoryName ?? destination} using {publishResult.Tool}.",
-                packageDetails.PackagePath);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return ReleaseQueueReceiptFactory.FailedPublishReceipt(
-                repository.RootPath,
-                repository.Name,
-                ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-                packageDetails.ModuleName,
-                destination,
-                FirstLine(ex.Message) ?? "Module publish failed.",
-                "PowerShellRepository",
-                packageDetails.PackagePath);
-        }
+        if (!publishResult.Succeeded) cancellationToken.ThrowIfCancellationRequested();
+        return ReleaseQueueReceiptFactory.CreatePublishReceipt(
+            repository.RootPath,
+            repository.Name,
+            ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+            packageDetails.ModuleName,
+            "PowerShellRepository",
+            publishResult.RepositoryName ?? destination,
+            publishResult.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+            publishResult.Succeeded ? $"Module published to {publishResult.RepositoryName ?? destination} using {publishResult.Tool}."
+                : publishResult.ErrorMessage ?? "Module publication failed.",
+            packageDetails.PackagePath);
     }
 
     private async Task<ReleasePublishReceipt> ExecuteModuleGitHubPublishAsync(
@@ -294,39 +282,28 @@ public sealed partial class ReleasePublishExecutionService
             return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "GitHub publishing requires UserName.");
         }
 
-        try
+        var apiKey = ModulePublisher.ResolvePublishApiKey(publishConfig, repository.RootPath);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            var apiKey = ModulePublisher.ResolvePublishApiKey(publishConfig, repository.RootPath);
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "GitHub publishing is enabled but no token was resolved.");
-            }
+            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, "GitHub publishing is enabled but no token was resolved.");
+        }
 
-            var repoName = string.IsNullOrWhiteSpace(publishConfig.RepositoryName) ? repository.Name : publishConfig.RepositoryName!.Trim();
-            var tag = new ModulePublishTagBuilder().BuildTag(publishConfig, packageDetails.ModuleName, packageDetails.Version, packageDetails.PreRelease);
-            var isPreRelease = !string.IsNullOrWhiteSpace(packageDetails.PreRelease) && !publishConfig.DoNotMarkAsPreRelease;
-            var zipAssets = ResolveModuleGitHubAssets(moduleContext, publishConfig, packageDetails);
+        var repoName = string.IsNullOrWhiteSpace(publishConfig.RepositoryName) ? repository.Name : publishConfig.RepositoryName!.Trim();
+        var tag = new ModulePublishTagBuilder().BuildTag(publishConfig, packageDetails.ModuleName, packageDetails.Version, packageDetails.PreRelease);
+        var isPreRelease = !string.IsNullOrWhiteSpace(packageDetails.PreRelease) && !publishConfig.DoNotMarkAsPreRelease;
+        var zipAssets = ResolveModuleGitHubAssets(moduleContext, publishConfig, packageDetails);
 
-            var execution = await PublishGitHubReleaseAsync(repository.RootPath, publishConfig.UserName!, repoName, apiKey, tag, tag, zipAssets, publishConfig.GenerateReleaseNotes, isPreRelease, cancellationToken);
-            return ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                repository.RootPath,
-                repository.Name,
-                ReleaseBuildAdapterKind.ModuleBuild.ToString(),
-                "GitHub release",
-                "GitHub",
-                execution.ReleaseUrl ?? $"{publishConfig.UserName}/{repoName}",
-                execution.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                execution.Succeeded ? $"GitHub release {tag} published." : execution.ErrorMessage!,
-                zipAssets.FirstOrDefault());
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ModuleBuild.ToString(), "GitHub release", null, FirstLine(ex.Message) ?? "GitHub publish secret could not be resolved.");
-        }
+        var execution = await PublishGitHubReleaseAsync(repository.RootPath, publishConfig.UserName!, repoName, apiKey, tag, tag, zipAssets, publishConfig.GenerateReleaseNotes, isPreRelease, cancellationToken);
+        return ReleaseQueueReceiptFactory.CreatePublishReceipt(
+            repository.RootPath,
+            repository.Name,
+            ReleaseBuildAdapterKind.ModuleBuild.ToString(),
+            "GitHub release",
+            "GitHub",
+            execution.ReleaseUrl ?? $"{publishConfig.UserName}/{repoName}",
+            execution.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+            execution.Succeeded ? $"GitHub release {tag} published." : execution.ErrorMessage!,
+            zipAssets.FirstOrDefault());
     }
 
     private static IReadOnlyList<string> ResolveModuleGitHubAssets(

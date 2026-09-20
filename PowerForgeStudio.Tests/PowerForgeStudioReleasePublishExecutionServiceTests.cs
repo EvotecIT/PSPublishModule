@@ -333,8 +333,12 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         }
     }
 
-    [Fact]
-    public async Task ExecuteAsync_ModuleRepositoryPublish_UsesSharedRepositoryPublisher()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task ExecuteAsync_ModuleRepositoryPublish_UsesSharedRepositoryPublisher(bool cancelOnCompletion, bool failPublication)
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
         var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
@@ -433,6 +437,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
 
                 return new PowerShellRunResult(1, string.Empty, "Unexpected command.", "pwsh");
             });
+        using var cancellation = new CancellationTokenSource();
         var service = new ReleasePublishExecutionService(
             new RepositoryCatalogScanner(),
             new ModuleBuildHostService(moduleRunner),
@@ -442,7 +447,11 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, "published", string.Empty, "dotnet", TimeSpan.Zero, timedOut: false, errorMessage: null)),
             publishCheckpointedModuleAsync: (request, _) => {
                 captured = request;
-                return Task.FromResult(CreateSuccessfulCheckpointedModulePublish(request));
+                if (cancelOnCompletion) cancellation.Cancel();
+                return Task.FromResult(failPublication
+                    ? new ModulePublishResult(PublishDestination.PowerShellGallery, "PSGallery", null, null, "2.0.0", false,
+                        [], null, false, "Fixture publication failed", PublishTool.PSResourceGet)
+                    : CreateSuccessfulCheckpointedModulePublish(request));
             });
 
         try
@@ -450,8 +459,16 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             using var _ = new EnvironmentScope()
                 .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
 
-            var result = await service.ExecuteAsync(queueItem);
+            var result = await service.ExecuteAsync(queueItem, cancellation.Token);
 
+            if (failPublication)
+            {
+                Assert.False(result.Succeeded);
+                Assert.Equal(cancelOnCompletion, result.RequiresReconciliation);
+                Assert.Equal(cancelOnCompletion, result.WasCancelled);
+                Assert.Equal(ReleasePublishReceiptStatus.Failed, Assert.Single(result.Receipts).Status);
+                return;
+            }
             Assert.True(result.Succeeded);
             Assert.True(
                 captured is not null,
