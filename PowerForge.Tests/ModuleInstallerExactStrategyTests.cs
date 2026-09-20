@@ -7,6 +7,42 @@ namespace PowerForge.Tests;
 public sealed class ModuleInstallerExactStrategyTests
 {
     [Fact]
+    public void InstallFromStaging_Exact_PreservesInstalledVersionBesideNewerLocalRevisions()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var staging = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "staging"));
+            var destinationRoot = Directory.CreateDirectory(Path.Combine(tempRoot.FullName, "modules"));
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(destinationRoot.FullName, "TestModule"));
+            File.WriteAllText(Path.Combine(staging.FullName, "TestModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+
+            foreach (var version in new[] { "1.0.0.1", "1.0.0.2", "1.0.0.3" })
+            {
+                var localVersion = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, version));
+                File.WriteAllText(Path.Combine(localVersion.FullName, "TestModule.psd1"), $"@{{ ModuleVersion = '{version}' }}");
+            }
+
+            var installer = new ModuleInstaller(new NullLogger());
+            var options = new ModuleInstallerOptions(new[] { destinationRoot.FullName }, InstallationStrategy.Exact, keepVersions: 3);
+            var result = installer.InstallFromStaging(staging.FullName, "TestModule", "1.0.0", options);
+
+            var installedPath = Path.Combine(moduleRoot.FullName, "1.0.0");
+            Assert.Equal("1.0.0", result.Version);
+            Assert.Contains(installedPath, result.InstalledPaths);
+            Assert.True(File.Exists(Path.Combine(installedPath, "TestModule.psd1")));
+            Assert.DoesNotContain(installedPath, result.PrunedPaths);
+            Assert.False(Directory.Exists(Path.Combine(moduleRoot.FullName, "1.0.0.1")));
+            Assert.True(Directory.Exists(Path.Combine(moduleRoot.FullName, "1.0.0.2")));
+            Assert.True(Directory.Exists(Path.Combine(moduleRoot.FullName, "1.0.0.3")));
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void InstallFromStaging_Exact_CleansTargetDirectory()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

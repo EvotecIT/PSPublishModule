@@ -125,7 +125,7 @@ public sealed class ModuleInstaller
                         SyncDirectoryToSource(tempPath, finalPath);
                         TryDeleteDirectory(tempPath);
                         installed.Add(finalPath);
-                        var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removedInExact);
+                        var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removedInExact);
                         pruned.AddRange(removedInExact);
                         _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
                         continue;
@@ -167,7 +167,7 @@ public sealed class ModuleInstaller
                 // Prune old versions
                 if (!options.RequireAllDestinationRoots)
                 {
-                    var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
+                    var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removed);
                     pruned.AddRange(removed);
                     _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
                 }
@@ -222,7 +222,7 @@ public sealed class ModuleInstaller
                 try
                 {
                     HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
-                    var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
+                    var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removed);
                     pruned.AddRange(removed);
                     _logger.Verbose($"Installed at {moduleRoot}; versions kept={left}, pruned={removed.Count}");
                 }
@@ -680,7 +680,12 @@ public sealed class ModuleInstaller
         catch { /* best effort */ }
     }
 
-    private static int PruneOldVersions(string moduleRoot, int keep, ISet<string>? preserveVersions, out List<string> removed)
+    private static int PruneOldVersions(
+        string moduleRoot,
+        int keep,
+        ISet<string>? preserveVersions,
+        string installedVersion,
+        out List<string> removed)
     {
         removed = new List<string>();
         if (!Directory.Exists(moduleRoot)) return 0;
@@ -695,8 +700,17 @@ public sealed class ModuleInstaller
         foreach (var p in preserve.Where(p => !string.IsNullOrWhiteSpace(p)))
             keepSet.Add(p.Trim());
 
-        // Keep up to 'keep' non-preserved versions (dirs are already ordered descending).
+        // Count the version installed by this operation toward the ordinary keep limit,
+        // but always retain it even when newer local revisions sort ahead of it.
         var keptNonPreserved = 0;
+        if (!string.IsNullOrWhiteSpace(installedVersion) &&
+            dirs.Contains(installedVersion, StringComparer.OrdinalIgnoreCase) &&
+            keepSet.Add(installedVersion.Trim()))
+        {
+            keptNonPreserved = 1;
+        }
+
+        // Keep up to 'keep' non-preserved versions (dirs are already ordered descending).
         foreach (var d in dirs)
         {
             if (keepSet.Contains(d)) continue;
