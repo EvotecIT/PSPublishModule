@@ -48,7 +48,17 @@ public sealed partial class MainWindow : Window
 
     private async void SaveBeforeClosing(object? sender, WindowClosingEventArgs args)
     {
-        if (_closeAfterSave || DataContext is not WorkspaceViewModel model) return;
+        if (DataContext is not WorkspaceViewModel model) return;
+        if (model.Release.IsSigning)
+        {
+            _closeAfterSave = false;
+            _discardOnNextClose = false;
+            args.Cancel = true;
+            model.ShowReleaseCommand.Execute(null);
+            model.Release.Status = "Signing is still running. Cancel signing or wait for completion before closing.";
+            return;
+        }
+        if (_closeAfterSave) return;
         args.Cancel = true;
         if (_savingOnClose) return;
         _savingOnClose = true;

@@ -10,20 +10,36 @@
     </StackPanel>
     <WrapPanel Grid.Row="1">
       <Button Content="Prepare built artifacts" Command="{Binding PrepareCommand}" IsEnabled="{Binding CanPrepare}" Background="#0865FF" Foreground="White" Margin="0,0,16,5" />
+      <Button Content="Sign artifacts" Command="{Binding SignCommand}" IsEnabled="{Binding CanSign}" Margin="0,0,12,5" />
+      <Button Content="Cancel signing" Command="{Binding CancelSigningCommand}" IsVisible="{Binding IsSigning}" Margin="0,0,12,5" />
       <TextBlock Text="{Binding Stage}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,0,5" />
     </WrapPanel>
-    <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="10">
+    <Grid Grid.Row="2" RowDefinitions="Auto,*,Auto,Auto,*" RowSpacing="10">
       <TextBlock Text="Release artifacts" FontSize="16" FontWeight="SemiBold" />
       <ListBox Grid.Row="1" ItemsSource="{Binding Artifacts}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="domain:ReleaseSigningArtifact">
             <StackPanel Spacing="6" Margin="8">
               <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding ArtifactPath}" TextWrapping="Wrap" FontSize="12" />
+              <TextBlock Text="{Binding ArtifactPath}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ArtifactPath}" FontSize="12" />
               <StackPanel Orientation="Horizontal" Spacing="12">
                 <TextBlock Text="{Binding AdapterKind}" Foreground="#0865FF" FontSize="12" />
                 <TextBlock Text="{Binding ArtifactKind}" Classes="muted" FontSize="12" />
               </StackPanel>
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <ProgressBar Grid.Row="2" IsIndeterminate="True" IsVisible="{Binding IsSigning}" Height="4" />
+      <TextBlock Grid.Row="3" Text="Signing receipts · retained for this session" FontSize="16" FontWeight="SemiBold" />
+      <ListBox Grid.Row="4" ItemsSource="{Binding Receipts}" Background="#F7F9FC">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="domain:ReleaseSigningReceipt">
+            <StackPanel Spacing="5" Margin="8">
+              <TextBlock Text="{Binding ArtifactName}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding Status}" Foreground="#0865FF" />
+              <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ArtifactPath}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ArtifactPath}" FontSize="12" />
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>

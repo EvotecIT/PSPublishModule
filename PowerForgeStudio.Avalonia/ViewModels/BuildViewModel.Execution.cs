@@ -12,13 +12,15 @@ public sealed partial class BuildViewModel
     private int _buildVersion;
     [ObservableProperty] private bool _hasSuccessfulInspection;
     [ObservableProperty] private bool _isBuilding;
+    [ObservableProperty] private bool _isReleaseRunning;
+    partial void OnIsReleaseRunningChanged(bool value) => OnPropertyChanged(nameof(CanBuild));
     [ObservableProperty] private bool _wasBuildCancelled;
     [ObservableProperty] private string _buildRoot = "";
     [ObservableProperty] private string _buildStatus = "No build started.";
     [ObservableProperty] private string _buildOutput = "";
     [ObservableProperty] private ReleaseBuildExecutionResult? _buildResult;
     public bool HasBuild => !string.IsNullOrEmpty(BuildRoot);
-    public bool CanBuild => HasSuccessfulInspection && !HasUnsavedChanges && !IsBusy && !IsBuilding && !_disposed;
+    public bool CanBuild => HasSuccessfulInspection && !HasUnsavedChanges && !IsBusy && !IsBuilding && !IsReleaseRunning && !_disposed;
     partial void OnHasSuccessfulInspectionChanged(bool value) => OnPropertyChanged(nameof(CanBuild));
     partial void OnIsBuildingChanged(bool value)
     {

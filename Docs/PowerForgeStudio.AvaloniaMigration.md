@@ -20,6 +20,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [ ] Connect cancellation, live progress, artifacts and release receipts.
 - [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
 - [x] Prepare release artifacts from a captured successful build using the existing queue checkpoint owner.
+- [x] Connect explicit signing, cancellation and session receipts with build/close interlocks.
 - [x] Connect Git status, diffs, staging, unstaging and local commits through the shared Git owner.
 - [ ] Complete issues, PR review actions and provider status through existing owners.
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
@@ -253,3 +254,19 @@ Thirty focused tests passed across signing, queue transitions and returned-resul
 Independent review found a P2: retry could reuse a build checkpoint after partially modifying a signed artifact. The result now carries a serialized RequiresRebuild flag for interrupted or failed execution. Both retry paths clear the old checkpoint and queue a rebuild. Configuration failure before execution keeps its existing signing retry behavior. The same reviewer confirmed this correction with no further findings; confirmation patch fingerprint: 4ab451c5e3bc5f64adedbe5c7fecf2f330eb46a2. Boundary: candidate-reviewed. Real certificate signing and native process termination remain unverified; Avalonia signing controls are not yet connected.
 
 Next: connect signing through a captured release session, prevent simultaneous rebuilds of its artifacts, retain stage progress and receipts, and consolidate durable checkpoint/receipt persistence before adding publication and resume. Task-owned shared-test binaries (about 75.6 MiB) were removed after validation; active Avalonia outputs and small evidence remain.
+
+
+### Explicit signing in the release workspace
+
+The Releases page now runs signing through ReleaseSigningWorkflow, the canonical signing executor and queue transitions. It operates on the captured handoff, retains per-artifact receipts, and reports cancellation or a rebuild requirement. Publication remains a separate action and is not invoked by signing. The UI shows indeterminate stage progress because the executor does not yet expose per-artifact progress events.
+
+Workspace build commands are disabled while signing is active. Switching projects leaves the captured release root intact. Closing the window during signing keeps it open and brings the release page forward, allowing cancellation and receipt capture to finish. A successful stage cannot be signed again from the same handoff. An execution exception requires rebuilding; pre-execution configuration failures can be prepared again after correcting configuration.
+
+Five focused Avalonia tests passed, including the existing real JSON build/NuGet artifact workflow and new success/cancellation tests through the actual signing workflow with a controlled signer. Two decisive tests passed again after adding the window-close guard. They cover project switching, build interlocking, active-window close, cancellation after a returned receipt, and canonical stage transitions. Wide and compact Skia renders were inspected at 1600 x 1000 and 1050 x 720: Artifacts/StudioValidation/release-signing-complete.png and release-signing-cancelled-compact.png. Native Windows input and real certificate signing remain unverified.
+
+Receipts and the release handoff remain in the current app session. Durable storage, resume, target preview, publication, verification and per-artifact live progress are still required. Shared storage inspection found that existing queue/header/item and receipt replacement calls do not form one transaction; consolidation through the existing DbaClientX owner is needed before claiming crash-safe recovery. No user artifact was signed or published during validation.
+
+
+Independent review of the signing UI found a P2 close/save race. A controlled state-store test reproduced signing starting while close awaited persistence. Moving the signing guard ahead of final-close authorization fixed that sequence. Targeted confirmation identified retained close authorization after a blocked close; a second regression reproduced skipped unsaved-document handling. The guard now clears both close/discard flags. The extended test edits a document after the blocked close and verifies that a subsequent close invokes draft resolution and preserves the draft when cancelled. Five focused signing/preparation/editor tests passed after the final correction. The final two-line reset was validated by regression and a local inspection of both close continuation branches; no additional independent full pass was requested. Review boundary: candidate-reviewed with both reproduced findings addressed.
+
+Compact artifact paths now use single-line ellipsis with full-path tooltips. The final rendered compact state was inspected. Small retained validation artifacts total about 2.6 MiB; disposable build and close-race fixtures were removed by their test cleanup. Active app/test outputs remain for ongoing implementation.

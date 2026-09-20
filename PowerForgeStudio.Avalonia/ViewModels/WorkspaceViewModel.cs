@@ -25,8 +25,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingTreeSelection;
     private int _refreshVersion;
 
-    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null)
     {
+        Release = release ?? new ReleaseViewModel();
         GitHub = new GitHubViewModel(gitHub);
         WorkspaceRoot = Path.GetFullPath(root);
         _stateStore = stateStore;
@@ -42,6 +43,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
                 GitSummary = !snapshot.IsGitRepository ? "Not a Git working copy" : snapshot.HasConflicts ? "Merge conflicts need resolution" : snapshot.StatusSummary;
             }
         };
+        Release.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ReleaseViewModel.IsSigning)) Build.IsReleaseRunning = Release.IsSigning;
+        };
         Build.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName is nameof(BuildViewModel.BuildResult) or nameof(BuildViewModel.IsBuilding) or nameof(BuildViewModel.WasBuildCancelled))
@@ -50,7 +55,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(DisplayedOutput));
         };
     }
-    public ReleaseViewModel Release { get; } = new();
+    public ReleaseViewModel Release { get; }
     [ObservableProperty] private bool _isReleasePage;
     partial void OnIsReleasePageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(OutputPaneHeight)); }
     [RelayCommand] private void ShowRelease() { IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true; }
