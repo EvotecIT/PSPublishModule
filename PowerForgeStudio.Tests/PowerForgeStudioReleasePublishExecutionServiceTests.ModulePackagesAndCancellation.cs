@@ -624,7 +624,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             1,
             [],
             UnifiedReleaseStateJson: JsonSerializer.Serialize(unified),
-            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig));
+            UnifiedReleaseConfigSha256: UnifiedReleaseConfigFingerprint.Compute(releaseConfig),
+            ProjectBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeProjectBuildConfig(releaseConfig));
         var signingResult = new ReleaseSigningExecutionResult(
             repositoryRoot,
             true,
@@ -644,4 +645,13 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             JsonSerializer.Serialize(signingResult),
             DateTimeOffset.UtcNow);
     }
+
+    private static string CreateProjectBuildCheckpoint(string repositoryRoot, string configPath)
+        => JsonSerializer.Serialize(new ReleaseBuildExecutionResult(
+            repositoryRoot,
+            true,
+            "Build completed.",
+            1,
+            [],
+            ProjectBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeProjectBuildConfig(configPath)));
 }

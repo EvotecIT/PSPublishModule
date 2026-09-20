@@ -274,8 +274,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         {
             var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
             File.WriteAllText(Path.Combine(buildDirectory, "Build-Project.ps1"), "# build");
+            var projectConfig = Path.Combine(buildDirectory, "project.build.json");
             File.WriteAllText(
-                Path.Combine(buildDirectory, "project.build.json"),
+                projectConfig,
                 """
                 {
                   "PublishNuget": true,
@@ -296,7 +297,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 repositoryRoot,
                 true,
                 "Signing completed.",
-                SourceCheckpointStateJson: null,
+                SourceCheckpointStateJson: CreateProjectBuildCheckpoint(repositoryRoot, projectConfig),
                 [
                     CreateSigningReceipt(repositoryRoot, firstPackage, "File", ReleaseBuildAdapterKind.ProjectBuild),
                     CreateSigningReceipt(repositoryRoot, secondPackage, "File", ReleaseBuildAdapterKind.ProjectBuild)

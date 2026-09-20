@@ -571,7 +571,13 @@ public sealed partial class ReleasePublishExecutionService
             ];
         }
 
-        var config = _projectBuildPublishHostService.LoadConfiguration(configPath);
+        var validatedConfig = TryLoadCheckpointedProjectPublishConfiguration(
+            repository,
+            signingResult,
+            configPath);
+        if (validatedConfig.Failure is not null)
+            return [validatedConfig.Failure];
+        var config = validatedConfig.Configuration!;
         var receipts = new List<ReleasePublishReceipt>();
 
         try

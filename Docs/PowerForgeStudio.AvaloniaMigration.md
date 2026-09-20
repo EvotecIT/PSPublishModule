@@ -17,11 +17,13 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [ ] Complete deletion/recovery behavior.
 - [ ] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
-- [ ] Connect cancellation, live progress, artifacts and release receipts.
+- [x] Connect cancellation, stage progress, artifacts and release receipts.
+- [ ] Add per-artifact progress events and durable process-level recovery evidence.
 - [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
 - [x] Prepare release artifacts from a captured successful build using the existing queue checkpoint owner.
 - [x] Connect explicit signing, cancellation and session receipts with build/close interlocks.
 - [x] Journal signing, reopen saved receipt history and recover failed local saves.
+- [x] Connect inspected targets, explicit publication approval, durable publication and verification.
 - [x] Connect Git status, diffs, staging, unstaging and local commits through the shared Git owner.
 - [ ] Complete issues, PR review actions and provider status through existing owners.
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
@@ -393,10 +395,20 @@ Next: connect the durable publication and verification workflows to the Avalonia
 
 The Avalonia release page now carries a prepared release through destination inspection, explicit publication acknowledgement, durable publication, and durable verification. The page shows publication and verification receipts separately, offers cancellation while each operation is running, and restores all three receipt types in saved history. Actual external publication remains additionally gated by `RELEASE_OPS_STUDIO_ENABLE_PUBLISH=true` in the shared executor.
 
-Publication is enabled only for the exact captured release session after targets have been inspected. Studio re-inspects and compares the complete displayed target set immediately before invoking the durable workflow; any destination or artifact-target change clears approval. This binds the current UI decision to the visible targets, while existing build/signing hashes continue to protect captured artifacts and supported module/unified configuration. A fully serialized execution plan for every legacy project-build option, such as GitHub tag and release-name fields that do not change the displayed destination row, remains a follow-up hardening item.
+Publication is enabled only for the exact captured release session after targets have been inspected. Studio re-inspects and compares the complete displayed target set immediately before invoking the durable workflow; any destination or artifact-target change clears approval. This binds the current UI decision to the visible targets, while build/signing hashes protect captured artifacts and module, unified and project-build JSON configuration. The project-build checkpoint is detailed below.
 
 Running publication or verification, and any locally unsaved receipts, keep the release page visible and prevent window close, history changes and new build replacement. Local save retry routes to the owning signing, publication or verification workflow without repeating remote work. An explicit discard leaves the durable marker for later review. User-facing summaries and receipt fields pass through the Studio sanitizer.
 
 All 30 Avalonia tests pass. New cases cover the full inspect/acknowledge/publish/verify view-model flow, a changed destination blocking publication, unsaved publication receipts blocking navigation and build replacement, and local save recovery without another publish. The rendered page was inspected at 1600 x 1000, at its bottom receipt state, and at 1050 x 720: `Artifacts/StudioValidation/release-publish-verify.png`, `release-publish-verify-bottom.png`, and `release-publish-verify-compact.png`. Controlled workflows were used; no package, release or network request was published. Independent local review remained unavailable because the reviewer quota was exhausted; structured source and rendered-state review found and corrected release-operation disposal and generic close/navigation messages.
 
-Next: freeze the complete project-build execution plan, add progress events below the stage level, and exercise the guarded default workflows against a private disposable feed/repository before describing external publication as end-to-end validated.
+Next: add progress events below the stage level and exercise the guarded default workflows against a private disposable feed/repository before describing external publication as end-to-end validated.
+
+### Project-build publication configuration checkpoint
+
+Every Studio project build now fingerprints the exact JSON configuration resolved for that build. The fingerprint is stored in the build checkpoint, survives signing, and is validated before and after publication configuration parsing. A change to any JSON option, including fields that do not alter the displayed destination row such as a GitHub tag, release name or release mode, blocks publication and requires a rebuild. Configuration changes detected while the build is running also prevent creation of a successful checkpoint.
+
+Project publication fails closed when the signing state has no readable build checkpoint or when an older checkpoint has no project-configuration fingerprint. This intentionally requires a rebuild after upgrading rather than allowing a legacy checkpoint to publish against current configuration. The loaded publication configuration is immutable for the operation after the second hash check. The guard addresses accidental or cooperating-process drift; it is not a filesystem lock against a hostile process that swaps and restores bytes inside the narrow read/check interval. Credential environment values and external credential-file contents are resolved at publication and are not copied into the checkpoint.
+
+Seventy-eight focused tests passed: all 76 project/module/unified publication cases plus the two direct project-build checkpoint cases. They prove an unchanged JSON contract publishes through controlled NuGet and GitHub delegates, changed or missing checkpoint state invokes no publisher, destination drift after signing is rejected, and drift during execution aborts the build checkpoint. The publication suite also retains its cancellation, partial-evidence, artifact-integrity and fail-fast coverage. No external feed, GitHub release or user repository was modified.
+
+Independent local review remained unavailable because the reviewer quota was exhausted. A structured primary review found and fixed the missing-checkpoint bypass before the final test run. The earlier broad build-class filter also selected the unrelated Apple source-trust matrix, whose macOS path-attestation fixtures fail on this Windows host; that run was stopped. The exact 78-test filter above is the validation boundary for this milestone.

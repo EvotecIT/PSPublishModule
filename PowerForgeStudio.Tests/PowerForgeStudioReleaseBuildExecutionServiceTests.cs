@@ -84,10 +84,52 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(2, callIndex);
+        Assert.Equal(
+            UnifiedReleaseConfigFingerprint.ComputeProjectBuildConfig(configPath),
+            result.ProjectBuildConfigSha256);
         var adapter = Assert.Single(result.AdapterResults);
         Assert.Equal(ReleaseBuildAdapterKind.ProjectBuild, adapter.AdapterKind);
         Assert.Contains(outputDirectory, adapter.ArtifactDirectories);
         Assert.Contains(adapter.ArtifactFiles, path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RejectsProjectBuildConfigDriftDuringBuild()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("ProjectConfigDriftRepo");
+        var buildDirectory = scope.CreateDirectory(Path.Combine("ProjectConfigDriftRepo", "Build"));
+        var buildScriptPath = Path.Combine(buildDirectory, "Build-Project.ps1");
+        var configPath = Path.Combine(buildDirectory, "project.build.json");
+        File.WriteAllText(buildScriptPath, "# test");
+        File.WriteAllText(
+            configPath,
+            """{ "RootPath": "..", "PublishNuget": false }""");
+
+        var service = new ReleaseBuildExecutionService(
+            new RepositoryCatalogScanner(),
+            new ProjectBuildHostService(
+                new NullLogger(),
+                executeRelease: spec =>
+                {
+                    if (!spec.WhatIf)
+                    {
+                        File.WriteAllText(
+                            configPath,
+                            """{ "RootPath": "..", "PublishNuget": true }""");
+                    }
+
+                    return new DotNetRepositoryReleaseResult { Success = true };
+                },
+                publishGitHub: null,
+                validateGitHubPreflight: null),
+            new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ExecuteAsync(repositoryRoot));
+
+        Assert.Contains("changed after the build checkpoint", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void RunGit(string workingDirectory, params string[] arguments)

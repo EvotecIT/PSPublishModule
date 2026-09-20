@@ -22,8 +22,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         {
             var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
             File.WriteAllText(Path.Combine(buildDirectory, "Build-Project.ps1"), "# build");
+            var projectConfig = Path.Combine(buildDirectory, "project.build.json");
             File.WriteAllText(
-                Path.Combine(buildDirectory, "project.build.json"),
+                projectConfig,
                 """
                 {
                   "PublishNuget": true,
@@ -64,7 +65,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 "Build completed.",
                 1,
                 [],
-                ModuleBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeModuleConfig(moduleConfig));
+                ModuleBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeModuleConfig(moduleConfig),
+                ProjectBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeProjectBuildConfig(projectConfig));
             var signingResult = new ReleaseSigningExecutionResult(
                 repositoryRoot,
                 true,
@@ -141,6 +143,118 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             var failure = Assert.Single(result.Receipts, receipt =>
                 receipt.Status == ReleasePublishReceiptStatus.Failed);
             Assert.Contains("changed after the build checkpoint", failure.Summary, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("changed")]
+    [InlineData("missing")]
+    public async Task ExecuteAsync_rejects_unbound_project_publication_config(string scenario)
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeStudio.Tests",
+            Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+            File.WriteAllText(Path.Combine(buildDirectory, "Build-Project.ps1"), "# build");
+            var projectConfig = Path.Combine(buildDirectory, "project.build.json");
+            File.WriteAllText(
+                projectConfig,
+                """
+                {
+                  "PublishNuget": true,
+                  "PublishApiKey": "test-key",
+                  "PublishSource": "https://approved.example.test/v3/index.json"
+                }
+                """);
+
+            var packagePath = Path.Combine(repositoryRoot, "Sample.Library.1.0.0.nupkg");
+            File.WriteAllText(packagePath, "signed-package");
+            var buildResult = new ReleaseBuildExecutionResult(
+                repositoryRoot,
+                true,
+                "Build completed.",
+                1,
+                [],
+                ProjectBuildConfigSha256: UnifiedReleaseConfigFingerprint.ComputeProjectBuildConfig(projectConfig));
+            var signingResult = new ReleaseSigningExecutionResult(
+                repositoryRoot,
+                true,
+                "Signing completed.",
+                scenario == "missing" ? null : JsonSerializer.Serialize(buildResult),
+                [
+                    ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
+                        repositoryRoot,
+                        "Sample",
+                        ReleaseBuildAdapterKind.ProjectBuild.ToString(),
+                        packagePath,
+                        "File",
+                        ReleaseSigningReceiptStatus.Signed,
+                        "Signed.",
+                        DateTimeOffset.UtcNow))
+                ]);
+            var queueItem = new ReleaseQueueItem(
+                repositoryRoot,
+                "Sample",
+                ReleaseRepositoryKind.Library,
+                ReleaseWorkspaceKind.PrimaryRepository,
+                1,
+                ReleaseQueueStage.Publish,
+                ReleaseQueueItemStatus.ReadyToRun,
+                "Ready.",
+                "publish.ready",
+                JsonSerializer.Serialize(signingResult),
+                DateTimeOffset.UtcNow);
+
+            if (scenario == "changed")
+            {
+                File.WriteAllText(
+                    projectConfig,
+                    """
+                    {
+                      "PublishNuget": true,
+                      "PublishApiKey": "test-key",
+                      "PublishSource": "https://changed.example.test/v3/index.json"
+                    }
+                    """);
+            }
+            var pushCalls = 0;
+            var service = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(),
+                new ModuleBuildHostService(),
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(),
+                new ProjectBuildPublishHostService(),
+                (_, _) =>
+                {
+                    pushCalls++;
+                    return Task.FromResult(new DotNetNuGetPushResult(
+                        0,
+                        "published",
+                        string.Empty,
+                        "dotnet",
+                        TimeSpan.Zero,
+                        timedOut: false,
+                        errorMessage: null));
+                });
+
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var result = await service.ExecuteAsync(queueItem);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(0, pushCalls);
+            var failure = Assert.Single(result.Receipts);
+            Assert.Equal(ReleasePublishReceiptStatus.Failed, failure.Status);
+            Assert.Contains(
+                scenario == "changed" ? "changed after the build checkpoint" : "checkpoint is missing",
+                failure.Summary,
+                StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

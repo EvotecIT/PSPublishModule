@@ -29,8 +29,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
         File.WriteAllText(zipPath, "zip");
 
+        var projectConfig = Path.Combine(buildDirectory, "project.build.json");
         File.WriteAllText(
-            Path.Combine(buildDirectory, "project.build.json"),
+            projectConfig,
             """
             {
               "PublishGitHub": true,
@@ -41,12 +42,17 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
               "GitHubGenerateReleaseNotes": true,
             }
             """);
+        File.WriteAllText(
+            projectConfig,
+            File.ReadAllText(projectConfig).Replace(
+                "\"PublishGitHub\": true,",
+                "\"PublishGitHub\": true, \"GitHubReleaseMode\": \"" + mode + "\","));
 
         var signingResult = new ReleaseSigningExecutionResult(
             RootPath: repositoryRoot,
             Succeeded: true,
             Summary: "Signing completed.",
-            SourceCheckpointStateJson: null,
+            SourceCheckpointStateJson: CreateProjectBuildCheckpoint(repositoryRoot, projectConfig),
             Receipts: [
                 new ReleaseSigningReceipt(
                     RootPath: repositoryRoot,
@@ -74,8 +80,6 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             CheckpointStateJson: JsonSerializer.Serialize(signingResult),
             UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-        var configurationPath = Path.Combine(buildDirectory, "project.build.json");
-        File.WriteAllText(configurationPath, File.ReadAllText(configurationPath).Replace("\"PublishGitHub\": true,", "\"PublishGitHub\": true, \"GitHubReleaseMode\": \"" + mode + "\","));
         var otherZip = Path.Combine(repositoryRoot, "Unapproved.zip");
         File.WriteAllText(otherZip, "not signed");
         ProjectBuildGitHubPublishRequest? captured = null;

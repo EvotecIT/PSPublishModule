@@ -6,7 +6,7 @@ using PowerForgeStudio.Orchestrator.Portfolio;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
-public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
+public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 {
     private readonly RepositoryCatalogScanner _catalogScanner;
     private readonly ProjectBuildHostService _projectBuildHostService;
@@ -75,6 +75,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
         var results = new List<ReleaseBuildAdapterResult>();
         var startedAt = DateTimeOffset.UtcNow;
+        var projectBuildConfigCheckpoint = CaptureProjectBuildConfigCheckpoint(repository);
         var directModuleConfigPath =
             string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) &&
             string.Equals(Path.GetExtension(repository.ModuleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase)
@@ -126,6 +127,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 throw new InvalidOperationException(
                     "Unified release configuration changed while the build was running. Rebuild from the updated contract before signing.");
             }
+            ValidateProjectBuildConfigCheckpoint(projectBuildConfigCheckpoint);
 
             results.AddRange(CreateUnifiedAdapterResults(repository, unified, DateTimeOffset.UtcNow - startedAt));
             return ReleaseQueueExecutionResultFactory.CreateBuildResult(
@@ -134,12 +136,14 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 results,
                 SerializeUnifiedCheckpoint(unified),
                 configFingerprint,
-                moduleExportedConfigSha256: moduleExportCheckpoint.Fingerprint);
+                moduleExportedConfigSha256: moduleExportCheckpoint.Fingerprint,
+                projectBuildConfigSha256: projectBuildConfigCheckpoint?.Fingerprint);
         }
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
         {
             results.Add(await ExecuteProjectBuildAsync(repository, reporter, cancellationToken));
+            ValidateProjectBuildConfigCheckpoint(projectBuildConfigCheckpoint);
         }
 
         PowerForgeReleaseResult? directModuleCheckpoint = null;
@@ -173,7 +177,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             unifiedReleaseStateJson: directModuleCheckpoint is null
                 ? null
                 : SerializeUnifiedCheckpoint(directModuleCheckpoint),
-            moduleBuildConfigSha256: directModuleConfigFingerprint);
+            moduleBuildConfigSha256: directModuleConfigFingerprint,
+            projectBuildConfigSha256: projectBuildConfigCheckpoint?.Fingerprint);
     }
 
     internal static PowerForgeReleaseRequest CreateUnifiedReleaseBuildRequest(

@@ -24,7 +24,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         try
         {
             var build = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
-            File.WriteAllText(Path.Combine(build, "project.build.json"), """{"PublishNuget":true,"PublishApiKey":"fixture-key"}""");
+            var projectConfig = Path.Combine(build, "project.build.json");
+            File.WriteAllText(projectConfig, """{"PublishNuget":true,"PublishApiKey":"fixture-key"}""");
             File.WriteAllText(Path.Combine(root, "Fixture.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
             var evidence = new List<ReleaseSigningReceipt>();
             for (var i = 0; i < (scenario == "last-success" ? 1 : 3); i++)
@@ -34,7 +35,12 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 evidence.Add(ReleaseSigningArtifactIntegrity.Capture(new(root, "Fixture", "ProjectBuild", package,
                     "File", ReleaseSigningReceiptStatus.Signed, "Signed", DateTimeOffset.UtcNow)));
             }
-            var signing = new ReleaseSigningExecutionResult(root, true, "Signed", null, evidence);
+            var signing = new ReleaseSigningExecutionResult(
+                root,
+                true,
+                "Signed",
+                CreateProjectBuildCheckpoint(root, projectConfig),
+                evidence);
             var item = new ReleaseQueueItem(root, "Fixture", ReleaseRepositoryKind.Library, ReleaseWorkspaceKind.PrimaryRepository,
                 1, ReleaseQueueStage.Publish, ReleaseQueueItemStatus.ReadyToRun, "Ready", "publish.ready", JsonSerializer.Serialize(signing), DateTimeOffset.UtcNow);
             var calls = 0;

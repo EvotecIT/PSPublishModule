@@ -13,7 +13,8 @@ public static class ReleaseQueueExecutionResultFactory
         string? unifiedReleaseStateJson = null,
         string? unifiedReleaseConfigSha256 = null,
         string? moduleBuildConfigSha256 = null,
-        string? moduleExportedConfigSha256 = null)
+        string? moduleExportedConfigSha256 = null,
+        string? projectBuildConfigSha256 = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(adapterResults);
@@ -34,7 +35,8 @@ public static class ReleaseQueueExecutionResultFactory
             UnifiedReleaseStateJson: unifiedReleaseStateJson,
             UnifiedReleaseConfigSha256: unifiedReleaseConfigSha256,
             ModuleBuildConfigSha256: moduleBuildConfigSha256,
-            ModuleExportedConfigSha256: moduleExportedConfigSha256);
+            ModuleExportedConfigSha256: moduleExportedConfigSha256,
+            ProjectBuildConfigSha256: projectBuildConfigSha256);
     }
 
     public static ReleasePublishExecutionResult CreatePublishResult(

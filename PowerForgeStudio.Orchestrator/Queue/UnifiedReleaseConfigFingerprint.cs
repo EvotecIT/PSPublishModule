@@ -45,6 +45,23 @@ internal static class UnifiedReleaseConfigFingerprint
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
+    internal static string ComputeProjectBuildConfig(string configPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        AppendFile(hash, "project-build", Path.GetFullPath(configPath));
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    internal static void ValidateProjectBuildConfig(string configPath, string? expectedSha256)
+    {
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+            throw new InvalidOperationException("Project build config fingerprint is missing from the build checkpoint. Rebuild before publishing.");
+        var actualSha256 = ComputeProjectBuildConfig(configPath);
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Project build config changed after the build checkpoint. Rebuild and approve the updated contract before publishing.");
+    }
+
     internal static void Validate(string configPath, string? expectedSha256)
     {
         if (string.IsNullOrWhiteSpace(expectedSha256))
