@@ -8,7 +8,9 @@ using PowerForgeStudio.Orchestrator.Queue;
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
 /// <summary>Prepares a release from the captured build rather than the currently selected repository.</summary>
-public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? service = null, IReleaseSigningWorkflow? signing = null, PowerForgeStudio.Orchestrator.Storage.IReleaseHistoryService? history = null, IReleasePublicationPreviewService? publication = null) : ObservableObject, IDisposable
+public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? service = null, IReleaseSigningWorkflow? signing = null,
+    PowerForgeStudio.Orchestrator.Storage.IReleaseHistoryService? history = null, IReleasePublicationPreviewService? publication = null,
+    IReleasePublicationWorkflow? publishing = null, IReleaseVerificationWorkflow? verification = null) : ObservableObject, IDisposable
 {
     private readonly IReleaseBuildHandoffService _service = service ?? new ReleaseBuildHandoffService();
     private readonly IReleaseSigningWorkflow _signing = signing ?? new DurableReleaseSigningWorkflow(PowerForgeStudioHostPaths.GetReleaseHistoryDatabasePath());
@@ -29,8 +31,8 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
     public void SetBuild(ReleaseBuildExecutionResult? build, bool running, bool cancelled)
     {
         if (_disposed) return;
-        if (HasProtectedReleaseWork) throw new InvalidOperationException("A build cannot replace an active signing operation.");
-        PublicationTargets.Clear(); PublicationSummary = "";
+        if (HasProtectedReleaseWork) throw new InvalidOperationException("A build cannot replace an active release operation or unsaved receipt evidence.");
+        ResetPublicationState();
         SigningResult = null; Receipts.Clear(); RequiresRebuild = false; ConfirmDiscardReceipts = false;
         ++_version; _preparing?.Cancel(); _candidate = !running && !cancelled ? build : null;
         Handoff = null; Artifacts.Clear(); IsPreparing = false;
@@ -67,5 +69,12 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
         finally { if (ReferenceEquals(_preparing, read)) _preparing = null; if (!_disposed && version == _version) IsPreparing = false; }
     }
 
-    public void Dispose() { if (_disposed) return; _disposed = true; ++_version; _preparing?.Cancel(); _signingCancellation?.Cancel(); }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true; ++_version; _preparing?.Cancel(); _signingCancellation?.Cancel();
+        _publicationCancellation?.Cancel(); _verificationCancellation?.Cancel();
+        if (publishing is null && _publishing is IDisposable disposablePublishing) disposablePublishing.Dispose();
+        if (verification is null && _verification is IDisposable disposableVerification) disposableVerification.Dispose();
+    }
 }

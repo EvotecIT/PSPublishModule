@@ -1,5 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:publish="using:PowerForgeStudio.Domain.Publish" xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing"
+             xmlns:publish="using:PowerForgeStudio.Domain.Publish" xmlns:verify="using:PowerForgeStudio.Domain.Verification" xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing"
              x:Class="PowerForgeStudio.Avalonia.Views.ReleaseView" x:DataType="vm:ReleaseViewModel">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled">
   <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="16">
@@ -62,7 +62,12 @@
       </ListBox>
     </Grid>
     <StackPanel Grid.Row="4" Spacing="8">
-      <Button Content="Inspect publication targets" Command="{Binding InspectPublicationCommand}" IsEnabled="{Binding CanInspectPublication}" />
+      <WrapPanel>
+        <Button Content="Inspect publication targets" Command="{Binding InspectPublicationCommand}" IsEnabled="{Binding CanInspectPublication}" Margin="0,0,8,4" />
+        <Button Content="Cancel publication" Command="{Binding CancelPublicationCommand}" IsVisible="{Binding IsPublishing}" Margin="0,0,8,4" />
+        <Button Content="Verify published targets" Command="{Binding VerifyCommand}" IsEnabled="{Binding CanVerify}" Margin="0,0,8,4" />
+        <Button Content="Cancel verification" Command="{Binding CancelVerificationCommand}" IsVisible="{Binding IsVerifying}" Margin="0,0,8,4" />
+      </WrapPanel>
       <TextBlock Text="{Binding PublicationSummary}" TextWrapping="Wrap" />
       <ListBox ItemsSource="{Binding PublicationTargets}" MaxHeight="260">
         <ListBox.ItemTemplate><DataTemplate x:DataType="publish:ReleasePublishTarget">
@@ -71,6 +76,32 @@
             <TextBlock Text="{Binding TargetKind}" Foreground="#0865FF" />
             <TextBlock Text="{Binding Destination}" TextWrapping="Wrap" />
             <TextBlock Text="{Binding SourcePath}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SourcePath}" FontSize="12" />
+          </StackPanel>
+        </DataTemplate></ListBox.ItemTemplate>
+      </ListBox>
+      <CheckBox Content="I reviewed these destinations and approve external publication" IsChecked="{Binding ConfirmPublication}" IsEnabled="{Binding CanInspectPublication}" />
+      <Button Content="Publish signed artifacts" Command="{Binding PublishCommand}" IsEnabled="{Binding CanPublish}" Background="#0865FF" Foreground="White" />
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsPublishing}" Height="4" />
+      <TextBlock IsVisible="{Binding HasPublicationReceipts}" Text="Publication receipts" FontSize="16" FontWeight="SemiBold" />
+      <ListBox IsVisible="{Binding HasPublicationReceipts}" ItemsSource="{Binding PublicationReceipts}" MaxHeight="260" Background="#F7F9FC">
+        <ListBox.ItemTemplate><DataTemplate x:DataType="publish:ReleasePublishReceipt">
+          <StackPanel Spacing="5" Margin="8">
+            <TextBlock Text="{Binding TargetName}" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Status}" Foreground="#0865FF" />
+            <TextBlock Text="{Binding Destination}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+          </StackPanel>
+        </DataTemplate></ListBox.ItemTemplate>
+      </ListBox>
+      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsVerifying}" Height="4" />
+      <TextBlock IsVisible="{Binding HasVerificationReceipts}" Text="Verification receipts" FontSize="16" FontWeight="SemiBold" />
+      <ListBox IsVisible="{Binding HasVerificationReceipts}" ItemsSource="{Binding VerificationReceipts}" MaxHeight="260" Background="#F7F9FC">
+        <ListBox.ItemTemplate><DataTemplate x:DataType="verify:ReleaseVerificationReceipt">
+          <StackPanel Spacing="5" Margin="8">
+            <TextBlock Text="{Binding TargetName}" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Status}" Foreground="#0865FF" />
+            <TextBlock Text="{Binding Destination}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
           </StackPanel>
         </DataTemplate></ListBox.ItemTemplate>
       </ListBox>

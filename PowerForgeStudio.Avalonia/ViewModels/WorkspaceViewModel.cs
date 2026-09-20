@@ -63,7 +63,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isGitHubPage;
     partial void OnIsGitHubPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(OutputPaneHeight)); }
     public global::Avalonia.Controls.GridLength OutputPaneHeight => new(IsGitHubPage || IsReleasePage ? 0 : 170);
-    [RelayCommand] private void ShowGitHub() { IsReleasePage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
+    [RelayCommand] private void ShowGitHub() { if (KeepReleaseVisible()) return; IsReleasePage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
@@ -77,9 +77,19 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     }
     public string DisplayedOutput => IsChangesPage ? Changes.LastOperation : IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;
     partial void OnOutputChanged(string value) => OnPropertyChanged(nameof(DisplayedOutput));
-    [RelayCommand] private void ShowFiles() { IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
-    [RelayCommand] private void ShowBuild() { IsReleasePage = false; IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
-    [RelayCommand] private void ShowChanges() { IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
+    [RelayCommand] private void ShowFiles() { if (KeepReleaseVisible()) return; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
+    [RelayCommand] private void ShowBuild() { if (KeepReleaseVisible()) return; IsReleasePage = false; IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
+    [RelayCommand] private void ShowChanges() { if (KeepReleaseVisible()) return; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
+
+    private bool KeepReleaseVisible()
+    {
+        if (!Release.HasProtectedReleaseWork) return false;
+        IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true;
+        Release.Status = Release.HasUnpersistedEvidence
+            ? "Save or explicitly discard the unsaved receipts before leaving this release."
+            : "Wait for the release operation to finish, or cancel it and retain its receipts before leaving.";
+        return true;
+    }
     public ObservableCollection<ExplorerNode> Projects { get; } = [];
     public ObservableCollection<FileItemViewModel> Files { get; } = [];
     [ObservableProperty] private string _workspaceRoot;

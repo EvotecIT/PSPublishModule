@@ -56,6 +56,8 @@ public sealed partial class MainWindow : Window
             args.Cancel = true;
             model.ShowReleaseCommand.Execute(null);
             model.Release.Status = model.Release.HasUnpersistedEvidence ? "Save or explicitly discard the unsaved receipts before closing."
+                : model.Release.IsPublishing ? "Publication is still running. Cancel it or wait for receipt capture before closing."
+                : model.Release.IsVerifying ? "Verification is still running. Cancel it or wait for receipt capture before closing."
                 : "Signing is still running. Cancel signing or wait for completion before closing.";
             return;
         }

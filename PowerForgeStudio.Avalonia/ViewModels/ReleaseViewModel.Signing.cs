@@ -22,6 +22,7 @@ public sealed partial class ReleaseViewModel
     private void NotifyReleaseState()
     {
         OnPropertyChanged(nameof(CanInspectPublication)); OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(CanSign));
+        OnPropertyChanged(nameof(CanPublish)); OnPropertyChanged(nameof(CanVerify));
         OnPropertyChanged(nameof(HasArtifacts)); OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));
         OnPropertyChanged(nameof(HasProtectedReleaseWork)); OnPropertyChanged(nameof(CanBrowseHistory));
     }
@@ -40,7 +41,7 @@ public sealed partial class ReleaseViewModel
             _pendingSave = result.PersistenceError is null ? null : result;
             HasUnpersistedEvidence = _pendingSave is not null;
             SigningResult = result.Execution;
-            Handoff = captured with { Session = result.Session };
+            Handoff = captured with { Session = result.Session }; ResetPublicationState();
             Receipts.Clear();
             foreach (var receipt in result.Execution.Receipts)
                 Receipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary) });
