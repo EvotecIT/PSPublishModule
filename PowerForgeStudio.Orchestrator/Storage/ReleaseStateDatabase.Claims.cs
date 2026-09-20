@@ -1,5 +1,6 @@
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Signing;
+using PowerForgeStudio.Domain.Publish;
 
 namespace PowerForgeStudio.Orchestrator.Storage;
 
@@ -7,7 +8,8 @@ public sealed partial class ReleaseStateDatabase
 {
     /// <summary>Atomically creates a new session or replaces exactly the observed checkpoint. A stale caller makes no changes.</summary>
     public async Task<bool> TryAdvanceReleaseCheckpointAsync(ReleaseQueueSession? expected, ReleaseQueueSession next,
-        IReadOnlyList<ReleaseSigningReceipt>? signingReceipts = null, CancellationToken cancellationToken = default)
+        IReadOnlyList<ReleaseSigningReceipt>? signingReceipts = null, CancellationToken cancellationToken = default,
+        IReadOnlyList<ReleasePublishReceipt>? publishReceipts = null)
     {
         ArgumentNullException.ThrowIfNull(next);
         ArgumentException.ThrowIfNullOrWhiteSpace(next.SessionId);
@@ -21,6 +23,8 @@ public sealed partial class ReleaseStateDatabase
             await PersistQueueSessionCoreAsync(transaction, next, token).ConfigureAwait(false);
             if (signingReceipts is not null)
                 await PersistReceiptSetAsync(transaction, next.SessionId, signingReceipts, SigningReceiptTable, token).ConfigureAwait(false);
+            if (publishReceipts is not null)
+                await PersistReceiptSetAsync(transaction, next.SessionId, publishReceipts, PublishReceiptTable, token).ConfigureAwait(false);
             return true;
         }, cancellationToken).ConfigureAwait(false);
     }

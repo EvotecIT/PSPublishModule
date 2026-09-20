@@ -19,7 +19,7 @@ public sealed class DurableReleaseSigningWorkflow(string databasePath, IReleaseS
         var item = handoff.Session.Items.Single();
         if (item.Stage != ReleaseQueueStage.Sign || item.Status != ReleaseQueueItemStatus.WaitingApproval)
             throw new InvalidOperationException("Prepare a successful build before signing.");
-        using var lease = AcquireWorkingCopyLease(item.RootPath);
+        using var lease = ReleaseWorkingCopyLease.Acquire(databasePath, item.RootPath);
         var database = new ReleaseStateDatabase(databasePath);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var interruption = new ReleaseSigningExecutionResult(item.RootPath, false,
@@ -57,15 +57,4 @@ public sealed class DurableReleaseSigningWorkflow(string databasePath, IReleaseS
             return result with { PersistenceError = "Could not save signing completion: " + Host.StudioOutputSanitizer.Sanitize(ex.Message) };
         }
     }
-    private FileStream AcquireWorkingCopyLease(string root)
-    {
-        var normalized = Host.PowerForgeStudioHostPaths.NormalizeWorkspaceRoot(root);
-        if (OperatingSystem.IsWindows()) normalized = normalized.ToUpperInvariant();
-        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalized)));
-        var directory = Path.GetFullPath(databasePath) + ".locks";
-        Directory.CreateDirectory(directory);
-        try { return new FileStream(Path.Combine(directory, key + ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
-        catch (IOException ex) { throw new InvalidOperationException("Another signing operation may be using this working copy. Wait for it to finish before starting another session.", ex); }
-    }
-
 }
