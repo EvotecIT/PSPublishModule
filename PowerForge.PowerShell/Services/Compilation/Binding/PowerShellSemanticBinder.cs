@@ -245,11 +245,12 @@ internal sealed partial class PowerShellSemanticBinder
             regionCandidates[laterContinuationCandidate.RegionId] = laterContinuationCandidate;
             guardedPrefixCandidate = laterContinuationCandidate;
         }
-        if (regionCandidates is not null && (!bodyIsValid || guardedPrefixCandidate is not null) &&
-            PowerShellBoundRegionCandidateSelector.TryCreateDetachedContinuation(
-                document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
-                guardedPrefixCandidate, out var detachedContinuationCandidate))
-            regionCandidates[detachedContinuationCandidate.RegionId] = detachedContinuationCandidate;
+        if (regionCandidates is not null && (!bodyIsValid || guardedPrefixCandidate is not null))
+            foreach (var detachedContinuationCandidate in
+                     PowerShellBoundRegionCandidateSelector.CreateDetachedContinuations(
+                         document, function, functionSymbol, parameters, locals, authoredStatements,
+                         statementBindings, guardedPrefixCandidate))
+                regionCandidates[detachedContinuationCandidate.RegionId] = detachedContinuationCandidate;
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
             if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&

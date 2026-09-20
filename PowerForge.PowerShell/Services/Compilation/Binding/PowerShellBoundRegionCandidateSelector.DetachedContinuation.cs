@@ -5,11 +5,12 @@ namespace PowerForge;
 internal static partial class PowerShellBoundRegionCandidateSelector
 {
     /// <summary>
-    /// Selects the first closed statement-aligned typed run after an earlier promoted region or from
-    /// retained definite assignment. Mutated outputs remain stable scalars and return to a later
-    /// retained continuation; a read-only run may be terminal under the structured transfer policy.
+    /// Selects one closed statement-aligned typed candidate from every non-overlapping canonical run
+    /// after an earlier promoted region or from retained definite assignment. Mutated outputs remain
+    /// stable scalars and return to a later retained continuation; a read-only run may be terminal
+    /// under the structured transfer policy.
     /// </summary>
-    internal static bool TryCreateDetachedContinuation(
+    internal static PowerShellBoundRegionCandidate[] CreateDetachedContinuations(
         ParsedSourceDocument document,
         FunctionDefinitionAst syntax,
         PowerShellSymbolId sourceFunction,
@@ -17,15 +18,13 @@ internal static partial class PowerShellBoundRegionCandidateSelector
         IReadOnlyList<PowerShellBoundLocal> functionLocals,
         IReadOnlyList<StatementAst> authoredStatements,
         IReadOnlyList<PowerShellBoundStatementBinding> bindings,
-        PowerShellBoundRegionCandidate? guardedPrefix,
-        out PowerShellBoundRegionCandidate candidate)
+        PowerShellBoundRegionCandidate? guardedPrefix)
     {
-        candidate = null!;
         if (guardedPrefix is { RequiresLocalOwnershipGuard: false } ||
             !PowerShellSourceSemanticValidator.SupportsDetachedFunctionMetadata(document) ||
             syntax.IsFilter || syntax.IsWorkflow || HasNamedLifecycle(syntax.Body) ||
             syntax.Body.EndBlock?.Traps is { Count: > 0 })
-            return false;
+            return Array.Empty<PowerShellBoundRegionCandidate>();
 
         var ordered = bindings.OrderBy(static binding => binding.AuthoredStatementIndex).ToArray();
         var runs = new List<List<PowerShellBoundStatementBinding>>();
@@ -40,17 +39,24 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             runs[runs.Count - 1].Add(binding);
         }
 
+        var candidates = new List<PowerShellBoundRegionCandidate>();
         foreach (var run in runs.Where(run => run.Count >= 1 &&
                      run[0].AuthoredStatementIndex > 0))
         {
             // A completely bound retained statement may still divide two independently closed
-            // regions. Try the maximal run first, then later statement-aligned suffixes.
+            // regions. Preserve the maximal run and every structurally closed later suffix so the
+            // promotion policy can reject an unsafe outer candidate without hiding a safe suffix.
             for (var start = 0; start < run.Count; start++)
-                if (TryCreateDetachedRun(document, syntax, sourceFunction, parameters, functionLocals,
-                        authoredStatements, run.Skip(start).ToArray(), guardedPrefix, out candidate))
-                    return true;
+            {
+                if (!TryCreateDetachedRun(document, syntax, sourceFunction, parameters, functionLocals,
+                        authoredStatements, run.Skip(start).ToArray(), guardedPrefix, out var candidate))
+                    continue;
+                candidates.Add(candidate);
+            }
         }
-        return false;
+        return candidates
+            .OrderBy(static candidate => candidate.RegionFunction.Body.Span.StartOffset)
+            .ToArray();
     }
 
     private static bool TryCreateDetachedRun(
