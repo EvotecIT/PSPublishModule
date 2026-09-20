@@ -3,5 +3,6 @@
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="/Styles/Workspace.axaml" />
+    <StyleInclude Source="/Styles/ProjectTree.axaml" />
   </Application.Styles>
 </Application>

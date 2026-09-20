@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Avalonia.Media;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
@@ -24,10 +25,20 @@ public sealed partial class ExplorerNode : ObservableObject
     public string Name { get; }
     public string Path { get; }
     public string Kind { get; }
+    public string IconKind => IsContextProject && Kind == "project" ? "folder" : Kind;
+    private static readonly IBrush ContextBrush = Brush.Parse("#EAF2FF");
+    public IBrush ContextBackground => IsContextProject ? ContextBrush : Brushes.Transparent;
     public string RepositoryRoot { get; }
     public ObservableCollection<ExplorerNode> Children { get; } = [];
     [ObservableProperty] private string _detail = "";
+    [ObservableProperty] private string _statusMarker = "";
     [ObservableProperty] private bool _isExpanded;
+    [ObservableProperty] private bool _isContextProject;
+    partial void OnIsContextProjectChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IconKind));
+        OnPropertyChanged(nameof(ContextBackground));
+    }
 
     partial void OnIsExpandedChanged(bool value)
     {

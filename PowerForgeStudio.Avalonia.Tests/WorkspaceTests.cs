@@ -3,6 +3,7 @@ using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -41,6 +42,9 @@ public sealed class WorkspaceTests
                 await model.SelectAsync(readme);
                 Assert.Equal("# Preview content", model.Preview);
                 Assert.Contains("untracked", model.GitSummary);
+                Assert.True(project.IsContextProject);
+                Assert.Equal("folder", project.IconKind);
+                Assert.Equal("?", readme.StatusMarker);
                 // A central-pane navigation must retain the working-copy root even if tree selection is absent.
                 Assert.Null(model.SelectedNode);
                 var build = Assert.Single(model.Files, x => x.Name == "Build");
@@ -64,6 +68,25 @@ public sealed class WorkspaceTests
                     window.Show();
                     window.UpdateLayout();
                     Dispatcher.UIThread.RunJobs();
+                    var tree = window.FindControl<TreeView>("ProjectTree")!;
+                    var buildNode = Assert.Single(checkout.Children, node => node.Name == "Build");
+                    tree.SelectedItem = buildNode;
+                    var buildContainer = Assert.Single(window.GetVisualDescendants().OfType<TreeViewItem>(), item => ReferenceEquals(item.Header, buildNode));
+                    Assert.True(buildContainer.Focus());
+                    window.KeyPress(Key.Right, RawInputModifiers.None, PhysicalKey.None, null);
+                    window.KeyRelease(Key.Right, RawInputModifiers.None, PhysicalKey.None, null);
+                    await buildNode.EnsureLoadedAsync();
+                    Assert.True(buildNode.IsExpanded);
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+                    window.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.None, null);
+                    window.KeyRelease(Key.Down, RawInputModifiers.None, PhysicalKey.None, null);
+                    var script = Assert.Single(buildNode.Children, node => node.Name == "Build-Project.ps1");
+                    Assert.Same(script, tree.SelectedItem);
+                    await model.SelectAsync(script);
+                    Assert.Equal("# Fixture only", model.Preview);
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
                     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                     Assert.NotNull(window.FindControl<TreeView>("ProjectTree"));
                     Assert.Single(window.GetVisualDescendants().OfType<FilesView>());
@@ -75,6 +98,8 @@ public sealed class WorkspaceTests
                         Directory.CreateDirectory(output);
                         frame.Save(Path.Combine(output, "workspace.png"), PngBitmapEncoderOptions.Default);
                     }
+                    await model.SelectAsync(readme);
+                    model.SelectedFile = Assert.Single(model.Files, file => file.Name == "README.md");
                     var operation = new FileOperationViewModel(model, WorkspaceFileOperation.Copy) { Destination = "README-copy.md" };
                     var dialog = new FileOperationDialog { DataContext = operation };
                     var shown = dialog.ShowDialog(window);

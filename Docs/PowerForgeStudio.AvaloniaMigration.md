@@ -9,6 +9,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Inspect current WPF host, shared owners and project state.
 - [x] Isolate implementation on feature/studio-avalonia.
 - [ ] Implement the reviewed workspace shell and hierarchical project explorer.
+- [x] Apply native tree row geometry, ancestry guides, context/selection styling, vector navigation icons and Git markers.
 - [ ] Connect real file navigation, previews and explicit file operations.
 - [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
 - [ ] Complete file editing/save conflicts and deletion/recovery behavior.
@@ -130,3 +131,19 @@ Evidence:
 Remaining Git work includes refresh after external edits, branch/history and remote workflows, partial staging, and native interaction proof. Diffs displayed in the UI are capped at 256 KiB after capture; the shared Git runner's capture is not yet bounded by that display limit. The shared branch/worktree list helpers also still return empty lists on secondary probe failure. These limits are separate from the now-explicit primary status failures.
 
 No user repository was staged, committed, or published by the GUI validation. Disposable repositories were removed by their tests. Temporary WPF validation binaries were removed; active Avalonia outputs and small screenshots are retained.
+
+### Tree and shell milestone
+
+The explorer now uses a native TreeViewItem theme with 30-pixel rows, 19-pixel indentation and ancestor guides. The active project uses a blue folder and a subtle context background; other projects remain amber. Selected files have a separate highlight. The theme retains Avalonia's named expansion, header and item-presenter parts and focus target. Rail actions use one outline vector family, while page buttons identify the selected page with a blue underline. Unimplemented rail routes remain disabled.
+
+Loaded file nodes show real Git markers, and each inspected working copy shows its own change count or clean/conflict state. Windows paths from Git worktree output are normalized before matching file nodes. Selecting a linked checkout retains its owning project name. Tree file selection also synchronizes the central list so file actions target that file. Filtering retains existing project nodes and their expanded children.
+
+Evidence:
+
+- Nine Avalonia tests passed after the tree/theme/status changes. The three workspace tests passed again after synchronizing tree and central-file selection.
+- A real two-repository fixture with a linked checkout proves separate Git markers and owning-project context. A native-control headless keyboard check uses Right to expand a folder and Down to select and preview its script.
+- Inspected updated wide and compact rendered views, including Artifacts/StudioValidation/workspace-tree.png with primary checkout, worktree, modified file and active-project context.
+- Independent read-only review /root/review_tree_shell found no actionable P0-P3 issue. Boundary: current; base ed759f285; staged patch fingerprint ab65f8fcba8692e272d1d3afa89ae3b84154fb4e. No targeted confirmation was needed.
+- Native Windows validation was retried after window discovery began responding. The application process and window appeared, but capture/activation still failed with foreground window did not report a process id on both attempts. Both owned validation processes were closed. Native input/rendering remains unverified; headless keyboard input is not equivalent evidence.
+
+Favorites, document tabs, saved workspace/expansion state, complete keyboard/mouse coverage and the remaining pages are still required. The existing WorkspaceRootCatalogService and its profile records live in PowerForgeStudio.Wpf/ViewModels; extract reusable persistence into the shared owner before connecting saved state in Avalonia. Do not create a competing settings store. Current Git markers reflect the last explicit status read, not a filesystem watcher.

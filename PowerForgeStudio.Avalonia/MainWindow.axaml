@@ -10,36 +10,37 @@
       <Grid ColumnDefinitions="360,*,280" Margin="22,0">
         <TextBlock Text="PowerForge Studio" Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
         <TextBox Grid.Column="1" Text="{Binding Filter}" PlaceholderText="Find a project…" MaxWidth="550" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#EAF0F8" />
-        <TextBlock Grid.Column="2" Text="Local workspace" Foreground="#D6E4F7" VerticalAlignment="Center" HorizontalAlignment="Right" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right"><controls:NavigationIcon Kind="monitor" Width="21" Height="21" Ink="#D6E4F7" /><TextBlock Text="Local workspace" Foreground="#D6E4F7" /></StackPanel>
       </Grid>
     </Border>
     <Grid Grid.Row="1" x:Name="WorkspaceLayout" ColumnDefinitions="70,326,5,*,280">
       <Border Background="#0B2745">
         <StackPanel Spacing="4" Margin="0,10">
-          <Button Classes="rail" Content="Projects" />
-          <Button Classes="rail" Content="Activity" IsEnabled="False" />
-          <Button Classes="rail" Content="GitHub" IsEnabled="False" />
-          <Button Classes="rail" Content="Schedules" IsEnabled="False" />
-          <Button Classes="rail" Content="Storage" IsEnabled="False" />
-          <Button Classes="rail" Content="Connections" IsEnabled="False" />
+          <Button Classes="rail selected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Schedules" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
         </StackPanel>
       </Border>
       <Border Grid.Column="1" Background="#FBFCFF" BorderBrush="#DDE5EF" BorderThickness="0,0,1,0">
         <Grid RowDefinitions="58,42,36,*,28">
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="17,8">
             <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Content="+" ToolTip.Tip="Choose workspace folder" Click="ChooseWorkspace" Padding="8,2" BorderThickness="0" />
-            <Button Grid.Column="2" Content="↻" ToolTip.Tip="Refresh repositories" Command="{Binding RefreshCommand}" Padding="8,2" BorderThickness="0" />
+            <Button Grid.Column="1" ToolTip.Tip="Choose workspace folder" Click="ChooseWorkspace" Classes="toolbar"><controls:NavigationIcon Kind="plus" Width="18" Height="18" Ink="#25354E" /></Button>
+            <Button Grid.Column="2" ToolTip.Tip="Refresh repositories" Command="{Binding RefreshCommand}" Classes="toolbar"><controls:NavigationIcon Kind="refresh" Width="18" Height="18" Ink="#25354E" /></Button>
           </Grid>
           <TextBox Grid.Row="1" Text="{Binding Filter}" PlaceholderText="Filter projects…" Margin="16,0,16,7" />
           <TextBlock Grid.Row="2" Text="All projects" Foreground="#0865FF" FontWeight="SemiBold" Margin="19,6" />
-          <TreeView Grid.Row="3" x:Name="ProjectTree" ItemsSource="{Binding Projects}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}" Background="Transparent" Margin="5,0">
+          <TreeView Grid.Row="3" x:Name="ProjectTree" ItemsSource="{Binding Projects}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}" Background="Transparent" Margin="6,0" ItemContainerTheme="{StaticResource WorkspaceTreeItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <TreeView.ItemTemplate>
               <TreeDataTemplate x:DataType="vm:ExplorerNode" ItemsSource="{Binding Children}">
-                <Grid ColumnDefinitions="20,*,Auto" ColumnSpacing="8" Height="30" ToolTip.Tip="{Binding Path}">
-                  <controls:ProjectIcon Kind="{Binding Kind}" Width="20" Height="20" />
+                <Grid ColumnDefinitions="20,*,Auto,Auto" ColumnSpacing="7" Height="30" ToolTip.Tip="{Binding Path}">
+                  <controls:ProjectIcon Kind="{Binding IconKind}" Width="20" Height="20" />
                   <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="muted" FontSize="12" VerticalAlignment="Center" Margin="5,0" />
+                  <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="muted" FontSize="12" VerticalAlignment="Center" MaxWidth="70" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="3" Text="{Binding StatusMarker}" Foreground="#0865FF" FontSize="12" VerticalAlignment="Center" />
                 </Grid>
               </TreeDataTemplate>
             </TreeView.ItemTemplate>
@@ -50,7 +51,7 @@
         </Grid>
       </Border>
       <GridSplitter Grid.Column="2" ResizeDirection="Columns" Background="#E5EBF4" />
-      <Grid Grid.Column="3" RowDefinitions="43,93,*,170">
+      <Grid Grid.Column="3" RowDefinitions="43,93,*,170" Background="White">
         <Border Background="#EFF4FB" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="18,10">
           <StackPanel Orientation="Horizontal" Spacing="10">
             <controls:ProjectIcon Kind="folder" Width="20" Height="20" />
@@ -63,10 +64,10 @@
               <TextBlock Text="{Binding ProjectName}" Classes="heading" TextTrimming="CharacterEllipsis" />
               <TextBlock Grid.Column="1" Text="{Binding Branch}" Foreground="#0865FF" VerticalAlignment="Center" />
             </Grid>
-            <StackPanel Orientation="Horizontal" Spacing="25">
-              <Button Content="Files" Command="{Binding ShowFilesCommand}" Padding="0" BorderThickness="0" Background="Transparent" />
-              <Button Content="Changes" Command="{Binding ShowChangesCommand}" Padding="0" BorderThickness="0" Background="Transparent" />
-              <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Padding="0" BorderThickness="0" Background="Transparent" />
+            <StackPanel Orientation="Horizontal" Spacing="20">
+              <Button Content="Files" Command="{Binding ShowFilesCommand}" Classes="pageTab" Classes.active="{Binding IsFilesPage}" />
+              <Button Content="Changes" Command="{Binding ShowChangesCommand}" Classes="pageTab" Classes.active="{Binding IsChangesPage}" />
+              <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Classes="pageTab" Classes.active="{Binding IsBuildPage}" />
               <TextBlock Text="Releases" Classes="muted" />
             </StackPanel>
           </StackPanel>
@@ -76,7 +77,7 @@
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
         <Border Grid.Row="3" Background="#0D2132">
           <Grid RowDefinitions="38,*">
-            <TextBlock Text="Output" Foreground="#E6F0FF" Margin="17,10" />
+            <StackPanel Orientation="Horizontal" Spacing="9" Margin="17,10"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#E6F0FF" /><TextBlock Text="Output" Foreground="#E6F0FF" /></StackPanel>
             <ScrollViewer Grid.Row="1" Margin="17,5,17,12" HorizontalScrollBarVisibility="Auto">
               <SelectableTextBlock Text="{Binding DisplayedOutput}" Foreground="#D7E7F8" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
             </ScrollViewer>

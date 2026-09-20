@@ -29,6 +29,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             if (args.PropertyName == nameof(GitChangesViewModel.LastOperation)) OnPropertyChanged(nameof(DisplayedOutput));
             if (args.PropertyName == nameof(GitChangesViewModel.Snapshot) && Changes.Snapshot is { } snapshot)
             {
+                UpdateGitDecorations(Changes.Root, snapshot);
                 Branch = snapshot.BranchDisplay;
                 GitSummary = !snapshot.IsGitRepository ? "Not a Git working copy" : snapshot.HasConflicts ? "Merge conflicts need resolution" : snapshot.StatusSummary;
             }
@@ -80,6 +81,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 
     partial void OnActiveWorkingCopyRootChanged(string value)
     {
+        foreach (var project in _projectNodes.Values)
+            project.IsContextProject = !string.IsNullOrEmpty(value) &&
+                (SamePath(project.Path, value) || project.Children.Any(child => child.Children.Any(worktree =>
+                    worktree.Kind == "branch" && !string.IsNullOrEmpty(worktree.Path) && SamePath(worktree.Path, value))));
         Build.SetWorkingCopy(value);
         Changes.SetWorkingCopy(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
@@ -128,6 +133,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             _catalog.Clear();
             _catalog.AddRange(found);
             _projectNodes.Clear();
+            _gitSnapshots.Clear();
             ApplyFilter();
             RepositoryCount = $"{found.Length} repositories";
             Status = "Local discovery complete";
@@ -165,6 +171,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         }
         await primary.EnsureLoadedAsync();
         primary.IsExpanded = true;
+        UpdateGitDecorations(node.Path, git);
     }
 
     private async Task LoadDirectoryAsync(ExplorerNode node)
@@ -177,6 +184,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         foreach (var entry in entries)
             node.Children.Add(existing.TryGetValue(entry.FullPath, out var child) && child.Kind == Kind(entry) ? child
                 : new ExplorerNode(entry.Name, entry.FullPath, Kind(entry), node.RepositoryRoot, entry.IsDirectory ? LoadDirectoryAsync : null));
+        if (_gitSnapshots.TryGetValue(node.RepositoryRoot, out var snapshot)) UpdateGitDecorations(node.RepositoryRoot, snapshot);
     }
 
     public async Task SelectAsync(ExplorerNode node)
@@ -195,11 +203,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             }
             SelectedPath = node.Path;
             ActiveWorkingCopyRoot = node.RepositoryRoot;
-            ProjectName = Path.GetFileName(node.RepositoryRoot);
+            ProjectName = _projectNodes.Values.FirstOrDefault(project => project.IsContextProject)?.Name ?? Path.GetFileName(node.RepositoryRoot);
             Status = "Loading selection…";
             var entries = await _files.ListDirectoryAsync(directory, _lifetime.Token);
             if (_disposed || version != _selectionVersion) return;
             ReplaceFiles(entries);
+            _updatingFileList = true;
+            try { SelectedFile = Files.FirstOrDefault(file => !file.IsDirectory && SamePath(file.FullPath, node.Path)); }
+            finally { _updatingFileList = false; }
             CurrentDirectory = directory;
             PreviewTitle = node.Name;
             var preview = Directory.Exists(node.Path) ? $"{entries.Count} visible entries\n\n{node.Path}" : await _files.ReadTextPreviewAsync(node.Path, _lifetime.Token);
@@ -208,6 +219,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             var git = await _git.GetStatusAsync(node.RepositoryRoot, _lifetime.Token);
             if (_disposed || version != _selectionVersion) return;
             Branch = git.BranchDisplay;
+            UpdateGitDecorations(node.RepositoryRoot, git);
             GitSummary = git.IsGitRepository ? git.StatusSummary : "Git status unavailable";
             Status = "Ready";
         }

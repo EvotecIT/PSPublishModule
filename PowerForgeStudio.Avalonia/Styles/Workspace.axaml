@@ -17,15 +17,26 @@
     <Setter Property="Foreground" Value="White" />
     <Setter Property="BorderBrush" Value="#0865FF" />
   </Style>
+  <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="#EEF2F7" /><Setter Property="Foreground" Value="#8390A3" /><Setter Property="BorderBrush" Value="#E1E7EF" />
+  </Style>
+  <Style Selector="TextBox"><Setter Property="BorderBrush" Value="#DAE3EF" /><Setter Property="CornerRadius" Value="5" /></Style>
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#E4EFFF" /><Setter Property="Foreground" Value="#172238" /></Style>
   <Style Selector="Button.rail">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Foreground" Value="#E0EBFA" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
-    <Setter Property="Padding" Value="2,15" />
+    <Setter Property="Padding" Value="2,11" />
     <Setter Property="FontSize" Value="11" />
   </Style>
+  <Style Selector="Button.rail.selected"><Setter Property="Background" Value="#164477" /><Setter Property="BorderBrush" Value="#1680FF" /><Setter Property="BorderThickness" Value="3,0,0,0" /><Setter Property="CornerRadius" Value="0" /></Style>
+  <Style Selector="Button.rail:disabled /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="Transparent" /><Setter Property="Foreground" Value="#8298B3" /></Style>
+  <Style Selector="Button.rail:disabled"><Setter Property="Opacity" Value="0.55" /></Style>
+  <Style Selector="Button.toolbar"><Setter Property="Padding" Value="8,5" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style>
+  <Style Selector="Button.pageTab"><Setter Property="Padding" Value="0,0,0,7" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0,0,0,2" /><Setter Property="BorderBrush" Value="Transparent" /><Setter Property="CornerRadius" Value="0" /></Style>
+  <Style Selector="Button.pageTab.active"><Setter Property="Foreground" Value="#0865FF" /><Setter Property="BorderBrush" Value="#0865FF" /></Style>
   <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#67748B" /></Style>
   <Style Selector="TextBlock.heading"><Setter Property="FontSize" Value="23" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
   <Style Selector="Border.card"><Setter Property="Background" Value="White" /><Setter Property="BorderBrush" Value="#DDE5F0" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="5" /></Style>
