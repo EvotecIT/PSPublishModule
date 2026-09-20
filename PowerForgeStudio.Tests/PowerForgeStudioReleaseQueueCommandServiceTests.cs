@@ -128,7 +128,7 @@ public sealed class PowerForgeStudioReleaseQueueCommandServiceTests
 
     private sealed class StubBuildExecutionService(bool succeeded) : IReleaseBuildExecutionService
     {
-        public Task<ReleaseBuildExecutionResult> ExecuteAsync(string rootPath, CancellationToken cancellationToken = default)
+        public Task<ReleaseBuildExecutionResult> ExecuteAsync(string rootPath, CancellationToken cancellationToken = default, IProgress<ReleaseBuildProgress>? progress = null)
             => Task.FromResult(new ReleaseBuildExecutionResult(
                 RootPath: rootPath,
                 Succeeded: succeeded,

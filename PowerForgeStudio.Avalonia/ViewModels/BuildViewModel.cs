@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Portfolio;
+using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
@@ -14,14 +15,18 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _operation;
     private int _contextVersion;
     private bool _disposed;
-    public BuildViewModel(IRepositoryPlanPreviewService? planner = null) => _planner = planner ?? new RepositoryPlanPreviewService();
+    public BuildViewModel(IRepositoryPlanPreviewService? planner = null, IReleaseBuildExecutionService? builds = null)
+    {
+        _planner = planner ?? new RepositoryPlanPreviewService();
+        _builds = builds ?? new ReleaseBuildExecutionService();
+    }
     public ObservableCollection<RepositoryPlanResult> Results { get; } = [];
     [ObservableProperty] private string _workingCopyRoot = "";
     [ObservableProperty] private string _status = "Select a working copy to inspect its build contract.";
     [ObservableProperty] private string _contracts = "No contract inspected.";
     [ObservableProperty] private bool _isBusy;
-    public bool CanPlan => !IsBusy && !string.IsNullOrEmpty(WorkingCopyRoot);
-    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanPlan));
+    public bool CanPlan => !IsBusy && !IsBuilding && !_disposed && !string.IsNullOrEmpty(WorkingCopyRoot);
+    partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(CanBuild)); }
 
     public void SetWorkingCopy(string root)
     {
@@ -30,6 +35,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
         _operation?.Cancel();
         WorkingCopyRoot = root;
         Results.Clear();
+        HasSuccessfulInspection = false;
         Contracts = "No contract inspected.";
         Status = string.IsNullOrEmpty(root) ? "Select a working copy to inspect its build contract." : "Ready to inspect and plan this working copy.";
         OnPropertyChanged(nameof(CanPlan));
@@ -45,6 +51,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
         _operation = cancellation;
         IsBusy = true;
         Results.Clear();
+        HasSuccessfulInspection = false;
         Status = "Inspecting build contracts…";
         try
         {
@@ -63,6 +70,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
             var results = await Task.Run(() => _planner.PlanRepositoryAsync(repository, cancellation.Token), cancellation.Token);
             if (_disposed || version != _contextVersion) return;
             foreach (var result in results) Results.Add(result);
+            HasSuccessfulInspection = results.Count > 0 && results.All(x => x.Status == RepositoryPlanStatus.Succeeded);
             Status = results.Any(x => x.Status == RepositoryPlanStatus.Failed) ? "Inspection failed. Review the details below." : "Inspection complete. Each result states whether configuration was validated, exported or planned.";
         }
         catch (OperationCanceledException) { if (!_disposed && version == _contextVersion) Status = "Planning cancelled."; }
@@ -73,5 +81,5 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Cancel() { Status = "Cancellation requested; waiting for the planner to stop…"; _operation?.Cancel(); }
 
-    public void Dispose() { _disposed = true; ++_contextVersion; _operation?.Cancel(); }
+    public void Dispose() { _disposed = true; ++_contextVersion; _operation?.Cancel(); _buildCancellation?.Cancel(); }
 }

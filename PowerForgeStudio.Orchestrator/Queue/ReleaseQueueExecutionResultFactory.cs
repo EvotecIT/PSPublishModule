@@ -20,7 +20,7 @@ public static class ReleaseQueueExecutionResultFactory
 
         var succeeded = adapterResults.Count > 0 && adapterResults.All(result => result.Succeeded);
         var summary = succeeded
-            ? $"Build completed for {adapterResults.Count} adapter(s) without publish/install side effects."
+            ? $"Build completed for {adapterResults.Count} adapter(s) with PowerForge publishing disabled."
             : FirstLine(adapterResults.FirstOrDefault(result => !result.Succeeded)?.ErrorTail
                 ?? adapterResults.FirstOrDefault(result => !result.Succeeded)?.OutputTail
                 ?? "Build execution failed.");

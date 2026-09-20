@@ -56,10 +56,12 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         }
     }
 
-    public async Task<ReleaseBuildExecutionResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken = default)
+    public async Task<ReleaseBuildExecutionResult> ExecuteAsync(string repositoryRoot, CancellationToken cancellationToken = default, IProgress<ReleaseBuildProgress>? progress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
 
+        cancellationToken.ThrowIfCancellationRequested();
+        var reporter = new ReleaseBuildProgressAdapter(progress);
         var repository = _catalogScanner.InspectRepository(repositoryRoot);
         if (!repository.IsReleaseManaged)
         {
@@ -105,6 +107,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 unifiedRequest.AppleSourceCommit = appleSourceTrust.SourceCommit;
             }
             unifiedRequest.CancellationToken = cancellationToken;
+            unifiedRequest.Progress = reporter;
             var unified = await Task.Run(
                 () => _executeUnifiedReleaseBuild(configPath, unifiedRequest),
                 cancellationToken).ConfigureAwait(false);
@@ -136,13 +139,13 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
 
         if (!string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath))
         {
-            results.Add(await ExecuteProjectBuildAsync(repository, cancellationToken));
+            results.Add(await ExecuteProjectBuildAsync(repository, reporter, cancellationToken));
         }
 
         PowerForgeReleaseResult? directModuleCheckpoint = null;
         if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
         {
-            var moduleResult = await ExecuteModuleBuildAsync(repository, cancellationToken);
+            var moduleResult = await ExecuteModuleBuildAsync(repository, reporter, cancellationToken);
             results.Add(moduleResult);
             if (!string.IsNullOrWhiteSpace(directModuleConfigPath) &&
                 string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath) &&
@@ -429,7 +432,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
         };
     }
 
-    private async Task<ReleaseBuildAdapterResult> ExecuteProjectBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, CancellationToken cancellationToken)
+    private async Task<ReleaseBuildAdapterResult> ExecuteProjectBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, ReleaseBuildProgressAdapter progress, CancellationToken cancellationToken)
     {
         var scriptPath = repository.ProjectBuildScriptPath!;
         var configPath = RepositoryPlanPreviewService.ResolveProjectConfigPath(scriptPath, repository.RootPath);
@@ -444,7 +447,8 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
                 Build = true,
                 PublishNuget = false,
                 PublishGitHub = false,
-                CancellationToken = cancellationToken
+                CancellationToken = cancellationToken,
+                Progress = progress
             });
             var artifactInfo = CollectProjectArtifacts(execution);
 
@@ -480,7 +484,7 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             ErrorTail: TrimTail(powerShellExecution.StandardError));
     }
 
-    private async Task<ReleaseBuildAdapterResult> ExecuteModuleBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, CancellationToken cancellationToken)
+    private async Task<ReleaseBuildAdapterResult> ExecuteModuleBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, ReleaseBuildProgressAdapter progress, CancellationToken cancellationToken)
     {
         var buildInputPath = repository.ModuleBuildScriptPath!;
         var configBacked = string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase);
@@ -492,11 +496,14 @@ public sealed class ReleaseBuildExecutionService : IReleaseBuildExecutionService
             ScriptPath = configBacked ? null : buildInputPath,
             ModulePath = modulePath,
             Framework = configBacked ? "auto" : null,
-            RunMode = configBacked ? ConfigurationGateMode.Build : null,
+            RunMode = ConfigurationGateMode.Build,
             StagingPath = stagingPath,
             IncludeProjectPackages = string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath),
-            SkipInstall = configBacked,
-            NoSign = configBacked
+            SkipInstall = true,
+            NoSign = true,
+            IncludeModulePublishing = false,
+            RequireBuildOnly = !configBacked,
+            Progress = progress
         }, cancellationToken);
         var artifactInfo = CollectModuleArtifacts(repository.RootPath, buildInputPath, stagingPath);
         var succeeded = execution.Succeeded;

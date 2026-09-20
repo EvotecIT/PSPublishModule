@@ -474,6 +474,16 @@ public sealed class ModuleBuildHostService
             "$buildScriptArguments = @{}"
         };
 
+        if (request.RequireBuildOnly)
+        {
+            if (request.RunMode != ConfigurationGateMode.Build || !request.NoSign || !request.SkipInstall || request.IncludeModulePublishing)
+                throw new ArgumentException("Build-only script execution requires Build mode, NoSign, SkipInstall and disabled module publishing.", nameof(request));
+            arguments.Add("$requiredBuildParameters = @('NoSign', 'SkipInstall', 'IncludeModulePublishing')");
+            arguments.Add("$missingBuildParameters = @($requiredBuildParameters | Where-Object { -not $buildScriptCommand.Parameters.ContainsKey($_) })");
+            arguments.Add("if ($missingBuildParameters.Count -ne 0) { throw \"Build-only execution requires script parameters: $($missingBuildParameters -join ', '). Use a module JSON configuration or expose the required build controls.\" }");
+            arguments.Add("if (-not $buildScriptCommand.Parameters.ContainsKey('RunMode') -and -not $buildScriptCommand.Parameters.ContainsKey('ConfigurationGateMode')) { throw 'Build-only execution requires a RunMode or ConfigurationGateMode parameter.' }");
+        }
+
         if (request.ReleaseCheckpoint)
         {
             arguments.Add("$PSDefaultParameterValues['Invoke-ModuleBuild:PowerForgeReleaseCheckpoint'] = $true");

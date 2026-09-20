@@ -77,7 +77,7 @@
           <Grid RowDefinitions="38,*">
             <TextBlock Text="Output" Foreground="#E6F0FF" Margin="17,10" />
             <ScrollViewer Grid.Row="1" Margin="17,5,17,12">
-              <SelectableTextBlock Text="{Binding Output}" Foreground="#D7E7F8" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
+              <SelectableTextBlock Text="{Binding DisplayedOutput}" Foreground="#D7E7F8" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
             </ScrollViewer>
           </Grid>
         </Border>

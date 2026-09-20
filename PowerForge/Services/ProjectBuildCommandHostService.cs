@@ -72,12 +72,17 @@ public sealed class ProjectBuildCommandHostService
     private async Task<ProjectBuildCommandHostExecutionResult> RunCommandAsync(string workingDirectory, string script, CancellationToken cancellationToken)
     {
         var startedAt = Stopwatch.StartNew();
-        var result = await Task.Run(() => _powerShellRunner.Run(PowerShellRunRequest.ForCommand(
+        cancellationToken.ThrowIfCancellationRequested();
+        var runRequest = PowerShellRunRequest.ForCommand(
             commandText: script,
             timeout: TimeSpan.FromMinutes(15),
             preferPwsh: !FrameworkCompatibility.IsWindows(),
             workingDirectory: workingDirectory,
-            executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"))), cancellationToken).ConfigureAwait(false);
+            executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"));
+        var result = _powerShellRunner is ICancellablePowerShellRunner cancellableRunner
+            ? await cancellableRunner.RunAsync(runRequest, cancellationToken).ConfigureAwait(false)
+            : await Task.Run(() => _powerShellRunner.Run(runRequest), cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         startedAt.Stop();
 
         return new ProjectBuildCommandHostExecutionResult {

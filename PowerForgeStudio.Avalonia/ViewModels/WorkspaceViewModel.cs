@@ -21,11 +21,25 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _disposed;
     private bool _updatingFileList;
 
-    public WorkspaceViewModel(string root) => WorkspaceRoot = Path.GetFullPath(root);
+    public WorkspaceViewModel(string root)
+    {
+        WorkspaceRoot = Path.GetFullPath(root);
+        Build.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(BuildViewModel.BuildOutput) or nameof(BuildViewModel.HasBuild))
+                OnPropertyChanged(nameof(DisplayedOutput));
+        };
+    }
     public BuildViewModel Build { get; } = new();
     [ObservableProperty] private bool _isBuildPage;
     public bool IsFilesPage => !IsBuildPage;
-    partial void OnIsBuildPageChanged(bool value) => OnPropertyChanged(nameof(IsFilesPage));
+    partial void OnIsBuildPageChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsFilesPage));
+        OnPropertyChanged(nameof(DisplayedOutput));
+    }
+    public string DisplayedOutput => IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;
+    partial void OnOutputChanged(string value) => OnPropertyChanged(nameof(DisplayedOutput));
     [RelayCommand] private void ShowFiles() => IsBuildPage = false;
     [RelayCommand] private void ShowBuild() => IsBuildPage = true;
     public ObservableCollection<ExplorerNode> Projects { get; } = [];

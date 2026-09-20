@@ -8,6 +8,12 @@ public sealed class ModuleBuildHostBuildRequest
     internal IPowerForgeReleaseProgressReporterV2? Progress { get; set; }
 
     /// <summary>
+    /// Requires a legacy script to expose the gate, signing, installation and module-publishing
+    /// controls needed for a build-only invocation. Unsupported scripts fail before invocation.
+    /// </summary>
+    public bool RequireBuildOnly { get; set; }
+
+    /// <summary>
     /// Repository root used as the command working directory.
     /// </summary>
     public string RepositoryRoot { get; set; } = string.Empty;

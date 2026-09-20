@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
              xmlns:domain="using:PowerForgeStudio.Domain.Portfolio"
+             xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue"
              x:Class="PowerForgeStudio.Avalonia.Views.BuildView" x:DataType="vm:BuildViewModel">
   <ScrollViewer>
     <StackPanel Margin="22,18" Spacing="14">
@@ -13,6 +14,7 @@
       <StackPanel Orientation="Horizontal" Spacing="10">
         <Button Content="Inspect &amp; plan" Command="{Binding PlanCommand}" IsEnabled="{Binding CanPlan}" Background="#0865FF" Foreground="White" />
         <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
+        <Button Content="Build current configuration" Command="{Binding BuildCommand}" IsEnabled="{Binding CanBuild}" />
       </StackPanel>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
@@ -36,7 +38,35 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-      <TextBlock Text="Build execution, signing, publishing and artifact receipts are being connected. A successful plan does not mean a package has been built or published." Classes="muted" TextWrapping="Wrap" />
+      <TextBlock Text="Build runs the current configuration with publishing disabled through PowerForge. Project scripts and build hooks execute code; project builds may perform configured local signing. Changing projects leaves an active build running; its working copy is shown below." Classes="muted" TextWrapping="Wrap" />
+      <Border IsVisible="{Binding HasBuild}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="14">
+        <StackPanel Spacing="10">
+          <TextBlock Text="Build result" FontSize="18" FontWeight="SemiBold" />
+          <SelectableTextBlock Text="{Binding BuildRoot}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding BuildStatus}" TextWrapping="Wrap" />
+          <ProgressBar IsVisible="{Binding IsBuilding}" IsIndeterminate="True" Height="3" />
+          <Button Content="Cancel build" Command="{Binding CancelBuildCommand}" IsVisible="{Binding IsBuilding}" HorizontalAlignment="Left" />
+          <ItemsControl ItemsSource="{Binding BuildResult.AdapterResults}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="queue:ReleaseBuildAdapterResult">
+                <StackPanel Spacing="6" Margin="0,8">
+                  <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="{Binding ErrorTail}" Foreground="#AE2424" TextWrapping="Wrap" FontSize="12" />
+                  <SelectableTextBlock Text="{Binding OutputTail}" TextWrapping="Wrap" FontSize="12" />
+                  <TextBlock Text="Artifact files" Classes="muted" />
+                  <ItemsControl ItemsSource="{Binding ArtifactFiles}">
+                    <ItemsControl.ItemTemplate><DataTemplate><SelectableTextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="12" /></DataTemplate></ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Text="Build directories" Classes="muted" />
+                  <ItemsControl ItemsSource="{Binding ArtifactDirectories}">
+                    <ItemsControl.ItemTemplate><DataTemplate><SelectableTextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="12" /></DataTemplate></ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

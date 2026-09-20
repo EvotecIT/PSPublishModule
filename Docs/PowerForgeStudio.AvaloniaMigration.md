@@ -15,6 +15,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [ ] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [ ] Connect cancellation, live progress, artifacts and release receipts.
+- [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
 - [ ] Connect Git changes, issues, PRs and provider status through existing owners.
 - [ ] Inventory and expose schedules, storage and optional licensing/IntelligenceX integration.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
@@ -88,4 +89,23 @@ Evidence: 31 focused catalog/planner tests and four Avalonia tests passed. A con
 
 The build-planning review found two P2 issues: nested JSON taking precedence over a root script, and validation being described as full planning. Both were corrected and confirmed in one targeted follow-up. No further review loop was started. Temporary fixtures from the interrupted dispatcher test and the failed JSON test were removed. Small rendered evidence remains under Artifacts/StudioValidation/build-plan*.png.
 
-Still required: resolved module build plans, inspectable plan contents, build execution with streaming progress and cancellation, artifact receipts, signing/publishing controls, and portable process/JSON execution. No user repository was built or published by this milestone.
+This inspection milestone did not build or publish a user repository. The execution milestone below extends this surface.
+
+### Build execution milestone
+
+After a successful inspection, Build current configuration invokes ReleaseBuildExecutionService for that working copy. The output dock shows structured engine phases and work items. The result lists adapter diagnostics, artifact files and build directories. Changing projects preserves the active build and its original root; Cancel build targets that run. Closing the workspace requests cancellation. Output is bounded, and displayed diagnostics use the existing command-secret redactor. This filter recognizes secret argument patterns; it cannot infer arbitrary secrets printed by trusted project code.
+
+The shared executor disables PowerForge publication. Project builds may perform configured local signing; module builds request Build mode with signing, installation and module publishing disabled. Legacy module scripts must expose the required controls before invocation, otherwise they fail with an actionable error. This is a build-only contract check, not a sandbox for arbitrary scripts or hooks. The PowerShell project fallback now forwards cancellation to the shared cancellable runner instead of cancelling only its waiting task.
+
+Evidence:
+
+- Six Avalonia workflow tests passed. A JSON-only fixture produced a real NuGet package containing lib/net10.0/StudioFixture.dll. A subsequent real compiler failure produced visible diagnostics and left the build action available. A controlled execution test proved that navigation retains the running build's root and that explicit cancellation reaches that run.
+- Five PowerForge host tests passed, including actual PowerShell invocations of supported and unsupported module-script fixtures, plus cancellable-runner dispatch.
+- Twenty-two focused execution/queue tests and one progress/redaction test passed.
+- PowerForge built without warnings for net10.0, net8.0 and net472. The application builds against net10.0.
+- Success/failure rendering was inspected at 1600 × 1000 and 1050 × 720. Small local evidence is retained in Artifacts/StudioValidation/build-result*.png and build-failure.png. Native Windows input and cancellation rendering remain unverified.
+- Independent read-only execution review found no actionable P0–P2 issue. Its wording observation was addressed by scoping the shared completion summary to PowerForge publication rather than claiming no possible script side effects.
+
+An initially broad release-build test filter included Apple source-trust tests in unchanged code. Several expected exception types/messages differed from the current wrapper behavior, so that run was stopped and the changed execution contracts were tested separately. This milestone does not claim a green full Studio suite or verified Apple execution. Its 78 disposable Git fixture residues were removed after containment/attribute checks. The completed core test binary output (about 565 MiB) was also removed; the active app's build output remains available for continued development. No user project or public feed was modified.
+
+Remaining execution work includes complete module planning, inspectable plan contents, arbitrary executable/PowerShell task profiles, live raw process output where supported, durable activity/history and artifact provenance, release signing/publishing/verification controls, and native interaction proof. The earlier checklist remains the full replacement scope.
