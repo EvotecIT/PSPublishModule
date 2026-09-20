@@ -14,6 +14,7 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 {
     private readonly IFileExplorerService _files;
+    private readonly IFileRecoveryService _recovery;
     private readonly IWorkspaceRepositorySource _repositories;
     private readonly ProjectGitService _git = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -25,13 +26,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingTreeSelection;
     private int _refreshVersion;
 
-    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null)
     {
         Release = release ?? new ReleaseViewModel();
         GitHub = new GitHubViewModel(gitHub);
         WorkspaceRoot = Path.GetFullPath(root);
         _stateStore = stateStore;
         _files = files ?? new FileExplorerService();
+        _recovery = recovery ?? new FileRecoveryService();
         _repositories = repositories ?? new WorkspaceRepositorySource();
         Changes.PropertyChanged += (_, args) =>
         {

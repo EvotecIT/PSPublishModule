@@ -11,10 +11,10 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [ ] Implement the reviewed workspace shell and hierarchical project explorer.
 - [x] Apply native tree row geometry, ancestry guides, context/selection styling, vector navigation icons and Git markers.
 - [x] Restore workspace favorites, expanded folders and document tabs through shared catalog persistence.
-- [ ] Connect real file navigation, previews and explicit file operations.
+- [x] Connect real file navigation, previews and explicit file operations.
 - [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
 - [x] Add text editing, conflict-aware saves, unsaved-document choices and draft-safe navigation.
-- [ ] Complete deletion/recovery behavior.
+- [x] Complete deletion/recovery behavior.
 - [ ] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [x] Connect cancellation, stage progress, artifacts and release receipts.
@@ -88,6 +88,20 @@ Evidence:
 - Local review: review_file_management inspected this milestone read-only against 7c4b36958. Three P2 findings (superseded navigation, destination-tree invalidation, Unix file modes) were fixed and tested. One targeted confirmation found the fixes addressed with no additional actionable finding. The navigation stress test does not force a particular read-completion schedule; the source fix always repopulates the winning request.
 
 Next implementation focus: reviewed build plans and execution through canonical PowerForge services. The existing ProcessRunRequest already supports streaming stdout/stderr callbacks, and ReleaseBuildExecutionService already adapts project/module/unified release contracts. Reuse those owners rather than the old independent streaming implementation in ProjectBuildService.
+
+### File deletion and recovery milestone
+
+Files and folders are deleted through a reviewed recovery workflow. Studio first captures the selected path, item count, logical size and a metadata snapshot, then requires explicit confirmation. The operation is refused when an open document under that path is dirty or busy, when the item changed after review, or when the selected tree contains Git metadata, a symbolic link or a junction. The working-copy root and `.git` metadata cannot be selected.
+
+Confirmed items move atomically into the application-managed recovery store under the user's local application-data folder. Each entry has a durable manifest with prepared, available, restoring and deleting states. Listing repairs interrupted states when the payload remains and removes orphaned manifests when the payload is gone. Restore refuses to replace an occupied destination or recreate a missing parent. Permanent deletion requires a separate checkbox and re-inspects directory payloads before removing the exact recovery entry. A recovery store inside the working copy or below a linked path is rejected.
+
+Evidence:
+
+- Twenty-nine focused shared tests passed for the recovery owner and existing explorer operations. They cover review drift, root and Git protection, restore conflicts, interrupted manifests, exact-entry deletion, nested Git metadata introduced after recovery, missing-payload cleanup, recovery-store containment and tampered manifest isolation.
+- All 31 Avalonia tests passed. The end-to-end recovery test uses a real disposable Git repository and exercises a dirty-document block, confirmed move, durable listing, restore, a second move and explicitly confirmed permanent deletion.
+- Wide and compact Skia renders were inspected for the Files toolbar, review dialog and recovery dialog: `Artifacts/StudioValidation/workspace-recovery-toolbar.png`, `file-delete-review.png`, `file-recovery.png` and `file-recovery-compact.png`. The compact footer keeps confirmation and actions on separate responsive rows.
+
+The review fingerprint intentionally covers path/type/size/timestamp/attributes rather than hashing every file's contents; it detects ordinary edits but is not a content-integrity guarantee against a process that preserves the same metadata. The store uses an atomic same-volume move. If the working copy and local application-data store are on different volumes, the operation fails and leaves the source in place; cross-volume copy-to-recovery is not implemented. Recovery entries consume local disk until restored or explicitly deleted. Headless rendering and input tests do not establish native Windows modal, keyboard or pointer behavior. The independent reviewer quota was exhausted, so this data-loss-sensitive boundary received a structured primary review rather than a fresh external pass.
 
 ### Build inspection milestone
 

@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" x:DataType="vm:FileDeleteViewModel"
+        x:Class="PowerForgeStudio.Avalonia.Views.FileDeleteDialog"
+        Title="Move to recovery" Width="620" SizeToContent="Height" CanResize="False" WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="26" Spacing="14">
+    <TextBlock Text="Move item to recovery" Classes="heading" />
+    <TextBlock Text="Review the selected item before it leaves the working copy. It can be restored later from Recovery." TextWrapping="Wrap" />
+    <Border Classes="card" Padding="16">
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="110,*" RowSpacing="8">
+        <TextBlock Text="Name" Classes="muted" />
+        <TextBlock Grid.Column="1" Text="{Binding ItemName}" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Grid.Row="1" Text="Type" Classes="muted" />
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ItemType}" />
+        <TextBlock Grid.Row="2" Text="Contents" Classes="muted" />
+        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding ItemCount}" />
+        <TextBlock Grid.Row="3" Text="Size" Classes="muted" />
+        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Size}" />
+      </Grid>
+    </Border>
+    <TextBlock Text="{Binding Preview.SourcePath}" Classes="muted" TextWrapping="Wrap" />
+    <CheckBox x:Name="ConfirmBox" IsChecked="{Binding Confirmed}" IsEnabled="{Binding !IsBusy}" Content="I reviewed this path and want to move it to PowerForge Studio recovery." />
+    <TextBlock Text="The operation stops if the item changed after this review. Git metadata, linked paths and nested repositories are protected." Classes="muted" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding Error}" Foreground="#BA2737" TextWrapping="Wrap" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="9">
+      <Button Content="Cancel" Click="Cancel" />
+      <Button Content="Move to recovery" Classes="primary" Click="Apply" IsEnabled="{Binding CanSubmit}" />
+    </StackPanel>
+  </StackPanel>
+</Window>

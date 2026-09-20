@@ -10,6 +10,9 @@ public static class PowerForgeStudioHostPaths
     public static string GetReleaseHistoryDatabasePath()
         => Path.Combine(GetStudioRootPath(), "release-history.db");
 
+    public static string GetFileRecoveryRootPath()
+        => Path.Combine(GetStudioRootPath(), "file-recovery");
+
     public static string GetDefaultDatabasePath()
         => Path.Combine(GetStudioRootPath(), "releaseops.db");
 

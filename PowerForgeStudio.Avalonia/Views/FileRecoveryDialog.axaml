@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+        xmlns:hub="using:PowerForgeStudio.Domain.Hub"
+        x:DataType="vm:FileRecoveryViewModel"
+        x:Class="PowerForgeStudio.Avalonia.Views.FileRecoveryDialog"
+        Title="File recovery" Width="760" Height="520" MinWidth="620" MinHeight="400" WindowStartupLocation="CenterOwner">
+  <Grid Margin="26" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
+    <TextBlock Text="File recovery" Classes="heading" />
+    <TextBlock Grid.Row="1" Text="Items moved from the selected working copy remain here until restored or explicitly deleted." TextWrapping="Wrap" Classes="muted" />
+    <Border Grid.Row="2" Classes="card">
+      <Grid>
+        <ListBox ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="hub:WorkspaceFileRecoveryEntry">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="8" ColumnSpacing="12">
+                <TextBlock Text="{Binding OriginalPath}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OriginalPath}" />
+                <TextBlock Grid.Column="1" Text="{Binding DeletedAtUtc}" Classes="muted" FontSize="12" />
+                <TextBlock Grid.Row="1" Text="{Binding ItemCount, StringFormat={}{0} item(s)}" Classes="muted" FontSize="12" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Text="No recoverable items for this working copy." IsVisible="{Binding !HasEntries}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" />
+      </Grid>
+    </Border>
+    <Grid Grid.Row="3" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+      <TextBlock Text="{Binding Error}" Foreground="#BA2737" TextWrapping="Wrap" />
+      <CheckBox Grid.Row="1" IsChecked="{Binding ConfirmPermanentDelete}" IsEnabled="{Binding !IsBusy}">
+        <TextBlock Text="Allow permanent deletion of the selected recovery item" TextWrapping="Wrap" />
+      </CheckBox>
+      <WrapPanel Grid.Row="2" HorizontalAlignment="Right" ItemSpacing="9" LineSpacing="8">
+        <Button Content="Refresh" Click="Refresh" IsEnabled="{Binding !IsBusy}" />
+        <Button Content="Restore selected" Classes="primary" Click="Restore" IsEnabled="{Binding CanRestore}" />
+        <Button Content="Delete permanently" Click="DeletePermanently" IsEnabled="{Binding CanDeletePermanently}" Background="#BA2737" Foreground="White" />
+        <Button Content="Close" Click="CloseDialog" IsEnabled="{Binding !IsBusy}" />
+      </WrapPanel>
+    </Grid>
+  </Grid>
+</Window>

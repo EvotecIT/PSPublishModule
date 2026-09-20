@@ -12,6 +12,8 @@
       <Button Content="Copy" Tag="Copy" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
       <Button Content="Move" Tag="Move" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
       <Button Content="Rename" Tag="Rename" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
+      <Button Content="Move to recovery" Click="DeleteFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
+      <Button Content="Recovery" Click="ShowRecovery" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
       <Button Content="Refresh" Command="{Binding RefreshFolderCommand}" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
       <Button Content="Copy path" Click="CopyPath" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
       <Button Content="Open externally" Click="OpenExternally" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />

@@ -40,6 +40,30 @@ public sealed partial class FilesView : UserControl
         await dialog.ShowDialog(owner);
     }
 
+    private async void DeleteFile(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is not WorkspaceViewModel model || TopLevel.GetTopLevel(this) is not Window owner)
+            return;
+        try
+        {
+            var preview = await model.InspectSelectedFileForDeletionAsync();
+            await new FileDeleteDialog { DataContext = new FileDeleteViewModel(model, preview) }.ShowDialog(owner);
+        }
+        catch (Exception ex)
+        {
+            model.ReportFileActionError(ex);
+        }
+    }
+
+    private async void ShowRecovery(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is not WorkspaceViewModel model || TopLevel.GetTopLevel(this) is not Window owner)
+            return;
+        var recovery = new FileRecoveryViewModel(model);
+        await recovery.RefreshAsync();
+        await new FileRecoveryDialog { DataContext = recovery }.ShowDialog(owner);
+    }
+
     private async void CopyPath(object? sender, RoutedEventArgs args)
     {
         if (DataContext is not WorkspaceViewModel model || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;

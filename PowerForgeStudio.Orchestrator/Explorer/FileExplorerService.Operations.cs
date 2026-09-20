@@ -126,7 +126,7 @@ public sealed partial class FileExplorerService
         }
     }
 
-    private static IReadOnlyList<(string Path, bool IsDirectory)> InspectTransferTree(string source, CancellationToken token)
+    internal static IReadOnlyList<(string Path, bool IsDirectory)> InspectTransferTree(string source, CancellationToken token)
     {
         var entries = new List<(string, bool)>();
         var pending = new Stack<string>();
@@ -150,12 +150,12 @@ public sealed partial class FileExplorerService
         return entries;
     }
 
-    private static StringComparison PathComparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    internal static StringComparison PathComparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    private static bool IsWithin(string root, string path) =>
+    internal static bool IsWithin(string root, string path) =>
         path.StartsWith(Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar, PathComparison);
 
-    private static string ValidateOperationPath(string root, string path)
+    internal static string ValidateOperationPath(string root, string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (OperatingSystem.IsWindows())
