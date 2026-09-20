@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Identifies the concrete installed or downloaded module selected as an approved function donor.
+/// Identifies a concrete installed or downloaded module source selected for dependency analysis.
 /// </summary>
 public sealed class ApprovedModuleSource
 {
@@ -20,7 +20,7 @@ public sealed class ApprovedModuleSource
     /// <summary>Optional module search root that contains dependencies downloaded beside this donor.</summary>
     public string? ModuleSearchRoot { get; }
 
-    /// <summary>Creates a concrete approved-module source.</summary>
+    /// <summary>Creates a concrete module-analysis source.</summary>
     public ApprovedModuleSource(
         string name,
         string? version,

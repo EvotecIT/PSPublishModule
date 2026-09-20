@@ -17,6 +17,7 @@ public sealed partial class ModulePipelineRunner
 
         var approved = plan.ApprovedModules ?? Array.Empty<string>();
         using var sources = ResolveApprovedModuleSources(plan);
+        var runtimeSources = ResolveRuntimeRequiredModuleSources(plan);
         try
         {
             var options = new MissingFunctionsOptions(
@@ -25,7 +26,8 @@ public sealed partial class ModulePipelineRunner
                 ignoreFunctions: Array.Empty<string>(),
                 includeFunctionsRecursively: true,
                 approvedModuleSources: sources.Sources,
-                requireApprovedModuleSources: true);
+                requireApprovedModuleSources: true,
+                runtimeModuleSources: runtimeSources);
             return _missingFunctionAnalysisService.Analyze(filePath, code, options);
         }
         catch (Exception ex)
@@ -34,6 +36,44 @@ public sealed partial class ModulePipelineRunner
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             return null;
         }
+    }
+
+    private ApprovedModuleSource[] ResolveRuntimeRequiredModuleSources(ModulePipelinePlan plan)
+    {
+        var approved = new HashSet<string>(plan.ApprovedModules ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var required = (plan.RequiredModules ?? Array.Empty<RequiredModuleReference>())
+            .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
+            .Where(module => !approved.Contains(module.ModuleName))
+            .GroupBy(static module => module.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToArray();
+        if (required.Length == 0)
+            return Array.Empty<ApprovedModuleSource>();
+
+        IReadOnlyDictionary<string, InstalledModuleMetadata> installed;
+        if (_moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider)
+        {
+            installed = versionedProvider.GetInstalledModules(required);
+        }
+        else
+        {
+            installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(
+                required.Select(static module => module.ModuleName).ToArray());
+        }
+
+        return required
+            .Where(module => installed.TryGetValue(module.ModuleName, out var metadata) &&
+                             !string.IsNullOrWhiteSpace(metadata.ModuleBasePath))
+            .Select(module =>
+            {
+                var metadata = installed[module.ModuleName];
+                return new ApprovedModuleSource(
+                    module.ModuleName,
+                    metadata.Version,
+                    Path.GetFullPath(metadata.ModuleBasePath!),
+                    metadata.Guid);
+            })
+            .ToArray();
     }
 
     private static string[] ResolveConsumerModuleFunctionNames(string? filePath, string? code)
