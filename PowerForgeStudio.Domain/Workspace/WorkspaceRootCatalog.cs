@@ -5,4 +5,5 @@ public sealed record WorkspaceRootCatalog(
     IReadOnlyList<string> RecentWorkspaceRoots,
     string? ActiveProfileId,
     IReadOnlyList<WorkspaceProfile> Profiles,
-    IReadOnlyList<WorkspaceProfileTemplate>? Templates = null);
+    IReadOnlyList<WorkspaceProfileTemplate>? Templates = null,
+    WorkspaceStudioPreferences? Preferences = null);

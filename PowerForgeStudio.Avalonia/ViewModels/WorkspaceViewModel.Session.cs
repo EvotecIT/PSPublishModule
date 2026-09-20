@@ -27,7 +27,7 @@ public sealed partial class WorkspaceViewModel
     public bool HasActiveProject => _projectNodes.Values.Any(project => project.IsContextProject);
     public string FavoriteActionLabel => _projectNodes.Values.FirstOrDefault(project => project.IsContextProject) is { } project && _favorites.Contains(project.Path)
         ? "Remove favorite" : "Add favorite";
-    public string DisplayedStatus => HasStateError ? StateError : IsActivityPage ? Activity.Status : IsStoragePage ? Storage.Status : IsAutomationsPage ? Automations.Status : IsConnectionsPage ? Connections.Status : Status;
+    public string DisplayedStatus => HasStateError ? StateError : IsSettingsPage ? Settings.Status : IsActivityPage ? Activity.Status : IsStoragePage ? Storage.Status : IsAutomationsPage ? Automations.Status : IsConnectionsPage ? Connections.Status : Status;
     partial void OnStatusChanged(string value) => OnPropertyChanged(nameof(DisplayedStatus));
     partial void OnStateErrorChanged(string value) { OnPropertyChanged(nameof(HasStateError)); OnPropertyChanged(nameof(DisplayedStatus)); }
     partial void OnFavoritesOnlyChanged(bool value) { OnPropertyChanged(nameof(AllProjects)); ApplyFilter(); }
@@ -79,7 +79,7 @@ public sealed partial class WorkspaceViewModel
             if (_disposed || refresh != _refreshVersion || !SamePath(root, WorkspaceRoot)) return;
             _loadedStateRoot = root;
             _pendingRestore = state;
-            _restoreDocumentsFromDisk = true;
+            _restoreDocumentsFromDisk = _restoreOpenDocuments;
             foreach (var favorite in state.FavoriteProjectRoots) _favorites.Add(Path.GetFullPath(favorite));
         }
         catch (Exception ex)

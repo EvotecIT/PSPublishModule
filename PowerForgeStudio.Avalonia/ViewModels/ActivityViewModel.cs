@@ -13,6 +13,7 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
     private readonly bool _ownsInventory;
     private readonly List<WorkspaceActivityEntry> _allEntries = [];
     private readonly HashSet<string> _mutedIds = new(StringComparer.Ordinal);
+    private WorkspaceActivityOptions _options = new();
     private CancellationTokenSource? _refreshCancellation;
     private int _refreshVersion;
 
@@ -88,6 +89,17 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         NotifyCounts();
     }
 
+    public void SetOptions(WorkspaceActivityOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (_options == options) return;
+        _options = options;
+        ++_refreshVersion;
+        _refreshCancellation?.Cancel();
+        IsLoading = false;
+        Status = "Activity limits changed. Refresh evidence to apply them.";
+    }
+
     [RelayCommand]
     public async Task RefreshAsync()
     {
@@ -100,7 +112,7 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         Status = "Collecting read-only project, release, GitHub and schedule evidence…";
         try
         {
-            var snapshot = await _inventory.InspectAsync(root, cancellationToken: _refreshCancellation.Token);
+            var snapshot = await _inventory.InspectAsync(root, _options, _refreshCancellation.Token);
             if (version != _refreshVersion || !SamePath(root, WorkspaceRoot)) return;
             _allEntries.Clear();
             _allEntries.AddRange(snapshot.Entries);

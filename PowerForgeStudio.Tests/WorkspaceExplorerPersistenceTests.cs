@@ -47,6 +47,30 @@ public sealed class WorkspaceExplorerPersistenceTests : IDisposable
         Assert.Equal(_root, Assert.Single(first.LoadExplorer(_root).ExpandedPaths));
     }
 
+    [Fact]
+    public void PreferencesAreNormalizedAndPreserveExplorerStateAndUnknownFields()
+    {
+        File.WriteAllText(CatalogPath, "{\"futureSetting\":{\"value\":42}}");
+        var store = new WorkspaceRootCatalogService(CatalogPath);
+        var project = Path.Combine(_root, "Project");
+        store.SetFavorite(_root, project, true);
+
+        var saved = store.SavePreferences(new WorkspaceStudioPreferences(
+            RestoreOpenDocuments: false,
+            ActivityMaxGitHubRepositories: 99,
+            ActivityMaxIssuesPerRepository: -1,
+            ActivityMaxEntries: 4000,
+            ActivityGitHubTimeoutSeconds: 2), _root);
+
+        Assert.Equal(new WorkspaceStudioPreferences(false, 50, 0, 1000, 5), saved.Preferences);
+        Assert.Equal(saved.Preferences, new WorkspaceRootCatalogService(CatalogPath).Load(_root).Preferences);
+        Assert.Equal(project, Assert.Single(store.LoadExplorer(_root).FavoriteProjectRoots));
+        using var json = JsonDocument.Parse(File.ReadAllText(CatalogPath));
+        Assert.Equal(42, json.RootElement.GetProperty("futureSetting").GetProperty("value").GetInt32());
+        Assert.False(json.RootElement.GetProperty("preferences").GetProperty("restoreOpenDocuments").GetBoolean());
+        Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
+    }
+
     [Theory]
     [InlineData("{not-json")]
     [InlineData("null")]

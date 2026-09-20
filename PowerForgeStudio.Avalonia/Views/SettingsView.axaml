@@ -1,0 +1,118 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             x:DataType="vm:SettingsViewModel" x:Class="PowerForgeStudio.Avalonia.Views.SettingsView">
+  <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="22,18" Spacing="16">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Settings" Classes="heading" />
+          <TextBlock Text="Machine-local Studio behavior, workspace roots and bounded provider refresh limits." Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1" Content="Reload" Command="{Binding ReloadCommand}" VerticalAlignment="Center" />
+      </Grid>
+
+      <WrapPanel ItemSpacing="8" LineSpacing="8">
+        <Button Content="General" Classes="chip" Classes.active="{Binding IsGeneralSection}" Command="{Binding ShowGeneralCommand}" />
+        <Button Content="Workspace" Classes="chip" Classes.active="{Binding IsWorkspaceSection}" Command="{Binding ShowWorkspaceCommand}" />
+        <Button Content="Execution" Classes="chip" Classes.active="{Binding IsExecutionSection}" Command="{Binding ShowExecutionCommand}" />
+        <Button Content="Integrations" Classes="chip" Classes.active="{Binding IsIntegrationsSection}" Command="{Binding ShowIntegrationsCommand}" />
+        <Button Content="Diagnostics" Classes="chip" Classes.active="{Binding IsDiagnosticsSection}" Command="{Binding ShowDiagnosticsCommand}" />
+      </WrapPanel>
+
+      <StackPanel Spacing="14" IsVisible="{Binding IsGeneralSection}">
+        <Border Classes="card" Padding="18">
+          <StackPanel Spacing="12">
+            <TextBlock Text="Restore behavior" FontSize="16" FontWeight="SemiBold" />
+            <CheckBox Content="Restore open document tabs when this workspace starts" IsChecked="{Binding RestoreOpenDocuments}" />
+            <TextBlock Text="Favorites and expanded tree nodes remain part of the workspace session. Disabling this option leaves saved tab references intact but does not reopen them." Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+        <Border Classes="card" Padding="18">
+          <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto" RowSpacing="10">
+            <TextBlock Text="Theme" Classes="muted" />
+            <TextBlock Grid.Column="1" Text="PowerForge light" />
+            <TextBlock Grid.Row="1" Text="Scaling" Classes="muted" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="System-managed" />
+          </Grid>
+        </Border>
+      </StackPanel>
+
+      <StackPanel Spacing="14" IsVisible="{Binding IsWorkspaceSection}">
+        <Border Classes="card" Padding="18">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Workspace roots" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding WorkspaceRoot}" Foreground="#0865FF" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding WorkspaceRoots}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate><Border Background="#F6F8FC" CornerRadius="5" Padding="10" Margin="0,3"><TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" /></Border></DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="This milestone displays registered recent roots. Removing or regrouping roots will be added with an explicit registration-only review; no filesystem action is implied." Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Padding="18">
+          <StackPanel Spacing="14">
+            <TextBlock Text="Activity refresh limits" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="These limits bound external GitHub work and the combined inbox. Deferred and omitted evidence remains visible as partial state." Classes="muted" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,150" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12" ColumnSpacing="18">
+              <StackPanel><TextBlock Text="GitHub repositories" FontWeight="SemiBold" /><TextBlock Text="Maximum repositories queried per refresh." Classes="muted" FontSize="11" /></StackPanel>
+              <NumericUpDown Grid.Column="1" Value="{Binding ActivityMaxGitHubRepositories}" Minimum="0" Maximum="50" Increment="1" />
+              <StackPanel Grid.Row="1"><TextBlock Text="Issues per repository" FontWeight="SemiBold" /><TextBlock Text="Maximum issue rows retained for each repository." Classes="muted" FontSize="11" /></StackPanel>
+              <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding ActivityMaxIssuesPerRepository}" Minimum="0" Maximum="50" Increment="1" />
+              <StackPanel Grid.Row="2"><TextBlock Text="Combined rows" FontWeight="SemiBold" /><TextBlock Text="Maximum rows retained after severity ordering." Classes="muted" FontSize="11" /></StackPanel>
+              <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding ActivityMaxEntries}" Minimum="20" Maximum="1000" Increment="10" />
+              <StackPanel Grid.Row="3"><TextBlock Text="GitHub deadline" FontWeight="SemiBold" /><TextBlock Text="Overall provider deadline in seconds." Classes="muted" FontSize="11" /></StackPanel>
+              <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding ActivityGitHubTimeoutSeconds}" Minimum="5" Maximum="300" Increment="5" />
+            </Grid>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <StackPanel Spacing="14" IsVisible="{Binding IsExecutionSection}">
+        <Border Classes="card" Padding="18">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Execution ownership" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="Build, test, run, package, sign and publish remain distinct project intents. Runtime selection belongs to the inspected workflow; Studio does not elevate the entire application." TextWrapping="Wrap" />
+            <TextBlock Text="Verify installed Git, .NET, PowerShell and GitHub CLI capability on Connections. Project-specific JSON and script plans remain under Build &amp; Run." Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <StackPanel Spacing="14" IsVisible="{Binding IsIntegrationsSection}">
+        <Border Classes="card" Padding="18">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Integration bindings" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="Connections owns endpoints, credential references and observed capabilities. Credential values and provider runtime state are never committed to Studio settings." TextWrapping="Wrap" />
+            <TextBlock Text="Licensing and IntelligenceX remain optional. Open Connections to verify their current owner boundary before enabling project features." Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <StackPanel Spacing="14" IsVisible="{Binding IsDiagnosticsSection}">
+        <Border Classes="card" Padding="18">
+          <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="11" ColumnSpacing="16">
+            <TextBlock Text="Studio version" Classes="muted" /><TextBlock Grid.Column="1" Text="{Binding AppVersion}" />
+            <TextBlock Grid.Row="1" Text="Runtime" Classes="muted" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RuntimeDescription}" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="2" Text="Operating system" Classes="muted" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding OperatingSystemDescription}" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="3" Text="Local configuration" Classes="muted" /><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ConfigurationPath}" FontSize="11" TextWrapping="Wrap" />
+          </Grid>
+        </Border>
+        <Button Content="Open configuration folder" Command="{Binding OpenConfigurationFolderCommand}" IsEnabled="{Binding HasPreferenceStore}" HorizontalAlignment="Left" />
+      </StackPanel>
+
+      <Border Background="#EFF7F1" BorderBrush="#A9D7B4" BorderThickness="1" CornerRadius="6" Padding="11">
+        <TextBlock Text="Local settings contain behavior and numeric limits only. Credentials, source contents, build logs and provider runtime state are excluded." TextWrapping="Wrap" />
+      </Border>
+
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding IsEditableSection}">
+        <TextBlock Text="{Binding Status}" Classes="muted" VerticalAlignment="Center" TextWrapping="Wrap" />
+        <Button Grid.Column="1" Content="Discard changes" Command="{Binding DiscardChangesCommand}" IsVisible="{Binding IsDirty}" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+          <Button Content="Reset to defaults" Command="{Binding ResetCommand}" IsEnabled="{Binding !IsSaving}" />
+          <Button Content="Save settings" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}" />
+        </StackPanel>
+      </Grid>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

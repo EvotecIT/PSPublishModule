@@ -22,6 +22,7 @@
           <Button Classes="rail" Classes.selected="{Binding IsAutomationsPage}" Command="{Binding ShowAutomationsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Automations" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsStoragePage}" Command="{Binding ShowStorageCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsConnectionsPage}" Command="{Binding ShowConnectionsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsSettingsPage}" Command="{Binding ShowSettingsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="settings" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Settings" HorizontalAlignment="Center" /></StackPanel></Button>
         </StackPanel>
       </Border>
       <Border Grid.Column="1" Background="#FBFCFF" BorderBrush="#DDE5EF" BorderThickness="0,0,1,0">
@@ -103,6 +104,7 @@
         <views:StorageView Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsStoragePage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Storage}" />
         <views:AutomationsView x:Name="AutomationsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsAutomationsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Automations}" />
         <views:ConnectionsView x:Name="ConnectionsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsConnectionsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Connections}" />
+        <views:SettingsView x:Name="SettingsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsSettingsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Settings}" />
         <Border Grid.Row="3" Background="#0D2132">
           <Grid RowDefinitions="38,*">
             <StackPanel Orientation="Horizontal" Spacing="9" Margin="17,10"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#E6F0FF" /><TextBlock Text="Output" Foreground="#E6F0FF" /></StackPanel>
@@ -209,6 +211,23 @@
               </Border>
               <Border Background="#EFF7F1" BorderBrush="#A9D7B4" BorderThickness="1" CornerRadius="6" Padding="10">
                 <TextBlock Text="No secret value is loaded into the Connections page." TextWrapping="Wrap" />
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+          <ScrollViewer IsVisible="{Binding IsSettingsPage}">
+            <StackPanel Spacing="14" DataContext="{Binding Settings}">
+              <TextBlock Text="Settings context" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Text="{Binding Section}" Foreground="#0865FF" />
+              <TextBlock Text="Current workspace" Classes="muted" />
+              <TextBlock Text="{Binding WorkspaceRoot}" FontSize="11" TextWrapping="Wrap" />
+              <TextBlock Text="Local configuration" Classes="muted" />
+              <TextBlock Text="{Binding ConfigurationPath}" FontSize="11" TextWrapping="Wrap" />
+              <TextBlock Text="Unsaved changes" Classes="muted" />
+              <TextBlock Text="{Binding IsDirty}" />
+              <Button Content="Save settings" Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}" IsVisible="{Binding IsEditableSection}" />
+              <Button Content="Reset to defaults" Command="{Binding ResetCommand}" IsEnabled="{Binding !IsSaving}" IsVisible="{Binding IsEditableSection}" />
+              <Border Background="#EFF7F1" BorderBrush="#A9D7B4" BorderThickness="1" CornerRadius="6" Padding="10">
+                <TextBlock Text="This file is machine-local. It contains no credential values." TextWrapping="Wrap" />
               </Border>
             </StackPanel>
           </ScrollViewer>

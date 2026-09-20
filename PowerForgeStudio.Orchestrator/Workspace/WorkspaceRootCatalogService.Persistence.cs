@@ -100,7 +100,7 @@ public sealed partial class WorkspaceRootCatalogService
     }
 
     private static WorkspaceRootCatalogDocument EmptyDocument(string root)
-        => new(root, [root], null, [], [], DateTimeOffset.UtcNow, []);
+        => new(root, [root], null, [], [], DateTimeOffset.UtcNow, [], WorkspaceStudioPreferences.Default);
 
     private void PersistCatalog(WorkspaceRootCatalog catalog)
     {
@@ -109,6 +109,7 @@ public sealed partial class WorkspaceRootCatalogService
         {
             ActiveWorkspaceRoot = catalog.ActiveWorkspaceRoot, RecentWorkspaceRoots = catalog.RecentWorkspaceRoots,
             ActiveProfileId = catalog.ActiveProfileId, Profiles = catalog.Profiles, Templates = catalog.Templates,
+            Preferences = catalog.Preferences,
             UpdatedAtUtc = DateTimeOffset.UtcNow
         });
     }
@@ -131,7 +132,8 @@ public sealed partial class WorkspaceRootCatalogService
     private sealed record WorkspaceRootCatalogDocument(
         string? ActiveWorkspaceRoot, IReadOnlyList<string>? RecentWorkspaceRoots, string? ActiveProfileId,
         IReadOnlyList<WorkspaceProfile>? Profiles, IReadOnlyList<WorkspaceProfileTemplate>? Templates,
-        DateTimeOffset UpdatedAtUtc, IReadOnlyList<WorkspaceExplorerState>? ExplorerStates = null)
+        DateTimeOffset UpdatedAtUtc, IReadOnlyList<WorkspaceExplorerState>? ExplorerStates = null,
+        WorkspaceStudioPreferences? Preferences = null)
     {
         [JsonExtensionData] public Dictionary<string, JsonElement>? AdditionalProperties { get; init; }
     }

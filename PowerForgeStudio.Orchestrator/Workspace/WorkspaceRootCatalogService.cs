@@ -5,7 +5,7 @@ using PowerForgeStudio.Orchestrator.Host;
 
 namespace PowerForgeStudio.Orchestrator.Workspace;
 
-public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogService, IWorkspaceExplorerStateStore
+public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogService, IWorkspaceExplorerStateStore, IWorkspacePreferenceService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web) {
         WriteIndented = true
@@ -13,6 +13,8 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
 
     private readonly string _catalogPath;
     private readonly int _maxRecentRoots;
+
+    public string ConfigurationPath => _catalogPath;
 
     public WorkspaceRootCatalogService(string? catalogPath = null, int maxRecentRoots = 8)
     {
@@ -33,7 +35,8 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
             recentWorkspaceRoots: document?.RecentWorkspaceRoots,
             activeProfileId: document?.ActiveProfileId,
             profiles: document?.Profiles,
-            templates: document?.Templates);
+            templates: document?.Templates,
+            preferences: document?.Preferences);
     }
 
     public WorkspaceRootCatalog SaveActive(string workspaceRoot, string? activeProfileId = null)
@@ -41,13 +44,15 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
         using var writeLock = AcquireWriteLock();
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
 
+        var existing = LoadDocument(strict: true);
         var normalized = NormalizeCatalog(
             activeWorkspaceRoot: workspaceRoot,
             fallbackWorkspaceRoot: workspaceRoot,
-            recentWorkspaceRoots: LoadDocument(strict: true)?.RecentWorkspaceRoots,
+            recentWorkspaceRoots: existing?.RecentWorkspaceRoots,
             activeProfileId: activeProfileId,
-            profiles: LoadDocument(strict: true)?.Profiles,
-            templates: LoadDocument(strict: true)?.Templates);
+            profiles: existing?.Profiles,
+            templates: existing?.Templates,
+            preferences: existing?.Preferences);
 
         PersistCatalog(normalized);
         return normalized;
@@ -84,7 +89,8 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
             recentWorkspaceRoots: existing?.RecentWorkspaceRoots,
             activeProfileId: activeProfileId,
             profiles: profiles,
-            templates: existing?.Templates);
+            templates: existing?.Templates,
+            preferences: existing?.Preferences);
 
         PersistCatalog(normalized);
         return normalized;
@@ -110,7 +116,8 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
             recentWorkspaceRoots: existing?.RecentWorkspaceRoots,
             activeProfileId: effectiveActiveProfileId,
             profiles: profiles,
-            templates: existing?.Templates);
+            templates: existing?.Templates,
+            preferences: existing?.Preferences);
 
         PersistCatalog(normalized);
         return normalized;
@@ -138,7 +145,8 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
             recentWorkspaceRoots: existing?.RecentWorkspaceRoots,
             activeProfileId: activeProfileId,
             profiles: existing?.Profiles,
-            templates: templates);
+            templates: templates,
+            preferences: existing?.Preferences);
         PersistCatalog(normalized);
         return normalized;
     }
@@ -160,8 +168,31 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
             recentWorkspaceRoots: existing?.RecentWorkspaceRoots,
             activeProfileId: activeProfileId,
             profiles: existing?.Profiles,
-            templates: templates);
+            templates: templates,
+            preferences: existing?.Preferences);
 
+        PersistCatalog(normalized);
+        return normalized;
+    }
+
+    public WorkspaceRootCatalog SavePreferences(
+        WorkspaceStudioPreferences preferences,
+        string fallbackWorkspaceRoot,
+        string? activeProfileId = null)
+    {
+        using var writeLock = AcquireWriteLock();
+        ArgumentNullException.ThrowIfNull(preferences);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fallbackWorkspaceRoot);
+
+        var existing = LoadDocument(strict: true);
+        var normalized = NormalizeCatalog(
+            activeWorkspaceRoot: existing?.ActiveWorkspaceRoot,
+            fallbackWorkspaceRoot: fallbackWorkspaceRoot,
+            recentWorkspaceRoots: existing?.RecentWorkspaceRoots,
+            activeProfileId: activeProfileId ?? existing?.ActiveProfileId,
+            profiles: existing?.Profiles,
+            templates: existing?.Templates,
+            preferences: preferences);
         PersistCatalog(normalized);
         return normalized;
     }
@@ -172,7 +203,8 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
         IReadOnlyList<string>? recentWorkspaceRoots,
         string? activeProfileId,
         IReadOnlyList<WorkspaceProfile>? profiles,
-        IReadOnlyList<WorkspaceProfileTemplate>? templates)
+        IReadOnlyList<WorkspaceProfileTemplate>? templates,
+        WorkspaceStudioPreferences? preferences)
     {
         var normalizedProfiles = NormalizeProfiles(profiles);
         var normalizedTemplates = NormalizeTemplates(templates);
@@ -217,7 +249,20 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
             RecentWorkspaceRoots: recentRoots,
             ActiveProfileId: activeProfile?.ProfileId,
             Profiles: normalizedProfiles,
-            Templates: normalizedTemplates);
+            Templates: normalizedTemplates,
+            Preferences: NormalizePreferences(preferences));
+    }
+
+    private static WorkspaceStudioPreferences NormalizePreferences(WorkspaceStudioPreferences? preferences)
+    {
+        preferences ??= WorkspaceStudioPreferences.Default;
+        return preferences with
+        {
+            ActivityMaxGitHubRepositories = Math.Clamp(preferences.ActivityMaxGitHubRepositories, 0, 50),
+            ActivityMaxIssuesPerRepository = Math.Clamp(preferences.ActivityMaxIssuesPerRepository, 0, 50),
+            ActivityMaxEntries = Math.Clamp(preferences.ActivityMaxEntries, 20, 1000),
+            ActivityGitHubTimeoutSeconds = Math.Clamp(preferences.ActivityGitHubTimeoutSeconds, 5, 300)
+        };
     }
 
     private static IReadOnlyList<WorkspaceProfile> NormalizeProfiles(IReadOnlyList<WorkspaceProfile>? profiles)

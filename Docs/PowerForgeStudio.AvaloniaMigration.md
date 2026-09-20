@@ -34,6 +34,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Inventory Windows schedules and local GitHub workflow definitions with explicit provider evidence boundaries.
 - [x] Add secret-free GitHub, registry, Licensing, IntelligenceX and local-toolchain connection evidence.
 - [x] Add a cross-project Activity inbox over existing portfolio, release, GitHub issue/PR/CI and automation owners.
+- [x] Add machine-local Settings with durable behavior and bounded Activity refresh preferences.
 - [ ] Connect GitHub automation runtime and a supported Codex adapter; add provider-owned configuration actions only where their owners expose safe APIs.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
@@ -183,6 +184,21 @@ Evidence:
 - Wide, compact-top and compact-list Skia renders were inspected: `Artifacts/StudioValidation/activity-attention.png`, `activity-attention-compact.png` and `activity-attention-compact-list.png`. The compact shell keeps the project tree, collapses the right inspector and scrolls the inbox above the output dock.
 
 The Activity route currently reads open GitHub issues and aggregate pull-request/CI signals. It does not provide a global issue search, review submission, issue edits, persistent mute rules, GitHub workflow runtime history or durable Activity history. The existing selected-project GitHub page remains the detail owner. Native Windows pointer, keyboard and external-link opening remain unverified.
+
+### Settings milestone
+
+The Settings rail route keeps the workspace tree visible and uses five consistent sections: General, Workspace, Execution, Integrations and Diagnostics. General currently owns document-tab restoration. Workspace owns bounded Activity limits for queried GitHub repositories, issue rows, combined inbox rows and the overall GitHub deadline. Execution and Integrations explain their existing owners without exposing controls that Studio cannot yet apply safely. Diagnostics reports the Studio/runtime/OS versions and the machine-local configuration path.
+
+Editable preferences live in the existing machine-local workspace catalog as a small JSON object. Credentials, source contents, build logs and provider runtime state are excluded. Catalog writes retain explorer state, profiles, templates and unknown future top-level properties, use the existing process lock and atomic replacement, and normalize numeric limits before returning them to either host. Reset only previews defaults; the rest of Studio receives new preferences after a successful durable save. Unsaved drafts survive route, refresh and workspace navigation, can be explicitly discarded, and block window close until the user chooses Save or Discard. Disabling document restoration leaves the saved references intact while skipping their next reopen.
+
+Evidence:
+
+- Seven focused catalog/explorer tests pass. The new case persists deliberately out-of-range values, verifies their normalized bounds, and proves that explorer favorites plus an unknown future JSON field survive the settings write.
+- All 41 Avalonia tests pass. The Settings case seeds a saved document and non-default preferences, proves that restoration is disabled, retains a draft across route navigation, keeps previewed defaults isolated until Save, reloads the persisted JSON and passes the saved limits into the Activity owner.
+- The retained WPF host builds in Release with zero warnings after the optional catalog field was added.
+- Actual Skia rendering was inspected at 1600 x 1000 and 1050 x 720: `Artifacts/StudioValidation/settings-workspace.png`, `settings-workspace-compact.png`, `settings-workspace-compact-bottom.png` and `settings-diagnostics-compact.png`. The wide shell retains the tree and Settings inspector; compact mode hides the inspector while keeping the section selector, scrollable editable limits, diagnostics and output visible.
+
+Workspace-root registration, exclusions, groups, retention, runtime/terminal profiles, keyboard mappings, themes, scaling, provider binding edits and diagnostic export remain planned settings. Current roots are visible but cannot be removed from Settings yet. A future removal control must delete only the registration and must never imply deleting its directory. Native Windows keyboard, pointer, scaling and file-picker behavior remain unverified.
 
 ### Build inspection milestone
 

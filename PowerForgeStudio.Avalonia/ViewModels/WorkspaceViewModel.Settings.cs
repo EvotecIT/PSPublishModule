@@ -1,15 +1,16 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PowerForgeStudio.Domain.Workspace;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
 public sealed partial class WorkspaceViewModel
 {
-    public AutomationsViewModel Automations { get; private set; } = null!;
-    [ObservableProperty] private bool _isAutomationsPage;
-    public bool IsWorkspaceUtilityPage => IsSettingsPage || IsActivityPage || IsStoragePage || IsAutomationsPage || IsConnectionsPage;
+    public SettingsViewModel Settings { get; private set; } = null!;
+    [ObservableProperty] private bool _isSettingsPage;
+    private bool _restoreOpenDocuments = true;
 
-    partial void OnIsAutomationsPageChanged(bool value)
+    partial void OnIsSettingsPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
         OnPropertyChanged(nameof(IsWorkspaceUtilityPage));
@@ -18,19 +19,24 @@ public sealed partial class WorkspaceViewModel
     }
 
     [RelayCommand]
-    private async Task ShowAutomationsAsync()
+    private void ShowSettings()
     {
         if (KeepReleaseVisible()) return;
-        IsSettingsPage = false;
         IsActivityPage = false;
         IsStoragePage = false;
+        IsAutomationsPage = false;
         IsConnectionsPage = false;
         IsReleasePage = false;
         IsGitHubPage = false;
         IsBuildPage = false;
         IsChangesPage = false;
-        IsAutomationsPage = true;
-        Automations.SetWorkspace(WorkspaceRoot);
-        await Automations.RefreshAsync();
+        IsSettingsPage = true;
+        Settings.SetWorkspace(WorkspaceRoot);
+    }
+
+    private void ApplyStudioPreferences(WorkspaceStudioPreferences preferences)
+    {
+        _restoreOpenDocuments = preferences.RestoreOpenDocuments;
+        Activity.SetOptions(preferences.ToActivityOptions());
     }
 }

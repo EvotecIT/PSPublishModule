@@ -61,6 +61,14 @@ public sealed partial class MainWindow : Window
                 : "Signing is still running. Cancel signing or wait for completion before closing.";
             return;
         }
+        if (model.Settings.IsDirty)
+        {
+            _closeAfterSave = false;
+            args.Cancel = true;
+            model.ShowSettingsCommand.Execute(null);
+            model.Settings.Status = "Save or explicitly discard the unsaved settings before closing.";
+            return;
+        }
         if (_closeAfterSave) return;
         args.Cancel = true;
         if (_savingOnClose) return;

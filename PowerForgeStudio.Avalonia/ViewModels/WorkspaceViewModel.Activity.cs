@@ -20,6 +20,7 @@ public sealed partial class WorkspaceViewModel
     private async Task ShowActivityAsync()
     {
         if (KeepReleaseVisible()) return;
+        IsSettingsPage = false;
         IsStoragePage = false;
         IsAutomationsPage = false;
         IsConnectionsPage = false;
@@ -38,6 +39,7 @@ public sealed partial class WorkspaceViewModel
         if (IsStoragePage) return Storage.RefreshAsync();
         if (IsAutomationsPage) return Automations.RefreshAsync();
         if (IsConnectionsPage) return Connections.RefreshAsync();
+        if (IsSettingsPage && Settings.CanReload) Settings.Reload();
         return Task.CompletedTask;
     }
 }
