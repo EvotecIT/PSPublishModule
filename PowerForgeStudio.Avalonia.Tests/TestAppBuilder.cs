@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Headless;
 
+[assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
+
 namespace PowerForgeStudio.Avalonia.Tests;
 
 internal static class TestAppBuilder

@@ -64,14 +64,15 @@
               <TextBlock Grid.Column="1" Text="{Binding Branch}" Foreground="#0865FF" VerticalAlignment="Center" />
             </Grid>
             <StackPanel Orientation="Horizontal" Spacing="25">
-              <TextBlock Text="Files" Foreground="#0865FF" FontWeight="SemiBold" />
+              <Button Content="Files" Command="{Binding ShowFilesCommand}" Padding="0" BorderThickness="0" Background="Transparent" />
               <TextBlock Text="Changes" Classes="muted" />
-              <TextBlock Text="Build &amp; Run" Classes="muted" />
+              <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Padding="0" BorderThickness="0" Background="Transparent" />
               <TextBlock Text="Releases" Classes="muted" />
             </StackPanel>
           </StackPanel>
         </Border>
-        <views:FilesView Grid.Row="2" />
+        <views:FilesView Grid.Row="2" IsVisible="{Binding IsFilesPage}" />
+        <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
         <Border Grid.Row="3" Background="#0D2132">
           <Grid RowDefinitions="38,*">
             <TextBlock Text="Output" Foreground="#E6F0FF" Margin="17,10" />

@@ -22,6 +22,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingFileList;
 
     public WorkspaceViewModel(string root) => WorkspaceRoot = Path.GetFullPath(root);
+    public BuildViewModel Build { get; } = new();
+    [ObservableProperty] private bool _isBuildPage;
+    public bool IsFilesPage => !IsBuildPage;
+    partial void OnIsBuildPageChanged(bool value) => OnPropertyChanged(nameof(IsFilesPage));
+    [RelayCommand] private void ShowFiles() => IsBuildPage = false;
+    [RelayCommand] private void ShowBuild() => IsBuildPage = true;
     public ObservableCollection<ExplorerNode> Projects { get; } = [];
     public ObservableCollection<FileItemViewModel> Files { get; } = [];
     [ObservableProperty] private string _workspaceRoot;
@@ -47,6 +53,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 
     partial void OnActiveWorkingCopyRootChanged(string value)
     {
+        Build.SetWorkingCopy(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
         OnPropertyChanged(nameof(CanManageFiles));
     }
@@ -215,5 +222,5 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var text = Output + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
         Output = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 }

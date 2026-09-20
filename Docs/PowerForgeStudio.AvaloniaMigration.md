@@ -13,6 +13,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
 - [ ] Complete file editing/save conflicts and deletion/recovery behavior.
 - [ ] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
+- [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [ ] Connect cancellation, live progress, artifacts and release receipts.
 - [ ] Connect Git changes, issues, PRs and provider status through existing owners.
 - [ ] Inventory and expose schedules, storage and optional licensing/IntelligenceX integration.
@@ -76,3 +77,15 @@ Evidence:
 - Local review: review_file_management inspected this milestone read-only against 7c4b36958. Three P2 findings (superseded navigation, destination-tree invalidation, Unix file modes) were fixed and tested. One targeted confirmation found the fixes addressed with no additional actionable finding. The navigation stress test does not force a particular read-completion schedule; the source fix always repopulates the winning request.
 
 Next implementation focus: reviewed build plans and execution through canonical PowerForge services. The existing ProcessRunRequest already supports streaming stdout/stderr callbacks, and ReleaseBuildExecutionService already adapts project/module/unified release contracts. Reuse those owners rather than the old independent streaming implementation in ProjectBuildService.
+
+### Build inspection milestone
+
+Build & Run now opens a working-copy-specific inspection page. Its explicit action uses RepositoryPlanPreviewService through a narrow interface; it does not construct a synthetic portfolio or execute on selection. Project and unified release contracts use their existing planning adapters. Module JSON is validated, and PowerShell module contracts export configuration. These results are distinguished in the UI: module configuration validation is not presented as a resolved build plan.
+
+Catalog discovery recognizes Build/project.build.json without a PowerShell wrapper. It checks the repository's Build directory before child directories and prefers JSON within each directory. Invalid project configuration becomes a failed result. Changing working copies cancels the old request and discards late results. Synchronous adapter work may finish before cancellation is observed; the UI does not claim immediate termination.
+
+Evidence: 31 focused catalog/planner tests and four Avalonia tests passed. A controlled delayed-planner test verifies cancellation and stale-result suppression while switching working copies. The rendered page was inspected at 1600 × 1000 and 1050 × 720; the compact page scrolls its content below the output dock. Native input/scrolling proof remains open. Test dispatchers are serialized because Avalonia's application state is process-wide.
+
+The build-planning review found two P2 issues: nested JSON taking precedence over a root script, and validation being described as full planning. Both were corrected and confirmed in one targeted follow-up. No further review loop was started. Temporary fixtures from the interrupted dispatcher test and the failed JSON test were removed. Small rendered evidence remains under Artifacts/StudioValidation/build-plan*.png.
+
+Still required: resolved module build plans, inspectable plan contents, build execution with streaming progress and cancellation, artifact receipts, signing/publishing controls, and portable process/JSON execution. No user repository was built or published by this milestone.

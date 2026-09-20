@@ -63,7 +63,7 @@ public sealed class RepositoryCatalogScanner
                                  !releaseContract.ModuleIncludesPackages
             ? releaseContract.ConfigPath
             : releaseModuleBuildInput is null
-                ? FindBuildScript(directoryPath, "Build-Project.ps1", includeImmediateChildBuildFolders)
+                ? FindBuildInput(directoryPath, includeImmediateChildBuildFolders, "project.build.json", "Build-Project.ps1")
                 : null;
         var hasWebsiteSignals = HasWebsiteSignals(directoryPath);
 
@@ -252,27 +252,26 @@ public sealed class RepositoryCatalogScanner
         bool RequiresUnifiedExecution);
 
     private static string? FindBuildScript(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)
+        => FindBuildInput(directoryPath, includeImmediateChildBuildFolders, fileName);
+
+    private static string? FindBuildInput(string directoryPath, bool includeImmediateChildBuildFolders, params string[] fileNames)
     {
-        var directCandidate = Path.Combine(directoryPath, "Build", fileName);
-        if (File.Exists(directCandidate))
+        foreach (var fileName in fileNames)
         {
-            return directCandidate;
+            var candidate = Path.Combine(directoryPath, "Build", fileName);
+            if (File.Exists(candidate)) return candidate;
         }
-
-        if (!includeImmediateChildBuildFolders)
+        if (includeImmediateChildBuildFolders)
         {
-            return null;
-        }
-
-        foreach (var childDirectory in Directory.EnumerateDirectories(directoryPath))
-        {
-            var nestedCandidate = Path.Combine(childDirectory, "Build", fileName);
-            if (File.Exists(nestedCandidate))
+            foreach (var childDirectory in Directory.EnumerateDirectories(directoryPath).OrderBy(x => x, StringComparer.Ordinal))
             {
-                return nestedCandidate;
+                foreach (var fileName in fileNames)
+                {
+                    var candidate = Path.Combine(childDirectory, "Build", fileName);
+                    if (File.Exists(candidate)) return candidate;
+                }
             }
         }
-
         return null;
     }
 
