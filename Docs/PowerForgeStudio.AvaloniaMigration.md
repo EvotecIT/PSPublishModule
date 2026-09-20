@@ -378,3 +378,13 @@ Published targets no longer complete the queue when the configured destination c
 Thirty-five focused verification, cancellation, result-factory and queue-transition tests passed. Controlled HTTP fixtures cover cancellation before, between and during probes, final-result races, unsupported target kinds, missing destinations, database readback and retry restoration. No external service was contacted. The independent local review could not start because the reviewer agent quota was exhausted; a structured primary review found no actionable defect. Independent review remains an explicit validation gap for this boundary.
 
 Next: add a durable verification claim/finalization workflow, then connect publication and verification execution to the Avalonia release page with explicit acknowledgement and saved receipts.
+
+### Durable verification journal
+
+A shared durable verification workflow now conditionally replaces the exact saved verify-ready checkpoint with an interruption marker before remote probes begin. The same working-copy lease used by signing and publication prevents overlapping cooperating release operations. Completion and verification receipts commit in one database transaction.
+
+If final persistence fails, the workflow returns the receipts and marker needed for a local-only retry. Retry accepts only the exact completed checkpoint and complete receipt multiset, so it neither repeats remote probes nor overwrites different evidence. The workflow disposes the default verification host it owns while leaving injected hosts under caller ownership.
+
+Thirty-six focused durable verification, publication, signing, verification execution, cancellation and checkpoint tests passed. They cover the in-progress marker, competing-operation exclusion, cancellation, successful completion, receipt-write rollback, recovery without another probe, idempotent save, changed-evidence refusal, cross-working-copy evidence rejection, missing checkpoints and multiple destinations. The validation used controlled fixtures and no external service. A structured primary review found and corrected default verifier disposal. Independent review remains unavailable because the local reviewer quota was exhausted.
+
+Next: connect the durable publication and verification workflows to the Avalonia release page. The UI must capture an inspected destination snapshot, require an explicit publish acknowledgement, surface progress and receipts, prevent navigation/close while evidence is unsaved, and clearly distinguish verified, failed and unsupported delivery.
