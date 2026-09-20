@@ -57,6 +57,20 @@ public sealed class MissingFunctionsAnalyzer
             .Select(name => approvedSources[name])
             .ToArray();
 
+        var runtimeSourceCandidates = (options.RuntimeModuleSources ?? Array.Empty<ApprovedModuleSource>())
+            .Where(static source => source is not null &&
+                                    !string.IsNullOrWhiteSpace(source.Name) &&
+                                    !string.IsNullOrWhiteSpace(source.ModuleBasePath))
+            .ToArray();
+        var runtimeSources = runtimeSourceCandidates
+            .GroupBy(static source => source.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.OrdinalIgnoreCase);
+        var runtimeSourceOrder = runtimeSourceCandidates
+            .Select(static source => source.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(name => runtimeSources[name])
+            .ToArray();
+
         var ignore = new HashSet<string>(
             (options.IgnoreFunctions ?? Array.Empty<string>())
                 .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -78,6 +92,8 @@ public sealed class MissingFunctionsAnalyzer
                 approvedModules: approved,
                 approvedModuleSources: approvedSources,
                 approvedModuleSourceOrder: approvedSourceOrder,
+                runtimeModuleSources: runtimeSources,
+                runtimeModuleSourceOrder: runtimeSourceOrder,
                 requireApprovedModuleSources: options.RequireApprovedModuleSources,
                 ignoreFunctions: ignore,
                 includeFunctionsRecursively: options.IncludeFunctionsRecursively);
@@ -95,6 +111,8 @@ public sealed class MissingFunctionsAnalyzer
         HashSet<string> approvedModules,
         IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
         IReadOnlyList<ApprovedModuleSource> approvedModuleSourceOrder,
+        IReadOnlyDictionary<string, ApprovedModuleSource> runtimeModuleSources,
+        IReadOnlyList<ApprovedModuleSource> runtimeModuleSourceOrder,
         bool requireApprovedModuleSources,
         HashSet<string> ignoreFunctions,
         bool includeFunctionsRecursively,
@@ -125,6 +143,8 @@ public sealed class MissingFunctionsAnalyzer
                 approvedModules,
                 approvedModuleSources,
                 approvedModuleSourceOrder,
+                runtimeModuleSources,
+                runtimeModuleSourceOrder,
                 requireApprovedModuleSources,
                 preferredApprovedModuleSource);
             if (string.Equals(info.Source, "Microsoft.PowerShell.Core", StringComparison.OrdinalIgnoreCase))
@@ -170,6 +190,8 @@ public sealed class MissingFunctionsAnalyzer
                     approvedModules: approvedModules,
                     approvedModuleSources: approvedModuleSources,
                     approvedModuleSourceOrder: approvedModuleSourceOrder,
+                    runtimeModuleSources: runtimeModuleSources,
+                    runtimeModuleSourceOrder: runtimeModuleSourceOrder,
                     requireApprovedModuleSources: requireApprovedModuleSources,
                     ignoreFunctions: ignoreNext,
                     includeFunctionsRecursively: includeFunctionsRecursively,
@@ -402,6 +424,8 @@ public sealed class MissingFunctionsAnalyzer
         HashSet<string> approvedModules,
         IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
         IReadOnlyList<ApprovedModuleSource> approvedModuleSourceOrder,
+        IReadOnlyDictionary<string, ApprovedModuleSource> runtimeModuleSources,
+        IReadOnlyList<ApprovedModuleSource> runtimeModuleSourceOrder,
         bool requireApprovedModuleSources,
         ApprovedModuleSource? preferredApprovedModuleSource)
     {
@@ -411,6 +435,21 @@ public sealed class MissingFunctionsAnalyzer
 
         try
         {
+            if (qualifier is not null && runtimeModuleSources.TryGetValue(qualifier, out var qualifiedRuntimeSource))
+            {
+                var qualifiedRuntimeCommand = GetCommandFromModuleScopeCached(
+                    qualifiedRuntimeSource,
+                    lookupName,
+                    includePrivate: false);
+                if (qualifiedRuntimeCommand is null)
+                {
+                    throw new CommandNotFoundException(
+                        $"The command '{name}' was not exported by the selected runtime module '{qualifiedRuntimeSource.Name}' {qualifiedRuntimeSource.Version ?? "(version unknown)"} at '{qualifiedRuntimeSource.ModuleBasePath}'.");
+                }
+
+                return CreateRuntimeResolution(qualifiedRuntimeCommand);
+            }
+
             if (qualifier is not null && approvedModuleSources.TryGetValue(qualifier, out var qualifiedSource))
             {
                 var qualifiedCommand = GetCommandFromModuleScopeCached(qualifiedSource, lookupName, includePrivate: false);
@@ -431,6 +470,16 @@ public sealed class MissingFunctionsAnalyzer
                     includePrivate: true);
                 if (preferredCommand is not null)
                     return CreateResolution(preferredCommand, isAlias: preferredCommand is AliasInfo, isPrivate: true);
+            }
+
+            if (qualifier is null && runtimeModuleSources.Count > 0)
+            {
+                foreach (var source in runtimeModuleSourceOrder)
+                {
+                    var runtimeCommand = GetCommandFromModuleScopeCached(source, lookupName, includePrivate: false);
+                    if (runtimeCommand is not null)
+                        return CreateRuntimeResolution(runtimeCommand);
+                }
             }
 
             if (qualifier is null && approvedModuleSources.Count > 0)
@@ -650,6 +699,16 @@ public sealed class MissingFunctionsAnalyzer
             isPrivate: isPrivate,
             error: string.Empty,
             scriptBlock: (command as FunctionInfo)?.ScriptBlock);
+
+    private static MissingFunctionCommand CreateRuntimeResolution(CommandInfo command)
+        => new(
+            name: command.Name,
+            source: command.Source ?? command.ModuleName ?? string.Empty,
+            commandType: command.CommandType == 0 ? string.Empty : command.CommandType.ToString(),
+            isAlias: command is AliasInfo,
+            isPrivate: false,
+            error: string.Empty,
+            scriptBlock: null);
 
     private CommandInfo? GetCommandFromCurrentSessionCached(string name)
     {

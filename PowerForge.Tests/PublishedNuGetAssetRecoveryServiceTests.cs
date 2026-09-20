@@ -6,6 +6,74 @@ namespace PowerForge.Tests;
 
 public sealed class PublishedNuGetAssetRecoveryServiceTests
 {
+    [Theory]
+    [InlineData(0, 600)]
+    [InlineData(30, 0)]
+    public void Constructor_RejectsNonPositiveRecoveryRequestTimeouts(
+        int serviceIndexRequestTimeoutSeconds,
+        int downloadRequestTimeoutSeconds)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PublishedNuGetAssetRecoveryService(
+            new NullLogger(),
+            serviceIndexRequestTimeoutSeconds: serviceIndexRequestTimeoutSeconds,
+            downloadRequestTimeoutSeconds: downloadRequestTimeoutSeconds));
+    }
+
+    [Fact]
+    public void Restore_AppliesConfiguredPackageDownloadTimeout()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string packageId = "PowerForge.Build";
+            const string version = "3.0.81";
+            var packagePath = Path.Combine(root.FullName, $"{packageId}.{version}.nupkg");
+            File.WriteAllBytes(packagePath, CreateToolPackage(packageId, version, "rebuilt"));
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NeverCompletingPackageHandler()),
+                downloadRequestTimeoutSeconds: 1);
+
+            Assert.ThrowsAny<OperationCanceledException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [packagePath],
+                CancellationToken.None));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_KeepsServiceIndexTimeoutIndependentFromPackageDownloadTimeout()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string packageId = "PowerForge.Build";
+            const string version = "3.0.81";
+            var packagePath = Path.Combine(root.FullName, $"{packageId}.{version}.nupkg");
+            File.WriteAllBytes(packagePath, CreateToolPackage(packageId, version, "rebuilt"));
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NeverCompletingIndexHandler()),
+                serviceIndexRequestTimeoutSeconds: 1,
+                downloadRequestTimeoutSeconds: 10 * 60);
+
+            Assert.ThrowsAny<OperationCanceledException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [packagePath],
+                CancellationToken.None));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void Restore_ReplacesRebuiltPackageWithExactPublishedBytes()
     {
@@ -211,7 +279,7 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
     }
 
     [Fact]
-    public void Restore_RejectsConflictingLibraryPayloadsEvenWhenOnePackageOwnsReleaseZip()
+    public void Restore_PrefersOwningPackageWhenLibraryPayloadsCollide()
     {
         var root = Directory.CreateTempSubdirectory();
         try
@@ -249,25 +317,212 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
                         [secondPackageId] = publishedSecond
                     })));
 
-            var exception = Assert.Throws<InvalidOperationException>(() => service.Restore(
+            var restored = service.Restore(
                 "https://packages.example/v3/index.json",
                 version,
                 [firstPackagePath, secondPackagePath, firstReleaseZipPath],
-                CancellationToken.None));
+                CancellationToken.None);
 
-            Assert.Contains("conflicting library payload", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(
+                [firstPackagePath, firstReleaseZipPath, secondPackagePath],
+                restored);
             using (var firstPackage = ZipFile.OpenRead(firstPackagePath))
             {
                 Assert.Equal(
-                    "rebuilt-first",
+                    "published-first",
                     ReadText(Assert.Single(
                         firstPackage.Entries,
                         entry => entry.FullName == $"lib/net10.0/{assemblyName}")));
             }
             using var release = ZipFile.OpenRead(firstReleaseZipPath);
             Assert.Equal(
-                "rebuilt-first",
+                "published-first",
                 ReadText(Assert.Single(release.Entries, entry => entry.FullName == $"net10.0/{assemblyName}")));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_PrefersOwningPackageBeforeMultipleDependenciesCollide()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string ownerPackageId = "Owner.Package";
+            const string firstDependencyId = "Shared.First";
+            const string secondDependencyId = "Shared.Second";
+            const string version = "3.0.81";
+            const string assemblyName = "Shared.Common.dll";
+            var ownerPackagePath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.nupkg");
+            var firstDependencyPath = Path.Combine(root.FullName, $"{firstDependencyId}.{version}.nupkg");
+            var secondDependencyPath = Path.Combine(root.FullName, $"{secondDependencyId}.{version}.nupkg");
+            var ownerReleaseZipPath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.zip");
+            File.WriteAllBytes(
+                ownerPackagePath,
+                CreateLibraryPackageWithLibrary(ownerPackageId, version, assemblyName, "rebuilt-owner"));
+            File.WriteAllBytes(
+                firstDependencyPath,
+                CreateLibraryPackageWithLibrary(firstDependencyId, version, assemblyName, "rebuilt-first"));
+            File.WriteAllBytes(
+                secondDependencyPath,
+                CreateLibraryPackageWithLibrary(secondDependencyId, version, assemblyName, "rebuilt-second"));
+            CreateReleaseZipWithEntry(ownerReleaseZipPath, $"net10.0/{assemblyName}", "rebuilt-owner");
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(
+                    new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [ownerPackageId] = CreateLibraryPackageWithLibrary(
+                            ownerPackageId,
+                            version,
+                            assemblyName,
+                            "published-owner"),
+                        [firstDependencyId] = CreateLibraryPackageWithLibrary(
+                            firstDependencyId,
+                            version,
+                            assemblyName,
+                            "published-first"),
+                        [secondDependencyId] = CreateLibraryPackageWithLibrary(
+                            secondDependencyId,
+                            version,
+                            assemblyName,
+                            "published-second")
+                    })));
+
+            var restored = service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [ownerPackagePath, firstDependencyPath, secondDependencyPath, ownerReleaseZipPath],
+                CancellationToken.None);
+
+            Assert.Equal(
+                [ownerPackagePath, ownerReleaseZipPath, firstDependencyPath, secondDependencyPath],
+                restored);
+            using var release = ZipFile.OpenRead(ownerReleaseZipPath);
+            Assert.Equal(
+                "published-owner",
+                ReadText(Assert.Single(release.Entries, entry => entry.FullName == $"net10.0/{assemblyName}")));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_RejectsConflictingLibraryPayloadsFromNonOwningPackages()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string ownerPackageId = "Owner.Package";
+            const string firstDependencyId = "Shared.First";
+            const string secondDependencyId = "Shared.Second";
+            const string version = "3.0.81";
+            const string sharedAssemblyName = "Shared.Common.dll";
+            var ownerPackagePath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.nupkg");
+            var firstDependencyPath = Path.Combine(root.FullName, $"{firstDependencyId}.{version}.nupkg");
+            var secondDependencyPath = Path.Combine(root.FullName, $"{secondDependencyId}.{version}.nupkg");
+            var ownerReleaseZipPath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.zip");
+            File.WriteAllBytes(ownerPackagePath, CreatePackage(ownerPackageId, version, "rebuilt-owner"));
+            File.WriteAllBytes(
+                firstDependencyPath,
+                CreateLibraryPackageWithLibrary(firstDependencyId, version, sharedAssemblyName, "rebuilt-first"));
+            File.WriteAllBytes(
+                secondDependencyPath,
+                CreateLibraryPackageWithLibrary(secondDependencyId, version, sharedAssemblyName, "rebuilt-second"));
+            CreateReleaseZipWithEntry(ownerReleaseZipPath, $"net10.0/{sharedAssemblyName}", "rebuilt-unknown");
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(
+                    new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [ownerPackageId] = CreatePackage(ownerPackageId, version, "published-owner"),
+                        [firstDependencyId] = CreateLibraryPackageWithLibrary(
+                            firstDependencyId,
+                            version,
+                            sharedAssemblyName,
+                            "published-first"),
+                        [secondDependencyId] = CreateLibraryPackageWithLibrary(
+                            secondDependencyId,
+                            version,
+                            sharedAssemblyName,
+                            "published-second")
+                    })));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [ownerPackagePath, firstDependencyPath, secondDependencyPath, ownerReleaseZipPath],
+                CancellationToken.None));
+
+            Assert.Contains("conflicting library payload", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_SelectsDependencyMatchingRebuiltAggregateReleasePayload()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string ownerPackageId = "Owner.Package";
+            const string firstDependencyId = "Shared.First";
+            const string secondDependencyId = "Shared.Second";
+            const string version = "3.0.81";
+            const string sharedAssemblyName = "Shared.Common.dll";
+            var ownerPackagePath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.nupkg");
+            var firstDependencyPath = Path.Combine(root.FullName, $"{firstDependencyId}.{version}.nupkg");
+            var secondDependencyPath = Path.Combine(root.FullName, $"{secondDependencyId}.{version}.nupkg");
+            var ownerReleaseZipPath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.zip");
+            File.WriteAllBytes(ownerPackagePath, CreatePackage(ownerPackageId, version, "rebuilt-owner"));
+            File.WriteAllBytes(
+                firstDependencyPath,
+                CreateLibraryPackageWithLibrary(firstDependencyId, version, sharedAssemblyName, "rebuilt-first"));
+            File.WriteAllBytes(
+                secondDependencyPath,
+                CreateLibraryPackageWithLibrary(secondDependencyId, version, sharedAssemblyName, "rebuilt-second"));
+            CreateReleaseZipWithEntry(ownerReleaseZipPath, $"net10.0/{sharedAssemblyName}", "rebuilt-second");
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(
+                    new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [ownerPackageId] = CreatePackage(ownerPackageId, version, "published-owner"),
+                        [firstDependencyId] = CreateLibraryPackageWithLibrary(
+                            firstDependencyId,
+                            version,
+                            sharedAssemblyName,
+                            "published-first"),
+                        [secondDependencyId] = CreateLibraryPackageWithLibrary(
+                            secondDependencyId,
+                            version,
+                            sharedAssemblyName,
+                            "published-second")
+                    })));
+
+            var restored = service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [ownerPackagePath, firstDependencyPath, secondDependencyPath, ownerReleaseZipPath],
+                CancellationToken.None);
+
+            Assert.Equal(
+                [ownerPackagePath, ownerReleaseZipPath, firstDependencyPath, secondDependencyPath],
+                restored);
+            using var release = ZipFile.OpenRead(ownerReleaseZipPath);
+            Assert.Equal(
+                "published-second",
+                ReadText(Assert.Single(
+                    release.Entries,
+                    entry => entry.FullName == $"net10.0/{sharedAssemblyName}")));
         }
         finally
         {
@@ -497,6 +752,39 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
             {
                 Content = new ByteArrayContent(responseBytes)
             });
+        }
+    }
+
+    private sealed class NeverCompletingPackageHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsoluteUri.EndsWith("/v3/index.json", StringComparison.Ordinal) == true)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "{\"resources\":[{\"@id\":\"https://packages.example/v3-flatcontainer/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}",
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("The canceled recovery request unexpectedly continued.");
+        }
+    }
+
+    private sealed class NeverCompletingIndexHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("The canceled service-index request unexpectedly continued.");
         }
     }
 }

@@ -16,6 +16,7 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
         {
             const string moduleName = "TestModule";
             const string approvedModule = "Approved.Module";
+            const string runtimeModule = "Runtime.Module";
 
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
 
@@ -28,7 +29,11 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 new ThrowingPowerShellRunner(),
-                new FakeDependencyMetadataProvider(),
+                new FakeDependencyMetadataProvider(new InstalledModuleMetadata(
+                    runtimeModule,
+                    "1.0.0",
+                    "11111111-1111-1111-1111-111111111111",
+                    root.FullName)),
                 new FakeHostedOperations(),
                 new FakeManifestMutator(),
                 analysisService);
@@ -52,6 +57,15 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
                         {
                             ModuleName = approvedModule
                         }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = runtimeModule,
+                            RequiredVersion = "1.0.0"
+                        }
                     }
                 }
             };
@@ -72,6 +86,9 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
             Assert.True(analysisService.LastOptions.IncludeFunctionsRecursively);
             Assert.Empty(analysisService.LastOptions.IgnoreFunctions);
             Assert.True(analysisService.LastOptions.RequireApprovedModuleSources);
+            var runtimeSource = Assert.Single(analysisService.LastOptions.RuntimeModuleSources);
+            Assert.Equal(runtimeModule, runtimeSource.Name);
+            Assert.Equal(root.FullName, runtimeSource.ModuleBasePath);
         }
         finally
         {
@@ -310,8 +327,20 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
 
     internal sealed class FakeDependencyMetadataProvider : IModuleDependencyMetadataProvider
     {
+        private readonly InstalledModuleMetadata? _installed;
+
+        internal FakeDependencyMetadataProvider(InstalledModuleMetadata? installed = null)
+        {
+            _installed = installed;
+        }
+
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
-            => new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
+        {
+            var output = new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
+            if (_installed is not null && names.Contains(_installed.Name, StringComparer.OrdinalIgnoreCase))
+                output[_installed.Name] = _installed;
+            return output;
+        }
 
         public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
             => Array.Empty<RequiredModuleReference>();
