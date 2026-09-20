@@ -20,7 +20,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [ ] Connect cancellation, live progress, artifacts and release receipts.
 - [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
 - [x] Connect Git status, diffs, staging, unstaging and local commits through the shared Git owner.
-- [ ] Connect issues, PRs and provider status through existing owners.
+- [ ] Complete issues, PR review actions and provider status through existing owners.
+- [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
 - [ ] Inventory and expose schedules, storage and optional licensing/IntelligenceX integration.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
@@ -49,7 +50,7 @@ The reviewed design uses a navy rail and title bar, white workspace, a persisten
 
 - The old generic ProjectBuildService resolves a detected script without explicit mode arguments. Do not wire it to a new one-click Build command without a reviewable execution plan.
 - The same service has a separate streaming process implementation; inspect cancellation, stdout/stderr lifetime and buffer bounds before reusing that path.
-- Shared Git status now propagates failures and preserves merge conflicts. The GitHub service still returns empty/partial lists for some access failures; distinguish those states before connecting its inbox.
+- Shared Git status propagates failures and preserves merge conflicts. GitHub project reads now distinguish access failures and bounded partial listings; the older WPF UI still has silent display-level catches and is retained only during migration.
 
 ## Validation record
 
@@ -186,3 +187,25 @@ Evidence:
 - Independent read-only review /root/review_file_editing inspected the editor milestone against c3baca719, original fingerprint ea76d13cd14f166c837ca8a334fea0f0761c5304. It found two P1 draft-loss races during discovery and relocation, a P2 stale-inspection result, and a P3 missing recovery-path diagnostic. These were interactions introduced by the editor feature. All were fixed, with a sibling sweep across tab/window close, root changes, folder refresh and save/move overlap. The single targeted confirmation accepted fingerprint 1dd6656c6ea3a90b0df2c65cd9ceab39cd94f050 with no additional actionable findings in the remediation scope. Boundary: candidate-reviewed.
 
 The editor is a bounded plain-text editor. Syntax tooling and crash-recoverable drafts are not implemented. No user repository file was edited by validation; tests used disposable fixtures. Large task-owned test/CLI/module binaries were removed after validation; the active Avalonia build and small screenshots remain local.
+
+
+### GitHub project workspace
+
+The GitHub rail and project tab open pull requests or issues for the selected working copy. Refresh resolves its github.com origin and loads the selected open/closed/all filter. Lists, discussion, inline review comments and timeline entries use the shared GitHubProjectService. Switching working copy, filter or item cancels previous reads and rejects late results. The GitHub page uses the output dock's space for discussion; builds and local changes keep their existing dock.
+
+PR details capture the head SHA returned by GitHub, then load check runs and latest commit status per context for that SHA. Failures are visible; access failures for checks leave the discussion readable. This snapshot is not a merge-policy decision. PR file diffs, review posting, branch protection/ruleset evaluation and merge actions remain unfinished. Discussion Markdown is currently shown as selectable plain text. Open on GitHub uses a URL constructed from the validated repository and numeric item number, not remote body links.
+
+The shared service validates repository identifiers, reports HTTP access/rate-limit errors without echoing response bodies, limits each response to 4 MiB, and bounds requests including body reads. Lists expose possible additional pages after five 100-item pages, counting raw issue-endpoint records before filtering PRs. Discussion exposes its own coverage flag. Incomplete counts raise an error instead of returning an exact-looking number. The old "Ready to merge" display was replaced with "No merge conflicts"; list responses state that reviews have not been loaded.
+
+Authentication retains the existing environment/gh/token-file resolution order, with thread-safe lazy resolution. The CLI path now uses the canonical PowerForge ProcessRunner, a five-second timeout per executable candidate, bounded captured output and an explicit github.com hostname. Initial discovery runs away from the UI thread. Credential discovery is cached for the process lifetime; changing credentials requires restarting Studio. No credentials are persisted in the workspace catalog.
+
+Evidence:
+
+- Twenty-six focused shared GitHub tests passed: access failures, later-page failure, filtered pagination coverage, invalid repository names, malformed/oversized responses, captured-head checks, latest commit status per context, disposal during an active request, and bounded CLI credential lookup.
+- All 21 Avalonia tests passed before the final GitHub dock adjustment; the two GitHub UI tests passed again after it. Controlled tests cover ignored cancellation on project/filter switches, stale discussion results, explicit access errors and discussion retention when check access fails.
+- Avalonia and retained WPF builds passed with zero warnings. Actual headless Skia renders were inspected at 1600 × 1000 and 1050 × 700: Artifacts/StudioValidation/workspace-github.png and workspace-github-compact.png. Native Windows input and launching the external browser remain unverified.
+- A disposable console harness exercised the actual shared service and normal credential resolution against EvotecIT/PSPublishModule: two open PRs, one issue, PR 958 with one comment and four timeline events, and nine checks/statuses at its returned head. These are point-in-time observations, not a release/readiness claim. No remote writes occurred and only counts were logged.
+- Independent read-only review /root/review_github_workspace inspected the staged milestone against 5f7131552, fingerprint 1c8e6d50a69048a67d044adcf945b7414f855ce6, including both renders. It found no actionable introduced defect. Boundary: candidate-reviewed. No targeted confirmation was needed. Native interaction and the remaining review/action scope remain explicit gaps.
+- The disposable live harness and completed shared-test/WPF binaries were removed after containment, link, tracked-file and running-process checks: about 225 MiB. Active Avalonia outputs and the small rendered evidence remain local.
+
+API contract references: [GitHub check runs](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference) and [commit statuses](https://docs.github.com/en/rest/commits/statuses#list-commit-statuses-for-a-reference).

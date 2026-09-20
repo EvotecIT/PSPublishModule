@@ -25,8 +25,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingTreeSelection;
     private int _refreshVersion;
 
-    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null)
     {
+        GitHub = new GitHubViewModel(gitHub);
         WorkspaceRoot = Path.GetFullPath(root);
         _stateStore = stateStore;
         _files = files ?? new FileExplorerService();
@@ -47,12 +48,17 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(DisplayedOutput));
         };
     }
+    public GitHubViewModel GitHub { get; }
+    [ObservableProperty] private bool _isGitHubPage;
+    partial void OnIsGitHubPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(OutputPaneHeight)); }
+    public global::Avalonia.Controls.GridLength OutputPaneHeight => new(IsGitHubPage ? 0 : 170);
+    [RelayCommand] private void ShowGitHub() { IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
     partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(DisplayedOutput)); }
     [ObservableProperty] private bool _isBuildPage;
-    public bool IsFilesPage => !IsBuildPage && !IsChangesPage;
+    public bool IsFilesPage => !IsBuildPage && !IsChangesPage && !IsGitHubPage;
     partial void OnIsBuildPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
@@ -60,9 +66,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     }
     public string DisplayedOutput => IsChangesPage ? Changes.LastOperation : IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;
     partial void OnOutputChanged(string value) => OnPropertyChanged(nameof(DisplayedOutput));
-    [RelayCommand] private void ShowFiles() { IsBuildPage = false; IsChangesPage = false; }
-    [RelayCommand] private void ShowBuild() { IsChangesPage = false; IsBuildPage = true; }
-    [RelayCommand] private void ShowChanges() { IsBuildPage = false; IsChangesPage = true; }
+    [RelayCommand] private void ShowFiles() { IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
+    [RelayCommand] private void ShowBuild() { IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
+    [RelayCommand] private void ShowChanges() { IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
     public ObservableCollection<ExplorerNode> Projects { get; } = [];
     public ObservableCollection<FileItemViewModel> Files { get; } = [];
     [ObservableProperty] private string _workspaceRoot;
@@ -97,6 +103,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Build.SetWorkingCopy(value);
         NotifyEditorChanged();
         Changes.SetWorkingCopy(value);
+        GitHub.SetWorkingCopy(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
         OnPropertyChanged(nameof(CanManageFiles));
     }
@@ -287,5 +294,5 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var text = Output + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
         Output = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); Changes.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); Changes.Dispose(); GitHub.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 }

@@ -5,5 +5,6 @@ public enum GitHubPrReviewStatus
     None = 0,
     Pending = 1,
     Approved = 2,
-    ChangesRequested = 3
+    ChangesRequested = 3,
+    Unknown = 4
 }

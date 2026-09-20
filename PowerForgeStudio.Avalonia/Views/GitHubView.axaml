@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Hub"
+             x:Class="PowerForgeStudio.Avalonia.Views.GitHubView" x:DataType="vm:GitHubViewModel">
+  <UserControl.Styles><Style Selector="TextBlock.failure"><Setter Property="Foreground" Value="#BD2424" /></Style></UserControl.Styles>
+  <Grid Margin="18" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+    <StackPanel Spacing="5">
+      <TextBlock Text="GitHub" FontSize="22" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding Slug}" Foreground="#0865FF" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="12" />
+    </StackPanel>
+    <WrapPanel Grid.Row="1">
+      <Button Content="Pull requests" Command="{Binding ShowPullsCommand}" Classes="chip" Classes.active="{Binding ShowPullRequests}" Margin="0,0,8,4" />
+      <Button Content="Issues" Command="{Binding ShowIssueListCommand}" Classes="chip" Classes.active="{Binding ShowIssues}" Margin="0,0,12,4" />
+      <ComboBox ItemsSource="{Binding States}" SelectedItem="{Binding StateFilter, Mode=TwoWay}" Width="100" Margin="0,0,8,4" ToolTip.Tip="GitHub state filter" />
+      <Button Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" Background="#0865FF" Foreground="White" Margin="0,0,0,4" />
+    </WrapPanel>
+    <Grid Grid.Row="2" ColumnDefinitions="2*,5,3*">
+      <ListBox x:Name="GitHubItems" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected, Mode=TwoWay}" Background="#F7F9FC">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:GitHubItemRow">
+            <StackPanel Spacing="5" Margin="4,8">
+              <TextBlock Text="{Binding Caption}" TextWrapping="Wrap" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding Metadata}" Classes="muted" FontSize="12" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12,0,0,0">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding DetailTitle}" FontWeight="SemiBold" FontSize="17" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding DetailStatus}" TextWrapping="Wrap" Classes="muted" FontSize="12" />
+          <WrapPanel>
+            <Button Content="Reload detail" Command="{Binding LoadSelectionCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,4" />
+            <Button Content="Open on GitHub" Click="OpenOnGitHub" IsEnabled="{Binding HasSelection}" Margin="0,0,0,4" />
+          </WrapPanel>
+          <Border IsVisible="{Binding HasChecks}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="5" Padding="12">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Checks at PR head" FontWeight="SemiBold" />
+              <SelectableTextBlock Text="{Binding HeadSha}" FontSize="11" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ChecksStatus}" TextWrapping="Wrap" FontSize="12" />
+              <ItemsControl ItemsSource="{Binding Checks}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="domain:GitHubCheck">
+                    <StackPanel Margin="0,5" Spacing="3">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Display}" Classes="muted" Classes.failure="{Binding IsFailure}" TextWrapping="Wrap" FontSize="12" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+          <ItemsControl ItemsSource="{Binding Discussion}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="domain:GitHubThreadEntry">
+                <Border BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="0,10,0,14">
+                  <StackPanel Spacing="7">
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding AuthorLogin}" Foreground="#0865FF" FontSize="12" />
+                    <TextBlock Text="{Binding Path}" IsVisible="{Binding HasPath}" TextWrapping="Wrap" FontSize="12" />
+                    <SelectableTextBlock Text="{Binding Markdown}" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</UserControl>

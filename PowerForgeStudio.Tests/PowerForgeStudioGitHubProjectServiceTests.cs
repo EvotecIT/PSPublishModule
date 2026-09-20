@@ -87,7 +87,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
         Assert.Equal("Rendered through OfficeIMO", pr.BodyMarkdown);
         Assert.Equal("Merged", pr.StateDisplay);
         Assert.Equal("enhancement", pr.LabelDisplay);
-        Assert.Equal("Ready to merge", pr.MergeStatusDisplay);
+        Assert.Equal("No merge conflicts", pr.MergeStatusDisplay);
     }
 
     [Fact]

@@ -16,7 +16,8 @@ public sealed record GitHubPullRequest(
     DateTimeOffset CreatedAt,
     DateTimeOffset? MergedAt,
     string? HtmlUrl = null,
-    string? BodyMarkdown = null)
+    string? BodyMarkdown = null,
+    string? HeadSha = null)
 {
     public bool IsOpen => string.Equals(State, "open", StringComparison.OrdinalIgnoreCase);
 
@@ -28,6 +29,7 @@ public sealed record GitHubPullRequest(
 
     public string ReviewStatusDisplay => ReviewStatus switch
     {
+        GitHubPrReviewStatus.Unknown => "Reviews not loaded",
         GitHubPrReviewStatus.Approved => "Approved",
         GitHubPrReviewStatus.ChangesRequested => "Changes requested",
         GitHubPrReviewStatus.Pending => "Review pending",
@@ -36,7 +38,7 @@ public sealed record GitHubPullRequest(
 
     public string MergeStatusDisplay => MergeStatus switch
     {
-        GitHubPrMergeStatus.Clean => "Ready to merge",
+        GitHubPrMergeStatus.Clean => "No merge conflicts",
         GitHubPrMergeStatus.Blocked => "Blocked",
         GitHubPrMergeStatus.Behind => "Behind base",
         GitHubPrMergeStatus.Conflicting => "Conflicts",

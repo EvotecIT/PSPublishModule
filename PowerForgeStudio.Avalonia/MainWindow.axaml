@@ -16,9 +16,9 @@
     <Grid Grid.Row="1" x:Name="WorkspaceLayout" ColumnDefinitions="70,326,5,*,280">
       <Border Background="#0B2745">
         <StackPanel Spacing="4" Margin="0,10">
-          <Button Classes="rail selected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsGitHubPage}" Command="{Binding ShowGitHubCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Schedules" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
@@ -54,7 +54,8 @@
         </Grid>
       </Border>
       <GridSplitter Grid.Column="2" ResizeDirection="Columns" Background="#E5EBF4" />
-      <Grid Grid.Column="3" RowDefinitions="43,93,*,170" Background="White">
+      <Grid Grid.Column="3" Background="White">
+        <Grid.RowDefinitions><RowDefinition Height="43" /><RowDefinition Height="93" /><RowDefinition Height="*" /><RowDefinition Height="{Binding OutputPaneHeight}" /></Grid.RowDefinitions>
         <Border Background="#EFF4FB" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1">
           <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
             <StackPanel Orientation="Horizontal">
@@ -87,12 +88,14 @@
               <Button Content="Files" Command="{Binding ShowFilesCommand}" Classes="pageTab" Classes.active="{Binding IsFilesPage}" />
               <Button Content="Changes" Command="{Binding ShowChangesCommand}" Classes="pageTab" Classes.active="{Binding IsChangesPage}" />
               <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Classes="pageTab" Classes.active="{Binding IsBuildPage}" />
+              <Button Content="GitHub" Command="{Binding ShowGitHubCommand}" Classes="pageTab" Classes.active="{Binding IsGitHubPage}" />
               <TextBlock Text="Releases" Classes="muted" />
               <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" Classes="pageTab" />
             </StackPanel>
           </StackPanel>
         </Border>
         <ContentControl Grid.Row="2" IsVisible="{Binding IsChangesPage}"><views:GitChangesView DataContext="{Binding Changes}" /></ContentControl>
+        <ContentControl Grid.Row="2" IsVisible="{Binding IsGitHubPage}"><views:GitHubView DataContext="{Binding GitHub}" /></ContentControl>
         <views:FilesView Grid.Row="2" IsVisible="{Binding IsFilesPage}" />
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
         <Border Grid.Row="3" Background="#0D2132">

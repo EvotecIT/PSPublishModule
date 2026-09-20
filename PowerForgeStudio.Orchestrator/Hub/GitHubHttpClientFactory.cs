@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using PowerForge;
 using System.Net.Http.Headers;
 
 namespace PowerForgeStudio.Orchestrator.Hub;
@@ -10,8 +10,7 @@ namespace PowerForgeStudio.Orchestrator.Hub;
 /// </summary>
 public static class GitHubHttpClientFactory
 {
-    private static string? _cachedToken;
-    private static bool _tokenResolved;
+    private static readonly Lazy<string?> Token = new(ResolveTokenCore);
 
     public static HttpClient Create(TimeSpan? timeout = null)
     {
@@ -33,35 +32,26 @@ public static class GitHubHttpClientFactory
 
     public static bool HasToken => !string.IsNullOrWhiteSpace(ResolveToken());
 
-    internal static string? ResolveToken()
+    internal static string? ResolveToken() => Token.Value;
+
+    private static string? ResolveTokenCore()
     {
-        // Return cached result after first resolution
-        if (_tokenResolved)
-        {
-            return _cachedToken;
-        }
-
-        _tokenResolved = true;
-
         // 1. Environment variables (explicit configuration)
         var token = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_GITHUB_TOKEN");
         if (!string.IsNullOrWhiteSpace(token))
         {
-            _cachedToken = token;
             return token;
         }
 
         token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
         if (!string.IsNullOrWhiteSpace(token))
         {
-            _cachedToken = token;
             return token;
         }
 
         token = Environment.GetEnvironmentVariable("GH_TOKEN");
         if (!string.IsNullOrWhiteSpace(token))
         {
-            _cachedToken = token;
             return token;
         }
 
@@ -69,7 +59,6 @@ public static class GitHubHttpClientFactory
         token = TryGetGhCliToken();
         if (!string.IsNullOrWhiteSpace(token))
         {
-            _cachedToken = token;
             return token;
         }
 
@@ -79,55 +68,32 @@ public static class GitHubHttpClientFactory
             ".config", "powerforge", "github-token"));
         if (!string.IsNullOrWhiteSpace(token))
         {
-            _cachedToken = token;
             return token;
         }
 
-        _cachedToken = null;
         return null;
     }
 
     private static string? TryGetGhCliToken()
-    {
-        // Try known install locations + PATH
-        var candidates = new[]
-        {
-            @"C:\Program Files\GitHub CLI\gh.exe",
-            @"C:\Program Files (x86)\GitHub CLI\gh.exe",
-            "gh"
-        };
+        => TryGetGhCliTokenAsync(new ProcessRunner()).GetAwaiter().GetResult();
 
-        foreach (var ghPath in candidates)
+    internal static async Task<string?> TryGetGhCliTokenAsync(IProcessRunner runner)
+    {
+        var candidates = OperatingSystem.IsWindows()
+            ? new[] { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "GitHub CLI", "gh.exe"), "gh" }
+            : new[] { "gh" };
+        foreach (var candidate in candidates)
         {
+            var request = new ProcessRunRequest(candidate, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ["auth", "token", "--hostname", "github.com"], TimeSpan.FromSeconds(5)) { MaxCapturedOutputCharacters = 8192 };
             try
             {
-                var psi = new ProcessStartInfo(ghPath)
-                {
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-                psi.ArgumentList.Add("auth");
-                psi.ArgumentList.Add("token");
-
-                using var process = Process.Start(psi);
-                if (process is null) continue;
-
-                var output = process.StandardOutput.ReadToEnd().Trim();
-                process.WaitForExit(5000);
-
-                if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
-                {
-                    return output;
-                }
+                var result = await runner.RunAsync(request).ConfigureAwait(false);
+                if (result.Succeeded && !result.StandardOutputLimitExceeded && !string.IsNullOrWhiteSpace(result.StdOut))
+                    return result.StdOut.Trim();
             }
-            catch
-            {
-                // This path didn't work, try next
-            }
+            catch { /* Authentication discovery is optional; never surface captured credential output. */ }
         }
-
         return null;
     }
 
@@ -137,7 +103,11 @@ public static class GitHubHttpClientFactory
         {
             if (File.Exists(path))
             {
-                var content = File.ReadAllText(path).Trim();
+                using var reader = new StreamReader(path);
+                var buffer = new char[8193];
+                var count = reader.ReadBlock(buffer, 0, buffer.Length);
+                if (count > 8192) return null;
+                var content = new string(buffer, 0, count).Trim();
                 if (!string.IsNullOrWhiteSpace(content))
                 {
                     return content;
