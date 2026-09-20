@@ -19,7 +19,7 @@
           <Button Classes="rail" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsGitHubPage}" Command="{Binding ShowGitHubCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Schedules" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsAutomationsPage}" Command="{Binding ShowAutomationsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Automations" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsStoragePage}" Command="{Binding ShowStorageCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
         </StackPanel>
@@ -78,7 +78,7 @@
             </StackPanel>
           </ScrollViewer>
         </Border>
-        <Border Grid.Row="1" Background="White" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="22,14" IsVisible="{Binding !IsStoragePage}">
+        <Border Grid.Row="1" Background="White" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="22,14" IsVisible="{Binding !IsWorkspaceUtilityPage}">
           <StackPanel Spacing="12">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
               <TextBlock Text="{Binding ProjectName}" Classes="heading" TextTrimming="CharacterEllipsis" />
@@ -100,6 +100,7 @@
         <views:FilesView Grid.Row="2" IsVisible="{Binding IsFilesPage}" />
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
         <views:StorageView Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsStoragePage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Storage}" />
+        <views:AutomationsView x:Name="AutomationsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsAutomationsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Automations}" />
         <Border Grid.Row="3" Background="#0D2132">
           <Grid RowDefinitions="38,*">
             <StackPanel Orientation="Horizontal" Spacing="9" Margin="17,10"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#E6F0FF" /><TextBlock Text="Output" Foreground="#E6F0FF" /></StackPanel>
@@ -111,7 +112,7 @@
       </Grid>
       <Border Grid.Column="4" x:Name="ContextPanel" Background="White" BorderBrush="#DDE5EF" BorderThickness="1,0,0,0" Padding="20,23">
         <Grid>
-          <StackPanel Spacing="18" IsVisible="{Binding !IsStoragePage}">
+          <StackPanel Spacing="18" IsVisible="{Binding !IsWorkspaceUtilityPage}">
             <TextBlock Text="Context" FontWeight="SemiBold" FontSize="16" />
             <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
             <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
@@ -140,9 +141,28 @@
               <TextBlock Text="Retained artifacts" Classes="muted" />
               <TextBlock Text="Not checked" />
               <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10">
-                <TextBlock Text="Candidate rows still require remote, active-use and retained-artifact evidence before removal can be offered." TextWrapping="Wrap" />
+                <TextBlock Text="Candidate rows are local evidence. Use Review removal to refresh remote, Studio-use and retained-content checks." TextWrapping="Wrap" />
               </Border>
               <TextBlock Text="{Binding SelectedEntry.Warning}" Foreground="#BA2737" TextWrapping="Wrap" />
+            </StackPanel>
+          </ScrollViewer>
+          <ScrollViewer IsVisible="{Binding IsAutomationsPage}">
+            <StackPanel Spacing="14" DataContext="{Binding Automations}">
+              <TextBlock Text="Automation evidence" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Text="{Binding SelectedEntry.Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SelectedEntry.Provider}" Foreground="#0865FF" />
+              <TextBlock Text="Project / scope" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.ProjectDisplay}" TextWrapping="Wrap" />
+              <TextBlock Text="Schedule" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.Schedule}" TextWrapping="Wrap" />
+              <TextBlock Text="Last observation" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.LastRunDisplay}" />
+              <TextBlock Text="{Binding SelectedEntry.LastResult}" TextWrapping="Wrap" />
+              <TextBlock Text="Source" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.SourcePath}" FontSize="11" TextWrapping="Wrap" />
+              <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10">
+                <TextBlock Text="{Binding SelectedEntry.Detail}" TextWrapping="Wrap" />
+              </Border>
             </StackPanel>
           </ScrollViewer>
         </Grid>

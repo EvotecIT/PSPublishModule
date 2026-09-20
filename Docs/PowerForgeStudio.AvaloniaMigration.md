@@ -31,7 +31,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Add review-only workspace storage inventory with measured worktrees and local ancestry evidence.
 - [x] Add current-remote, Studio-use and retained-artifact checks with guarded no-force worktree removal.
 - [ ] Add matching merged-PR-head fallback, broken-reference pruning and external process detection where available.
-- [ ] Inventory and expose schedules, storage and optional licensing/IntelligenceX integration.
+- [x] Inventory Windows schedules and local GitHub workflow definitions with explicit provider evidence boundaries.
+- [ ] Connect GitHub automation runtime, a supported Codex adapter, and optional licensing/IntelligenceX integrations.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
 - [ ] Clean task-owned validation artifacts and report delivery limits.
@@ -133,6 +134,21 @@ Evidence:
 - Wide and compact Skia renders were inspected: `Artifacts/StudioValidation/worktree-removal-review.png`, `worktree-removal-review-compact.png` and `worktree-removal-review-compact-bottom.png`. The compact dialog keeps the action bar pinned and makes the evidence and confirmations scrollable.
 
 This gate proves current default-branch ancestry. It intentionally blocks squash-merged work unless a future matching merged-PR-head check supplies equivalent evidence. Detecting every external process that may hold or later access a path is not portable, so the external-use confirmation remains an explicit human assertion. Remote resolution may invoke the user's existing Git credential helper, but Studio neither requests nor stores a credential. Broken-reference pruning and automatic bulk cleanup remain unimplemented.
+
+### Automation inventory milestone
+
+The Automations rail route now keeps the project tree visible while combining read-only evidence from separate providers. Windows Task Scheduler supplies task state, last run, next run and result through an exact Windows PowerShell probe. The probe excludes Microsoft task folders, caps captured output, invokes the installed `ScheduledTasks` module without a profile and never reads action arguments. Product-name matches and action executable or working-directory paths below the workspace drive the default Relevant filter; All observed exposes the remaining non-Microsoft rows.
+
+Local GitHub workflow files contribute block-form `on` / `schedule` / `cron` definitions from primary checkouts only. These rows are labelled Definition only and never presented as enabled, upcoming or healthy because no GitHub runtime was queried. Workflow files are bounded to 1 MiB and worktree copies are skipped to reduce duplicate definitions. Codex appears as an unavailable provider with the reason stated: no supported external inventory API is currently available, and Studio does not read or edit private Codex automation files.
+
+Evidence:
+
+- Three shared automation tests passed. They keep Windows runtime evidence separate from GitHub definitions, preserve Windows rows when GitHub discovery fails, verify provider status for unavailable Codex integration, enforce the PowerShell output bound and prove that unrelated `cron` keys outside `on.schedule` are ignored while quoted cron text is preserved.
+- The exact Windows probe ran read-only on the development workstation. It observed 29 non-Microsoft tasks and classified three current product tasks as relevant without collecting action arguments.
+- All 35 Avalonia tests passed. The automation route test covers relevant, all, provider and attention filters while retaining the workspace tree. A controlled delayed source proves that switching workspaces cancels the old inspection and permits an immediate refresh in the new workspace.
+- Wide, compact-top and compact-list Skia renders were inspected: `Artifacts/StudioValidation/automations-inventory.png`, `automations-inventory-compact.png` and `automations-inventory-compact-list.png`.
+
+This milestone does not calculate cron occurrences, query GitHub workflow runs, enable or pause tasks, or register schedules. Windows schedule text summarizes the first trigger while the provider's next-run timestamp remains the runtime evidence. Tasks identifiable only through command arguments may appear under All observed because arguments are intentionally excluded. Inline/flow-style GitHub schedule YAML is not parsed. Provider-specific detail/history pages, supported provider editing and schedule creation remain future work.
 
 ### Build inspection milestone
 
