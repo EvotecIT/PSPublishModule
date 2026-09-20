@@ -51,12 +51,14 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         string? owningPackagePath = null)
     {
         var payload = new Dictionary<string, PublishedPackageEntry>(StringComparer.OrdinalIgnoreCase);
+        var nonOwnerPayload = new Dictionary<string, PublishedPackageEntry>(StringComparer.OrdinalIgnoreCase);
         var normalizedOwner = string.IsNullOrWhiteSpace(owningPackagePath)
             ? null
             : Path.GetFullPath(owningPackagePath);
         var orderedPackagePaths = packagePaths
             .Select(Path.GetFullPath)
-            .OrderBy(path => string.Equals(path, normalizedOwner, StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            .OrderBy(path => string.Equals(path, normalizedOwner, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         foreach (var packagePath in orderedPackagePaths)
         {
@@ -81,20 +83,46 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                     entry.ExternalAttributes,
                     packagePath,
                     name.StartsWith("tools/", StringComparison.OrdinalIgnoreCase));
+                if (!isOwner)
+                {
+                    if (nonOwnerPayload.TryGetValue(releasePath, out var existingNonOwner))
+                    {
+                        if (!existingNonOwner.Bytes.SequenceEqual(published.Bytes))
+                        {
+                            throw new InvalidOperationException(
+                                $"Published NuGet packages contain conflicting library payload '{releasePath}'.");
+                        }
+                    }
+                    else
+                    {
+                        nonOwnerPayload.Add(releasePath, published);
+                    }
+                }
                 if (payload.TryGetValue(releasePath, out var existing))
                 {
                     if (existing.Bytes.SequenceEqual(published.Bytes))
                         continue;
-                    if (isOwner &&
-                        published.IsToolPayload &&
-                        !existing.IsToolPayload &&
-                        !string.Equals(
-                            existing.SourcePackagePath,
-                            packagePath,
-                            StringComparison.OrdinalIgnoreCase))
+
+                    var existingIsOwner = normalizedOwner is not null && string.Equals(
+                        existing.SourcePackagePath,
+                        normalizedOwner,
+                        StringComparison.OrdinalIgnoreCase);
+                    if (existingIsOwner && !isOwner)
+                        continue;
+                    if (isOwner && !existingIsOwner)
                     {
                         payload[releasePath] = published;
                         continue;
+                    }
+                    if (isOwner && existingIsOwner)
+                    {
+                        if (published.IsToolPayload && !existing.IsToolPayload)
+                        {
+                            payload[releasePath] = published;
+                            continue;
+                        }
+                        if (existing.IsToolPayload && !published.IsToolPayload)
+                            continue;
                     }
                     throw new InvalidOperationException(
                         $"Published NuGet packages contain conflicting library payload '{releasePath}'.");
