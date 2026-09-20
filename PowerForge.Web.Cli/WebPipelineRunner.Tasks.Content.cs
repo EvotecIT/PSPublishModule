@@ -1393,40 +1393,14 @@ internal static partial class WebPipelineRunner
         var result = WebReleaseHubGenerator.Generate(options);
         bool incompleteFetch = result.Warnings.Any(warning =>
             warning.StartsWith("Incomplete GitHub release fetch ", StringComparison.Ordinal));
-        if (!string.IsNullOrWhiteSpace(existingOutputContent) &&
-            result.Warnings.Length > 0 &&
-            (result.ReleaseCount == 0 || incompleteFetch) &&
-            TryPreserveExistingReleaseHub(existingOutputContent, outPath,
-                options.RetainLatestStableTagPrefixes.Concat(options.RetainAllStableTagPrefixes),
-                requireCompleteHistory: options.RetainAllStableTagPrefixes.Any(
-                    static prefix => !string.IsNullOrWhiteSpace(prefix)),
-                observedNonStableTags: result.ObservedNonStableTags))
-        {
-            var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
-            result = new WebReleaseHubResult
-            {
-                OutputPath = outPath,
-                ReleaseCount = preservedDocument?.Releases.Count ?? 0,
-                AssetCount = preservedDocument?.Releases.Sum(static release => release.Assets.Count) ?? 0,
-                Source = result.Source,
-                Warnings = result.Warnings
-                    .Concat(new[] { "Preserved existing release-hub output after an incomplete refresh." })
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray()
-            };
-            stepResult.Success = true;
-            stepResult.Message = $"Release hub fallback: preserved existing '{outPath}' after an incomplete refresh.";
-            return;
-        }
-
-        if (incompleteFetch)
+        if (incompleteFetch || (result.ReleaseCount == 0 && result.Warnings.Length > 0))
         {
             if (existingOutputContent is null)
                 File.Delete(outPath);
             else
                 File.WriteAllText(outPath, existingOutputContent);
             throw new InvalidOperationException(
-                $"Release hub fetch for '{outPath}' was incomplete; no complete prior output was available.");
+                $"Release hub refresh for '{outPath}' was incomplete or returned no releases with warnings; publication requires a complete source.");
         }
 
         var note = result.Source != WebChangelogSource.Auto ? $" ({result.Source.ToString().ToLowerInvariant()})" : string.Empty;
@@ -1468,129 +1442,6 @@ internal static partial class WebPipelineRunner
         return parsed;
     }
 
-    internal static bool TryPreserveExistingReleaseHub(
-        string existingJson,
-        string outputPath,
-        IEnumerable<string>? requiredStableTagPrefixes = null,
-        bool requireCompleteHistory = false,
-        IEnumerable<string>? observedNonStableTags = null)
-    {
-        // An old document contains no proof that it retained every historical release.
-        if (requireCompleteHistory)
-            return false;
-        if (string.IsNullOrWhiteSpace(existingJson) || !File.Exists(outputPath))
-            return false;
-
-        var existing = TryReadReleaseHubDocument(existingJson);
-        // The generator has already written outputPath; read it here to compare old vs newly generated release data.
-        var generated = TryReadReleaseHubDocument(File.ReadAllText(outputPath));
-        if (existing is null || generated is null)
-            return false;
-
-        if (existing.Releases.Count <= 0 ||
-            !string.Equals(existing.Repo, generated.Repo, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var nonStableTags = new HashSet<string>(observedNonStableTags ?? [], StringComparer.OrdinalIgnoreCase);
-
-        foreach (var prefix in requiredStableTagPrefixes?
-                     .Where(static value => !string.IsNullOrWhiteSpace(value)) ?? [])
-        {
-            var normalizedPrefix = prefix.Trim();
-            var preserved = existing.Releases
-                .Where(release => !release.IsDraft && !release.IsPrerelease &&
-                    release.Tag?.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase) == true)
-                .OrderByDescending(release => release.PublishedAt ?? release.CreatedAt)
-                .ThenByDescending(release => release.Tag, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (preserved is null)
-                return false;
-
-            if (preserved.Tag is not null && nonStableTags.Contains(preserved.Tag))
-                return false;
-
-            // A matching tag seen as a draft or prerelease is a reclassification,
-            // not an absent stable release hidden by incomplete pagination.
-            if (generated.Releases.Any(release =>
-                    string.Equals(release.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
-                    (release.IsDraft || release.IsPrerelease)))
-                return false;
-
-            var observed = generated.Releases
-                .Where(release => !release.IsDraft && !release.IsPrerelease &&
-                    release.Tag?.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase) == true)
-                .OrderByDescending(release => release.PublishedAt ?? release.CreatedAt)
-                .ThenByDescending(release => release.Tag, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (observed is null)
-                continue;
-            var observedTime = observed.PublishedAt ?? observed.CreatedAt;
-            var preservedTime = preserved.PublishedAt ?? preserved.CreatedAt;
-            if ((observedTime is not null && preservedTime is null) || observedTime > preservedTime ||
-                (!string.Equals(observed.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
-                 (observedTime is null || preservedTime is null || observedTime == preservedTime)) ||
-                (string.Equals(observed.Tag, preserved.Tag, StringComparison.OrdinalIgnoreCase) &&
-                 (observed.PublishedAt != preserved.PublishedAt ||
-                  observed.CreatedAt != preserved.CreatedAt ||
-                  !string.Equals(observed.Title, preserved.Title, StringComparison.Ordinal) ||
-                  !string.Equals(observed.Url, preserved.Url, StringComparison.Ordinal) ||
-                  !string.Equals(observed.BodyMarkdown, preserved.BodyMarkdown, StringComparison.Ordinal) ||
-                  !HaveSameReleaseAssets(observed.Assets, preserved.Assets))))
-                return false;
-        }
-
-        File.WriteAllText(outputPath, existingJson);
-        return true;
-    }
-
-    private static bool HaveSameReleaseAssets(List<WebReleaseHubAsset>? observed, List<WebReleaseHubAsset>? preserved)
-    {
-        if (observed is null || preserved is null || observed.Count != preserved.Count)
-            return false;
-
-        // Match as a multiset so a missing asset cannot be hidden by an extra
-        // copy of another asset or by a different order from the API.
-        var remaining = new List<WebReleaseHubAsset>(preserved);
-        foreach (var asset in observed)
-        {
-            if (asset is null)
-                return false;
-            var index = remaining.FindIndex(previous => previous is not null &&
-                string.Equals(previous.Name, asset.Name, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(previous.DownloadUrl, asset.DownloadUrl, StringComparison.Ordinal) &&
-                string.Equals(previous.Product, asset.Product, StringComparison.Ordinal) &&
-                string.Equals(previous.Channel, asset.Channel, StringComparison.Ordinal) &&
-                string.Equals(previous.Platform, asset.Platform, StringComparison.Ordinal) &&
-                string.Equals(previous.Arch, asset.Arch, StringComparison.Ordinal) &&
-                string.Equals(previous.Kind, asset.Kind, StringComparison.Ordinal) &&
-                string.Equals(previous.Sha256, asset.Sha256, StringComparison.Ordinal) &&
-                previous.Size == asset.Size &&
-                string.Equals(previous.ContentType, asset.ContentType, StringComparison.Ordinal));
-            if (index < 0)
-                return false;
-            remaining.RemoveAt(index);
-        }
-
-        return remaining.Count == 0;
-    }
-
-    private static WebReleaseHubDocument? TryReadReleaseHubDocument(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<WebReleaseHubDocument>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-        }
-        catch
-        {
-            return null;
-        }
-    }
 
     private static List<WebReleaseHubAssetRuleInput> ParseReleaseHubAssetRules(JsonElement step)
     {

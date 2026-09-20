@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using PowerForge.Web;
 using PowerForge.Web.Cli;
 using Xunit;
 
@@ -43,159 +42,6 @@ public class WebPipelineRunnerReleaseHubTests
         }
     }
 
-    [Fact]
-    public void ReleaseHubFallback_KeepsCompleteOutputWhenRefreshHasPartialTimeline()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-release-fallback-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            string outputPath = Path.Combine(root, "release-hub.json");
-            const string existing = """
-                { "releases": [
-                    { "tag": "OfficeIMO-v4", "assets": [] },
-                    { "tag": "Studio-v0.1.9", "assets": [] }
-                  ] }
-                """;
-            File.WriteAllText(outputPath,
-                """
-                { "releases": [{ "tag": "OfficeIMO-v4", "isDraft": false, "isPrerelease": false, "assets": [] }] }
-                """);
-
-            Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath));
-            Assert.Equal(existing, File.ReadAllText(outputPath));
-        }
-        finally
-        {
-            TryDeleteDirectory(root);
-        }
-    }
-
-    [Fact]
-    public void ReleaseHubFallback_RejectsOutputFromAnotherRepository()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-repo-mismatch-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            var outputPath = Path.Combine(root, "release-hub.json");
-            const string existing = """{"repo":"EvotecIT/Old","releases":[{"tag":"v1","assets":[]}]}""";
-            const string generated = """{"repo":"EvotecIT/New","releases":[{"tag":"v2","assets":[]}]}""";
-            File.WriteAllText(outputPath, generated);
-
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath));
-            Assert.Equal(generated, File.ReadAllText(outputPath));
-        }
-        finally
-        {
-            TryDeleteDirectory(root);
-        }
-    }
-
-    [Fact]
-    public void ReleaseHubFallback_RejectsOldOutputMissingRequiredStableProduct()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-retention-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            var outputPath = Path.Combine(root, "release-hub.json");
-            const string existing = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"OfficeIMO-v4","assets":[]}]}""";
-            File.WriteAllText(outputPath, """{"repo":"EvotecIT/OfficeIMO","releases":[]}""");
-
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
-            Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["OfficeIMO-v"]));
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath,
-                ["OfficeIMO-v"], requireCompleteHistory: true));
-        }
-        finally
-        {
-            TryDeleteDirectory(root);
-        }
-    }
-
-    [Fact]
-    public void ReleaseHubFallback_RejectsOlderStableProductWhenPartialRefreshObservedNewerRelease()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-newer-product-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            var outputPath = Path.Combine(root, "release-hub.json");
-            const string existing = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[]}]}""";
-            const string newer = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.2.0","publishedAt":"2026-09-01T00:00:00Z","assets":[]}]}""";
-            File.WriteAllText(outputPath, newer);
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
-            Assert.Equal(newer, File.ReadAllText(outputPath));
-
-            File.WriteAllText(outputPath,
-                """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[{"name":"Studio-arm64.msi","downloadUrl":"https://example.invalid/Studio-arm64.msi"}]}]}""");
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
-
-            const string existingWithTwoAssets = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[{"name":"Studio-x64.msi","downloadUrl":"https://example.invalid/Studio-x64.msi"},{"name":"Studio-arm64.msi","downloadUrl":"https://example.invalid/Studio-arm64.msi"}]}]}""";
-            const string observedWithoutArm64 = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[{"name":"Studio-x64.msi","downloadUrl":"https://example.invalid/Studio-x64.msi"}]}]}""";
-            File.WriteAllText(outputPath, observedWithoutArm64);
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existingWithTwoAssets, outputPath, ["Studio-v"]));
-            Assert.Equal(observedWithoutArm64, File.ReadAllText(outputPath));
-
-            const string reclassifiedAsPrerelease = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","isPrerelease":true,"assets":[]}]}""";
-            File.WriteAllText(outputPath, reclassifiedAsPrerelease);
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
-            Assert.Equal(reclassifiedAsPrerelease, File.ReadAllText(outputPath));
-
-            const string reclassifiedAsDraft = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","isDraft":true,"assets":[]}]}""";
-            File.WriteAllText(outputPath, reclassifiedAsDraft);
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
-            Assert.Equal(reclassifiedAsDraft, File.ReadAllText(outputPath));
-
-            const string correctedEarlierDate = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-07-31T00:00:00Z","assets":[]}]}""";
-            File.WriteAllText(outputPath, correctedEarlierDate);
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
-            Assert.Equal(correctedEarlierDate, File.ReadAllText(outputPath));
-
-            File.WriteAllText(outputPath,
-                """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.0.9","publishedAt":"2026-07-01T00:00:00Z","assets":[]}]}""");
-            Assert.True(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"]));
-        }
-        finally
-        {
-            TryDeleteDirectory(root);
-        }
-    }
-
-    [Fact]
-    public void ReleaseHubFallback_RejectsDraftTagFilteredFromGeneratedOutput()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-filtered-draft-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            var releasesPath = Path.Combine(root, "releases.json");
-            var outputPath = Path.Combine(root, "release-hub.json");
-            File.WriteAllText(releasesPath,
-                """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","isDraft":true,"isPrerelease":false,"assets":[]},{"tag":"OfficeIMO-v1.0.0","isDraft":false,"isPrerelease":false,"assets":[]}]}""");
-            var result = WebReleaseHubGenerator.Generate(new WebReleaseHubOptions
-            {
-                Source = WebChangelogSource.File,
-                ReleasesPath = releasesPath,
-                OutputPath = outputPath,
-                Repo = "EvotecIT/OfficeIMO"
-            });
-            Assert.Contains("Studio-v0.1.0", result.ObservedNonStableTags);
-            Assert.DoesNotContain("Studio-v0.1.0", File.ReadAllText(outputPath), StringComparison.Ordinal);
-            Assert.Equal(1, result.ReleaseCount);
-
-            const string existing = """{"repo":"EvotecIT/OfficeIMO","releases":[{"tag":"Studio-v0.1.0","publishedAt":"2026-08-01T00:00:00Z","assets":[]}]}""";
-            var filteredOutput = File.ReadAllText(outputPath);
-            Assert.False(WebPipelineRunner.TryPreserveExistingReleaseHub(existing, outputPath, ["Studio-v"],
-                observedNonStableTags: result.ObservedNonStableTags));
-            Assert.Equal(filteredOutput, File.ReadAllText(outputPath));
-        }
-        finally
-        {
-            TryDeleteDirectory(root);
-        }
-    }
 
     [Fact]
     public void PipelineOutputStamp_TracksFilesBeyondInputStampLimit()
@@ -213,6 +59,13 @@ public class WebPipelineRunnerReleaseHubTests
             Assert.NotNull(before);
             Assert.NotNull(after);
             Assert.NotEqual(before, after);
+
+            var unchangedMetadataPath = Path.Combine(root, "page-0000.html");
+            var originalTime = File.GetLastWriteTimeUtc(unchangedMetadataPath);
+            File.WriteAllText(unchangedMetadataPath, "PAGE");
+            File.SetLastWriteTimeUtc(unchangedMetadataPath, originalTime);
+            var afterCorruption = WebPipelineRunner.ComputeOutputStamp([root]);
+            Assert.NotEqual(after, afterCorruption);
         }
         finally
         {
@@ -255,6 +108,16 @@ public class WebPipelineRunnerReleaseHubTests
             var unchanged = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
             Assert.True(unchanged.Success);
             Assert.All(unchanged.Steps, step => Assert.True(step.Cached, step.Task));
+
+            var hubOutput = Path.Combine(root, "data", "release-hub.json");
+            var hubWriteTime = File.GetLastWriteTimeUtc(hubOutput);
+            var originalHub = File.ReadAllText(hubOutput);
+            File.WriteAllText(hubOutput, originalHub.Replace("v1", "v9", StringComparison.Ordinal));
+            File.SetLastWriteTimeUtc(hubOutput, hubWriteTime);
+            var afterCorruptedHub = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(afterCorruptedHub.Success);
+            Assert.All(afterCorruptedHub.Steps, step => Assert.False(step.Cached));
+            Assert.Contains("v1", File.ReadAllText(hubOutput), StringComparison.Ordinal);
 
             var builtPage = Path.Combine(root, "site", "index.html");
             Assert.True(File.Exists(builtPage));
@@ -430,7 +293,7 @@ public class WebPipelineRunnerReleaseHubTests
     }
 
     [Fact]
-    public void RunPipeline_ReleaseHub_PreservesExistingOutputWhenWarningsProduceEmptyRefresh()
+    public void RunPipeline_ReleaseHub_FailsClosedAndKeepsPreviousFileWhenSourceIsIncomplete()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-release-hub-fallback-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -460,28 +323,18 @@ public class WebPipelineRunnerReleaseHubTests
                 }
                 """);
 
-            var generatedPath = Path.Combine(root, "generated.json");
-            File.WriteAllText(generatedPath,
+            var previous = File.ReadAllText(outputPath);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
                 """
-                {
-                  "title": "Release Hub",
-                  "generatedAtUtc": "2026-04-02T00:00:00Z",
-                  "source": "github",
-                  "repo": "EvotecIT/TestRepo",
-                  "latest": {},
-                  "products": [],
-                  "releases": [],
-                  "warnings": [ "GitHub release fetch failed (401) for EvotecIT/TestRepo." ]
-                }
+                { "steps": [{ "task": "release-hub", "source": "file", "releasesPath": "./missing.json",
+                    "out": "./data/release-hub.json" }] }
                 """);
 
-            var preserved = WebPipelineRunner.TryPreserveExistingReleaseHub(
-                File.ReadAllText(outputPath), generatedPath);
-            Assert.True(preserved);
-
-            using var doc = JsonDocument.Parse(File.ReadAllText(generatedPath));
-            Assert.Equal(1, doc.RootElement.GetProperty("releases").GetArrayLength());
-            Assert.Equal("v1.0.0", doc.RootElement.GetProperty("latest").GetProperty("stableTag").GetString());
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Contains("publication requires a complete source", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(previous, File.ReadAllText(outputPath));
         }
         finally
         {

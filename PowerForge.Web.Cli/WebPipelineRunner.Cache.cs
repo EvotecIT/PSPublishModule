@@ -28,6 +28,9 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("github-artifacts", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (task.Equals("private-gallery-index", StringComparison.OrdinalIgnoreCase) ||
+            task.Equals("private-gallery", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
             return false;
         if (task.Equals("exec", StringComparison.OrdinalIgnoreCase))
@@ -191,7 +194,7 @@ internal static partial class WebPipelineRunner
             {
                 if (File.Exists(path))
                 {
-                    hash.AppendData(Encoding.UTF8.GetBytes(BuildPathStamp(path) + "\n"));
+                    AppendOutputFileStamp(hash, path);
                     continue;
                 }
 
@@ -207,8 +210,7 @@ internal static partial class WebPipelineRunner
                 foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
                              .OrderBy(file => file, WebCliHelpers.FileSystemPathComparer))
                 {
-                    var info = new FileInfo(file);
-                    hash.AppendData(Encoding.UTF8.GetBytes($"{file}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n"));
+                    AppendOutputFileStamp(hash, file);
                 }
             }
 
@@ -219,6 +221,14 @@ internal static partial class WebPipelineRunner
             // An unreadable output cannot validate a cache hit.
             return null;
         }
+    }
+
+    private static void AppendOutputFileStamp(IncrementalHash hash, string path)
+    {
+        using var stream = File.OpenRead(path);
+        var info = new FileInfo(path);
+        hash.AppendData(Encoding.UTF8.GetBytes($"f|{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}|"));
+        hash.AppendData(SHA256.HashData(stream));
     }
 
     private static IEnumerable<string> EnumerateFingerprintPaths(string baseDir, JsonElement step)
@@ -425,6 +435,26 @@ internal static partial class WebPipelineRunner
         {
             case "build":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "nav-export":
+            {
+                var configuredOut = GetString(step, "out") ?? GetString(step, "output");
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(configuredOut))
+                        return ResolveOutputCandidates(baseDir, configuredOut);
+                    var config = ResolvePath(baseDir, GetString(step, "config"));
+                    if (string.IsNullOrWhiteSpace(config))
+                        return Array.Empty<string>();
+                    var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
+                    var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                    return new[] { WebCliHelpers.GetDefaultNavExportOutputPath(spec, plan.RootPath) };
+                }
+                catch
+                {
+                    // Invalid configuration is reported by task execution.
+                    return Array.Empty<string>();
+                }
+            }
             case "apidocs":
             {
                 var outputs = new List<string>();
@@ -1336,7 +1366,17 @@ internal static partial class WebPipelineRunner
                     .ToArray();
             }
             default:
-                return Array.Empty<string>();
+                try
+                {
+                    // Preserve output integrity for new file-producing tasks that
+                    // declare an explicit conventional output path.
+                    return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                }
+                catch
+                {
+                    // Execution owns the error for an invalid output path.
+                    return Array.Empty<string>();
+                }
         }
     }
 

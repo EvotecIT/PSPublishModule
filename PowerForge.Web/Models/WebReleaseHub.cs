@@ -60,8 +60,6 @@ public sealed class WebReleaseHubResult
     public WebChangelogSource Source { get; set; } = WebChangelogSource.Auto;
     /// <summary>Warnings emitted during generation.</summary>
     public string[] Warnings { get; set; } = Array.Empty<string>();
-    /// <summary>Draft or prerelease tags observed in the source, including releases filtered from the output.</summary>
-    public string[] ObservedNonStableTags { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Release hub document.</summary>

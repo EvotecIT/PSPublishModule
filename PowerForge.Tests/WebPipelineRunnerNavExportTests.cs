@@ -50,6 +50,7 @@ public class WebPipelineRunnerNavExportTests
             File.WriteAllText(pipelinePath,
                 """
                 {
+                  "cache": true,
                   "steps": [
                     { "task": "nav-export", "config": "./site.json" }
                   ]
@@ -65,10 +66,37 @@ public class WebPipelineRunnerNavExportTests
             var outPath = Path.Combine(root, "static", "data", "site-nav.json");
             Assert.True(File.Exists(outPath));
 
+            var cached = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(cached.Success);
+            Assert.True(cached.Steps[0].Cached);
+
+            File.Delete(outPath);
+            var restored = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(restored.Success);
+            Assert.False(restored.Steps[0].Cached);
+            Assert.True(File.Exists(outPath));
+
             using var doc = JsonDocument.Parse(File.ReadAllText(outPath));
             Assert.Equal(2, doc.RootElement.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("powerforge.site-nav", doc.RootElement.GetProperty("format").GetString());
             Assert.True(doc.RootElement.GetProperty("generated").GetBoolean());
+
+            File.WriteAllText(pipelinePath,
+                """
+                { "cache": true, "steps": [
+                    { "task": "nav-export", "config": "./site.json", "out": "./explicit-nav.json" }
+                  ] }
+                """);
+            var explicitFirst = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            var explicitSecond = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(explicitFirst.Success);
+            Assert.True(explicitSecond.Steps[0].Cached);
+            var explicitOut = Path.Combine(root, "explicit-nav.json");
+            File.Delete(explicitOut);
+            var explicitRestored = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(explicitRestored.Success);
+            Assert.False(explicitRestored.Steps[0].Cached);
+            Assert.True(File.Exists(explicitOut));
         }
         finally
         {
