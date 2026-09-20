@@ -170,6 +170,58 @@ public sealed class PrivateGalleryEngineTests
     }
 
     [Fact]
+    public async Task NuGetV3PackageDownloader_PreservesDefaultTokenCallAndTimeoutFallback()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-private-gallery-download-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var destination = Path.Combine(root, "package.nupkg");
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.RequestUri!.AbsoluteUri.EndsWith("/index.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """
+                        {
+                          "resources": [
+                            { "@type": "PackageBaseAddress/3.0.0", "@id": "https://pkgs.example.test/flat/" }
+                          ]
+                        }
+                        """,
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(Encoding.UTF8.GetBytes("package"))
+            };
+        });
+
+        try
+        {
+            var downloader = new NuGetV3PackageDownloader(handler);
+            var options = new PrivateGalleryIndexOptions { RequestTimeoutSeconds = 0 };
+
+            await downloader.DownloadPackageAsync(
+                "https://pkgs.example.test/index.json",
+                "Contoso.Tools",
+                "1.0.0",
+                destination,
+                options,
+                default);
+
+            Assert.Equal("package", File.ReadAllText(destination));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task AzureArtifactsClient_ParsesPackageAndVersionMetrics()
     {
         var calls = new List<string>();

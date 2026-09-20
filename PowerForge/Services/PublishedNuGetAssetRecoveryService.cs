@@ -207,7 +207,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
             TryDelete(destinationPath);
             try
             {
-                _downloader.DownloadPackageAsync(
+                _downloader.DownloadPackageWithTimeoutAsync(
                         serviceIndexUrl,
                         packageId,
                         expectedVersion,

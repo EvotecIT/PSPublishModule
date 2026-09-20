@@ -41,13 +41,13 @@ public sealed class NuGetV3PackageDownloader
         CancellationToken cancellationToken = default)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
-        await DownloadPackageAsync(
+        await DownloadPackageWithTimeoutAsync(
                 serviceIndexUrl,
                 packageId,
                 version,
                 destinationPath,
                 options,
-                options.RequestTimeoutSeconds,
+                PrivateGalleryHttp.NormalizeTimeoutSeconds(options.RequestTimeoutSeconds),
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -62,7 +62,7 @@ public sealed class NuGetV3PackageDownloader
     /// <param name="options">Private gallery options carrying the service-index timeout and authentication.</param>
     /// <param name="packageRequestTimeoutSeconds">Timeout for the package-body request.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task DownloadPackageAsync(
+    internal async Task DownloadPackageWithTimeoutAsync(
         string serviceIndexUrl,
         string packageId,
         string version,
