@@ -79,20 +79,21 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                     ReadAllBytes(entry),
                     entry.LastWriteTime,
                     entry.ExternalAttributes,
-                    packagePath,
-                    name.StartsWith("tools/", StringComparison.OrdinalIgnoreCase));
+                    packagePath);
                 if (payload.TryGetValue(releasePath, out var existing))
                 {
                     if (existing.Bytes.SequenceEqual(published.Bytes))
                         continue;
                     if (isOwner &&
-                        published.IsToolPayload &&
-                        !existing.IsToolPayload &&
                         !string.Equals(
                             existing.SourcePackagePath,
                             packagePath,
                             StringComparison.OrdinalIgnoreCase))
                     {
+                        // A release ZIP belongs to one package. When that package carries a
+                        // same-path payload of its own, its published bytes are authoritative
+                        // for that ZIP. Runtime packages can legitimately ship a library with
+                        // the same path but different bytes from the standalone library package.
                         payload[releasePath] = published;
                         continue;
                     }
@@ -208,14 +209,12 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
             byte[] bytes,
             DateTimeOffset lastWriteTime,
             int externalAttributes,
-            string sourcePackagePath,
-            bool isToolPayload)
+            string sourcePackagePath)
         {
             Bytes = bytes;
             LastWriteTime = lastWriteTime;
             ExternalAttributes = externalAttributes;
             SourcePackagePath = sourcePackagePath;
-            IsToolPayload = isToolPayload;
         }
 
         internal byte[] Bytes { get; }
@@ -226,6 +225,5 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
 
         internal string SourcePackagePath { get; }
 
-        internal bool IsToolPayload { get; }
     }
 }

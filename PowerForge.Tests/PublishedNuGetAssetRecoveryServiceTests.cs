@@ -279,7 +279,7 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
     }
 
     [Fact]
-    public void Restore_RejectsConflictingLibraryPayloadsEvenWhenOnePackageOwnsReleaseZip()
+    public void Restore_PrefersOwningPackageWhenLibraryPayloadsCollide()
     {
         var root = Directory.CreateTempSubdirectory();
         try
@@ -317,25 +317,82 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
                         [secondPackageId] = publishedSecond
                     })));
 
-            var exception = Assert.Throws<InvalidOperationException>(() => service.Restore(
+            var restored = service.Restore(
                 "https://packages.example/v3/index.json",
                 version,
                 [firstPackagePath, secondPackagePath, firstReleaseZipPath],
-                CancellationToken.None));
+                CancellationToken.None);
 
-            Assert.Contains("conflicting library payload", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(
+                [firstPackagePath, firstReleaseZipPath, secondPackagePath],
+                restored);
             using (var firstPackage = ZipFile.OpenRead(firstPackagePath))
             {
                 Assert.Equal(
-                    "rebuilt-first",
+                    "published-first",
                     ReadText(Assert.Single(
                         firstPackage.Entries,
                         entry => entry.FullName == $"lib/net10.0/{assemblyName}")));
             }
             using var release = ZipFile.OpenRead(firstReleaseZipPath);
             Assert.Equal(
-                "rebuilt-first",
+                "published-first",
                 ReadText(Assert.Single(release.Entries, entry => entry.FullName == $"net10.0/{assemblyName}")));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_RejectsConflictingLibraryPayloadsFromNonOwningPackages()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string ownerPackageId = "Owner.Package";
+            const string firstDependencyId = "Shared.First";
+            const string secondDependencyId = "Shared.Second";
+            const string version = "3.0.81";
+            const string sharedAssemblyName = "Shared.Common.dll";
+            var ownerPackagePath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.nupkg");
+            var firstDependencyPath = Path.Combine(root.FullName, $"{firstDependencyId}.{version}.nupkg");
+            var secondDependencyPath = Path.Combine(root.FullName, $"{secondDependencyId}.{version}.nupkg");
+            var ownerReleaseZipPath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.zip");
+            File.WriteAllBytes(ownerPackagePath, CreatePackage(ownerPackageId, version, "rebuilt-owner"));
+            File.WriteAllBytes(
+                firstDependencyPath,
+                CreateLibraryPackageWithLibrary(firstDependencyId, version, sharedAssemblyName, "rebuilt-first"));
+            File.WriteAllBytes(
+                secondDependencyPath,
+                CreateLibraryPackageWithLibrary(secondDependencyId, version, sharedAssemblyName, "rebuilt-second"));
+            CreateReleaseZipWithEntry(ownerReleaseZipPath, $"net10.0/{sharedAssemblyName}", "rebuilt-first");
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(
+                    new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [ownerPackageId] = CreatePackage(ownerPackageId, version, "published-owner"),
+                        [firstDependencyId] = CreateLibraryPackageWithLibrary(
+                            firstDependencyId,
+                            version,
+                            sharedAssemblyName,
+                            "published-first"),
+                        [secondDependencyId] = CreateLibraryPackageWithLibrary(
+                            secondDependencyId,
+                            version,
+                            sharedAssemblyName,
+                            "published-second")
+                    })));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [ownerPackagePath, firstDependencyPath, secondDependencyPath, ownerReleaseZipPath],
+                CancellationToken.None));
+
+            Assert.Contains("conflicting library payload", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
