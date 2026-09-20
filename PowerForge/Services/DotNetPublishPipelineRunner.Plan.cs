@@ -640,7 +640,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     target.Name,
                     combination.Framework,
                     combination.Runtime,
-                    combination.Style);
+                    combination.Style) ?? target.Version;
                 if (outputTemplate.IndexOf("{version}", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     if (string.IsNullOrWhiteSpace(releaseVersion))
@@ -2723,6 +2723,8 @@ public sealed partial class DotNetPublishPipelineRunner
             var id = (installer.Id ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException("Installers[].Id is required.");
+            if (id.Contains('|'))
+                throw new ArgumentException($"Installer '{id}' ID cannot contain '|', which separates MSI version key components.");
             if (!ids.Add(id))
                 throw new ArgumentException($"Duplicate installer ID detected: {id}");
 

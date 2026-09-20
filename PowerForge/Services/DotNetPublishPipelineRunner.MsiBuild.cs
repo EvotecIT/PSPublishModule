@@ -247,7 +247,8 @@ public sealed partial class DotNetPublishPipelineRunner
             SourceFileName = "Product.wxs",
             ProjectFileName = SanitizeWixIdentifier(installerId, "Installer") + ".wixproj",
             Configuration = plan.Configuration,
-            NoRestore = plan.Restore
+            NoRestore = plan.Restore,
+            Platform = ResolveWixInstallerPlatform(step.Runtime)
         };
         AddGeneratedInstallerDefineConstants(request, prepare);
         if (!string.IsNullOrWhiteSpace(prepare.HarvestPath))
@@ -257,6 +258,21 @@ public sealed partial class DotNetPublishPipelineRunner
             .PrepareWorkspace(definition, request);
         _logger.Info($"Generated WiX installer project for '{installerId}' -> {workspace.ProjectPath}");
         return workspace.ProjectPath;
+    }
+
+    private static string ResolveWixInstallerPlatform(string? runtime)
+    {
+        string rid = runtime?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (rid.Length == 0)
+            return "x64";
+        if (!rid.StartsWith("win-", StringComparison.Ordinal) &&
+            !(rid.Length > 3 && rid.StartsWith("win", StringComparison.Ordinal) && char.IsDigit(rid[3])))
+            throw new InvalidOperationException($"Cannot determine WiX installer platform for runtime '{runtime}'.");
+
+        if (rid.EndsWith("-arm64", StringComparison.Ordinal)) return "arm64";
+        if (rid.EndsWith("-x64", StringComparison.Ordinal)) return "x64";
+        if (rid.EndsWith("-x86", StringComparison.Ordinal)) return "x86";
+        throw new InvalidOperationException($"Cannot determine WiX installer platform for runtime '{runtime}'.");
     }
 
     private static void ResolveGeneratedInstallerAuthoringPaths(
@@ -805,13 +821,16 @@ public sealed partial class DotNetPublishPipelineRunner
         return plan.MsiVersions.TryGetValue(key, out var version) ? version : null;
     }
 
-    private static string BuildMsiVersionKey(
+    internal static string BuildMsiVersionKey(
         string? installerId,
         string? targetName,
         string? framework,
         string? runtime,
         DotNetPublishStyle style)
     {
+        if (new[] { installerId, targetName, framework, runtime }
+            .Any(static part => part?.Contains('|') == true))
+            throw new ArgumentException("MSI version key components cannot contain '|'.");
         return string.Join(
             "|",
             installerId?.Trim() ?? string.Empty,

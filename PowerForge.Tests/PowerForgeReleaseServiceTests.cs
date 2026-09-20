@@ -4955,6 +4955,56 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_PlanOnly_BindsHeadToExactUnifiedReleaseCommit()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+            var github = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD" };
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages should not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
+                planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
+                {
+                    ProjectRoot = root,
+                    Targets = [new DotNetPublishTargetPlan { Name = "Studio", Version = "0.1.1" }]
+                },
+                runDotNetTools: _ => throw new InvalidOperationException("DotNet publish should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var result = service.Execute(
+                new PowerForgeReleaseSpec
+                {
+                    Tools = new PowerForgeToolReleaseSpec { DotNetPublish = new DotNetPublishSpec() },
+                    GitHub = github
+                },
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    ToolsOnly = true,
+                    PlanOnly = true
+                });
+
+            Assert.True(result.Success);
+            Assert.Equal(commit, github.Commitish);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_LegacyToolPlan_rejects_dirty_source_before_stamping_exact_commit()
     {
         var root = CreateSandbox();
@@ -5920,7 +5970,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new PowerForgeReleaseWingetPackage
                             {
                                 PackageIdentifier = "EvotecIT.IntelligenceX.Tray",
-                                PackageVersion = "1.0.0",
+                                PackageVersion = " 1.0.0 ",
                                 Publisher = "Evotec",
                                 PackageName = "IntelligenceX Tray",
                                 License = "MIT",
@@ -5958,7 +6008,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(result.Success);
-            var manifestPath = Assert.Single(result.WingetManifestPaths);
+            Assert.Equal(3, result.WingetManifestPaths.Length);
+            var manifestPath = Assert.Single(result.WingetManifests).ManifestPath;
             Assert.True(File.Exists(manifestPath));
 
             var yaml = File.ReadAllText(manifestPath);
@@ -5973,6 +6024,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             var manifest = Assert.Single(result.WingetManifests);
             Assert.Equal("EvotecIT.IntelligenceX.Tray", manifest.PackageIdentifier);
             Assert.Equal(2, manifest.InstallerUrls.Length);
+            Assert.All(manifest.InstallerUrls, url =>
+            {
+                Assert.Contains("/v1.0.0/", url, StringComparison.Ordinal);
+                Assert.DoesNotContain("%20", url, StringComparison.Ordinal);
+            });
             Assert.NotNull(result.WingetSubmissionPlan);
             Assert.Same(capturedWingetSubmissionPlan, result.WingetSubmissionPlan);
             var submitEntry = Assert.Single(result.WingetSubmissionPlan!.Entries);
@@ -6181,7 +6237,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(result.Success);
-            var manifestPath = Assert.Single(result.WingetManifestPaths);
+            Assert.Equal(3, result.WingetManifestPaths.Length);
+            var manifestPath = Assert.Single(result.WingetManifests).ManifestPath;
             var yaml = File.ReadAllText(manifestPath);
             Assert.Contains("PackageVersion: 0.1.5", yaml, StringComparison.Ordinal);
             Assert.Contains("IntelligenceX.Tray-0.1.5-win-x64-portable.zip", yaml, StringComparison.Ordinal);
@@ -6332,7 +6389,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success);
             Assert.Empty(result.ToolGitHubReleases);
             Assert.Single(result.ToolGitHubReleasePlans);
-            var manifestPath = Assert.Single(result.WingetManifestPaths);
+            Assert.Equal(3, result.WingetManifestPaths.Length);
+            var manifestPath = Assert.Single(result.WingetManifests).ManifestPath;
             var yaml = File.ReadAllText(manifestPath);
             Assert.Contains("https://github.com/EvotecIT/IntelligenceX/releases/download/IntelligenceX.Tray%2Bv1.0.0/IntelligenceX.Tray-1.0.0-win-x64-portable.zip", yaml, StringComparison.Ordinal);
         }
@@ -6471,7 +6529,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(result.Success);
-            var manifestPath = Assert.Single(result.WingetManifestPaths);
+            Assert.Equal(3, result.WingetManifestPaths.Length);
+            var manifestPath = Assert.Single(result.WingetManifests).ManifestPath;
             Assert.StartsWith(Path.Combine(stageRoot, "Winget"), manifestPath, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(manifestPath, result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
             Assert.NotNull(result.ReleaseChecksumsPath);
@@ -6680,7 +6739,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("IntelligenceX", capturedGitHubRequest.Repository);
             Assert.Contains(Path.Combine(stageRoot, "NuGet", "IntelligenceX.0.1.0.nupkg"), capturedGitHubRequest.AssetFilePaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine(stageRoot, "GitHub", "IntelligenceX.Tray-0.1.0-win-x64-portable.zip"), capturedGitHubRequest.AssetFilePaths, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains(Path.Combine(stageRoot, "Winget", "EvotecIT.IntelligenceX.Tray.yaml"), capturedGitHubRequest.AssetFilePaths, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(Path.Combine(stageRoot, "Winget", "EvotecIT.IntelligenceX.Tray", "0.1.0", "EvotecIT.IntelligenceX.Tray.yaml"), capturedGitHubRequest.AssetFilePaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine(stageRoot, "release-manifest.json"), capturedGitHubRequest.AssetFilePaths, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine(stageRoot, "SHA256SUMS.txt"), capturedGitHubRequest.AssetFilePaths, StringComparer.OrdinalIgnoreCase);
             var manifestText = File.ReadAllText(Path.Combine(stageRoot, "release-manifest.json"));
@@ -6810,7 +6869,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(result.Success);
-            var manifestPath = Assert.Single(result.WingetManifestPaths);
+            Assert.Equal(3, result.WingetManifestPaths.Length);
+            var manifestPath = Assert.Single(result.WingetManifests).ManifestPath;
             var yaml = File.ReadAllText(manifestPath);
             Assert.Contains("InstallerUrl: \"https://example.test/downloads/EvotecIT.IntelligenceX.Tray/1.0.0/win-x64/net10.0-windows10.0.19041.0/tray%20raw.zip\"", yaml, StringComparison.Ordinal);
             Assert.Contains("RelativeFilePath: \"IntelligenceX Tray\\\\IntelligenceX.Tray.exe\"", yaml, StringComparison.Ordinal);
@@ -6841,7 +6901,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             var outputPath = Path.Combine(root, "Winget");
             Directory.CreateDirectory(outputPath);
-            File.WriteAllText(Path.Combine(outputPath, "EvotecIT.IntelligenceX.Tray.yaml"), "# existing", new UTF8Encoding(false));
+            Directory.CreateDirectory(Path.Combine(outputPath, "EvotecIT.IntelligenceX.Tray", "1.0.0"));
 
             var service = new PowerForgeReleaseService(
                 new NullLogger(),

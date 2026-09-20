@@ -338,6 +338,9 @@ internal sealed class PowerForgeReleaseResult
 
     public DotNetPublishResult? DotNetTools { get; set; }
 
+    /// <summary>Exact source commit bound to the built DotNet release and retained across publish checkpoints.</summary>
+    public string? DotNetSourceCommitSha { get; set; }
+
     public PowerForgeAppleReleasePlan? AppleAppPlan { get; set; }
 
     public PowerForgeAppleAppReleaseResult[] AppleApps { get; set; } = Array.Empty<PowerForgeAppleAppReleaseResult>();
@@ -853,10 +856,13 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public string? TokenEnvName { get; set; }
 
-    /// <summary>Optional exact commit used to create and verify the unified release tag.</summary>
+    /// <summary>Optional exact commit, or HEAD resolved and verified from the clean DotNet publish checkout, used for the unified release tag.</summary>
     public string? Commitish { get; set; }
 
     public bool GenerateReleaseNotes { get; set; } = true;
+
+    /// <summary>Create the unified GitHub release as a draft so its exact assets can be qualified before promotion.</summary>
+    public bool IsDraft { get; set; }
 
     public bool IsPreRelease { get; set; }
 
@@ -963,6 +969,8 @@ internal sealed class PowerForgeWingetManifestArtifact
     public string PackageVersion { get; set; } = string.Empty;
 
     public string ManifestPath { get; set; } = string.Empty;
+
+    public string? ManifestDirectory { get; set; }
 
     public string[] InstallerUrls { get; set; } = Array.Empty<string>();
 }

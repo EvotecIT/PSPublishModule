@@ -18,6 +18,128 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void VerifySharedReleaseSourceCommit_ResolvesHeadFromCleanCheckout()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var commit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+
+            Assert.Equal(commit, PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, "HEAD"));
+            File.WriteAllText(Path.Combine(root, "Injected.cs"), "internal sealed class Injected { }");
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, "HEAD"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void VerifySharedReleaseSourceCommit_RejectsChangesOutsideNestedConfigDirectory()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var configDirectory = Path.Combine(root, "Build");
+            Directory.CreateDirectory(configDirectory);
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+
+            Assert.NotNull(PowerForgeReleaseService.VerifySharedReleaseSourceCommit(configDirectory, "HEAD"));
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Changed { }");
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(configDirectory, "HEAD"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void BindBuiltDotNetSourceCommit_RecoversExactHeadAcrossSerializedCheckpoint()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var sha = RunSnapshotGit(root, "rev-parse", "HEAD").Trim().ToLowerInvariant();
+            var checkpoint = new PowerForgeReleaseResult
+            {
+                DotNetSourceCommitSha = sha,
+                DotNetToolPlan = new DotNetPublishPlan { ProjectRoot = root, SourceRevision = sha }
+            };
+            var restored = JsonSerializer.Deserialize<PowerForgeReleaseResult>(JsonSerializer.Serialize(checkpoint))!;
+            var spec = new PowerForgeReleaseSpec { GitHub = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD" } };
+
+            PowerForgeReleaseService.BindBuiltDotNetSourceCommit(spec, restored, Path.Combine(root, "release.json"));
+            Assert.Equal(sha, spec.GitHub.Commitish);
+
+            var missing = new PowerForgeReleaseSpec { GitHub = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD" } };
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.BindBuiltDotNetSourceCommit(missing,
+                    new PowerForgeReleaseResult { DotNetToolPlan = restored.DotNetToolPlan },
+                    Path.Combine(root, "release.json")));
+            var changedPlan = new PowerForgeReleaseSpec { GitHub = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD" } };
+            restored.DotNetToolPlan!.SourceRevision = new string('f', 40);
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.BindBuiltDotNetSourceCommit(changedPlan, restored,
+                    Path.Combine(root, "release.json")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ResolveDotNetSourceRootForPreflight_UsesProjectCheckoutWhenConfigIsExternal()
+    {
+        var root = CreateSandbox();
+        var configRoot = CreateSandbox();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Source { }");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "source");
+            var configPath = Path.Combine(configRoot, "publish.json");
+            var spec = new DotNetPublishSpec { DotNet = new DotNetPublishDotNetOptions { ProjectRoot = root } };
+            var projectRoot = PowerForgeReleaseService.ResolveDotNetSourceRootForPreflight(spec, configPath);
+
+            Assert.Equal(Path.GetFullPath(root), projectRoot);
+            Assert.NotNull(PowerForgeReleaseService.VerifySharedReleaseSourceCommit(projectRoot, "HEAD", configPath));
+            File.WriteAllText(Path.Combine(root, "source.cs"), "internal sealed class Modified { }");
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(projectRoot, "HEAD", configPath));
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(configRoot);
+        }
+    }
+
+    [Fact]
     public void VerifySharedReleaseSourceCommit_accepts_only_validated_public_release_inputs()
     {
         var root = CreatePublicReleaseSourceSandbox(out var commit, out var configPath, out _, out _, out var evidenceRoot);
@@ -37,6 +159,62 @@ public sealed partial class PowerForgeReleaseServiceTests
             TryDelete(root);
             TryDelete(evidenceRoot);
         }
+    }
+
+    [Fact]
+    public void VerifySharedReleaseSourceCommit_accepts_authorized_external_config_with_head_marker()
+    {
+        var root = CreatePublicReleaseSourceSandbox(out var commit, out var configPath, out _, out _, out var evidenceRoot);
+        try
+        {
+            var exactConfig = File.ReadAllText(configPath);
+            var headConfig = exactConfig.Replace($"\"Commitish\":\"{commit}\"", "\"Commitish\":\"HEAD\"");
+            Assert.NotEqual(exactConfig, headConfig);
+            File.WriteAllText(configPath, headConfig);
+
+            Assert.Equal(commit, PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, "HEAD", configPath));
+            Assert.Throws<InvalidOperationException>(() =>
+                PowerForgeReleaseService.VerifySharedReleaseSourceCommit(root, commit, configPath));
+        }
+        finally
+        {
+            TryDelete(root);
+            TryDelete(evidenceRoot);
+        }
+    }
+
+    [Fact]
+    public void ValidateHeadSourceSelection_RejectsPublishingWithoutSelectedDotNetCheckout()
+    {
+        var spec = new PowerForgeReleaseSpec { GitHub = new PowerForgeReleaseGitHubOptions { Commitish = "HEAD", Publish = true } };
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateHeadSourceSelection(spec,
+                willRunTools: false, publishUnifiedGitHub: true, dotNetSpec: null, dotNetConfigPath: null));
+        PowerForgeReleaseService.ValidateHeadSourceSelection(spec,
+            willRunTools: true, publishUnifiedGitHub: true,
+            dotNetSpec: new DotNetPublishSpec(), dotNetConfigPath: "publish.json");
+    }
+
+    [Fact]
+    public void ValidateDraftWingetSubmission_RejectsIncompatibleReleaseBeforePublication()
+    {
+        var spec = new PowerForgeReleaseSpec
+        {
+            GitHub = new PowerForgeReleaseGitHubOptions { IsDraft = true },
+            Winget = new PowerForgeReleaseWingetOptions { Submit = true }
+        };
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateDraftWingetSubmission(spec, new PowerForgeReleaseRequest()));
+        PowerForgeReleaseService.ValidateDraftWingetSubmission(spec,
+            new PowerForgeReleaseRequest { SubmitWinget = false });
+        spec.Winget!.Submit = false;
+        spec.Winget.Submission.Enabled = true;
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateDraftWingetSubmission(spec, new PowerForgeReleaseRequest()));
+        spec.Winget = null;
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateDraftWingetSubmission(spec,
+                new PowerForgeReleaseRequest { SubmitWinget = true }));
     }
 
     [Fact]

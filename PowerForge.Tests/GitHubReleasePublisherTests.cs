@@ -61,6 +61,100 @@ public sealed class GitHubReleasePublisherTests
         }
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task PublishRelease_DraftBindsExactTargetBeforeAssetUploadWithoutTagRef(bool matchingTarget, bool preexistingWrongTag)
+    {
+        var listener = new HttpListener();
+        var apiBaseUrl = $"http://127.0.0.1:{GetAvailablePort()}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "asset");
+        const string commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var target = matchingTarget ? commit : new string('b', 40);
+        var requests = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        using var stop = new CancellationTokenSource();
+        var server = Task.Run(async () =>
+        {
+            try
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    var context = await listener.GetContextAsync().WaitAsync(stop.Token);
+                    var path = context.Request.Url!.AbsolutePath;
+                    requests.Enqueue($"{context.Request.HttpMethod} {path}");
+                    await context.Request.InputStream.CopyToAsync(Stream.Null, stop.Token);
+                    var status = path.Contains("/releases/tags/", StringComparison.Ordinal) ||
+                                 path.Contains("/git/ref/tags/", StringComparison.Ordinal) && !preexistingWrongTag ? 404 :
+                        context.Request.HttpMethod == "POST" ? 201 : 200;
+                    var body = path.EndsWith("/assets", StringComparison.Ordinal) ?
+                        $"[{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\",\"state\":\"uploaded\"}}]" :
+                        path.Contains("/git/ref/tags/", StringComparison.Ordinal) ?
+                            "{\"object\":{\"sha\":\"" + new string('f', 40) + "\",\"type\":\"commit\"}}" :
+                        path == "/uploads" ?
+                            $"{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\",\"state\":\"uploaded\"}}" :
+                            $$"""{"id":42,"tag_name":"v1.2.3","target_commitish":"{{target}}","html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","draft":true} """;
+                    var bytes = Encoding.UTF8.GetBytes(body);
+                    context.Response.StatusCode = status;
+                    context.Response.ContentType = "application/json";
+                    context.Response.ContentLength64 = bytes.Length;
+                    await context.Response.OutputStream.WriteAsync(bytes, stop.Token);
+                    context.Response.Close();
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (HttpListenerException) when (stop.IsCancellationRequested) { }
+        });
+        try
+        {
+            var request = new GitHubReleasePublishRequest
+            {
+                Owner = "EvotecIT", Repository = "example", Token = "token",
+                ApiBaseUrl = apiBaseUrl, TagName = "v1.2.3", Commitish = commit,
+                ExpectedTagCommitSha = commit, IsDraft = true, AssetFilePaths = [assetPath]
+            };
+            if (matchingTarget && !preexistingWrongTag)
+            {
+                var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(request);
+                Assert.True(result.Succeeded);
+                Assert.Single(result.UploadedAssets);
+            }
+            else
+            {
+                var error = Assert.Throws<InvalidOperationException>(() =>
+                    new GitHubReleasePublisher(new NullLogger()).PublishRelease(request));
+                Assert.Contains("expected commit", error.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(requests, item => item == "POST /uploads");
+                if (preexistingWrongTag)
+                    Assert.DoesNotContain(requests, item => item == "POST /repos/EvotecIT/example/releases");
+            }
+            Assert.Contains(requests, item => item.Contains("/git/ref/tags/", StringComparison.Ordinal));
+        }
+        finally
+        {
+            stop.Cancel();
+            listener.Stop();
+            listener.Close();
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public void PublishRelease_RejectsDraftRequiringPublishedStableReleaseBeforeRemoteMutation()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new GitHubReleasePublisher(new NullLogger()).PublishRelease(new GitHubReleasePublishRequest
+            {
+                Owner = "EvotecIT", Repository = "example", Token = "token",
+                TagName = "v1.2.3", IsDraft = true, RequirePublishedStableRelease = true
+            }));
+        Assert.Contains("draft", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task PublishRelease_RejectsSuccessfulResponseWithoutReleaseId()
     {

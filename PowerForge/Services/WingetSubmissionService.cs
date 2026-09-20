@@ -145,6 +145,8 @@ internal sealed class WingetSubmissionService
             throw new InvalidOperationException($"Winget submission manifest '{manifest.PackageIdentifier}' is missing PackageVersion.");
         if (string.IsNullOrWhiteSpace(manifest.ManifestPath) || !File.Exists(manifest.ManifestPath))
             throw new FileNotFoundException($"Winget manifest does not exist on disk: {manifest.ManifestPath}");
+        if (!string.IsNullOrWhiteSpace(manifest.ManifestDirectory) && !Directory.Exists(manifest.ManifestDirectory))
+            throw new DirectoryNotFoundException($"Winget manifest directory does not exist: {manifest.ManifestDirectory}");
 
         var args = new List<string>();
         var redacted = new List<string>();
@@ -156,8 +158,8 @@ internal sealed class WingetSubmissionService
             default:
                 args.Add("submit");
                 redacted.Add("submit");
-                args.Add(manifest.ManifestPath);
-                redacted.Add(manifest.ManifestPath);
+                args.Add(manifest.ManifestDirectory ?? manifest.ManifestPath);
+                redacted.Add(manifest.ManifestDirectory ?? manifest.ManifestPath);
                 break;
         }
 

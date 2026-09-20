@@ -6,7 +6,49 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
-    private static void ApplySharedReleaseVersion(
+    internal static void ValidateHeadSourceSelection(
+        PowerForgeReleaseSpec spec, bool willRunTools, bool publishUnifiedGitHub,
+        DotNetPublishSpec? dotNetSpec, string? dotNetConfigPath)
+    {
+        if (spec.GitHub is not { Commitish: "HEAD" } || (!willRunTools && !publishUnifiedGitHub))
+            return;
+        if (!willRunTools || dotNetSpec is null || string.IsNullOrWhiteSpace(dotNetConfigPath))
+            throw new InvalidOperationException(
+                "GitHub.Commitish HEAD requires a selected DotNet publish source checkout before any release publication.");
+    }
+
+    internal static string ResolveDotNetSourceRootForPreflight(DotNetPublishSpec spec, string configPath)
+    {
+        var resolved = DotNetPublishPipelineRunner.ResolveProfile(spec);
+        var configDirectory = Path.GetDirectoryName(Path.GetFullPath(configPath))
+            ?? Directory.GetCurrentDirectory();
+        var configuredRoot = resolved.DotNet.ProjectRoot;
+        return string.IsNullOrWhiteSpace(configuredRoot)
+            ? configDirectory
+            : DotNetPublishPipelineRunner.ResolvePath(configDirectory, configuredRoot!);
+    }
+
+    internal static void BindBuiltDotNetSourceCommit(
+        PowerForgeReleaseSpec spec, PowerForgeReleaseResult builtResult, string configPath)
+    {
+        if (spec.GitHub is not { Commitish: "HEAD" })
+            return;
+        if (builtResult.DotNetToolPlan is null ||
+            string.IsNullOrWhiteSpace(builtResult.DotNetSourceCommitSha))
+            throw new InvalidOperationException("The built DotNet release checkpoint has no verified source commit for GitHub.Commitish HEAD.");
+
+        if (!string.Equals(builtResult.DotNetToolPlan.SourceRevision,
+                builtResult.DotNetSourceCommitSha, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The built DotNet release plan source revision does not match its verified checkpoint commit.");
+
+        var currentCommit = VerifySharedReleaseSourceCommit(
+            builtResult.DotNetToolPlan.ProjectRoot, "HEAD", configPath);
+        if (!string.Equals(currentCommit, builtResult.DotNetSourceCommitSha, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The DotNet source checkout changed after the release checkpoint was built.");
+        spec.GitHub.Commitish = builtResult.DotNetSourceCommitSha;
+    }
+
+    private static string? ApplySharedReleaseVersion(
         DotNetPublishPlan plan,
         string? sharedReleaseVersion,
         string? sourceCommit,
@@ -17,16 +59,42 @@ internal sealed partial class PowerForgeReleaseService
         var verifiedSourceCommit = VerifySharedReleaseSourceCommit(plan.ProjectRoot, sourceCommit, releaseConfigPath);
         ValidateNativeInstallerReleaseVersions(plan, sharedReleaseVersion);
         if (string.IsNullOrWhiteSpace(sharedReleaseVersion))
-            return;
+            return verifiedSourceCommit;
 
         foreach (var entry in BuildSharedReleaseVersionProperties(sharedReleaseVersion!, verifiedSourceCommit))
             plan.MsBuildProperties[entry.Key] = entry.Value;
+        return verifiedSourceCommit;
     }
 
     internal static void ValidateNativeInstallerReleaseVersions(DotNetPublishPlan plan, string? sharedReleaseVersion)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
+
+        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
+        {
+            string releaseVersion = sharedReleaseVersion!;
+            foreach (KeyValuePair<string, DotNetPublishMsiVersionPlan> resolvedVersion in plan.MsiVersions ?? new Dictionary<string, DotNetPublishMsiVersionPlan>())
+            {
+                string[] keyParts = resolvedVersion.Key.Split('|');
+                if (keyParts.Length != 5 ||
+                    string.IsNullOrWhiteSpace(keyParts[0]) ||
+                    string.IsNullOrWhiteSpace(keyParts[1]) ||
+                    string.IsNullOrWhiteSpace(keyParts[4]))
+                    throw new InvalidOperationException($"MSI version plan '{resolvedVersion.Key}' has an invalid key.");
+                string installerId = keyParts[0];
+                var installer = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+                    .FirstOrDefault(candidate => string.Equals(candidate.Id, installerId, StringComparison.OrdinalIgnoreCase));
+                if (installer is null)
+                    throw new InvalidOperationException($"MSI version plan '{resolvedVersion.Key}' has no matching installer.");
+                if (installer.Versioning is not { Enabled: true, ApplyToPublish: true })
+                    continue;
+                if (string.Equals(resolvedVersion.Value.Version?.Trim(), releaseVersion.Trim(), StringComparison.Ordinal))
+                    continue;
+                throw new InvalidOperationException(
+                    $"MSI installer '{resolvedVersion.Key}' version '{resolvedVersion.Value.Version}' does not match release version '{releaseVersion}'.");
+            }
+        }
 
         foreach (DotNetPublishInstallerPlan installer in plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
         {
@@ -73,8 +141,9 @@ internal sealed partial class PowerForgeReleaseService
         string? releaseConfigPath = null)
     {
         var expectedCommit = configuredCommit?.Trim();
-        if (string.IsNullOrWhiteSpace(expectedCommit) ||
-            !Regex.IsMatch(expectedCommit!, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant))
+        bool resolveHead = string.Equals(expectedCommit, "HEAD", StringComparison.Ordinal);
+        if (!resolveHead && (string.IsNullOrWhiteSpace(expectedCommit) ||
+            !Regex.IsMatch(expectedCommit!, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant)))
         {
             return null;
         }
@@ -87,6 +156,11 @@ internal sealed partial class PowerForgeReleaseService
 
         var root = Path.GetFullPath(projectRoot);
         var git = GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        var checkout = git.RunRawAsync(root, ["rev-parse", "--show-toplevel"], TimeSpan.FromMinutes(2))
+            .GetAwaiter().GetResult();
+        if (!checkout.Succeeded || string.IsNullOrWhiteSpace(checkout.StdOut))
+            throw new InvalidOperationException("Unable to locate the DotNet publish Git checkout for source verification.");
+        root = Path.GetFullPath(checkout.StdOut.Trim());
         var result = git.RunRawAsync(root, ["rev-parse", "HEAD"], TimeSpan.FromMinutes(2))
             .GetAwaiter()
             .GetResult();
@@ -100,6 +174,8 @@ internal sealed partial class PowerForgeReleaseService
         var observedCommit = result.StdOut.Trim();
         if (!Regex.IsMatch(observedCommit, "^[0-9a-fA-F]{40}$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("The DotNet publish checkout did not report an exact 40-character Git commit SHA.");
+        if (resolveHead)
+            expectedCommit = observedCommit;
         if (!string.Equals(expectedCommit, observedCommit, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
@@ -122,7 +198,8 @@ internal sealed partial class PowerForgeReleaseService
         var allowedGeneratedPaths = ResolveAuthorizedPublicReleaseGeneratedPaths(
             root,
             releaseConfigPath,
-            expectedCommit!);
+            expectedCommit!,
+            resolveHead);
         var unexpectedChanges = ParseGitStatusPaths(status.StdOut)
             .Where(entry => !entry.IsUntracked || !allowedGeneratedPaths.Contains(entry.Path))
             .ToArray();
@@ -138,7 +215,8 @@ internal sealed partial class PowerForgeReleaseService
     private static HashSet<string> ResolveAuthorizedPublicReleaseGeneratedPaths(
         string projectRoot,
         string? releaseConfigPath,
-        string expectedCommit)
+        string expectedCommit,
+        bool allowHeadCommitish)
     {
         var allowed = new HashSet<string>(
             RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -159,7 +237,8 @@ internal sealed partial class PowerForgeReleaseService
         using var config = JsonDocument.Parse(File.ReadAllText(configPath));
         var root = config.RootElement;
         var configuredCommit = GetRequiredNestedString(root, "GitHub", "Commitish");
-        if (!string.Equals(configuredCommit, expectedCommit, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(configuredCommit, expectedCommit, StringComparison.OrdinalIgnoreCase) &&
+            !(allowHeadCommitish && string.Equals(configuredCommit, "HEAD", StringComparison.Ordinal)))
             throw new InvalidOperationException("The public release authorization config does not bind the expected commit.");
 
         var provenancePath = Path.Combine(projectRoot, "Module", "PowerForge.ReleaseProvenance.json");

@@ -173,10 +173,11 @@
         "TokenEnvName": { "type": [ "string", "null" ] },
         "Commitish": {
           "type": [ "string", "null" ],
-          "pattern": "^[0-9A-Fa-f]{40}$",
-          "description": "Exact commit SHA used to create and verify the unified GitHub release tag."
+          "pattern": "^(?:[0-9A-Fa-f]{40}|HEAD)$",
+          "description": "Exact commit SHA, or HEAD resolved from a clean DotNet publish checkout, used to create and verify the unified GitHub release tag."
         },
         "GenerateReleaseNotes": { "type": "boolean" },
+        "IsDraft": { "type": "boolean", "description": "Create the unified GitHub release as a draft; promote the same qualified asset set after validation." },
         "IsPreRelease": { "type": "boolean" },
         "ReuseExistingRelease": {
           "type": "boolean",

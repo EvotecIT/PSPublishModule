@@ -407,6 +407,9 @@ internal sealed partial class PowerForgeReleaseService
         var publishUnifiedGitHub = !explicitAppleAction &&
                                    ShouldPublishUnifiedGitHub(spec, request, runModule);
 
+        if (publishUnifiedGitHub)
+            ValidateDraftWingetSubmission(spec, request);
+
         ValidateVersionCoordinationConfiguration(spec, runModule);
 
         var willRunTools = runTools && ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
@@ -462,6 +465,17 @@ internal sealed partial class PowerForgeReleaseService
             RegistryPublishingSkippedForVerifiedGitHubRecovery =
                 registryPublishingSkippedForVerifiedGitHubRecovery
         };
+
+        // Resolve and validate HEAD before any version reservation or other remote side effect.
+        // Planning below verifies that the selected DotNet project belongs to this same checkout.
+        ValidateHeadSourceSelection(
+            spec, willRunTools, publishUnifiedGitHub, dotNetSpecForTools, dotNetSourcePathForTools);
+        if (spec.GitHub is { Commitish: "HEAD" } && (willRunTools || publishUnifiedGitHub))
+        {
+            result.DotNetSourceCommitSha = VerifySharedReleaseSourceCommit(
+                ResolveDotNetSourceRootForPreflight(dotNetSpecForTools!, dotNetSourcePathForTools!),
+                "HEAD", expectedLoadedConfigurationPath);
+        }
 
         if (runWorkspaceValidation)
         {
@@ -733,11 +747,17 @@ internal sealed partial class PowerForgeReleaseService
                         request,
                         dotNetTargets,
                         () => _planDotNetTools(dotNetSpecForTools, dotNetSourcePathForTools, request, selectedToolOutputs));
-                    ApplySharedReleaseVersion(
+                    var verifiedSourceCommit = ApplySharedReleaseVersion(
                         dotNetPlan,
                         sharedReleaseVersion,
                         spec.GitHub?.Commitish,
                         request.EffectiveConfigurationPath ?? configPath);
+                    if (result.DotNetSourceCommitSha is not null &&
+                        !string.Equals(result.DotNetSourceCommitSha, verifiedSourceCommit, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("The DotNet source checkout changed between preflight and planning.");
+                    result.DotNetSourceCommitSha = verifiedSourceCommit;
+                    if (spec.GitHub is { Commitish: "HEAD" } && verifiedSourceCommit is not null)
+                        spec.GitHub.Commitish = verifiedSourceCommit;
                     ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
                     result.DotNetToolPlan = dotNetPlan;
 
@@ -1217,6 +1237,10 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        if (ShouldPublishUnifiedGitHub(spec, request,
+                spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly))
+            ValidateDraftWingetSubmission(spec, request);
+        BindBuiltDotNetSourceCommit(spec, builtResult, request.EffectiveConfigurationPath ?? configPath);
         var publishVirusTotalMonitor = ShouldPublishVirusTotalMonitorFromCheckpoint(
             spec,
             builtResult,
@@ -3624,10 +3648,15 @@ internal sealed partial class PowerForgeReleaseService
 
         var manifestPaths = new List<string>();
         var manifestArtifacts = new List<PowerForgeWingetManifestArtifact>();
+        var packageIdentifiers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var package in winget.Packages)
         {
             if (string.IsNullOrWhiteSpace(package.PackageIdentifier))
                 throw new InvalidOperationException("Winget package PackageIdentifier is required.");
+            if (!IsValidWingetPackageIdentifier(package.PackageIdentifier))
+                throw new InvalidOperationException($"Winget package identifier '{package.PackageIdentifier}' cannot be used as a manifest directory name.");
+            if (!packageIdentifiers.Add(package.PackageIdentifier))
+                throw new InvalidOperationException($"Winget manifest already written for '{package.PackageIdentifier}'. PackageIdentifier values must be unique within a release config.");
             if (string.IsNullOrWhiteSpace(package.Publisher))
                 throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing Publisher.");
             if (string.IsNullOrWhiteSpace(package.PackageName))
@@ -3648,22 +3677,30 @@ internal sealed partial class PowerForgeReleaseService
             if (installerEntries.Length == 0)
                 throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' did not resolve any installers.");
 
-            var packageVersion = package.PackageVersion
-                ?? installerEntries.Select(entry => entry.Asset.Version).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
-            if (string.IsNullOrWhiteSpace(packageVersion))
-                throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing PackageVersion and no installer asset version was available.");
+            var packageVersion = ResolveWingetPackageVersion(package, installerEntries);
+            var packageLocale = string.IsNullOrWhiteSpace(package.PackageLocale) ? (winget.PackageLocale ?? "en-US") : package.PackageLocale!;
+            if (!IsSafeWingetManifestPathSegment(packageVersion!)
+                || !Regex.IsMatch(packageLocale, @"^[A-Za-z0-9-]+$", RegexOptions.CultureInvariant))
+                throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' has a version or locale that cannot be used as a manifest path.");
 
-            var manifestPath = Path.Combine(outputPath, $"{package.PackageIdentifier}.yaml");
-            if (File.Exists(manifestPath))
+            var manifestDirectory = Path.Combine(outputPath, package.PackageIdentifier, packageVersion!);
+            var manifestPath = Path.Combine(manifestDirectory, $"{package.PackageIdentifier}.installer.yaml");
+            if (Directory.Exists(manifestDirectory))
                 throw new InvalidOperationException($"Winget manifest already written for '{package.PackageIdentifier}'. PackageIdentifier values must be unique within a release config.");
-            var yaml = WingetManifestWriter.Build(winget, package, packageVersion!, installerEntries);
-            File.WriteAllText(manifestPath, yaml, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            manifestPaths.Add(manifestPath);
+            Directory.CreateDirectory(manifestDirectory);
+            var manifestVersionPath = Path.Combine(manifestDirectory, $"{package.PackageIdentifier}.yaml");
+            var manifestLocalePath = Path.Combine(manifestDirectory, $"{package.PackageIdentifier}.locale.{packageLocale}.yaml");
+            var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            File.WriteAllText(manifestPath, WingetManifestWriter.Build(winget, package, packageVersion!, installerEntries), utf8);
+            File.WriteAllText(manifestVersionPath, WingetManifestWriter.BuildVersion(winget, package, packageVersion!), utf8);
+            File.WriteAllText(manifestLocalePath, WingetManifestWriter.BuildDefaultLocale(winget, package, packageVersion!), utf8);
+            manifestPaths.AddRange(new[] { manifestPath, manifestVersionPath, manifestLocalePath });
             manifestArtifacts.Add(new PowerForgeWingetManifestArtifact
             {
                 PackageIdentifier = package.PackageIdentifier,
                 PackageVersion = packageVersion!,
                 ManifestPath = manifestPath,
+                ManifestDirectory = manifestDirectory,
                 InstallerUrls = installerEntries
                     .Select(entry => entry.InstallerUrl)
                     .Where(url => !string.IsNullOrWhiteSpace(url))
@@ -3674,6 +3711,75 @@ internal sealed partial class PowerForgeReleaseService
 
         result.WingetManifestPaths = manifestPaths.ToArray();
         result.WingetManifests = manifestArtifacts.ToArray();
+    }
+
+    internal static string ResolveWingetPackageVersion(
+        PowerForgeReleaseWingetPackage package,
+        IReadOnlyList<WingetManifestInstallerEntry> installerEntries)
+    {
+        var installerVersions = installerEntries
+            .Select(entry => entry.Asset.Version?.Trim())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (installerVersions.Length > 1)
+            throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' resolved installers with different versions ({string.Join(", ", installerVersions)}).");
+
+        var packageVersion = package.PackageVersion?.Trim() ?? installerVersions.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(packageVersion))
+            throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' is missing PackageVersion and no installer asset version was available.");
+        if (installerVersions.Length > 0 && !string.Equals(packageVersion, installerVersions[0], StringComparison.Ordinal))
+            throw new InvalidOperationException($"Winget package '{package.PackageIdentifier}' version '{packageVersion}' does not match installer asset version '{installerVersions[0]}'.");
+
+        return packageVersion!;
+    }
+
+    internal static bool IsSafeWingetManifestPathSegment(string? value)
+    {
+        string segment = value ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(segment) || segment != segment.Trim() ||
+            segment.EndsWith(".", StringComparison.Ordinal) ||
+            segment.IndexOfAny(new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*' }) >= 0 ||
+            segment.Any(char.IsControl) || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            return false;
+
+        string deviceName = segment.Split('.')[0];
+        return !IsWindowsReservedDeviceName(deviceName);
+    }
+
+    private static bool IsWindowsReservedDeviceName(string deviceName)
+    {
+        if (deviceName.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
+            deviceName.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+            deviceName.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
+            deviceName.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+            (deviceName.Length == 4 &&
+             (deviceName.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
+              deviceName.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
+             (deviceName[3] is >= '1' and <= '9' or '¹' or '²' or '³')))
+            return true;
+
+        return false;
+    }
+
+    internal static bool IsValidWingetPackageIdentifier(string? value)
+    {
+        // Match WinGet's dot-separated identifier grammar without excluding valid characters such as '+'.
+        return value is { Length: <= 128 } &&
+               Regex.IsMatch(value, @"^[^.\s\\/:*?""<>|\x01-\x1f]{1,32}(\.[^.\s\\/:*?""<>|\x01-\x1f]{1,32}){1,7}$", RegexOptions.CultureInvariant) &&
+               value.Split('.').All(IsSafeWingetManifestPathSegment);
+    }
+
+    internal static void ValidateDraftWingetSubmission(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
+    {
+        var winget = spec.Winget;
+        if (spec.GitHub?.IsDraft != true)
+            return;
+        var submissionEnabled = request.SubmitWinget ??
+            (winget?.Submit == true || winget?.Submission?.Enabled == true);
+        if (submissionEnabled)
+            throw new InvalidOperationException(
+                "WinGet submission requires a published GitHub release; draft assets are unavailable to public installer validation.");
     }
 
     private void SubmitWingetOutputs(
@@ -3894,6 +4000,8 @@ internal sealed partial class PowerForgeReleaseService
 
         try
         {
+            if (string.Equals(gitHub.Commitish, "HEAD", StringComparison.Ordinal))
+                throw new InvalidOperationException("GitHub.Commitish HEAD requires a verified DotNet publish source checkout before publishing.");
             var publishResult = _publishGitHubRelease(
                 new GitHubReleasePublishRequest
                 {
@@ -3905,6 +4013,7 @@ internal sealed partial class PowerForgeReleaseService
                     Commitish = gitHub.Commitish,
                     ExpectedTagCommitSha = gitHub.Commitish,
                     GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
+                    IsDraft = gitHub.IsDraft,
                     IsPreRelease = gitHub.IsPreRelease,
                     ReuseExistingReleaseOnConflict = gitHub.ReuseExistingRelease,
                     RequireExpectedExistingRelease = gitHub.RequireExpectedExistingRelease,
@@ -4045,7 +4154,7 @@ internal sealed partial class PowerForgeReleaseService
         var releases = new List<PowerForgeToolGitHubReleaseResult>();
         foreach (var target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
         {
-            var version = ResolveDotNetTargetVersion(target, result, sharedReleaseVersion);
+            var version = ResolveDotNetTargetVersion(target.Name, plan, sharedReleaseVersion);
             if (string.IsNullOrWhiteSpace(version))
             {
                 releases.Add(new PowerForgeToolGitHubReleaseResult
@@ -4199,25 +4308,6 @@ internal sealed partial class PowerForgeReleaseService
                 ErrorMessage = ex.Message
             };
         }
-    }
-
-    private static string? ResolveDotNetTargetVersion(DotNetPublishTargetPlan target, DotNetPublishResult result, string? sharedReleaseVersion)
-    {
-        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
-            return sharedReleaseVersion;
-
-        if (!string.IsNullOrWhiteSpace(target.Version))
-            return target.Version;
-
-        var msiVersion = (result.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
-            .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
-            .Select(entry => entry.Version)
-            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
-
-        if (!string.IsNullOrWhiteSpace(msiVersion))
-            return msiVersion;
-
-        return string.IsNullOrWhiteSpace(sharedReleaseVersion) ? null : sharedReleaseVersion;
     }
 
     private static (string? Owner, string? Repository, string? Token, PowerForgeToolGitHubReleaseResult? Error) ResolveGitHubConfiguration(
@@ -5393,7 +5483,7 @@ internal sealed partial class PowerForgeReleaseService
             throw new FileNotFoundException($"Winget asset does not exist on disk: {installerPath}");
 
         var fileName = Path.GetFileName(installerPath);
-        var version = package.PackageVersion ?? asset.Version ?? string.Empty;
+        var version = package.PackageVersion?.Trim() ?? asset.Version?.Trim() ?? string.Empty;
         var architecture = string.IsNullOrWhiteSpace(installer.Architecture)
             ? InferWingetArchitecture(asset.Runtime)
             : installer.Architecture!.Trim();
@@ -5475,9 +5565,28 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private static string? ResolveDotNetArtefactVersion(DotNetPublishArtefactResult artifact, DotNetPublishPlan? plan, string? sharedReleaseVersion)
-        => ResolveDotNetTargetVersion(artifact.Target, plan, sharedReleaseVersion);
+        => ResolveDotNetCombinationVersion(
+            artifact.Target, artifact.Framework, artifact.Runtime, artifact.Style, plan, sharedReleaseVersion);
 
-    private static string? ResolveDotNetTargetVersion(string targetName, DotNetPublishPlan? plan, string? sharedReleaseVersion)
+    private static string? ResolveDotNetCombinationVersion(
+        string targetName,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style,
+        DotNetPublishPlan? plan,
+        string? sharedReleaseVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
+            return sharedReleaseVersion;
+        if (plan is null)
+            return null;
+
+        return DotNetPublishPipelineRunner.ResolvePublishReleaseVersion(plan, targetName, framework, runtime, style)
+               ?? (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).FirstOrDefault(candidate =>
+                   string.Equals(candidate.Name, targetName, StringComparison.OrdinalIgnoreCase))?.Version;
+    }
+
+    internal static string? ResolveDotNetTargetVersion(string targetName, DotNetPublishPlan? plan, string? sharedReleaseVersion)
     {
         if (!string.IsNullOrWhiteSpace(sharedReleaseVersion))
             return sharedReleaseVersion;
@@ -5489,6 +5598,16 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.Name, targetName, StringComparison.OrdinalIgnoreCase));
         if (target is null)
             return null;
+
+        var publishVersions = target.Combinations
+            .Select(combo => ResolveDotNetCombinationVersion(
+                target.Name, combo.Framework, combo.Runtime, combo.Style, plan, null)?.Trim() ?? string.Empty)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (publishVersions.Length > 1)
+            throw new InvalidOperationException($"DotNet publish target '{target.Name}' resolved multiple effective release versions across its publish combinations.");
+        if (publishVersions.Length == 1)
+            return publishVersions[0];
 
         return string.IsNullOrWhiteSpace(target.Version)
             ? null

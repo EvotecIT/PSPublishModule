@@ -88,7 +88,13 @@ internal sealed partial class PowerForgeReleaseService
         DotNetPublishPlan? dotNetPlan,
         string? sharedReleaseVersion)
     {
-        var version = ResolveDotNetTargetVersion(storePackage.Target, dotNetPlan, sharedReleaseVersion);
+        var version = ResolveDotNetCombinationVersion(
+            storePackage.Target,
+            storePackage.Framework,
+            storePackage.Runtime,
+            storePackage.Style,
+            dotNetPlan,
+            sharedReleaseVersion);
         foreach (var path in (storePackage.OutputFiles ?? Array.Empty<string>())
             .Concat(storePackage.UploadFiles ?? Array.Empty<string>())
             .Concat(storePackage.SymbolFiles ?? Array.Empty<string>())

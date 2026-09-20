@@ -60,6 +60,93 @@ public sealed class NativeInstallerReleaseSafetyTests
     }
 
     [Fact]
+    public void SharedReleaseVersion_RejectsMsiMismatchBeforeReservation()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Installers = new[] { new DotNetPublishInstallerPlan
+            {
+                Id = "studio.msi", Versioning = new DotNetPublishMsiVersionOptions { Enabled = true, ApplyToPublish = true }
+            } },
+            MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+            {
+                ["studio.msi|studio|net10.0|win-x64|PortableCompat"] = new() { Version = "0.1.9758" }
+            }
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateNativeInstallerReleaseVersions(plan, "0.1.9759"));
+
+        Assert.Contains("studio.msi", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("0.1.9758", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SharedReleaseVersion_AllowsSeparateMsiVersionWhenNotAppliedToPublish()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Installers = new[] { new DotNetPublishInstallerPlan
+            {
+                Id = "studio.msi", Versioning = new DotNetPublishMsiVersionOptions { Enabled = true, ApplyToPublish = false }
+            } },
+            MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+            {
+                ["studio.msi|studio|net10.0|win-x64|PortableCompat"] = new() { Version = "0.1.9758" }
+            }
+        };
+
+        PowerForgeReleaseService.ValidateNativeInstallerReleaseVersions(plan, "0.1.0");
+    }
+
+    [Theory]
+    [InlineData("studio|msi", "studio", "net10.0", "win-x64")]
+    [InlineData("studio.msi", "studio|windows", "net10.0", "win-x64")]
+    [InlineData("studio.msi", "studio", "net10.0|preview", "win-x64")]
+    [InlineData("studio.msi", "studio", "net10.0", "win|x64")]
+    public void MsiVersionKey_RejectsDelimitersInEveryComponent(string installerId, string target, string framework, string runtime)
+    {
+        Assert.Throws<ArgumentException>(() => DotNetPublishPipelineRunner.BuildMsiVersionKey(
+            installerId, target, framework, runtime, DotNetPublishStyle.PortableCompat));
+    }
+
+    [Fact]
+    public void SharedReleaseVersion_RejectsMsiVersionPlanWithUnknownInstaller()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Installers = [new DotNetPublishInstallerPlan { Id = "studio|msi" }],
+            MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+            {
+                ["studio|msi|studio|net10.0|win-x64|PortableCompat"] = new() { Version = "0.1.9758" }
+            }
+        };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ValidateNativeInstallerReleaseVersions(plan, "0.1.9759"));
+    }
+
+    [Fact]
+    public void SharedReleaseVersion_AllowsEmptyOptionalFrameworkAndRuntimeInVersionKey()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Installers = [new DotNetPublishInstallerPlan
+            {
+                Id = "studio.msi",
+                Versioning = new DotNetPublishMsiVersionOptions { Enabled = true, ApplyToPublish = true }
+            }],
+            MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
+            {
+                [DotNetPublishPipelineRunner.BuildMsiVersionKey("studio.msi", "studio", "", "", DotNetPublishStyle.PortableCompat)] =
+                    new() { Version = "0.1.9759" }
+            }
+        };
+
+        PowerForgeReleaseService.ValidateNativeInstallerReleaseVersions(plan, "0.1.9759");
+    }
+
+    [Fact]
     public void MacAppExecutionBoundary_RejectsMutatedDistributionIdentity()
     {
         var options = new DotNetPublishMacAppOptions
