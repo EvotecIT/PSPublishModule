@@ -122,6 +122,7 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
 
     private void ClearDetail()
     {
+        ClearFiles();
         ++_detailVersion;
         Discussion.Clear(); Checks.Clear(); HeadSha = "";
         DetailTitle = "Discussion"; DetailStatus = "Select a pull request or issue.";

@@ -6,6 +6,7 @@ namespace PowerForgeStudio.Orchestrator.Hub;
 public interface IGitHubProjectService
 {
     Task<string?> ResolveRepositoryAsync(string workingCopy, CancellationToken cancellationToken = default);
+    Task<GitHubPullRequestFiles> FetchPullRequestFilesAsync(string slug, int number, string expectedHeadSha, CancellationToken cancellationToken = default);
     Task<GitHubPage<GitHubCheck>> FetchChecksAsync(string slug, string headSha, CancellationToken cancellationToken = default);
     Task<GitHubPage<GitHubIssue>> FetchIssuesAsync(string slug, string state = "open", CancellationToken cancellationToken = default);
     Task<GitHubPage<GitHubPullRequest>> FetchPullRequestsAsync(string slug, string state = "open", CancellationToken cancellationToken = default);

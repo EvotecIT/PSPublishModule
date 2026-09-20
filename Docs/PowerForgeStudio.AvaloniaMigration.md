@@ -22,6 +22,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Connect Git status, diffs, staging, unstaging and local commits through the shared Git owner.
 - [ ] Complete issues, PR review actions and provider status through existing owners.
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
+- [x] Add PR changed-file lists and bounded patch previews with revision checks.
 - [ ] Inventory and expose schedules, storage and optional licensing/IntelligenceX integration.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
@@ -193,7 +194,7 @@ The editor is a bounded plain-text editor. Syntax tooling and crash-recoverable 
 
 The GitHub rail and project tab open pull requests or issues for the selected working copy. Refresh resolves its github.com origin and loads the selected open/closed/all filter. Lists, discussion, inline review comments and timeline entries use the shared GitHubProjectService. Switching working copy, filter or item cancels previous reads and rejects late results. The GitHub page uses the output dock's space for discussion; builds and local changes keep their existing dock.
 
-PR details capture the head SHA returned by GitHub, then load check runs and latest commit status per context for that SHA. Failures are visible; access failures for checks leave the discussion readable. This snapshot is not a merge-policy decision. PR file diffs, review posting, branch protection/ruleset evaluation and merge actions remain unfinished. Discussion Markdown is currently shown as selectable plain text. Open on GitHub uses a URL constructed from the validated repository and numeric item number, not remote body links.
+PR details capture the head SHA returned by GitHub, then load check runs and latest commit status per context for that SHA. Failures are visible; access failures for checks leave the discussion readable. This snapshot is not a merge-policy decision. PR file review is covered by the following milestone. Review posting, branch protection/ruleset evaluation and merge actions remain unfinished. Discussion Markdown is currently shown as selectable plain text. Open on GitHub uses a URL constructed from the validated repository and numeric item number, not remote body links.
 
 The shared service validates repository identifiers, reports HTTP access/rate-limit errors without echoing response bodies, limits each response to 4 MiB, and bounds requests including body reads. Lists expose possible additional pages after five 100-item pages, counting raw issue-endpoint records before filtering PRs. Discussion exposes its own coverage flag. Incomplete counts raise an error instead of returning an exact-looking number. The old "Ready to merge" display was replaced with "No merge conflicts"; list responses state that reviews have not been loaded.
 
@@ -209,3 +210,21 @@ Evidence:
 - The disposable live harness and completed shared-test/WPF binaries were removed after containment, link, tracked-file and running-process checks: about 225 MiB. Active Avalonia outputs and the small rendered evidence remain local.
 
 API contract references: [GitHub check runs](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference) and [commit statuses](https://docs.github.com/en/rest/commits/statuses#list-commit-statuses-for-a-reference).
+
+
+### Pull-request changed files
+
+Review files opens a file list and patch pane in the central workspace. It shows change status, additions/deletions and previous paths for renames. Remote paths remain display data; they do not become local file-operation targets. Patches are selectable plain text and have a 262,144-character preview limit. Missing patches explicitly identify unavailable text rather than implying no changes. All patches are labelled excerpts because GitHub can omit unchanged context and some large-file content.
+
+The shared GitHubProjectService validates the expected PR head before fetching files and compares both head and base afterward. If either revision changes, the page asks for a detail refresh and returns no file snapshot. This checks the observations around pagination; it is not an atomic server-side snapshot or a guarantee that the PR cannot change after loading. Five-page listing limits and GitHub's reported changed-file count determine the incomplete-list warning. Back navigation, project switching and detail reload invalidate pending file results.
+
+Evidence:
+
+- Seventeen shared file/read contract tests passed, including four new cases covering initial head mismatch, head/base changes during pagination, rename metadata, missing binary patches, bounded large patches and incomplete coverage.
+- Three GitHub Avalonia tests passed, including ignored cancellation during back/project navigation and actual Skia file-review renders at 1600 × 1000 and 1050 × 700. Evidence: Artifacts/StudioValidation/workspace-pr-files.png and workspace-pr-files-compact.png. Native Windows input, browser launching and long-path/large-patch interaction remain unverified.
+- A disposable harness consumed the actual shared service against PowerForge PR 958. It returned two changed files, two text patches, no local patch truncation and no partial-list flag; revision validation completed. No remote writes occurred and only counts were logged.
+- Independent read-only review /root/review_pr_files inspected the staged milestone against bc4cff7f4, fingerprint 7c735286ee0854241421e62686fd5623629f018e, and both renders. It found no actionable introduced defect. Boundary: candidate-reviewed; no targeted confirmation needed.
+
+Review submission is not yet implemented. The existing Open on GitHub action remains available from the discussion view. Authentication and HTTP response bounds remain owned by the shared GitHub service.
+
+Task-owned cleanup removed the disposable file-review harness and completed shared-test binaries (about 146 MiB) after containment, link, tracked-file and process checks. Active Avalonia outputs and small rendered evidence remain local.

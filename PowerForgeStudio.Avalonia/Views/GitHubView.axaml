@@ -1,5 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Hub"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Hub" xmlns:views="using:PowerForgeStudio.Avalonia.Views"
              x:Class="PowerForgeStudio.Avalonia.Views.GitHubView" x:DataType="vm:GitHubViewModel">
   <UserControl.Styles><Style Selector="TextBlock.failure"><Setter Property="Foreground" Value="#BD2424" /></Style></UserControl.Styles>
   <Grid Margin="18" RowDefinitions="Auto,Auto,*" RowSpacing="12">
@@ -14,7 +14,8 @@
       <ComboBox ItemsSource="{Binding States}" SelectedItem="{Binding StateFilter, Mode=TwoWay}" Width="100" Margin="0,0,8,4" ToolTip.Tip="GitHub state filter" />
       <Button Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" Background="#0865FF" Foreground="White" Margin="0,0,0,4" />
     </WrapPanel>
-    <Grid Grid.Row="2" ColumnDefinitions="2*,5,3*">
+    <views:GitHubFilesView Grid.Row="2" IsVisible="{Binding IsFilesReview}" />
+    <Grid Grid.Row="2" ColumnDefinitions="2*,5,3*" IsVisible="{Binding !IsFilesReview}">
       <ListBox x:Name="GitHubItems" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected, Mode=TwoWay}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:GitHubItemRow">
@@ -31,6 +32,7 @@
           <TextBlock Text="{Binding DetailTitle}" FontWeight="SemiBold" FontSize="17" TextWrapping="Wrap" />
           <TextBlock Text="{Binding DetailStatus}" TextWrapping="Wrap" Classes="muted" FontSize="12" />
           <WrapPanel>
+            <Button Content="Review files" Command="{Binding ReviewFilesCommand}" IsEnabled="{Binding CanReviewFiles}" Margin="0,0,8,4" />
             <Button Content="Reload detail" Command="{Binding LoadSelectionCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,4" />
             <Button Content="Open on GitHub" Click="OpenOnGitHub" IsEnabled="{Binding HasSelection}" Margin="0,0,0,4" />
           </WrapPanel>

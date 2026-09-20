@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Hub"
+             x:Class="PowerForgeStudio.Avalonia.Views.GitHubFilesView" x:DataType="vm:GitHubViewModel">
+  <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
+    <WrapPanel>
+      <Button Content="Back to discussion" Command="{Binding ShowDiscussionCommand}" Margin="0,0,8,4" />
+      <Button Content="Reload files" Command="{Binding ReviewFilesCommand}" IsEnabled="{Binding CanReviewFiles}" Margin="0,0,0,4" />
+    </WrapPanel>
+    <StackPanel Grid.Row="1" Spacing="6">
+      <TextBlock Text="{Binding DetailTitle}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding FilesStatus}" TextWrapping="Wrap" FontSize="12" />
+      <SelectableTextBlock Text="{Binding FilesRevision}" TextWrapping="Wrap" FontSize="11" Classes="muted" />
+    </StackPanel>
+    <Grid Grid.Row="2" ColumnDefinitions="*,5,2*">
+      <ListBox ItemsSource="{Binding ChangedFiles}" SelectedItem="{Binding SelectedChangedFile, Mode=TwoWay}" Background="#F7F9FC">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="domain:GitHubPullRequestFile">
+            <StackPanel Spacing="6" Margin="3,6">
+              <TextBlock Text="{Binding Path}" TextWrapping="Wrap" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <Grid Grid.Column="2" RowDefinitions="Auto,*" Margin="12,0,0,0" RowSpacing="10">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{Binding FilePath}" TextWrapping="Wrap" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding PreviousFilePath}" TextWrapping="Wrap" Classes="muted" FontSize="12" />
+          <TextBlock Text="{Binding PatchNotice}" TextWrapping="Wrap" Foreground="#98620C" FontSize="12" />
+        </StackPanel>
+        <Border Grid.Row="1" Background="#F7F9FC" Padding="10">
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <SelectableTextBlock Text="{Binding PatchPreview}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
+          </ScrollViewer>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</UserControl>

@@ -78,6 +78,22 @@ public sealed class GitHubWorkspaceTests
                         frame.Save(Path.Combine(output, compact ? "workspace-github-compact.png" : "workspace-github.png"), PngBitmapEncoderOptions.Default);
                     }
                 }
+                await workspace.GitHub.ReviewFilesAsync();
+                Assert.True(workspace.GitHub.IsFilesReview);
+                Assert.Equal(2, workspace.GitHub.ChangedFiles.Count);
+                Assert.Contains("Release", workspace.GitHub.PatchPreview);
+                foreach (var compact in new[] { false, true })
+                {
+                    window.Width = compact ? 1050 : 1600; window.Height = compact ? 700 : 1000;
+                    window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
+                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    if (!string.IsNullOrWhiteSpace(output)) frame.Save(Path.Combine(output, compact ? "workspace-pr-files-compact.png" : "workspace-pr-files.png"), PngBitmapEncoderOptions.Default);
+                }
+                workspace.GitHub.SelectedChangedFile = workspace.GitHub.ChangedFiles[1];
+                Assert.Contains("binary", workspace.GitHub.PatchNotice);
+                workspace.GitHub.ShowDiscussionCommand.Execute(null);
+                Assert.False(workspace.GitHub.IsFilesReview);
                 service.CheckError = true;
                 await workspace.GitHub.LoadSelectionAsync();
                 Assert.NotEmpty(workspace.GitHub.Discussion);
@@ -91,6 +107,32 @@ public sealed class GitHubWorkspaceTests
         });
     }
 
+    [Fact]
+    public async Task LateFilesCannotReopenReviewAfterNavigationOrReplaceAnotherProject()
+    {
+        await TestAppBuilder.RunAsync(async () =>
+        {
+            var service = new FakeGitHub();
+            using var model = new GitHubViewModel(service);
+            model.SetWorkingCopy("first"); await model.RefreshAsync();
+            model.Selected = model.Items[0]; await model.SelectionLoad;
+            service.PendingFiles = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var loading = model.ReviewFilesAsync();
+            Assert.True(model.IsFilesLoading);
+            model.ShowDiscussionCommand.Execute(null);
+            service.PendingFiles.SetResult(new(new string('a', 40), new string('b', 40), new([], false)));
+            await loading;
+            Assert.False(model.IsFilesReview); Assert.Empty(model.ChangedFiles);
+            service.PendingFiles = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            loading = model.ReviewFilesAsync();
+            model.SetWorkingCopy("second");
+            service.PendingFiles.SetResult(new(new string('a', 40), new string('b', 40), new([new("wrong.cs", null, "added", 1, 0, "+wrong", false)], false)));
+            await loading;
+            Assert.Empty(model.ChangedFiles); Assert.False(model.IsFilesReview); Assert.Equal("", model.FilesRevision);
+            return true;
+        });
+    }
+
     private static GitHubPullRequest Pull(int number = 42, string title = "Preserve build configuration across working copies") => new(number, title, "open", "maintainer",
         "feature/build-context", "main", GitHubPrReviewStatus.Unknown, GitHubPrMergeStatus.Unknown, [], 12, 3, 2, DateTimeOffset.UtcNow, null,
         BodyMarkdown: "Build plans must follow the selected working copy. Keep the captured configuration stable during execution.", HeadSha: new string('a', 40));
@@ -100,6 +142,11 @@ public sealed class GitHubWorkspaceTests
         public TaskCompletionSource<GitHubPage<GitHubPullRequest>>? PendingList;
         public TaskCompletionSource<GitHubPullRequestDetail?>? PendingDetail;
         public bool Error, CheckError;
+        public TaskCompletionSource<GitHubPullRequestFiles>? PendingFiles;
+        public Task<GitHubPullRequestFiles> FetchPullRequestFilesAsync(string slug, int number, string expectedHeadSha, CancellationToken cancellationToken = default)
+            => PendingFiles?.Task ?? Task.FromResult(new GitHubPullRequestFiles(expectedHeadSha, new string('b', 40), new([
+                new("Build/project.build.json", null, "modified", 2, 1, "@@ -1,3 +1,4 @@\n {\n-  \"configuration\": \"Debug\"\n+  \"configuration\": \"Release\",\n+  \"sign\": true\n }", false),
+                new("Assets/icon.png", null, "modified", 0, 0, null, false)], false)));
         public Task<string?> ResolveRepositoryAsync(string root, CancellationToken cancellationToken = default) => Task.FromResult<string?>("owner/" + (root == "first" ? "first" : "second"));
         public Task<GitHubPage<GitHubPullRequest>> FetchPullRequestsAsync(string slug, string state = "open", CancellationToken cancellationToken = default)
         {
