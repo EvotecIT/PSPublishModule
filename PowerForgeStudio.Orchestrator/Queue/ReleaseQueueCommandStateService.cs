@@ -34,26 +34,17 @@ public sealed class ReleaseQueueCommandStateService
         string message,
         CancellationToken cancellationToken = default)
     {
-        var persistedQueue = fallbackSession is null
-            ? null
-            : await stateDatabase.LoadLatestQueueSessionAsync(cancellationToken).ConfigureAwait(false) ?? fallbackSession;
-
-        if (persistedQueue is null)
-        {
-            return EmptyResult(message);
-        }
-
-        var signingReceipts = await stateDatabase.LoadSigningReceiptsAsync(persistedQueue.SessionId, cancellationToken).ConfigureAwait(false);
-        var publishReceipts = await stateDatabase.LoadPublishReceiptsAsync(persistedQueue.SessionId, cancellationToken).ConfigureAwait(false);
-        var verificationReceipts = await stateDatabase.LoadVerificationReceiptsAsync(persistedQueue.SessionId, cancellationToken).ConfigureAwait(false);
+        var snapshot = fallbackSession is null ? null
+            : await stateDatabase.LoadReleaseCheckpointAsync(fallbackSession.SessionId, cancellationToken).ConfigureAwait(false);
+        if (snapshot is null) return EmptyResult(message);
 
         return new ReleaseQueueCommandResult(
             Changed: changed,
             Message: message,
-            QueueSession: persistedQueue,
-            SigningReceipts: signingReceipts,
-            PublishReceipts: publishReceipts,
-            VerificationReceipts: verificationReceipts);
+            QueueSession: snapshot.Session,
+            SigningReceipts: snapshot.SigningReceipts,
+            PublishReceipts: snapshot.PublishReceipts,
+            VerificationReceipts: snapshot.VerificationReceipts);
     }
 
     public ReleaseQueueCommandResult EmptyResult(string message)

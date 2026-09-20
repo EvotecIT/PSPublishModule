@@ -1,5 +1,7 @@
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Domain.Queue;
+using PowerForgeStudio.Domain.Publish;
+using PowerForgeStudio.Domain.Verification;
 using PowerForgeStudio.Orchestrator.Storage;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
@@ -63,7 +65,8 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
         }
 
         ReleaseQueueTransitionResult transition;
-        Func<CancellationToken, Task>? persistReceipts = null;
+        IReadOnlyList<ReleasePublishReceipt>? publishReceipts = null;
+        IReadOnlyList<ReleaseVerificationReceipt>? verificationReceipts = null;
         if (nextReadyItem.Stage == ReleaseQueueStage.Build)
         {
             var buildResult = await _buildExecutionService.ExecuteAsync(nextReadyItem.RootPath, cancellationToken).ConfigureAwait(false);
@@ -75,7 +78,7 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
         else if (nextReadyItem.Stage == ReleaseQueueStage.Publish)
         {
             var publishResult = await _publishExecutionService.ExecuteAsync(nextReadyItem, cancellationToken).ConfigureAwait(false);
-            persistReceipts = token => stateDatabase.PersistPublishReceiptsAsync(currentSession.SessionId, publishResult.Receipts, token);
+            publishReceipts = publishResult.Receipts;
             transition = publishResult.Succeeded
                 ? _queueRunner.CompletePublish(currentSession, nextReadyItem.RootPath, publishResult)
                 : _queueRunner.FailPublish(currentSession, nextReadyItem.RootPath, publishResult);
@@ -83,7 +86,7 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
         else if (nextReadyItem.Stage == ReleaseQueueStage.Verify)
         {
             var verificationResult = await _verificationExecutionService.ExecuteAsync(nextReadyItem, cancellationToken).ConfigureAwait(false);
-            persistReceipts = token => stateDatabase.PersistVerificationReceiptsAsync(currentSession.SessionId, verificationResult.Receipts, token);
+            verificationReceipts = verificationResult.Receipts;
             transition = verificationResult.Succeeded
                 ? _queueRunner.CompleteVerification(currentSession, nextReadyItem.RootPath, verificationResult)
                 : _queueRunner.FailVerification(currentSession, nextReadyItem.RootPath, verificationResult);
@@ -95,8 +98,10 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
 
         // Once an executor returns evidence, cancellation must not discard its local receipts/checkpoint.
         using var finalization = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        if (persistReceipts is not null) await persistReceipts(finalization.Token).ConfigureAwait(false);
-        return await _commandStateService.PersistTransitionResultAsync(stateDatabase, currentSession, transition, finalization.Token).ConfigureAwait(false);
+        if (transition.Changed)
+            await stateDatabase.PersistReleaseCheckpointAsync(transition.Session, publishReceipts: publishReceipts,
+                verificationReceipts: verificationReceipts, cancellationToken: finalization.Token, receiptRootPath: nextReadyItem.RootPath).ConfigureAwait(false);
+        return await _commandStateService.LoadResultAsync(stateDatabase, transition.Session, transition.Changed, transition.Message, finalization.Token).ConfigureAwait(false);
     }
 
     public async Task<ReleaseQueueCommandResult> ApproveUsbAsync(string databasePath, CancellationToken cancellationToken = default)
@@ -123,13 +128,15 @@ public sealed class ReleaseQueueCommandService : IReleaseQueueCommandService
         var signingResult = await _signingExecutionService.ExecuteAsync(waitingItem, cancellationToken).ConfigureAwait(false);
         if (cancellationToken.IsCancellationRequested) signingResult = signingResult with { Succeeded = false, RequiresRebuild = true, Summary = "Signing was cancelled; completed artifact receipts retained. Rebuild before retrying." };
         using var finalization = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        await stateDatabase.PersistSigningReceiptsAsync(currentSession.SessionId, signingResult.Receipts, finalization.Token).ConfigureAwait(false);
 
         var transition = signingResult.Succeeded
             ? _queueRunner.CompleteSigning(currentSession, waitingItem.RootPath, signingResult)
             : _queueRunner.FailSigning(currentSession, waitingItem.RootPath, signingResult);
 
-        return await _commandStateService.PersistTransitionResultAsync(stateDatabase, currentSession, transition, finalization.Token).ConfigureAwait(false);
+        if (transition.Changed)
+            await stateDatabase.PersistReleaseCheckpointAsync(transition.Session, signingReceipts: signingResult.Receipts,
+                cancellationToken: finalization.Token, receiptRootPath: waitingItem.RootPath).ConfigureAwait(false);
+        return await _commandStateService.LoadResultAsync(stateDatabase, transition.Session, transition.Changed, transition.Message, finalization.Token).ConfigureAwait(false);
     }
 
     public Task<ReleaseQueueCommandResult> RetryFailedAsync(string databasePath, CancellationToken cancellationToken = default)

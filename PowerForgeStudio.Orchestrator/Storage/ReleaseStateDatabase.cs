@@ -1,5 +1,6 @@
 using DBAClientX;
 using System.Data.Common;
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using PowerForgeStudio.Orchestrator.Host;
@@ -14,7 +15,7 @@ using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Orchestrator.Storage;
 
-public sealed class ReleaseStateDatabase
+public sealed partial class ReleaseStateDatabase
 {
     private const string CurrentSchemaVersion = "18";
     private readonly SQLite _sqlite = new() {
@@ -1188,198 +1189,6 @@ public sealed class ReleaseStateDatabase
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task PersistQueueSessionAsync(ReleaseQueueSession session, CancellationToken cancellationToken = default)
-    {
-        await _sqlite.ExecuteNonQueryAsync(
-            DatabasePath,
-            """
-            INSERT INTO release_queue_session(
-                session_id,
-                workspace_root,
-                scope_key,
-                scope_display_name,
-                total_items,
-                build_ready_items,
-                prepare_pending_items,
-                waiting_approval_items,
-                blocked_items,
-                verification_ready_items,
-                created_at_utc)
-            VALUES (
-                @SessionId,
-                @WorkspaceRoot,
-                @ScopeKey,
-                @ScopeDisplayName,
-                @TotalItems,
-                @BuildReadyItems,
-                @PreparePendingItems,
-                @WaitingApprovalItems,
-                @BlockedItems,
-                @VerificationReadyItems,
-                @CreatedAtUtc)
-            ON CONFLICT(session_id) DO UPDATE SET
-                workspace_root = excluded.workspace_root,
-                scope_key = excluded.scope_key,
-                scope_display_name = excluded.scope_display_name,
-                total_items = excluded.total_items,
-                build_ready_items = excluded.build_ready_items,
-                prepare_pending_items = excluded.prepare_pending_items,
-                waiting_approval_items = excluded.waiting_approval_items,
-                blocked_items = excluded.blocked_items,
-                verification_ready_items = excluded.verification_ready_items,
-                created_at_utc = excluded.created_at_utc;
-            """,
-            new Dictionary<string, object?> {
-                ["@SessionId"] = session.SessionId,
-                ["@WorkspaceRoot"] = session.WorkspaceRoot,
-                ["@ScopeKey"] = session.ScopeKey,
-                ["@ScopeDisplayName"] = session.ScopeDisplayName,
-                ["@TotalItems"] = session.Summary.TotalItems,
-                ["@BuildReadyItems"] = session.Summary.BuildReadyItems,
-                ["@PreparePendingItems"] = session.Summary.PreparePendingItems,
-                ["@WaitingApprovalItems"] = session.Summary.WaitingApprovalItems,
-                ["@BlockedItems"] = session.Summary.BlockedItems,
-                ["@VerificationReadyItems"] = session.Summary.VerificationReadyItems,
-                ["@CreatedAtUtc"] = session.CreatedAtUtc.ToString("O")
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        await ReplaceRowsAsync(
-            deleteSql: "DELETE FROM release_queue_item WHERE session_id = @SessionId;",
-            deleteParameters: new Dictionary<string, object?> {
-                ["@SessionId"] = session.SessionId
-            },
-            insertSql:
-            """
-            INSERT INTO release_queue_item(
-                session_id,
-                root_path,
-                repository_name,
-                repository_kind,
-                workspace_kind,
-                queue_order,
-                stage,
-                status,
-                summary,
-                checkpoint_key,
-                checkpoint_state_json,
-                updated_at_utc)
-            VALUES (
-                @SessionId,
-                @RootPath,
-                @RepositoryName,
-                @RepositoryKind,
-                @WorkspaceKind,
-                @QueueOrder,
-                @Stage,
-                @Status,
-                @Summary,
-                @CheckpointKey,
-                @CheckpointStateJson,
-                @UpdatedAtUtc);
-            """,
-            rows: session.Items,
-            buildParameters: item => new Dictionary<string, object?> {
-                ["@SessionId"] = session.SessionId,
-                ["@RootPath"] = item.RootPath,
-                ["@RepositoryName"] = item.RepositoryName,
-                ["@RepositoryKind"] = item.RepositoryKind.ToString(),
-                ["@WorkspaceKind"] = item.WorkspaceKind.ToString(),
-                ["@QueueOrder"] = item.QueueOrder,
-                ["@Stage"] = item.Stage.ToString(),
-                ["@Status"] = item.Status.ToString(),
-                ["@Summary"] = item.Summary,
-                ["@CheckpointKey"] = item.CheckpointKey,
-                ["@CheckpointStateJson"] = item.CheckpointStateJson,
-                ["@UpdatedAtUtc"] = item.UpdatedAtUtc.ToString("O")
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<ReleaseQueueSession?> LoadLatestQueueSessionAsync(CancellationToken cancellationToken = default)
-    {
-        var sessions = await _sqlite.QueryReadOnlyAsListAsync(
-            DatabasePath,
-            """
-            SELECT session_id,
-                   workspace_root,
-                   scope_key,
-                   scope_display_name,
-                   total_items,
-                   build_ready_items,
-                   prepare_pending_items,
-                   waiting_approval_items,
-                   blocked_items,
-                   verification_ready_items,
-                   created_at_utc
-            FROM release_queue_session
-            ORDER BY created_at_utc DESC
-            LIMIT 1;
-            """,
-            reader => new QueueSessionRow(
-                SessionId: reader.GetString(0),
-                WorkspaceRoot: reader.GetString(1),
-                ScopeKey: reader.IsDBNull(2) ? null : reader.GetString(2),
-                ScopeDisplayName: reader.IsDBNull(3) ? null : reader.GetString(3),
-                TotalItems: reader.GetInt32(4),
-                BuildReadyItems: reader.GetInt32(5),
-                PreparePendingItems: reader.GetInt32(6),
-                WaitingApprovalItems: reader.GetInt32(7),
-                BlockedItems: reader.GetInt32(8),
-                VerificationReadyItems: reader.GetInt32(9),
-                CreatedAtUtc: DateTimeOffset.Parse(reader.GetString(10))),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        var sessionRow = sessions.FirstOrDefault();
-        if (sessionRow == default)
-        {
-            return null;
-        }
-
-        var items = await _sqlite.QueryReadOnlyAsListAsync(
-            DatabasePath,
-            """
-            SELECT root_path,
-                   repository_name,
-                   repository_kind,
-                   workspace_kind,
-                   queue_order,
-                   stage,
-                   status,
-                   summary,
-                   checkpoint_key,
-                   checkpoint_state_json,
-                   updated_at_utc
-            FROM release_queue_item
-            WHERE session_id = @SessionId
-            ORDER BY queue_order;
-            """,
-            reader => new ReleaseQueueItem(
-                RootPath: reader.GetString(0),
-                RepositoryName: reader.GetString(1),
-                RepositoryKind: Enum.Parse<ReleaseRepositoryKind>(reader.GetString(2), ignoreCase: true),
-                WorkspaceKind: Enum.Parse<ReleaseWorkspaceKind>(reader.GetString(3), ignoreCase: true),
-                QueueOrder: reader.GetInt32(4),
-                Stage: Enum.Parse<ReleaseQueueStage>(reader.GetString(5), ignoreCase: true),
-                Status: Enum.Parse<ReleaseQueueItemStatus>(reader.GetString(6), ignoreCase: true),
-                Summary: reader.GetString(7),
-                CheckpointKey: reader.IsDBNull(8) ? null : reader.GetString(8),
-                CheckpointStateJson: reader.IsDBNull(9) ? null : reader.GetString(9),
-                UpdatedAtUtc: DateTimeOffset.Parse(reader.GetString(10))),
-            new Dictionary<string, object?> {
-                ["@SessionId"] = sessionRow.SessionId
-            },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return ReleaseQueueSessionFactory.Create(
-            workspaceRoot: sessionRow.WorkspaceRoot,
-            items: items,
-            createdAtUtc: sessionRow.CreatedAtUtc,
-            scopeKey: sessionRow.ScopeKey,
-            scopeDisplayName: sessionRow.ScopeDisplayName,
-            sessionId: sessionRow.SessionId);
-    }
-
     public async Task PersistSigningReceiptsAsync(string sessionId, IEnumerable<ReleaseSigningReceipt> receipts, CancellationToken cancellationToken = default)
     {
         await PersistReceiptRowsAsync(sessionId, receipts, SigningReceiptTable, cancellationToken).ConfigureAwait(false);
@@ -1509,7 +1318,7 @@ public sealed class ReleaseStateDatabase
         string InsertSql,
         string QuerySql,
         Func<string, TReceipt, Dictionary<string, object?>> BuildParameters,
-        Func<DbDataReader, TReceipt> Map);
+        Func<IDataRecord, TReceipt> Map);
 
     private async Task PersistReceiptRowsAsync<TReceipt>(
         string sessionId,
