@@ -10,6 +10,16 @@ public sealed class ReleaseQueueTargetProjectionService
         Func<ReleaseQueueItem, TCheckpoint?> tryReadCheckpoint,
         Func<ReleaseQueueItem, TCheckpoint, IEnumerable<TTarget>> projectTargets,
         Func<TTarget, string> distinctKeySelector)
+        => BuildTargetsByKey(queueItems, stage, tryReadCheckpoint, projectTargets, distinctKeySelector, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Projects pending targets using a caller-defined identity and equality contract.</summary>
+    public IReadOnlyList<TTarget> BuildTargetsByKey<TCheckpoint, TTarget, TKey>(
+        IEnumerable<ReleaseQueueItem> queueItems,
+        ReleaseQueueStage stage,
+        Func<ReleaseQueueItem, TCheckpoint?> tryReadCheckpoint,
+        Func<ReleaseQueueItem, TCheckpoint, IEnumerable<TTarget>> projectTargets,
+        Func<TTarget, TKey> distinctKeySelector,
+        IEqualityComparer<TKey>? comparer = null)
     {
         ArgumentNullException.ThrowIfNull(queueItems);
         ArgumentNullException.ThrowIfNull(tryReadCheckpoint);
@@ -29,7 +39,7 @@ public sealed class ReleaseQueueTargetProjectionService
         }
 
         return targets
-            .DistinctBy(distinctKeySelector, StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(distinctKeySelector, comparer)
             .ToList();
     }
 }

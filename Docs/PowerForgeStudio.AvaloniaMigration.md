@@ -353,7 +353,7 @@ Failed finalization returns pending evidence and a local-only retry operation. R
 
 Independent review /root/review_durable_publication found a P2 ordering defect in the idempotent comparison; the multiset correction and expanded regression were accepted in the one targeted confirmation. Boundary: candidate-reviewed. Process termination and cross-process lease behavior remain unverified independently. The workflow is not yet wired into Avalonia.
 
-The publication receipt-key limitation identified here is resolved by schema 19 below. Verification still needs its equivalent schema and destination-identity changes before the complete multi-destination UI workflow is connected.
+The publication receipt-key limitation identified here is resolved by schema 19 below. Verification schema and destination identity are resolved in schema 20 below; durable verification and UI execution remain open.
 
 ### Publication receipt schema 19
 
@@ -361,4 +361,10 @@ Publication receipts now use an internal integer row identity, allowing the same
 
 Twenty-three focused schema, durable publication, checkpoint and state-database tests passed. Evidence includes exact legacy receipt preservation, null destination/source fields, repeated and concurrent initialization, older missing-source-column databases, multiple feeds, duplicate counts, and rollback followed by repair/retry. The durable save-recovery fixture now uses two destinations for the same target name and kind. Independent review /root/review_publication_schema found no actionable issues, fingerprint 97db3023bedbe2381f6ff358a777039c3f397a4b; boundary current. No user database was opened or migrated, and abrupt process termination remains untested.
 
-Next verification work: release_verification_receipt retains the old target-name composite primary key, and ReleaseVerificationExecutionService.BuildPendingTargets omits Destination from its distinct key. Fix both to preserve multiple feeds through the publish/verify workflow; then add durable verification and connect release execution in Avalonia.
+### Verification destinations and schema 20
+
+Verification targets now use structured identity including destination and source path. Distinct case-sensitive feed paths remain separate, delimiter characters cannot combine unrelated identities, and the existing shared string-key projection API retains its case-insensitive behavior. Verification receipts use an internal row identity so multiple destinations and duplicate evidence survive storage.
+
+The legacy verification table is copied and replaced transactionally. Twenty-one focused verification, schema, projection and checkpoint tests passed, including two feeds for one package through preview, controlled HTTP probes and database readback; exact legacy evidence retention; rollback and repair; repeat initialization; and concurrent initialization. No real publication or user database migration occurred. Independent review /root/review_verification_destinations found no actionable issues, fingerprint 7fc634cc731b45af7b9ccec251c8d7be4946ab2f; boundary current. Separate-process migration concurrency and forced process termination remain untested.
+
+Next: retain partial verification evidence across cancellation/errors, add durable verification, bind displayed publication destinations to execution, and connect the Avalonia release controls. Unknown published target kinds currently return Skipped and must not be presented as verified delivery.

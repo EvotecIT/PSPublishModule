@@ -17,7 +17,7 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed partial class ReleaseStateDatabase
 {
-    private const string CurrentSchemaVersion = "19";
+    private const string CurrentSchemaVersion = "20";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
@@ -441,21 +441,7 @@ public sealed partial class ReleaseStateDatabase
             CREATE INDEX IF NOT EXISTS idx_release_publish_receipt_session
             ON release_publish_receipt(session_id, root_path, status);
             """,
-            """
-            CREATE TABLE IF NOT EXISTS release_verification_receipt (
-                session_id TEXT NOT NULL,
-                root_path TEXT NOT NULL,
-                repository_name TEXT NOT NULL,
-                adapter_kind TEXT NOT NULL,
-                target_name TEXT NOT NULL,
-                target_kind TEXT NOT NULL,
-                destination TEXT NULL,
-                status TEXT NOT NULL,
-                summary TEXT NOT NULL,
-                verified_at_utc TEXT NOT NULL,
-                PRIMARY KEY (session_id, root_path, target_name, target_kind)
-            );
-            """,
+            CreateVerificationReceiptTableSql,
             """
             CREATE INDEX IF NOT EXISTS idx_release_verification_receipt_session
             ON release_verification_receipt(session_id, root_path, status);
@@ -535,6 +521,7 @@ public sealed partial class ReleaseStateDatabase
             cancellationToken).ConfigureAwait(false);
 
         await MigratePublicationReceiptsAsync(cancellationToken).ConfigureAwait(false);
+        await MigrateVerificationReceiptsAsync(cancellationToken).ConfigureAwait(false);
 
         await EnsureColumnExistsAsync(
             tableName: "release_signing_receipt",

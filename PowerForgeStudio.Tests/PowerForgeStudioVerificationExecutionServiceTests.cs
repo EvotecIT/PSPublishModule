@@ -216,6 +216,56 @@ public sealed class PowerForgeStudioVerificationExecutionServiceTests
         Assert.Contains("2.5.0-preview1", result.Receipts[0].Summary);
     }
 
+    [Fact]
+    public async Task TwoFeedsForSamePackageRemainVisibleExecuteIndependentlyAndPersist()
+    {
+        using var package = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        var root = Path.GetDirectoryName(package.PackagePath)!;
+        var first = new ReleasePublishReceipt(root, "Fixture", "ProjectBuild", "Package", "NuGet",
+            "https://packages.contoso.test/Feed/index.json", package.PackagePath, ReleasePublishReceiptStatus.Published,
+            "Published", DateTimeOffset.UtcNow);
+        var second = first with { Destination = "https://packages.contoso.test/feed/index.json" };
+        var published = new ReleasePublishExecutionResult(root, true, "Published", "{}", [first, second]);
+        var item = CreateVerifyReadyQueueItem(root, "Fixture", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(published));
+        var requests = new List<string>();
+        using var client = new HttpClient(new StubHttpMessageHandler(request => {
+            requests.Add(request.RequestUri!.AbsoluteUri);
+            return CreateResponse(request.RequestUri);
+        }));
+        using var service = new ReleaseVerificationExecutionService(client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => throw new InvalidOperationException("Unexpected PowerShell execution"))));
+        var targets = service.BuildPendingTargets([item, item]);
+        Assert.Equal(2, targets.Count);
+        Assert.Equal(new[] { first.Destination, second.Destination }, targets.Select(target => target.Destination));
+        var result = await service.ExecuteAsync(item);
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Receipts.Count);
+        Assert.All(result.Receipts, receipt => Assert.Equal(ReleaseVerificationReceiptStatus.Verified, receipt.Status));
+        Assert.Contains(first.Destination!, requests);
+        Assert.Contains(second.Destination!, requests);
+        var database = new PowerForgeStudio.Orchestrator.Storage.ReleaseStateDatabase(Path.Combine(root, "state.db"));
+        await database.InitializeAsync();
+        var session = ReleaseQueueSessionFactory.Create(root, [], DateTimeOffset.UtcNow);
+        await database.PersistReleaseCheckpointAsync(session, verificationReceipts: result.Receipts);
+        var restored = (await database.LoadReleaseCheckpointAsync(session.SessionId))!.VerificationReceipts;
+        Assert.Equal(2, restored.Count);
+        Assert.All(result.Receipts, receipt => Assert.Contains(receipt, restored));
+    }
+
+    [Fact]
+    public void VerificationIdentityRetainsDistinctSourcesAndDoesNotJoinDelimitedFields()
+    {
+        var first = new ReleasePublishReceipt("root", "Fixture", "ProjectBuild", "Package", "NuGet",
+            "feed", "one.nupkg", ReleasePublishReceiptStatus.Published, "Published", DateTimeOffset.UtcNow);
+        var receipts = new[] { first, first with { SourcePath = "two.nupkg" },
+            first with { TargetName = "a|b", TargetKind = "c" },
+            first with { TargetName = "a", TargetKind = "b|c" } };
+        var published = new ReleasePublishExecutionResult("root", true, "Published", "{}", receipts);
+        var item = CreateVerifyReadyQueueItem("root", "Fixture", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(published));
+        using var service = new ReleaseVerificationExecutionService();
+        Assert.Equal(4, service.BuildPendingTargets([item, item]).Count);
+    }
+
     private static ReleaseQueueItem CreateVerifyReadyQueueItem(string rootPath, string repositoryName, ReleaseRepositoryKind repositoryKind, string checkpointStateJson)
         => new(
             RootPath: rootPath,

@@ -51,7 +51,7 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
 
     public IReadOnlyList<ReleaseVerificationTarget> BuildPendingTargets(IEnumerable<ReleaseQueueItem> queueItems)
     {
-        return _targetProjectionService.BuildTargets(
+        return _targetProjectionService.BuildTargetsByKey(
             queueItems,
             ReleaseQueueStage.Verify,
             TryDeserializePublishResult,
@@ -63,7 +63,7 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
                 TargetKind: receipt.TargetKind,
                 Destination: receipt.Destination,
                 SourcePath: receipt.SourcePath)),
-            static target => $"{target.RootPath}|{target.AdapterKind}|{target.TargetName}|{target.TargetKind}");
+            static target => (target.RootPath, target.AdapterKind, target.TargetName, target.TargetKind, target.Destination, target.SourcePath));
     }
 
     public async Task<ReleaseVerificationExecutionResult> ExecuteAsync(ReleaseQueueItem queueItem, CancellationToken cancellationToken = default)
