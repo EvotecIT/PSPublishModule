@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PowerForgeStudio.Avalonia.Views.UnsavedChangesDialog" Title="Unsaved changes"
+        Width="520" SizeToContent="Height" CanResize="False" WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="24" Spacing="16">
+    <TextBlock Text="Save your changes?" FontSize="20" FontWeight="SemiBold" />
+    <TextBlock Text="These documents have unsaved changes:" TextWrapping="Wrap" />
+    <ScrollViewer MaxHeight="220"><TextBlock x:Name="DocumentNames" TextWrapping="Wrap" /></ScrollViewer>
+    <TextBlock Text="Save keeps your edits on disk. Discard removes the drafts. Cancel keeps the documents open." TextWrapping="Wrap" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Click="Cancel" IsCancel="True" />
+      <Button Content="Discard" Click="Discard" />
+      <Button Content="Save" Click="Save" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

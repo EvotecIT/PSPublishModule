@@ -15,6 +15,7 @@ public sealed partial class WorkspaceViewModel
     private int _restoringSession;
     private bool _sessionReady;
     private WorkspaceExplorerState? _pendingRestore;
+    private bool _restoreDocumentsFromDisk;
     public ObservableCollection<ExplorerNode> ExplorerRoots { get; } = [];
     public ObservableCollection<WorkspaceDocumentViewModel> Documents { get; } = [];
     [ObservableProperty] private WorkspaceDocumentViewModel? _activeDocument;
@@ -34,6 +35,7 @@ public sealed partial class WorkspaceViewModel
     {
         OnPropertyChanged(nameof(IsWorkspaceTab));
         foreach (var document in Documents) document.IsActive = ReferenceEquals(document, value);
+        NotifyEditorChanged();
     }
     [RelayCommand] private void ShowAllProjects() => FavoritesOnly = false;
     [RelayCommand] private void ShowFavoriteProjects() => FavoritesOnly = true;
@@ -77,6 +79,7 @@ public sealed partial class WorkspaceViewModel
             if (_disposed || refresh != _refreshVersion || !SamePath(root, WorkspaceRoot)) return;
             _loadedStateRoot = root;
             _pendingRestore = state;
+            _restoreDocumentsFromDisk = true;
             foreach (var favorite in state.FavoriteProjectRoots) _favorites.Add(Path.GetFullPath(favorite));
         }
         catch (Exception ex)
@@ -89,25 +92,30 @@ public sealed partial class WorkspaceViewModel
         }
     }
 
-    private async Task RestoreSessionAsync(int refresh, string root)
+    private async Task RestoreSessionAsync(int refresh, string root, int selection)
     {
         var state = _pendingRestore;
         if (state is null) return;
         ++_restoringSession;
-        var selection = _selectionVersion;
         try
         {
-            Documents.Clear(); ActiveDocument = null;
-            foreach (var reference in state.OpenDocuments)
-                Documents.Add(new WorkspaceDocumentViewModel(reference));
+            var restoreDocuments = _restoreDocumentsFromDisk;
+            if (restoreDocuments)
+                foreach (var reference in state.OpenDocuments)
+                    if (!Documents.Any(document => SameDocument(document.Reference, reference))) Documents.Add(CreateDocument(reference));
+            _restoreDocumentsFromDisk = false;
             var expanded = new HashSet<string>(state.ExpandedPaths, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             foreach (var project in _projectNodes.Values.ToArray())
             {
                 await RestoreExpandedAsync(project, expanded);
                 if (_disposed || refresh != _refreshVersion || !SamePath(root, WorkspaceRoot)) return;
             }
-            if (selection == _selectionVersion && state.ActiveDocument is { } active && Documents.FirstOrDefault(document => SameDocument(document.Reference, active)) is { } selected)
-                await SelectDocumentAsync(selected);
+            if (selection == _selectionVersion)
+            {
+                var selected = ActiveDocument ?? (restoreDocuments && state.ActiveDocument is { } active
+                    ? Documents.FirstOrDefault(document => SameDocument(document.Reference, active)) : null);
+                if (selected is not null) await SelectDocumentAsync(selected);
+            }
             if (ReferenceEquals(_pendingRestore, state)) _pendingRestore = null;
         }
         finally { --_restoringSession; }
@@ -125,7 +133,7 @@ public sealed partial class WorkspaceViewModel
     {
         var reference = new WorkspaceDocumentReference(Path.GetFullPath(node.RepositoryRoot), Path.GetFullPath(node.Path));
         var document = Documents.FirstOrDefault(item => SameDocument(item.Reference, reference));
-        if (document is null) { document = new WorkspaceDocumentViewModel(reference); Documents.Add(document); }
+        if (document is null) { document = CreateDocument(reference); Documents.Add(document); }
         ActiveDocument = document;
     }
 
@@ -142,6 +150,7 @@ public sealed partial class WorkspaceViewModel
     [RelayCommand]
     private async Task CloseDocumentAsync(WorkspaceDocumentViewModel document)
     {
+        if (!await ResolveUnsavedDocumentsAsync([document])) return;
         var wasActive = ReferenceEquals(document, ActiveDocument);
         Documents.Remove(document);
         if (wasActive)
@@ -186,12 +195,14 @@ public sealed partial class WorkspaceViewModel
     private void CaptureSessionBeforeRefresh()
     {
         if (!_sessionReady || _loadedStateRoot is null || !SamePath(_loadedStateRoot, WorkspaceRoot)) return;
+        _restoreDocumentsFromDisk = false;
         _pendingRestore = new WorkspaceExplorerState(WorkspaceRoot, _favorites.ToArray(), Documents.Select(document => document.Reference).ToArray(),
             ActiveDocument?.Reference, LoadedNodes().Where(node => node.IsExpanded && node.Path.Length > 0).Select(node => Path.GetFullPath(node.Path)).ToArray());
     }
 
     public async Task<bool> ActivateWorkspaceAsync(string root)
     {
+        if (!await ResolveUnsavedDocumentsAsync()) return false;
         try
         {
             if (_stateStore is IWorkspaceRootCatalogService catalog) await Task.Run(() => catalog.SaveActive(root));

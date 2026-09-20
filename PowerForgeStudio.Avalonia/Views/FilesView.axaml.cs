@@ -12,6 +12,13 @@ public sealed partial class FilesView : UserControl
 {
     public FilesView() => InitializeComponent();
 
+    private async void BeginEdit(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is not WorkspaceViewModel model) return;
+        await model.EditDocumentCommand.ExecuteAsync(null);
+        if (model.IsEditorVisible) EditorBox.Focus();
+    }
+
     private async void OpenFile(object? sender, TappedEventArgs args)
     {
         if (DataContext is WorkspaceViewModel model && FileList.SelectedItem is FileItemViewModel entry)

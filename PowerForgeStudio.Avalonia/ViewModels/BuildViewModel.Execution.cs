@@ -17,7 +17,7 @@ public sealed partial class BuildViewModel
     [ObservableProperty] private string _buildOutput = "";
     [ObservableProperty] private ReleaseBuildExecutionResult? _buildResult;
     public bool HasBuild => !string.IsNullOrEmpty(BuildRoot);
-    public bool CanBuild => HasSuccessfulInspection && !IsBusy && !IsBuilding && !_disposed;
+    public bool CanBuild => HasSuccessfulInspection && !HasUnsavedChanges && !IsBusy && !IsBuilding && !_disposed;
     partial void OnHasSuccessfulInspectionChanged(bool value) => OnPropertyChanged(nameof(CanBuild));
     partial void OnIsBuildingChanged(bool value)
     {

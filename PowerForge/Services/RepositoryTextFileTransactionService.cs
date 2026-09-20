@@ -1,19 +1,24 @@
 using System.Text;
+using System.Security.Cryptography;
 
 namespace PowerForge;
 
 internal sealed class RepositoryTextFileUpdate
 {
-    public RepositoryTextFileUpdate(string filePath, string originalContent, string updatedContent)
+    public RepositoryTextFileUpdate(string filePath, string originalContent, string updatedContent, string? expectedHash = null, int? maxBytes = null)
     {
         FilePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
         OriginalContent = originalContent ?? throw new ArgumentNullException(nameof(originalContent));
         UpdatedContent = updatedContent ?? throw new ArgumentNullException(nameof(updatedContent));
+        ExpectedHash = expectedHash;
+        MaxBytes = maxBytes;
     }
 
     public string FilePath { get; }
     public string OriginalContent { get; }
     public string UpdatedContent { get; }
+    public string? ExpectedHash { get; }
+    public int? MaxBytes { get; }
 }
 
 internal sealed class RepositoryTextFileTransactionService
@@ -71,7 +76,9 @@ internal sealed class RepositoryTextFileTransactionService
                 if (!File.Exists(fullPath))
                     throw new FileNotFoundException($"Release file update target was not found: {fullPath}", fullPath);
 
-                var snapshot = ReadSnapshot(fullPath);
+                var snapshot = ReadSnapshot(fullPath, update.MaxBytes);
+                if (update.ExpectedHash is not null && snapshot.Hash != update.ExpectedHash)
+                    throw new IOException($"File changed on disk. Reload or copy your draft before retrying: {fullPath}");
                 var currentContent = snapshot.Content;
                 if (!string.Equals(currentContent, update.OriginalContent, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Release file changed after version planning and was not modified: {fullPath}");
@@ -81,9 +88,11 @@ internal sealed class RepositoryTextFileTransactionService
                 var suffix = ".powerforge-" + Guid.NewGuid().ToString("N");
                 var temporaryPath = fullPath + suffix + ".tmp";
                 var backupPath = fullPath + suffix + ".bak";
-                var preparedUpdate = new PreparedUpdate(fullPath, temporaryPath, backupPath);
+                var preparedUpdate = new PreparedUpdate(fullPath, temporaryPath, backupPath, update.ExpectedHash, update.MaxBytes);
                 prepared.Add(preparedUpdate);
                 _prepareFile(temporaryPath, update.UpdatedContent, snapshot.Encoding, snapshot.Preamble);
+                if (update.MaxBytes is { } limit && new FileInfo(temporaryPath).Length > limit)
+                    throw new IOException("The encoded draft exceeds the editor size limit.");
 #if !NET472
                 if (!OperatingSystem.IsWindows())
                     File.SetUnixFileMode(temporaryPath, File.GetUnixFileMode(fullPath));
@@ -95,19 +104,37 @@ internal sealed class RepositoryTextFileTransactionService
             {
                 foreach (var update in prepared)
                 {
+                    if (update.ExpectedHash is not null && ReadSnapshot(update.FilePath, update.MaxBytes).Hash != update.ExpectedHash)
+                        throw new IOException($"File changed on disk before saving: {update.FilePath}");
                     _replaceFile(update.TemporaryPath, update.FilePath, update.BackupPath);
+                    if (update.ExpectedHash is not null)
+                    {
+                        // A pathname replacement by another editor can race the preflight check.
+                        // Retain the displaced bytes instead of deleting the only copy of that edit.
+                        preserveBackups = true;
+                        try
+                        {
+                            if (ReadSnapshot(update.BackupPath, update.MaxBytes).Hash != update.ExpectedHash)
+                                throw new IOException("The displaced bytes do not match the original snapshot.");
+                        }
+                        catch (Exception exception)
+                        {
+                            throw new IOException($"The draft was installed, but the displaced file could not be verified. Its contents were retained at {update.BackupPath}", exception);
+                        }
+                        preserveBackups = false;
+                    }
                     replaced.Add(update);
                 }
             }
             catch (Exception writeException)
             {
                 var rollbackErrors = RollBack(replaced);
-                preserveBackups = rollbackErrors.Count > 0;
+                preserveBackups |= rollbackErrors.Count > 0;
                 var message = rollbackErrors.Count == 0
                     ? "Release file transaction failed; prior file replacements were rolled back."
                     : "Release file transaction failed and one or more prior file replacements could not be rolled back: "
                       + string.Join(" | ", rollbackErrors);
-                throw new InvalidOperationException(message, writeException);
+                throw new InvalidOperationException(message + " " + writeException.Message, writeException);
             }
         }
         finally
@@ -162,9 +189,30 @@ internal sealed class RepositoryTextFileTransactionService
     internal static string ReadText(string path)
         => ReadSnapshot(path).Content;
 
-    private static TextFileSnapshot ReadSnapshot(string path)
+    internal static RepositoryTextDocument ReadDocument(string path, int maxBytes)
     {
-        var bytes = File.ReadAllBytes(path);
+        var snapshot = ReadSnapshot(path, maxBytes);
+        if (snapshot.Content.Contains('\0')) throw new InvalidOperationException("Binary files cannot be edited as text.");
+        return new RepositoryTextDocument(Path.GetFullPath(path), snapshot.Content, snapshot.Hash, snapshot.Encoding.WebName, maxBytes);
+    }
+
+    private static TextFileSnapshot ReadSnapshot(string path, int? maxBytes = null)
+    {
+        byte[] bytes;
+        if (maxBytes is null) bytes = File.ReadAllBytes(path);
+        else
+        {
+            using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var output = new MemoryStream();
+            var buffer = new byte[8192];
+            int count;
+            while ((count = input.Read(buffer, 0, buffer.Length)) != 0)
+            {
+                if (output.Length + count > maxBytes.Value) throw new IOException("Text editing is limited to files of 256 KiB or less. Open this file externally.");
+                output.Write(buffer, 0, count);
+            }
+            bytes = output.ToArray();
+        }
         Encoding encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
         var preambleLength = 0;
 
@@ -199,7 +247,8 @@ internal sealed class RepositoryTextFileTransactionService
             return new TextFileSnapshot(
                 encoding.GetString(bytes, preambleLength, bytes.Length - preambleLength),
                 encoding,
-                preambleLength == 0 ? Array.Empty<byte>() : encoding.GetPreamble());
+                preambleLength == 0 ? Array.Empty<byte>() : encoding.GetPreamble(),
+                Hash(bytes));
         }
         catch (DecoderFallbackException ex)
         {
@@ -215,7 +264,15 @@ internal sealed class RepositoryTextFileTransactionService
         var bytes = new byte[preamble.Length + contentBytes.Length];
         Buffer.BlockCopy(preamble, 0, bytes, 0, preamble.Length);
         Buffer.BlockCopy(contentBytes, 0, bytes, preamble.Length, contentBytes.Length);
-        File.WriteAllBytes(path, bytes);
+        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        stream.Write(bytes, 0, bytes.Length);
+        stream.Flush(flushToDisk: true);
+    }
+
+    private static string Hash(byte[] bytes)
+    {
+        using var sha = SHA256.Create();
+        return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "");
     }
 
     private static bool StartsWith(byte[] bytes, byte[] prefix)
@@ -234,29 +291,35 @@ internal sealed class RepositoryTextFileTransactionService
 
     private sealed class PreparedUpdate
     {
-        public PreparedUpdate(string filePath, string temporaryPath, string backupPath)
+        public PreparedUpdate(string filePath, string temporaryPath, string backupPath, string? expectedHash, int? maxBytes)
         {
             FilePath = filePath;
             TemporaryPath = temporaryPath;
             BackupPath = backupPath;
+            ExpectedHash = expectedHash;
+            MaxBytes = maxBytes;
         }
 
         public string FilePath { get; }
         public string TemporaryPath { get; }
         public string BackupPath { get; }
+        public string? ExpectedHash { get; }
+        public int? MaxBytes { get; }
     }
 
     private sealed class TextFileSnapshot
     {
-        public TextFileSnapshot(string content, Encoding encoding, byte[] preamble)
+        public TextFileSnapshot(string content, Encoding encoding, byte[] preamble, string hash)
         {
             Content = content;
             Encoding = encoding;
             Preamble = preamble;
+            Hash = hash;
         }
 
         public string Content { get; }
         public Encoding Encoding { get; }
         public byte[] Preamble { get; }
+        public string Hash { get; }
     }
 }

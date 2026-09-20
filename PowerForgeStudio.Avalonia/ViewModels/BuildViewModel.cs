@@ -25,7 +25,20 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _status = "Select a working copy to inspect its build contract.";
     [ObservableProperty] private string _contracts = "No contract inspected.";
     [ObservableProperty] private bool _isBusy;
-    public bool CanPlan => !IsBusy && !IsBuilding && !_disposed && !string.IsNullOrEmpty(WorkingCopyRoot);
+    [ObservableProperty] private bool _hasUnsavedChanges;
+    partial void OnHasUnsavedChangesChanged(bool value)
+    {
+        if (value)
+        {
+            ++_contextVersion;
+            _operation?.Cancel();
+            Results.Clear();
+            HasSuccessfulInspection = false;
+            Status = "Configuration changed. Save or discard drafts, then inspect again.";
+        }
+        OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(CanBuild));
+    }
+    public bool CanPlan => !HasUnsavedChanges && !IsBusy && !IsBuilding && !_disposed && !string.IsNullOrEmpty(WorkingCopyRoot);
     partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(CanBuild)); }
 
     public void SetWorkingCopy(string root)

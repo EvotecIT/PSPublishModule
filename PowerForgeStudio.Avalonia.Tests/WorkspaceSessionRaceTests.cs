@@ -81,6 +81,10 @@ public sealed class WorkspaceSessionRaceTests
         }
         public Task<string> ReadTextPreviewAsync(string path, CancellationToken cancellationToken = default)
             => _inner.ReadTextPreviewAsync(path, cancellationToken);
+        public Task<PowerForge.RepositoryTextDocument> OpenTextDocumentAsync(string root, string path, CancellationToken cancellationToken = default)
+            => _inner.OpenTextDocumentAsync(root, path, cancellationToken);
+        public Task<PowerForge.RepositoryTextDocument> SaveTextDocumentAsync(string root, PowerForge.RepositoryTextDocument original, string text, CancellationToken cancellationToken = default)
+            => _inner.SaveTextDocumentAsync(root, original, text, cancellationToken);
         public Task ExecuteAsync(WorkspaceFileOperationRequest request, CancellationToken cancellationToken = default, IProgress<FileTransferProgress>? progress = null)
             => _inner.ExecuteAsync(request, cancellationToken, progress);
     }

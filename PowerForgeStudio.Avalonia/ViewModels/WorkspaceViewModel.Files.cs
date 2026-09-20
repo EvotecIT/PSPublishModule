@@ -42,6 +42,12 @@ public sealed partial class WorkspaceViewModel
         IProgress<FileTransferProgress>? progress = null)
     {
         if (IsFileOperationRunning) return false;
+        if (request.Operation is WorkspaceFileOperation.Move or WorkspaceFileOperation.Rename &&
+            Documents.Any(document => SamePath(document.Reference.WorkingCopyRoot, request.WorkingCopyRoot) && (document.IsDirty || document.IsBusy)))
+        {
+            Status = "Save or discard drafts in this working copy before moving or renaming files.";
+            return false;
+        }
         IsFileOperationRunning = true;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
         try
@@ -93,12 +99,10 @@ public sealed partial class WorkspaceViewModel
             if (!SamePath(document.Reference.WorkingCopyRoot, root)) continue;
             var relative = Path.GetRelativePath(source, document.Reference.Path);
             if (relative == ".." || Path.IsPathRooted(relative) || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)) continue;
-            var replacement = new WorkspaceDocumentViewModel(document.Reference with
+            document.Relocate(document.Reference with
             {
                 Path = relative == "." ? destination : Path.Combine(destination, relative)
             });
-            Documents[index] = replacement;
-            if (ReferenceEquals(ActiveDocument, document)) ActiveDocument = replacement;
         }
     }
 }

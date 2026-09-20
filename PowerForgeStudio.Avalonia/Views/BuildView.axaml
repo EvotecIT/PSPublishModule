@@ -8,6 +8,7 @@
       <TextBlock Text="Build configuration &amp; plans" FontSize="22" FontWeight="SemiBold" />
       <TextBlock Text="Working copy" Classes="muted" />
       <SelectableTextBlock Text="{Binding WorkingCopyRoot}" TextWrapping="Wrap" />
+      <TextBlock Text="Save or discard this working copy's drafts before inspecting or building. Build commands use files on disk." IsVisible="{Binding HasUnsavedChanges}" Foreground="#B45309" TextWrapping="Wrap" />
       <Border Background="#EEF4FF" CornerRadius="6" Padding="14">
         <TextBlock Text="Project and release contracts generate plans. Module JSON is checked for a valid configuration. PowerShell contracts may run project code to export configuration; inspect only projects you trust." TextWrapping="Wrap" />
       </Border>

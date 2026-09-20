@@ -12,6 +12,33 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class BuildTests
 {
     [Fact]
+    public async Task EditingAndSavingDuringInspectionInvalidatesItsLateResult()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-build-edit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Build"));
+        await File.WriteAllTextAsync(Path.Combine(root, "Build", "project.build.json"), "{}");
+        var planner = new DelayedPlanner();
+        try
+        {
+            using var model = new BuildViewModel(planner);
+            model.SetWorkingCopy(root);
+            var pending = model.PlanAsync();
+            await planner.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            model.HasUnsavedChanges = true;
+            Assert.True(planner.Token.IsCancellationRequested);
+            model.HasUnsavedChanges = false;
+            planner.Complete.SetResult([new RepositoryPlanResult(RepositoryPlanAdapterKind.ProjectPlan,
+                RepositoryPlanStatus.Succeeded, "Before edit", null, 0, 0)]);
+            await pending;
+            Assert.Empty(model.Results);
+            Assert.False(model.HasSuccessfulInspection);
+            Assert.False(model.CanBuild);
+            Assert.True(model.CanPlan);
+        }
+        finally { planner.Complete.TrySetResult([]); Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task SwitchingWorkingCopyCancelsAndDiscardsAnInFlightResult()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-build-switch-" + Guid.NewGuid().ToString("N"));

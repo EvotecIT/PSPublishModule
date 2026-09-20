@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using PowerForgeStudio.Avalonia.ViewModels;
+using PowerForgeStudio.Avalonia.Views;
 
 namespace PowerForgeStudio.Avalonia;
 
@@ -17,6 +18,11 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         SizeChanged += (_, args) => ApplyResponsiveLayout(args.NewSize.Width);
         Closing += SaveBeforeClosing;
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is WorkspaceViewModel model)
+                model.ResolveUnsavedChanges = documents => new UnsavedChangesDialog(documents).ShowDialog<UnsavedChangesChoice>(this);
+        };
     }
 
     private void ApplyResponsiveLayout(double width)
@@ -43,10 +49,11 @@ public sealed partial class MainWindow : Window
     private async void SaveBeforeClosing(object? sender, WindowClosingEventArgs args)
     {
         if (_closeAfterSave || DataContext is not WorkspaceViewModel model) return;
-        if (_discardOnNextClose && model.HasStateError) return;
         args.Cancel = true;
         if (_savingOnClose) return;
         _savingOnClose = true;
+        if (!await model.ResolveUnsavedDocumentsAsync()) { _savingOnClose = false; return; }
+        if (_discardOnNextClose && model.HasStateError) { _savingOnClose = false; _closeAfterSave = true; Close(); return; }
         await model.SaveSessionAsync();
         _savingOnClose = false;
         if (model.HasStateError)

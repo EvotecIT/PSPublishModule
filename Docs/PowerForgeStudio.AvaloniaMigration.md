@@ -13,7 +13,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Restore workspace favorites, expanded folders and document tabs through shared catalog persistence.
 - [ ] Connect real file navigation, previews and explicit file operations.
 - [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
-- [ ] Complete file editing/save conflicts and deletion/recovery behavior.
+- [x] Add text editing, conflict-aware saves, unsaved-document choices and draft-safe navigation.
+- [ ] Complete deletion/recovery behavior.
 - [ ] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [ ] Connect cancellation, live progress, artifacts and release receipts.
@@ -165,4 +166,23 @@ Evidence:
 - Actual Avalonia Skia screenshots were inspected at 1600 × 1000 and 1050 × 720: Artifacts/StudioValidation/workspace-session.png and workspace-session-compact.png. Keyboard activation of a document tab selects its owning repository. Native desktop validation remains blocked by the previously recorded automation failure.
 - Independent read-only review /root/review_workspace_session covered the original staged milestone against aa0ab79c2, fingerprint 1a304ca0105907b8c29a424ec8cbde5ad353ece9. It identified two P2 races: saving empty state before restoration, and late preview completion after closing the sole tab. Both were fixed and covered by a seeded failed-discovery test and a controlled pending filesystem read. The single targeted confirmation accepted both fixes without further findings in that boundary. Status: candidate-reviewed; the original fingerprint identifies the pre-remediation candidate only.
 
-Temporary WPF validation binaries (about 325 MiB) and the isolated legacy-test temp directory were removed. The active Avalonia outputs and small rendered evidence remain local. There has been no application distribution switch, package publication or live user-workspace migration. File editing, deletion/recovery, releases, GitHub, schedules, storage/worktree actions and provider connections remain on the delivery checklist.
+Temporary WPF validation binaries (about 325 MiB) and the isolated legacy-test temp directory were removed. The active Avalonia outputs and small rendered evidence remain local. There has been no application distribution switch, package publication or live user-workspace migration. Deletion/recovery, releases, GitHub, schedules, storage/worktree actions and provider connections remain on the delivery checklist.
+
+
+### Text editing and save conflicts
+
+Files can be edited in the central pane, with Save, Reload, Browse files and Ctrl+S. Each document keeps its own draft and shows an unsaved marker in its tab. Closing a dirty tab, closing the window or leaving the workspace offers Save, Discard and Cancel. Navigation and refresh retain drafts. Draft contents are kept in memory and are not written to the workspace catalog; crash recovery is not implemented.
+
+The shared PowerForge RepositoryTextFileEditor uses the existing repository text transaction owner. It accepts UTF-8 and BOM-marked UTF-16/UTF-32 up to 256 KiB, preserves encoding/BOM and existing line endings, and checks the original byte hash before saving. Binary, invalid-Unicode, oversized and deleted files are rejected. The Studio adapter applies the same working-copy, Git-metadata and link restrictions as other explorer operations. Successful saves use a flushed temporary file and replacement. If another process replaces the pathname in the final comparison/replacement interval, the draft may already be installed; the displaced contents are retained in a named backup and the error identifies that recovery path. This is not a filesystem-wide lock against external editors.
+
+Move/rename retains document identity and draft state while rebinding its original snapshot to the destination. Input and saves are disabled during a file operation. A late binding update is preserved rather than discarded. Repository discovery now runs through the shared WorkspaceRepositorySource; refresh never reconstructs a live document collection from an older saved list. Build inspection/execution is disabled for working copies with drafts, and an edit invalidates pending inspection results even if it is saved before the old inspection completes.
+
+Evidence:
+
+- All 16 Avalonia tests passed before independent review. After remediation, ten focused editor/session/planning tests passed. The two controlled refresh/relocation tests passed again after adding an actual headless keyboard check proving that a moving file cannot be typed into while its editor is read-only.
+- Twenty-one shared text transaction/editor tests passed after remediation, including the existing transaction tests, six Unicode/BOM variants, byte-only external changes, bounded content, and normal/oversized displaced-file recovery. The Studio path-boundary test passed for outside-root paths, Git metadata and a deleted target.
+- PowerForge builds with zero warnings for net472, net8.0 and net10.0. No PowerForge package has been published; the Avalonia worktree consumes the local project reference.
+- Actual Skia renders were inspected at 1600 × 1000 and 1050 × 720. The first compact render hid the editor below its conflict message; the corrected editor spans the central pane and bounds the message region. Current evidence: Artifacts/StudioValidation/workspace-editor.png and workspace-editor-compact.png. Native Windows validation remains the previously recorded gap.
+- Independent read-only review /root/review_file_editing inspected the editor milestone against c3baca719, original fingerprint ea76d13cd14f166c837ca8a334fea0f0761c5304. It found two P1 draft-loss races during discovery and relocation, a P2 stale-inspection result, and a P3 missing recovery-path diagnostic. These were interactions introduced by the editor feature. All were fixed, with a sibling sweep across tab/window close, root changes, folder refresh and save/move overlap. The single targeted confirmation accepted fingerprint 1dd6656c6ea3a90b0df2c65cd9ceab39cd94f050 with no additional actionable findings in the remediation scope. Boundary: candidate-reviewed.
+
+The editor is a bounded plain-text editor. Syntax tooling and crash-recoverable drafts are not implemented. No user repository file was edited by validation; tests used disposable fixtures. Large task-owned test/CLI/module binaries were removed after validation; the active Avalonia build and small screenshots remain local.

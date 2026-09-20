@@ -5,7 +5,7 @@
   <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="22,18">
     <TextBlock Text="Files" Classes="heading" />
     <TextBlock Grid.Row="1" Text="{Binding CurrentDirectory}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentDirectory}" Margin="0,9,0,13" />
-    <WrapPanel Grid.Row="2" Margin="0,0,0,13" IsEnabled="{Binding CanManageFiles}">
+    <WrapPanel Grid.Row="2" Margin="0,0,0,13" IsEnabled="{Binding CanManageFiles}" IsVisible="{Binding IsPreviewVisible}">
       <Button Content="Up" Command="{Binding NavigateUpCommand}" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
       <Button Content="New file" Tag="CreateFile" Click="ManageFile" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
       <Button Content="New folder" Tag="CreateDirectory" Click="ManageFile" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
@@ -17,7 +17,7 @@
       <Button Content="Open externally" Click="OpenExternally" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
     </WrapPanel>
     <Grid Grid.Row="3" ColumnDefinitions="0.85*,14,1.15*">
-      <Border Classes="card">
+      <Border Classes="card" IsVisible="{Binding IsPreviewVisible}">
         <Grid RowDefinitions="42,*">
           <TextBlock Text="Name" Margin="15,12" FontWeight="SemiBold" />
           <ListBox Grid.Row="1" x:Name="FileList" ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
@@ -34,12 +34,27 @@
           </ListBox>
         </Grid>
       </Border>
-      <Border Grid.Column="2" Classes="card">
-        <Grid RowDefinitions="42,*">
+      <Border Grid.Column="{Binding EditorColumn}" Grid.ColumnSpan="{Binding EditorColumnSpan}" Classes="card">
+        <Grid RowDefinitions="42,Auto,Auto,*">
           <TextBlock Text="{Binding PreviewTitle}" FontWeight="SemiBold" Margin="15,12" TextTrimming="CharacterEllipsis" />
-          <TextBox Grid.Row="1" Text="{Binding Preview}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+          <WrapPanel Grid.Row="1" Margin="12,0,12,8">
+            <Button Content="Edit" Click="BeginEdit" IsVisible="{Binding IsPreviewVisible}" IsEnabled="{Binding CanEditDocument}" Margin="0,0,6,4" />
+            <Button Content="Save" Command="{Binding SaveActiveDocumentCommand}" IsVisible="{Binding IsEditorVisible}" IsEnabled="{Binding CanSaveDocument}" Margin="0,0,6,4" />
+            <Button Content="Reload" Command="{Binding ReloadDocumentCommand}" IsVisible="{Binding IsEditorVisible}" IsEnabled="{Binding CanEditDocument}" Margin="0,0,6,4" />
+            <Button Content="Browse files" Command="{Binding ShowWorkspaceCommand}" IsVisible="{Binding IsEditorVisible}" Margin="0,0,6,4" />
+            <TextBlock Text="{Binding ActiveDocument.EncodingLabel}" IsVisible="{Binding IsEditorVisible}" Classes="muted" Margin="4,8" />
+          </WrapPanel>
+          <ScrollViewer Grid.Row="2" MaxHeight="70" IsVisible="{Binding ActiveDocument.HasError}" Margin="15,0,15,10">
+            <TextBlock Text="{Binding ActiveDocument.Error}" Foreground="#B45309" TextWrapping="Wrap" />
+          </ScrollViewer>
+          <TextBox Grid.Row="3" Text="{Binding Preview}" IsVisible="{Binding IsPreviewVisible}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
                    FontFamily="Cascadia Code, Consolas, monospace" FontSize="13" BorderThickness="0" Padding="15"
                    ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+          <TextBox Grid.Row="3" x:Name="EditorBox" Text="{Binding ActiveDocument.Text, Mode=TwoWay}" IsVisible="{Binding IsEditorVisible}" IsReadOnly="{Binding IsEditorReadOnly}"
+                   AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap" FontFamily="Cascadia Code, Consolas, monospace"
+                   FontSize="13" BorderThickness="0" Padding="15" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <TextBox.KeyBindings><KeyBinding Gesture="Ctrl+S" Command="{Binding SaveActiveDocumentCommand}" /></TextBox.KeyBindings>
+          </TextBox>
         </Grid>
       </Border>
     </Grid>

@@ -14,6 +14,7 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 {
     private readonly IFileExplorerService _files;
+    private readonly IWorkspaceRepositorySource _repositories;
     private readonly ProjectGitService _git = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<RepositoryCatalogEntry> _catalog = [];
@@ -24,11 +25,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingTreeSelection;
     private int _refreshVersion;
 
-    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null)
     {
         WorkspaceRoot = Path.GetFullPath(root);
         _stateStore = stateStore;
         _files = files ?? new FileExplorerService();
+        _repositories = repositories ?? new WorkspaceRepositorySource();
         Changes.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(GitChangesViewModel.LastOperation)) OnPropertyChanged(nameof(DisplayedOutput));
@@ -93,12 +95,13 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasActiveProject));
         OnPropertyChanged(nameof(FavoriteActionLabel));
         Build.SetWorkingCopy(value);
+        NotifyEditorChanged();
         Changes.SetWorkingCopy(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
         OnPropertyChanged(nameof(CanManageFiles));
     }
-    partial void OnIsFileOperationRunningChanged(bool value) => OnPropertyChanged(nameof(CanManageFiles));
-    partial void OnIsSelectionLoadingChanged(bool value) => OnPropertyChanged(nameof(CanManageFiles));
+    partial void OnIsFileOperationRunningChanged(bool value) { OnPropertyChanged(nameof(CanManageFiles)); NotifyEditorChanged(); }
+    partial void OnIsSelectionLoadingChanged(bool value) { OnPropertyChanged(nameof(CanManageFiles)); NotifyEditorChanged(); }
     partial void OnSelectedFileChanged(FileItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedFile));
@@ -114,13 +117,19 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task RefreshAsync()
     {
+        if (_loadedStateRoot is not null && !SamePath(_loadedStateRoot, WorkspaceRoot) && Documents.Any(document => document.IsDirty || document.IsBusy))
+        {
+            WorkspaceRoot = _loadedStateRoot;
+            Status = "Save or discard open drafts before changing workspace.";
+            return;
+        }
         var refresh = ++_refreshVersion;
         try
         {
             CaptureSessionBeforeRefresh();
             _sessionReady = false;
             Status = "Discovering local repositories…";
-            ++_selectionVersion;
+            var selection = ++_selectionVersion;
             SelectedNode = null;
             SelectedFile = null;
             ActiveWorkingCopyRoot = "";
@@ -133,24 +142,17 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             var root = WorkspaceRoot;
             await LoadSessionAsync(root, refresh);
             if (_disposed || refresh != _refreshVersion) return;
-            var found = await Task.Run(() =>
-            {
-                if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
-                var scanner = new RepositoryCatalogScanner();
-                return WorktreeDetector.IsGitRepository(root)
-                    ? new[] { scanner.InspectRepository(root) }
-                    : scanner.Scan(root).Where(x => WorktreeDetector.IsGitRepository(x.RootPath)).ToArray();
-            }, _lifetime.Token);
+            var found = await _repositories.DiscoverAsync(root, _lifetime.Token);
             if (_disposed || refresh != _refreshVersion) return;
             _catalog.Clear();
             _catalog.AddRange(found);
             _projectNodes.Clear();
             _gitSnapshots.Clear();
             ApplyFilter();
-            RepositoryCount = $"{found.Length} repositories";
+            RepositoryCount = $"{found.Count} repositories";
             Status = "Local discovery complete";
-            AppendOutput($"Discovered {found.Length} repositories in {root}.");
-            await RestoreSessionAsync(refresh, root);
+            AppendOutput($"Discovered {found.Count} repositories in {root}.");
+            await RestoreSessionAsync(refresh, root, selection);
             if (!_disposed && refresh == _refreshVersion && SamePath(root, WorkspaceRoot)) _sessionReady = true;
         }
         catch (OperationCanceledException) { }
