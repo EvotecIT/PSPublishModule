@@ -434,7 +434,7 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
             File.WriteAllBytes(
                 secondDependencyPath,
                 CreateLibraryPackageWithLibrary(secondDependencyId, version, sharedAssemblyName, "rebuilt-second"));
-            CreateReleaseZipWithEntry(ownerReleaseZipPath, $"net10.0/{sharedAssemblyName}", "rebuilt-first");
+            CreateReleaseZipWithEntry(ownerReleaseZipPath, $"net10.0/{sharedAssemblyName}", "rebuilt-unknown");
             var service = new PublishedNuGetAssetRecoveryService(
                 new NullLogger(),
                 new NuGetV3PackageDownloader(new NuGetRecoveryHandler(
@@ -460,6 +460,69 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
                 CancellationToken.None));
 
             Assert.Contains("conflicting library payload", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_SelectsDependencyMatchingRebuiltAggregateReleasePayload()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string ownerPackageId = "Owner.Package";
+            const string firstDependencyId = "Shared.First";
+            const string secondDependencyId = "Shared.Second";
+            const string version = "3.0.81";
+            const string sharedAssemblyName = "Shared.Common.dll";
+            var ownerPackagePath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.nupkg");
+            var firstDependencyPath = Path.Combine(root.FullName, $"{firstDependencyId}.{version}.nupkg");
+            var secondDependencyPath = Path.Combine(root.FullName, $"{secondDependencyId}.{version}.nupkg");
+            var ownerReleaseZipPath = Path.Combine(root.FullName, $"{ownerPackageId}.{version}.zip");
+            File.WriteAllBytes(ownerPackagePath, CreatePackage(ownerPackageId, version, "rebuilt-owner"));
+            File.WriteAllBytes(
+                firstDependencyPath,
+                CreateLibraryPackageWithLibrary(firstDependencyId, version, sharedAssemblyName, "rebuilt-first"));
+            File.WriteAllBytes(
+                secondDependencyPath,
+                CreateLibraryPackageWithLibrary(secondDependencyId, version, sharedAssemblyName, "rebuilt-second"));
+            CreateReleaseZipWithEntry(ownerReleaseZipPath, $"net10.0/{sharedAssemblyName}", "rebuilt-second");
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(
+                    new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [ownerPackageId] = CreatePackage(ownerPackageId, version, "published-owner"),
+                        [firstDependencyId] = CreateLibraryPackageWithLibrary(
+                            firstDependencyId,
+                            version,
+                            sharedAssemblyName,
+                            "published-first"),
+                        [secondDependencyId] = CreateLibraryPackageWithLibrary(
+                            secondDependencyId,
+                            version,
+                            sharedAssemblyName,
+                            "published-second")
+                    })));
+
+            var restored = service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [ownerPackagePath, firstDependencyPath, secondDependencyPath, ownerReleaseZipPath],
+                CancellationToken.None);
+
+            Assert.Equal(
+                [ownerPackagePath, ownerReleaseZipPath, firstDependencyPath, secondDependencyPath],
+                restored);
+            using var release = ZipFile.OpenRead(ownerReleaseZipPath);
+            Assert.Equal(
+                "published-second",
+                ReadText(Assert.Single(
+                    release.Entries,
+                    entry => entry.FullName == $"net10.0/{sharedAssemblyName}")));
         }
         finally
         {

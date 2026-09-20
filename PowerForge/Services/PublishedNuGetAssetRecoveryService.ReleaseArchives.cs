@@ -7,6 +7,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
     private static void RewriteReleaseZipFromPublishedPackages(
         IEnumerable<string> publishedPackagePaths,
         string owningPublishedPackagePath,
+        IReadOnlyDictionary<string, string> rebuiltPackagePaths,
         string releaseZipPath,
         string destinationPath,
         CancellationToken cancellationToken)
@@ -16,9 +17,17 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                 $"The rebuilt release ZIP required for recovery was not found: {releaseZipPath}",
                 releaseZipPath);
 
-        var payload = ReadPublishedReleasePayload(publishedPackagePaths, owningPublishedPackagePath);
-        var requiredPayload = ReadPublishedReleasePayload([owningPublishedPackagePath]);
         using var source = ZipFile.OpenRead(releaseZipPath);
+        var sourceEntries = source.Entries
+            .Where(static entry => !string.IsNullOrEmpty(entry.Name))
+            .ToDictionary(
+                entry => NormalizeArchivePath(entry.FullName),
+                StringComparer.OrdinalIgnoreCase);
+        var payload = ReadPublishedReleasePayload(
+            publishedPackagePaths,
+            owningPublishedPackagePath,
+            sourceEntries,
+            rebuiltPackagePaths);
         var matched = new Dictionary<string, PublishedPackageEntry>(StringComparer.OrdinalIgnoreCase);
         using (var destination = ZipFile.Open(destinationPath, ZipArchiveMode.Create))
         {
@@ -37,18 +46,14 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
             }
         }
 
-        var missing = requiredPayload.Keys.Where(path => !matched.ContainsKey(path)).ToArray();
-        if (missing.Length > 0)
-        {
-            throw new InvalidOperationException(
-                $"Release ZIP '{releaseZipPath}' is missing published package payload: {string.Join(", ", missing)}.");
-        }
         ValidateReleaseZipPayload(destinationPath, matched);
     }
 
     private static IReadOnlyDictionary<string, PublishedPackageEntry> ReadPublishedReleasePayload(
         IEnumerable<string> packagePaths,
-        string? owningPackagePath = null)
+        string? owningPackagePath = null,
+        IReadOnlyDictionary<string, ZipArchiveEntry>? releaseEntries = null,
+        IReadOnlyDictionary<string, string>? rebuiltPackagePaths = null)
     {
         var payload = new Dictionary<string, PublishedPackageEntry>(StringComparer.OrdinalIgnoreCase);
         var normalizedOwner = string.IsNullOrWhiteSpace(owningPackagePath)
@@ -74,6 +79,8 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                 }
                 var releasePath = MapPublishedPackageEntryToReleasePath(name);
                 if (releasePath is null)
+                    continue;
+                if (releaseEntries is not null && !releaseEntries.ContainsKey(releasePath))
                     continue;
                 var published = new PublishedPackageEntry(
                     ReadAllBytes(entry),
@@ -107,6 +114,19 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                         payload[releasePath] = published;
                         continue;
                     }
+                    if (releaseEntries is not null &&
+                        rebuiltPackagePaths is not null &&
+                        TrySelectPublishedDependencyEntry(
+                            releasePath,
+                            releaseEntries[releasePath],
+                            existing,
+                            published,
+                            rebuiltPackagePaths,
+                            out var selected))
+                    {
+                        payload[releasePath] = selected;
+                        continue;
+                    }
                     throw new InvalidOperationException(
                         $"Published NuGet packages contain conflicting library payload '{releasePath}'.");
                 }
@@ -117,6 +137,54 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         if (payload.Count == 0)
             throw new InvalidOperationException("Published NuGet package contains no library or tool payload for release ZIP recovery.");
         return payload;
+    }
+
+    private static bool TrySelectPublishedDependencyEntry(
+        string releasePath,
+        ZipArchiveEntry releaseEntry,
+        PublishedPackageEntry existing,
+        PublishedPackageEntry candidate,
+        IReadOnlyDictionary<string, string> rebuiltPackagePaths,
+        out PublishedPackageEntry selected)
+    {
+        selected = existing;
+        if (!rebuiltPackagePaths.TryGetValue(existing.SourcePackagePath, out var existingRebuiltPackagePath) ||
+            !rebuiltPackagePaths.TryGetValue(candidate.SourcePackagePath, out var candidateRebuiltPackagePath) ||
+            !TryReadPackagePayloadEntry(existingRebuiltPackagePath, releasePath, out var existingRebuiltBytes) ||
+            !TryReadPackagePayloadEntry(candidateRebuiltPackagePath, releasePath, out var candidateRebuiltBytes))
+        {
+            return false;
+        }
+
+        var releaseBytes = ReadAllBytes(releaseEntry);
+        var existingMatches = releaseBytes.SequenceEqual(existingRebuiltBytes);
+        var candidateMatches = releaseBytes.SequenceEqual(candidateRebuiltBytes);
+        if (existingMatches == candidateMatches)
+            return false;
+
+        selected = candidateMatches ? candidate : existing;
+        return true;
+    }
+
+    private static bool TryReadPackagePayloadEntry(
+        string packagePath,
+        string releasePath,
+        out byte[] bytes)
+    {
+        using var package = ZipFile.OpenRead(packagePath);
+        foreach (var entry in package.Entries)
+        {
+            if (string.IsNullOrEmpty(entry.Name))
+                continue;
+            var mappedPath = MapPublishedPackageEntryToReleasePath(NormalizeArchivePath(entry.FullName));
+            if (!string.Equals(mappedPath, releasePath, StringComparison.OrdinalIgnoreCase))
+                continue;
+            bytes = ReadAllBytes(entry);
+            return true;
+        }
+
+        bytes = [];
+        return false;
     }
 
     private static string? MapPublishedPackageEntryToReleasePath(string name)

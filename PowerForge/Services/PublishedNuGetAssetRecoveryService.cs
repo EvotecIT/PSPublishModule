@@ -147,6 +147,10 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
             var publishedPackagePaths = plans
                 .Select(static plan => plan.PublishedPackagePath)
                 .ToArray();
+            var rebuiltPackagePaths = plans.ToDictionary(
+                static plan => plan.PublishedPackagePath,
+                static plan => plan.PackagePath,
+                StringComparer.OrdinalIgnoreCase);
             foreach (var plan in plans.Where(static plan => !string.IsNullOrWhiteSpace(plan.ReleaseZipPath)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -155,6 +159,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                     RewriteReleaseZipFromPublishedPackages(
                         publishedPackagePaths,
                         plan.PublishedPackagePath,
+                        rebuiltPackagePaths,
                         plan.ReleaseZipPath!,
                         plan.PublishedReleaseZipPath!,
                         cancellationToken);
