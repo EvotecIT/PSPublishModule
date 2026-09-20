@@ -6,16 +6,21 @@ namespace PowerForge.Tests;
 
 public sealed class PublishedNuGetAssetRecoveryServiceTests
 {
-    [Fact]
-    public void Constructor_RejectsNonPositiveRecoveryDownloadTimeout()
+    [Theory]
+    [InlineData(0, 600)]
+    [InlineData(30, 0)]
+    public void Constructor_RejectsNonPositiveRecoveryRequestTimeouts(
+        int serviceIndexRequestTimeoutSeconds,
+        int downloadRequestTimeoutSeconds)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PublishedNuGetAssetRecoveryService(
             new NullLogger(),
-            downloadRequestTimeoutSeconds: 0));
+            serviceIndexRequestTimeoutSeconds: serviceIndexRequestTimeoutSeconds,
+            downloadRequestTimeoutSeconds: downloadRequestTimeoutSeconds));
     }
 
     [Fact]
-    public void Restore_AppliesConfiguredRecoveryDownloadTimeout()
+    public void Restore_AppliesConfiguredPackageDownloadTimeout()
     {
         var root = Directory.CreateTempSubdirectory();
         try
@@ -28,6 +33,34 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
                 new NullLogger(),
                 new NuGetV3PackageDownloader(new NeverCompletingPackageHandler()),
                 downloadRequestTimeoutSeconds: 1);
+
+            Assert.ThrowsAny<OperationCanceledException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [packagePath],
+                CancellationToken.None));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Restore_KeepsServiceIndexTimeoutIndependentFromPackageDownloadTimeout()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string packageId = "PowerForge.Build";
+            const string version = "3.0.81";
+            var packagePath = Path.Combine(root.FullName, $"{packageId}.{version}.nupkg");
+            File.WriteAllBytes(packagePath, CreateToolPackage(packageId, version, "rebuilt"));
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NeverCompletingIndexHandler()),
+                serviceIndexRequestTimeoutSeconds: 1,
+                downloadRequestTimeoutSeconds: 10 * 60);
 
             Assert.ThrowsAny<OperationCanceledException>(() => service.Restore(
                 "https://packages.example/v3/index.json",
@@ -554,6 +587,17 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
 
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             throw new InvalidOperationException("The canceled recovery request unexpectedly continued.");
+        }
+    }
+
+    private sealed class NeverCompletingIndexHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("The canceled service-index request unexpectedly continued.");
         }
     }
 }

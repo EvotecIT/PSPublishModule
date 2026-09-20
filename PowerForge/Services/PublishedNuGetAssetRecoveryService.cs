@@ -14,6 +14,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
     private readonly TimeSpan _indexingTimeout;
     private readonly TimeSpan _retryDelay;
     private readonly Action<TimeSpan, CancellationToken> _delay;
+    private readonly int _serviceIndexRequestTimeoutSeconds;
     private readonly int _downloadRequestTimeoutSeconds;
 
     internal PublishedNuGetAssetRecoveryService(
@@ -22,8 +23,11 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         TimeSpan? indexingTimeout = null,
         TimeSpan? retryDelay = null,
         Action<TimeSpan, CancellationToken>? delay = null,
+        int serviceIndexRequestTimeoutSeconds = 30,
         int downloadRequestTimeoutSeconds = 10 * 60)
     {
+        if (serviceIndexRequestTimeoutSeconds < 1)
+            throw new ArgumentOutOfRangeException(nameof(serviceIndexRequestTimeoutSeconds));
         if (downloadRequestTimeoutSeconds < 1)
             throw new ArgumentOutOfRangeException(nameof(downloadRequestTimeoutSeconds));
 
@@ -31,6 +35,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         _downloader = downloader ?? new NuGetV3PackageDownloader();
         _indexingTimeout = indexingTimeout ?? TimeSpan.FromMinutes(10);
         _retryDelay = retryDelay ?? TimeSpan.FromSeconds(5);
+        _serviceIndexRequestTimeoutSeconds = serviceIndexRequestTimeoutSeconds;
         _downloadRequestTimeoutSeconds = downloadRequestTimeoutSeconds;
         _delay = delay ?? ((duration, cancellationToken) =>
         {
@@ -209,8 +214,9 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                         destinationPath,
                         new PrivateGalleryIndexOptions
                         {
-                            RequestTimeoutSeconds = _downloadRequestTimeoutSeconds
+                            RequestTimeoutSeconds = _serviceIndexRequestTimeoutSeconds
                         },
+                        _downloadRequestTimeoutSeconds,
                         cancellationToken)
                     .ConfigureAwait(false)
                     .GetAwaiter()

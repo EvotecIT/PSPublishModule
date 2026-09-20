@@ -40,22 +40,55 @@ public sealed class NuGetV3PackageDownloader
         PrivateGalleryIndexOptions options,
         CancellationToken cancellationToken = default)
     {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        await DownloadPackageAsync(
+                serviceIndexUrl,
+                packageId,
+                version,
+                destinationPath,
+                options,
+                options.RequestTimeoutSeconds,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Downloads a package to the specified file with a package-body timeout independent of the service-index timeout.
+    /// </summary>
+    /// <param name="serviceIndexUrl">NuGet V3 service index URL.</param>
+    /// <param name="packageId">Package id.</param>
+    /// <param name="version">Package version.</param>
+    /// <param name="destinationPath">Destination nupkg path.</param>
+    /// <param name="options">Private gallery options carrying the service-index timeout and authentication.</param>
+    /// <param name="packageRequestTimeoutSeconds">Timeout for the package-body request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task DownloadPackageAsync(
+        string serviceIndexUrl,
+        string packageId,
+        string version,
+        string destinationPath,
+        PrivateGalleryIndexOptions options,
+        int packageRequestTimeoutSeconds,
+        CancellationToken cancellationToken = default)
+    {
         if (string.IsNullOrWhiteSpace(serviceIndexUrl)) throw new ArgumentException("Service index URL is required.", nameof(serviceIndexUrl));
         if (string.IsNullOrWhiteSpace(packageId)) throw new ArgumentException("Package id is required.", nameof(packageId));
         if (string.IsNullOrWhiteSpace(version)) throw new ArgumentException("Version is required.", nameof(version));
         if (string.IsNullOrWhiteSpace(destinationPath)) throw new ArgumentException("Destination path is required.", nameof(destinationPath));
         if (options is null) throw new ArgumentNullException(nameof(options));
+        if (packageRequestTimeoutSeconds < 1) throw new ArgumentOutOfRangeException(nameof(packageRequestTimeoutSeconds));
 
-        using var http = PrivateGalleryHttp.CreateClient(options.RequestTimeoutSeconds, _httpHandler);
-        var packageBase = await ResolvePackageBaseAddressCachedAsync(http, serviceIndexUrl, options, cancellationToken).ConfigureAwait(false);
+        using var indexHttp = PrivateGalleryHttp.CreateClient(options.RequestTimeoutSeconds, _httpHandler);
+        var packageBase = await ResolvePackageBaseAddressCachedAsync(indexHttp, serviceIndexUrl, options, cancellationToken).ConfigureAwait(false);
         var lowerId = packageId.Trim().ToLowerInvariant();
         var lowerVersion = version.Trim().ToLowerInvariant();
         var packageUri = new Uri(new Uri(EnsureTrailingSlash(packageBase)), $"{Uri.EscapeDataString(lowerId)}/{Uri.EscapeDataString(lowerVersion)}/{Uri.EscapeDataString(lowerId)}.{Uri.EscapeDataString(lowerVersion)}.nupkg");
 
+        using var packageHttp = PrivateGalleryHttp.CreateClient(packageRequestTimeoutSeconds, _httpHandler);
         using var request = new HttpRequestMessage(HttpMethod.Get, packageUri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
         PrivateGalleryHttp.ApplyAuthentication(request, options.Token, options.AuthenticationKind);
-        using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await packageHttp.SendAsync(request, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new NuGetPackageDownloadException(
                 response.StatusCode,
