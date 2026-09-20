@@ -286,6 +286,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             PowerShellRegionTransferOwnership.Unspecified,
             PowerShellRegionTransferOutputBehavior.NoEnumerate,
             PowerShellRegionTransferMutation.None,
+            PowerShellRegionMutationLifetime.None,
             supported: true);
         return true;
     }

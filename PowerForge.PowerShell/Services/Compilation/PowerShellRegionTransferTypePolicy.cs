@@ -32,9 +32,13 @@ internal static class PowerShellRegionTransferTypePolicy
                 PowerShellRegionTransferOutputBehavior.EnumerateOneLevel,
             _ => PowerShellRegionTransferOutputBehavior.None
         };
+        var compiledFreshVector = shape == PowerShellRegionTransferShape.StableScalarVector &&
+                                  direction == PowerShellRegionTransferDirection.LiveOut &&
+                                  ownership == PowerShellRegionTransferOwnership.GuardedFresh &&
+                                  mutation == PowerShellRegionTransferMutation.CompiledOwned;
         var supported = shape != PowerShellRegionTransferShape.Unsupported &&
                         element != PowerShellRegionTransferElementContract.Unsupported &&
-                        mutation != PowerShellRegionTransferMutation.CompiledOwned;
+                        (mutation != PowerShellRegionTransferMutation.CompiledOwned || compiledFreshVector);
         return new PowerShellRegionTransferContract(
             shape,
             element,
@@ -42,6 +46,9 @@ internal static class PowerShellRegionTransferTypePolicy
             ownership,
             output,
             mutation,
+            compiledFreshVector
+                ? PowerShellRegionMutationLifetime.CompiledFreshUntilTransfer
+                : PowerShellRegionMutationLifetime.None,
             supported);
     }
 
@@ -59,6 +66,7 @@ internal static class PowerShellRegionTransferTypePolicy
             PowerShellRegionTransferOwnership.Unspecified,
             PowerShellRegionTransferOutputBehavior.None,
             PowerShellRegionTransferMutation.None,
+            PowerShellRegionMutationLifetime.None,
             supported: true);
 
     /// <summary>
@@ -74,6 +82,7 @@ internal static class PowerShellRegionTransferTypePolicy
             PowerShellRegionTransferOwnership.Unspecified,
             PowerShellRegionTransferOutputBehavior.Atomic,
             PowerShellRegionTransferMutation.None,
+            PowerShellRegionMutationLifetime.None,
             supported: true);
 
     /// <summary>Describes a compiler-owned envelope whose exact authored alternatives remain closed.</summary>
@@ -88,6 +97,7 @@ internal static class PowerShellRegionTransferTypePolicy
             ownership,
             PowerShellRegionTransferOutputBehavior.Atomic,
             mutation,
+            PowerShellRegionMutationLifetime.None,
             supported: mutation != PowerShellRegionTransferMutation.CompiledOwned);
 
     internal static bool IsAtomicDictionaryReference(Type type)

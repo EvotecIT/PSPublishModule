@@ -35,7 +35,8 @@ public sealed class PowerShellCompilationRegionTransferContractTests
         Assert.Equal(output, contract.OutputBehavior);
         Assert.Equal(PowerShellRegionTransferDirection.LiveIn, contract.Direction);
         Assert.Equal(PowerShellRegionTransferOwnership.ParameterBorrowed, contract.Ownership);
-        Assert.Equal(5, contract.SchemaVersion);
+        Assert.Equal(PowerShellRegionMutationLifetime.None, contract.MutationLifetime);
+        Assert.Equal(6, contract.SchemaVersion);
         if (output == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel)
         {
             Assert.Equal(PowerShellRegionEnumerationOwner.RetainedPowerShell, contract.EnumerationOwner);
@@ -64,10 +65,11 @@ public sealed class PowerShellCompilationRegionTransferContractTests
         Assert.Equal(PowerShellRegionTransferOwnership.Unspecified, contract.Ownership);
         Assert.Equal(PowerShellRegionTransferOutputBehavior.None, contract.OutputBehavior);
         Assert.Equal(PowerShellRegionTransferMutation.None, contract.Mutation);
+        Assert.Equal(PowerShellRegionMutationLifetime.None, contract.MutationLifetime);
         Assert.Equal(PowerShellRegionEnumerationOwner.None, contract.EnumerationOwner);
         Assert.Equal(PowerShellRegionEnumerationFailureBehavior.None, contract.EnumerationFailureBehavior);
         Assert.Equal(PowerShellRegionEnumeratorLifetime.None, contract.EnumeratorLifetime);
-        Assert.Equal(5, contract.SchemaVersion);
+        Assert.Equal(6, contract.SchemaVersion);
         Assert.Equal(0, (int)PowerShellRegionTransferShape.Unsupported);
         Assert.Equal(1, (int)PowerShellRegionTransferShape.StableScalar);
         Assert.Equal(2, (int)PowerShellRegionTransferShape.AtomicMap);
@@ -96,10 +98,11 @@ public sealed class PowerShellCompilationRegionTransferContractTests
         Assert.Equal(PowerShellRegionTransferOwnership.Unspecified, contract.Ownership);
         Assert.Equal(PowerShellRegionTransferOutputBehavior.Atomic, contract.OutputBehavior);
         Assert.Equal(PowerShellRegionTransferMutation.None, contract.Mutation);
+        Assert.Equal(PowerShellRegionMutationLifetime.None, contract.MutationLifetime);
         Assert.Equal(PowerShellRegionEnumerationOwner.None, contract.EnumerationOwner);
         Assert.Equal(PowerShellRegionEnumerationFailureBehavior.None, contract.EnumerationFailureBehavior);
         Assert.Equal(PowerShellRegionEnumeratorLifetime.None, contract.EnumeratorLifetime);
-        Assert.Equal(5, contract.SchemaVersion);
+        Assert.Equal(6, contract.SchemaVersion);
         Assert.False(PowerShellRegionTransferTypePolicy.IsSupported(typeof(object)));
     }
 
@@ -132,5 +135,45 @@ public sealed class PowerShellCompilationRegionTransferContractTests
         Assert.False(contract.Supported);
         Assert.Equal(PowerShellRegionTransferShape.AtomicMap, contract.Shape);
         Assert.Equal(PowerShellRegionTransferMutation.CompiledOwned, contract.Mutation);
+        Assert.Equal(PowerShellRegionMutationLifetime.None, contract.MutationLifetime);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Describe_AdmitsOnlyFreshLiveOutStableVectorConstructionForCompiledMutation()
+    {
+        var contract = PowerShellRegionTransferTypePolicy.Describe(
+            typeof(string[]),
+            PowerShellRegionTransferDirection.LiveOut,
+            PowerShellRegionTransferOwnership.GuardedFresh,
+            PowerShellRegionTransferMutation.CompiledOwned);
+
+        Assert.True(contract.Supported);
+        Assert.Equal(PowerShellRegionTransferShape.StableScalarVector, contract.Shape);
+        Assert.Equal(PowerShellRegionTransferMutation.CompiledOwned, contract.Mutation);
+        Assert.Equal(PowerShellRegionMutationLifetime.CompiledFreshUntilTransfer, contract.MutationLifetime);
+        Assert.Equal(PowerShellRegionEnumerationOwner.RetainedPowerShell, contract.EnumerationOwner);
+        Assert.Equal(PowerShellRegionEnumeratorLifetime.RetainedPowerShell, contract.EnumeratorLifetime);
+
+        var rejected = new[]
+        {
+            PowerShellRegionTransferTypePolicy.Describe(
+                typeof(string[]), PowerShellRegionTransferDirection.LiveIn,
+                PowerShellRegionTransferOwnership.GuardedFresh, PowerShellRegionTransferMutation.CompiledOwned),
+            PowerShellRegionTransferTypePolicy.Describe(
+                typeof(string[]), PowerShellRegionTransferDirection.LiveInOut,
+                PowerShellRegionTransferOwnership.RetainedDefiniteAssignment, PowerShellRegionTransferMutation.CompiledOwned),
+            PowerShellRegionTransferTypePolicy.Describe(
+                typeof(List<string>), PowerShellRegionTransferDirection.LiveOut,
+                PowerShellRegionTransferOwnership.GuardedFresh, PowerShellRegionTransferMutation.CompiledOwned),
+            PowerShellRegionTransferTypePolicy.Describe(
+                typeof(OrderedDictionary), PowerShellRegionTransferDirection.LiveOut,
+                PowerShellRegionTransferOwnership.GuardedFresh, PowerShellRegionTransferMutation.CompiledOwned)
+        };
+        Assert.All(rejected, static item =>
+        {
+            Assert.False(item.Supported);
+            Assert.Equal(PowerShellRegionMutationLifetime.None, item.MutationLifetime);
+        });
     }
 }

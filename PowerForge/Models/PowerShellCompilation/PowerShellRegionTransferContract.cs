@@ -86,8 +86,20 @@ public enum PowerShellRegionTransferMutation
     None,
     /// <summary>Only retained PowerShell may mutate the transferred reference.</summary>
     RetainedOnly,
-    /// <summary>The typed region may mutate the transferred reference. This is not currently admitted.</summary>
+    /// <summary>The typed region may mutate a fresh transferred reference for an explicitly bounded lifetime.</summary>
     CompiledOwned
+}
+
+/// <summary>Lifetime during which a typed region may mutate a transferred collection.</summary>
+public enum PowerShellRegionMutationLifetime
+{
+    /// <summary>No typed-region mutation lifetime is granted.</summary>
+    None,
+    /// <summary>
+    /// The typed region exclusively owns fresh collection construction until the completed value
+    /// crosses its live-out boundary. Retained PowerShell owns all later observation and mutation.
+    /// </summary>
+    CompiledFreshUntilTransfer
 }
 
 /// <summary>Runtime owner of collection enumeration at a retained/typed region boundary.</summary>
@@ -128,6 +140,7 @@ public sealed class PowerShellRegionTransferContract
         PowerShellRegionTransferOwnership ownership,
         PowerShellRegionTransferOutputBehavior outputBehavior,
         PowerShellRegionTransferMutation mutation,
+        PowerShellRegionMutationLifetime mutationLifetime,
         bool supported)
     {
         Shape = shape;
@@ -136,11 +149,12 @@ public sealed class PowerShellRegionTransferContract
         Ownership = ownership;
         OutputBehavior = outputBehavior;
         Mutation = mutation;
+        MutationLifetime = mutationLifetime;
         Supported = supported;
     }
 
     /// <summary>Contract schema version.</summary>
-    public int SchemaVersion => 5;
+    public int SchemaVersion => 6;
     /// <summary>CLR storage shape.</summary>
     public PowerShellRegionTransferShape Shape { get; }
     /// <summary>Element-level contract.</summary>
@@ -153,6 +167,8 @@ public sealed class PowerShellRegionTransferContract
     public PowerShellRegionTransferOutputBehavior OutputBehavior { get; }
     /// <summary>Mutation authority.</summary>
     public PowerShellRegionTransferMutation Mutation { get; }
+    /// <summary>Bounded lifetime of typed-region mutation authority.</summary>
+    public PowerShellRegionMutationLifetime MutationLifetime { get; }
     /// <summary>Owner that performs one-level output enumeration.</summary>
     public PowerShellRegionEnumerationOwner EnumerationOwner =>
         OutputBehavior == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel

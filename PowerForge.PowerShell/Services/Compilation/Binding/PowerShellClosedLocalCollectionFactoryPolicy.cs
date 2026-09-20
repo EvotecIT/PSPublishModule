@@ -52,6 +52,7 @@ internal static class PowerShellClosedLocalCollectionFactoryPolicy
                 PowerShellRegionTransferOwnership.CompiledCalleeFresh,
                 PowerShellRegionTransferOutputBehavior.NoEnumerate,
                 PowerShellRegionTransferMutation.RetainedOnly,
+                PowerShellRegionMutationLifetime.None,
                 supported: true));
         return true;
     }

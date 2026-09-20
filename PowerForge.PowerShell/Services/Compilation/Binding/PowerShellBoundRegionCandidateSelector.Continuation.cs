@@ -397,7 +397,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 vectorType,
                 PowerShellRegionTransferDirection.LiveOut,
                 PowerShellRegionTransferOwnership.GuardedFresh,
-                PowerShellRegionTransferMutation.RetainedOnly));
+                PowerShellRegionTransferMutation.CompiledOwned));
         return true;
     }
 

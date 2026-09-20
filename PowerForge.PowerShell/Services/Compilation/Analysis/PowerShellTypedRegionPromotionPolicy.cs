@@ -188,6 +188,7 @@ internal static class PowerShellTypedRegionPromotionPolicy
            left.Ownership == right.Ownership &&
            left.OutputBehavior == right.OutputBehavior &&
            left.Mutation == right.Mutation &&
+           left.MutationLifetime == right.MutationLifetime &&
            left.Supported == right.Supported;
 
     private static bool HasCompleteInputLocalContract(PowerShellBoundRegionCandidate candidate)

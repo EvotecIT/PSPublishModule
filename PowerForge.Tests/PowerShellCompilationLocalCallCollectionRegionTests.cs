@@ -119,7 +119,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var roundTrip = System.Text.Json.JsonSerializer.Deserialize<PowerShellCompiledRegion>(
             System.Text.Json.JsonSerializer.Serialize(region));
         Assert.Equal("New-ClosedList", Assert.Single(roundTrip!.LocalCalls).SourceName);
-        Assert.Equal(5, Assert.Single(roundTrip.LocalCalls).ResultContract.SchemaVersion);
+        Assert.Equal(6, Assert.Single(roundTrip.LocalCalls).ResultContract.SchemaVersion);
     }
 
     [Theory]

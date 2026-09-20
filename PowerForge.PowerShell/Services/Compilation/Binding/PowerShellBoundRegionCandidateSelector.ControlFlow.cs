@@ -172,6 +172,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             PowerShellRegionTransferOwnership.ParameterBorrowed,
             PowerShellRegionTransferOutputBehavior.NoEnumerate,
             PowerShellRegionTransferMutation.None,
+            PowerShellRegionMutationLifetime.None,
             supported: true);
         flowReturn = new PowerShellBoundRegionControlFlowReturnStatement(
             returned.Span,
@@ -187,5 +188,6 @@ internal static partial class PowerShellBoundRegionCandidateSelector
            left.ElementContract == right.ElementContract &&
            left.OutputBehavior == right.OutputBehavior &&
            left.Mutation == right.Mutation &&
+           left.MutationLifetime == right.MutationLifetime &&
            left.Supported == right.Supported;
 }

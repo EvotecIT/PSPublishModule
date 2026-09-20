@@ -106,15 +106,17 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 string.Join(Environment.NewLine, typed.RegionCandidates.Select(candidate =>
                     candidate.StartLine + "-" + candidate.EndLine + " " + candidate.DecisionCode + ": " + candidate.Reason)));
             Assert.Equal(new[] { item.Target, "V" }, region.ContinuationLocals.Select(static local => local.Name));
-            Assert.All(region.ContinuationLocals, static local =>
-            {
-                var contract = Assert.IsType<PowerShellRegionTransferContract>(local.Contract);
-                Assert.Equal(PowerShellRegionTransferDirection.LiveOut, contract.Direction);
-                Assert.Equal(PowerShellRegionTransferOwnership.GuardedFresh, contract.Ownership);
-                Assert.Equal(PowerShellRegionTransferMutation.RetainedOnly, contract.Mutation);
-            });
             var vector = Assert.IsType<PowerShellRegionTransferContract>(region.ContinuationLocals[0].Contract);
+            Assert.Equal(PowerShellRegionTransferDirection.LiveOut, vector.Direction);
+            Assert.Equal(PowerShellRegionTransferOwnership.GuardedFresh, vector.Ownership);
             Assert.Equal(PowerShellRegionTransferShape.StableScalarVector, vector.Shape);
+            Assert.Equal(PowerShellRegionTransferMutation.CompiledOwned, vector.Mutation);
+            Assert.Equal(PowerShellRegionMutationLifetime.CompiledFreshUntilTransfer, vector.MutationLifetime);
+            var loopScalar = Assert.IsType<PowerShellRegionTransferContract>(region.ContinuationLocals[1].Contract);
+            Assert.Equal(PowerShellRegionTransferDirection.LiveOut, loopScalar.Direction);
+            Assert.Equal(PowerShellRegionTransferOwnership.GuardedFresh, loopScalar.Ownership);
+            Assert.Equal(PowerShellRegionTransferMutation.RetainedOnly, loopScalar.Mutation);
+            Assert.Equal(PowerShellRegionMutationLifetime.None, loopScalar.MutationLifetime);
             Assert.Empty(region.RegionGraph.Regions.SelectMany(static graph => graph.Streams));
             Assert.Empty(regions[1].ContinuationLocals);
             Assert.Equal(PowerShellRegionTransferOutputBehavior.EnumerateOneLevel,
