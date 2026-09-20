@@ -1,10 +1,11 @@
+using PowerForgeStudio.Domain.Workspace;
 using System.IO;
 using System.Text.Json;
 using PowerForgeStudio.Orchestrator.Host;
 
-namespace PowerForgeStudio.Wpf.ViewModels;
+namespace PowerForgeStudio.Orchestrator.Workspace;
 
-public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
+public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogService, IWorkspaceExplorerStateStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web) {
         WriteIndented = true
@@ -17,7 +18,7 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
     {
         _catalogPath = string.IsNullOrWhiteSpace(catalogPath)
             ? PowerForgeStudioHostPaths.GetWorkspaceRootCatalogPath()
-            : catalogPath;
+            : Path.GetFullPath(catalogPath);
         _maxRecentRoots = Math.Max(1, maxRecentRoots);
     }
 
@@ -37,15 +38,16 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
 
     public WorkspaceRootCatalog SaveActive(string workspaceRoot, string? activeProfileId = null)
     {
+        using var writeLock = AcquireWriteLock();
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
 
         var normalized = NormalizeCatalog(
             activeWorkspaceRoot: workspaceRoot,
             fallbackWorkspaceRoot: workspaceRoot,
-            recentWorkspaceRoots: LoadDocument()?.RecentWorkspaceRoots,
+            recentWorkspaceRoots: LoadDocument(strict: true)?.RecentWorkspaceRoots,
             activeProfileId: activeProfileId,
-            profiles: LoadDocument()?.Profiles,
-            templates: LoadDocument()?.Templates);
+            profiles: LoadDocument(strict: true)?.Profiles,
+            templates: LoadDocument(strict: true)?.Templates);
 
         PersistCatalog(normalized);
         return normalized;
@@ -53,9 +55,10 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
 
     public WorkspaceRootCatalog SaveProfile(WorkspaceProfile profile, string? activeProfileId = null)
     {
+        using var writeLock = AcquireWriteLock();
         ArgumentNullException.ThrowIfNull(profile);
 
-        var existing = LoadDocument();
+        var existing = LoadDocument(strict: true);
         var profiles = new List<WorkspaceProfile>();
         if (existing?.Profiles is not null)
         {
@@ -89,10 +92,11 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
 
     public WorkspaceRootCatalog DeleteProfile(string profileId, string fallbackWorkspaceRoot, string? activeProfileId = null)
     {
+        using var writeLock = AcquireWriteLock();
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
         ArgumentException.ThrowIfNullOrWhiteSpace(fallbackWorkspaceRoot);
 
-        var existing = LoadDocument();
+        var existing = LoadDocument(strict: true);
         var profiles = existing?.Profiles?
             .Where(profile => !string.Equals(profile.ProfileId, profileId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
@@ -114,10 +118,11 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
 
     public WorkspaceRootCatalog SaveTemplate(WorkspaceProfileTemplate template, string fallbackWorkspaceRoot, string? activeProfileId = null)
     {
+        using var writeLock = AcquireWriteLock();
         ArgumentNullException.ThrowIfNull(template);
         ArgumentException.ThrowIfNullOrWhiteSpace(fallbackWorkspaceRoot);
 
-        var existing = LoadDocument();
+        var existing = LoadDocument(strict: true);
         var templates = new List<WorkspaceProfileTemplate>();
         if (existing?.Templates is not null)
         {
@@ -140,10 +145,11 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
 
     public WorkspaceRootCatalog DeleteTemplate(string templateId, string fallbackWorkspaceRoot, string? activeProfileId = null)
     {
+        using var writeLock = AcquireWriteLock();
         ArgumentException.ThrowIfNullOrWhiteSpace(templateId);
         ArgumentException.ThrowIfNullOrWhiteSpace(fallbackWorkspaceRoot);
 
-        var existing = LoadDocument();
+        var existing = LoadDocument(strict: true);
         var templates = existing?.Templates?
             .Where(template => !string.Equals(template.TemplateId, templateId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
@@ -158,28 +164,6 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
 
         PersistCatalog(normalized);
         return normalized;
-    }
-
-    private WorkspaceRootCatalogDocument? LoadDocument()
-    {
-        if (!File.Exists(_catalogPath))
-        {
-            return null;
-        }
-
-        try
-        {
-            var content = File.ReadAllText(_catalogPath);
-            return JsonSerializer.Deserialize<WorkspaceRootCatalogDocument>(content, SerializerOptions);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-        catch (IOException)
-        {
-            return null;
-        }
     }
 
     private WorkspaceRootCatalog NormalizeCatalog(
@@ -234,24 +218,6 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
             ActiveProfileId: activeProfile?.ProfileId,
             Profiles: normalizedProfiles,
             Templates: normalizedTemplates);
-    }
-
-    private void PersistCatalog(WorkspaceRootCatalog catalog)
-    {
-        var parentDirectory = Path.GetDirectoryName(_catalogPath);
-        if (!string.IsNullOrWhiteSpace(parentDirectory))
-        {
-            Directory.CreateDirectory(parentDirectory);
-        }
-
-        var document = new WorkspaceRootCatalogDocument(
-            catalog.ActiveWorkspaceRoot,
-            catalog.RecentWorkspaceRoots,
-            catalog.ActiveProfileId,
-            catalog.Profiles,
-            catalog.Templates,
-            DateTimeOffset.UtcNow);
-        File.WriteAllText(_catalogPath, JsonSerializer.Serialize(document, SerializerOptions));
     }
 
     private static IReadOnlyList<WorkspaceProfile> NormalizeProfiles(IReadOnlyList<WorkspaceProfile>? profiles)
@@ -327,7 +293,7 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
         }
 
         var normalizedRoot = PowerForgeStudioHostPaths.NormalizeWorkspaceRoot(workspaceRoot);
-        if (roots.Contains(normalizedRoot, StringComparer.OrdinalIgnoreCase))
+        if (roots.Contains(normalizedRoot, PathComparer))
         {
             return;
         }
@@ -394,11 +360,4 @@ public sealed class WorkspaceRootCatalogService : IWorkspaceRootCatalogService
             .ToArray();
     }
 
-    private sealed record WorkspaceRootCatalogDocument(
-        string? ActiveWorkspaceRoot,
-        IReadOnlyList<string>? RecentWorkspaceRoots,
-        string? ActiveProfileId,
-        IReadOnlyList<WorkspaceProfile>? Profiles,
-        IReadOnlyList<WorkspaceProfileTemplate>? Templates,
-        DateTimeOffset UpdatedAtUtc);
 }

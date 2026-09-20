@@ -20,7 +20,7 @@ using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Wpf.ViewModels;
 
-public sealed class ShellViewModel : ViewModelBase
+public sealed partial class ShellViewModel : ViewModelBase
 {
     private readonly RepositoryWorkspaceFamilyService _workspaceFamilyService;
     private readonly RepositoryDetailService _repositoryDetailService;
@@ -320,7 +320,7 @@ public sealed class ShellViewModel : ViewModelBase
             ApplySavedPortfolioView(snapshot.SavedPortfolioView);
             ApplyCurrentProjection(snapshot.ReleaseInboxItems);
             await ReloadSavedPortfolioViewsAsync().ConfigureAwait(true);
-            ApplyWorkspaceRootCatalog(_workspaceRootCatalogService.SaveActive(WorkspaceRoot, _activeWorkspaceProfileId));
+            if (!TrySaveWorkspaceCatalog(() => _workspaceRootCatalogService.SaveActive(WorkspaceRoot, _activeWorkspaceProfileId))) return;
             var profileStatus = ApplyActiveWorkspaceProfileContext();
             StatusText = profileStatus
                 ?? $"Portfolio ready. Persisted {snapshot.PortfolioItems.Count} portfolio rows, remote inbox signals, plan previews, and draft queue state to {DatabasePath}.";
@@ -626,7 +626,7 @@ public sealed class ShellViewModel : ViewModelBase
                 ApplyStartupPreferenceAfterSavedView: ResolveWorkspaceProfileApplyStartupPreferenceAfterSavedView(),
                 UpdatedAtUtc: DateTimeOffset.UtcNow);
 
-            ApplyWorkspaceRootCatalog(_workspaceRootCatalogService.SaveProfile(profile, profile.ProfileId));
+            if (!TrySaveWorkspaceCatalog(() => _workspaceRootCatalogService.SaveProfile(profile, profile.ProfileId))) return;
             PortfolioOverview.WorkspaceProfileDraftName = displayName;
             PortfolioOverview.ViewMemory = $"Saved workspace profile '{displayName}'.";
             StatusText = $"Saved workspace profile '{displayName}'.";
@@ -734,7 +734,7 @@ public sealed class ShellViewModel : ViewModelBase
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
-        ApplyWorkspaceRootCatalog(_workspaceRootCatalogService.SaveProfile(updatedProfile, updatedProfile.ProfileId));
+        if (!TrySaveWorkspaceCatalog(() => _workspaceRootCatalogService.SaveProfile(updatedProfile, updatedProfile.ProfileId))) return;
         PortfolioOverview.SelectedWorkspaceProfile = PortfolioOverview.WorkspaceProfiles.FirstOrDefault(existing =>
             string.Equals(existing.ProfileId, updatedProfile.ProfileId, StringComparison.OrdinalIgnoreCase));
     }
@@ -800,6 +800,7 @@ public sealed class ShellViewModel : ViewModelBase
         }
 
         var switchingRoots = !string.Equals(profile.WorkspaceRoot, WorkspaceRoot, StringComparison.OrdinalIgnoreCase);
+        if (!TrySaveWorkspaceCatalog(() => _workspaceRootCatalogService.SaveActive(profile.WorkspaceRoot, profile.ProfileId))) return;
         _activeWorkspaceProfileId = profile.ProfileId;
 
         if (switchingRoots)
@@ -807,7 +808,6 @@ public sealed class ShellViewModel : ViewModelBase
             WorkspaceRoot = profile.WorkspaceRoot;
         }
 
-        ApplyWorkspaceRootCatalog(_workspaceRootCatalogService.SaveActive(profile.WorkspaceRoot, profile.ProfileId));
 
         if (switchingRoots)
         {
@@ -833,7 +833,7 @@ public sealed class ShellViewModel : ViewModelBase
             var nextActiveProfileId = string.Equals(_activeWorkspaceProfileId, profile.ProfileId, StringComparison.OrdinalIgnoreCase)
                 ? null
                 : _activeWorkspaceProfileId;
-            ApplyWorkspaceRootCatalog(_workspaceRootCatalogService.DeleteProfile(profile.ProfileId, WorkspaceRoot, nextActiveProfileId));
+            if (!TrySaveWorkspaceCatalog(() => _workspaceRootCatalogService.DeleteProfile(profile.ProfileId, WorkspaceRoot, nextActiveProfileId))) return;
             PortfolioOverview.WorkspaceProfileDraftName = string.Empty;
             PortfolioOverview.WorkspaceProfileDraftDescription = string.Empty;
             PortfolioOverview.WorkspaceProfileDraftTodayNote = string.Empty;
@@ -866,7 +866,7 @@ public sealed class ShellViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            await EnsureWorkspaceProfileContextAsync(profile).ConfigureAwait(true);
+            if (!await EnsureWorkspaceProfileContextAsync(profile).ConfigureAwait(true)) return false;
 
             var family = ResolveFamilyByKey(profile.QueueScopeKey);
             var result = await _familyQueueActionService.PrepareQueueAsync(
@@ -900,7 +900,7 @@ public sealed class ShellViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            await EnsureWorkspaceProfileContextAsync(profile).ConfigureAwait(true);
+            if (!await EnsureWorkspaceProfileContextAsync(profile).ConfigureAwait(true)) return false;
 
             var family = ResolveFamilyByKey(profile.QueueScopeKey);
             var result = await _familyQueueActionService.RetryFailedAsync(
@@ -1631,7 +1631,7 @@ public sealed class ShellViewModel : ViewModelBase
                 ApplyStartupPreferenceAfterSavedView: ResolveWorkspaceProfileApplyStartupPreferenceAfterSavedView(),
                 PreferCurrentFamilyForQueueScope: ResolveSelectedFamily() is not null);
 
-            ApplyWorkspaceRootCatalog(_workspaceRootCatalogService.SaveTemplate(template, WorkspaceRoot, _activeWorkspaceProfileId));
+            if (!TrySaveWorkspaceCatalog(() => _workspaceRootCatalogService.SaveTemplate(template, WorkspaceRoot, _activeWorkspaceProfileId))) return;
             PortfolioOverview.SelectedWorkspaceProfileTemplate = PortfolioOverview.WorkspaceProfileTemplates.FirstOrDefault(existing =>
                 string.Equals(existing.TemplateId, template.TemplateId, StringComparison.OrdinalIgnoreCase));
             StatusText = $"Saved custom template '{displayName}'.";
@@ -1668,7 +1668,7 @@ public sealed class ShellViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            ApplyWorkspaceRootCatalog(_workspaceRootCatalogService.DeleteTemplate(template.TemplateId, WorkspaceRoot, _activeWorkspaceProfileId));
+            if (!TrySaveWorkspaceCatalog(() => _workspaceRootCatalogService.DeleteTemplate(template.TemplateId, WorkspaceRoot, _activeWorkspaceProfileId))) return;
             PortfolioOverview.SelectedWorkspaceProfileTemplate = null;
             StatusText = $"Deleted custom template '{template.DisplayName}'.";
             await Task.CompletedTask.ConfigureAwait(true);
@@ -2042,11 +2042,12 @@ public sealed class ShellViewModel : ViewModelBase
         return true;
     }
 
-    private async Task EnsureWorkspaceProfileContextAsync(WorkspaceProfile profile)
+    private async Task<bool> EnsureWorkspaceProfileContextAsync(WorkspaceProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
 
         var switchingRoots = !string.Equals(profile.WorkspaceRoot, WorkspaceRoot, StringComparison.OrdinalIgnoreCase);
+        if (!TrySaveWorkspaceCatalog(() => _workspaceRootCatalogService.SaveActive(profile.WorkspaceRoot, profile.ProfileId))) return false;
         _activeWorkspaceProfileId = profile.ProfileId;
 
         if (switchingRoots)
@@ -2054,15 +2055,15 @@ public sealed class ShellViewModel : ViewModelBase
             WorkspaceRoot = profile.WorkspaceRoot;
         }
 
-        ApplyWorkspaceRootCatalog(_workspaceRootCatalogService.SaveActive(profile.WorkspaceRoot, profile.ProfileId));
 
         if (switchingRoots)
         {
             await RefreshAsync(forceRefresh: true).ConfigureAwait(true);
-            return;
+            return true;
         }
 
         ApplyActiveWorkspaceProfileContext();
+        return true;
     }
 
     private bool CanPrepareSelectedWorkspaceProfileQueue()

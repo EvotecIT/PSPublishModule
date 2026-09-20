@@ -15,7 +15,7 @@ using PowerForgeStudio.Wpf.ViewModels;
 
 namespace PowerForgeStudio.Wpf.Tests;
 
-public sealed class ShellViewModelTests
+public sealed partial class ShellViewModelTests
 {
     [Fact]
     public async Task RefreshAsync_PopulatesReleaseSignalChildViewModel()

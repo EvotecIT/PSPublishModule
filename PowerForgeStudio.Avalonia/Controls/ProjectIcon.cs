@@ -16,7 +16,10 @@ public sealed class ProjectIcon : Control
         base.Render(context);
         using var scale = context.PushTransform(Matrix.CreateScale(Bounds.Width / 24, Bounds.Height / 24));
         var ink = new Pen(Brush.Parse("#26334B"), 1.5);
-        if (Kind is "folder" or "project")
+        if (Kind == "favorite")
+            context.DrawGeometry(Brush.Parse("#FFD569"), new Pen(Brush.Parse("#EBA200"), 1.2),
+                Geometry.Parse("M12,2 L15,8 22,9 17,14 18,22 12,18 6,22 7,14 2,9 9,8 Z"));
+        else if (Kind is "folder" or "project")
         {
             var accent = Kind == "project" ? "#EBA200" : "#0873FF";
             context.DrawGeometry(Brush.Parse(Kind == "project" ? "#FFD569" : "#61A6FF"), new Pen(Brush.Parse(accent), 1.5),

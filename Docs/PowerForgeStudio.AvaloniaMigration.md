@@ -10,6 +10,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Isolate implementation on feature/studio-avalonia.
 - [ ] Implement the reviewed workspace shell and hierarchical project explorer.
 - [x] Apply native tree row geometry, ancestry guides, context/selection styling, vector navigation icons and Git markers.
+- [x] Restore workspace favorites, expanded folders and document tabs through shared catalog persistence.
 - [ ] Connect real file navigation, previews and explicit file operations.
 - [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
 - [ ] Complete file editing/save conflicts and deletion/recovery behavior.
@@ -32,7 +33,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 | Files | Studio.Orchestrator Explorer | Navigation, previews, explicit operations |
 | Build/sign/publish/verify | Studio.Orchestrator Queue and PowerForge | Plan, execute, progress, receipts |
 | GitHub issues and PRs | Studio.Orchestrator Hub/Portfolio | Read/review/action presentation |
-| Local state | Studio.Orchestrator storage through DbaClientX | Restore user workspace |
+| Local state | Studio.Orchestrator workspace catalog; release state through DbaClientX | Restore user workspace |
 | Licensing and AI | Existing Licensing and IntelligenceX owners | Scoped optional connections |
 
 The existing WPF app stays runnable until the replacement covers its useful workflows. Its removal and switching the default launcher are delivery steps, not prerequisites for getting the new host running. No existing workspace state is overwritten during development.
@@ -47,7 +48,6 @@ The reviewed design uses a navy rail and title bar, white workspace, a persisten
 
 - The old generic ProjectBuildService resolves a detected script without explicit mode arguments. Do not wire it to a new one-click Build command without a reviewable execution plan.
 - The same service has a separate streaming process implementation; inspect cancellation, stdout/stderr lifetime and buffer bounds before reusing that path.
-- Workspace profile persistence still lives in WPF view-model services. Move reusable persistence into the orchestrator when the new host needs it.
 - Shared Git status now propagates failures and preserves merge conflicts. The GitHub service still returns empty/partial lists for some access failures; distinguish those states before connecting its inbox.
 
 ## Validation record
@@ -146,4 +146,23 @@ Evidence:
 - Independent read-only review /root/review_tree_shell found no actionable P0-P3 issue. Boundary: current; base ed759f285; staged patch fingerprint ab65f8fcba8692e272d1d3afa89ae3b84154fb4e. No targeted confirmation was needed.
 - Native Windows validation was retried after window discovery began responding. The application process and window appeared, but capture/activation still failed with foreground window did not report a process id on both attempts. Both owned validation processes were closed. Native input/rendering remains unverified; headless keyboard input is not equivalent evidence.
 
-Favorites, document tabs, saved workspace/expansion state, complete keyboard/mouse coverage and the remaining pages are still required. The existing WorkspaceRootCatalogService and its profile records live in PowerForgeStudio.Wpf/ViewModels; extract reusable persistence into the shared owner before connecting saved state in Avalonia. Do not create a competing settings store. Current Git markers reflect the last explicit status read, not a filesystem watcher.
+Complete keyboard/mouse coverage and the remaining pages are still required. Current Git markers reflect the last explicit status read, not a filesystem watcher.
+
+
+### Workspace persistence and document tabs
+
+The existing workspace catalog and profile records now live in Domain/Workspace and Orchestrator/Workspace. Both hosts use that owner. Avalonia restores favorite projects, expanded folders and document tabs per workspace, and loads the saved active workspace when no command-line root is supplied. File contents and credentials are not stored in the catalog. Same-named files show their working-copy name in the tab; the full path remains available as a tooltip.
+
+Favorite updates and session writes preserve each other's fields. Catalog writes use a bounded cross-process file lock, a flushed adjacent temporary file and atomic replacement. Unknown top-level JSON fields and legacy profiles/templates survive saves. Malformed catalogs are preserved and reported rather than overwritten. WPF also displays persistence failures and retains its original workspace when an attempted profile switch cannot be saved.
+
+Open tabs follow file and folder moves performed in Studio. A missing file displays its own failed-preview state. Closing an active tab selects a remaining tab, or returns to the workspace. Closing during startup or after failed discovery preserves the last persisted session. If a settings save fails at window close, the error remains visible; closing again exits without saving.
+
+Evidence:
+
+- All 12 Avalonia tests passed before review. After remediation, all five session tests passed, including the two new regressions below.
+- Six shared persistence tests passed: concurrent field updates, legacy profile coexistence, unknown top-level fields, corrupt-catalog preservation and document path validation. Six existing WPF catalog tests also passed.
+- The WPF host built with zero warnings; its new view-model failure test passed for refresh, profile switch and profile save against a malformed catalog.
+- Actual Avalonia Skia screenshots were inspected at 1600 × 1000 and 1050 × 720: Artifacts/StudioValidation/workspace-session.png and workspace-session-compact.png. Keyboard activation of a document tab selects its owning repository. Native desktop validation remains blocked by the previously recorded automation failure.
+- Independent read-only review /root/review_workspace_session covered the original staged milestone against aa0ab79c2, fingerprint 1a304ca0105907b8c29a424ec8cbde5ad353ece9. It identified two P2 races: saving empty state before restoration, and late preview completion after closing the sole tab. Both were fixed and covered by a seeded failed-discovery test and a controlled pending filesystem read. The single targeted confirmation accepted both fixes without further findings in that boundary. Status: candidate-reviewed; the original fingerprint identifies the pre-remediation candidate only.
+
+Temporary WPF validation binaries (about 325 MiB) and the isolated legacy-test temp directory were removed. The active Avalonia outputs and small rendered evidence remain local. There has been no application distribution switch, package publication or live user-workspace migration. File editing, deletion/recovery, releases, GitHub, schedules, storage/worktree actions and provider connections remain on the delivery checklist.

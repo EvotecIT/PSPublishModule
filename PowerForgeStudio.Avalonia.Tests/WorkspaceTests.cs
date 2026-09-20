@@ -46,7 +46,7 @@ public sealed class WorkspaceTests
                 Assert.Equal("folder", project.IconKind);
                 Assert.Equal("?", readme.StatusMarker);
                 // A central-pane navigation must retain the working-copy root even if tree selection is absent.
-                Assert.Null(model.SelectedNode);
+                Assert.Same(readme, model.SelectedNode);
                 var build = Assert.Single(model.Files, x => x.Name == "Build");
                 await model.OpenEntryAsync(build);
                 Assert.Equal(root, model.ActiveWorkingCopyRoot);

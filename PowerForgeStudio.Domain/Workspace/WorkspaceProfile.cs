@@ -1,7 +1,7 @@
 using System.Linq;
 using PowerForgeStudio.Domain.Portfolio;
 
-namespace PowerForgeStudio.Wpf.ViewModels;
+namespace PowerForgeStudio.Domain.Workspace;
 
 public sealed record WorkspaceProfile(
     string ProfileId,

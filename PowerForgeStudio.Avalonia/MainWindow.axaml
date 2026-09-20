@@ -32,8 +32,11 @@
             <Button Grid.Column="2" ToolTip.Tip="Refresh repositories" Command="{Binding RefreshCommand}" Classes="toolbar"><controls:NavigationIcon Kind="refresh" Width="18" Height="18" Ink="#25354E" /></Button>
           </Grid>
           <TextBox Grid.Row="1" Text="{Binding Filter}" PlaceholderText="Filter projects…" Margin="16,0,16,7" />
-          <TextBlock Grid.Row="2" Text="All projects" Foreground="#0865FF" FontWeight="SemiBold" Margin="19,6" />
-          <TreeView Grid.Row="3" x:Name="ProjectTree" ItemsSource="{Binding Projects}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}" Background="Transparent" Margin="6,0" ItemContainerTheme="{StaticResource WorkspaceTreeItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="16,0,16,5">
+            <Button Content="All" Classes="chip" Classes.active="{Binding AllProjects}" Command="{Binding ShowAllProjectsCommand}" />
+            <Button Content="Favorites" Classes="chip" Classes.active="{Binding FavoritesOnly}" Command="{Binding ShowFavoriteProjectsCommand}" />
+          </StackPanel>
+          <TreeView Grid.Row="3" x:Name="ProjectTree" ItemsSource="{Binding ExplorerRoots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}" Background="Transparent" Margin="6,0" ItemContainerTheme="{StaticResource WorkspaceTreeItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <TreeView.ItemTemplate>
               <TreeDataTemplate x:DataType="vm:ExplorerNode" ItemsSource="{Binding Children}">
                 <Grid ColumnDefinitions="20,*,Auto,Auto" ColumnSpacing="7" Height="30" ToolTip.Tip="{Binding Path}">
@@ -52,11 +55,27 @@
       </Border>
       <GridSplitter Grid.Column="2" ResizeDirection="Columns" Background="#E5EBF4" />
       <Grid Grid.Column="3" RowDefinitions="43,93,*,170" Background="White">
-        <Border Background="#EFF4FB" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="18,10">
-          <StackPanel Orientation="Horizontal" Spacing="10">
-            <controls:ProjectIcon Kind="folder" Width="20" Height="20" />
-            <TextBlock Text="{Binding ProjectName}" />
-          </StackPanel>
+        <Border Background="#EFF4FB" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1">
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <StackPanel Orientation="Horizontal">
+              <Button Content="Workspace" Command="{Binding ShowWorkspaceCommand}" Classes="documentTab" Classes.active="{Binding IsWorkspaceTab}" />
+              <ItemsControl ItemsSource="{Binding Documents}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:WorkspaceDocumentViewModel">
+                    <Border Classes="document" Classes.active="{Binding IsActive}" ToolTip.Tip="{Binding Location}">
+                      <StackPanel Orientation="Horizontal">
+                        <Button Classes="documentTab" Command="{ReflectionBinding DataContext.SelectDocumentCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}">
+                          <TextBlock Text="{Binding Caption}" MaxWidth="230" TextTrimming="CharacterEllipsis" />
+                        </Button>
+                        <Button Content="×" Classes="documentClose" ToolTip.Tip="Close document" Command="{ReflectionBinding DataContext.CloseDocumentCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
         </Border>
         <Border Grid.Row="1" Background="White" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="22,14">
           <StackPanel Spacing="12">
@@ -69,6 +88,7 @@
               <Button Content="Changes" Command="{Binding ShowChangesCommand}" Classes="pageTab" Classes.active="{Binding IsChangesPage}" />
               <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Classes="pageTab" Classes.active="{Binding IsBuildPage}" />
               <TextBlock Text="Releases" Classes="muted" />
+              <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" Classes="pageTab" />
             </StackPanel>
           </StackPanel>
         </Border>
@@ -87,6 +107,8 @@
       <Border Grid.Column="4" x:Name="ContextPanel" Background="White" BorderBrush="#DDE5EF" BorderThickness="1,0,0,0" Padding="20,23">
         <StackPanel Spacing="18">
           <TextBlock Text="Context" FontWeight="SemiBold" FontSize="16" />
+          <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
+          <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
           <TextBlock Text="Working copy" Classes="muted" />
           <TextBlock Text="{Binding Branch}" />
           <TextBlock Text="Git state" Classes="muted" />
@@ -100,7 +122,7 @@
     </Grid>
     <Border Grid.Row="2" Background="#F5F8FD" BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" Padding="15,5">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="{Binding Status}" FontSize="12" TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{Binding DisplayedStatus}" ToolTip.Tip="{Binding DisplayedStatus}" FontSize="12" TextTrimming="CharacterEllipsis" />
         <TextBlock Grid.Column="1" Text="Avalonia · Local workspace" Classes="muted" FontSize="12" />
       </Grid>
     </Border>

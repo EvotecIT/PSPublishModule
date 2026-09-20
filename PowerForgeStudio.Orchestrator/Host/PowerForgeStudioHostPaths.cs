@@ -77,8 +77,7 @@ public static class PowerForgeStudioHostPaths
 
         try
         {
-            return Path.GetFullPath(value)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(value));
         }
         catch (Exception exception) when (exception is ArgumentException or SecurityException or PathTooLongException or NotSupportedException)
         {

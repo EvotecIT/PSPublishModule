@@ -1,4 +1,5 @@
-namespace PowerForgeStudio.Wpf.ViewModels;
+using PowerForgeStudio.Domain.Workspace;
+namespace PowerForgeStudio.Orchestrator.Workspace;
 
 public interface IWorkspaceRootCatalogService
 {

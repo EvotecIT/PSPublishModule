@@ -1,4 +1,4 @@
-namespace PowerForgeStudio.Wpf.ViewModels;
+namespace PowerForgeStudio.Domain.Workspace;
 
 public sealed record WorkspaceProfileLaunchResult(
     WorkspaceProfileLaunchActionKind ActionKind,

@@ -50,13 +50,21 @@ public sealed partial class WorkspaceViewModel
             AppendOutput($"{request.Operation}: {request.DestinationPath}");
             var destination = Path.GetFullPath(request.DestinationPath, request.WorkingCopyRoot);
             var source = request.SourcePath is null ? null : Path.GetFullPath(request.SourcePath, request.WorkingCopyRoot);
+            if (source is not null && request.Operation is WorkspaceFileOperation.Move or WorkspaceFileOperation.Rename)
+                RelocateDocuments(request.WorkingCopyRoot, source, destination);
+            var selection = _selectionVersion;
+            var activeDocument = ActiveDocument;
             var affected = new[] { Path.GetDirectoryName(destination), source is null ? null : Path.GetDirectoryName(source) };
             // Keep expanded sibling folders current even when they are not displayed in the center pane.
             foreach (var node in LoadedNodes().Where(n => n.Kind is "folder" or "branch" && n.Path.Length > 0 &&
                          affected.Any(path => path is not null && SamePath(n.Path, path))).ToArray())
                 await node.ReloadAsync();
-            if (!_disposed && SamePath(request.WorkingCopyRoot, ActiveWorkingCopyRoot))
-                await RefreshFolderAsync();
+            if (!_disposed && selection == _selectionVersion && SamePath(request.WorkingCopyRoot, ActiveWorkingCopyRoot))
+            {
+                if (activeDocument is not null && Documents.Contains(activeDocument)) await SelectDocumentAsync(activeDocument);
+                else await RefreshFolderAsync();
+            }
+            await SaveSessionAsync();
             Status = $"{request.Operation} completed";
             return true;
         }
@@ -76,4 +84,21 @@ public sealed partial class WorkspaceViewModel
     }
 
     public void ReportFileActionError(Exception exception) => Report(exception);
+
+    private void RelocateDocuments(string root, string source, string destination)
+    {
+        for (var index = 0; index < Documents.Count; index++)
+        {
+            var document = Documents[index];
+            if (!SamePath(document.Reference.WorkingCopyRoot, root)) continue;
+            var relative = Path.GetRelativePath(source, document.Reference.Path);
+            if (relative == ".." || Path.IsPathRooted(relative) || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)) continue;
+            var replacement = new WorkspaceDocumentViewModel(document.Reference with
+            {
+                Path = relative == "." ? destination : Path.Combine(destination, relative)
+            });
+            Documents[index] = replacement;
+            if (ReferenceEquals(ActiveDocument, document)) ActiveDocument = replacement;
+        }
+    }
 }

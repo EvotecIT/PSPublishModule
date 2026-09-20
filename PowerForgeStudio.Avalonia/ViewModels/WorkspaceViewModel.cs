@@ -6,13 +6,14 @@ using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Explorer;
 using PowerForgeStudio.Orchestrator.Hub;
+using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
 /// <summary>Coordinates workspace presentation over shared Studio services.</summary>
 public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 {
-    private readonly FileExplorerService _files = new();
+    private readonly IFileExplorerService _files;
     private readonly ProjectGitService _git = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<RepositoryCatalogEntry> _catalog = [];
@@ -20,10 +21,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private int _selectionVersion;
     private bool _disposed;
     private bool _updatingFileList;
+    private bool _updatingTreeSelection;
+    private int _refreshVersion;
 
-    public WorkspaceViewModel(string root)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null)
     {
         WorkspaceRoot = Path.GetFullPath(root);
+        _stateStore = stateStore;
+        _files = files ?? new FileExplorerService();
         Changes.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(GitChangesViewModel.LastOperation)) OnPropertyChanged(nameof(DisplayedOutput));
@@ -85,6 +90,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             project.IsContextProject = !string.IsNullOrEmpty(value) &&
                 (SamePath(project.Path, value) || project.Children.Any(child => child.Children.Any(worktree =>
                     worktree.Kind == "branch" && !string.IsNullOrEmpty(worktree.Path) && SamePath(worktree.Path, value))));
+        OnPropertyChanged(nameof(HasActiveProject));
+        OnPropertyChanged(nameof(FavoriteActionLabel));
         Build.SetWorkingCopy(value);
         Changes.SetWorkingCopy(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
@@ -101,14 +108,17 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     partial void OnFilterChanged(string value) => ApplyFilter();
     partial void OnSelectedNodeChanged(ExplorerNode? value)
     {
-        if (value is not null) _ = SelectAsync(value);
+        if (!_updatingTreeSelection && value is not null) _ = SelectAsync(value);
     }
 
     [RelayCommand]
     public async Task RefreshAsync()
     {
+        var refresh = ++_refreshVersion;
         try
         {
+            CaptureSessionBeforeRefresh();
+            _sessionReady = false;
             Status = "Discovering local repositories…";
             ++_selectionVersion;
             SelectedNode = null;
@@ -121,6 +131,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             PreviewTitle = "Workspace";
             Preview = "Select a project to browse its files and working copies.";
             var root = WorkspaceRoot;
+            await LoadSessionAsync(root, refresh);
+            if (_disposed || refresh != _refreshVersion) return;
             var found = await Task.Run(() =>
             {
                 if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
@@ -129,7 +141,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
                     ? new[] { scanner.InspectRepository(root) }
                     : scanner.Scan(root).Where(x => WorktreeDetector.IsGitRepository(x.RootPath)).ToArray();
             }, _lifetime.Token);
-            if (_disposed) return;
+            if (_disposed || refresh != _refreshVersion) return;
             _catalog.Clear();
             _catalog.AddRange(found);
             _projectNodes.Clear();
@@ -138,20 +150,23 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             RepositoryCount = $"{found.Length} repositories";
             Status = "Local discovery complete";
             AppendOutput($"Discovered {found.Length} repositories in {root}.");
+            await RestoreSessionAsync(refresh, root);
+            if (!_disposed && refresh == _refreshVersion && SamePath(root, WorkspaceRoot)) _sessionReady = true;
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Report(ex); }
+        catch (Exception ex) { if (!_disposed && refresh == _refreshVersion) Report(ex); }
     }
 
     private void ApplyFilter()
     {
         Projects.Clear();
-        foreach (var entry in _catalog.Where(x => x.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase)))
+        foreach (var entry in _catalog.Where(x => x.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase) && (!FavoritesOnly || _favorites.Contains(x.RootPath))))
         {
             if (!_projectNodes.TryGetValue(entry.RootPath, out var node))
                 _projectNodes[entry.RootPath] = node = new ExplorerNode(entry.Name, entry.RootPath, "project", entry.RootPath, LoadProjectAsync);
             Projects.Add(node);
         }
+        RebuildExplorerGroups();
     }
 
     private async Task LoadProjectAsync(ExplorerNode node)
@@ -194,6 +209,13 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         try
         {
             IsSelectionLoading = true;
+            PreviewTitle = node.Name;
+            Preview = "Loading…";
+            _updatingTreeSelection = true;
+            try { SelectedNode = LoadedNodes().FirstOrDefault(item => item.Path.Length > 0 && SamePath(item.Path, node.Path) && SamePath(item.RepositoryRoot, node.RepositoryRoot)); }
+            finally { _updatingTreeSelection = false; }
+            if (node.Kind is "project" or "branch" or "folder" || Directory.Exists(node.Path)) ActiveDocument = null;
+            else OpenDocument(node);
             var directory = Directory.Exists(node.Path) ? node.Path : Path.GetDirectoryName(node.Path)!;
             if (string.IsNullOrEmpty(CurrentDirectory) || !SamePath(CurrentDirectory, directory) ||
                 string.IsNullOrEmpty(ActiveWorkingCopyRoot) || !SamePath(ActiveWorkingCopyRoot, node.RepositoryRoot))
@@ -222,9 +244,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             UpdateGitDecorations(node.RepositoryRoot, git);
             GitSummary = git.IsGitRepository ? git.StatusSummary : "Git status unavailable";
             Status = "Ready";
+            await SaveSessionAsync();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (version == _selectionVersion) Report(ex); }
+        catch (Exception ex) { if (version == _selectionVersion) { Preview = "Unable to load this selection: " + ex.Message; Report(ex); } }
         finally { if (version == _selectionVersion) IsSelectionLoading = false; }
     }
 
