@@ -2,7 +2,7 @@ using PowerForgeStudio.Domain.Hub;
 
 namespace PowerForgeStudio.Orchestrator.Explorer;
 
-public sealed class FileExplorerService
+public sealed partial class FileExplorerService
 {
     private readonly FileExplorerOptions _options;
 

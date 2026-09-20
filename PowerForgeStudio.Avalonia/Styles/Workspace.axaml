@@ -1,0 +1,40 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Style Selector="Window">
+    <Setter Property="FontFamily" Value="Segoe UI, Inter, sans-serif" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="Foreground" Value="#172238" />
+    <Setter Property="Background" Value="#F7F9FC" />
+  </Style>
+  <Style Selector="Button">
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="Padding" Value="13,7" />
+    <Setter Property="Background" Value="White" />
+    <Setter Property="BorderBrush" Value="#DAE3EF" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="#0865FF" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="BorderBrush" Value="#0865FF" />
+  </Style>
+  <Style Selector="Button.rail">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="#E0EBFA" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="Padding" Value="2,15" />
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#67748B" /></Style>
+  <Style Selector="TextBlock.heading"><Setter Property="FontSize" Value="23" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+  <Style Selector="Border.card"><Setter Property="Background" Value="White" /><Setter Property="BorderBrush" Value="#DDE5F0" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="5" /></Style>
+  <Style Selector="TreeViewItem">
+    <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="30" />
+  </Style>
+  <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot"><Setter Property="MinHeight" Value="30" /></Style>
+  <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot"><Setter Property="Background" Value="#DFEDFF" /></Style>
+  <Style Selector="ListBoxItem"><Setter Property="Padding" Value="10,8" /></Style>
+</Styles>
