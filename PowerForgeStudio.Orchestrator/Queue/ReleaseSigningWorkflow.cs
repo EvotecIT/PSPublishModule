@@ -2,7 +2,11 @@ using PowerForgeStudio.Domain.Queue;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
-public sealed record ReleaseSigningWorkflowResult(ReleaseQueueSession Session, ReleaseSigningExecutionResult Execution);
+public sealed record ReleaseSigningWorkflowResult(ReleaseQueueSession Session, ReleaseSigningExecutionResult Execution)
+{
+    /// <summary>Non-null when returned evidence is available but its durable checkpoint could not be committed.</summary>
+    public string? PersistenceError { get; init; }
+}
 
 public interface IReleaseSigningWorkflow
 {

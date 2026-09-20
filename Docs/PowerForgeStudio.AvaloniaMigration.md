@@ -284,3 +284,17 @@ This storage milestone does not yet persist the Avalonia release handoff. Durabl
 
 
 Independent read-only review /root/review_release_storage found no actionable defect in the frozen storage candidate, fingerprint 2db1ed5fc7886a686afb2ff249a8550aca3c8a3f. The review inspected DbaClientX transaction semantics and the queue integration. Boundary: current; no targeted confirmation required. Task-owned shared-test binaries (about 75.7 MiB) were removed after containment, tracked-file, link and process checks. Active Avalonia outputs and compact evidence remain.
+
+
+### Conditional signing claims
+
+TryAdvanceReleaseCheckpointAsync creates a session only if absent, or advances exactly the checkpoint the caller observed. The comparison and write run within one DbaClientX transaction. Session identity, workspace, creation time, scope and ordered items form the comparison; summary counts are derived when loading. Stale callers make no checkpoint or receipt changes.
+
+DurableReleaseSigningWorkflow claims a new captured session by saving a failed-signing result with RequiresRebuild before calling the executor. The marker explicitly says signing may still be running or may have been interrupted: it is not evidence that a process has stopped. Successful or returned-failed execution replaces that exact marker and commits its receipts. A thrown executor exception leaves the marker. Finalization uses a separate 30-second token; a failed finalization returns the completed execution evidence with PersistenceError instead of discarding receipts.
+
+Nine focused tests passed against disposable SQLite databases. They verify one winner for competing expected-state updates, exclusion of a second execution for the same session, reopening success and interruption records, and a trigger-injected receipt write failure that rolls back the completion checkpoint while preserving receipts in the returned result. These tests use controlled signing executors; no user artifact or certificate was used.
+
+This owner is not yet the Avalonia default. The next UI integration must display saved-session history and handle PersistenceError with an explicit save/recovery path before clearing receipts or closing. Per-session claims do not exclude different sessions targeting the same artifact paths or unconditional legacy writers. Working-copy exclusion and cautious reopen behavior remain requirements for final release workflow delivery.
+
+
+Independent read-only review /root/review_signing_claim found no actionable defect within the single-session signing claim contract, fingerprint 5469dc2efe854ab6b7feb6f6c4965310bd970d6e. Boundary: current. Multi-item expected checkpoints must retain canonical QueueOrder ordering, since storage reloads items in that order. Existing file line endings were restored after review; no semantic changes followed. Task-owned shared-test binaries were removed after validation; active Avalonia outputs remain.
