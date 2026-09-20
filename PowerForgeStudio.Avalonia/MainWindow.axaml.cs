@@ -1,15 +1,29 @@
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using PowerForgeStudio.Avalonia.ViewModels;
-using PowerForgeStudio.Domain.Hub;
 
 namespace PowerForgeStudio.Avalonia;
 
 public sealed partial class MainWindow : Window
 {
-    public MainWindow() => InitializeComponent();
+    private bool? _compactLayout;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        SizeChanged += (_, args) => ApplyResponsiveLayout(args.NewSize.Width);
+    }
+
+    private void ApplyResponsiveLayout(double width)
+    {
+        var compact = width < 1280;
+        if (_compactLayout == compact) return;
+        _compactLayout = compact;
+        ContextPanel.IsVisible = !compact;
+        WorkspaceLayout.ColumnDefinitions[4].Width = new GridLength(compact ? 0 : 280);
+        WorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(compact ? 270 : 326);
+    }
 
     private async void ChooseWorkspace(object? sender, RoutedEventArgs args)
     {
@@ -20,9 +34,4 @@ public sealed partial class MainWindow : Window
         await model.RefreshCommand.ExecuteAsync(null);
     }
 
-    private async void OpenFile(object? sender, TappedEventArgs args)
-    {
-        if (DataContext is WorkspaceViewModel model && FileList.SelectedItem is FileSystemEntry entry)
-            await model.OpenEntryAsync(entry);
-    }
 }

@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" x:DataType="vm:FileOperationViewModel"
+        x:Class="PowerForgeStudio.Avalonia.Views.FileOperationDialog"
+        Title="{Binding Title}" Width="620" SizeToContent="Height" CanResize="False" WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="26" Spacing="14">
+    <TextBlock Text="{Binding Title}" Classes="heading" />
+    <TextBlock Text="Working copy" Classes="muted" />
+    <TextBlock Text="{Binding Root}" TextWrapping="Wrap" />
+    <TextBlock Text="Source" Classes="muted" />
+    <TextBlock Text="{Binding Source}" TextWrapping="Wrap" />
+    <TextBlock Text="Destination path, relative to this working copy" />
+    <TextBox x:Name="DestinationBox" Text="{Binding Destination}" IsEnabled="{Binding !IsBusy}" />
+    <TextBlock Text="Existing items will not be overwritten." Classes="muted" />
+    <TextBlock Text="{Binding Error}" Foreground="#BA2737" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding TransferStatus}" Classes="muted" IsVisible="{Binding IsBusy}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="9">
+      <Button Content="Cancel" Click="Cancel" />
+      <Button x:Name="ApplyButton" Content="Apply" Classes="primary" Click="Apply" IsEnabled="{Binding !IsBusy}" />
+    </StackPanel>
+  </StackPanel>
+</Window>

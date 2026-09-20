@@ -10,6 +10,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Isolate implementation on feature/studio-avalonia.
 - [ ] Implement the reviewed workspace shell and hierarchical project explorer.
 - [ ] Connect real file navigation, previews and explicit file operations.
+- [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
+- [ ] Complete file editing/save conflicts and deletion/recovery behavior.
 - [ ] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
 - [ ] Connect cancellation, live progress, artifacts and release receipts.
 - [ ] Connect Git changes, issues, PRs and provider status through existing owners.
@@ -58,3 +60,19 @@ dotnet test PowerForgeStudio.Avalonia.Tests
 ```
 
 Set POWERFORGE_STUDIO_VISUAL_OUTPUT to a task-owned folder to retain the rendered test screenshot. The initial screenshot is retained locally under Artifacts/StudioValidation/workspace.png. No package was published, no user project was built or modified, and no existing Studio state was migrated.
+
+### File-management milestone
+
+The files page now supports up-navigation, refresh, keyboard Enter, clipboard paths, opening externally, and explicit create/copy/move/rename dialogs. The shared explorer service keeps operations inside the selected working copy, rejects Git metadata and linked paths, and refuses existing destinations. Copy cancellation removes task-created partial output and retains the source. Unix file copies retain executable and restrictive permission modes. The dialog shows transfer progress and accepts cancellation while copying.
+
+The working-copy root is retained independently of tree selection. A winning asynchronous selection repopulates the file list; refreshing a parent preserves loaded child-node identity. Operations refresh loaded source and destination folders, including expanded folders outside the central view.
+
+Evidence:
+
+- Windows: 19 focused FileExplorerOperationsTests cases passed (Unix-only bodies are platform-guarded).
+- WSL: the same 19 cases passed using an isolated test project that linked the exact shared service, domain and test sources (Windows-only bodies are platform-guarded). This is file-service proof, not a full Linux repository/app build. WSL has SDK 10.0.112; the repository requests 10.0.303.
+- Avalonia: two tests passed with expanded real-Git discovery/navigation, copy dialog, destination collision, cross-directory move/tree refresh, UTF-16 preview and bounded binary/large-file behavior.
+- Rendered evidence inspected at 1600 × 1000 and 1050 × 720, plus the operation dialog. Compact layout hides the inspector and wraps file actions. Clipboard/external-opening and native modal interaction still need desktop proof.
+- Local review: review_file_management inspected this milestone read-only against 7c4b36958. Three P2 findings (superseded navigation, destination-tree invalidation, Unix file modes) were fixed and tested. One targeted confirmation found the fixes addressed with no additional actionable finding. The navigation stress test does not force a particular read-completion schedule; the source fix always repopulates the winning request.
+
+Next implementation focus: reviewed build plans and execution through canonical PowerForge services. The existing ProcessRunRequest already supports streaming stdout/stderr callbacks, and ReleaseBuildExecutionService already adapts project/module/unified release contracts. Reuse those owners rather than the old independent streaming implementation in ProjectBuildService.

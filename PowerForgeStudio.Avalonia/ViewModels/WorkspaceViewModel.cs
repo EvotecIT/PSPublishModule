@@ -16,12 +16,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private readonly ProjectGitService _git = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<RepositoryCatalogEntry> _catalog = [];
+    private readonly Dictionary<string, ExplorerNode> _projectNodes = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private int _selectionVersion;
     private bool _disposed;
+    private bool _updatingFileList;
 
     public WorkspaceViewModel(string root) => WorkspaceRoot = Path.GetFullPath(root);
     public ObservableCollection<ExplorerNode> Projects { get; } = [];
-    public ObservableCollection<FileSystemEntry> Files { get; } = [];
+    public ObservableCollection<FileItemViewModel> Files { get; } = [];
     [ObservableProperty] private string _workspaceRoot;
     [ObservableProperty] private string _filter = "";
     [ObservableProperty] private string _status = "Ready";
@@ -34,6 +36,27 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _output = "PowerForge Studio · Avalonia\nNo commands executed.";
     [ObservableProperty] private string _repositoryCount = "No projects loaded";
     [ObservableProperty] private ExplorerNode? _selectedNode;
+    [ObservableProperty] private string _activeWorkingCopyRoot = "";
+    [ObservableProperty] private string _currentDirectory = "";
+    [ObservableProperty] private FileItemViewModel? _selectedFile;
+    [ObservableProperty] private bool _isFileOperationRunning;
+    [ObservableProperty] private bool _isSelectionLoading;
+    public bool HasWorkingCopy => !string.IsNullOrEmpty(ActiveWorkingCopyRoot);
+    public bool HasSelectedFile => SelectedFile is not null;
+    public bool CanManageFiles => HasWorkingCopy && !IsSelectionLoading && !IsFileOperationRunning;
+
+    partial void OnActiveWorkingCopyRootChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasWorkingCopy));
+        OnPropertyChanged(nameof(CanManageFiles));
+    }
+    partial void OnIsFileOperationRunningChanged(bool value) => OnPropertyChanged(nameof(CanManageFiles));
+    partial void OnIsSelectionLoadingChanged(bool value) => OnPropertyChanged(nameof(CanManageFiles));
+    partial void OnSelectedFileChanged(FileItemViewModel? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedFile));
+        if (!_updatingFileList && value is not null && !value.IsDirectory) _ = OpenEntryAsync(value);
+    }
 
     partial void OnFilterChanged(string value) => ApplyFilter();
     partial void OnSelectedNodeChanged(ExplorerNode? value)
@@ -47,6 +70,16 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         try
         {
             Status = "Discovering local repositories…";
+            ++_selectionVersion;
+            SelectedNode = null;
+            SelectedFile = null;
+            ActiveWorkingCopyRoot = "";
+            CurrentDirectory = "";
+            SelectedPath = "";
+            IsSelectionLoading = false;
+            Files.Clear();
+            PreviewTitle = "Workspace";
+            Preview = "Select a project to browse its files and working copies.";
             var root = WorkspaceRoot;
             var found = await Task.Run(() =>
             {
@@ -59,6 +92,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             if (_disposed) return;
             _catalog.Clear();
             _catalog.AddRange(found);
+            _projectNodes.Clear();
             ApplyFilter();
             RepositoryCount = $"{found.Length} repositories";
             Status = "Local discovery complete";
@@ -72,7 +106,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     {
         Projects.Clear();
         foreach (var entry in _catalog.Where(x => x.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase)))
-            Projects.Add(new ExplorerNode(entry.Name, entry.RootPath, "project", entry.RootPath, LoadProjectAsync));
+        {
+            if (!_projectNodes.TryGetValue(entry.RootPath, out var node))
+                _projectNodes[entry.RootPath] = node = new ExplorerNode(entry.Name, entry.RootPath, "project", entry.RootPath, LoadProjectAsync);
+            Projects.Add(node);
+        }
     }
 
     private async Task LoadProjectAsync(ExplorerNode node)
@@ -98,9 +136,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     {
         var entries = await _files.ListDirectoryAsync(node.Path, _lifetime.Token);
         _lifetime.Token.ThrowIfCancellationRequested();
+        var existing = node.Children.Where(x => x.Path.Length > 0)
+            .ToDictionary(x => x.Path, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         node.Children.Clear();
         foreach (var entry in entries)
-            node.Children.Add(new ExplorerNode(entry.Name, entry.FullPath, Kind(entry), node.RepositoryRoot, entry.IsDirectory ? LoadDirectoryAsync : null));
+            node.Children.Add(existing.TryGetValue(entry.FullPath, out var child) && child.Kind == Kind(entry) ? child
+                : new ExplorerNode(entry.Name, entry.FullPath, Kind(entry), node.RepositoryRoot, entry.IsDirectory ? LoadDirectoryAsync : null));
     }
 
     public async Task SelectAsync(ExplorerNode node)
@@ -109,13 +150,22 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var version = ++_selectionVersion;
         try
         {
+            IsSelectionLoading = true;
+            var directory = Directory.Exists(node.Path) ? node.Path : Path.GetDirectoryName(node.Path)!;
+            if (string.IsNullOrEmpty(CurrentDirectory) || !SamePath(CurrentDirectory, directory) ||
+                string.IsNullOrEmpty(ActiveWorkingCopyRoot) || !SamePath(ActiveWorkingCopyRoot, node.RepositoryRoot))
+            {
+                SelectedFile = null;
+                Files.Clear();
+            }
             SelectedPath = node.Path;
+            ActiveWorkingCopyRoot = node.RepositoryRoot;
             ProjectName = Path.GetFileName(node.RepositoryRoot);
             Status = "Loading selection…";
-            var entries = await _files.ListDirectoryAsync(Directory.Exists(node.Path) ? node.Path : Path.GetDirectoryName(node.Path)!, _lifetime.Token);
+            var entries = await _files.ListDirectoryAsync(directory, _lifetime.Token);
             if (_disposed || version != _selectionVersion) return;
-            Files.Clear();
-            foreach (var entry in entries) Files.Add(entry);
+            ReplaceFiles(entries);
+            CurrentDirectory = directory;
             PreviewTitle = node.Name;
             var preview = Directory.Exists(node.Path) ? $"{entries.Count} visible entries\n\n{node.Path}" : await _files.ReadTextPreviewAsync(node.Path, _lifetime.Token);
             if (_disposed || version != _selectionVersion) return;
@@ -128,12 +178,27 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (version == _selectionVersion) Report(ex); }
+        finally { if (version == _selectionVersion) IsSelectionLoading = false; }
     }
 
-    public Task OpenEntryAsync(FileSystemEntry entry)
+    public Task OpenEntryAsync(FileItemViewModel entry)
     {
-        var root = SelectedNode?.RepositoryRoot ?? SelectedPath;
-        return SelectAsync(new ExplorerNode(entry.Name, entry.FullPath, Kind(entry), root));
+        var root = ActiveWorkingCopyRoot;
+        if (string.IsNullOrEmpty(root)) return Task.CompletedTask;
+        return SelectAsync(new ExplorerNode(entry.Name, entry.FullPath, entry.IconKind, root));
+    }
+
+    private void ReplaceFiles(IReadOnlyList<FileSystemEntry> entries)
+    {
+        var selected = SelectedFile?.FullPath;
+        _updatingFileList = true;
+        try
+        {
+            Files.Clear();
+            foreach (var entry in entries) Files.Add(new FileItemViewModel(entry));
+            SelectedFile = selected is null ? null : Files.FirstOrDefault(x => SamePath(x.FullPath, selected));
+        }
+        finally { _updatingFileList = false; }
     }
 
     private static string Kind(FileSystemEntry entry) => entry.IsDirectory ? "folder" : entry.Extension.ToLowerInvariant() switch
@@ -145,6 +210,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Path.GetFullPath(second).TrimEnd(Path.DirectorySeparatorChar), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     private void Report(Exception error) { Status = error.Message; AppendOutput(error.Message); }
-    private void AppendOutput(string line) => Output += $"\n[{DateTime.Now:HH:mm:ss}] {line}";
+    private void AppendOutput(string line)
+    {
+        var text = Output + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
+        Output = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
+    }
     public void Dispose() { if (_disposed) return; _disposed = true; _lifetime.Cancel(); _lifetime.Dispose(); }
 }

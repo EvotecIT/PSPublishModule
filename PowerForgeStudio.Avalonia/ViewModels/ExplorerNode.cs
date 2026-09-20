@@ -8,7 +8,7 @@ public sealed partial class ExplorerNode : ObservableObject
 {
     private readonly Func<ExplorerNode, Task>? _load;
     private bool _loaded;
-    private bool _loading;
+    private Task? _loading;
 
     public ExplorerNode(string name, string path, string kind, string repositoryRoot,
         Func<ExplorerNode, Task>? load = null)
@@ -34,13 +34,26 @@ public sealed partial class ExplorerNode : ObservableObject
         if (value) _ = EnsureLoadedAsync();
     }
 
-    public async Task EnsureLoadedAsync()
+    public Task EnsureLoadedAsync()
     {
-        if (_loaded || _loading || _load is null) return;
-        _loading = true;
+        if (_loaded || _load is null) return Task.CompletedTask;
+        if (_loading is { IsCompleted: false }) return _loading;
+        return _loading = LoadAsync();
+    }
+
+    public async Task ReloadAsync()
+    {
+        if (_loading is not null) await _loading;
+        _loaded = false;
+        _loading = null;
+        await EnsureLoadedAsync();
+    }
+
+    private async Task LoadAsync()
+    {
         try
         {
-            await _load(this);
+            await _load!(this);
             _loaded = true;
         }
         catch (OperationCanceledException) { }
@@ -50,6 +63,6 @@ public sealed partial class ExplorerNode : ObservableObject
             Children.Add(new ExplorerNode("Unable to load", "", "error", RepositoryRoot) { Detail = ex.Message });
             IsExpanded = false;
         }
-        finally { _loading = false; }
+        finally { _loading = null; }
     }
 }

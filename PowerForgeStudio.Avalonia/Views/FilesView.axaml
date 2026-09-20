@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
+             x:Class="PowerForgeStudio.Avalonia.Views.FilesView" x:DataType="vm:WorkspaceViewModel">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="22,18">
+    <TextBlock Text="Files" Classes="heading" />
+    <TextBlock Grid.Row="1" Text="{Binding CurrentDirectory}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentDirectory}" Margin="0,9,0,13" />
+    <WrapPanel Grid.Row="2" Margin="0,0,0,13" IsEnabled="{Binding CanManageFiles}">
+      <Button Content="Up" Command="{Binding NavigateUpCommand}" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
+      <Button Content="New file" Tag="CreateFile" Click="ManageFile" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
+      <Button Content="New folder" Tag="CreateDirectory" Click="ManageFile" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
+      <Button Content="Copy" Tag="Copy" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
+      <Button Content="Move" Tag="Move" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
+      <Button Content="Rename" Tag="Rename" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
+      <Button Content="Refresh" Command="{Binding RefreshFolderCommand}" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
+      <Button Content="Copy path" Click="CopyPath" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
+      <Button Content="Open externally" Click="OpenExternally" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
+    </WrapPanel>
+    <Grid Grid.Row="3" ColumnDefinitions="0.85*,14,1.15*">
+      <Border Classes="card">
+        <Grid RowDefinitions="42,*">
+          <TextBlock Text="Name" Margin="15,12" FontWeight="SemiBold" />
+          <ListBox Grid.Row="1" x:Name="FileList" ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                   DoubleTapped="OpenFile" KeyDown="FileKeyDown" Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:FileItemViewModel">
+                <Grid ColumnDefinitions="20,*,Auto" ColumnSpacing="9" ToolTip.Tip="{Binding FullPath}">
+                  <controls:ProjectIcon Kind="{Binding IconKind}" Width="20" Height="20" />
+                  <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Text="{Binding SizeDisplay}" Classes="muted" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+      <Border Grid.Column="2" Classes="card">
+        <Grid RowDefinitions="42,*">
+          <TextBlock Text="{Binding PreviewTitle}" FontWeight="SemiBold" Margin="15,12" TextTrimming="CharacterEllipsis" />
+          <TextBox Grid.Row="1" Text="{Binding Preview}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                   FontFamily="Cascadia Code, Consolas, monospace" FontSize="13" BorderThickness="0" Padding="15"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>
