@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             xmlns:workspace="using:PowerForgeStudio.Domain.Workspace"
+             x:DataType="vm:StorageViewModel" x:Class="PowerForgeStudio.Avalonia.Views.StorageView">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="22,18" Spacing="14">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Review workspace storage" Classes="heading" />
+          <TextBlock Text="Measured working copies and local evidence. Inspection never removes files." Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+        <WrapPanel Grid.Column="1" ItemSpacing="8" VerticalAlignment="Center">
+          <Button Content="Open selected" Click="OpenSelected" IsEnabled="{Binding SelectedEntry.Exists}" />
+          <Button Content="Refresh inspection" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
+        </WrapPanel>
+      </Grid>
+      <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
+        <Border Classes="card" Padding="16"><StackPanel><TextBlock Text="{Binding IndexedDisplay}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="indexed" Classes="muted" /></StackPanel></Border>
+        <Border Grid.Column="1" Classes="card" Padding="16"><StackPanel><TextBlock Text="{Binding WorktreeDisplay}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="in worktrees" Classes="muted" /></StackPanel></Border>
+        <Border Grid.Column="2" Classes="card" Padding="16"><StackPanel><TextBlock Text="{Binding CandidateCount}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="review candidates" Classes="muted" /></StackPanel></Border>
+      </Grid>
+      <WrapPanel ItemSpacing="8" LineSpacing="8">
+        <Button Content="All working copies" Classes="chip" Classes.active="{Binding IsAllFilter}" Command="{Binding ShowAllCommand}" />
+        <Button Content="Review candidates" Classes="chip" Classes.active="{Binding IsCandidatesFilter}" Command="{Binding ShowCandidatesCommand}" />
+        <Button Content="Changed" Classes="chip" Classes.active="{Binding IsChangedFilter}" Command="{Binding ShowChangedCommand}" />
+        <Button Content="Broken references" Classes="chip" Classes.active="{Binding IsBrokenFilter}" Command="{Binding ShowBrokenCommand}" />
+      </WrapPanel>
+      <Border Classes="card" Padding="0" MinHeight="280">
+        <Grid RowDefinitions="42,*">
+          <Grid ColumnDefinitions="2*,90,1.2*,1.5*" ColumnSpacing="12" Margin="16,0">
+            <TextBlock Text="Working copy" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="Size" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Text="Local state" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="3" Text="Next check" Classes="muted" VerticalAlignment="Center" />
+          </Grid>
+          <ListBox Grid.Row="1" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="workspace:WorkspaceStorageEntry">
+                <Grid ColumnDefinitions="2*,90,1.2*,1.5*" ColumnSpacing="12" Margin="10,8">
+                  <StackPanel><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" /><TextBlock Text="{Binding KindDisplay}" Classes="muted" FontSize="12" /></StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding SizeDisplay}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="{Binding LocalStateDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  <TextBlock Grid.Column="3" Text="{Binding NextCheck}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Grid.Row="1" Text="No working copies match this filter." IsVisible="{Binding !HasEntries}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" />
+        </Grid>
+      </Border>
+      <TextBlock Text="Logical sizes can overlap through hard links and shared Git objects; they are not guaranteed reclaimable space." Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -28,6 +28,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [ ] Complete issues, PR review actions and provider status through existing owners.
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
 - [x] Add PR changed-file lists and bounded patch previews with revision checks.
+- [x] Add review-only workspace storage inventory with measured worktrees and local ancestry evidence.
+- [ ] Add remote/PR, active-use and retained-artifact checks before guarded worktree cleanup.
 - [ ] Inventory and expose schedules, storage and optional licensing/IntelligenceX integration.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
@@ -102,6 +104,20 @@ Evidence:
 - Wide and compact Skia renders were inspected for the Files toolbar, review dialog and recovery dialog: `Artifacts/StudioValidation/workspace-recovery-toolbar.png`, `file-delete-review.png`, `file-recovery.png` and `file-recovery-compact.png`. The compact footer keeps confirmation and actions on separate responsive rows.
 
 The review fingerprint intentionally covers path/type/size/timestamp/attributes rather than hashing every file's contents; it detects ordinary edits but is not a content-integrity guarantee against a process that preserves the same metadata. The store uses an atomic same-volume move. If the working copy and local application-data store are on different volumes, the operation fails and leaves the source in place; cross-volume copy-to-recovery is not implemented. Recovery entries consume local disk until restored or explicitly deleted. Headless rendering and input tests do not establish native Windows modal, keyboard or pointer behavior. The independent reviewer quota was exhausted, so this data-loss-sensitive boundary received a structured primary review rather than a fresh external pass.
+
+### Workspace storage inspection milestone
+
+The Storage rail route now inventories primary checkouts and every worktree registered by Git. The shared inspection owner measures logical file size without traversing links, reads tracked and untracked changes through the typed Git client, resolves the local default branch, and checks whether each worktree `HEAD` is already an ancestor of that local branch. Missing registered paths appear as broken references. Filters expose all working copies, local review candidates, changed copies and broken references.
+
+A review candidate currently means only that the entry is a linked worktree, unlocked, clean and locally merged. The page intentionally does not offer deletion. Its evidence inspector labels remote/PR state, active task or process use, and retained artifacts as not checked. Those checks must be implemented and refreshed immediately before a guarded removal operation. Primary checkouts are always retained by this workflow.
+
+Evidence:
+
+- Two real-Git shared tests passed. They create a primary repository and linked worktree, verify unmerged-to-merged ancestry changes, invalidate candidate state after an untracked edit, and report a manually missing registered worktree as broken.
+- All 32 Avalonia tests passed. The Storage route test verifies measured summary cards, candidate filtering and selection state.
+- Wide and compact Skia renders were inspected: `Artifacts/StudioValidation/storage-review.png` and `storage-review-compact.png`. The wide view retains the evidence inspector; compact mode hides that side panel and keeps the measured list scrollable above the output dock.
+
+Reported sizes are logical bytes. Hard links and shared Git objects can make their sum larger than physically reclaimable space. Inaccessible directories are retained with a warning and linked entries are not measured. The scan is local and does not fetch remotes. Large workspaces are inspected sequentially and currently expose stage-level status rather than per-working-copy progress. No worktree was removed, no Git reference was pruned, and no user repository was modified during validation.
 
 ### Build inspection milestone
 

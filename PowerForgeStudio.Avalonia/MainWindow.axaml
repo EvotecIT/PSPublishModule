@@ -20,7 +20,7 @@
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsGitHubPage}" Command="{Binding ShowGitHubCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Schedules" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsStoragePage}" Command="{Binding ShowStorageCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
         </StackPanel>
       </Border>
@@ -78,7 +78,7 @@
             </StackPanel>
           </ScrollViewer>
         </Border>
-        <Border Grid.Row="1" Background="White" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="22,14">
+        <Border Grid.Row="1" Background="White" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="22,14" IsVisible="{Binding !IsStoragePage}">
           <StackPanel Spacing="12">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
               <TextBlock Text="{Binding ProjectName}" Classes="heading" TextTrimming="CharacterEllipsis" />
@@ -99,6 +99,7 @@
         <ContentControl Grid.Row="2" IsVisible="{Binding IsReleasePage}"><views:ReleaseView DataContext="{Binding Release}" /></ContentControl>
         <views:FilesView Grid.Row="2" IsVisible="{Binding IsFilesPage}" />
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
+        <views:StorageView Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsStoragePage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Storage}" />
         <Border Grid.Row="3" Background="#0D2132">
           <Grid RowDefinitions="38,*">
             <StackPanel Orientation="Horizontal" Spacing="9" Margin="17,10"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#E6F0FF" /><TextBlock Text="Output" Foreground="#E6F0FF" /></StackPanel>
@@ -109,19 +110,42 @@
         </Border>
       </Grid>
       <Border Grid.Column="4" x:Name="ContextPanel" Background="White" BorderBrush="#DDE5EF" BorderThickness="1,0,0,0" Padding="20,23">
-        <StackPanel Spacing="18">
-          <TextBlock Text="Context" FontWeight="SemiBold" FontSize="16" />
-          <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
-          <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
-          <TextBlock Text="Working copy" Classes="muted" />
-          <TextBlock Text="{Binding Branch}" />
-          <TextBlock Text="Git state" Classes="muted" />
-          <TextBlock Text="{Binding GitSummary}" TextWrapping="Wrap" />
-          <TextBlock Text="Selection" Classes="muted" />
-          <TextBlock Text="{Binding SelectedPath}" TextWrapping="Wrap" FontSize="12" />
-          <TextBlock Text="Local discovery" Classes="muted" />
-          <TextBlock Text="Build outputs and package caches are hidden in the explorer." TextWrapping="Wrap" />
-        </StackPanel>
+        <Grid>
+          <StackPanel Spacing="18" IsVisible="{Binding !IsStoragePage}">
+            <TextBlock Text="Context" FontWeight="SemiBold" FontSize="16" />
+            <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
+            <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
+            <TextBlock Text="Working copy" Classes="muted" />
+            <TextBlock Text="{Binding Branch}" />
+            <TextBlock Text="Git state" Classes="muted" />
+            <TextBlock Text="{Binding GitSummary}" TextWrapping="Wrap" />
+            <TextBlock Text="Selection" Classes="muted" />
+            <TextBlock Text="{Binding SelectedPath}" TextWrapping="Wrap" FontSize="12" />
+            <TextBlock Text="Local discovery" Classes="muted" />
+            <TextBlock Text="Build outputs and package caches are hidden in the explorer." TextWrapping="Wrap" />
+          </StackPanel>
+          <ScrollViewer IsVisible="{Binding IsStoragePage}">
+            <StackPanel Spacing="14" DataContext="{Binding Storage}">
+              <TextBlock Text="Review evidence" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Text="{Binding SelectedEntry.DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SelectedEntry.Path}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+              <TextBlock Text="Local changes" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.LocalStateDisplay}" TextWrapping="Wrap" />
+              <TextBlock Text="Default-branch ancestry" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.AncestryDisplay}" TextWrapping="Wrap" />
+              <TextBlock Text="Remote / PR evidence" Classes="muted" />
+              <TextBlock Text="Not checked" Foreground="#B45309" />
+              <TextBlock Text="Active task or process" Classes="muted" />
+              <TextBlock Text="Not checked" />
+              <TextBlock Text="Retained artifacts" Classes="muted" />
+              <TextBlock Text="Not checked" />
+              <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10">
+                <TextBlock Text="Candidate rows still require remote, active-use and retained-artifact evidence before removal can be offered." TextWrapping="Wrap" />
+              </Border>
+              <TextBlock Text="{Binding SelectedEntry.Warning}" Foreground="#BA2737" TextWrapping="Wrap" />
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
       </Border>
     </Grid>
     <Border Grid.Row="2" Background="#F5F8FD" BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" Padding="15,5">
