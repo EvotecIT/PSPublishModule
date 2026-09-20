@@ -5,11 +5,10 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 
 public sealed partial class WorkspaceViewModel
 {
-    public AutomationsViewModel Automations { get; private set; } = null!;
-    [ObservableProperty] private bool _isAutomationsPage;
-    public bool IsWorkspaceUtilityPage => IsStoragePage || IsAutomationsPage || IsConnectionsPage;
+    public ConnectionsViewModel Connections { get; private set; } = null!;
+    [ObservableProperty] private bool _isConnectionsPage;
 
-    partial void OnIsAutomationsPageChanged(bool value)
+    partial void OnIsConnectionsPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
         OnPropertyChanged(nameof(IsWorkspaceUtilityPage));
@@ -18,17 +17,17 @@ public sealed partial class WorkspaceViewModel
     }
 
     [RelayCommand]
-    private async Task ShowAutomationsAsync()
+    private async Task ShowConnectionsAsync()
     {
         if (KeepReleaseVisible()) return;
         IsStoragePage = false;
-        IsConnectionsPage = false;
+        IsAutomationsPage = false;
         IsReleasePage = false;
         IsGitHubPage = false;
         IsBuildPage = false;
         IsChangesPage = false;
-        IsAutomationsPage = true;
-        Automations.SetWorkspace(WorkspaceRoot);
-        await Automations.RefreshAsync();
+        IsConnectionsPage = true;
+        Connections.SetWorkspace(WorkspaceRoot);
+        await Connections.RefreshAsync();
     }
 }

@@ -21,7 +21,7 @@
           <Button Classes="rail" Classes.selected="{Binding IsGitHubPage}" Command="{Binding ShowGitHubCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsAutomationsPage}" Command="{Binding ShowAutomationsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Automations" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsStoragePage}" Command="{Binding ShowStorageCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" IsEnabled="False" ToolTip.Tip="This workspace page is still being connected"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsConnectionsPage}" Command="{Binding ShowConnectionsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
         </StackPanel>
       </Border>
       <Border Grid.Column="1" Background="#FBFCFF" BorderBrush="#DDE5EF" BorderThickness="0,0,1,0">
@@ -101,6 +101,7 @@
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
         <views:StorageView Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsStoragePage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Storage}" />
         <views:AutomationsView x:Name="AutomationsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsAutomationsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Automations}" />
+        <views:ConnectionsView x:Name="ConnectionsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsConnectionsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Connections}" />
         <Border Grid.Row="3" Background="#0D2132">
           <Grid RowDefinitions="38,*">
             <StackPanel Orientation="Horizontal" Spacing="9" Margin="17,10"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#E6F0FF" /><TextBlock Text="Output" Foreground="#E6F0FF" /></StackPanel>
@@ -162,6 +163,29 @@
               <TextBlock Text="{Binding SelectedEntry.SourcePath}" FontSize="11" TextWrapping="Wrap" />
               <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10">
                 <TextBlock Text="{Binding SelectedEntry.Detail}" TextWrapping="Wrap" />
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+          <ScrollViewer IsVisible="{Binding IsConnectionsPage}">
+            <StackPanel Spacing="14" DataContext="{Binding Connections}">
+              <TextBlock Text="Connection evidence" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Text="{Binding SelectedEntry.Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SelectedEntry.State}" Foreground="#0865FF" />
+              <TextBlock Text="Endpoint" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.Endpoint}" FontSize="11" TextWrapping="Wrap" />
+              <TextBlock Text="Credential reference" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.CredentialReference}" TextWrapping="Wrap" />
+              <TextBlock Text="Observed capabilities" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.CapabilityDisplay}" TextWrapping="Wrap" />
+              <TextBlock Text="Last verified" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.VerifiedDisplay}" />
+              <TextBlock Text="Owner" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.Owner}" FontSize="11" TextWrapping="Wrap" />
+              <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10">
+                <TextBlock Text="{Binding SelectedEntry.Evidence}" TextWrapping="Wrap" />
+              </Border>
+              <Border Background="#EFF7F1" BorderBrush="#A9D7B4" BorderThickness="1" CornerRadius="6" Padding="10">
+                <TextBlock Text="No secret value is loaded into the Connections page." TextWrapping="Wrap" />
               </Border>
             </StackPanel>
           </ScrollViewer>

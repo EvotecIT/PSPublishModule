@@ -32,7 +32,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Add current-remote, Studio-use and retained-artifact checks with guarded no-force worktree removal.
 - [ ] Add matching merged-PR-head fallback, broken-reference pruning and external process detection where available.
 - [x] Inventory Windows schedules and local GitHub workflow definitions with explicit provider evidence boundaries.
-- [ ] Connect GitHub automation runtime, a supported Codex adapter, and optional licensing/IntelligenceX integrations.
+- [x] Add secret-free GitHub, registry, Licensing, IntelligenceX and local-toolchain connection evidence.
+- [ ] Connect GitHub automation runtime and a supported Codex adapter; add provider-owned configuration actions only where their owners expose safe APIs.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
 - [ ] Clean task-owned validation artifacts and report delivery limits.
@@ -149,6 +150,23 @@ Evidence:
 - Wide, compact-top and compact-list Skia renders were inspected: `Artifacts/StudioValidation/automations-inventory.png`, `automations-inventory-compact.png` and `automations-inventory-compact-list.png`.
 
 This milestone does not calculate cron occurrences, query GitHub workflow runs, enable or pause tasks, or register schedules. Windows schedule text summarizes the first trigger while the provider's next-run timestamp remains the runtime evidence. Tasks identifiable only through command arguments may appear under All observed because arguments are intentionally excluded. Inline/flow-style GitHub schedule YAML is not parsed. Provider-specific detail/history pages, supported provider editing and schedule creation remain future work.
+
+### Connections inventory milestone
+
+The Connections rail route keeps the project tree visible while verifying service, registry and local-tool boundaries through read-only provider adapters. Its domain model can carry an endpoint, credential reference, observed capabilities, verification time and evidence, but has no credential-value field. URI display removes user information, query and fragment data; non-loopback HTTP endpoints are blocked. Provider failures and timeouts are isolated so one unavailable service does not hide other evidence.
+
+GitHub verification invokes the installed CLI with a fixed `auth status --hostname github.com --active` request and discards all command output. The page reports only whether an active account was confirmed and names the GitHub CLI credential store; it does not infer repository or write scopes. Local Git, .NET, PowerShell and GitHub CLI rows use bounded direct version checks. NuGet.org and PowerShell Gallery use public response-header checks; reachability is not described as authenticated publication access.
+
+Licensing remains owned by `Licensing.Core`, `Licensing.Admin` and `Licensing.Release`. Studio calls the public `control.evotec.xyz/healthz` endpoint without credentials and counts protected profile filenames under the existing `Licensing.Admin` profile directory without opening their contents. It does not unprotect a profile or infer authenticated scope. IntelligenceX remains owned by `IntelligenceX.Chat.Client` and `IntelligenceX.Chat.Service`. Studio performs the documented named-pipe `hello` handshake, retains only the sanitized service version and never reads provider profiles or API keys. Both integrations work as optional capability evidence; Studio still runs when either owner is absent.
+
+Evidence:
+
+- Twelve focused shared tests pass. They cover credential/query URI redaction, non-loopback HTTP rejection, locked Licensing profile files that cannot be opened, an explicit reachable-but-unconfigured Licensing state, discarded GitHub command output containing a secret sentinel, GitHub timeout classification, provider failure isolation, provider-owned HTTP timeout handling, portable IntelligenceX owner discovery and a correlated owner handshake that discards unrelated payload fields.
+- All 37 Avalonia tests pass. Two focused Connections cases cover route/filter/inspector state, secret-free output, cancellation and immediate refresh after a workspace switch.
+- A disposable live console probe observed GitHub authentication; Git, .NET 10.0.400, PowerShell 7.6.5 and GitHub CLI 2.97.0; reachable NuGet.org, PowerShell Gallery and Evotec Control endpoints; nine protected Licensing profile references; and a successful IntelligenceX.Chat.Service 1.0.0.0 handshake. The probe emitted only the same sanitized rows shown by Studio and was removed after verification.
+- Wide, compact-top and compact-list Skia renders were inspected: `Artifacts/StudioValidation/connections-inventory.png`, `connections-inventory-compact.png` and `connections-inventory-compact-list.png`. Compact mode retains the tree, collapses the inspector and scrolls the page above the output dock.
+
+This milestone does not edit connections, authenticate a new account, publish a package, retrieve licensing customer data, query download totals or open an IntelligenceX chat session. Those actions must remain in their existing owners and expose explicit capability/scope evidence before Studio enables them. Native Windows keyboard, pointer and credential-flow interaction remain unverified.
 
 ### Build inspection milestone
 

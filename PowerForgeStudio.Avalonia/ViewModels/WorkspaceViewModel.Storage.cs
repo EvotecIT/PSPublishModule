@@ -22,6 +22,7 @@ public sealed partial class WorkspaceViewModel
         if (KeepReleaseVisible())
             return;
         IsAutomationsPage = false;
+        IsConnectionsPage = false;
         IsReleasePage = false;
         IsGitHubPage = false;
         IsBuildPage = false;

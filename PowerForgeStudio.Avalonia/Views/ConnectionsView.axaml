@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             xmlns:connections="using:PowerForgeStudio.Domain.Connections"
+             x:DataType="vm:ConnectionsViewModel" x:Class="PowerForgeStudio.Avalonia.Views.ConnectionsView">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.connectionState.attention"><Setter Property="Foreground" Value="#BA2737" /></Style>
+    <Style Selector="TextBlock.connectionState.verified"><Setter Property="Foreground" Value="#14833B" /></Style>
+  </UserControl.Styles>
+  <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="22,18" Spacing="14">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Connections" Classes="heading" />
+          <TextBlock Text="Read-only capability checks for services, registries and local toolchains. Credentials remain with their owners." Classes="muted" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1" Content="Verify connections" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" VerticalAlignment="Center" />
+      </Grid>
+      <ItemsControl ItemsSource="{Binding Sources}">
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="218" ItemHeight="112" ItemSpacing="10" LineSpacing="10" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="connections:WorkspaceConnectionSourceState">
+            <Border Classes="card" Padding="13" Margin="0,0,10,0">
+              <StackPanel Spacing="4">
+                <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Provider}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Grid.Column="1" Text="{Binding EntryCount}" Foreground="#0865FF" FontWeight="SemiBold" /></Grid>
+                <TextBlock Text="{Binding State}" Classes="muted" />
+                <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" MaxHeight="43" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
+        <Border Classes="card" Padding="14"><StackPanel><TextBlock Text="{Binding VerifiedCount}" FontSize="22" FontWeight="SemiBold" Foreground="#14833B" /><TextBlock Text="verified or reachable" Classes="muted" /></StackPanel></Border>
+        <Border Grid.Column="1" Classes="card" Padding="14"><StackPanel><TextBlock Text="{Binding PendingCount}" FontSize="22" FontWeight="SemiBold" Foreground="#0865FF" /><TextBlock Text="available / unconfigured" Classes="muted" /></StackPanel></Border>
+        <Border Grid.Column="2" Classes="card" Padding="14"><StackPanel><TextBlock Text="{Binding AttentionCount}" FontSize="22" FontWeight="SemiBold" Foreground="#BA2737" /><TextBlock Text="need attention" Classes="muted" /></StackPanel></Border>
+      </Grid>
+      <WrapPanel ItemSpacing="8" LineSpacing="8">
+        <Button Content="All connections" Classes="chip" Classes.active="{Binding IsAllFilter}" Command="{Binding ShowAllCommand}" />
+        <Button Content="Verified" Classes="chip" Classes.active="{Binding IsVerifiedFilter}" Command="{Binding ShowVerifiedCommand}" />
+        <Button Content="Services" Classes="chip" Classes.active="{Binding IsServicesFilter}" Command="{Binding ShowServicesCommand}" />
+        <Button Content="Toolchains" Classes="chip" Classes.active="{Binding IsToolchainsFilter}" Command="{Binding ShowToolchainsCommand}" />
+        <Button Content="Needs attention" Classes="chip" Classes.active="{Binding IsAttentionFilter}" Command="{Binding ShowAttentionCommand}" />
+      </WrapPanel>
+      <Border Classes="card" Padding="0" MinHeight="280">
+        <Grid RowDefinitions="42,*">
+          <Grid ColumnDefinitions="1.4*,1.1*,105,1.1*" ColumnSpacing="12" Margin="16,0">
+            <TextBlock Text="Connection" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="Provider / owner" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Text="State" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="3" Text="Last verified" Classes="muted" VerticalAlignment="Center" />
+          </Grid>
+          <ListBox Grid.Row="1" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="connections:WorkspaceConnectionEntry">
+                <Grid ColumnDefinitions="1.4*,1.1*,105,1.1*" ColumnSpacing="12" Margin="10,8">
+                  <StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Category}" Classes="muted" FontSize="11" /></StackPanel>
+                  <StackPanel Grid.Column="1"><TextBlock Text="{Binding Provider}" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Owner}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" /></StackPanel>
+                  <TextBlock Grid.Column="2" Text="{Binding State}" VerticalAlignment="Center" Classes="connectionState" Classes.attention="{Binding NeedsAttention}" Classes.verified="{Binding IsVerified}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Column="3" Text="{Binding VerifiedDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Grid.Row="1" Text="No connections match this filter." IsVisible="{Binding !HasEntries}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" />
+        </Grid>
+      </Border>
+      <Border Background="#EFF7F1" BorderBrush="#A9D7B4" BorderThickness="1" CornerRadius="6" Padding="11">
+        <TextBlock Text="Secret boundary: Studio records provider, endpoint, credential reference and observed capability evidence. It never records the credential value." TextWrapping="Wrap" />
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
