@@ -565,6 +565,9 @@ Notes:
 - `releasesPath` accepts local JSON (GitHub API array shape or release-hub shape) for deterministic/offline builds.
 - `changelogPath` can be used as a markdown fallback when `source:file`.
 - `tokenEnv` is preferred over inline `token` in CI.
+- `retainLatestStableTagPrefixes` keeps the newest published stable release for each tag prefix even when it falls outside `maxReleases`. `retainAllStableTagPrefixes` keeps every published stable release for each prefix, including older versions needed for complete download history.
+- `maxReleases` limits the normal timeline. The global latest stable and prerelease entries, plus configured retained product releases, can appear beyond that limit so the latest markers still identify releases present in the hub.
+- With either retention option, GitHub pagination must reach the end of the release list. Set `maxPages` high enough to cover the history; a full final page gets one extra request to verify whether more releases exist. An incomplete scan fails. A previous same-repository hub may be preserved for latest-only retention when it contains each requested prefix; retain-all requires a complete fresh scan.
 - `assetRules` classify multi-asset releases into product/channel/platform/kind buckets.
 - Output is page-agnostic and can be rendered on home/docs/changelog/downloads pages from `data.release_hub`.
 

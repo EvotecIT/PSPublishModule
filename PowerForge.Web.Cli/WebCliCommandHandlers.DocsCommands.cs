@@ -485,7 +485,18 @@ internal static partial class WebCliCommandHandlers
             MaxPages = maxPages <= 0 ? 5 : maxPages
         };
 
+        var existingOutputPath = Path.GetFullPath(outPath);
+        var existingOutput = File.Exists(existingOutputPath) ? File.ReadAllText(existingOutputPath) : null;
         var result = WebReleaseHubGenerator.Generate(options);
+        if (result.Warnings.Any(warning =>
+                warning.StartsWith("Incomplete GitHub release fetch ", StringComparison.Ordinal)))
+        {
+            if (existingOutput is null)
+                File.Delete(result.OutputPath);
+            else
+                File.WriteAllText(result.OutputPath, existingOutput);
+            return Fail("Release hub fetch was incomplete; prior output was preserved.", outputJson, logger, "web.release_hub");
+        }
 
         if (!outputJson && result.Warnings.Length > 0)
         {

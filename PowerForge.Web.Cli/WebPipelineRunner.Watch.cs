@@ -212,14 +212,15 @@ internal static partial class WebPipelineRunner
         }
     }
 
-    private static bool IsUnderAnyRoot(string path, IReadOnlyList<string> roots)
+    internal static bool IsUnderAnyRoot(string path, IReadOnlyList<string> roots)
     {
         if (roots.Count == 0) return false;
 
         foreach (var root in roots)
         {
             if (string.IsNullOrWhiteSpace(root)) continue;
-            if (path.StartsWith(root, FileSystemPathComparison))
+            if (path.StartsWith(root, FileSystemPathComparison) ||
+                string.Equals(path, root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), FileSystemPathComparison))
                 return true;
         }
         return false;

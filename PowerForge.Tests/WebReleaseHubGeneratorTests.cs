@@ -6,6 +6,49 @@ namespace PowerForge.Tests;
 public class WebReleaseHubGeneratorTests
 {
     [Fact]
+    public void Generate_RetainsTrueGlobalLatestStableAlongsideOlderProductRelease()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-release-global-latest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var input = Path.Combine(root, "releases.json");
+            var output = Path.Combine(root, "release-hub.json");
+            File.WriteAllText(input,
+                """
+                [
+                  { "tag_name": "v5-preview2", "published_at": "2026-09-04T00:00:00Z", "prerelease": true },
+                  { "tag_name": "v5-preview1", "published_at": "2026-09-03T00:00:00Z", "prerelease": true },
+                  { "tag_name": "OfficeIMO-v4", "published_at": "2026-09-02T00:00:00Z" },
+                  { "tag_name": "Studio-v0.1", "published_at": "2026-09-01T00:00:00Z" }
+                ]
+                """);
+            var options = new WebReleaseHubOptions
+            {
+                Source = WebChangelogSource.File,
+                ReleasesPath = input,
+                OutputPath = output,
+                MaxReleases = 2,
+                RetainLatestStableTagPrefixes = ["Studio-v"]
+            };
+
+            var result = WebReleaseHubGenerator.Generate(options);
+            Assert.Equal(4, result.ReleaseCount);
+            using var document = JsonDocument.Parse(File.ReadAllText(output));
+            Assert.Equal("OfficeIMO-v4", document.RootElement.GetProperty("latest").GetProperty("stableTag").GetString());
+            var releases = document.RootElement.GetProperty("releases").EnumerateArray().ToArray();
+            Assert.True(releases.Single(release => release.GetProperty("tag").GetString() == "OfficeIMO-v4")
+                .GetProperty("isLatestStable").GetBoolean());
+            Assert.False(releases.Single(release => release.GetProperty("tag").GetString() == "Studio-v0.1")
+                .GetProperty("isLatestStable").GetBoolean());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Generate_FromLocalReleasesJson_ClassifiesAssetsAndMarksLatest()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-release-hub-generator-" + Guid.NewGuid().ToString("N"));

@@ -1382,6 +1382,8 @@ internal static partial class WebPipelineRunner
             IncludeDraft = GetBool(step, "includeDraft") ?? GetBool(step, "include-draft") ?? false,
             IncludePrerelease = GetBool(step, "includePrerelease") ?? GetBool(step, "include-prerelease") ?? true,
             MaxReleases = maxReleases is > 0 ? maxReleases : null,
+            RetainLatestStableTagPrefixes = ReadStringList(step, "retainLatestStableTagPrefixes", "retain-latest-stable-tag-prefixes").ToList(),
+            RetainAllStableTagPrefixes = ReadStringList(step, "retainAllStableTagPrefixes", "retain-all-stable-tag-prefixes").ToList(),
             PageSize = pageSize is > 0 ? pageSize.Value : 100,
             MaxPages = maxPages is > 0 ? maxPages.Value : 5
         };
@@ -1389,25 +1391,16 @@ internal static partial class WebPipelineRunner
         options.AssetRules.AddRange(rules);
 
         var result = WebReleaseHubGenerator.Generate(options);
-        if (!string.IsNullOrWhiteSpace(existingOutputContent) &&
-            result.Warnings.Length > 0 &&
-            TryPreserveExistingReleaseHub(existingOutputContent, outPath))
+        bool incompleteFetch = result.Warnings.Any(warning =>
+            warning.StartsWith("Incomplete GitHub release fetch ", StringComparison.Ordinal));
+        if (incompleteFetch || (result.ReleaseCount == 0 && result.Warnings.Length > 0))
         {
-            var preservedDocument = TryReadReleaseHubDocument(existingOutputContent);
-            result = new WebReleaseHubResult
-            {
-                OutputPath = outPath,
-                ReleaseCount = preservedDocument?.Releases.Count ?? 0,
-                AssetCount = preservedDocument?.Releases.Sum(static release => release.Assets.Count) ?? 0,
-                Source = result.Source,
-                Warnings = result.Warnings
-                    .Concat(new[] { "Preserved existing release-hub output after warning-only empty refresh." })
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray()
-            };
-            stepResult.Success = true;
-            stepResult.Message = $"Release hub fallback: preserved existing '{outPath}' after warning-only empty refresh.";
-            return;
+            if (existingOutputContent is null)
+                File.Delete(outPath);
+            else
+                File.WriteAllText(outPath, existingOutputContent);
+            throw new InvalidOperationException(
+                $"Release hub refresh for '{outPath}' was incomplete or returned no releases with warnings; publication requires a complete source.");
         }
 
         var note = result.Source != WebChangelogSource.Auto ? $" ({result.Source.ToString().ToLowerInvariant()})" : string.Empty;
@@ -1449,41 +1442,6 @@ internal static partial class WebPipelineRunner
         return parsed;
     }
 
-    private static bool TryPreserveExistingReleaseHub(string existingJson, string outputPath)
-    {
-        if (string.IsNullOrWhiteSpace(existingJson) || !File.Exists(outputPath))
-            return false;
-
-        var existing = TryReadReleaseHubDocument(existingJson);
-        // The generator has already written outputPath; read it here to compare old vs newly generated release data.
-        var generated = TryReadReleaseHubDocument(File.ReadAllText(outputPath));
-        if (existing is null || generated is null)
-            return false;
-
-        if (existing.Releases.Count <= 0 || generated.Releases.Count > 0)
-            return false;
-
-        File.WriteAllText(outputPath, existingJson);
-        return true;
-    }
-
-    private static WebReleaseHubDocument? TryReadReleaseHubDocument(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<WebReleaseHubDocument>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-        }
-        catch
-        {
-            return null;
-        }
-    }
 
     private static List<WebReleaseHubAssetRuleInput> ParseReleaseHubAssetRules(JsonElement step)
     {
