@@ -11,6 +11,7 @@
         </StackPanel>
         <WrapPanel Grid.Column="1" ItemSpacing="8" VerticalAlignment="Center">
           <Button Content="Open selected" Click="OpenSelected" IsEnabled="{Binding SelectedEntry.Exists}" />
+          <Button Content="Review removal" Click="ReviewRemoval" IsEnabled="{Binding CanReviewRemoval}" />
           <Button Content="Refresh inspection" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
         </WrapPanel>
       </Grid>

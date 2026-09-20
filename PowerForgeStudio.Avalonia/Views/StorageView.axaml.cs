@@ -26,4 +26,13 @@ public sealed partial class StorageView : UserControl
             }
         }
     }
+
+    private async void ReviewRemoval(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is not StorageViewModel model || TopLevel.GetTopLevel(this) is not Window owner)
+            return;
+        if (!await model.ReviewSelectedRemovalAsync())
+            return;
+        await new WorktreeRemovalDialog { DataContext = model }.ShowDialog(owner);
+    }
 }

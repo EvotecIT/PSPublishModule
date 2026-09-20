@@ -26,10 +26,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingTreeSelection;
     private int _refreshVersion;
 
-    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null, IWorkspaceStorageRemovalService? storageRemoval = null)
     {
         Release = release ?? new ReleaseViewModel();
-        Storage = new StorageViewModel(storage);
+        Storage = new StorageViewModel(storage, storageRemoval, GetProtectedWorkingCopies);
         GitHub = new GitHubViewModel(gitHub);
         WorkspaceRoot = Path.GetFullPath(root);
         _stateStore = stateStore;

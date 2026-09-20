@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" x:DataType="vm:StorageViewModel"
+        x:Class="PowerForgeStudio.Avalonia.Views.WorktreeRemovalDialog"
+        Title="Review worktree removal" Width="760" Height="680" MinWidth="620" MinHeight="520" WindowStartupLocation="CenterOwner">
+  <Window.Styles>
+    <Style Selector="TextBlock.evidence"><Setter Property="Foreground" Value="#BA2737" /></Style>
+    <Style Selector="TextBlock.evidence.passed"><Setter Property="Foreground" Value="#169B45" /></Style>
+  </Window.Styles>
+  <Grid Margin="26" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
+    <StackPanel Spacing="4">
+      <TextBlock Text="Review worktree removal" Classes="heading" />
+      <TextBlock Text="The evidence is rechecked immediately before Git removes this linked worktree without force." Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+    <Border Grid.Row="1" Classes="card" Padding="14">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding RemovalReview.WorktreePath}" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding RemovalReview.HeadSha, StringFormat=Exact HEAD: {0}}" Classes="muted" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" TextTrimming="CharacterEllipsis" />
+        <TextBlock Text="{Binding RemovalReview.RemoteDefaultRef, StringFormat=Remote default: {0}}" Classes="muted" />
+      </StackPanel>
+    </Border>
+    <ScrollViewer Grid.Row="2" x:Name="ReviewScroller" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+          <TextBlock Text="Workspace containment" /><TextBlock Grid.Column="1" Text="{Binding RemovalReview.ContainmentDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.ContainmentPassed}" />
+          <TextBlock Grid.Row="1" Text="Exact Git registration" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RemovalReview.RegistrationDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.RegistrationPassed}" />
+          <TextBlock Grid.Row="2" Text="Git worktree is unlocked" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RemovalReview.UnlockedDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.UnlockedPassed}" />
+          <TextBlock Grid.Row="3" Text="Clean tracked and untracked state" /><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding RemovalReview.CleanDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.CleanPassed}" />
+          <TextBlock Grid.Row="4" Text="Exact HEAD in current remote default" /><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding RemovalReview.RemoteAncestryDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.RemoteAncestryPassed}" />
+          <TextBlock Grid.Row="5" Text="No PowerForge Studio use" /><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding RemovalReview.StudioUseDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.StudioUsePassed}" />
+        </Grid>
+        <Border Background="#FFF1F2" BorderBrush="#F3A3AD" BorderThickness="1" CornerRadius="6" Padding="12" IsVisible="{Binding !RemovalReview.ReadyForConfirmation}">
+          <StackPanel Spacing="7">
+            <TextBlock Text="Removal is blocked" FontWeight="SemiBold" Foreground="#BA2737" />
+            <ItemsControl ItemsSource="{Binding RemovalReview.Findings}">
+              <ItemsControl.ItemTemplate><DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" Margin="0,2" /></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+        <Border Classes="card" Padding="12" IsVisible="{Binding RemovalReview.HasRetainedArtifacts}">
+          <StackPanel Spacing="7">
+            <TextBlock Text="Retained artifact paths" FontWeight="SemiBold" />
+            <ItemsControl ItemsSource="{Binding RemovalReview.RetainedArtifactPaths}">
+              <ItemsControl.ItemTemplate><DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+        <CheckBox IsChecked="{Binding ConfirmNoExternalUse}" IsEnabled="{Binding RemovalReview.ReadyForConfirmation}">
+          <TextBlock Text="I confirmed no external editor, terminal, task, or process is using this worktree." TextWrapping="Wrap" />
+        </CheckBox>
+        <CheckBox IsChecked="{Binding ConfirmRetainedArtifacts}" IsVisible="{Binding RemovalReview.HasRetainedArtifacts}" IsEnabled="{Binding RemovalReview.ReadyForConfirmation}">
+          <TextBlock Text="I reviewed the retained artifact paths and accept removing them with the worktree." TextWrapping="Wrap" />
+        </CheckBox>
+        <TextBlock Text="{Binding RemovalError}" Foreground="#BA2737" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+    <WrapPanel Grid.Row="3" HorizontalAlignment="Right" ItemSpacing="9">
+      <Button Content="Refresh evidence" Click="RefreshEvidence" IsEnabled="{Binding CanReviewRemoval}" />
+      <Button Content="Cancel" Click="Cancel" IsEnabled="{Binding !IsRemoving}" />
+      <Button Content="Remove worktree" Click="Remove" IsEnabled="{Binding CanRemoveReviewed}" Background="#BA2737" Foreground="White" />
+    </WrapPanel>
+  </Grid>
+</Window>

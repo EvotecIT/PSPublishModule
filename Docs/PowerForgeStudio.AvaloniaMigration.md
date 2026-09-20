@@ -29,7 +29,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
 - [x] Add PR changed-file lists and bounded patch previews with revision checks.
 - [x] Add review-only workspace storage inventory with measured worktrees and local ancestry evidence.
-- [ ] Add remote/PR, active-use and retained-artifact checks before guarded worktree cleanup.
+- [x] Add current-remote, Studio-use and retained-artifact checks with guarded no-force worktree removal.
+- [ ] Add matching merged-PR-head fallback, broken-reference pruning and external process detection where available.
 - [ ] Inventory and expose schedules, storage and optional licensing/IntelligenceX integration.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
 - [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
@@ -118,6 +119,20 @@ Evidence:
 - Wide and compact Skia renders were inspected: `Artifacts/StudioValidation/storage-review.png` and `storage-review-compact.png`. The wide view retains the evidence inspector; compact mode hides that side panel and keeps the measured list scrollable above the output dock.
 
 Reported sizes are logical bytes. Hard links and shared Git objects can make their sum larger than physically reclaimable space. Inaccessible directories are retained with a warning and linked entries are not measured. The scan is local and does not fetch remotes. Large workspaces are inspected sequentially and currently expose stage-level status rather than per-working-copy progress. No worktree was removed, no Git reference was pruned, and no user repository was modified during validation.
+
+### Guarded worktree removal milestone
+
+Storage can now open a dedicated removal review for a linked worktree. The shared removal owner requires a physical path below the workspace without an intervening directory link, exact unlocked Git registration, a clean tracked and untracked state, and proof that the exact worktree `HEAD` is an ancestor of the current `origin` default branch. It reads that branch with `git ls-remote --symref origin HEAD`, validates the returned branch ref and object ID, and does not fetch, rewrite local refs or persist credentials. Removal remains blocked when the remote commit is not already available in the local object database.
+
+The review also blocks a working copy used by PowerForge Studio's current selection, open documents, build or protected release state. Git's ignored-file view is folded into reviewable retained-content roots alongside known build output locations. The user must separately confirm that no external editor, terminal, task or process is using the worktree and, when retained content exists, accept removing those listed roots. The evidence is fingerprinted and rebuilt immediately before execution. Any change invalidates the review. Git removes the worktree without `--force`, after which Studio verifies that both the path and worktree registration are gone. Primary checkouts cannot enter this workflow.
+
+Evidence:
+
+- Four real-Git storage tests passed. Two inspection tests cover local ancestry, changed state and broken registrations. Two removal tests use a bare `origin`, a merged feature worktree, ignored `bin` and previously unknown `.cache` content, a real Git lock, Studio-use protection, confirmation gates, stale-review rejection and the path/registration postconditions.
+- All 33 Avalonia tests passed. The storage workflow test opens the removal dialog and proves that both confirmations are required before its destructive action becomes available. A separate regression proves that a failed evidence refresh invalidates the prior review and disables removal.
+- Wide and compact Skia renders were inspected: `Artifacts/StudioValidation/worktree-removal-review.png`, `worktree-removal-review-compact.png` and `worktree-removal-review-compact-bottom.png`. The compact dialog keeps the action bar pinned and makes the evidence and confirmations scrollable.
+
+This gate proves current default-branch ancestry. It intentionally blocks squash-merged work unless a future matching merged-PR-head check supplies equivalent evidence. Detecting every external process that may hold or later access a path is not portable, so the external-use confirmation remains an explicit human assertion. Remote resolution may invoke the user's existing Git credential helper, but Studio neither requests nor stores a credential. Broken-reference pruning and automatic bulk cleanup remain unimplemented.
 
 ### Build inspection milestone
 

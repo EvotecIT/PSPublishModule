@@ -28,4 +28,14 @@ public sealed partial class WorkspaceViewModel
         Storage.SetWorkspace(WorkspaceRoot);
         await Storage.RefreshAsync();
     }
+
+    private IReadOnlyCollection<string> GetProtectedWorkingCopies()
+    {
+        var paths = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(ActiveWorkingCopyRoot)) paths.Add(ActiveWorkingCopyRoot);
+        foreach (var document in Documents) paths.Add(document.Reference.WorkingCopyRoot);
+        if (Build.IsBuilding && !string.IsNullOrWhiteSpace(Build.BuildRoot)) paths.Add(Build.BuildRoot);
+        if (Release.HasProtectedReleaseWork && !string.IsNullOrWhiteSpace(Release.BuildRoot)) paths.Add(Release.BuildRoot);
+        return paths;
+    }
 }
