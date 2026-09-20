@@ -11,7 +11,7 @@ using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Tests;
 
-public sealed class PowerForgeStudioVerificationExecutionServiceTests
+public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
 {
     [Fact]
     public void BuildPendingTargets_VerifyReadyItem_ReturnsTargetsFromPublishCheckpoint()

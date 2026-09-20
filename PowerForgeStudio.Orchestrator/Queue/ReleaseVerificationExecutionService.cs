@@ -98,7 +98,30 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
         var receipts = new List<ReleaseVerificationReceipt>(publishResult.Receipts.Count);
         foreach (var receipt in publishResult.Receipts)
         {
-            receipts.Add(await VerifyReceiptAsync(receipt, cancellationToken));
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var result = await VerifyReceiptAsync(receipt, cancellationToken).ConfigureAwait(false);
+                // Some hosts return a failed probe when cancelled instead of throwing.
+                if (result.Status != ReleaseVerificationReceiptStatus.Verified)
+                    cancellationToken.ThrowIfCancellationRequested();
+                receipts.Add(result);
+            }
+            catch (Exception exception)
+            {
+                var cancelled = cancellationToken.IsCancellationRequested || exception is OperationCanceledException;
+                receipts.Add(FailedReceipt(receipt.RootPath, receipt.RepositoryName, receipt.AdapterKind,
+                    receipt.TargetName, receipt.Destination,
+                    cancelled ? "Verification was cancelled before this check completed."
+                        : "Verification was interrupted before this check completed. Retry verification to check remote state.",
+                    receipt.TargetKind));
+                return ReleaseQueueExecutionResultFactory.CreateVerificationResult(queueItem, receipts) with
+                {
+                    WasCancelled = cancelled,
+                    Summary = cancelled ? "Verification cancelled; completed check results retained."
+                        : "Verification interrupted; completed check results retained."
+                };
+            }
         }
 
         return ReleaseQueueExecutionResultFactory.CreateVerificationResult(queueItem, receipts);
@@ -132,7 +155,9 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
             "GitHub" => await VerifyGitHubAsync(publishReceipt, cancellationToken),
             "NuGet" => await VerifyNuGetAsync(publishReceipt, cancellationToken),
             "PowerShellRepository" => await VerifyPowerShellRepositoryAsync(publishReceipt, cancellationToken),
-            _ => SkippedReceipt(publishReceipt, $"Verification is not implemented for {publishReceipt.TargetKind} targets yet.")
+            _ => FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind,
+                publishReceipt.TargetName, publishReceipt.Destination,
+                $"Verification is not available for published {publishReceipt.TargetKind} targets. Delivery remains unverified.", publishReceipt.TargetKind)
         };
     }
 
@@ -187,7 +212,6 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
         => result.Status switch
         {
             PublishVerificationStatus.Verified => VerifiedReceipt(publishReceipt, result.Summary),
-            PublishVerificationStatus.Skipped => SkippedReceipt(publishReceipt, result.Summary),
             _ => FailedReceipt(
                 publishReceipt.RootPath,
                 publishReceipt.RepositoryName,

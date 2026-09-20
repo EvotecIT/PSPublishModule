@@ -368,3 +368,13 @@ Verification targets now use structured identity including destination and sourc
 The legacy verification table is copied and replaced transactionally. Twenty-one focused verification, schema, projection and checkpoint tests passed, including two feeds for one package through preview, controlled HTTP probes and database readback; exact legacy evidence retention; rollback and repair; repeat initialization; and concurrent initialization. No real publication or user database migration occurred. Independent review /root/review_verification_destinations found no actionable issues, fingerprint 7fc634cc731b45af7b9ccec251c8d7be4946ab2f; boundary current. Separate-process migration concurrency and forced process termination remain untested.
 
 Next: retain partial verification evidence across cancellation/errors, add durable verification, bind displayed publication destinations to execution, and connect the Avalonia release controls. Unknown published target kinds currently return Skipped and must not be presented as verified delivery.
+
+### Interrupted verification evidence
+
+Verification now returns completed checks when a later probe is cancelled or interrupted, adds a neutral failed receipt for the unfinished target, and stops before subsequent targets. A cancellation racing a successful final probe does not erase that success. Exception details are not copied into durable or UI-facing evidence. Failed verification can be safely retried from its preserved publication checkpoint because verification probes are read-only.
+
+Published targets no longer complete the queue when the configured destination cannot be probed or the target kind has no verifier. They remain explicitly failed and unverified. A publication receipt that was intentionally skipped still produces a skipped verification receipt.
+
+Thirty-five focused verification, cancellation, result-factory and queue-transition tests passed. Controlled HTTP fixtures cover cancellation before, between and during probes, final-result races, unsupported target kinds, missing destinations, database readback and retry restoration. No external service was contacted. The independent local review could not start because the reviewer agent quota was exhausted; a structured primary review found no actionable defect. Independent review remains an explicit validation gap for this boundary.
+
+Next: add a durable verification claim/finalization workflow, then connect publication and verification execution to the Avalonia release page with explicit acknowledgement and saved receipts.

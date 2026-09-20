@@ -7,4 +7,8 @@ public sealed record ReleaseVerificationExecutionResult(
     bool Succeeded,
     string Summary,
     string? SourceCheckpointStateJson,
-    IReadOnlyList<ReleaseVerificationReceipt> Receipts);
+    IReadOnlyList<ReleaseVerificationReceipt> Receipts)
+{
+    /// <summary>True when cancellation prevented completion of all requested checks.</summary>
+    public bool WasCancelled { get; init; }
+}
