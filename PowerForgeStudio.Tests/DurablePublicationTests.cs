@@ -67,7 +67,7 @@ public sealed class DurablePublicationTests
             var reopened = (await database.LoadReleaseCheckpointAsync(session.SessionId))!;
             Assert.Equal(ReleaseQueueStage.Verify, reopened.Session.Items[0].Stage); Assert.Equal(2, reopened.PublishReceipts.Count);
             await new DBAClientX.SQLite().ExecuteNonQueryAsync(path,
-                "UPDATE release_publish_receipt SET summary = 'changed elsewhere' WHERE target_kind = 'GitHub';");
+                "UPDATE release_publish_receipt SET summary = 'changed elsewhere' WHERE destination = 'fixture release';");
             Assert.NotNull((await workflow.RetrySaveAsync(result)).PersistenceError);
             Assert.Contains((await database.LoadReleaseCheckpointAsync(session.SessionId))!.PublishReceipts,
                 receipt => receipt.Summary == "changed elsewhere");
@@ -104,7 +104,7 @@ public sealed class DurablePublicationTests
             if (interrupt) throw new IOException("Unknown remote outcome");
             var receipt = new ReleasePublishReceipt(item.RootPath, item.RepositoryName, "ProjectBuild", "Fixture", "NuGet", "fixture feed", "fixture.nupkg", ReleasePublishReceiptStatus.Published, "Published", DateTimeOffset.UtcNow);
             return new(item.RootPath, true, "Published", item.CheckpointStateJson,
-                multiple ? [receipt, receipt with { TargetKind = "GitHub", Destination = "fixture release", PublishedAtUtc = receipt.PublishedAtUtc.AddSeconds(1) }] : [receipt]);
+                multiple ? [receipt, receipt with { Destination = "fixture release", PublishedAtUtc = receipt.PublishedAtUtc.AddSeconds(1) }] : [receipt]);
         }
     }
 }
