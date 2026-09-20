@@ -75,6 +75,12 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
     {
         ArgumentNullException.ThrowIfNull(queueItem);
 
+        if (queueItem.Stage != ReleaseQueueStage.Publish || queueItem.Status != ReleaseQueueItemStatus.ReadyToRun)
+            return new ReleasePublishExecutionResult(queueItem.RootPath, false,
+                "Queue item is not ready for publication.", queueItem.CheckpointStateJson,
+                [FailedReceipt(queueItem.RootPath, queueItem.RepositoryName, "Publish", "Queue checkpoint", null,
+                    "Queue item must be at the Publish stage and ready to run.")]);
+
         var signingResult = TryDeserializeSigningResult(queueItem);
         if (signingResult is null)
         {
@@ -96,7 +102,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
             return new ReleasePublishExecutionResult(
                 RootPath: queueItem.RootPath,
                 Succeeded: false,
-                Summary: "Unified release publish targets could not be projected.",
+                Summary: "Publication targets could not be validated.",
                 SourceCheckpointStateJson: queueItem.CheckpointStateJson,
                 Receipts: [
                     FailedReceipt(
@@ -484,13 +490,11 @@ public sealed partial class ReleasePublishExecutionService
         ReleaseSigningExecutionResult signingResult)
         => ReadUnifiedReleaseCheckpoint(signingResult)?.Packages?.Result.Release;
 
-    private static IReadOnlyList<string> ResolveProjectGitHubAssets(DotNetRepositoryReleaseResult plan, ReleaseSigningExecutionResult signingResult, string? projectName = null)
+    private static IReadOnlyList<string> ResolveProjectGitHubAssets(DotNetRepositoryReleaseResult plan, string? projectName = null)
     {
         var assets = plan.Projects
             .Where(project => project.IsPackable && (string.IsNullOrWhiteSpace(projectName) || string.Equals(project.ProjectName, projectName, StringComparison.OrdinalIgnoreCase)))
-            .Select(project => !string.IsNullOrWhiteSpace(project.ReleaseZipPath) && File.Exists(project.ReleaseZipPath)
-                ? project.ReleaseZipPath!
-                : FindZipAsset(signingResult, project.ProjectName))
+            .Select(project => project.ReleaseZipPath)
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => path!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -692,6 +696,10 @@ public sealed partial class ReleasePublishExecutionService
 
         var repoName = config.GitHubRepositoryName!.Trim();
         var owner = config.GitHubUsername!.Trim();
+        var integrityFailure = ValidateProjectGitHubAssets(plan, signingResult);
+        if (integrityFailure is not null)
+            return [FailedReceipt(repository.RootPath, repository.Name, "ProjectBuild", "GitHub release",
+                $"{owner}/{repoName}", integrityFailure)];
         var publishSummary = _projectBuildPublishHostService.PublishGitHub(config, plan);
 
         if (publishSummary.PerProject)
@@ -700,7 +708,7 @@ public sealed partial class ReleasePublishExecutionService
                 .Where(project => project.IsPackable)
                 .Select(project => {
                     var publishResult = publishSummary.Results.FirstOrDefault(result => string.Equals(result.ProjectName, project.ProjectName, StringComparison.OrdinalIgnoreCase));
-                    var sourcePath = ResolveProjectGitHubAssets(plan, signingResult, project.ProjectName).FirstOrDefault();
+                    var sourcePath = ResolveProjectGitHubAssets(plan, project.ProjectName).FirstOrDefault();
                     return ReleaseQueueReceiptFactory.CreatePublishReceipt(
                         repository.RootPath,
                         repository.Name,
@@ -717,7 +725,7 @@ public sealed partial class ReleasePublishExecutionService
                 .ToList();
         }
 
-        var assets = ResolveProjectGitHubAssets(plan, signingResult);
+        var assets = ResolveProjectGitHubAssets(plan);
         if (assets.Count == 0)
         {
             return [

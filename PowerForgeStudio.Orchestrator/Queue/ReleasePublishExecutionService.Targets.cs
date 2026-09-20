@@ -14,6 +14,9 @@ public sealed partial class ReleasePublishExecutionService
         ReleaseSigningExecutionResult signingResult)
     {
         var targets = new List<ReleasePublishTarget>();
+        var checkpointFailure = ValidateSigningCheckpoint(item, signingResult);
+        if (checkpointFailure is not null)
+            return [SigningCheckpointFailure(item, checkpointFailure)];
         var repository = _catalogScanner.InspectRepository(item.RootPath);
         var receipts = signingResult.Receipts ?? [];
         var directModuleConfigFailure = ValidateDirectModuleConfigCheckpoint(repository, signingResult);
@@ -104,11 +107,7 @@ public sealed partial class ReleasePublishExecutionService
             }
         }
 
-        var hasPersistedIntegrityCheckpoint =
-            !string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) ||
-            string.Equals(Path.GetExtension(repository.ModuleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase);
-        if (hasPersistedIntegrityCheckpoint &&
-            targets.Any(static target =>
+        if (targets.Any(static target =>
                 !string.Equals(target.TargetKind, "ConfigurationError", StringComparison.OrdinalIgnoreCase)))
         {
             var integrityFailure = ReleaseSigningArtifactIntegrity.Validate(receipts);
@@ -118,7 +117,7 @@ public sealed partial class ReleasePublishExecutionService
                     new ReleasePublishTarget(
                         RootPath: item.RootPath,
                         RepositoryName: item.RepositoryName,
-                        AdapterKind: "UnifiedRelease",
+                        AdapterKind: "Publish",
                         TargetName: "Signed artifact integrity",
                         TargetKind: "ConfigurationError",
                         SourcePath: item.RootPath,
@@ -129,6 +128,37 @@ public sealed partial class ReleasePublishExecutionService
 
         return targets;
     }
+
+    private static string? ValidateSigningCheckpoint(ReleaseQueueItem item, ReleaseSigningExecutionResult signing)
+    {
+        if (!signing.Succeeded || signing.RequiresRebuild)
+            return "Signing did not complete successfully. Rebuild and sign before publishing.";
+        if (signing.Receipts is null)
+            return "Signing checkpoint is missing artifact receipts. Rebuild and sign before publishing.";
+        // Metadata-only unified operations can legitimately have an empty receipt list.
+        if (signing.Receipts.Any(static receipt => receipt is null))
+            return "Signing checkpoint contains an invalid artifact receipt.";
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        bool SameRoot(string root) => Path.IsPathFullyQualified(root) && Path.IsPathFullyQualified(item.RootPath) &&
+            string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)),
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(item.RootPath)), comparison);
+        try
+        {
+            if (!SameRoot(signing.RootPath) || signing.Receipts.Any(receipt => !SameRoot(receipt.RootPath)))
+                return "Signing checkpoint belongs to a different working copy. Rebuild and sign before publishing.";
+            if (signing.Receipts.Any(receipt => !Path.IsPathFullyQualified(receipt.ArtifactPath) ||
+                    receipt.Status is not (ReleaseSigningReceiptStatus.Signed or ReleaseSigningReceiptStatus.Skipped)))
+                return "Signing checkpoint contains incomplete artifact receipts. Rebuild and sign before publishing.";
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException)
+        {
+            return "Signing checkpoint contains an invalid artifact or working-copy path.";
+        }
+        return null;
+    }
+
+    private static ReleasePublishTarget SigningCheckpointFailure(ReleaseQueueItem item, string summary)
+        => new(item.RootPath, item.RepositoryName, "Publish", "Signing checkpoint", "ConfigurationError", item.RootPath, summary);
 
     private string? ValidateDirectModuleConfigCheckpoint(
         RepositoryCatalogEntry repository,

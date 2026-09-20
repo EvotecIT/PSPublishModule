@@ -397,7 +397,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         string artifactPath,
         string artifactKind,
         ReleaseBuildAdapterKind adapterKind = ReleaseBuildAdapterKind.ModuleBuild)
-        => new(
+        => ReleaseSigningArtifactIntegrity.Capture(new(
             repositoryRoot,
             "Sample",
             adapterKind.ToString(),
@@ -405,7 +405,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             artifactKind,
             ReleaseSigningReceiptStatus.Signed,
             "Signed.",
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow));
 
     private static ReleasePublishExecutionService CreateReviewPublishService(
         ProjectBuildHostService? projectBuildHostService = null,

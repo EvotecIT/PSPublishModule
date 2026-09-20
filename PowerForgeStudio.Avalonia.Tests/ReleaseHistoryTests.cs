@@ -108,8 +108,11 @@ public sealed class ReleaseHistoryTests
         public Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem item, CancellationToken token = default)
         {
             Calls++;
+            var package = Path.Combine(item.RootPath, "fixture.nupkg");
+            File.WriteAllText(package, "signed package fixture");
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(package)));
             return Task.FromResult(new ReleaseSigningExecutionResult(item.RootPath, true, "Signed fixture", item.CheckpointStateJson,
-                [new(item.RootPath, item.RepositoryName, "ProjectBuild", Path.Combine(item.RootPath, "fixture.nupkg"), "File", ReleaseSigningReceiptStatus.Signed, "Signed fixture", DateTimeOffset.UtcNow)]));
+                [new(item.RootPath, item.RepositoryName, "ProjectBuild", package, "File", ReleaseSigningReceiptStatus.Signed, "Signed fixture", DateTimeOffset.UtcNow) { ContentSha256 = hash }]));
         }
     }
 }
