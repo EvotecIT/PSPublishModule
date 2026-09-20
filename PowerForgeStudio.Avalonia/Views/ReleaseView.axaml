@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing"
+             xmlns:publish="using:PowerForgeStudio.Domain.Publish" xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing"
              x:Class="PowerForgeStudio.Avalonia.Views.ReleaseView" x:DataType="vm:ReleaseViewModel">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-  <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="16">
+  <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="16">
     <StackPanel Spacing="8">
       <TextBlock Text="Release workspace" FontSize="22" FontWeight="SemiBold" />
       <TextBlock Text="Captured build working copy" Classes="muted" FontSize="12" />
@@ -61,6 +61,20 @@
         </ListBox.ItemTemplate>
       </ListBox>
     </Grid>
+    <StackPanel Grid.Row="4" Spacing="8">
+      <Button Content="Inspect publication targets" Command="{Binding InspectPublicationCommand}" IsEnabled="{Binding CanInspectPublication}" />
+      <TextBlock Text="{Binding PublicationSummary}" TextWrapping="Wrap" />
+      <ListBox ItemsSource="{Binding PublicationTargets}" MaxHeight="260">
+        <ListBox.ItemTemplate><DataTemplate x:DataType="publish:ReleasePublishTarget">
+          <StackPanel Spacing="5" Margin="8">
+            <TextBlock Text="{Binding TargetName}" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding TargetKind}" Foreground="#0865FF" />
+            <TextBlock Text="{Binding Destination}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding SourcePath}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SourcePath}" FontSize="12" />
+          </StackPanel>
+        </DataTemplate></ListBox.ItemTemplate>
+      </ListBox>
+    </StackPanel>
   </Grid>
   </ScrollViewer>
 </UserControl>

@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Host-facing service for resolving project publish settings and invoking shared GitHub publish logic.
 /// </summary>
-public sealed class ProjectBuildPublishHostService
+public sealed partial class ProjectBuildPublishHostService
 {
     private readonly ILogger _logger;
     private readonly Func<ProjectBuildGitHubPublishRequest, ProjectBuildGitHubPublishSummary>? _publishGitHub;

@@ -20,6 +20,9 @@ public sealed class ReleaseHistoryTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-history-ui-" + Guid.NewGuid().ToString("N"))).FullName;
         try
         {
+            Directory.CreateDirectory(Path.Combine(root, "Build"));
+            await File.WriteAllTextAsync(Path.Combine(root, "Fixture.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+            await File.WriteAllTextAsync(Path.Combine(root, "Build", "project.build.json"), """{"RootPath":"..","PublishNuget":true,"PublishSource":"https://packages.example.test/v3/index.json"}""");
             var path = Path.Combine(root, "history.db"); var database = new ReleaseStateDatabase(path); await database.InitializeAsync();
             await new DBAClientX.SQLite().ExecuteNonQueryAsync(path, "CREATE TRIGGER reject_receipt BEFORE INSERT ON release_signing_receipt BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;");
             var signer = new Signer();
@@ -52,6 +55,13 @@ public sealed class ReleaseHistoryTests
                     await release.RetrySaveReceiptsAsync();
                     Assert.False(release.HasUnpersistedEvidence); Assert.False(workspace.Build.IsReleaseRunning);
                     Assert.Equal(1, signer.Calls); Assert.Single((await database.LoadReleaseCheckpointAsync(release.Handoff!.Session.SessionId))!.SigningReceipts);
+                    Assert.True(release.CanInspectPublication); await release.InspectPublicationAsync();
+                    Assert.Equal("https://packages.example.test/v3/index.json", Assert.Single(release.PublicationTargets).Destination);
+                    window.GetVisualDescendants().OfType<ReleaseView>().Single().GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+                    Capture(window, "release-publication-preview.png");
+                    window.Width = 1050; window.Height = 720;
+                    Capture(window, "release-publication-preview-compact.png");
+                    window.Width = 1600; window.Height = 1000;
                     using var reopened = new ReleaseViewModel(history: history);
                     await reopened.RefreshHistoryAsync(); reopened.SelectedHistory = Assert.Single(reopened.History);
                     await reopened.OpenHistoryAsync(); Assert.Single(reopened.Receipts); Assert.False(reopened.CanSign);
@@ -70,7 +80,13 @@ public sealed class ReleaseHistoryTests
 
     private static void Capture(MainWindow window, string name)
     {
-        window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        window.UpdateLayout();
+        if (name.StartsWith("release-publication-preview", StringComparison.Ordinal))
+        {
+            window.GetVisualDescendants().OfType<ReleaseView>().Single().GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+            window.UpdateLayout();
+        }
+        Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
         var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
         if (!string.IsNullOrEmpty(output)) { Directory.CreateDirectory(output); frame.Save(Path.Combine(output, name), PngBitmapEncoderOptions.Default); }
@@ -93,7 +109,7 @@ public sealed class ReleaseHistoryTests
         {
             Calls++;
             return Task.FromResult(new ReleaseSigningExecutionResult(item.RootPath, true, "Signed fixture", item.CheckpointStateJson,
-                [new(item.RootPath, item.RepositoryName, "Project", Path.Combine(item.RootPath, "fixture.dll"), "File", ReleaseSigningReceiptStatus.Signed, "Signed fixture", DateTimeOffset.UtcNow)]));
+                [new(item.RootPath, item.RepositoryName, "ProjectBuild", Path.Combine(item.RootPath, "fixture.nupkg"), "File", ReleaseSigningReceiptStatus.Signed, "Signed fixture", DateTimeOffset.UtcNow)]));
         }
     }
 }

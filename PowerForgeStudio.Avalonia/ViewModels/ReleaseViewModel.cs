@@ -8,7 +8,7 @@ using PowerForgeStudio.Orchestrator.Queue;
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
 /// <summary>Prepares a release from the captured build rather than the currently selected repository.</summary>
-public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? service = null, IReleaseSigningWorkflow? signing = null, PowerForgeStudio.Orchestrator.Storage.IReleaseHistoryService? history = null) : ObservableObject, IDisposable
+public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? service = null, IReleaseSigningWorkflow? signing = null, PowerForgeStudio.Orchestrator.Storage.IReleaseHistoryService? history = null, IReleasePublicationPreviewService? publication = null) : ObservableObject, IDisposable
 {
     private readonly IReleaseBuildHandoffService _service = service ?? new ReleaseBuildHandoffService();
     private readonly IReleaseSigningWorkflow _signing = signing ?? new DurableReleaseSigningWorkflow(PowerForgeStudioHostPaths.GetReleaseHistoryDatabasePath());
@@ -30,6 +30,7 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
     {
         if (_disposed) return;
         if (HasProtectedReleaseWork) throw new InvalidOperationException("A build cannot replace an active signing operation.");
+        PublicationTargets.Clear(); PublicationSummary = "";
         SigningResult = null; Receipts.Clear(); RequiresRebuild = false; ConfirmDiscardReceipts = false;
         ++_version; _preparing?.Cancel(); _candidate = !running && !cancelled ? build : null;
         Handoff = null; Artifacts.Clear(); IsPreparing = false;

@@ -21,7 +21,7 @@ public sealed partial class ReleaseViewModel
     partial void OnIsSigningChanged(bool value) => NotifyReleaseState();
     private void NotifyReleaseState()
     {
-        OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(CanSign));
+        OnPropertyChanged(nameof(CanInspectPublication)); OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(CanSign));
         OnPropertyChanged(nameof(HasArtifacts)); OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));
         OnPropertyChanged(nameof(HasProtectedReleaseWork)); OnPropertyChanged(nameof(CanBrowseHistory));
     }

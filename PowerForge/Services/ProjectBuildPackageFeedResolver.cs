@@ -43,6 +43,14 @@ internal static class ProjectBuildPackageFeedResolver
         };
     }
 
+    /// <summary>Resolves the publish destination without reading credential files or environment variables.</summary>
+    internal static string ResolvePublishDestination(ProjectBuildConfiguration config)
+    {
+        var owner = ResolveGitHubPackagesOwner(config);
+        var source = ResolvePublishSource(config, ResolveGitHubPackagesSource(config, owner));
+        return string.IsNullOrWhiteSpace(source) ? DefaultNuGetPublishSource : source!.Trim();
+    }
+
     /// <summary>
     /// Returns the default NuGet publish source used when no project-build source is configured.
     /// </summary>
