@@ -1,7 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing"
+             xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing"
              x:Class="PowerForgeStudio.Avalonia.Views.ReleaseView" x:DataType="vm:ReleaseViewModel">
-  <Grid Margin="20" RowDefinitions="Auto,Auto,*" RowSpacing="16">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+  <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="16">
     <StackPanel Spacing="8">
       <TextBlock Text="Release workspace" FontSize="22" FontWeight="SemiBold" />
       <TextBlock Text="Captured build working copy" Classes="muted" FontSize="12" />
@@ -14,9 +15,24 @@
       <Button Content="Cancel signing" Command="{Binding CancelSigningCommand}" IsVisible="{Binding IsSigning}" Margin="0,0,12,5" />
       <TextBlock Text="{Binding Stage}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,0,5" />
     </WrapPanel>
-    <Grid Grid.Row="2" RowDefinitions="Auto,*,Auto,Auto,*" RowSpacing="10">
-      <TextBlock Text="Release artifacts" FontSize="16" FontWeight="SemiBold" />
-      <ListBox Grid.Row="1" ItemsSource="{Binding Artifacts}" Background="#F7F9FC">
+    <StackPanel Grid.Row="2" Spacing="8">
+      <WrapPanel>
+        <Button Content="Refresh saved releases" Command="{Binding RefreshHistoryCommand}" IsEnabled="{Binding CanBrowseHistory}" Margin="0,0,8,4" />
+        <ComboBox ItemsSource="{Binding History}" SelectedItem="{Binding SelectedHistory}" Width="260" PlaceholderText="Recent releases (up to 100)" Margin="0,0,8,4">
+          <ComboBox.ItemTemplate><DataTemplate x:DataType="storage:ReleaseHistoryEntry"><TextBlock Text="{Binding DisplayName}" ToolTip.Tip="{Binding WorkingCopy}" /></DataTemplate></ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="Open saved release" Command="{Binding OpenHistoryCommand}" IsEnabled="{Binding CanBrowseHistory}" Margin="0,0,0,4" />
+      </WrapPanel>
+      <StackPanel IsVisible="{Binding HasUnpersistedEvidence}" Spacing="6">
+        <TextBlock Text="Receipts have not been saved. Retry saving before leaving this release." TextWrapping="Wrap" Foreground="#B45309" />
+        <Button Content="Retry saving receipts" Command="{Binding RetrySaveReceiptsCommand}" IsEnabled="{Binding !IsSavingReceipts}" />
+        <CheckBox Content="I accept losing the unsaved receipt copy" IsChecked="{Binding ConfirmDiscardReceipts}" />
+        <Button Content="Discard unsaved receipts" Command="{Binding DiscardUnsavedReceiptsCommand}" IsEnabled="{Binding ConfirmDiscardReceipts}" />
+      </StackPanel>
+    </StackPanel>
+    <Grid Grid.Row="3" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+      <TextBlock IsVisible="{Binding HasArtifacts}" Text="Release artifacts" FontSize="16" FontWeight="SemiBold" />
+      <ListBox Grid.Row="1" IsVisible="{Binding HasArtifacts}" MaxHeight="200" ItemsSource="{Binding Artifacts}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="domain:ReleaseSigningArtifact">
             <StackPanel Spacing="6" Margin="8">
@@ -31,8 +47,8 @@
         </ListBox.ItemTemplate>
       </ListBox>
       <ProgressBar Grid.Row="2" IsIndeterminate="True" IsVisible="{Binding IsSigning}" Height="4" />
-      <TextBlock Grid.Row="3" Text="Signing receipts · retained for this session" FontSize="16" FontWeight="SemiBold" />
-      <ListBox Grid.Row="4" ItemsSource="{Binding Receipts}" Background="#F7F9FC">
+      <TextBlock Grid.Row="3" Text="Signing receipts" FontSize="16" FontWeight="SemiBold" />
+      <ListBox Grid.Row="4" MaxHeight="300" ItemsSource="{Binding Receipts}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="domain:ReleaseSigningReceipt">
             <StackPanel Spacing="5" Margin="8">
@@ -46,4 +62,5 @@
       </ListBox>
     </Grid>
   </Grid>
+  </ScrollViewer>
 </UserControl>

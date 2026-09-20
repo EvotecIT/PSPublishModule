@@ -25,7 +25,7 @@ public sealed partial class ReleaseStateDatabase
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    private static bool MatchesCheckpoint(ReleaseQueueSession expected, ReleaseQueueSession current)
+    internal static bool MatchesCheckpoint(ReleaseQueueSession expected, ReleaseQueueSession current)
         => expected.SessionId == current.SessionId && expected.WorkspaceRoot == current.WorkspaceRoot
             && expected.CreatedAtUtc == current.CreatedAtUtc && expected.ScopeKey == current.ScopeKey
             && expected.ScopeDisplayName == current.ScopeDisplayName && expected.Items.SequenceEqual(current.Items);

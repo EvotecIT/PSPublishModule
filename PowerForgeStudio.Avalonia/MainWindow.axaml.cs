@@ -49,13 +49,14 @@ public sealed partial class MainWindow : Window
     private async void SaveBeforeClosing(object? sender, WindowClosingEventArgs args)
     {
         if (DataContext is not WorkspaceViewModel model) return;
-        if (model.Release.IsSigning)
+        if (model.Release.HasProtectedReleaseWork)
         {
             _closeAfterSave = false;
             _discardOnNextClose = false;
             args.Cancel = true;
             model.ShowReleaseCommand.Execute(null);
-            model.Release.Status = "Signing is still running. Cancel signing or wait for completion before closing.";
+            model.Release.Status = model.Release.HasUnpersistedEvidence ? "Save or explicitly discard the unsaved receipts before closing."
+                : "Signing is still running. Cancel signing or wait for completion before closing.";
             return;
         }
         if (_closeAfterSave) return;

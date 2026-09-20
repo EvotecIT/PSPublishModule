@@ -26,6 +26,8 @@ public sealed class DurableSigningTests
             await executor.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
             var competing = new DurableReleaseSigningWorkflow(path, new ReleaseSigningWorkflow(executor));
             await Assert.ThrowsAsync<InvalidOperationException>(() => competing.SignAsync(handoff));
+            var otherHandoff = handoff with { Session = ReleaseQueueSessionFactory.Create(root, [item], DateTimeOffset.UtcNow) };
+            await Assert.ThrowsAsync<InvalidOperationException>(() => competing.SignAsync(otherHandoff));
             var saved = (await new ReleaseStateDatabase(path).LoadReleaseCheckpointAsync(handoff.Session.SessionId))!;
             Assert.Equal(ReleaseQueueItemStatus.Failed, Assert.Single(saved.Session.Items).Status);
             Assert.Contains("RequiresRebuild", saved.Session.Items[0].CheckpointStateJson);
@@ -75,13 +77,46 @@ public sealed class DurableSigningTests
                 ReleaseQueueItemStatus.WaitingApproval, "Prepared", "sign.waiting.usb", "{}", DateTimeOffset.UtcNow);
             var handoff = new ReleaseBuildHandoff(ReleaseQueueSessionFactory.Create(root, [item], DateTimeOffset.UtcNow), []);
             var executor = new WaitingSigning(false); executor.Finish.TrySetResult();
-            var result = await new DurableReleaseSigningWorkflow(path, new ReleaseSigningWorkflow(executor)).SignAsync(handoff);
+            var workflow = new DurableReleaseSigningWorkflow(path, new ReleaseSigningWorkflow(executor));
+            var result = await workflow.SignAsync(handoff);
             Assert.True(result.Execution.Succeeded); Assert.Single(result.Execution.Receipts); Assert.NotNull(result.PersistenceError);
             var saved = (await database.LoadReleaseCheckpointAsync(handoff.Session.SessionId))!;
             Assert.Equal(ReleaseQueueItemStatus.Failed, saved.Session.Items.Single().Status);
             Assert.Empty(saved.SigningReceipts);
+            await new DBAClientX.SQLite().ExecuteNonQueryAsync(path, "DROP TRIGGER reject_receipt;");
+            var recovered = await workflow.RetrySaveAsync(result);
+            Assert.Null(recovered.PersistenceError); Assert.Null(recovered.PendingCheckpoint); Assert.Equal(1, executor.Calls);
+            var repeated = await workflow.RetrySaveAsync(result);
+            Assert.Null(repeated.PersistenceError); Assert.Equal(1, executor.Calls);
+            Assert.Single((await database.LoadReleaseCheckpointAsync(handoff.Session.SessionId))!.SigningReceipts);
         }
         finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task WindowsCaseVariantsShareTheWorkingCopyLease()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-case-lease-" + Guid.NewGuid().ToString("N"))).FullName;
+        var signer = new WaitingSigning(false); Task<ReleaseSigningWorkflowResult>? running = null;
+        try
+        {
+            var path = Path.Combine(root, "state.db");
+            var item = new ReleaseQueueItem(root, "Fixture", default, default, 1, ReleaseQueueStage.Sign,
+                ReleaseQueueItemStatus.WaitingApproval, "Prepared", "sign.waiting.usb", "{}", DateTimeOffset.UtcNow);
+            var handoff = new ReleaseBuildHandoff(ReleaseQueueSessionFactory.Create(root, [item], DateTimeOffset.UtcNow), []);
+            running = Task.Run(() => new DurableReleaseSigningWorkflow(path, new ReleaseSigningWorkflow(signer)).SignAsync(handoff));
+            await signer.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var alias = root.ToUpperInvariant(); var secondSigner = new WaitingSigning(false); secondSigner.Finish.TrySetResult();
+            var second = new ReleaseBuildHandoff(ReleaseQueueSessionFactory.Create(alias, [item with { RootPath = alias }], DateTimeOffset.UtcNow), []);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => new DurableReleaseSigningWorkflow(path, new ReleaseSigningWorkflow(secondSigner)).SignAsync(second));
+            Assert.Equal(0, secondSigner.Calls);
+        }
+        finally
+        {
+            signer.Finish.TrySetResult(); if (running is not null) await running;
+            Directory.Delete(root, true);
+        }
     }
 
     private sealed class WaitingSigning(bool interrupt) : IReleaseSigningExecutionService

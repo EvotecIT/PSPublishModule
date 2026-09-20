@@ -6,6 +6,8 @@ public sealed record ReleaseSigningWorkflowResult(ReleaseQueueSession Session, R
 {
     /// <summary>Non-null when returned evidence is available but its durable checkpoint could not be committed.</summary>
     public string? PersistenceError { get; init; }
+    /// <summary>Expected durable marker retained until completion can be saved.</summary>
+    public ReleaseQueueSession? PendingCheckpoint { get; init; }
 }
 
 public interface IReleaseSigningWorkflow

@@ -14,13 +14,16 @@ public sealed partial class ReleaseViewModel
     public ReleaseSigningExecutionResult? SigningResult { get; private set; }
     [ObservableProperty] private bool _isSigning;
     [ObservableProperty] private bool _requiresRebuild;
-    public bool CanSign => !_disposed && !IsSigning && !IsPreparing && Handoff is not null && SigningResult is null && !RequiresRebuild;
+    public bool CanSign => !_disposed && !HasProtectedReleaseWork && !IsLoadingHistory && !IsPreparing && Handoff is not null && SigningResult is null && !RequiresRebuild;
+    public bool HasArtifacts => Artifacts.Count > 0;
     public bool HasReceipts => Receipts.Count > 0;
+    partial void OnRequiresRebuildChanged(bool value) => NotifyReleaseState();
     partial void OnIsSigningChanged(bool value) => NotifyReleaseState();
     private void NotifyReleaseState()
     {
         OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(CanSign));
-        OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));
+        OnPropertyChanged(nameof(HasArtifacts)); OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));
+        OnPropertyChanged(nameof(HasProtectedReleaseWork)); OnPropertyChanged(nameof(CanBrowseHistory));
     }
 
     [RelayCommand]
@@ -33,6 +36,9 @@ public sealed partial class ReleaseViewModel
         try
         {
             var result = await Task.Run(() => _signing.SignAsync(captured, cancellation.Token));
+            ConfirmDiscardReceipts = false;
+            _pendingSave = result.PersistenceError is null ? null : result;
+            HasUnpersistedEvidence = _pendingSave is not null;
             SigningResult = result.Execution;
             Handoff = captured with { Session = result.Session };
             Receipts.Clear();
@@ -41,6 +47,7 @@ public sealed partial class ReleaseViewModel
             RequiresRebuild = result.Execution.RequiresRebuild;
             Stage = result.Execution.Succeeded ? "Signed · publication not started" : RequiresRebuild ? "Rebuild required" : "Signing failed";
             Status = StudioOutputSanitizer.Sanitize(result.Execution.Summary);
+            if (result.PersistenceError is not null) { Stage = "Receipts not saved"; Status += " " + result.PersistenceError; }
         }
         catch (Exception ex)
         {

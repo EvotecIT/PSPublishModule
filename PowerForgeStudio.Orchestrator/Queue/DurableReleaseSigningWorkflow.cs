@@ -4,7 +4,12 @@ using PowerForgeStudio.Orchestrator.Storage;
 namespace PowerForgeStudio.Orchestrator.Queue;
 
 /// <summary>Journals signing before artifact mutation and retains an interrupted-stage marker until finalization commits.</summary>
-public sealed class DurableReleaseSigningWorkflow(string databasePath, IReleaseSigningWorkflow? signing = null) : IReleaseSigningWorkflow
+public interface IReleaseSigningRecovery
+{
+    Task<ReleaseSigningWorkflowResult> RetrySaveAsync(ReleaseSigningWorkflowResult result, CancellationToken cancellationToken = default);
+}
+
+public sealed class DurableReleaseSigningWorkflow(string databasePath, IReleaseSigningWorkflow? signing = null) : IReleaseSigningWorkflow, IReleaseSigningRecovery
 {
     private readonly IReleaseSigningWorkflow _signing = signing ?? new ReleaseSigningWorkflow();
 
@@ -14,6 +19,7 @@ public sealed class DurableReleaseSigningWorkflow(string databasePath, IReleaseS
         var item = handoff.Session.Items.Single();
         if (item.Stage != ReleaseQueueStage.Sign || item.Status != ReleaseQueueItemStatus.WaitingApproval)
             throw new InvalidOperationException("Prepare a successful build before signing.");
+        using var lease = AcquireWorkingCopyLease(item.RootPath);
         var database = new ReleaseStateDatabase(databasePath);
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var interruption = new ReleaseSigningExecutionResult(item.RootPath, false,
@@ -25,15 +31,41 @@ public sealed class DurableReleaseSigningWorkflow(string databasePath, IReleaseS
             throw new InvalidOperationException("This release session already has an execution record. Reopen its saved state before taking another action.");
         var result = await _signing.SignAsync(handoff, cancellationToken).ConfigureAwait(false);
         using var finalization = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        return await RetrySaveAsync(result with { PendingCheckpoint = marker }, finalization.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>Retries only local persistence; it never invokes the signer again.</summary>
+    public async Task<ReleaseSigningWorkflowResult> RetrySaveAsync(ReleaseSigningWorkflowResult result, CancellationToken cancellationToken = default)
+    {
+        if (result.PendingCheckpoint is not { } marker) return result;
+        var database = new ReleaseStateDatabase(databasePath);
         try
         {
-            if (!await database.TryAdvanceReleaseCheckpointAsync(marker, result.Session, result.Execution.Receipts, finalization.Token).ConfigureAwait(false))
-                return result with { PersistenceError = "The saved checkpoint changed during signing. Completed receipts are retained in this session; reopen the saved record before continuing." };
+            var saved = await database.TryAdvanceReleaseCheckpointAsync(marker, result.Session, result.Execution.Receipts, cancellationToken).ConfigureAwait(false);
+            if (!saved)
+            {
+                // A commit may have succeeded even if its response was lost. Accept only the exact completed state and evidence.
+                var snapshot = await database.LoadReleaseCheckpointAsync(result.Session.SessionId, cancellationToken).ConfigureAwait(false);
+                saved = snapshot is not null && ReleaseStateDatabase.MatchesCheckpoint(result.Session, snapshot.Session)
+                    && snapshot.SigningReceipts.OrderBy(x => x.ArtifactPath, StringComparer.Ordinal).SequenceEqual(result.Execution.Receipts.OrderBy(x => x.ArtifactPath, StringComparer.Ordinal));
+            }
+            return saved ? result with { PendingCheckpoint = null, PersistenceError = null }
+                : result with { PersistenceError = "The saved checkpoint changed during signing. Receipts remain here; saving will not overwrite a different checkpoint." };
         }
         catch (Exception ex)
         {
             return result with { PersistenceError = "Could not save signing completion: " + Host.StudioOutputSanitizer.Sanitize(ex.Message) };
         }
-        return result;
     }
+    private FileStream AcquireWorkingCopyLease(string root)
+    {
+        var normalized = Host.PowerForgeStudioHostPaths.NormalizeWorkspaceRoot(root);
+        if (OperatingSystem.IsWindows()) normalized = normalized.ToUpperInvariant();
+        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalized)));
+        var directory = Path.GetFullPath(databasePath) + ".locks";
+        Directory.CreateDirectory(directory);
+        try { return new FileStream(Path.Combine(directory, key + ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+        catch (IOException ex) { throw new InvalidOperationException("Another signing operation may be using this working copy. Wait for it to finish before starting another session.", ex); }
+    }
+
 }

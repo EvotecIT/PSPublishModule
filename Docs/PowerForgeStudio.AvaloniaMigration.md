@@ -21,6 +21,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
 - [x] Prepare release artifacts from a captured successful build using the existing queue checkpoint owner.
 - [x] Connect explicit signing, cancellation and session receipts with build/close interlocks.
+- [x] Journal signing, reopen saved receipt history and recover failed local saves.
 - [x] Connect Git status, diffs, staging, unstaging and local commits through the shared Git owner.
 - [ ] Complete issues, PR review actions and provider status through existing owners.
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
@@ -298,3 +299,19 @@ This owner is not yet the Avalonia default. The next UI integration must display
 
 
 Independent read-only review /root/review_signing_claim found no actionable defect within the single-session signing claim contract, fingerprint 5469dc2efe854ab6b7feb6f6c4965310bd970d6e. Boundary: current. Multi-item expected checkpoints must retain canonical QueueOrder ordering, since storage reloads items in that order. Existing file line endings were restored after review; no semantic changes followed. Task-owned shared-test binaries were removed after validation; active Avalonia outputs remain.
+
+
+### Durable signing and saved-release UI
+
+Avalonia now uses the durable signing workflow by default. Its dedicated release-history.db lives under the portable Studio local-data owner, separate from the older releaseops.db queue. The release page can refresh the 100 most recently created sessions and open a captured session with its signing receipts. Reopened records are view-only: they cannot implicitly re-sign or publish. Execution resume and publication remain further delivery work.
+
+A failed completion save leaves receipts visible and protects them from new builds, replacement preparation, history navigation and window close. Retry saving invokes only the local conditional persistence operation. It recognizes an already-committed identical checkpoint and receipts, making a lost-response retry idempotent. A checkbox plus explicit discard action allows the user to abandon an unsaved copy; that leaves the durable interrupted record intact and requires rebuilding before continuing.
+
+Cooperating durable signing instances using the same journal hold a per-working-copy file lease through signing and finalization, in addition to the per-session database claim. Empty lock files remain as stable identities; file handles provide exclusion and release automatically when the process ends. These leases do not stop external build tools, legacy executors or different filesystem aliases from changing artifacts. The app's build/close interlock also remains active during local receipt recovery.
+
+Validation uses a controlled signer and a real disposable database. An injected receipt-write failure preserved UI evidence and blocked close/build, retry saved without invoking the signer again, and a fresh release view reopened the receipt. Shared tests cover different sessions contending for one working copy and repeated persistence retry. Five focused Avalonia tests and nine shared storage/signing tests passed before final review. Wide and compact Skia renders were inspected, including the scrolled compact recovery state. Native Windows input and real certificate signing remain unverified.
+
+
+Independent review /root/review_release_history identified a P2 Windows case-variant lease bypass. The focused Windows regression failed before normalizing casing and passed afterward. Targeted confirmation found the correction addressed, fingerprint f110df7600bd10eacf73a5f003f4ab03ef3c5f96. Final validation passed ten shared tests and five Avalonia tests. A small subsequent guard resets discard confirmation for every new build/signing result; the UI regression checks that an earlier checked value cannot authorize discarding a later failed save. Review boundary: candidate-reviewed. No further full review loop was run.
+
+Cross-process OS interaction remains unverified independently; the tests exercise competing handles/instances in the same process. Execution resume, publication, verification and external-artifact mutation exclusion remain incomplete. Task-owned shared-test binaries were removed after containment, tracked-file, link and process checks; active Avalonia outputs and small visual evidence remain for ongoing work.

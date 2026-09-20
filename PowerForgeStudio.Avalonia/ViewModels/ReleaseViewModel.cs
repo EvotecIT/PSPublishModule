@@ -8,10 +8,10 @@ using PowerForgeStudio.Orchestrator.Queue;
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
 /// <summary>Prepares a release from the captured build rather than the currently selected repository.</summary>
-public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? service = null, IReleaseSigningWorkflow? signing = null) : ObservableObject, IDisposable
+public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? service = null, IReleaseSigningWorkflow? signing = null, PowerForgeStudio.Orchestrator.Storage.IReleaseHistoryService? history = null) : ObservableObject, IDisposable
 {
     private readonly IReleaseBuildHandoffService _service = service ?? new ReleaseBuildHandoffService();
-    private readonly IReleaseSigningWorkflow _signing = signing ?? new ReleaseSigningWorkflow();
+    private readonly IReleaseSigningWorkflow _signing = signing ?? new DurableReleaseSigningWorkflow(PowerForgeStudioHostPaths.GetReleaseHistoryDatabasePath());
     private ReleaseBuildExecutionResult? _candidate;
     private CancellationTokenSource? _preparing;
     private int _version;
@@ -22,15 +22,15 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
     [ObservableProperty] private string _buildRoot = "";
     [ObservableProperty] private string _status = "Complete a build, then prepare its release artifacts here.";
     [ObservableProperty] private string _stage = "Build required";
-    public bool CanPrepare => !_disposed && !IsPreparing && !IsSigning && !RequiresRebuild && SigningResult?.Succeeded != true && _candidate?.Succeeded == true;
+    public bool CanPrepare => !_disposed && !IsPreparing && !HasProtectedReleaseWork && !IsLoadingHistory && !RequiresRebuild && SigningResult?.Succeeded != true && _candidate?.Succeeded == true;
     public bool HasHandoff => Handoff is not null;
     partial void OnIsPreparingChanged(bool value) => NotifyReleaseState();
 
     public void SetBuild(ReleaseBuildExecutionResult? build, bool running, bool cancelled)
     {
         if (_disposed) return;
-        if (IsSigning) throw new InvalidOperationException("A build cannot replace an active signing operation.");
-        SigningResult = null; Receipts.Clear(); RequiresRebuild = false;
+        if (HasProtectedReleaseWork) throw new InvalidOperationException("A build cannot replace an active signing operation.");
+        SigningResult = null; Receipts.Clear(); RequiresRebuild = false; ConfirmDiscardReceipts = false;
         ++_version; _preparing?.Cancel(); _candidate = !running && !cancelled ? build : null;
         Handoff = null; Artifacts.Clear(); IsPreparing = false;
         BuildRoot = build?.RootPath ?? "";

@@ -45,7 +45,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         };
         Release.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(ReleaseViewModel.IsSigning)) Build.IsReleaseRunning = Release.IsSigning;
+            if (args.PropertyName == nameof(ReleaseViewModel.HasProtectedReleaseWork)) Build.IsReleaseRunning = Release.HasProtectedReleaseWork;
         };
         Build.PropertyChanged += (_, args) =>
         {
