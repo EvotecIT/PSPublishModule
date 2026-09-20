@@ -56,7 +56,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
             : Path.GetFullPath(owningPackagePath);
         var orderedPackagePaths = packagePaths
             .Select(Path.GetFullPath)
-            .OrderBy(path => string.Equals(path, normalizedOwner, StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+            .OrderBy(path => string.Equals(path, normalizedOwner, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ToArray();
         foreach (var packagePath in orderedPackagePaths)
         {
@@ -84,6 +84,16 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                 {
                     if (existing.Bytes.SequenceEqual(published.Bytes))
                         continue;
+                    if (normalizedOwner is not null &&
+                        string.Equals(
+                            existing.SourcePackagePath,
+                            normalizedOwner,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        // The owner is read first so its same-path payload stays
+                        // authoritative even when several dependencies disagree.
+                        continue;
+                    }
                     if (isOwner &&
                         !string.Equals(
                             existing.SourcePackagePath,
