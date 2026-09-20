@@ -7,4 +7,8 @@ public sealed record ReleaseSigningExecutionResult(
     bool Succeeded,
     string Summary,
     string? SourceCheckpointStateJson,
-    IReadOnlyList<ReleaseSigningReceipt> Receipts);
+    IReadOnlyList<ReleaseSigningReceipt> Receipts)
+{
+    /// <summary>Signing may have changed artifacts without completing; retry must rebuild before signing again.</summary>
+    public bool RequiresRebuild { get; init; }
+}

@@ -53,8 +53,10 @@ public sealed class PowerForgeStudioReleaseQueueCommandServiceTests
         }
     }
 
-    [Fact]
-    public async Task ApproveUsbAsync_PersistsSigningReceiptsAndMovesQueueForward()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ApproveUsbAsync_PersistsSigningReceiptsAndMovesQueueForward(bool cancelAfterExecution)
     {
         var databasePath = Path.Combine(Path.GetTempPath(), "PowerForgeStudio", Guid.NewGuid().ToString("N"), "queue.db");
         try
@@ -76,6 +78,7 @@ public sealed class PowerForgeStudioReleaseQueueCommandServiceTests
                 UpdatedAtUtc: DateTimeOffset.UtcNow));
             await stateDatabase.PersistQueueSessionAsync(session);
 
+            using var cancellation = new CancellationTokenSource();
             var receipt = new ReleaseSigningReceipt(
                 RootPath: session.Items[0].RootPath,
                 RepositoryName: session.Items[0].RepositoryName,
@@ -90,18 +93,27 @@ public sealed class PowerForgeStudioReleaseQueueCommandServiceTests
                 new ReleaseQueuePlanner(),
                 new ReleaseQueueRunner(),
                 new StubBuildExecutionService(succeeded: true),
-                new StubSigningExecutionService(receipts: [receipt]),
+                new StubSigningExecutionService(receipts: [receipt], beforeReturn: () => { if (cancelAfterExecution) cancellation.Cancel(); }),
                 new StubPublishExecutionService(),
                 new StubVerificationExecutionService());
 
-            var result = await service.ApproveUsbAsync(databasePath);
+            var result = await service.ApproveUsbAsync(databasePath, cancellation.Token);
 
             Assert.True(result.Changed);
             Assert.NotNull(result.QueueSession);
-            Assert.Equal(ReleaseQueueStage.Publish, result.QueueSession!.Items[0].Stage);
-            Assert.Equal(ReleaseQueueItemStatus.ReadyToRun, result.QueueSession.Items[0].Status);
+            Assert.Equal(cancelAfterExecution ? ReleaseQueueStage.Sign : ReleaseQueueStage.Publish, result.QueueSession!.Items[0].Stage);
+            Assert.Equal(cancelAfterExecution ? ReleaseQueueItemStatus.Failed : ReleaseQueueItemStatus.ReadyToRun, result.QueueSession.Items[0].Status);
+            var persisted = await stateDatabase.LoadLatestQueueSessionAsync();
+            Assert.Equal(result.QueueSession.Items[0].Status, persisted!.Items[0].Status);
+            Assert.Single(await stateDatabase.LoadSigningReceiptsAsync(session.SessionId));
             Assert.Single(result.SigningReceipts);
             Assert.Equal(ReleaseSigningReceiptStatus.Signed, result.SigningReceipts[0].Status);
+            if (cancelAfterExecution)
+            {
+                var retry = await service.RetryFailedAsync(databasePath);
+                Assert.Equal(ReleaseQueueStage.Build, Assert.Single(retry.QueueSession!.Items).Stage);
+                Assert.Null(retry.QueueSession.Items[0].CheckpointStateJson);
+            }
         }
         finally
         {
@@ -137,15 +149,18 @@ public sealed class PowerForgeStudioReleaseQueueCommandServiceTests
                 AdapterResults: []));
     }
 
-    private sealed class StubSigningExecutionService(IReadOnlyList<ReleaseSigningReceipt>? receipts = null) : IReleaseSigningExecutionService
+    private sealed class StubSigningExecutionService(IReadOnlyList<ReleaseSigningReceipt>? receipts = null, Action? beforeReturn = null) : IReleaseSigningExecutionService
     {
         public Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem queueItem, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ReleaseSigningExecutionResult(
+        {
+            beforeReturn?.Invoke();
+            return Task.FromResult(new ReleaseSigningExecutionResult(
                 RootPath: queueItem.RootPath,
                 Succeeded: true,
                 Summary: "Signing completed safely.",
                 SourceCheckpointStateJson: queueItem.CheckpointStateJson,
                 Receipts: receipts ?? []));
+        }
     }
 
     private sealed class StubPublishExecutionService : IReleasePublishExecutionService

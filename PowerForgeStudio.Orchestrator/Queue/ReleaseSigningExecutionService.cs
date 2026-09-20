@@ -43,12 +43,21 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
     {
         ArgumentNullException.ThrowIfNull(queueItem);
 
+        var build = _checkpointReader.TryReadBuildResult(queueItem);
+        if (queueItem.Stage != ReleaseQueueStage.Sign || queueItem.Status != ReleaseQueueItemStatus.WaitingApproval ||
+            build is null || !build.Succeeded || build.AdapterResults.Count == 0 || build.AdapterResults.Any(adapter => !adapter.Succeeded) ||
+            !string.Equals(Path.GetFullPath(build.RootPath), Path.GetFullPath(queueItem.RootPath),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            return new(queueItem.RootPath, false, "Signing requires a successful build checkpoint for this working copy.", queueItem.CheckpointStateJson, []);
+        }
+
         var manifest = _checkpointReader.BuildSigningManifest([queueItem]);
         if (manifest.Count == 0)
         {
             return new ReleaseSigningExecutionResult(
                 RootPath: queueItem.RootPath,
-                Succeeded: true,
+                Succeeded: false,
                 Summary: "No signable artifacts were captured for this queue item.",
                 SourceCheckpointStateJson: queueItem.CheckpointStateJson,
                 Receipts: []);
@@ -74,28 +83,53 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
         }
 
         var receipts = new List<ReleaseSigningReceipt>(manifest.Count);
+        var cancelled = false;
         foreach (var artifact in manifest)
         {
-            receipts.Add(await SignArtifactAsync(queueItem.RootPath, artifact, settings, cancellationToken));
+            if (cancelled || cancellationToken.IsCancellationRequested)
+            {
+                cancelled = true;
+                receipts.Add(FailedReceipt(queueItem.RootPath, artifact, "Not attempted: signing was cancelled.", DateTimeOffset.UtcNow));
+                continue;
+            }
+            try
+            {
+                receipts.Add(await SignArtifactAsync(queueItem.RootPath, artifact, settings, cancellationToken));
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+                receipts.Add(FailedReceipt(queueItem.RootPath, artifact, "Signing was interrupted; this artifact may be partially signed. Rebuild before retrying.", DateTimeOffset.UtcNow));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
+            {
+                receipts.Add(FailedReceipt(queueItem.RootPath, artifact,
+                    StudioOutputSanitizer.Sanitize(FirstLine(ex.Message) ?? "Signing failed for this artifact."), DateTimeOffset.UtcNow));
+            }
         }
 
-        RefreshUnifiedArchives(queueItem, receipts);
+        cancelled |= cancellationToken.IsCancellationRequested;
+        if (!cancelled && receipts.All(receipt => receipt.Status != ReleaseSigningReceiptStatus.Failed))
+            RefreshUnifiedArchives(queueItem, receipts);
         CaptureIntegrityDigests(receipts);
+        cancelled |= cancellationToken.IsCancellationRequested;
 
         var failed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Failed);
         var signed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Signed);
         var skipped = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Skipped);
 
-        var summary = failed > 0
+        var summary = cancelled
+            ? $"Signing cancelled. Retained {signed} signed, {skipped} skipped and {failed} failed or unattempted artifact receipt(s). Rebuild before retrying."
+            : failed > 0
             ? $"Signing completed with {failed} failure(s), {signed} signed, {skipped} skipped."
             : $"Signing completed with {signed} signed and {skipped} skipped artifact(s).";
 
         return new ReleaseSigningExecutionResult(
             RootPath: queueItem.RootPath,
-            Succeeded: failed == 0,
+            Succeeded: !cancelled && failed == 0,
             Summary: summary,
             SourceCheckpointStateJson: queueItem.CheckpointStateJson,
-            Receipts: receipts);
+            Receipts: receipts) { RequiresRebuild = cancelled || failed > 0 };
     }
 
     private static void CaptureIntegrityDigests(List<ReleaseSigningReceipt> receipts)

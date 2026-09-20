@@ -398,7 +398,7 @@ public sealed class ReleaseQueueRunner
             return new ReleaseQueueTransitionResult(session, false, $"{entry.Item.RepositoryName} cannot retry signing because the build checkpoint was not preserved.");
         }
 
-        return BuildResult(session, entry.Index, updatedItem, $"Signing retry armed for {entry.Item.RepositoryName}. USB approval is required again.", timestamp);
+        return BuildResult(session, entry.Index, updatedItem, updatedItem.Stage == ReleaseQueueStage.Build ? $"Rebuild queued for {entry.Item.RepositoryName} before signing can resume." : $"Signing retry armed for {entry.Item.RepositoryName}. USB approval is required again.", timestamp);
     }
 
     private ReleaseQueueTransitionResult RetryPublish(ReleaseQueueSession session, QueueLookupEntry entry, DateTimeOffset timestamp)
@@ -443,6 +443,12 @@ public sealed class ReleaseQueueRunner
     private ReleaseQueueItem? BuildSigningRetryItem(ReleaseQueueItem item, DateTimeOffset timestamp)
     {
         var signingResult = _checkpointSerializer.TryDeserialize<ReleaseSigningExecutionResult>(item.CheckpointStateJson);
+        if (signingResult?.RequiresRebuild == true)
+        {
+            return _itemTransitionFactory.CreateStateUpdate(item, ReleaseQueueStage.Build, ReleaseQueueItemStatus.ReadyToRun,
+                "Signing was interrupted or failed after execution. Rebuild is required before signing again.",
+                "build.ready", null, timestamp);
+        }
         if (string.IsNullOrWhiteSpace(signingResult?.SourceCheckpointStateJson))
         {
             return null;
