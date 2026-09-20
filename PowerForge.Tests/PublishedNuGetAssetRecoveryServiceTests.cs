@@ -7,6 +7,41 @@ namespace PowerForge.Tests;
 public sealed class PublishedNuGetAssetRecoveryServiceTests
 {
     [Fact]
+    public void Constructor_RejectsNonPositiveRecoveryDownloadTimeout()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PublishedNuGetAssetRecoveryService(
+            new NullLogger(),
+            downloadRequestTimeoutSeconds: 0));
+    }
+
+    [Fact]
+    public void Restore_AppliesConfiguredRecoveryDownloadTimeout()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string packageId = "PowerForge.Build";
+            const string version = "3.0.81";
+            var packagePath = Path.Combine(root.FullName, $"{packageId}.{version}.nupkg");
+            File.WriteAllBytes(packagePath, CreateToolPackage(packageId, version, "rebuilt"));
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NeverCompletingPackageHandler()),
+                downloadRequestTimeoutSeconds: 1);
+
+            Assert.ThrowsAny<OperationCanceledException>(() => service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [packagePath],
+                CancellationToken.None));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Restore_ReplacesRebuiltPackageWithExactPublishedBytes()
     {
         var root = Directory.CreateDirectory(Path.Combine(
@@ -497,6 +532,28 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
             {
                 Content = new ByteArrayContent(responseBytes)
             });
+        }
+    }
+
+    private sealed class NeverCompletingPackageHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsoluteUri.EndsWith("/v3/index.json", StringComparison.Ordinal) == true)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "{\"resources\":[{\"@id\":\"https://packages.example/v3-flatcontainer/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}",
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("The canceled recovery request unexpectedly continued.");
         }
     }
 }

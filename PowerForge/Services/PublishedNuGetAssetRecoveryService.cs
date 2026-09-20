@@ -14,18 +14,24 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
     private readonly TimeSpan _indexingTimeout;
     private readonly TimeSpan _retryDelay;
     private readonly Action<TimeSpan, CancellationToken> _delay;
+    private readonly int _downloadRequestTimeoutSeconds;
 
     internal PublishedNuGetAssetRecoveryService(
         ILogger logger,
         NuGetV3PackageDownloader? downloader = null,
         TimeSpan? indexingTimeout = null,
         TimeSpan? retryDelay = null,
-        Action<TimeSpan, CancellationToken>? delay = null)
+        Action<TimeSpan, CancellationToken>? delay = null,
+        int downloadRequestTimeoutSeconds = 10 * 60)
     {
+        if (downloadRequestTimeoutSeconds < 1)
+            throw new ArgumentOutOfRangeException(nameof(downloadRequestTimeoutSeconds));
+
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _downloader = downloader ?? new NuGetV3PackageDownloader();
         _indexingTimeout = indexingTimeout ?? TimeSpan.FromMinutes(10);
         _retryDelay = retryDelay ?? TimeSpan.FromSeconds(5);
+        _downloadRequestTimeoutSeconds = downloadRequestTimeoutSeconds;
         _delay = delay ?? ((duration, cancellationToken) =>
         {
             if (duration > TimeSpan.Zero)
@@ -201,7 +207,10 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                         packageId,
                         expectedVersion,
                         destinationPath,
-                        new PrivateGalleryIndexOptions(),
+                        new PrivateGalleryIndexOptions
+                        {
+                            RequestTimeoutSeconds = _downloadRequestTimeoutSeconds
+                        },
                         cancellationToken)
                     .ConfigureAwait(false)
                     .GetAwaiter()
