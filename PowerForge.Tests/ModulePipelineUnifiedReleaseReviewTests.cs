@@ -953,6 +953,79 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void InstallOverlapCheck_ResolvesDefaultModuleRootsBeforeComparingArtifacts()
+    {
+        const string moduleName = "TestModule";
+        var defaultRoots = ModuleInstaller.ResolveDestinationRoots(Array.Empty<string>());
+        Assert.NotEmpty(defaultRoots);
+        var defaultRoot = defaultRoots.First();
+        var ownedModulePath = Path.Combine(defaultRoot, moduleName);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ModulePipelineRunner.ValidateInstallArtefactPathConflicts(
+                Array.Empty<string>(), moduleName, [ownedModulePath]));
+
+        Assert.Contains("overlaps a finalized artefact output", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Run_RejectsPackedArtifactReplacedByEmptyDirectoryDuringLaterProjectBuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var packedRoot = Path.Combine(root.FullName, "Artifacts", "Packed");
+            var runner = new ModulePipelineRunner(
+                new NullLogger(), powerShellRunner: null, moduleDependencyMetadataProvider: null,
+                hostedOperations: null, manifestMutator: null, missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    string archive = Assert.Single(Directory.EnumerateFiles(packedRoot, "*.zip"));
+                    File.Delete(archive);
+                    Directory.CreateDirectory(archive);
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration { Enabled = true, Path = packedRoot }
+                    },
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration
+                        {
+                            Name = "Packages", RootPath = "Sources", BuildBeforeModule = false
+                        }
+                    }
+                ]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("changed after package validation", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(".zip", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_RejectsReleaseMetadataChangedAfterStagingInsideUnpackedArtefactRoot()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

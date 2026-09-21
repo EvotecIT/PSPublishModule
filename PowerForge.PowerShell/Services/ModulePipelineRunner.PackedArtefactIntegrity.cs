@@ -139,6 +139,11 @@ public sealed partial class ModulePipelineRunner
 
             foreach (string path in ownedPaths)
             {
+                // A finalized file cannot become a directory, even if the new
+                // directory is empty and its child inventory happens to match.
+                if (state.FinalizedPackedArtefactHashes.ContainsKey(path) && Directory.Exists(path))
+                    ThrowFinalizedArtefactChanged(path, signed);
+
                 if (Directory.Exists(path))
                 {
                     var expectedFiles = new HashSet<string>(state.FinalizedLooseArtefactFileInventories.Values
@@ -177,14 +182,23 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static void ValidateInstallArtefactPathConflicts(ModulePipelinePlan plan, ModulePipelineRunState state)
+        => ValidateInstallArtefactPathConflicts(
+            plan.InstallRoots,
+            plan.ModuleName,
+            state.ArtefactResults.SelectMany(EnumerateOwnedArtefactPaths));
+
+    internal static void ValidateInstallArtefactPathConflicts(
+        IEnumerable<string> installRoots,
+        string moduleName,
+        IEnumerable<string> artefactOwnedPaths)
     {
-        var ownedPaths = state.ArtefactResults.SelectMany(EnumerateOwnedArtefactPaths)
+        var ownedPaths = artefactOwnedPaths
             .Select(Path.GetFullPath)
             .ToArray();
 
-        foreach (string root in plan.InstallRoots)
+        foreach (string root in ModuleInstaller.ResolveDestinationRoots(installRoots))
         {
-            string installedModuleParent = Path.GetFullPath(Path.Combine(root, plan.ModuleName));
+            string installedModuleParent = Path.GetFullPath(Path.Combine(root, moduleName));
             if (ownedPaths.Any(path => IsSameOrChildPath(path, installedModuleParent) ||
                                        IsSameOrChildPath(installedModuleParent, path)))
                 throw new InvalidOperationException(
