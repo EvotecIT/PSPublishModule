@@ -24,6 +24,7 @@ public sealed partial class WorkspaceViewModel
     {
         if (KeepReleaseVisible()) return;
         IsOverviewPage = false;
+        IsHistoryPage = false;
         IsActivityPage = false;
         IsStoragePage = false;
         IsAutomationsPage = false;

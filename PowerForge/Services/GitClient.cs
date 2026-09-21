@@ -179,17 +179,35 @@ public sealed class GitClient
     /// <param name="timeout">Optional timeout override.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Process execution result.</returns>
+    public Task<ProcessRunResult> RunRawAsync(
+        string repositoryRoot,
+        IReadOnlyList<string> arguments,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+        => RunRawAsync(repositoryRoot, arguments, int.MaxValue, timeout, cancellationToken);
+
+    /// <summary>
+    /// Runs an arbitrary Git command while enforcing a captured-output character limit.
+    /// </summary>
+    /// <param name="repositoryRoot">Working directory for Git.</param>
+    /// <param name="arguments">Raw git arguments.</param>
+    /// <param name="maxCapturedOutputCharacters">Maximum characters retained independently for standard output and error.</param>
+    /// <param name="timeout">Optional timeout override.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Process execution result.</returns>
     public async Task<ProcessRunResult> RunRawAsync(
         string repositoryRoot,
         IReadOnlyList<string> arguments,
+        int maxCapturedOutputCharacters,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(repositoryRoot))
             throw new ArgumentException("Working directory is required.", nameof(repositoryRoot));
+        if (maxCapturedOutputCharacters <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxCapturedOutputCharacters));
 
-        return await _processRunner.RunAsync(
-            new ProcessRunRequest(
+        var request = new ProcessRunRequest(
                 _gitExecutable,
                 repositoryRoot,
                 arguments,
@@ -197,8 +215,11 @@ public sealed class GitClient
                 _environmentVariables,
                 captureOutput: true,
                 captureError: true,
-                inheritEnvironment: _inheritEnvironment),
-            cancellationToken).ConfigureAwait(false);
+                inheritEnvironment: _inheritEnvironment)
+        {
+            MaxCapturedOutputCharacters = maxCapturedOutputCharacters
+        };
+        return await _processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

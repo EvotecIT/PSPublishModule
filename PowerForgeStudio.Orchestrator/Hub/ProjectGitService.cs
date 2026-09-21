@@ -3,8 +3,11 @@ using PowerForgeStudio.Domain.Hub;
 
 namespace PowerForgeStudio.Orchestrator.Hub;
 
-public sealed partial class ProjectGitService
+public sealed partial class ProjectGitService : IProjectHistoryService
 {
+    private const int MaxHistoryFiles = 400;
+    private const int MaxHistoryOutputCharacters = 256 * 1024;
+    private const int MaxHistoryContextCharacters = 16 * 1024;
     private readonly GitClient _gitClient;
 
     public ProjectGitService()
@@ -33,6 +36,20 @@ public sealed partial class ProjectGitService
             untracked.Count, staged, unstaged, untracked, branches, worktrees);
     }
 
+    public async Task<ProjectHistoryContext> GetHistoryContextAsync(string repositoryRoot, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!Directory.Exists(repositoryRoot) || !Catalog.WorktreeDetector.IsGitRepository(repositoryRoot))
+            return ProjectHistoryContext.NotARepository;
+        var result = await _gitClient.RunRawAsync(repositoryRoot,
+            ["status", "--porcelain=2", "--branch", "--untracked-files=no", "-z"],
+            MaxHistoryContextCharacters,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        EnsureHistoryReadCompleted(result);
+        return new ProjectHistoryContext(true, ParseHistoryBranch(result.StdOut));
+    }
+
     public async Task<string> GetDiffAsync(string repositoryRoot, string? filePath = null, bool staged = false, CancellationToken cancellationToken = default, string? originalPath = null)
     {
         var args = new List<string> { "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-color" };
@@ -47,33 +64,88 @@ public sealed partial class ProjectGitService
 
     public async Task<IReadOnlyList<GitLogEntry>> GetLogAsync(string repositoryRoot, int count = 15, CancellationToken cancellationToken = default)
     {
+        count = Math.Clamp(count, 1, 100);
         var result = await _gitClient.RunRawAsync(
             repositoryRoot, ["log", $"-{count}", "--format=%H%n%h%n%an%n%s%n%aI%n---"],
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         if (!result.Succeeded) return [];
+        return ParseLogEntries(result.StdOut);
+    }
 
-        var entries = new List<GitLogEntry>();
-        var lines = result.StdOut.Split(["\r\n", "\n"], StringSplitOptions.None);
-        var i = 0;
-        while (i + 4 < lines.Length)
+    public async Task<IReadOnlyList<GitLogEntry>> GetHistoryLogAsync(
+        string repositoryRoot,
+        int count = 15,
+        CancellationToken cancellationToken = default)
+    {
+        count = Math.Clamp(count, 1, 100);
+        var head = await _gitClient.RunRawAsync(repositoryRoot,
+            ["rev-parse", "--verify", "--quiet", "HEAD"], cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!head.Succeeded)
         {
-            var hash = lines[i].Trim();
-            var shortHash = lines[i + 1].Trim();
-            var author = lines[i + 2].Trim();
-            var message = lines[i + 3].Trim();
-            var dateStr = lines[i + 4].Trim();
-
-            if (!string.IsNullOrEmpty(hash) && DateTimeOffset.TryParse(dateStr, out var date))
-            {
-                entries.Add(new GitLogEntry(hash, shortHash, author, message, date));
-            }
-
-            i += 5;
-            while (i < lines.Length && lines[i].Trim() == "---") i++;
+            EnsureExpectedAbsence(head);
+            return [];
         }
 
-        return entries;
+        var result = await _gitClient.RunRawAsync(repositoryRoot,
+            ["log", $"-{count}", "--format=%H%n%h%n%an%n%s%n%aI%n---"],
+            MaxHistoryOutputCharacters,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(result);
+        return ParseLogEntries(result.StdOut);
+    }
+
+    public async Task<GitCommitDetail> GetCommitDetailAsync(
+        string repositoryRoot,
+        string commitHash,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateCommitHash(commitHash);
+        var parentResult = await _gitClient.RunRawAsync(repositoryRoot,
+            ["rev-list", "--parents", "-n", "1", commitHash],
+            MaxHistoryContextCharacters,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(parentResult);
+        var revisions = parentResult.StdOut.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (revisions.Length == 0 || !string.Equals(revisions[0], commitHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Git did not return the selected commit while resolving its first parent.");
+        var firstParent = revisions.Length > 1 ? revisions[1] : null;
+        IReadOnlyList<string> fileArguments = firstParent is null
+            ? ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-z", commitHash, "--"]
+            : ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", firstParent, commitHash, "--"];
+        var filesResult = await _gitClient.RunRawAsync(repositoryRoot,
+            fileArguments,
+            MaxHistoryOutputCharacters,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        EnsureHistoryReadCompleted(filesResult);
+        var fileOutput = filesResult.StdOut;
+        if (filesResult.StandardOutputLimitExceeded && fileOutput.Length > 0 && fileOutput[^1] != '\0')
+        {
+            var lastCompletePath = fileOutput.LastIndexOf('\0');
+            fileOutput = lastCompletePath < 0 ? "" : fileOutput[..(lastCompletePath + 1)];
+        }
+        var changedFiles = fileOutput
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Take(MaxHistoryFiles)
+            .ToArray();
+        var filesTruncated = filesResult.StandardOutputLimitExceeded ||
+                             filesResult.StdOut.Count(character => character == '\0') > MaxHistoryFiles;
+
+        IReadOnlyList<string> diffArguments = firstParent is null
+            ? ["show", "--format=", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames", "--find-copies", commitHash, "--"]
+            : ["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames", "--find-copies", firstParent, commitHash, "--"];
+        var diffResult = await _gitClient.RunRawAsync(repositoryRoot,
+            diffArguments,
+            MaxHistoryOutputCharacters,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        EnsureHistoryReadCompleted(diffResult);
+        var diff = string.IsNullOrWhiteSpace(diffResult.StdOut)
+            ? "No textual diff is available for this commit."
+            : diffResult.StdOut;
+        if (diffResult.StandardOutputLimitExceeded)
+            diff += "\n[Commit diff truncated at 256K characters]";
+
+        return new GitCommitDetail(commitHash, changedFiles, diff, filesTruncated, diffResult.StandardOutputLimitExceeded);
     }
 
     public Task<bool> StageFileAsync(string repositoryRoot, string filePath, CancellationToken cancellationToken = default)
@@ -126,6 +198,50 @@ public sealed partial class ProjectGitService
             throw new InvalidOperationException(result.TimedOut ? "Git timed out. Refresh repository state before retrying."
                 : result.StandardOutputLimitExceeded || result.StandardErrorLimitExceeded ? "Git output exceeded the capture limit."
                 : "Git failed: " + Host.StudioOutputSanitizer.Sanitize(result.StdErr));
+    }
+
+    private static void EnsureHistoryReadCompleted(ProcessRunResult result)
+    {
+        if (result.ExitCode != 0 || result.StartFailed || result.TimedOut || result.StandardErrorLimitExceeded)
+            EnsureSuccess(result);
+    }
+
+    private static IReadOnlyList<GitLogEntry> ParseLogEntries(string output)
+    {
+        var entries = new List<GitLogEntry>();
+        var lines = output.Split(["\r\n", "\n"], StringSplitOptions.None);
+        var i = 0;
+        while (i + 4 < lines.Length)
+        {
+            var hash = lines[i].Trim();
+            var shortHash = lines[i + 1].Trim();
+            var author = lines[i + 2].Trim();
+            var message = lines[i + 3].Trim();
+            var dateStr = lines[i + 4].Trim();
+            if (!string.IsNullOrEmpty(hash) && DateTimeOffset.TryParse(dateStr, out var date))
+                entries.Add(new GitLogEntry(hash, shortHash, author, message, date));
+            i += 5;
+            while (i < lines.Length && lines[i].Trim() == "---") i++;
+        }
+        return entries;
+    }
+
+    private static string ParseHistoryBranch(string output)
+    {
+        const string prefix = "# branch.head ";
+        var start = output.IndexOf(prefix, StringComparison.Ordinal);
+        if (start < 0) return "";
+        start += prefix.Length;
+        var end = output.IndexOfAny(['\r', '\n', '\0'], start);
+        var branch = (end < 0 ? output[start..] : output[start..end]).Trim();
+        return branch == "(detached)" ? "" : branch;
+    }
+
+    private static void ValidateCommitHash(string commitHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commitHash);
+        if (commitHash.Length is not (40 or 64) || !commitHash.All(Uri.IsHexDigit))
+            throw new ArgumentException("Select a valid commit from the observed history.", nameof(commitHash));
     }
 
     private static void EnsureExpectedAbsence(ProcessRunResult result)

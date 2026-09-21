@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             xmlns:domain="using:PowerForgeStudio.Domain.Hub"
+             x:Class="PowerForgeStudio.Avalonia.Views.ProjectHistoryView"
+             x:DataType="vm:ProjectHistoryViewModel">
+  <Grid Margin="18" RowDefinitions="Auto,*" RowSpacing="12">
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+      <StackPanel Spacing="4">
+        <TextBlock Text="History" FontSize="22" FontWeight="SemiBold" />
+        <SelectableTextBlock Text="{Binding Root}" FontSize="11" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+      <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding HasWorkingCopy}" VerticalAlignment="Top" />
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="1.05*,5,1.75*">
+      <Border Classes="card" Padding="8">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Text="Recent commits" FontSize="15" FontWeight="SemiBold" Margin="7,5,7,8" />
+          <ListBox Grid.Row="1" ItemsSource="{Binding Commits}" SelectedItem="{Binding SelectedCommit, Mode=TwoWay}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="domain:GitLogEntry">
+                <Grid RowDefinitions="Auto,Auto,Auto" Margin="5,7">
+                  <TextBlock Text="{Binding Message}" FontWeight="SemiBold" TextWrapping="Wrap" MaxLines="2" />
+                  <TextBlock Grid.Row="1" Text="{Binding ShortHash}" Foreground="#0865FF" FontFamily="Cascadia Code, Consolas, monospace" />
+                  <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBlock Text="{Binding AuthorName}" Classes="muted" TextTrimming="CharacterEllipsis" FontSize="11" />
+                    <TextBlock Grid.Column="1" Text="{Binding RelativeTime}" Classes="muted" FontSize="11" />
+                  </Grid>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <Border Grid.Column="2" Classes="card" Padding="12">
+        <Grid RowDefinitions="Auto,Auto,82,*" RowSpacing="9">
+          <StackPanel Spacing="3">
+            <TextBlock Text="{Binding SelectedCommit.Message, FallbackValue=Select a commit}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding DetailStatus}" Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+          <ProgressBar Grid.Row="1" IsVisible="{Binding IsDetailLoading}" IsIndeterminate="True" Height="3" />
+          <Border Grid.Row="2" Background="#F6F8FC" CornerRadius="5" Padding="9">
+            <Grid RowDefinitions="Auto,*">
+              <TextBlock Text="Changed files" FontWeight="SemiBold" />
+              <ListBox Grid.Row="1" ItemsSource="{Binding ChangedFiles}" Background="Transparent">
+                <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding}" /></DataTemplate></ListBox.ItemTemplate>
+              </ListBox>
+            </Grid>
+          </Border>
+          <Border Grid.Row="3" Background="#0D2132" CornerRadius="5" Padding="10">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+              <SelectableTextBlock Text="{Binding Diff}" Foreground="#D7E7F8" FontFamily="Cascadia Code, Consolas, monospace" FontSize="11" />
+            </ScrollViewer>
+          </Border>
+        </Grid>
+      </Border>
+    </Grid>
+    <ProgressBar Grid.Row="1" IsVisible="{Binding IsLoading}" IsIndeterminate="True" Height="3" VerticalAlignment="Top" />
+  </Grid>
+</UserControl>

@@ -29,7 +29,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingTreeSelection;
     private int _refreshVersion;
 
-    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null, IWorkspaceStorageRemovalService? storageRemoval = null, IWorkspaceAutomationInventoryService? automations = null, IWorkspaceConnectionInventoryService? connections = null, IWorkspaceActivityInventoryService? activity = null, PowerForgeStudio.Orchestrator.Projects.IProjectOverviewService? overview = null)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null, IWorkspaceStorageRemovalService? storageRemoval = null, IWorkspaceAutomationInventoryService? automations = null, IWorkspaceConnectionInventoryService? connections = null, IWorkspaceActivityInventoryService? activity = null, PowerForgeStudio.Orchestrator.Projects.IProjectOverviewService? overview = null, IProjectHistoryService? history = null)
     {
         Release = release ?? new ReleaseViewModel();
         Storage = new StorageViewModel(storage, storageRemoval, GetProtectedWorkingCopies);
@@ -37,6 +37,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Connections = new ConnectionsViewModel(connections);
         Activity = new ActivityViewModel(activity);
         Overview = new ProjectOverviewViewModel(overview);
+        History = new ProjectHistoryViewModel(history);
         Settings = new SettingsViewModel(stateStore as IWorkspaceRootCatalogService, stateStore as IWorkspacePreferenceService);
         GitHub = new GitHubViewModel(gitHub);
         WorkspaceRoot = Path.GetFullPath(root);
@@ -99,6 +100,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             if (args.PropertyName == nameof(ProjectOverviewViewModel.Output)) OnPropertyChanged(nameof(DisplayedOutput));
             if (args.PropertyName == nameof(ProjectOverviewViewModel.Status)) OnPropertyChanged(nameof(DisplayedStatus));
         };
+        History.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ProjectHistoryViewModel.Output)) OnPropertyChanged(nameof(DisplayedOutput));
+            if (args.PropertyName == nameof(ProjectHistoryViewModel.Status)) OnPropertyChanged(nameof(DisplayedStatus));
+            if (args.PropertyName == nameof(ProjectHistoryViewModel.DetailStatus) && IsHistoryPage) OnPropertyChanged(nameof(DisplayedStatus));
+        };
         Settings.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(SettingsViewModel.Output)) OnPropertyChanged(nameof(DisplayedOutput));
@@ -111,34 +118,34 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public ReleaseViewModel Release { get; }
     [ObservableProperty] private bool _isReleasePage;
     partial void OnIsReleasePageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(OutputPaneHeight)); }
-    [RelayCommand] private void ShowRelease() { IsOverviewPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true; }
+    [RelayCommand] private void ShowRelease() { IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true; }
     public GitHubViewModel GitHub { get; }
     [ObservableProperty] private bool _isGitHubPage;
     partial void OnIsGitHubPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(OutputPaneHeight)); }
-    public global::Avalonia.Controls.GridLength OutputPaneHeight => new(IsGitHubPage || IsReleasePage ? 0 : 170);
-    [RelayCommand] private void ShowGitHub() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
+    public global::Avalonia.Controls.GridLength OutputPaneHeight => new(IsGitHubPage || IsReleasePage ? 0 : IsHistoryPage ? 110 : 170);
+    [RelayCommand] private void ShowGitHub() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
     partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(DisplayedOutput)); }
     [ObservableProperty] private bool _isBuildPage;
-    public bool IsFilesPage => !IsOverviewPage && !IsSettingsPage && !IsActivityPage && !IsStoragePage && !IsAutomationsPage && !IsConnectionsPage && !IsBuildPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;
+    public bool IsFilesPage => !IsOverviewPage && !IsHistoryPage && !IsSettingsPage && !IsActivityPage && !IsStoragePage && !IsAutomationsPage && !IsConnectionsPage && !IsBuildPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;
     partial void OnIsBuildPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
         OnPropertyChanged(nameof(IsProjectRoute));
         OnPropertyChanged(nameof(DisplayedOutput));
     }
-    public string DisplayedOutput => IsOverviewPage ? Overview.Output : IsSettingsPage ? Settings.Output : IsActivityPage ? Activity.Output : IsStoragePage ? Storage.Output : IsAutomationsPage ? Automations.Output : IsConnectionsPage ? Connections.Output : IsChangesPage ? Changes.LastOperation : IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;
+    public string DisplayedOutput => IsOverviewPage ? Overview.Output : IsHistoryPage ? History.Output : IsSettingsPage ? Settings.Output : IsActivityPage ? Activity.Output : IsStoragePage ? Storage.Output : IsAutomationsPage ? Automations.Output : IsConnectionsPage ? Connections.Output : IsChangesPage ? Changes.LastOperation : IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;
     partial void OnOutputChanged(string value) => OnPropertyChanged(nameof(DisplayedOutput));
-    [RelayCommand] private void ShowFiles() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
-    [RelayCommand] private void ShowBuild() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
-    [RelayCommand] private void ShowChanges() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
+    [RelayCommand] private void ShowFiles() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
+    [RelayCommand] private void ShowBuild() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
+    [RelayCommand] private void ShowChanges() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
 
     private bool KeepReleaseVisible()
     {
         if (!Release.HasProtectedReleaseWork) return false;
-        IsOverviewPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true;
+        IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true;
         Release.Status = Release.HasUnpersistedEvidence
             ? "Save or explicitly discard the unsaved receipts before leaving this release."
             : "Wait for the release operation to finish, or cancel it and retain its receipts before leaving.";
@@ -179,6 +186,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Build.SetWorkingCopy(value);
         NotifyEditorChanged();
         Changes.SetWorkingCopy(value);
+        History.SetWorkingCopy(value);
         GitHub.SetWorkingCopy(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
         OnPropertyChanged(nameof(CanManageFiles));
@@ -389,5 +397,5 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var text = Output + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
         Output = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); Changes.Dispose(); GitHub.Dispose(); Release.Dispose(); Storage.Dispose(); Automations.Dispose(); Connections.Dispose(); Activity.Dispose(); Overview.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); Changes.Dispose(); History.Dispose(); GitHub.Dispose(); Release.Dispose(); Storage.Dispose(); Automations.Dispose(); Connections.Dispose(); Activity.Dispose(); Overview.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 }

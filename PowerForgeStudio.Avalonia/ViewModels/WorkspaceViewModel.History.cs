@@ -5,34 +5,33 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 
 public sealed partial class WorkspaceViewModel
 {
-    public ConnectionsViewModel Connections { get; private set; } = null!;
-    [ObservableProperty] private bool _isConnectionsPage;
+    public ProjectHistoryViewModel History { get; private set; } = null!;
+    [ObservableProperty] private bool _isHistoryPage;
 
-    partial void OnIsConnectionsPageChanged(bool value)
+    partial void OnIsHistoryPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
         OnPropertyChanged(nameof(IsProjectRoute));
-        OnPropertyChanged(nameof(IsWorkspaceUtilityPage));
         OnPropertyChanged(nameof(DisplayedOutput));
         OnPropertyChanged(nameof(DisplayedStatus));
+        OnPropertyChanged(nameof(OutputPaneHeight));
     }
 
     [RelayCommand]
-    private async Task ShowConnectionsAsync()
+    private async Task ShowHistoryAsync()
     {
         if (KeepReleaseVisible()) return;
         IsOverviewPage = false;
-        IsHistoryPage = false;
         IsSettingsPage = false;
         IsActivityPage = false;
         IsStoragePage = false;
         IsAutomationsPage = false;
+        IsConnectionsPage = false;
         IsReleasePage = false;
         IsGitHubPage = false;
         IsBuildPage = false;
         IsChangesPage = false;
-        IsConnectionsPage = true;
-        Connections.SetWorkspace(WorkspaceRoot);
-        await Connections.RefreshAsync();
+        IsHistoryPage = true;
+        await History.RefreshAsync();
     }
 }

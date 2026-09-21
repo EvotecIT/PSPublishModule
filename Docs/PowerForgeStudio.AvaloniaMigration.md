@@ -12,6 +12,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Apply native tree row geometry, ancestry guides, context/selection styling, vector navigation icons and Git markers.
 - [x] Restore workspace favorites, expanded folders and document tabs through shared catalog persistence.
 - [x] Add a bounded per-project overview with working-copy identity, product signals, entrypoints and prerequisites.
+- [x] Add bounded per-working-copy commit history with changed-file and diff inspection.
 - [x] Connect real file navigation, previews and explicit file operations.
 - [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
 - [x] Add text editing, conflict-aware saves, unsaved-document choices and draft-safe navigation.
@@ -94,6 +95,20 @@ Evidence:
 - Actual Skia rendering was inspected at 1600 x 1000 and 1050 x 720, including the compact bottom state: `Artifacts/StudioValidation/project-overview.png`, `project-overview-compact.png` and `project-overview-compact-bottom.png`.
 
 The overview does not claim installed-tool readiness; prerequisites link the user conceptually to Connections for observed runtime evidence. Persisted run history, release history, package/download summaries, editable project descriptors and archive inspection remain separate planned routes. Native pointer, keyboard, external README opening and filesystem watcher behavior remain unverified.
+
+### Project history milestone
+
+The `/projects/p/history?w=w` route keeps the project tree and project tabs visible while showing the 50 most recent commits for the selected working copy. Selecting a commit shows its author, message, changed paths and patch without checking out a revision or modifying repository content. The History route joins Overview, Files and Changes as a working-copy-specific surface; switching projects cancels the old read and clears its evidence before another repository can populate the page.
+
+History reuses ProjectGitService through a narrow interface. The service verifies an unborn `HEAD` separately from a real log failure, clamps requested log counts to 100, accepts only full SHA-1 or SHA-256 commit IDs observed by Studio, compares merge commits with their first parent, caps changed paths at 400 and caps captured file-list and diff output at 256K decoded characters. Its branch-only status probe skips untracked-file enumeration and caps capture at 16K characters. The bounded GitClient overload preserves the earlier public CLR signature for compiled consumers. Truncation is explicit in the typed result and rendered diff. Opening or selecting a project does not start a history scan; the route and its Refresh action own that work.
+
+Evidence:
+
+- Six focused shared tests pass. Real repositories prove bounded diff capture, changed-file projection, first-parent merge evidence, invalid-object rejection and unchanged working-copy state. An unborn repository returns an empty history while an actual `git log` failure remains an error. Forced capture-boundary results prove that incomplete paths are never published and that the branch probe remains bounded without enumerating untracked files. Reflection verifies that the original four-parameter GitClient CLR signature remains present.
+- Three focused Avalonia tests pass. Controlled delayed providers prove that switching working copies cancels old history and detail requests, clears their progress states and retains only the new evidence. A real repository proves navigation, commit selection, changed files and patch rendering.
+- Actual Skia rendering was inspected at 1600 x 1000 and 1050 x 720: `Artifacts/StudioValidation/project-history.png` and `project-history-compact.png`. The compact project-tab row remains complete, and the history-specific output height keeps both changed-file and diff evidence visible.
+
+History is currently read-only. Commit comparison, opening the exact commit on GitHub, pagination beyond the bounded recent set and path-specific history remain planned actions. Native pointer, keyboard and non-Windows rendering remain unverified.
 
 ### File-management milestone
 
