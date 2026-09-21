@@ -1,0 +1,108 @@
+# PowerForge Studio product map
+
+Status: canonical navigation and WPF retirement map.
+
+PowerForge Studio uses one workspace shell. The project tree, document tabs, context panel and output dock stay in place while the center surface changes. The product does not need one mockup for every loading, empty, error and dialog state. Eight representative visual references define the shell and reusable page patterns; runtime tests cover the state matrix.
+
+## Navigation model
+
+The left rail is workspace-wide. Project tabs are scoped to the selected working copy. A rail entry must never silently behave like a project tab.
+
+| Scope | Entry | Purpose | Main owner |
+|---|---|---|---|
+| Project | Overview | Identity, detected products, entrypoints, prerequisites and working-copy state | Project overview service |
+| Project | Files | Tree, file list, preview/editor and explicit file operations | Explorer services |
+| Project | Changes | Branches, status, diff, stage, unstage and commit | Project Git service |
+| Project | History | Bounded commit list, changed paths and patch | Project Git service |
+| Project | Build & Run | Inspect configuration, plan intent, execute and cancel | Build planning/execution services |
+| Project | GitHub | Issues, pull requests, checks, discussion and changed files for this repository | GitHub project service |
+| Project | Releases | Prepare, sign, publish, verify, recover and reopen durable receipts | Durable release workflows |
+| Workspace | Activity | Cross-project readiness, releases, reviews, CI and schedules needing attention | Activity inventory |
+| Workspace | GitHub | The Activity catalog prefiltered to cross-project GitHub evidence | Activity inventory |
+| Workspace | Automations | Provider-owned schedules and workflow definitions | Automation inventory |
+| Workspace | Storage | Measured working copies, cleanup candidates and guarded removal review | Storage inspection/removal services |
+| Workspace | Connections | Secret-free capability and endpoint evidence for GitHub, registries, Licensing, IntelligenceX and toolchains | Connection inventory |
+| Workspace | Settings | Local roots, restore behavior, limits and diagnostics preferences | Local Studio settings |
+
+Projects in the rail returns to the selected project's Overview. It remains highlighted for every project tab. GitHub in the rail opens the cross-project Activity filter; GitHub in the project tab stays bound to the selected working copy.
+
+## Subpages and overlays
+
+These are states within an owning surface, not additional top-level pages:
+
+- Files: document editor, unsaved-change choice, create/copy/move/rename, recoverable deletion and recovery.
+- Changes: local branch selector, new branch field, change list, diff and commit form.
+- Build & Run: discovered contracts, reviewed plan, running progress, cancellation, artifacts and output.
+- GitHub: issues, pull requests, discussion/checks and changed-file patch.
+- Releases: prepared plan, signing, destination review, publication, verification, saved history and local-save recovery.
+- Storage: filters, selected-row evidence, removal review and broken-registration prune review.
+- Connections: catalog evidence and provider-owned configuration handoff. Secret values never appear here.
+
+Dialogs are used only when the operator must confirm a target, resolve a collision, choose what happens to unsaved work, or authorize a destructive/external effect. A successful read or simple navigation does not need a dialog.
+
+## Eight visual references
+
+One wide and one compact runtime render may be captured from the same reference when responsive behavior matters. This is the complete visual set; it is intentionally smaller than the superseded 53-page/108-state browser pack.
+
+1. Workspace shell with project tree, working copies, files and document tabs.
+2. Project overview with identity, signals, entrypoints and prerequisites.
+3. Changes and history pattern with branch controls, lists and diff.
+4. Build & Run with reviewed plan, live stages, cancellation and artifacts.
+5. Releases with destination review, progress, receipts and saved history.
+6. Project GitHub with issue/PR/check context and changed files.
+7. Workspace catalog pattern represented by Activity; Automations and Connections reuse it.
+8. Storage review with measured candidates, evidence inspector and guarded removal.
+
+Screenshots demonstrate hierarchy, density, spacing, typography, icons and responsive composition. They do not freeze sample repository names, versions, statuses or invented data into product requirements.
+
+## Shared state contract
+
+Every data surface implements the states that apply to it:
+
+| State | Required behavior |
+|---|---|
+| Initial | Explain what will be read or what selection is required. |
+| Loading | Keep the current route and show the active read or operation. |
+| Empty | State that the read succeeded and no matching item exists. |
+| Ready | Show observation time, source and actionable evidence. |
+| Refreshing | Preserve stale evidence visibly until the replacement snapshot is complete. |
+| Partial | Identify the unavailable provider or omitted bounded results. |
+| Unauthorized | Name the missing provider capability without implying an empty result. |
+| Failed | Keep drafts and prior evidence; show a sanitized retryable error. |
+| Cancelled | Distinguish cancellation from failure and retain completed evidence. |
+| Protected | Block navigation while a mutation is active or evidence is unsaved, with the exact reason. |
+
+Selection, drafts, filters and scroll position survive refresh when the referenced identity still exists. A project switch cancels or versions old reads. Mutations capture their original working-copy root and cannot apply their completion state to a newly selected project.
+
+## WPF capability disposition
+
+| WPF capability | Avalonia disposition | Decision |
+|---|---|---|
+| Project/file explorer | Replaced by the persistent project tree, Files surface and shared file operations | Remove WPF copy |
+| Git status, diff, stage and commit | Replaced; branch create/switch now uses the same shared Git owner | Remove WPF copy |
+| Release portfolio dashboard | Useful attention outcomes are covered by Activity, project Overview and Releases | Do not migrate dashboard shell |
+| Workspace profiles and custom templates | Existing JSON records remain visible in Settings as read-only compatibility data; Avalonia favorites, filters and restored workspace state cover the daily workflow | Preserve data, retire execution |
+| Saved portfolio views and quick presets | These are legacy dashboard filter rows, separate from profiles. Existing rows remain untouched in each workspace `releaseops.db`; Avalonia does not apply or delete them | Preserve SQLite rows, retire the feature |
+| Family lane boards and broad global queue buttons | Project tree groups working copies; per-project durable Releases owns execution | Do not migrate |
+| Release stations and receipts | Replaced by Connections plus durable Releases progress/history | Remove WPF copy |
+| Embedded ConPTY/WebView2 terminal | Windows-only presentation with a private terminal stack | Do not port; keep reviewed execution and output in Studio, add an external-terminal handoff only if daily use proves it necessary |
+| Markdown/WebView previews | Files and GitHub use Avalonia-native bounded presentation and external handoff | Remove WPF copy |
+| WPF-only view-model tests | Current contracts have moved to Domain/Orchestrator or Avalonia tests; retired dashboard profile commands are intentionally reduced to a read-only compatibility view | Delete with WPF host after the retirement gate |
+
+## Retirement gate
+
+The WPF source can be removed when all of the following are true:
+
+- [x] Avalonia is the default build, run and publish target.
+- [x] Project/file management, Git changes, build, release, GitHub, activity, schedules, storage, connections and settings have working Avalonia surfaces.
+- [x] Branch creation and switching are available without returning to WPF.
+- [x] Persisted workspace profiles and custom templates remain visible and exportable through their machine-local JSON; Avalonia does not execute the retired queue/action-chain contract.
+- [x] Legacy saved portfolio-view rows have an explicit disposition: retain them in the workspace SQLite database without applying, migrating or deleting them.
+- [x] Wide and compact renders cover the eight reference patterns through representative pages.
+- [x] Native Windows UI Automation can navigate the tree and invoke a real branch workflow.
+- [x] Headless rendered controls cover keyboard tree navigation, text input, save, Enter and Escape; native UI Automation covers a real mutation workflow. Foreground keyboard injection is unavailable in the current validation host and is recorded as a platform validation limit rather than a WPF dependency.
+- [ ] Build/run/publish scripts and documentation no longer offer the WPF compatibility host.
+- [ ] WPF projects, tests and framework-only package assets are removed from the solution and repository.
+- [ ] The final Avalonia package is rebuilt, launched and reviewed after removal.
+
+An embedded terminal and the old global queue shell are not retirement blockers. Retained portfolio-profile records remain available in Settings and in the machine-local catalog, while their dashboard-specific execution behavior is intentionally excluded from the replacement product.

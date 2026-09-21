@@ -2,6 +2,8 @@
 
 Status: active implementation. Windows first; shared core remains portable.
 
+The canonical page, subpage, shared-state and WPF retirement decisions are in [PowerForgeStudio.ProductMap.md](PowerForgeStudio.ProductMap.md). That smaller map supersedes the exploratory 53-page/108-state browser pack.
+
 The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects already own repository discovery, Git status/worktrees, file enumeration, GitHub reads and the release queue. The replacement is PowerForgeStudio.Avalonia, a thin presentation host over those owners.
 
 ## Delivery checklist
@@ -604,3 +606,13 @@ The Changes page now keeps local branch work beside status, diff, staging and co
 Validation passed all 50 Avalonia tests and the eight focused shared Git-change tests. Real disposable repositories cover creation, switching, duplicate-name failures, invalid names, local-target enforcement, operational Git failure classification, unchanged repository state after rejection, and staging/commit/rename behavior. A delayed-process test switches projects while branch creation is paused and proves the original repository remains the mutation target while the newly selected project's draft survives. Wide and compact Skia renders were inspected in `Artifacts/StudioValidation/branch-management/`, including the scrolled compact commit state.
 
 Native Windows UI Automation selected the disposable project, opened Changes, set the branch value, invoked create/switch, selected `main`, invoked Switch and confirmed each result from the real repository. Windows still refused foreground keyboard delivery to the agent-started window, and a foreground screenshot could not be captured; the resulting desktop-only image was discarded. Native keyboard interaction therefore remains part of the final migration gate.
+
+### Canonical product map and profile retirement boundary
+
+`PowerForgeStudio.ProductMap.md` is now the canonical implementation map: 13 top-level surfaces, contextual subpages, one shared state contract and eight representative visual references. The earlier 53-page/108-state browser pack remains exploratory design input rather than an implementation checklist. The Projects rail remains selected throughout project-scoped tabs; the workspace GitHub rail entry now opens Activity with its cross-project GitHub filter, while the project GitHub tab remains bound to the selected working copy.
+
+Workspace profiles and custom templates have a shared persisted owner, so WPF retirement no longer treats them as absent or disposable. Avalonia Settings shows every retained profile and custom template, including its workspace, startup behavior and action-chain summary, and opens the machine-local JSON location for export. The records remain intact across preference saves. Their old dashboard queue/action-chain execution is deliberately retired; current workflows use favorites, filters, restored workspace state and per-project Releases. The local catalog inspected during this migration contained no profiles or custom templates, while a focused fixture proves non-empty records remain visible and durable.
+
+Saved portfolio views and quick presets are a separate WPF dashboard contract stored as rows in each workspace `releaseops.db`, not in the workspace-profile JSON. Avalonia does not read, apply or delete those rows. They remain in the existing SQLite database as recoverable legacy data, but their dashboard-specific focus, family and queue-filter semantics are deprecated and receive no replacement execution surface. Removing the WPF project removes the editor for those rows; it does not remove the database or migrate the rows into current favorites and filters.
+
+Four focused Activity, navigation and Settings tests pass. The new Settings render was inspected at 1600 x 1000 with retained profile and template fixtures, and the existing compact render continues to scroll the full page. This closes the only material finding from the independent WPF-retirement review. Headless rendered controls already cover tree navigation, text input, Ctrl+S, Enter and Escape. Native UI Automation covers a real branch mutation; Windows foreground-key injection remains unavailable in the validation host and is recorded as a platform limitation rather than a reason to retain the WPF product.

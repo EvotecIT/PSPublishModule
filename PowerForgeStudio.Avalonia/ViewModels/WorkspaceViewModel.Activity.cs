@@ -7,20 +7,30 @@ public sealed partial class WorkspaceViewModel
 {
     public ActivityViewModel Activity { get; private set; } = null!;
     [ObservableProperty] private bool _isActivityPage;
+    public bool IsActivityRailSelected => IsActivityPage && !Activity.IsGitHubFilter;
+    public bool IsGitHubActivityPage => IsActivityPage && Activity.IsGitHubFilter;
 
     partial void OnIsActivityPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
         OnPropertyChanged(nameof(IsProjectRoute));
         OnPropertyChanged(nameof(IsWorkspaceUtilityPage));
+        OnPropertyChanged(nameof(IsActivityRailSelected));
+        OnPropertyChanged(nameof(IsGitHubActivityPage));
         OnPropertyChanged(nameof(DisplayedOutput));
         OnPropertyChanged(nameof(DisplayedStatus));
     }
 
     [RelayCommand]
-    private async Task ShowActivityAsync()
+    private Task ShowActivityAsync() => ShowActivityAsync(gitHubOnly: false);
+
+    [RelayCommand]
+    private Task ShowGitHubActivityAsync() => ShowActivityAsync(gitHubOnly: true);
+
+    private async Task ShowActivityAsync(bool gitHubOnly)
     {
         if (KeepReleaseVisible()) return;
+        var hasCurrentEvidence = IsActivityPage && SamePath(Activity.WorkspaceRoot, WorkspaceRoot);
         IsOverviewPage = false;
         IsHistoryPage = false;
         IsSettingsPage = false;
@@ -33,7 +43,9 @@ public sealed partial class WorkspaceViewModel
         IsChangesPage = false;
         IsActivityPage = true;
         Activity.SetWorkspace(WorkspaceRoot);
-        await Activity.RefreshAsync();
+        if (gitHubOnly) Activity.ShowGitHubCommand.Execute(null);
+        else Activity.ShowAttentionCommand.Execute(null);
+        if (!hasCurrentEvidence) await Activity.RefreshAsync();
     }
 
     private Task RefreshActiveUtilityPageAsync()

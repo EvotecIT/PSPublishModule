@@ -31,6 +31,25 @@ public sealed class WorkspaceSettingsTests
             var store = new WorkspaceRootCatalogService(catalogPath);
             var reference = new WorkspaceDocumentReference(repository, readme);
             store.SaveSession(workspace, [reference], reference, []);
+            store.SaveProfile(new WorkspaceProfile(
+                "daily-release",
+                "Daily release",
+                "Retained profile fixture",
+                "Continue release follow-through.",
+                null,
+                [],
+                workspace,
+                "ready-view",
+                "current-family",
+                "Current family",
+                [WorkspaceProfileLaunchActionKind.RefreshWorkspace, WorkspaceProfileLaunchActionKind.PrepareQueue],
+                UpdatedAtUtc: new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero)));
+            store.SaveTemplate(new WorkspaceProfileTemplate(
+                "release-reference",
+                "Release reference",
+                "Retained custom template fixture.",
+                "Reference only",
+                "Continue the selected release."), workspace);
             var initial = new WorkspaceStudioPreferences(false, 11, 4, 222, 75);
             store.SavePreferences(initial, workspace);
 
@@ -42,6 +61,10 @@ public sealed class WorkspaceSettingsTests
 
                 Assert.Empty(model.Documents);
                 Assert.Equal(initial, model.Settings.SavedPreferences);
+                Assert.Equal("Daily release", Assert.Single(model.Settings.WorkspaceProfiles).DisplayName);
+                Assert.Equal("Release reference", Assert.Single(model.Settings.WorkspaceProfileTemplates).DisplayName);
+                Assert.True(model.Settings.HasWorkspaceProfiles);
+                Assert.True(model.Settings.HasWorkspaceProfileTemplates);
                 model.ShowSettingsCommand.Execute(null);
                 Assert.True(model.IsSettingsPage);
                 Assert.True(model.IsWorkspaceUtilityPage);
@@ -85,7 +108,10 @@ public sealed class WorkspaceSettingsTests
                 var expected = new WorkspaceStudioPreferences(true, 6, 2, 80, 30);
                 Assert.Equal(expected, model.Settings.SavedPreferences);
                 Assert.False(model.Settings.IsDirty);
-                Assert.Equal(expected, new WorkspaceRootCatalogService(catalogPath).Load(workspace).Preferences);
+                var savedCatalog = new WorkspaceRootCatalogService(catalogPath).Load(workspace);
+                Assert.Equal(expected, savedCatalog.Preferences);
+                Assert.Equal("daily-release", Assert.Single(savedCatalog.Profiles).ProfileId);
+                Assert.Equal("release-reference", Assert.Single(savedCatalog.Templates!).TemplateId);
 
                 await model.ShowActivityCommand.ExecuteAsync(null);
                 Assert.Equal(expected.ToActivityOptions(), activity.LastOptions);

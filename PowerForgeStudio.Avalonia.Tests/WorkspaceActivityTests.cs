@@ -76,6 +76,9 @@ public sealed class WorkspaceActivityTests
                 await model.RefreshAsync();
                 await model.ShowActivityCommand.ExecuteAsync(null);
                 Assert.True(model.IsActivityPage);
+                Assert.True(model.IsActivityRailSelected);
+                Assert.False(model.IsGitHubActivityPage);
+                Assert.False(model.IsProjectRoute);
                 Assert.True(model.IsWorkspaceUtilityPage);
                 Assert.Equal(5, model.Activity.Entries.Count);
                 Assert.Equal(5, model.Activity.ActionableCount);
@@ -85,12 +88,37 @@ public sealed class WorkspaceActivityTests
                 Assert.True(model.Activity.IsTruncated);
                 Assert.Equal(2, model.Activity.OmittedCount);
 
+                await model.ShowGitHubActivityCommand.ExecuteAsync(null);
+                Assert.True(model.IsActivityPage);
+                Assert.True(model.IsGitHubActivityPage);
+                Assert.False(model.IsActivityRailSelected);
+                Assert.False(model.IsGitHubPage);
+                Assert.Equal(3, model.Activity.Entries.Count);
+                await model.ShowActivityCommand.ExecuteAsync(null);
+                Assert.True(model.Activity.IsAttentionFilter);
+                Assert.True(model.IsActivityRailSelected);
+
+                model.ShowChangesCommand.Execute(null);
+                Assert.True(model.IsProjectRoute);
+                model.ShowBuildCommand.Execute(null);
+                Assert.True(model.IsProjectRoute);
+                model.ShowGitHubCommand.Execute(null);
+                Assert.True(model.IsProjectRoute);
+                model.ShowReleaseCommand.Execute(null);
+                Assert.True(model.IsProjectRoute);
+                await model.ShowActivityCommand.ExecuteAsync(null);
+
                 var window = new MainWindow { DataContext = model, Width = 1600, Height = 1000 };
                 window.Show();
                 try
                 {
                     model.Activity.SelectedEntry = model.Activity.Entries[0];
                     Capture(window, "activity-attention.png");
+                    await model.ShowGitHubActivityCommand.ExecuteAsync(null);
+                    Assert.True(model.IsGitHubActivityPage);
+                    Capture(window, "activity-github.png");
+                    await model.ShowActivityCommand.ExecuteAsync(null);
+                    model.Activity.SelectedEntry = model.Activity.Entries[0];
                     model.Activity.MuteSelectedCommand.Execute(null);
                     Assert.Equal(1, model.Activity.MutedCount);
                     Assert.Equal(4, model.Activity.Entries.Count);
@@ -122,7 +150,7 @@ public sealed class WorkspaceActivityTests
                 var otherWorkspace = Directory.CreateDirectory(Path.Combine(root, "OtherWorkspace")).FullName;
                 model.WorkspaceRoot = otherWorkspace;
                 await model.RefreshAsync();
-                Assert.Equal(3, inventory.Calls);
+                Assert.Equal(4, inventory.Calls);
                 Assert.Equal(Path.GetFullPath(otherWorkspace), model.Activity.WorkspaceRoot);
                 return true;
             });

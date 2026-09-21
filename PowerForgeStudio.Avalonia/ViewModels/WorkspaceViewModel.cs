@@ -94,6 +94,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         {
             if (args.PropertyName == nameof(ActivityViewModel.Output)) OnPropertyChanged(nameof(DisplayedOutput));
             if (args.PropertyName == nameof(ActivityViewModel.Status)) OnPropertyChanged(nameof(DisplayedStatus));
+            if (args.PropertyName == nameof(ActivityViewModel.IsGitHubFilter))
+            {
+                OnPropertyChanged(nameof(IsActivityRailSelected));
+                OnPropertyChanged(nameof(IsGitHubActivityPage));
+            }
         };
         Overview.PropertyChanged += (_, args) =>
         {

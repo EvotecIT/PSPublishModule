@@ -7,7 +7,8 @@ public sealed partial class WorkspaceViewModel
 {
     public ProjectOverviewViewModel Overview { get; private set; } = null!;
     [ObservableProperty] private bool _isOverviewPage;
-    public bool IsProjectRoute => IsOverviewPage || IsFilesPage || IsHistoryPage;
+    public bool IsProjectRoute => IsOverviewPage || IsFilesPage || IsChangesPage || IsHistoryPage
+        || IsBuildPage || IsGitHubPage || IsReleasePage;
 
     partial void OnIsOverviewPageChanged(bool value)
     {

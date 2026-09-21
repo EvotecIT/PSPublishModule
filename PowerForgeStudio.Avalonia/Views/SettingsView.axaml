@@ -52,6 +52,45 @@
         </Border>
 
         <Border Classes="card" Padding="18">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Retained workspace profiles" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding WorkspaceProfileSummary}" TextWrapping="Wrap" />
+            <TextBlock Text="Profiles created by the retired dashboard are kept as read-only reference data. Their saved filters, queue scopes and action chains are not executed by Avalonia Studio." Classes="muted" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding WorkspaceProfiles}" IsVisible="{Binding HasWorkspaceProfiles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Background="#F6F8FC" CornerRadius="5" Padding="10" Margin="0,3">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="3">
+                      <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding UpdatedAtUtc, StringFormat='{}{0:yyyy-MM-dd}'}" Classes="muted" FontSize="11" />
+                      <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding WorkspaceRoot}" Foreground="#0865FF" FontSize="11" TextWrapping="Wrap" />
+                      <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Spacing="2">
+                        <TextBlock Text="{Binding StartupBehaviorDisplay}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding PreferredActionChainDisplay}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl ItemsSource="{Binding WorkspaceProfileTemplates}" IsVisible="{Binding HasWorkspaceProfileTemplates}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Background="#F6F8FC" CornerRadius="5" Padding="10" Margin="0,3">
+                    <StackPanel Spacing="2">
+                      <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Summary}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                      <TextBlock Text="Custom template retained for reference" Classes="muted" FontSize="11" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Content="Open profile data folder" Command="{Binding OpenConfigurationFolderCommand}" IsEnabled="{Binding HasPreferenceStore}" HorizontalAlignment="Left" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Padding="18">
           <StackPanel Spacing="14">
             <TextBlock Text="Activity refresh limits" FontSize="16" FontWeight="SemiBold" />
             <TextBlock Text="These limits bound external GitHub work and the combined inbox. Deferred and omitted evidence remains visible as partial state." Classes="muted" TextWrapping="Wrap" />

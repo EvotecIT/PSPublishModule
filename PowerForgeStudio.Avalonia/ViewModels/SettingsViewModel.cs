@@ -27,6 +27,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public ObservableCollection<string> WorkspaceRoots { get; } = [];
+    public ObservableCollection<WorkspaceProfile> WorkspaceProfiles { get; } = [];
+    public ObservableCollection<WorkspaceProfileTemplate> WorkspaceProfileTemplates { get; } = [];
     public string ConfigurationPath { get; }
     public string AppVersion { get; }
     public string RuntimeDescription { get; }
@@ -41,6 +43,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool IsIntegrationsSection => Section == "Integrations";
     public bool IsDiagnosticsSection => Section == "Diagnostics";
     public bool IsEditableSection => IsGeneralSection || IsWorkspaceSection;
+    public bool HasWorkspaceProfiles => WorkspaceProfiles.Count > 0;
+    public bool HasWorkspaceProfileTemplates => WorkspaceProfileTemplates.Count > 0;
+    public string WorkspaceProfileSummary => WorkspaceProfiles.Count switch
+    {
+        0 => "No retained profiles are stored on this machine.",
+        1 => "1 retained profile is stored on this machine.",
+        _ => $"{WorkspaceProfiles.Count} retained profiles are stored on this machine."
+    };
 
     [ObservableProperty] private string _section = "Workspace";
     [ObservableProperty] private string _workspaceRoot = "";
@@ -204,6 +214,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         WorkspaceRoots.Clear();
         foreach (var root in catalog.RecentWorkspaceRoots) WorkspaceRoots.Add(root);
+
+        WorkspaceProfiles.Clear();
+        foreach (var profile in catalog.Profiles) WorkspaceProfiles.Add(profile);
+
+        WorkspaceProfileTemplates.Clear();
+        foreach (var template in catalog.Templates ?? []) WorkspaceProfileTemplates.Add(template);
+
+        OnPropertyChanged(nameof(HasWorkspaceProfiles));
+        OnPropertyChanged(nameof(HasWorkspaceProfileTemplates));
+        OnPropertyChanged(nameof(WorkspaceProfileSummary));
         ApplyFields(catalog.Preferences ?? WorkspaceStudioPreferences.Default, markClean: true, updateSavedPreferences: true);
     }
 
