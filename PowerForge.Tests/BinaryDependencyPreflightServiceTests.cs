@@ -8,6 +8,33 @@ namespace PowerForge.Tests;
 
 public sealed class BinaryDependencyPreflightServiceTests
 {
+    [Theory]
+    [InlineData("RequiredAssemblies")]
+    [InlineData("NestedModules")]
+    [InlineData("RootModule")]
+    public void Analyze_ReportsManifestDeclaredDllMissingFromDeliveredRoot(string key)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var module = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var manifest = Path.Combine(module.FullName, "TestModule.psd1");
+            var reference = key == "RootModule" ? "'Plugin.dll'" : "@('Plugin.dll')";
+            File.WriteAllText(manifest, $"@{{ ModuleVersion = '1.0.0'; {key} = {reference} }}");
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                module.FullName, "Core", manifest);
+
+            var issue = Assert.Single(result.Issues);
+            Assert.Equal("TestModule.psd1", issue.AssemblyFileName);
+            Assert.Equal("Plugin.dll", issue.MissingDependencyFileName);
+            Assert.Contains("Plugin.dll", BinaryDependencyPreflightService.BuildFailureMessage(result));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Analyze_ScriptLayoutUsesStagedManifestToExcludeUnloadedInternals()
     {

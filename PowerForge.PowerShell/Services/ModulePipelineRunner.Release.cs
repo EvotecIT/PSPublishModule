@@ -370,6 +370,7 @@ public sealed partial class ModulePipelineRunner
         // A configured release stage may live below a DoNotClear loose artefact root.
         // Its metadata and staged copies are produced by this step, after artefact finalization.
         // Rebaseline that trusted output so later actions still cannot change any delivered bytes.
+        ValidateFinalizedOwnedArtefactIntegrity(state, plan.SignModule);
         RefreshFinalizedArtefactIntegrity(plan, state);
 
         return new ModuleReleaseCoordinationResult

@@ -127,6 +127,69 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private static void ValidateFinalizedOwnedArtefactIntegrity(ModulePipelineRunState state, bool signed)
+    {
+        foreach (ArtefactBuildResult artefact in state.ArtefactResults)
+        {
+            // The loose output root may contain later trusted siblings. Module, copy,
+            // archive, and evidence paths belong to this artefact and must not change.
+            var ownedPaths = (artefact.Type is ArtefactType.Script or ArtefactType.Unpacked
+                    ? artefact.Modules.Select(static module => module.Path)
+                        .Concat(artefact.CopiedItems.Select(static item => item.Destination))
+                    : new[] { artefact.OutputPath })
+                .Concat(artefact.EvidencePaths)
+                .Select(Path.GetFullPath)
+                .Distinct(PowerShellCompilationPathSafety.PathComparer);
+
+            foreach (string path in ownedPaths)
+            {
+                if (Directory.Exists(path))
+                {
+                    var expectedFiles = new HashSet<string>(state.FinalizedLooseArtefactFileInventories.Values
+                        .SelectMany(static inventory => inventory)
+                        .Where(file => IsSameOrChildPath(path, file)), PowerShellCompilationPathSafety.PathComparer);
+                    var actualFiles = new HashSet<string>(Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                        .Select(Path.GetFullPath), PowerShellCompilationPathSafety.PathComparer);
+                    if (!expectedFiles.SetEquals(actualFiles))
+                        ThrowFinalizedArtefactChanged(path, signed);
+
+                    var expectedDirectories = new HashSet<string>(state.FinalizedLooseArtefactDirectoryInventories.Values
+                        .SelectMany(static inventory => inventory)
+                        .Where(directory => IsSameOrChildPath(path, directory) &&
+                                            !PowerShellCompilationPathSafety.PathComparer.Equals(path, directory)),
+                        PowerShellCompilationPathSafety.PathComparer);
+                    var actualDirectories = new HashSet<string>(Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories)
+                        .Select(Path.GetFullPath), PowerShellCompilationPathSafety.PathComparer);
+                    if (!expectedDirectories.SetEquals(actualDirectories))
+                        ThrowFinalizedArtefactChanged(path, signed);
+
+                    foreach (string file in expectedFiles)
+                        ValidateOwnedArtefactFile(state, file, signed);
+                    foreach (string directory in new[] { path }.Concat(expectedDirectories))
+                    {
+                        if (state.FinalizedLooseArtefactDirectoryUnixModes.TryGetValue(directory, out int expectedMode) &&
+                            ReadFinalizedArtefactUnixMode(directory) != expectedMode)
+                            ThrowFinalizedArtefactChanged(directory, signed);
+                    }
+                }
+                else
+                {
+                    ValidateOwnedArtefactFile(state, path, signed);
+                }
+            }
+        }
+    }
+
+    private static void ValidateOwnedArtefactFile(ModulePipelineRunState state, string path, bool signed)
+    {
+        if (!state.FinalizedPackedArtefactHashes.TryGetValue(path, out var expectedHash) ||
+            !File.Exists(path) ||
+            !string.Equals(ComputeFileSha256(path), expectedHash, StringComparison.OrdinalIgnoreCase) ||
+            (state.FinalizedPackedArtefactUnixModes.TryGetValue(path, out int expectedMode) &&
+             ReadFinalizedArtefactUnixMode(path) != expectedMode))
+            ThrowFinalizedArtefactChanged(path, signed);
+    }
+
     private static void ThrowFinalizedArtefactChanged(string path, bool signed)
         => throw new InvalidOperationException(
             $"The finalized artefact or its evidence changed after {(signed ? "signing" : "package validation")}: '{path}'. " +
@@ -147,8 +210,10 @@ public sealed partial class ModulePipelineRunner
         => new[] { artefact.OutputPath }
             .Concat(artefact.Type is ArtefactType.Script or ArtefactType.Unpacked
                 ? artefact.Modules
-                    .Where(static module => module.IsMainModule)
                     .Select(static module => module.Path)
+                : Array.Empty<string>())
+            .Concat(artefact.Type is ArtefactType.Script or ArtefactType.Unpacked
+                ? artefact.CopiedItems.Select(static item => item.Destination)
                 : Array.Empty<string>())
             .SelectMany(static path => Directory.Exists(path)
                 ? Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
@@ -162,8 +227,9 @@ public sealed partial class ModulePipelineRunner
         => artefact.Type is ArtefactType.Script or ArtefactType.Unpacked
             ? new[] { artefact.OutputPath }
                 .Concat(artefact.Modules
-                    .Where(static module => module.IsMainModule)
                     .Select(static module => module.Path))
+                .Concat(artefact.CopiedItems.Where(static item => item.IsDirectory)
+                    .Select(static item => item.Destination))
                 .Where(Directory.Exists)
                 .Select(Path.GetFullPath)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)

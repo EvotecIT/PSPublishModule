@@ -708,8 +708,10 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
     }
 
-    [Fact]
-    public void Run_AllowsDoNotClearUnpackedArtefactRootWithSiblingReleaseAndProjectBuildOutputs()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Run_AllowsDoNotClearUnpackedArtefactRootWithSiblingReleaseAndProjectBuildOutputs(bool buildBeforeModule)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -777,7 +779,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         {
                             Name = "Packages",
                             RootPath = "Sources",
-                            BuildBeforeModule = true
+                            BuildBeforeModule = buildBeforeModule
                         }
                     },
                     new ConfigurationArtefactSegment
@@ -788,6 +790,15 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                             Enabled = true,
                             DoNotClear = true,
                             Path = artefactsRoot
+                        }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(artefactsRoot, "Packed")
                         }
                     },
                     new ConfigurationReleaseSegment
@@ -803,6 +814,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var result = runner.Run(spec);
 
             Assert.True(File.Exists(packagePath), "DoNotClear unpacked artefacts should not clear sibling project-build package output.");
+            Assert.NotEmpty(Directory.EnumerateFiles(Path.Combine(artefactsRoot, "Packed"), "*.zip"));
             Assert.NotNull(result.ReleaseCoordinationResult);
             Assert.Contains(result.ReleaseCoordinationResult!.PackageAssetPaths, path => string.Equals(path, Path.Combine(artefactsRoot, "UploadReady", "nuget", Path.GetFileName(packagePath)), StringComparison.OrdinalIgnoreCase));
         }
@@ -861,6 +873,59 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
             Assert.Contains("changed after package validation", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("release-manifest.json", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsOwnedUnpackedModuleChangedByLaterProjectBuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
+            var runner = new ModulePipelineRunner(
+                new NullLogger(), powerShellRunner: null, moduleDependencyMetadataProvider: null,
+                hostedOperations: null, manifestMutator: null, missingFunctionAnalysisService: null,
+                scriptFunctionExportDetector: null,
+                packageBuildExecutor: (request, configuration, configPath) =>
+                {
+                    File.AppendAllText(Path.Combine(artefactsRoot, moduleName, moduleName + ".psd1"), "modified");
+                    return new ProjectBuildHostExecutionResult
+                    {
+                        Success = true,
+                        ConfigPath = configPath ?? request.ConfigPath,
+                        RootPath = root.FullName,
+                        OutputPath = Path.Combine(artefactsRoot, "ProjectBuild"),
+                        Result = new ProjectBuildResult { Success = true }
+                    };
+                });
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationPackageBuildSegment
+                    {
+                        Configuration = new PackageBuildConfiguration { Name = "Packages", RootPath = "Sources", BuildBeforeModule = false }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration { Enabled = true, DoNotClear = true, Path = artefactsRoot }
+                    }
+                ]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("changed after package validation", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(moduleName + ".psd1", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

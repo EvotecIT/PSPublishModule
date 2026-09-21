@@ -89,6 +89,25 @@ public sealed class BinaryDependencyPreflightService
             throw new DirectoryNotFoundException($"Module root not found: {root}");
 
         var edition = NormalizeEdition(powerShellEdition);
+        // An explicitly named DLL is needed for import even if no other assembly
+        // references it. Check the delivered root before graph analysis can discard it.
+        if (!string.IsNullOrWhiteSpace(manifestPath) && File.Exists(manifestPath))
+        {
+            var missingDeclaredAssemblies = ResolveManifestAssemblyPaths(root, manifestPath!)
+                .Where(static path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) && !File.Exists(path))
+                .Select(path => new BinaryDependencyPreflightIssue(
+                    Path.GetFileName(manifestPath!),
+                    Path.GetFileNameWithoutExtension(path),
+                    referencedVersion: null))
+                .ToArray();
+            if (missingDeclaredAssemblies.Length > 0)
+            {
+                return new BinaryDependencyPreflightResult(
+                    edition, root, root, string.Empty, missingDeclaredAssemblies,
+                    $"{missingDeclaredAssemblies.Length} missing manifest-declared assembl{(missingDeclaredAssemblies.Length == 1 ? "y" : "ies")}");
+            }
+        }
+
         var assemblyRoots = ResolveAssemblyRoots(root, edition);
         if (assemblyRoots.Length == 0)
         {

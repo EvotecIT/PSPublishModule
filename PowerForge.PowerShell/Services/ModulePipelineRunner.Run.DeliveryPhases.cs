@@ -58,7 +58,6 @@ public sealed partial class ModulePipelineRunner
                         }
                     }
                     state.ArtefactResults.Add(result);
-                    CaptureFinalizedPackedArtefactIntegrity(plan, state, result);
                     session.Done(step);
                 }
                 catch (Exception ex)
@@ -67,12 +66,19 @@ public sealed partial class ModulePipelineRunner
                     throw;
                 }
             }
+            // Later configured artefacts may populate a shared DoNotClear output root.
+            // Capture the completed set before user actions can change it.
+            RefreshFinalizedArtefactIntegrity(plan, state);
         }
         ExecuteActions(ModulePipelineActionStage.AfterArtefacts, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
         ValidateDeliveredArtefactIntegrity(plan, state);
 
         ExecutePackageBuildsAfterModule(plan, session, state);
+        // Project builds can add sibling outputs under a loose artefact root. Preserve
+        // the bytes and inventory of artefact-owned paths before accepting those additions.
+        ValidateFinalizedOwnedArtefactIntegrity(state, plan.SignModule);
+        RefreshFinalizedArtefactIntegrity(plan, state);
         ValidateRequestedReleaseVersion(plan, state);
 
         var publishingEnabled = plan.GateMode is null or ConfigurationGateMode.Publish;
