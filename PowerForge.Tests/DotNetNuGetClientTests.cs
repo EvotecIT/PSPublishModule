@@ -423,6 +423,36 @@ public sealed class DotNetNuGetClientTests
     }
 
     [Fact]
+    public async Task SignPackagesIndividuallyAsync_StopsAfterFirstTimeout()
+    {
+        var attempted = new List<string>();
+        var processRunner = new StubProcessRunner(request =>
+        {
+            string package = request.Arguments[2];
+            attempted.Add(package);
+            return package.EndsWith("Two.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase)
+                ? new ProcessRunResult(-1, string.Empty, "Timeout", request.FileName, TimeSpan.FromMinutes(10), timedOut: true)
+                : new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var client = new DotNetNuGetClient(processRunner);
+        string first = @"C:\repo\Artifacts\One.1.0.0.nupkg";
+        string second = @"C:\repo\Artifacts\Two.1.0.0.nupkg";
+        string third = @"C:\repo\Artifacts\Three.1.0.0.nupkg";
+
+        var outcome = await client.SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
+            new[] { first, second, third },
+            certificateFingerprint: "ABC123",
+            certificateStoreLocation: "CurrentUser",
+            timeStampServer: "http://timestamp.digicert.com"));
+
+        Assert.Equal(new[] { first, second }, attempted);
+        Assert.Equal(new[] { second, third }, outcome.FailedPackages);
+        Assert.True(outcome.Result.TimedOut);
+        Assert.Contains("1 remaining package(s) were not attempted", outcome.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("hardware-token authorization/PIN", outcome.Result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SignPackageAsync_DefaultPreservesAlreadySignedPackage()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
