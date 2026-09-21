@@ -9,7 +9,7 @@ public sealed partial class ModulePipelineRunner
 {
     private void ValidateDeliveredArtefactIntegrity(ModulePipelinePlan plan, ModulePipelineRunState state)
     {
-        ValidateFinalizedPackedArtefactIntegrity(state);
+        ValidateFinalizedPackedArtefactIntegrity(state, plan.SignModule);
         foreach (ArtefactBuildResult artefact in state.ArtefactResults)
         {
             if (artefact.Type is not (ArtefactType.Unpacked or ArtefactType.Script))
@@ -31,7 +31,7 @@ public sealed partial class ModulePipelineRunner
         foreach (string path in EnumerateFinalizedPackedArtefactPaths(artefact))
         {
             if (!File.Exists(path))
-                throw new FileNotFoundException("A finalized signed artefact or its evidence was not found.", path);
+                throw new FileNotFoundException("A finalized artefact or its evidence was not found.", path);
             state.FinalizedPackedArtefactHashes[path] = ComputeFileSha256(path);
             int? unixMode = ReadFinalizedArtefactUnixMode(path);
             if (unixMode.HasValue)
@@ -50,6 +50,12 @@ public sealed partial class ModulePipelineRunner
                 .Select(Path.GetFullPath)
                 .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
+            foreach (string directory in new[] { root }.Concat(state.FinalizedLooseArtefactDirectoryInventories[root]))
+            {
+                int? unixMode = ReadFinalizedArtefactUnixMode(directory);
+                if (unixMode.HasValue)
+                    state.FinalizedLooseArtefactDirectoryUnixModes[directory] = unixMode.Value;
+            }
         }
     }
 
@@ -62,11 +68,12 @@ public sealed partial class ModulePipelineRunner
         state.FinalizedPackedArtefactUnixModes.Clear();
         state.FinalizedLooseArtefactFileInventories.Clear();
         state.FinalizedLooseArtefactDirectoryInventories.Clear();
+        state.FinalizedLooseArtefactDirectoryUnixModes.Clear();
         foreach (ArtefactBuildResult artefact in state.ArtefactResults)
             CaptureFinalizedPackedArtefactIntegrity(plan, state, artefact);
     }
 
-    private static void ValidateFinalizedPackedArtefactIntegrity(ModulePipelineRunState state)
+    private static void ValidateFinalizedPackedArtefactIntegrity(ModulePipelineRunState state, bool signed)
     {
         foreach (KeyValuePair<string, string> expected in state.FinalizedPackedArtefactHashes)
         {
@@ -75,15 +82,13 @@ public sealed partial class ModulePipelineRunner
                 (state.FinalizedPackedArtefactUnixModes.TryGetValue(expected.Key, out int expectedMode) &&
                  ReadFinalizedArtefactUnixMode(expected.Key) != expectedMode))
             {
-                throw new InvalidOperationException(
-                    $"The finalized artefact or its evidence changed after package validation: '{expected.Key}'. " +
-                    "Artifact actions must not mutate release outputs after finalization.");
+                ThrowFinalizedArtefactChanged(expected.Key, signed);
             }
         }
         foreach (KeyValuePair<string, string[]> inventory in state.FinalizedLooseArtefactFileInventories)
         {
             if (!Directory.Exists(inventory.Key))
-                ThrowFinalizedArtefactChanged(inventory.Key);
+                ThrowFinalizedArtefactChanged(inventory.Key, signed);
 
             var expectedPaths = new HashSet<string>(inventory.Value, PowerShellCompilationPathSafety.PathComparer);
             var actualPaths = new HashSet<string>(
@@ -92,12 +97,12 @@ public sealed partial class ModulePipelineRunner
             string? changedPath = actualPaths.FirstOrDefault(path => !expectedPaths.Contains(path)) ??
                                   expectedPaths.FirstOrDefault(path => !actualPaths.Contains(path));
             if (changedPath is not null)
-                ThrowFinalizedArtefactChanged(changedPath);
+                ThrowFinalizedArtefactChanged(changedPath, signed);
         }
         foreach (KeyValuePair<string, string[]> inventory in state.FinalizedLooseArtefactDirectoryInventories)
         {
             if (!Directory.Exists(inventory.Key))
-                ThrowFinalizedArtefactChanged(inventory.Key);
+                ThrowFinalizedArtefactChanged(inventory.Key, signed);
 
             var expectedPaths = new HashSet<string>(inventory.Value, PowerShellCompilationPathSafety.PathComparer);
             var actualPaths = new HashSet<string>(
@@ -106,13 +111,18 @@ public sealed partial class ModulePipelineRunner
             string? changedPath = actualPaths.FirstOrDefault(path => !expectedPaths.Contains(path)) ??
                                   expectedPaths.FirstOrDefault(path => !actualPaths.Contains(path));
             if (changedPath is not null)
-                ThrowFinalizedArtefactChanged(changedPath);
+                ThrowFinalizedArtefactChanged(changedPath, signed);
+        }
+        foreach (KeyValuePair<string, int> expected in state.FinalizedLooseArtefactDirectoryUnixModes)
+        {
+            if (!Directory.Exists(expected.Key) || ReadFinalizedArtefactUnixMode(expected.Key) != expected.Value)
+                ThrowFinalizedArtefactChanged(expected.Key, signed);
         }
     }
 
-    private static void ThrowFinalizedArtefactChanged(string path)
+    private static void ThrowFinalizedArtefactChanged(string path, bool signed)
         => throw new InvalidOperationException(
-            $"The finalized artefact or its evidence changed after package validation: '{path}'. " +
+            $"The finalized artefact or its evidence changed after {(signed ? "signing" : "package validation")}: '{path}'. " +
             "Artifact actions must not mutate release outputs after finalization.");
 
     private static int? ReadFinalizedArtefactUnixMode(string path)
@@ -128,7 +138,7 @@ public sealed partial class ModulePipelineRunner
 
     private static IEnumerable<string> EnumerateFinalizedPackedArtefactPaths(ArtefactBuildResult artefact)
         => new[] { artefact.OutputPath }
-            .Concat(artefact.Type == ArtefactType.Script
+            .Concat(artefact.Type is ArtefactType.Script or ArtefactType.Unpacked
                 ? artefact.Modules
                     .Where(static module => module.IsMainModule)
                     .Select(static module => module.Path)

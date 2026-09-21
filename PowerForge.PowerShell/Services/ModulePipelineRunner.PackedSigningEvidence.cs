@@ -17,6 +17,7 @@ public sealed partial class ModulePipelineRunner
             return FinalizeSignedScriptArtefact(plan, state, context);
 
         PreparePackedReleaseProtection(plan, state, context);
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
             "Signing is enabled but no signing options were provided.");
         string manifestDirectory = Path.GetDirectoryName(context.ManifestPath)
@@ -156,6 +157,7 @@ public sealed partial class ModulePipelineRunner
         PackedArtefactFinalizationContext context)
     {
         PreparePackedReleaseProtection(plan, state, context);
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, state.RequireBuildResult().ManifestPath);
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
             "Signing is enabled but no signing options were provided.");
         string rootPath = Path.GetFullPath(context.RootPath);

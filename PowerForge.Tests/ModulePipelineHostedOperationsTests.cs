@@ -3431,6 +3431,8 @@ public sealed partial class ModulePipelineHostedOperationsTests
         public bool RemoveBinaryDependencyAfterArtefacts { get; set; }
         public bool TamperPackedArtifactAfterArtefacts { get; set; }
         public string? LooseArtifactExtensionToTamper { get; set; }
+        public string? ExternalLooseArtifactRootToTamper { get; set; }
+        public string? LooseArtifactDirectoryToChangeMode { get; set; }
         public string? CorruptInstalledBinaryUnder { get; set; }
         public bool PrepareRepositoryPackageOnPublish { get; set; }
         public int RemotePublishCalls { get; private set; }
@@ -3583,6 +3585,19 @@ public sealed partial class ModulePipelineHostedOperationsTests
                 var entryPoint = Assert.Single(Directory.EnumerateFiles(
                     artifactRoot, "*" + LooseArtifactExtensionToTamper, SearchOption.AllDirectories));
                 File.AppendAllText(entryPoint, "# changed after finalization\n");
+            }
+            if (!string.IsNullOrWhiteSpace(ExternalLooseArtifactRootToTamper) && context.Stage == ModulePipelineActionStage.AfterArtefacts)
+            {
+                string moduleFile = Assert.Single(Directory.EnumerateFiles(
+                    ExternalLooseArtifactRootToTamper, "*.psm1", SearchOption.AllDirectories));
+                File.AppendAllText(moduleFile, "# changed outside artifact output\n");
+            }
+            if (!OperatingSystem.IsWindows() &&
+                !string.IsNullOrWhiteSpace(LooseArtifactDirectoryToChangeMode) &&
+                context.Stage == ModulePipelineActionStage.AfterArtefacts)
+            {
+                string directory = LooseArtifactDirectoryToChangeMode;
+                File.SetUnixFileMode(directory, File.GetUnixFileMode(directory) ^ UnixFileMode.OtherWrite);
             }
 
             return new ModulePipelineActionResult

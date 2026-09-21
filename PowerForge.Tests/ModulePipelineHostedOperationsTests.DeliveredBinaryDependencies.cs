@@ -7,6 +7,107 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineHostedOperationsTests
 {
     [Fact]
+    public void Run_RejectsExternalUnpackedModuleContentChangedAfterValidation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string externalModules = Path.Combine(root.FullName, "ExternalModules");
+            var hostedOperations = new FakeHostedOperations { ExternalLooseArtifactRootToTamper = externalModules };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(), new ThrowingPowerShellRunner(), new FakeMetadataProvider(), hostedOperations);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(root.FullName, "Artefacts", "Unpacked"),
+                            RequiredModules = new ArtefactRequiredModulesConfiguration
+                            {
+                                ModulesPath = externalModules
+                            }
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = true,
+                            At = ModulePipelineActionStage.AfterArtefacts,
+                            Name = "Change external module"
+                        }
+                    }
+                ]
+            };
+
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("changed after package validation", failure.Message, StringComparison.Ordinal);
+            Assert.Contains(".psm1", failure.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsLooseArtifactDirectoryModeChangedAfterValidation()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string artefactRoot = Path.Combine(root.FullName, "Artefacts", "Unpacked");
+            var hostedOperations = new FakeHostedOperations { LooseArtifactDirectoryToChangeMode = artefactRoot };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(), new ThrowingPowerShellRunner(), new FakeMetadataProvider(), hostedOperations);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration { Enabled = true, Path = artefactRoot }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = true,
+                            At = ModulePipelineActionStage.AfterArtefacts,
+                            Name = "Change directory mode"
+                        }
+                    }
+                ]
+            };
+
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("changed after package validation", failure.Message, StringComparison.Ordinal);
+            Assert.Contains(artefactRoot, failure.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_ChecksBinaryDependenciesInDeliveredArtifactAndInstallPackage()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
