@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
              xmlns:activity="using:PowerForgeStudio.Domain.Activity"
+             xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:DataType="vm:ActivityViewModel" x:Class="PowerForgeStudio.Avalonia.Views.ActivityView">
   <UserControl.Styles>
     <Style Selector="TextBlock.activitySeverity.critical"><Setter Property="Foreground" Value="#BA2737" /></Style>
@@ -27,9 +28,10 @@
             <Border Classes="card" Padding="13" Margin="0,0,10,0">
               <StackPanel Spacing="4">
                 <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Provider}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Grid.Column="1" Text="{Binding EntryCount}" Foreground="#0865FF" FontWeight="SemiBold" /></Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                  <TextBlock Text="{Binding State}" Classes="sourceState" Classes.available="{Binding IsAvailable}" Classes.partial="{Binding IsPartial}" Classes.unavailable="{Binding IsUnavailable}" />
-                  <TextBlock Grid.Column="1" Text="{Binding ObservedDisplay}" Classes="muted" FontSize="10" />
+                <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="5">
+                  <controls:StatusIcon IsError="{Binding IsUnavailable}" IsWarning="{Binding IsPartial}" IsSuccess="{Binding IsAvailable}" Width="14" Height="14" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding State}" Classes="sourceState" Classes.available="{Binding IsAvailable}" Classes.partial="{Binding IsPartial}" Classes.unavailable="{Binding IsUnavailable}" />
+                  <TextBlock Grid.Column="2" Text="{Binding ObservedDisplay}" Classes="muted" FontSize="10" />
                 </Grid>
                 <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" MaxHeight="43" TextTrimming="CharacterEllipsis" />
               </StackPanel>
@@ -71,7 +73,13 @@
                 <Grid ColumnDefinitions="1.15*,100,1.7*,120" ColumnSpacing="12" Margin="10,8">
                   <StackPanel><TextBlock Text="{Binding Project}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Provider}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" /></StackPanel>
                   <TextBlock Grid.Column="1" Text="{Binding Kind}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                  <StackPanel Grid.Column="2"><TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding State}" Classes="activitySeverity" Classes.critical="{Binding IsCritical}" Classes.warning="{Binding IsWarning}" Classes.review="{Binding IsReview}" FontSize="11" /></StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <controls:StatusIcon IsError="{Binding IsCritical}" IsWarning="{Binding IsWarning}" IsReview="{Binding IsReview}" Width="13" Height="13" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding State}" Classes="activitySeverity" Classes.critical="{Binding IsCritical}" Classes.warning="{Binding IsWarning}" Classes.review="{Binding IsReview}" FontSize="11" />
+                    </StackPanel>
+                  </StackPanel>
                   <TextBlock Grid.Column="3" Text="{Binding ObservedDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
                 </Grid>
               </DataTemplate>

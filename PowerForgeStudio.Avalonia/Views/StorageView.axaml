@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
              xmlns:workspace="using:PowerForgeStudio.Domain.Workspace"
+             xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:DataType="vm:StorageViewModel" x:Class="PowerForgeStudio.Avalonia.Views.StorageView">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="22,18" Spacing="14">
@@ -24,9 +25,24 @@
         <ProgressBar Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent}" Height="5" />
       </StackPanel>
       <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
-        <Border Classes="card" Padding="16"><StackPanel><TextBlock Text="{Binding IndexedDisplay}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="indexed" Classes="muted" /></StackPanel></Border>
-        <Border Grid.Column="1" Classes="card" Padding="16"><StackPanel><TextBlock Text="{Binding WorktreeDisplay}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="in worktrees" Classes="muted" /></StackPanel></Border>
-        <Border Grid.Column="2" Classes="card" Padding="16"><StackPanel><TextBlock Text="{Binding CandidateCount}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="review candidates" Classes="muted" /></StackPanel></Border>
+        <Border Classes="card" Padding="16">
+          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
+            <controls:NavigationIcon Kind="storage" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1"><TextBlock Text="{Binding IndexedDisplay}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="indexed" Classes="muted" /></StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="1" Classes="card" Padding="16">
+          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
+            <controls:NavigationIcon Kind="projects" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1"><TextBlock Text="{Binding WorktreeDisplay}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="in worktrees" Classes="muted" /></StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="2" Classes="card" Padding="16">
+          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
+            <controls:NavigationIcon Kind="review" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1"><TextBlock Text="{Binding CandidateCount}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="review candidates" Classes="muted" /></StackPanel>
+          </Grid>
+        </Border>
       </Grid>
       <WrapPanel ItemSpacing="8" LineSpacing="8">
         <Button Content="All working copies" Classes="chip" Classes.active="{Binding IsAllFilter}" Command="{Binding ShowAllCommand}" />
@@ -48,7 +64,10 @@
                 <Grid ColumnDefinitions="2*,90,1.2*,1.5*" ColumnSpacing="12" Margin="10,8">
                   <StackPanel><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" /><TextBlock Text="{Binding KindDisplay}" Classes="muted" FontSize="12" /></StackPanel>
                   <TextBlock Grid.Column="1" Text="{Binding SizeDisplay}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="2" Text="{Binding LocalStateDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                    <controls:StatusIcon IsError="{Binding IsBroken}" IsWarning="{Binding IsChanged}" IsSuccess="{Binding !IsBroken}" Width="18" Height="18" ToolTip.Tip="{Binding LocalStateDisplay}" />
+                    <TextBlock Text="{Binding LocalStateDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  </StackPanel>
                   <TextBlock Grid.Column="3" Text="{Binding NextCheck}" VerticalAlignment="Center" TextWrapping="Wrap" />
                 </Grid>
               </DataTemplate>

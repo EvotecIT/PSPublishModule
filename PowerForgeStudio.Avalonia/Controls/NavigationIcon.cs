@@ -32,7 +32,8 @@ public sealed class NavigationIcon : Control
         ["more"] = "M5,12 A1,1 0 1 0 7,12 A1,1 0 1 0 5,12 M11,12 A1,1 0 1 0 13,12 A1,1 0 1 0 11,12 M17,12 A1,1 0 1 0 19,12 A1,1 0 1 0 17,12",
         ["menu"] = "M4,6 L20,6 M4,12 L20,12 M4,18 L20,18",
         ["monitor"] = "M2,3 L22,3 22,17 2,17 Z M12,17 L12,22 M7,22 L17,22",
-        ["output"] = "M3,4 L21,4 21,20 3,20 Z M7,9 L10,12 7,15 M13,15 L17,15"
+        ["output"] = "M3,4 L21,4 21,20 3,20 Z M7,9 L10,12 7,15 M13,15 L17,15",
+        ["review"] = "M6,2 L15,2 20,7 20,22 6,22 Z M15,2 L15,7 20,7 M9,12 L11,14 15,10 M9,18 L16,18"
     }.ToDictionary(pair => pair.Key, pair => Geometry.Parse(pair.Value));
     static NavigationIcon() => AffectsRender<NavigationIcon>(KindProperty, InkProperty);
     public override void Render(DrawingContext context)
