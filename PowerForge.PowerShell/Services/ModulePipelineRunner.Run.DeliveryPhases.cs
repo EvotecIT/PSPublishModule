@@ -110,6 +110,7 @@ public sealed partial class ModulePipelineRunner
         ValidateDeliveredArtefactIntegrity(plan, state);
         if (plan.InstallEnabled)
         {
+            ValidateInstallArtefactPathConflicts(plan, state);
             session.Start(session.InstallStep);
             string? installPackagePath = null;
             try
@@ -217,6 +218,14 @@ public sealed partial class ModulePipelineRunner
                     catch (Exception ex) { _logger.Warn($"Failed to delete install package folder: {ex.Message}"); }
                 }
             }
+        }
+        // An explicit install root can be a sibling beneath a DoNotClear
+        // artefact root. Preserve artefact-owned bytes before accepting the
+        // installed module, then guard the expanded root after actions.
+        if (state.InstallResult is not null)
+        {
+            ValidateFinalizedOwnedArtefactIntegrity(state, plan.SignModule);
+            RefreshFinalizedArtefactIntegrity(plan, state);
         }
         ExecuteActions(ModulePipelineActionStage.AfterInstall, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);

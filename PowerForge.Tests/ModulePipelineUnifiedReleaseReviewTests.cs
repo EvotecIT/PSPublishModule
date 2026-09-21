@@ -854,6 +854,104 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_RebaselinesDoNotClearArtefactRootAfterTrustedInstall(bool tamperAfterInstall)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
+            var installRoot = Path.Combine(artefactsRoot, "Installed");
+            var hosted = new FakeHostedOperations(new System.Collections.Generic.List<string>())
+            {
+                ModuleAction = (action, context) =>
+                {
+                    File.WriteAllText(Path.Combine(artefactsRoot, "added-after-install.txt"), "tampered");
+                    return CreateActionResult(action, context, succeeded: true);
+                }
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(), powerShellRunner: null, moduleDependencyMetadataProvider: null,
+                hostedOperations: hosted);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = true, Roots = [installRoot] },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration { Enabled = true, DoNotClear = true, Path = artefactsRoot }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = tamperAfterInstall,
+                            At = ModulePipelineActionStage.AfterInstall,
+                            Name = "Check installed snapshot"
+                        }
+                    }
+                ]
+            };
+
+            if (tamperAfterInstall)
+            {
+                var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+                Assert.Contains("changed after package validation", exception.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("added-after-install.txt", exception.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                var result = runner.Run(spec);
+                Assert.Contains(result.InstallResult!.InstalledPaths, Directory.Exists);
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsInstallThatWouldOverwriteFinalizedUnpackedModuleBeforeInstalling()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = true, Roots = [artefactsRoot] },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration { Enabled = true, DoNotClear = true, Path = artefactsRoot }
+                    }
+                ]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("overlaps a finalized artefact output", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(Directory.Exists(Path.Combine(artefactsRoot, moduleName, "1.0.0")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Run_RejectsReleaseMetadataChangedAfterStagingInsideUnpackedArtefactRoot()
     {

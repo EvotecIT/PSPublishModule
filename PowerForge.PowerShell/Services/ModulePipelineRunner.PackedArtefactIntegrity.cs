@@ -133,11 +133,7 @@ public sealed partial class ModulePipelineRunner
         {
             // The loose output root may contain later trusted siblings. Module, copy,
             // archive, and evidence paths belong to this artefact and must not change.
-            var ownedPaths = (artefact.Type is ArtefactType.Script or ArtefactType.Unpacked
-                    ? artefact.Modules.Select(static module => module.Path)
-                        .Concat(artefact.CopiedItems.Select(static item => item.Destination))
-                    : new[] { artefact.OutputPath })
-                .Concat(artefact.EvidencePaths)
+            var ownedPaths = EnumerateOwnedArtefactPaths(artefact)
                 .Select(Path.GetFullPath)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer);
 
@@ -179,6 +175,29 @@ public sealed partial class ModulePipelineRunner
             }
         }
     }
+
+    private static void ValidateInstallArtefactPathConflicts(ModulePipelinePlan plan, ModulePipelineRunState state)
+    {
+        var ownedPaths = state.ArtefactResults.SelectMany(EnumerateOwnedArtefactPaths)
+            .Select(Path.GetFullPath)
+            .ToArray();
+
+        foreach (string root in plan.InstallRoots)
+        {
+            string installedModuleParent = Path.GetFullPath(Path.Combine(root, plan.ModuleName));
+            if (ownedPaths.Any(path => IsSameOrChildPath(path, installedModuleParent) ||
+                                       IsSameOrChildPath(installedModuleParent, path)))
+                throw new InvalidOperationException(
+                    $"Install root '{root}' overlaps a finalized artefact output. Choose a sibling install root.");
+        }
+    }
+
+    private static IEnumerable<string> EnumerateOwnedArtefactPaths(ArtefactBuildResult artefact)
+        => (artefact.Type is ArtefactType.Script or ArtefactType.Unpacked
+                ? artefact.Modules.Select(static module => module.Path)
+                    .Concat(artefact.CopiedItems.Select(static item => item.Destination))
+                : new[] { artefact.OutputPath })
+            .Concat(artefact.EvidencePaths);
 
     private static void ValidateOwnedArtefactFile(ModulePipelineRunState state, string path, bool signed)
     {
