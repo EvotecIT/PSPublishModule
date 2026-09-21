@@ -1,15 +1,15 @@
 <Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Style Selector="Window">
-    <Setter Property="FontFamily" Value="Segoe UI, Inter, sans-serif" />
+    <Setter Property="FontFamily" Value="Inter, Segoe UI, sans-serif" />
     <Setter Property="FontSize" Value="14" />
-    <Setter Property="Foreground" Value="#172238" />
-    <Setter Property="Background" Value="#F7F9FC" />
+    <Setter Property="Foreground" Value="#142038" />
+    <Setter Property="Background" Value="#F7FAFE" />
   </Style>
   <Style Selector="Button">
-    <Setter Property="CornerRadius" Value="5" />
-    <Setter Property="Padding" Value="13,7" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="14,8" />
     <Setter Property="Background" Value="White" />
-    <Setter Property="BorderBrush" Value="#DAE3EF" />
+    <Setter Property="BorderBrush" Value="#D9E3F0" />
     <Setter Property="BorderThickness" Value="1" />
   </Style>
   <Style Selector="Button.primary">
@@ -20,7 +20,7 @@
   <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="#EEF2F7" /><Setter Property="Foreground" Value="#8390A3" /><Setter Property="BorderBrush" Value="#E1E7EF" />
   </Style>
-  <Style Selector="TextBox"><Setter Property="BorderBrush" Value="#DAE3EF" /><Setter Property="CornerRadius" Value="5" /></Style>
+  <Style Selector="TextBox"><Setter Property="BorderBrush" Value="#D2DFEF" /><Setter Property="CornerRadius" Value="6" /><Setter Property="Background" Value="White" /></Style>
   <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#E4EFFF" /><Setter Property="Foreground" Value="#172238" /></Style>
   <Style Selector="Button.rail">
     <Setter Property="Background" Value="Transparent" />
@@ -42,9 +42,9 @@
   <Style Selector="Button.fileAction.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#0758DC" /></Style>
   <Style Selector="Button.pageTab"><Setter Property="Padding" Value="0,0,0,7" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0,0,0,2" /><Setter Property="BorderBrush" Value="Transparent" /><Setter Property="CornerRadius" Value="0" /></Style>
   <Style Selector="Button.pageTab.active"><Setter Property="Foreground" Value="#0865FF" /><Setter Property="BorderBrush" Value="#0865FF" /></Style>
-  <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#67748B" /></Style>
-  <Style Selector="TextBlock.heading"><Setter Property="FontSize" Value="23" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
-  <Style Selector="Border.card"><Setter Property="Background" Value="White" /><Setter Property="BorderBrush" Value="#DDE5F0" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="5" /></Style>
+  <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#5C6B82" /></Style>
+  <Style Selector="TextBlock.heading"><Setter Property="FontSize" Value="23" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#111B30" /></Style>
+  <Style Selector="Border.card"><Setter Property="Background" Value="White" /><Setter Property="BorderBrush" Value="#D9E3F0" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="7" /></Style>
   <Style Selector="TreeViewItem">
     <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
     <Setter Property="Padding" Value="0" />
@@ -53,8 +53,8 @@
   <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot"><Setter Property="MinHeight" Value="30" /></Style>
   <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot"><Setter Property="Background" Value="#DFEDFF" /></Style>
   <Style Selector="ListBoxItem"><Setter Property="Padding" Value="10,8" /></Style>
-  <Style Selector="Button.chip"><Setter Property="Padding" Value="13,4" /><Setter Property="CornerRadius" Value="16" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="#EEF2F7" /></Style>
-  <Style Selector="Button.chip.active"><Setter Property="Background" Value="#0865FF" /><Setter Property="Foreground" Value="White" /></Style>
+  <Style Selector="Button.chip"><Setter Property="Padding" Value="16,6" /><Setter Property="CornerRadius" Value="18" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Background" Value="#EEF2F7" /><Setter Property="Foreground" Value="#2A3850" /></Style>
+  <Style Selector="Button.chip.active"><Setter Property="Background" Value="#1769ED" /><Setter Property="Foreground" Value="White" /></Style>
   <Style Selector="Button.documentTab"><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="CornerRadius" Value="0" /><Setter Property="Padding" Value="13,11" /></Style>
   <Style Selector="Button.documentClose"><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Padding" Value="8,5" /></Style>
   <Style Selector="Button.documentTab.active"><Setter Property="Background" Value="White" /><Setter Property="BorderBrush" Value="#247CFF" /><Setter Property="BorderThickness" Value="0,2,0,0" /></Style>

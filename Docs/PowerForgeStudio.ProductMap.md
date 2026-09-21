@@ -42,7 +42,7 @@ Dialogs are used only when the operator must confirm a target, resolve a collisi
 
 ## Eight visual references
 
-One wide and one compact runtime render may be captured from the same reference when responsive behavior matters. This is the complete visual set; it is intentionally smaller than the superseded 53-page/108-state browser pack.
+One wide and one compact runtime render may be captured from the same reference when responsive behavior matters. The [visual review pack](PowerForgeStudio.VisualReview.md) contains the eight images and records image-model corrections. This is the complete visual set; it is intentionally smaller than the superseded 53-page/108-state browser pack.
 
 1. Workspace shell with project tree, working copies, files and document tabs.
 2. Project overview with identity, signals, entrypoints and prerequisites.

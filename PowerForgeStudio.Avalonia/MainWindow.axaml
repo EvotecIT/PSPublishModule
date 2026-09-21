@@ -8,8 +8,11 @@
     <Border Grid.Row="0">
       <Border.Background><LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%"><GradientStop Color="#193958" /><GradientStop Color="#061A34" Offset="1" /></LinearGradientBrush></Border.Background>
       <Grid ColumnDefinitions="360,*,280" Margin="22,0">
-        <TextBlock Text="PowerForge Studio" Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <TextBox Grid.Column="1" Text="{Binding Filter}" PlaceholderText="Find a project…" MaxWidth="550" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#EAF0F8" />
+        <TextBlock Text="Project workspace" Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <Grid Grid.Column="1" MaxWidth="550" HorizontalAlignment="Stretch" VerticalAlignment="Center">
+          <TextBox Text="{Binding Filter}" PlaceholderText="Find a project…" Padding="32,6,10,6" Background="#EEF3FA" BorderBrush="#B8CAE0" />
+          <controls:NavigationIcon Kind="search" Width="17" Height="17" Ink="#617189" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False" />
+        </Grid>
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right"><controls:NavigationIcon Kind="monitor" Width="21" Height="21" Ink="#D6E4F7" /><TextBlock Text="Local workspace" Foreground="#D6E4F7" /></StackPanel>
       </Grid>
     </Border>
@@ -28,14 +31,14 @@
       <Border Grid.Column="1" Background="#FBFCFF" BorderBrush="#DDE5EF" BorderThickness="0,0,1,0">
         <Grid RowDefinitions="58,42,36,*,28">
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="17,8">
-            <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold" Foreground="#101B30" VerticalAlignment="Center" />
             <Button Grid.Column="1" ToolTip.Tip="Choose workspace folder" Click="ChooseWorkspace" Classes="toolbar"><controls:NavigationIcon Kind="plus" Width="18" Height="18" Ink="#25354E" /></Button>
             <Button Grid.Column="2" ToolTip.Tip="Refresh repositories" Command="{Binding RefreshCommand}" Classes="toolbar"><controls:NavigationIcon Kind="refresh" Width="18" Height="18" Ink="#25354E" /></Button>
           </Grid>
           <TextBox Grid.Row="1" Text="{Binding Filter}" PlaceholderText="Filter projects…" Margin="16,0,16,7" />
           <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="16,0,16,5">
-            <Button Content="All" Classes="chip" Classes.active="{Binding AllProjects}" Command="{Binding ShowAllProjectsCommand}" />
             <Button Content="Favorites" Classes="chip" Classes.active="{Binding FavoritesOnly}" Command="{Binding ShowFavoriteProjectsCommand}" />
+            <Button Content="All" Classes="chip" Classes.active="{Binding AllProjects}" Command="{Binding ShowAllProjectsCommand}" />
           </StackPanel>
           <TreeView Grid.Row="3" x:Name="ProjectTree" ItemsSource="{Binding ExplorerRoots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}" Background="Transparent" Margin="6,0" ItemContainerTheme="{StaticResource WorkspaceTreeItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <TreeView.ItemTemplate>
@@ -109,9 +112,11 @@
         <views:AutomationsView x:Name="AutomationsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsAutomationsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Automations}" />
         <views:ConnectionsView x:Name="ConnectionsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsConnectionsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Connections}" />
         <views:SettingsView x:Name="SettingsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsSettingsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Settings}" />
-        <Border Grid.Row="3" Background="#0D2132">
+        <Border Grid.Row="3" Background="#102236" BorderBrush="#2D4157" BorderThickness="0,1,0,0">
           <Grid RowDefinitions="38,*">
-            <StackPanel Orientation="Horizontal" Spacing="9" Margin="17,10"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#E6F0FF" /><TextBlock Text="Output" Foreground="#E6F0FF" /></StackPanel>
+            <Border BorderBrush="#2D4157" BorderThickness="0,0,0,1">
+              <StackPanel Orientation="Horizontal" Spacing="9" Margin="17,10"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#80B8FF" /><TextBlock Text="Output" Foreground="#F2F7FF" FontWeight="SemiBold" /></StackPanel>
+            </Border>
             <ScrollViewer Grid.Row="1" Margin="17,5,17,12" HorizontalScrollBarVisibility="Auto">
               <SelectableTextBlock Text="{Binding DisplayedOutput}" Foreground="#D7E7F8" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
             </ScrollViewer>
@@ -121,7 +126,7 @@
       <Border Grid.Column="4" x:Name="ContextPanel" Background="White" BorderBrush="#DDE5EF" BorderThickness="1,0,0,0" Padding="20,23">
         <Grid>
           <StackPanel Spacing="18" IsVisible="{Binding !IsWorkspaceUtilityPage}">
-            <TextBlock Text="Context" FontWeight="SemiBold" FontSize="16" />
+            <TextBlock Text="Selected working copy" FontWeight="SemiBold" FontSize="16" />
             <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
             <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
             <TextBlock Text="Working copy" Classes="muted" />
@@ -129,7 +134,8 @@
             <TextBlock Text="Git state" Classes="muted" />
             <TextBlock Text="{Binding GitSummary}" TextWrapping="Wrap" />
             <TextBlock Text="Selection" Classes="muted" />
-            <TextBlock Text="{Binding SelectedPath}" TextWrapping="Wrap" FontSize="12" />
+            <TextBox Text="{Binding SelectedPath}" IsReadOnly="True" TextWrapping="Wrap" Height="52" FontSize="12"
+                     BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="Select and copy the full path" />
             <TextBlock Text="Local discovery" Classes="muted" />
             <TextBlock Text="Build outputs and package caches are hidden in the explorer." TextWrapping="Wrap" />
           </StackPanel>
@@ -159,7 +165,8 @@
             <StackPanel Spacing="14" DataContext="{Binding Storage}">
               <TextBlock Text="Review evidence" FontWeight="SemiBold" FontSize="16" />
               <TextBlock Text="{Binding SelectedEntry.DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding SelectedEntry.Path}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+              <TextBox Text="{Binding SelectedEntry.Path}" IsReadOnly="True" TextWrapping="Wrap" Height="52" FontSize="12"
+                       BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="Select and copy the full path" />
               <TextBlock Text="Local changes" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.LocalStateDisplay}" TextWrapping="Wrap" />
               <TextBlock Text="Default-branch ancestry" Classes="muted" />

@@ -44,6 +44,7 @@ The desktop GUI is PowerForgeStudio.Avalonia, a thin presentation host over the 
 - [x] Add a cross-project Activity inbox over existing portfolio, release, GitHub issue/PR/CI and automation owners.
 - [x] Add machine-local Settings with durable behavior and bounded Activity refresh preferences.
 - [x] Connect bounded, read-only GitHub Actions workflow state and scheduled-run evidence to local definitions.
+- [x] Consolidate the visual direction into eight proposed concepts with explicit image-model corrections in [PowerForgeStudio.VisualReview.md](PowerForgeStudio.VisualReview.md).
 - [ ] Align native typography, icon treatment, density and state colors across the eight product-map references, then inspect each rendered page against the approved visual direction.
 - [ ] Connect a supported Codex automation inventory adapter and provider-owned configuration actions when their owners expose safe APIs.
 - [x] Validate native rendering, keyboard navigation and representative workflows within the recorded Windows capture limits.
