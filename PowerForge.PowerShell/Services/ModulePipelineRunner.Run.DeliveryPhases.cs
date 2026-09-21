@@ -88,6 +88,11 @@ public sealed partial class ModulePipelineRunner
             ValidateFinalizedModulePayloadIntegrity(state);
             ValidateDeliveredArtefactIntegrity(plan, state);
             ExecutePublishOperations(plan, session, buildResult, state);
+            // Package publication can rebuild sibling outputs beneath a DoNotClear
+            // artefact root. Keep the delivered paths fixed before accepting those
+            // trusted outputs; AfterPublish actions must still match this snapshot.
+            ValidateFinalizedOwnedArtefactIntegrity(state, plan.SignModule);
+            RefreshFinalizedArtefactIntegrity(plan, state);
             ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
             ValidateFinalizedModulePayloadIntegrity(state);
             ValidateDeliveredArtefactIntegrity(plan, state);

@@ -709,9 +709,12 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Run_AllowsDoNotClearUnpackedArtefactRootWithSiblingReleaseAndProjectBuildOutputs(bool buildBeforeModule)
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    public void Run_AllowsDoNotClearUnpackedArtefactRootWithSiblingReleaseAndProjectBuildOutputs(bool buildBeforeModule, bool publishNuGet, bool tamperAfterPublish)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -722,19 +725,27 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
             var packageOutput = Path.Combine(artefactsRoot, "ProjectBuild", "packages");
             var packagePath = Path.Combine(packageOutput, "Mailozaurr.1.0.0.nupkg");
+            var hosted = new FakeHostedOperations(new System.Collections.Generic.List<string>())
+            {
+                ModuleAction = (action, context) =>
+                {
+                    File.AppendAllText(packagePath, "tampered-after-publish");
+                    return CreateActionResult(action, context, succeeded: true);
+                }
+            };
 
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 powerShellRunner: null,
                 moduleDependencyMetadataProvider: null,
-                hostedOperations: null,
+                hostedOperations: hosted,
                 manifestMutator: null,
                 missingFunctionAnalysisService: null,
                 scriptFunctionExportDetector: null,
                 packageBuildExecutor: (request, configuration, configPath) =>
                 {
                     Directory.CreateDirectory(packageOutput);
-                    File.WriteAllText(packagePath, "package");
+                    File.WriteAllText(packagePath, request.PublishNuget == true ? "published-package" : "package");
 
                     var release = new DotNetRepositoryReleaseResult { Success = true };
                     var project = new DotNetRepositoryProjectResult
@@ -779,7 +790,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         {
                             Name = "Packages",
                             RootPath = "Sources",
-                            BuildBeforeModule = buildBeforeModule
+                            BuildBeforeModule = buildBeforeModule,
+                            PublishNuget = publishNuGet
                         }
                     },
                     new ConfigurationArtefactSegment
@@ -807,13 +819,31 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                         {
                             StageRoot = Path.Combine(artefactsRoot, "UploadReady")
                         }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = tamperAfterPublish,
+                            At = ModulePipelineActionStage.AfterPublish,
+                            Name = "Check published package snapshot"
+                        }
                     }
                 }
             };
 
+            if (tamperAfterPublish)
+            {
+                var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+                Assert.Contains("changed after package validation", exception.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains(Path.GetFileName(packagePath), exception.Message, StringComparison.OrdinalIgnoreCase);
+                return;
+            }
+
             var result = runner.Run(spec);
 
             Assert.True(File.Exists(packagePath), "DoNotClear unpacked artefacts should not clear sibling project-build package output.");
+            Assert.Equal(publishNuGet ? "published-package" : "package", File.ReadAllText(packagePath));
             Assert.NotEmpty(Directory.EnumerateFiles(Path.Combine(artefactsRoot, "Packed"), "*.zip"));
             Assert.NotNull(result.ReleaseCoordinationResult);
             Assert.Contains(result.ReleaseCoordinationResult!.PackageAssetPaths, path => string.Equals(path, Path.Combine(artefactsRoot, "UploadReady", "nuget", Path.GetFileName(packagePath)), StringComparison.OrdinalIgnoreCase));
