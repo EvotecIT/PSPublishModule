@@ -35,6 +35,56 @@ public sealed class BinaryDependencyPreflightServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("RequiredAssemblies")]
+    [InlineData("NestedModules")]
+    public void Analyze_ResolvesBackslashManifestAssemblyPathOnEveryPlatform(string key)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var module = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var core = Directory.CreateDirectory(Path.Combine(module.FullName, "Lib", "Core"));
+            var assembly = Path.Combine(core.FullName, "Dependency.dll");
+            File.WriteAllText(assembly, "assembly fixture");
+            var manifest = Path.Combine(module.FullName, "TestModule.psd1");
+            File.WriteAllText(manifest, $"@{{ ModuleVersion = '1.0.0'; {key} = @('.\\Lib\\Core\\Dependency.dll') }}");
+            var service = new BinaryDependencyPreflightService(new NullLogger());
+
+            Assert.False(service.Analyze(module.FullName, "Core", manifest).HasIssues);
+            File.Delete(assembly);
+            Assert.Contains(service.Analyze(module.FullName, "Core", manifest).Issues,
+                issue => issue.MissingDependencyFileName == "Dependency.dll");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Analyze_CaseDistinctManifestPathsRemainDistinctOnCaseSensitiveVolume()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var module = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            if (PowerShellCompilationPathSafety.GetPathComparison(module.FullName) != StringComparison.Ordinal)
+                return;
+
+            File.WriteAllText(Path.Combine(module.FullName, "Plugin.dll"), "assembly fixture");
+            var manifest = Path.Combine(module.FullName, "TestModule.psd1");
+            File.WriteAllText(manifest, "@{ ModuleVersion = '1.0.0'; RequiredAssemblies = @('Plugin.dll', 'plugin.dll') }");
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(module.FullName, "Core", manifest);
+            Assert.Contains(result.Issues, issue => issue.MissingDependencyFileName == "plugin.dll");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public void Analyze_ScriptLayoutUsesStagedManifestToExcludeUnloadedInternals()
     {
