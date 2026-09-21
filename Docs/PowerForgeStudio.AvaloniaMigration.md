@@ -38,11 +38,13 @@ The desktop GUI is PowerForgeStudio.Avalonia, a thin presentation host over the 
 - [x] Show cancellable storage-scan progress and expose a bounded read-only storage CLI for large workspaces.
 - [x] Add current-remote, Studio-use and retained-artifact checks with guarded no-force worktree removal.
 - [x] Add matching merged-PR-head fallback, reviewed broken-reference pruning and bounded external process detection where available.
+- [ ] Bring the persistent project tree closer to the approved reference hierarchy: Favorites, working-copy branches and files, followed by other projects.
 - [x] Inventory Windows schedules and local GitHub workflow definitions with explicit provider evidence boundaries.
 - [x] Add secret-free GitHub, registry, Licensing, IntelligenceX and local-toolchain connection evidence.
 - [x] Add a cross-project Activity inbox over existing portfolio, release, GitHub issue/PR/CI and automation owners.
 - [x] Add machine-local Settings with durable behavior and bounded Activity refresh preferences.
 - [x] Connect bounded, read-only GitHub Actions workflow state and scheduled-run evidence to local definitions.
+- [ ] Align native typography, icon treatment, density and state colors across the eight product-map references, then inspect each rendered page against the approved visual direction.
 - [ ] Connect a supported Codex automation inventory adapter and provider-owned configuration actions when their owners expose safe APIs.
 - [x] Validate native rendering, keyboard navigation and representative workflows within the recorded Windows capture limits.
 - [x] Review interacting behavior and retire the WPF host, its tests, dependencies and compatibility switches.
