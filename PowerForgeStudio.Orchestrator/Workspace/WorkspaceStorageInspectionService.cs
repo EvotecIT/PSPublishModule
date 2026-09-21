@@ -1,4 +1,5 @@
 using PowerForge;
+using System.Diagnostics;
 using PowerForgeStudio.Domain.Workspace;
 using PowerForgeStudio.Orchestrator.Catalog;
 
@@ -18,8 +19,14 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
         _repositories = repositories ?? new WorkspaceRepositorySource();
     }
 
+    public Task<WorkspaceStorageSnapshot> InspectAsync(
+        string workspaceRoot,
+        CancellationToken cancellationToken = default)
+        => InspectAsync(workspaceRoot, null, cancellationToken);
+
     public async Task<WorkspaceStorageSnapshot> InspectAsync(
         string workspaceRoot,
+        IProgress<WorkspaceStorageScanProgress>? progress,
         CancellationToken cancellationToken = default)
     {
         var root = Path.GetFullPath(workspaceRoot);
@@ -31,9 +38,12 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
         var inspected = new HashSet<string>(comparer);
         var entries = new List<WorkspaceStorageEntry>();
 
-        foreach (var repository in repositories.OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase))
+        var orderedRepositories = repositories.OrderBy(static item => item.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        for (var repositoryIndex = 0; repositoryIndex < orderedRepositories.Length; repositoryIndex++)
         {
+            var repository = orderedRepositories[repositoryIndex];
             cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(new(repositoryIndex, orderedRepositories.Length, repository.RootPath, 0, 0));
             var registered = await ReadWorktreesAsync(repository.RootPath, cancellationToken).ConfigureAwait(false);
             if (registered.Count == 0)
                 registered = [new RegisteredWorktree(repository.RootPath, null, false, false, null)];
@@ -54,8 +64,12 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
                     Path.GetFullPath(primary),
                     worktree,
                     defaultBranch,
+                    repositoryIndex,
+                    orderedRepositories.Length,
+                    progress,
                     cancellationToken).ConfigureAwait(false));
             }
+            progress?.Report(new(repositoryIndex + 1, orderedRepositories.Length, repository.RootPath, 0, 0));
         }
 
         var ordered = entries
@@ -63,6 +77,7 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
             .ThenByDescending(static item => item.IsPrimary)
             .ThenBy(static item => item.Branch, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        cancellationToken.ThrowIfCancellationRequested();
         return new WorkspaceStorageSnapshot(
             root,
             DateTimeOffset.UtcNow,
@@ -78,6 +93,9 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
         string primaryPath,
         RegisteredWorktree registered,
         string? defaultBranch,
+        int completedRepositories,
+        int totalRepositories,
+        IProgress<WorkspaceStorageScanProgress>? progress,
         CancellationToken token)
     {
         var isPrimary = PathsEqual(path, primaryPath);
@@ -94,7 +112,7 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
                     registered.IsLocked, 0, 0, 0, "Git inspection failed", defaultBranch ?? "", "Not checked",
                     "Inspect Git metadata", false, Sanitize(status.CommandResult.StdErr));
 
-            var measured = MeasureDirectory(path, token);
+            var measured = MeasureDirectory(path, token, progress, completedRepositories, totalRepositories);
             var changes = checked(status.TrackedChangeCount + status.UntrackedChangeCount);
             var clean = changes == 0;
             var ancestry = isPrimary || string.IsNullOrWhiteSpace(defaultBranch)
@@ -184,13 +202,15 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
         };
     }
 
-    private static DirectoryMeasurement MeasureDirectory(string root, CancellationToken token)
+    private static DirectoryMeasurement MeasureDirectory(string root, CancellationToken token,
+        IProgress<WorkspaceStorageScanProgress>? progress, int completedRepositories, int totalRepositories)
     {
         long bytes = 0;
         var items = 1;
         string? warning = null;
         var pending = new Stack<string>();
         pending.Push(root);
+        var lastReport = Stopwatch.GetTimestamp();
         while (pending.TryPop(out var directory))
         {
             token.ThrowIfCancellationRequested();
@@ -210,6 +230,11 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
                         pending.Push(entry);
                     else
                         bytes = checked(bytes + new FileInfo(entry).Length);
+                    if (progress is not null && Stopwatch.GetElapsedTime(lastReport) >= TimeSpan.FromSeconds(1))
+                    {
+                        progress.Report(new(completedRepositories, totalRepositories, root, bytes, items));
+                        lastReport = Stopwatch.GetTimestamp();
+                    }
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -217,6 +242,7 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
                 warning ??= "Some entries could not be measured.";
             }
         }
+        progress?.Report(new(completedRepositories, totalRepositories, root, bytes, items));
         return new DirectoryMeasurement(bytes, items, warning);
     }
 

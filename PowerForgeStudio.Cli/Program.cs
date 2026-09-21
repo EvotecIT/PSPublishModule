@@ -5,7 +5,7 @@ using PowerForgeStudio.Domain.Workspace;
 using PowerForgeStudio.Orchestrator.Storage;
 using PowerForgeStudio.Orchestrator.Workspace;
 
-internal static class Program
+internal static partial class Program
 {
     public static async Task<int> Main(string[] args)
     {
@@ -29,6 +29,12 @@ internal static class Program
 
         try
         {
+            if (string.Equals(command, "storage", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteStorageAsync(workspaceRoot, Math.Clamp(top, 1, 500), outputJson).ConfigureAwait(false);
+                return 0;
+            }
+
             var snapshotService = new WorkspaceSnapshotService();
             var queryService = new WorkspaceSnapshotQueryService();
             var commandService = new WorkspaceCommandService();
@@ -727,6 +733,7 @@ internal static class Program
         Console.WriteLine("  powerforgestudio snapshot [--root <path>] [--database <path>] [--max-plan <n>] [--max-github <n>] [--json]");
         Console.WriteLine("  powerforgestudio inbox [--root <path>] [--database <path>] [--top <n>] [--json]");
         Console.WriteLine("  powerforgestudio dashboard [--root <path>] [--database <path>] [--json]");
+        Console.WriteLine("  powerforgestudio storage [--root <path>] [--top <n>] [--json]  # read-only; no release database");
         Console.WriteLine("  powerforgestudio families [--root <path>] [--database <path>] [--top <n>] [--json]");
         Console.WriteLine("  powerforgestudio family-lane --family <key-or-name> [--root <path>] [--database <path>] [--json]");
         Console.WriteLine("  powerforgestudio git-actions --repo <name-or-path> [--root <path>] [--database <path>] [--json]");

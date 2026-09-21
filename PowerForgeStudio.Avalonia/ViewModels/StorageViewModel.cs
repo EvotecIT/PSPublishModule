@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Workspace;
@@ -31,6 +32,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     public ObservableCollection<WorkspaceStorageEntry> Entries { get; } = [];
     [ObservableProperty] private WorkspaceStorageEntry? _selectedEntry;
     [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private double _scanProgressPercent;
     [ObservableProperty] private string _status = "Open Storage to inspect local working copies.";
     [ObservableProperty] private string _output = "Storage inspection has not run.";
     [ObservableProperty] private string _indexedDisplay = "—";
@@ -50,6 +52,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _pruneError = "";
     public string WorkspaceRoot { get; private set; } = "";
     public bool HasEntries => Entries.Count > 0;
+    public bool ShowEmpty => !IsLoading && !HasEntries;
     public bool HasSelection => SelectedEntry is not null;
     public bool IsAllFilter => Filter == "All";
     public bool IsCandidatesFilter => Filter == "Candidates";
@@ -79,7 +82,11 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanReviewRemoval));
         OnPropertyChanged(nameof(CanReviewPrune));
     }
-    partial void OnIsLoadingChanged(bool value) => UpdateActionAvailability();
+    partial void OnIsLoadingChanged(bool value)
+    {
+        UpdateActionAvailability();
+        OnPropertyChanged(nameof(ShowEmpty));
+    }
     partial void OnIsReviewingRemovalChanged(bool value) => UpdateActionAvailability();
     partial void OnIsRemovingChanged(bool value) => UpdateActionAvailability();
     partial void OnIsReviewingPruneChanged(bool value) => UpdateActionAvailability();
@@ -114,9 +121,11 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         IndexedDisplay = "—";
         WorktreeDisplay = "—";
         CandidateCount = 0;
+        ScanProgressPercent = 0;
         Status = "Ready to inspect workspace storage.";
         Output = "Storage inspection has not run for this workspace.";
         OnPropertyChanged(nameof(HasEntries));
+        OnPropertyChanged(nameof(ShowEmpty));
     }
 
     [RelayCommand]
@@ -129,10 +138,18 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         _refreshCancellation?.Dispose();
         _refreshCancellation = new CancellationTokenSource();
         IsLoading = true;
+        ScanProgressPercent = 0;
         Status = "Measuring repositories and registered worktrees…";
         try
         {
-            var snapshot = await _inspection.InspectAsync(root, _refreshCancellation.Token);
+            var progress = new Progress<WorkspaceStorageScanProgress>(item => Dispatcher.UIThread.Post(() =>
+            {
+                if (version != _refreshVersion || !IsLoading || _refreshCancellation?.IsCancellationRequested == true || !string.Equals(root, WorkspaceRoot,
+                        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
+                ScanProgressPercent = item.TotalRepositories == 0 ? 0 : 100d * item.CompletedRepositories / item.TotalRepositories;
+                Status = $"Measuring {Path.GetFileName(item.WorkingCopyPath)} · {item.CompletedRepositories}/{item.TotalRepositories} repositories · {item.MeasuredDisplay} in current copy";
+            }));
+            var snapshot = await _inspection.InspectAsync(root, progress, _refreshCancellation.Token);
             if (version != _refreshVersion || !string.Equals(root, WorkspaceRoot,
                     OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                 return;
@@ -165,6 +182,14 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
             if (version == _refreshVersion)
                 IsLoading = false;
         }
+    }
+
+    [RelayCommand]
+    private void CancelRefresh()
+    {
+        if (!IsLoading) return;
+        _refreshCancellation?.Cancel();
+        Status = "Cancelling storage inspection…";
     }
 
     [RelayCommand] private void ShowAll() => Filter = "All";
@@ -325,6 +350,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         SelectedEntry = Entries.FirstOrDefault(entry => string.Equals(entry.Path, selectedPath,
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) ?? Entries.FirstOrDefault();
         OnPropertyChanged(nameof(HasEntries));
+        OnPropertyChanged(nameof(ShowEmpty));
     }
 
     public void Dispose()

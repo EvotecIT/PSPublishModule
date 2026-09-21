@@ -13,6 +13,54 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class WorkspaceStorageTests
 {
     [Fact]
+    public async Task LongStorageScanShowsProgressAndCanBeCancelled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-storage-progress-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                var source = new BlockingProgressInspectionService();
+                using var model = new StorageViewModel(source);
+                model.SetWorkspace(root);
+                var window = new Window { Content = new StorageView { DataContext = model }, Width = 1000, Height = 700 };
+                window.Show();
+                var scan = model.RefreshAsync();
+                await source.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                for (var attempt = 0; attempt < 30 && model.ScanProgressPercent < 50; attempt++)
+                {
+                    Dispatcher.UIThread.RunJobs();
+                    await Task.Delay(10);
+                }
+                Assert.Equal(50, model.ScanProgressPercent);
+                Assert.Contains("1/2 repositories", model.Status);
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                using (var frame = window.CaptureRenderedFrame())
+                {
+                    Assert.NotNull(frame);
+                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
+                    if (!string.IsNullOrWhiteSpace(output))
+                    {
+                        Directory.CreateDirectory(output);
+                        frame.Save(Path.Combine(output, "storage-progress.png"), PngBitmapEncoderOptions.Default);
+                    }
+                }
+
+                model.CancelRefreshCommand.Execute(null);
+                await scan;
+                Assert.False(model.IsLoading);
+                Assert.Equal("Storage inspection cancelled.", model.Status);
+                window.Close();
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task LateRemovalReviewIsDiscardedAfterSelectionChanges()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-storage-late-remove-" + Guid.NewGuid().ToString("N"))).FullName;
@@ -274,6 +322,23 @@ public sealed class WorkspaceStorageTests
                 entries.Where(static entry => !entry.IsPrimary).Sum(static entry => entry.SizeBytes),
                 entries.Count(static entry => entry.IsReviewCandidate),
                 entries));
+        }
+    }
+
+    private sealed class BlockingProgressInspectionService : IWorkspaceStorageInspectionService
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<WorkspaceStorageSnapshot> InspectAsync(string workspaceRoot, CancellationToken cancellationToken = default)
+            => InspectAsync(workspaceRoot, null, cancellationToken);
+
+        public async Task<WorkspaceStorageSnapshot> InspectAsync(string workspaceRoot,
+            IProgress<WorkspaceStorageScanProgress>? progress, CancellationToken cancellationToken = default)
+        {
+            progress?.Report(new(1, 2, workspaceRoot, 1024, 1));
+            Started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Unreachable");
         }
     }
 

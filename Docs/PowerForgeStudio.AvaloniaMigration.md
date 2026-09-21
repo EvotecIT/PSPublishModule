@@ -35,6 +35,7 @@ The desktop GUI is PowerForgeStudio.Avalonia, a thin presentation host over the 
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
 - [x] Add PR changed-file lists and bounded patch previews with revision checks.
 - [x] Add review-only workspace storage inventory with measured worktrees and local ancestry evidence.
+- [x] Show cancellable storage-scan progress and expose a bounded read-only storage CLI for large workspaces.
 - [x] Add current-remote, Studio-use and retained-artifact checks with guarded no-force worktree removal.
 - [x] Add matching merged-PR-head fallback, reviewed broken-reference pruning and bounded external process detection where available.
 - [x] Inventory Windows schedules and local GitHub workflow definitions with explicit provider evidence boundaries.
@@ -159,7 +160,9 @@ Evidence:
 - All 32 Avalonia tests passed. The Storage route test verifies measured summary cards, candidate filtering and selection state.
 - Wide and compact Skia renders were inspected: `Artifacts/StudioValidation/storage-review.png` and `storage-review-compact.png`. The wide view retains the evidence inspector; compact mode hides that side panel and keeps the measured list scrollable above the output dock.
 
-Reported sizes are logical bytes. Hard links and shared Git objects can make their sum larger than physically reclaimable space. Inaccessible directories are retained with a warning and linked entries are not measured. The inventory scan is local and does not fetch remotes. Large workspaces are inspected sequentially and currently expose stage-level status rather than per-working-copy progress. No user repository was modified during validation; removal and pruning tests used disposable repositories.
+Reported sizes are logical bytes. Hard links and shared Git objects can make their sum larger than physically reclaimable space. Inaccessible directories are retained with a warning and linked entries are not measured. The inventory scan is local and does not fetch remotes. Large workspaces are inspected sequentially with per-repository progress and a cancellation action. The headless `storage` command reports the same progress on stderr and returns a bounded inventory on stdout; it does not open the release-state database. No user repository was modified during validation; removal and pruning tests used disposable repositories.
+
+Scale check (2026-09-21): a read-only scan of the maintainer workspace completed across 194 discovered repositories and 266 working copies. It measured 477.1 GiB logical, including 81 existing worktrees totaling 228.7 GiB logical, and identified four local review candidates and no broken references. The scan took about eight minutes; progress remained visible throughout. The 1000 × 700 headless progress frame was inspected at `Artifacts/StudioValidation/storage-progress/storage-progress.png`. The rebuilt CLI also returned valid JSON for a disposable primary checkout with one linked worktree. All 54 Avalonia tests and 495 shared tests passed, with one intentionally skipped shared smoke test. A fresh read-only review found and prompted a fix for cancellation during repository discovery. No real working copy was removed or pruned.
 
 ### Guarded worktree removal milestone
 

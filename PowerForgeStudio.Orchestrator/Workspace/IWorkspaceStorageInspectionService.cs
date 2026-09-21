@@ -8,4 +8,10 @@ public interface IWorkspaceStorageInspectionService
     Task<WorkspaceStorageSnapshot> InspectAsync(
         string workspaceRoot,
         CancellationToken cancellationToken = default);
+
+    Task<WorkspaceStorageSnapshot> InspectAsync(
+        string workspaceRoot,
+        IProgress<WorkspaceStorageScanProgress>? progress,
+        CancellationToken cancellationToken = default)
+        => InspectAsync(workspaceRoot, cancellationToken);
 }

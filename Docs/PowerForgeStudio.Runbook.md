@@ -116,7 +116,10 @@ The CLI uses the same shared domain and orchestration owners:
 ```powershell
 dotnet run --project .\PowerForgeStudio.Cli\PowerForgeStudio.Cli.csproj -- snapshot --root C:\Support\GitHub --json
 dotnet run --project .\PowerForgeStudio.Cli\PowerForgeStudio.Cli.csproj -- inbox --root C:\Support\GitHub
+dotnet run --project .\PowerForgeStudio.Cli\PowerForgeStudio.Cli.csproj -- storage --root C:\Support\GitHub --top 20 --json
 ```
+
+`storage` measures primary and registered working copies locally. It sends scan progress to stderr, then writes a bounded inventory to stdout. Its sizes are logical bytes, not verified reclaimable space; review any removal candidate in Studio before cleanup.
 
 ## Day-to-day workflow
 

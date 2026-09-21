@@ -6,6 +6,19 @@ namespace PowerForgeStudio.Tests;
 public sealed partial class PowerForgeStudioRepositoryCatalogScannerTests
 {
     [Fact]
+    public void DiscoveryHonorsCancellationBeforeInspectingRepositories()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repository = scope.CreateRepository("Product");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var scanner = new RepositoryCatalogScanner();
+
+        Assert.ThrowsAny<OperationCanceledException>(() => scanner.Scan(scope.RootPath, cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() => scanner.InspectRepository(repository, cancellationToken: cancellation.Token));
+    }
+
+    [Fact]
     public void InspectRepository_ForwardSlashWorktreePath_IsDetectedAsWorktree()
     {
         using var scope = new TemporaryDirectoryScope();

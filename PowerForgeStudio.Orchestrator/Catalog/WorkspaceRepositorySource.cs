@@ -13,10 +13,11 @@ public sealed class WorkspaceRepositorySource : IWorkspaceRepositorySource
     public Task<IReadOnlyList<RepositoryCatalogEntry>> DiscoverAsync(string root, CancellationToken cancellationToken = default)
         => Task.Run<IReadOnlyList<RepositoryCatalogEntry>>(() =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
             var scanner = new RepositoryCatalogScanner();
             return WorktreeDetector.IsGitRepository(root)
-                ? [scanner.InspectRepository(root)]
-                : scanner.Scan(root).Where(entry => WorktreeDetector.IsGitRepository(entry.RootPath)).ToArray();
+                ? [scanner.InspectRepository(root, cancellationToken: cancellationToken)]
+                : scanner.Scan(root, cancellationToken).Where(entry => WorktreeDetector.IsGitRepository(entry.RootPath)).ToArray();
         }, cancellationToken);
 }

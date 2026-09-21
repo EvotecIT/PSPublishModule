@@ -1,4 +1,5 @@
 using PowerForge;
+using PowerForgeStudio.Domain.Workspace;
 using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Tests;
@@ -29,7 +30,10 @@ public sealed class WorkspaceStorageInspectionServiceTests : IDisposable
         await Run(worktree, "commit", "-m", "Feature");
 
         var service = new WorkspaceStorageInspectionService();
-        var beforeMerge = await service.InspectAsync(workspace);
+        var observations = new List<WorkspaceStorageScanProgress>();
+        var beforeMerge = await service.InspectAsync(workspace, new InlineProgress<WorkspaceStorageScanProgress>(observations.Add));
+        Assert.Contains(observations, item => item.TotalRepositories == 1 && item.CompletedRepositories == 1);
+        Assert.Contains(observations, item => item.WorkingCopyPath == worktree && item.MeasuredBytes > 0);
         var unmerged = Assert.Single(beforeMerge.Entries, entry => !entry.IsPrimary);
         Assert.Equal("Not merged", unmerged.AncestryState);
         Assert.False(unmerged.IsReviewCandidate);
@@ -78,6 +82,24 @@ public sealed class WorkspaceStorageInspectionServiceTests : IDisposable
     {
         var result = await _git.RunRawAsync(root, arguments);
         Assert.True(result.Succeeded, $"git {string.Join(' ', arguments)} failed: {result.StdErr}");
+    }
+
+    [Fact]
+    public async Task ProgressCallbackCanCancelBeforeRepositoryMeasurement()
+    {
+        var workspace = Directory.CreateDirectory(Path.Combine(_fixture, "Workspace")).FullName;
+        var primary = Directory.CreateDirectory(Path.Combine(workspace, "Product")).FullName;
+        await Run(primary, "init", "-b", "main");
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<WorkspaceStorageScanProgress>(_ => cancellation.Cancel());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new WorkspaceStorageInspectionService().InspectAsync(workspace, progress, cancellation.Token));
+    }
+
+    private sealed class InlineProgress<T>(Action<T> callback) : IProgress<T>
+    {
+        public void Report(T value) => callback(value);
     }
 
     public void Dispose()

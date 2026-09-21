@@ -6,24 +6,26 @@ namespace PowerForgeStudio.Orchestrator.Catalog;
 
 public sealed class RepositoryCatalogScanner
 {
-    public RepositoryCatalogEntry InspectRepository(string rootPath, bool includeImmediateChildBuildFolders = true)
+    public RepositoryCatalogEntry InspectRepository(string rootPath, bool includeImmediateChildBuildFolders = true,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
-        return InspectDirectory(rootPath, includeImmediateChildBuildFolders);
+        return InspectDirectory(rootPath, includeImmediateChildBuildFolders, cancellationToken);
     }
 
-    public IReadOnlyList<RepositoryCatalogEntry> Scan(string rootPath)
+    public IReadOnlyList<RepositoryCatalogEntry> Scan(string rootPath, CancellationToken cancellationToken = default)
     {
         var options = new ReleaseCatalogScanOptions {
             RootPath = rootPath
         };
 
-        return Scan(options);
+        return Scan(options, cancellationToken);
     }
 
-    public IReadOnlyList<RepositoryCatalogEntry> Scan(ReleaseCatalogScanOptions options)
+    public IReadOnlyList<RepositoryCatalogEntry> Scan(ReleaseCatalogScanOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(options.RootPath);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (!Directory.Exists(options.RootPath))
         {
@@ -33,7 +35,8 @@ public sealed class RepositoryCatalogScanner
         var entries = new List<RepositoryCatalogEntry>();
         foreach (var directory in Directory.EnumerateDirectories(options.RootPath).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
         {
-            entries.Add(InspectDirectory(directory, options.IncludeImmediateChildBuildFolders));
+            cancellationToken.ThrowIfCancellationRequested();
+            entries.Add(InspectDirectory(directory, options.IncludeImmediateChildBuildFolders, cancellationToken));
         }
 
         return entries;
@@ -50,20 +53,22 @@ public sealed class RepositoryCatalogScanner
             WorktreeRepositories: materialized.Count(entry => entry.IsWorktree));
     }
 
-    private static RepositoryCatalogEntry InspectDirectory(string directoryPath, bool includeImmediateChildBuildFolders)
+    private static RepositoryCatalogEntry InspectDirectory(string directoryPath, bool includeImmediateChildBuildFolders,
+        CancellationToken cancellationToken)
     {
-        var moduleBuildScript = FindBuildScript(directoryPath, "Build-Module.ps1", includeImmediateChildBuildFolders);
-        var releaseContract = FindReleaseBuildContract(directoryPath, includeImmediateChildBuildFolders);
+        cancellationToken.ThrowIfCancellationRequested();
+        var moduleBuildScript = FindBuildScript(directoryPath, "Build-Module.ps1", includeImmediateChildBuildFolders, cancellationToken);
+        var releaseContract = FindReleaseBuildContract(directoryPath, includeImmediateChildBuildFolders, cancellationToken);
         var releaseModuleBuildInput = releaseContract?.ModuleBuildInputPath;
         var discoveredModuleBuildInput = releaseModuleBuildInput ?? (moduleBuildScript is null
-            ? FindDirectModuleBuildConfig(directoryPath)
+            ? FindDirectModuleBuildConfig(directoryPath, cancellationToken)
             : null);
         var moduleBuildInput = discoveredModuleBuildInput ?? moduleBuildScript;
         var projectBuildScript = releaseContract?.IncludesPackages == true &&
                                  !releaseContract.ModuleIncludesPackages
             ? releaseContract.ConfigPath
             : releaseModuleBuildInput is null
-                ? FindBuildInput(directoryPath, includeImmediateChildBuildFolders, "project.build.json", "Build-Project.ps1")
+                ? FindBuildInput(directoryPath, includeImmediateChildBuildFolders, cancellationToken, "project.build.json", "Build-Project.ps1")
                 : null;
         var hasWebsiteSignals = HasWebsiteSignals(directoryPath);
 
@@ -81,10 +86,12 @@ public sealed class RepositoryCatalogScanner
                 : null);
     }
 
-    private static ReleaseBuildContract? FindReleaseBuildContract(string directoryPath, bool includeImmediateChildBuildFolders)
+    private static ReleaseBuildContract? FindReleaseBuildContract(string directoryPath, bool includeImmediateChildBuildFolders,
+        CancellationToken cancellationToken)
     {
-        foreach (var releaseConfigPath in EnumerateReleaseConfigFiles(directoryPath, includeImmediateChildBuildFolders))
+        foreach (var releaseConfigPath in EnumerateReleaseConfigFiles(directoryPath, includeImmediateChildBuildFolders, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var contract = ResolveReleaseBuildContract(releaseConfigPath);
             if (contract is not null)
             {
@@ -95,7 +102,7 @@ public sealed class RepositoryCatalogScanner
         return null;
     }
 
-    private static string? FindDirectModuleBuildConfig(string directoryPath)
+    private static string? FindDirectModuleBuildConfig(string directoryPath, CancellationToken cancellationToken)
     {
         foreach (var relativePath in new[]
         {
@@ -104,6 +111,7 @@ public sealed class RepositoryCatalogScanner
             Path.Combine(".powerforge", "powerforge.json")
         })
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var candidate = Path.Combine(directoryPath, relativePath);
             if (IsModulePipelineConfig(candidate))
                 return candidate;
@@ -114,10 +122,12 @@ public sealed class RepositoryCatalogScanner
 
     private static IEnumerable<string> EnumerateReleaseConfigFiles(
         string directoryPath,
-        bool includeImmediateChildBuildFolders)
+        bool includeImmediateChildBuildFolders,
+        CancellationToken cancellationToken)
     {
         foreach (var candidate in EnumerateReleaseConfigCandidates(directoryPath))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (File.Exists(candidate))
                 yield return candidate;
         }
@@ -129,8 +139,10 @@ public sealed class RepositoryCatalogScanner
 
         foreach (var childDirectory in Directory.EnumerateDirectories(directoryPath))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             foreach (var nestedCandidate in EnumerateReleaseConfigCandidates(childDirectory))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (File.Exists(nestedCandidate))
                     yield return nestedCandidate;
             }
@@ -251,13 +263,16 @@ public sealed class RepositoryCatalogScanner
         bool ModuleIncludesPackages,
         bool RequiresUnifiedExecution);
 
-    private static string? FindBuildScript(string directoryPath, string fileName, bool includeImmediateChildBuildFolders)
-        => FindBuildInput(directoryPath, includeImmediateChildBuildFolders, fileName);
+    private static string? FindBuildScript(string directoryPath, string fileName, bool includeImmediateChildBuildFolders,
+        CancellationToken cancellationToken)
+        => FindBuildInput(directoryPath, includeImmediateChildBuildFolders, cancellationToken, fileName);
 
-    private static string? FindBuildInput(string directoryPath, bool includeImmediateChildBuildFolders, params string[] fileNames)
+    private static string? FindBuildInput(string directoryPath, bool includeImmediateChildBuildFolders,
+        CancellationToken cancellationToken, params string[] fileNames)
     {
         foreach (var fileName in fileNames)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var candidate = Path.Combine(directoryPath, "Build", fileName);
             if (File.Exists(candidate)) return candidate;
         }
@@ -265,8 +280,10 @@ public sealed class RepositoryCatalogScanner
         {
             foreach (var childDirectory in Directory.EnumerateDirectories(directoryPath).OrderBy(x => x, StringComparer.Ordinal))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 foreach (var fileName in fileNames)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var candidate = Path.Combine(childDirectory, "Build", fileName);
                     if (File.Exists(candidate)) return candidate;
                 }
@@ -339,4 +356,3 @@ public sealed class RepositoryCatalogScanner
                || leafName.StartsWith(".wt-", StringComparison.OrdinalIgnoreCase);
     }
 }
-
