@@ -17,12 +17,12 @@ public sealed partial class ModulePipelineRunner
         }
 
         var publishBuildResult = BindSynchronizedReleasePayload(plan, buildResult, state);
-        PreflightRepositoryPublishPayload(plan, publishBuildResult, state);
         var publishOrder = ResolvePublishOrder(plan);
         var packageNuGetPublished = false;
         var packageGitHubPublished = false;
         var modulePublished = new HashSet<ConfigurationPublishSegment>();
         PreflightSynchronizedModulePublishVersions(plan, state, modulePublished);
+        PreflightRepositoryPublishPayload(plan, publishBuildResult, state, modulePublished);
         PreflightSynchronizedPackageGitHubRetrySafety(plan, state);
 
         foreach (var destination in publishOrder)
@@ -64,11 +64,14 @@ public sealed partial class ModulePipelineRunner
     private void PreflightRepositoryPublishPayload(
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        ModulePipelineRunState state)
+        ModulePipelineRunState state,
+        HashSet<ConfigurationPublishSegment> completed)
     {
         if (plan.ImportModules?.Self != true || plan.ImportModules.SkipBinaryDependencyCheck == true ||
-            !(plan.Publishes?.Any(static publish =>
-                publish?.Configuration is { Enabled: true, Destination: PublishDestination.PowerShellGallery }) ?? false))
+            !(plan.Publishes?.Any(publish =>
+                publish?.Configuration is { Enabled: true, Destination: PublishDestination.PowerShellGallery } &&
+                !completed.Contains(publish) &&
+                !ShouldSkipSynchronizedReleaseOperation(state, CreateModulePublishOperationFingerprint(plan, publish))) ?? false))
         {
             return;
         }

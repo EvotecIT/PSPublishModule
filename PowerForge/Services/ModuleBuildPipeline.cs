@@ -337,7 +337,7 @@ public sealed class ModuleBuildPipeline
             fallbackVersion: null);
 
         var originalStrategy = spec.Strategy;
-        using var installLock = originalStrategy == InstallationStrategy.AutoRevision
+        using var installLock = originalStrategy is InstallationStrategy.AutoRevision or InstallationStrategy.Exact
             ? ModuleInstallOperationLock.Acquire(spec.Roots, spec.Name, requireAllDestinationRoots)
             : null;
         var installRoots = installLock?.LockedRoots ?? spec.Roots;
@@ -383,7 +383,10 @@ public sealed class ModuleBuildPipeline
             legacyFlatHandling: spec.LegacyFlatHandling,
             preserveVersions: spec.PreserveVersions,
             requireNewDestination: originalStrategy == InstallationStrategy.AutoRevision,
-            requireAllDestinationRoots: requireAllDestinationRoots);
+            requireAllDestinationRoots: requireAllDestinationRoots)
+        {
+            OperationLockHeld = installLock is not null
+        };
         return requireAllDestinationRoots && validateInstalledPaths is not null
             ? installer.InstallFromStagingTransactional(
                 staging,

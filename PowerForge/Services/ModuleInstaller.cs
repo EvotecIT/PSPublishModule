@@ -68,6 +68,15 @@ public sealed partial class ModuleInstaller
 
         options ??= new ModuleInstallerOptions();
         var roots = ResolveDestinationRoots(options.DestinationRoots);
+        using var installLock = options.OperationLockHeld
+            ? null
+            : ModuleInstallOperationLock.Acquire(roots, moduleName, options.RequireAllDestinationRoots);
+        roots = installLock?.LockedRoots ?? roots;
+        if (installLock is not null)
+        {
+            foreach (var failure in installLock.Failures)
+                _logger.Warn($"Skipping module root because its install lock could not be acquired: {failure}");
+        }
         var installed = new List<string>();
         var installedModuleRoots = new List<string>();
         var pruned = new List<string>();
@@ -109,11 +118,6 @@ public sealed partial class ModuleInstaller
 
                 validatePreparedDestination?.Invoke(tempPath);
 
-                // Legacy-flat conversion can change an existing install, so wait until the
-                // prepared copy has passed validation before doing that housekeeping.
-                if (!options.RequireAllDestinationRoots)
-                    HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
-
                 // If target exists
                 if (Directory.Exists(finalPath))
                 {
@@ -138,6 +142,8 @@ public sealed partial class ModuleInstaller
                         CommitExactVersion(tempPath, finalPath, validateCommittedDestination);
                         TryDeleteDirectory(tempPath);
                         installed.Add(finalPath);
+                        if (!options.RequireAllDestinationRoots)
+                            FinishLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
                         var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removedInExact);
                         pruned.AddRange(removedInExact);
                         _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
@@ -149,6 +155,8 @@ public sealed partial class ModuleInstaller
                     CommitExactVersion(tempPath, finalPath, validateCommittedDestination);
                     TryDeleteDirectory(tempPath);
                     installed.Add(finalPath);
+                    if (!options.RequireAllDestinationRoots)
+                        FinishLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
                     var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removedInExact);
                     pruned.AddRange(removedInExact);
                     _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
@@ -190,6 +198,7 @@ public sealed partial class ModuleInstaller
                 // Prune old versions
                 if (!options.RequireAllDestinationRoots)
                 {
+                    FinishLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
                     var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removed);
                     pruned.AddRange(removed);
                     _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
@@ -269,6 +278,19 @@ public sealed partial class ModuleInstaller
             catch (Exception ex) { failures.Add($"{path}: {ex.Message}"); }
         }
         return failures;
+    }
+
+    private void FinishLegacyFlatInstall(
+        string moduleRoot,
+        string moduleName,
+        LegacyFlatModuleHandling handling,
+        ISet<string> preserveVersions)
+    {
+        try { HandleLegacyFlatInstall(moduleRoot, moduleName, handling, preserveVersions); }
+        catch (Exception ex)
+        {
+            _logger.Warn($"The module install was committed at '{moduleRoot}', but post-install legacy housekeeping failed: {ex.Message}");
+        }
     }
 
     private void HandleLegacyFlatInstall(
@@ -363,6 +385,7 @@ public sealed partial class ModuleInstaller
             if (name.Length == 0) continue;
             if (IsVersionFolderName(name)) continue;
             if (name.StartsWith(".tmp_install_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (name.StartsWith(".backup_install_", StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(name, "_legacy_flat", StringComparison.OrdinalIgnoreCase)) continue;
             TryDeleteDirectory(dir);
         }
@@ -386,6 +409,7 @@ public sealed partial class ModuleInstaller
             if (name.Length == 0) continue;
             if (IsVersionFolderName(name)) continue;
             if (name.StartsWith(".tmp_install_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (name.StartsWith(".backup_install_", StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(name, "_legacy_flat", StringComparison.OrdinalIgnoreCase)) continue;
 
             var target = Path.Combine(destinationRoot, name);

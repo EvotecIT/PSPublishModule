@@ -813,6 +813,62 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
+    public void Run_RejectsReleaseMetadataChangedAfterStagingInsideUnpackedArtefactRoot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var artefactsRoot = Path.Combine(root.FullName, "Artifacts");
+            var stageRoot = Path.Combine(artefactsRoot, "UploadReady");
+            var hosted = new FakeHostedOperations(new List<string>())
+            {
+                ModuleAction = (action, context) =>
+                {
+                    File.AppendAllText(Path.Combine(stageRoot, "metadata", "release-manifest.json"), "tampered");
+                    return CreateActionResult(action, context, succeeded: true);
+                }
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(), powerShellRunner: null, moduleDependencyMetadataProvider: null,
+                hostedOperations: hosted);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration { Enabled = true, DoNotClear = true, Path = artefactsRoot }
+                    },
+                    new ConfigurationReleaseSegment
+                    {
+                        Configuration = new ReleaseConfiguration { StageRoot = stageRoot }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = true, At = ModulePipelineActionStage.BeforeInstall, Name = "Mutate metadata"
+                        }
+                    }
+                ]
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("changed after package validation", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("release-manifest.json", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_AllowsPackedArtefactRootWithSiblingReleaseAndProjectBuildDirectories()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -1,11 +1,91 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 public sealed class ModuleInstallerExactStrategyTests
 {
+    [Theory]
+    [InlineData(LegacyFlatModuleHandling.Convert)]
+    [InlineData(LegacyFlatModuleHandling.Delete)]
+    public void InstallFromStaging_Exact_LeavesLegacyFlatInstallUntouchedOnCommittedValidationFailure(
+        LegacyFlatModuleHandling handling)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var staging = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            File.WriteAllText(Path.Combine(staging.FullName, "TestModule.psd1"), "new version");
+            var modules = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(modules.FullName, "TestModule"));
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psd1"), "@{ ModuleVersion = '0.9.0' }");
+            File.WriteAllText(Path.Combine(moduleRoot.FullName, "legacy.psm1"), "original flat payload");
+            var existing = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "1.0.0"));
+            File.WriteAllText(Path.Combine(existing.FullName, "TestModule.psd1"), "old version");
+            var options = new ModuleInstallerOptions([modules.FullName], InstallationStrategy.Exact,
+                legacyFlatHandling: handling);
+
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                new ModuleInstaller(new NullLogger()).InstallFromStagingWithPreparedValidation(
+                    staging.FullName, "TestModule", "1.0.0", options,
+                    prepared => Assert.True(File.Exists(Path.Combine(prepared, "TestModule.psd1"))),
+                    committed => throw new InvalidOperationException("committed validation failed")));
+
+            Assert.Equal("old version", File.ReadAllText(Path.Combine(existing.FullName, "TestModule.psd1")));
+            Assert.Equal("original flat payload", File.ReadAllText(Path.Combine(moduleRoot.FullName, "legacy.psm1")));
+            Assert.True(File.Exists(Path.Combine(moduleRoot.FullName, "TestModule.psd1")));
+            Assert.Empty(Directory.EnumerateDirectories(moduleRoot.FullName, ".backup_install_*"));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task InstallFromStaging_Exact_SerializesConcurrentReplacement()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        using var firstCommitted = new ManualResetEventSlim();
+        using var releaseFirst = new ManualResetEventSlim();
+        try
+        {
+            var modules = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            var firstStaging = Directory.CreateDirectory(Path.Combine(root.FullName, "first"));
+            var secondStaging = Directory.CreateDirectory(Path.Combine(root.FullName, "second"));
+            File.WriteAllText(Path.Combine(firstStaging.FullName, "TestModule.psd1"), "first payload");
+            File.WriteAllText(Path.Combine(secondStaging.FullName, "TestModule.psd1"), "second payload");
+            var options = new ModuleInstallerOptions([modules.FullName], InstallationStrategy.Exact);
+            var first = Task.Run(() => new ModuleInstaller(new NullLogger()).InstallFromStagingWithPreparedValidation(
+                firstStaging.FullName, "TestModule", "1.0.0", options,
+                _ => { }, committed =>
+                {
+                    firstCommitted.Set();
+                    Assert.True(releaseFirst.Wait(TimeSpan.FromSeconds(20)));
+                    Assert.Equal("first payload", File.ReadAllText(Path.Combine(committed, "TestModule.psd1")));
+                }));
+            Assert.True(firstCommitted.Wait(TimeSpan.FromSeconds(20)));
+            var second = Task.Run(() => new ModuleInstaller(new NullLogger()).InstallFromStaging(
+                secondStaging.FullName, "TestModule", "1.0.0", options));
+            await Task.Delay(200);
+            Assert.False(second.IsCompleted);
+            Assert.Equal("first payload", File.ReadAllText(Path.Combine(modules.FullName, "TestModule", "1.0.0", "TestModule.psd1")));
+
+            releaseFirst.Set();
+            await Task.WhenAll(first, second);
+            Assert.Equal("second payload", File.ReadAllText(Path.Combine(modules.FullName, "TestModule", "1.0.0", "TestModule.psd1")));
+            Assert.Empty(Directory.EnumerateDirectories(Path.Combine(modules.FullName, "TestModule"), ".backup_install_*"));
+        }
+        finally
+        {
+            releaseFirst.Set();
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void InstallFromStaging_Exact_RejectsInvalidPreparedCopyBeforeOverwritingOrPruning()
     {

@@ -64,6 +64,13 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state)
     {
         CaptureFinalizedModulePayloadIntegrity(state);
+        RefreshFinalizedArtefactIntegrity(plan, state);
+    }
+
+    private static void RefreshFinalizedArtefactIntegrity(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state)
+    {
         state.FinalizedPackedArtefactHashes.Clear();
         state.FinalizedPackedArtefactUnixModes.Clear();
         state.FinalizedLooseArtefactFileInventories.Clear();
