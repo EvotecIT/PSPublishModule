@@ -54,7 +54,7 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
-          <TextBlock Grid.Row="1" Text="No working copies match this filter." IsVisible="{Binding ShowEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" />
+          <TextBlock Grid.Row="1" Text="{Binding EmptyMessage}" IsVisible="{Binding ShowEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" />
         </Grid>
       </Border>
       <TextBlock Text="Logical sizes can overlap through hard links and shared Git objects; they are not guaranteed reclaimable space." Classes="muted" TextWrapping="Wrap" />

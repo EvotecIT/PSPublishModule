@@ -53,6 +53,7 @@ public sealed class WorkspaceStorageTests
                 await scan;
                 Assert.False(model.IsLoading);
                 Assert.Equal("Storage inspection cancelled.", model.Status);
+                Assert.Equal("Inspection cancelled. Refresh inspection to retry.", model.EmptyMessage);
                 window.Close();
                 return true;
             });

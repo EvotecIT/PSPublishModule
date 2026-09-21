@@ -34,6 +34,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private double _scanProgressPercent;
     [ObservableProperty] private string _status = "Open Storage to inspect local working copies.";
+    [ObservableProperty] private string _emptyMessage = "Refresh inspection to measure working copies.";
     [ObservableProperty] private string _output = "Storage inspection has not run.";
     [ObservableProperty] private string _indexedDisplay = "—";
     [ObservableProperty] private string _worktreeDisplay = "—";
@@ -123,6 +124,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         CandidateCount = 0;
         ScanProgressPercent = 0;
         Status = "Ready to inspect workspace storage.";
+        EmptyMessage = "Refresh inspection to measure working copies.";
         Output = "Storage inspection has not run for this workspace.";
         OnPropertyChanged(nameof(HasEntries));
         OnPropertyChanged(nameof(ShowEmpty));
@@ -158,6 +160,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
             IndexedDisplay = snapshot.IndexedDisplay;
             WorktreeDisplay = snapshot.WorktreeDisplay;
             CandidateCount = snapshot.ReviewCandidateCount;
+            EmptyMessage = "No working copies match this filter.";
             ApplyFilter();
             Status = $"Inspected {snapshot.Entries.Count} working copies. No files were removed.";
             Output = $"[{snapshot.InspectedAtUtc:HH:mm:ss}] Storage inspection complete — {snapshot.Entries.Count} working copies, " +
@@ -167,7 +170,11 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         catch (OperationCanceledException)
         {
             if (version == _refreshVersion)
+            {
                 Status = "Storage inspection cancelled.";
+                if (_allEntries.Count == 0)
+                    EmptyMessage = "Inspection cancelled. Refresh inspection to retry.";
+            }
         }
         catch (Exception ex)
         {
@@ -175,6 +182,8 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
             {
                 Status = "Storage inspection failed.";
                 Output = ex.Message;
+                if (_allEntries.Count == 0)
+                    EmptyMessage = "Inspection failed. Review the output and refresh.";
             }
         }
         finally
