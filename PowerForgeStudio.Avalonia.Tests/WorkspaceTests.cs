@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Automation.Peers;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
@@ -98,6 +99,25 @@ public sealed class WorkspaceTests
                         Directory.CreateDirectory(output);
                         frame.Save(Path.Combine(output, "workspace.png"), PngBitmapEncoderOptions.Default);
                     }
+                    var more = Assert.Single(window.GetVisualDescendants().OfType<Button>(), button => button.Flyout is MenuFlyout);
+                    var namedActions = window.GetVisualDescendants().OfType<Button>()
+                        .Where(button => button.Classes.Contains("fileAction"))
+                        .Select(button => ControlAutomationPeer.CreatePeerForElement(button)?.GetName())
+                        .ToArray();
+                    Assert.Equal(new[] { "Parent folder", "New file", "New folder", "Copy", "Move", "Rename", "More file actions" }, namedActions);
+                    var menu = Assert.IsType<MenuFlyout>(more.Flyout);
+                    Assert.Contains(menu.Items.OfType<MenuItem>(), item => item.Header?.ToString() == "Move to recovery");
+                    Assert.Contains(menu.Items.OfType<MenuItem>(), item => item.Header?.ToString() == "Refresh folder");
+                    menu.ShowAt(more);
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    using (var menuFrame = window.CaptureRenderedFrame())
+                    {
+                        Assert.NotNull(menuFrame);
+                        if (!string.IsNullOrEmpty(output)) menuFrame.Save(Path.Combine(output, "workspace-more.png"), PngBitmapEncoderOptions.Default);
+                    }
+                    menu.Hide();
                     await model.SelectAsync(readme);
                     model.SelectedFile = Assert.Single(model.Files, file => file.Name == "README.md");
                     var operation = new FileOperationViewModel(model, WorkspaceFileOperation.Copy) { Destination = "README-copy.md" };

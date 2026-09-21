@@ -35,6 +35,11 @@
   <Style Selector="Button.rail:disabled /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="Transparent" /><Setter Property="Foreground" Value="#8298B3" /></Style>
   <Style Selector="Button.rail:disabled"><Setter Property="Opacity" Value="0.55" /></Style>
   <Style Selector="Button.toolbar"><Setter Property="Padding" Value="8,5" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style>
+  <Style Selector="Button.fileAction"><Setter Property="Padding" Value="9,6" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderBrush" Value="Transparent" /><Setter Property="CornerRadius" Value="5" /><Setter Property="FontSize" Value="13" /></Style>
+  <Style Selector="Button.fileAction:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#E8F1FF" /></Style>
+  <Style Selector="Button.fileAction:disabled"><Setter Property="Opacity" Value="0.48" /></Style>
+  <Style Selector="Button.fileAction.primary"><Setter Property="Background" Value="#0865FF" /><Setter Property="Foreground" Value="White" /><Setter Property="BorderBrush" Value="#0865FF" /></Style>
+  <Style Selector="Button.fileAction.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#0758DC" /></Style>
   <Style Selector="Button.pageTab"><Setter Property="Padding" Value="0,0,0,7" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0,0,0,2" /><Setter Property="BorderBrush" Value="Transparent" /><Setter Property="CornerRadius" Value="0" /></Style>
   <Style Selector="Button.pageTab.active"><Setter Property="Foreground" Value="#0865FF" /><Setter Property="BorderBrush" Value="#0865FF" /></Style>
   <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#67748B" /></Style>

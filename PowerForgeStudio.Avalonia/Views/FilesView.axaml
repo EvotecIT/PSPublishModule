@@ -5,19 +5,44 @@
   <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="22,18">
     <TextBlock Text="Files" Classes="heading" />
     <TextBlock Grid.Row="1" Text="{Binding CurrentDirectory}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentDirectory}" Margin="0,9,0,13" />
-    <WrapPanel Grid.Row="2" Margin="0,0,0,13" IsEnabled="{Binding CanManageFiles}" IsVisible="{Binding IsPreviewVisible}">
-      <Button Content="Up" Command="{Binding NavigateUpCommand}" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
-      <Button Content="New file" Tag="CreateFile" Click="ManageFile" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
-      <Button Content="New folder" Tag="CreateDirectory" Click="ManageFile" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
-      <Button Content="Copy" Tag="Copy" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
-      <Button Content="Move" Tag="Move" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
-      <Button Content="Rename" Tag="Rename" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
-      <Button Content="Move to recovery" Click="DeleteFile" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
-      <Button Content="Recovery" Click="ShowRecovery" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
-      <Button Content="Refresh" Command="{Binding RefreshFolderCommand}" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
-      <Button Content="Copy path" Click="CopyPath" IsEnabled="{Binding HasWorkingCopy}" Margin="0,0,6,5" />
-      <Button Content="Open externally" Click="OpenExternally" IsEnabled="{Binding HasSelectedFile}" Margin="0,0,6,5" />
-    </WrapPanel>
+    <Border Grid.Row="2" Background="#F5F8FD" BorderBrush="#DDE7F3" BorderThickness="1" CornerRadius="7"
+            Padding="7,5" Margin="0,0,0,13" IsEnabled="{Binding CanManageFiles}" IsVisible="{Binding IsPreviewVisible}">
+      <WrapPanel ItemSpacing="3" LineSpacing="3">
+        <Button Classes="fileAction" Command="{Binding NavigateUpCommand}" IsEnabled="{Binding HasWorkingCopy}" ToolTip.Tip="Parent folder" AutomationProperties.Name="Parent folder">
+          <controls:NavigationIcon Kind="up" Ink="#35506C" Width="17" Height="17" />
+        </Button>
+        <Border Background="#DDE7F3" Width="1" Margin="4,5" />
+        <Button Classes="fileAction primary" Tag="CreateFile" Click="ManageFile" IsEnabled="{Binding HasWorkingCopy}" AutomationProperties.Name="New file">
+          <StackPanel Orientation="Horizontal" Spacing="6"><controls:NavigationIcon Kind="file-new" Width="16" Height="16" /><TextBlock Text="New file" /></StackPanel>
+        </Button>
+        <Button Classes="fileAction" Tag="CreateDirectory" Click="ManageFile" IsEnabled="{Binding HasWorkingCopy}" AutomationProperties.Name="New folder">
+          <StackPanel Orientation="Horizontal" Spacing="6"><controls:NavigationIcon Kind="folder-new" Ink="#35506C" Width="16" Height="16" /><TextBlock Text="New folder" /></StackPanel>
+        </Button>
+        <Border Background="#DDE7F3" Width="1" Margin="4,5" />
+        <Button Classes="fileAction" Tag="Copy" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" AutomationProperties.Name="Copy">
+          <StackPanel Orientation="Horizontal" Spacing="6"><controls:NavigationIcon Kind="copy" Ink="#35506C" Width="16" Height="16" /><TextBlock Text="Copy" /></StackPanel>
+        </Button>
+        <Button Classes="fileAction" Tag="Move" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" AutomationProperties.Name="Move">
+          <StackPanel Orientation="Horizontal" Spacing="6"><controls:NavigationIcon Kind="move" Ink="#35506C" Width="16" Height="16" /><TextBlock Text="Move" /></StackPanel>
+        </Button>
+        <Button Classes="fileAction" Tag="Rename" Click="ManageFile" IsEnabled="{Binding HasSelectedFile}" AutomationProperties.Name="Rename">
+          <StackPanel Orientation="Horizontal" Spacing="6"><controls:NavigationIcon Kind="rename" Ink="#35506C" Width="16" Height="16" /><TextBlock Text="Rename" /></StackPanel>
+        </Button>
+        <Button Classes="fileAction" ToolTip.Tip="More file actions" AutomationProperties.Name="More file actions">
+          <StackPanel Orientation="Horizontal" Spacing="5"><controls:NavigationIcon Kind="more" Ink="#35506C" Width="16" Height="16" /><TextBlock Text="More" /></StackPanel>
+          <Button.Flyout>
+            <MenuFlyout>
+              <MenuItem Header="Move to recovery" Click="DeleteFile" IsEnabled="{Binding HasSelectedFile}" />
+              <MenuItem Header="Recovery" Click="ShowRecovery" IsEnabled="{Binding HasWorkingCopy}" />
+              <Separator />
+              <MenuItem Header="Refresh folder" Command="{Binding RefreshFolderCommand}" IsEnabled="{Binding HasWorkingCopy}" />
+              <MenuItem Header="Copy path" Click="CopyPath" IsEnabled="{Binding HasWorkingCopy}" />
+              <MenuItem Header="Open externally" Click="OpenExternally" IsEnabled="{Binding HasSelectedFile}" />
+            </MenuFlyout>
+          </Button.Flyout>
+        </Button>
+      </WrapPanel>
+    </Border>
     <Grid Grid.Row="3" ColumnDefinitions="0.85*,14,1.15*">
       <Border Classes="card" IsVisible="{Binding IsPreviewVisible}">
         <Grid RowDefinitions="42,*">

@@ -34,7 +34,7 @@ public sealed partial class FilesView : UserControl
 
     private async void ManageFile(object? sender, RoutedEventArgs args)
     {
-        if (DataContext is not WorkspaceViewModel model || sender is not Button { Tag: string operation } ||
+        if (DataContext is not WorkspaceViewModel model || sender is not Control { Tag: string operation } ||
             !Enum.TryParse<WorkspaceFileOperation>(operation, out var kind) || TopLevel.GetTopLevel(this) is not Window owner) return;
         var dialog = new FileOperationDialog(model, kind);
         await dialog.ShowDialog(owner);

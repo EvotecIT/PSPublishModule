@@ -117,7 +117,7 @@ History is currently read-only. Commit comparison, opening the exact commit on G
 
 ### File-management milestone
 
-The files page now supports up-navigation, refresh, keyboard Enter, clipboard paths, opening externally, and explicit create/copy/move/rename dialogs. The shared explorer service keeps operations inside the selected working copy, rejects Git metadata and linked paths, and refuses existing destinations. Copy cancellation removes task-created partial output and retains the source. Unix file copies retain executable and restrictive permission modes. The dialog shows transfer progress and accepts cancellation while copying.
+The files page now supports up-navigation, refresh, keyboard Enter, clipboard paths, opening externally, and explicit create/copy/move/rename dialogs. Frequent actions use a compact icon-and-label toolbar; recovery, refresh, path copying and external opening live in its accessible More menu. The shared explorer service keeps operations inside the selected working copy, rejects Git metadata and linked paths, and refuses existing destinations. Copy cancellation removes task-created partial output and retains the source. Unix file copies retain executable and restrictive permission modes. The dialog shows transfer progress and accepts cancellation while copying.
 
 The working-copy root is retained independently of tree selection. A winning asynchronous selection repopulates the file list; refreshing a parent preserves loaded child-node identity. Operations refresh loaded source and destination folders, including expanded folders outside the central view.
 
@@ -126,8 +126,10 @@ Evidence:
 - Windows: 19 focused FileExplorerOperationsTests cases passed (Unix-only bodies are platform-guarded).
 - WSL: the same 19 cases passed using an isolated test project that linked the exact shared service, domain and test sources (Windows-only bodies are platform-guarded). This is file-service proof, not a full Linux repository/app build. WSL has SDK 10.0.112; the repository requests 10.0.303.
 - Avalonia: two tests passed with expanded real-Git discovery/navigation, copy dialog, destination collision, cross-directory move/tree refresh, UTF-16 preview and bounded binary/large-file behavior.
-- Rendered evidence inspected at 1600 × 1000 and 1050 × 720, plus the operation dialog. Compact layout hides the inspector and wraps file actions. Clipboard/external-opening and native modal interaction still need desktop proof.
+- Rendered evidence inspected at 1600 × 1000 and 1050 × 720, plus the operation dialog. The revised toolbar and open More menu were inspected in `Artifacts/StudioValidation/file-toolbar/`; at the compact viewport, the frequent actions fit in one row and the inspector is hidden. Clipboard/external-opening and native modal interaction still need desktop proof.
 - Local review: review_file_management inspected this milestone read-only against 7c4b36958. Three P2 findings (superseded navigation, destination-tree invalidation, Unix file modes) were fixed and tested. One targeted confirmation found the fixes addressed with no additional actionable finding. The navigation stress test does not force a particular read-completion schedule; the source fix always repopulates the winning request.
+
+The later toolbar refinement received a separate read-only review (`review_file_toolbar`). It found that icon-and-label buttons had lost their screen-reader names. The controls now set explicit automation names, and the real-repository headless test checks the names returned by Avalonia's automation peers, opens the More menu and captures its rendered state. The reviewer closed the finding in targeted confirmation. Native keyboard and screen-reader behavior remain unverified while the Windows session is locked.
 
 Next implementation focus: reviewed build plans and execution through canonical PowerForge services. The existing ProcessRunRequest already supports streaming stdout/stderr callbacks, and ReleaseBuildExecutionService already adapts project/module/unified release contracts. Reuse those owners rather than the old independent streaming implementation in ProjectBuildService.
 
