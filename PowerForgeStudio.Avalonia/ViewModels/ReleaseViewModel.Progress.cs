@@ -14,7 +14,7 @@ public sealed partial class ReleaseViewModel
     [ObservableProperty] private string _progressStatus = "";
     public bool HasExecutionProgress => ExecutionProgress.Count > 0;
     public bool HasDeterminateProgress => ProgressTotal > 0;
-    public bool ShowIndeterminateProgress => IsSigning && !HasDeterminateProgress;
+    public bool ShowIndeterminateProgress => (IsSigning || IsPublishing || IsVerifying) && !HasDeterminateProgress;
 
     partial void OnProgressTotalChanged(int value)
     {
@@ -29,6 +29,13 @@ public sealed partial class ReleaseViewModel
         ProgressTotal = 0;
         ProgressStatus = "";
         OnPropertyChanged(nameof(HasExecutionProgress));
+    }
+
+    private void BeginExecutionStage()
+    {
+        ProgressCompleted = 0;
+        ProgressTotal = 0;
+        ProgressStatus = "";
     }
 
     private void ApplyExecutionProgress(ReleaseArtifactProgress progress)

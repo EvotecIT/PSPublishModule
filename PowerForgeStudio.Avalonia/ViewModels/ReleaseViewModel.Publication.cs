@@ -39,8 +39,16 @@ public sealed partial class ReleaseViewModel
     public bool HasVerificationReceipts => VerificationReceipts.Count > 0;
 
     partial void OnIsInspectingPublicationChanged(bool value) => NotifyReleaseState();
-    partial void OnIsPublishingChanged(bool value) => NotifyReleaseState();
-    partial void OnIsVerifyingChanged(bool value) => NotifyReleaseState();
+    partial void OnIsPublishingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowIndeterminateProgress));
+        NotifyReleaseState();
+    }
+    partial void OnIsVerifyingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowIndeterminateProgress));
+        NotifyReleaseState();
+    }
     partial void OnConfirmPublicationChanged(bool value) => NotifyReleaseState();
 
     [RelayCommand]
@@ -70,7 +78,7 @@ public sealed partial class ReleaseViewModel
     {
         if (!CanPublish || Handoff is not { } captured || _publicationSnapshot is not { } inspected) return;
         using var cancellation = new CancellationTokenSource();
-        _publicationCancellation = cancellation; IsPublishing = true; Stage = "Publishing";
+        _publicationCancellation = cancellation; BeginExecutionStage(); IsPublishing = true; Stage = "Publishing";
         Status = "Rechecking the inspected destinations before publication…";
         try
         {
@@ -81,7 +89,7 @@ public sealed partial class ReleaseViewModel
                 Status = "Publication settings changed after inspection. Inspect the targets again before publishing."; return;
             }
             Status = "Publishing the signed artifacts to the inspected destinations…";
-            var result = await Task.Run(() => _publishing.PublishAsync(captured.Session, cancellation.Token));
+            var result = await Task.Run(() => _publishing.PublishAsync(captured.Session, cancellation.Token, new LiveProgressSink(this)));
             _pendingPublicationSave = result.PersistenceError is null ? null : result;
             HasUnpersistedEvidence = _pendingPublicationSave is not null;
             Handoff = captured with { Session = result.Session };
@@ -123,7 +131,8 @@ public sealed partial class ReleaseViewModel
         Status = "Checking each published destination…";
         try
         {
-            var result = await Task.Run(() => _verification.VerifyAsync(captured.Session, cancellation.Token));
+            BeginExecutionStage();
+            var result = await Task.Run(() => _verification.VerifyAsync(captured.Session, cancellation.Token, new LiveProgressSink(this)));
             _pendingVerificationSave = result.PersistenceError is null ? null : result;
             HasUnpersistedEvidence = _pendingVerificationSave is not null;
             Handoff = captured with { Session = result.Session };

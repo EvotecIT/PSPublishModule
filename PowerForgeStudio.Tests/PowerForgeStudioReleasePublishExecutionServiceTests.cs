@@ -163,8 +163,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         {
             using var _ = new EnvironmentScope()
                 .Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+            var progress = new PublishProgressSink();
 
-            var result = await service.ExecuteAsync(queueItem);
+            var result = await service.ExecuteAsync(queueItem, CancellationToken.None, progress);
 
             Assert.True(
                 result.Succeeded,
@@ -177,6 +178,59 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             var receipt = Assert.Single(result.Receipts);
             Assert.Equal(Domain.Publish.ReleasePublishReceiptStatus.Published, receipt.Status);
             Assert.Contains("dotnet nuget push", receipt.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(["Planned", "Publishing", "Published"], progress.Events.Select(static item => item.State));
+            Assert.Equal(1, progress.Events[^1].CompletedItems);
+            Assert.Equal(1, progress.Events[^1].TotalItems);
+        }
+        finally
+        {
+            try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task NormalProjectFailureTerminalizesLaterReviewedTargetsWithoutRunningThem()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeStudio.Tests", Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var buildDirectory = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Build")).FullName;
+            File.WriteAllText(Path.Combine(buildDirectory, "Build-Project.ps1"), "# build");
+            File.WriteAllText(Path.Combine(buildDirectory, "Build-Module.ps1"), "# build");
+            var projectConfig = Path.Combine(buildDirectory, "project.build.json");
+            File.WriteAllText(projectConfig, """{"PublishNuget":true,"PublishSource":"https://api.nuget.org/v3/index.json","PublishApiKey":""}""");
+            var packagePath = Path.Combine(repositoryRoot, "Artifacts", "Package.1.0.0.nupkg");
+            Directory.CreateDirectory(Path.GetDirectoryName(packagePath)!);
+            File.WriteAllText(packagePath, "package");
+            var modulePath = Directory.CreateDirectory(Path.Combine(repositoryRoot, "Artifacts", "Module")).FullName;
+            File.WriteAllText(Path.Combine(modulePath, "Fixture.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            var receipts = new[] {
+                new ReleaseSigningReceipt(repositoryRoot, "Fixture", ReleaseBuildAdapterKind.ProjectBuild.ToString(), packagePath, "File",
+                    ReleaseSigningReceiptStatus.Signed, "Signed.", DateTimeOffset.UtcNow),
+                new ReleaseSigningReceipt(repositoryRoot, "Fixture", ReleaseBuildAdapterKind.ModuleBuild.ToString(), modulePath, "Directory",
+                    ReleaseSigningReceiptStatus.Signed, "Signed.", DateTimeOffset.UtcNow)
+            }.Select(ReleaseSigningArtifactIntegrity.Capture).ToArray();
+            var signing = new ReleaseSigningExecutionResult(repositoryRoot, true, "Signed.",
+                CreateProjectBuildCheckpoint(repositoryRoot, projectConfig), receipts);
+            var item = new ReleaseQueueItem(repositoryRoot, "Fixture", ReleaseRepositoryKind.Mixed, ReleaseWorkspaceKind.PrimaryRepository,
+                1, ReleaseQueueStage.Publish, ReleaseQueueItemStatus.ReadyToRun, "Ready.", "publish.ready",
+                JsonSerializer.Serialize(signing), DateTimeOffset.UtcNow);
+            var progress = new PublishProgressSink();
+            var service = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(),
+                new ModuleBuildHostService(),
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(),
+                new ProjectBuildPublishHostService(),
+                (_, _) => throw new InvalidOperationException("NuGet publisher must not run without an API key."));
+            using var _ = new EnvironmentScope().Set("RELEASE_OPS_STUDIO_ENABLE_PUBLISH", "true");
+
+            var result = await service.ExecuteAsync(item, CancellationToken.None, progress);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(2, progress.Events.Where(static entry => entry.State == "Failed").Count());
+            Assert.DoesNotContain(progress.Events.GroupBy(static entry => entry.ItemName).Select(static group => group.Last()),
+                static entry => entry.State is "Planned" or "Publishing");
         }
         finally
         {
@@ -646,6 +700,17 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
     {
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => throw new InvalidOperationException("PowerShell should not be used for project publish planning when shared host service is available.");
+    }
+
+    private sealed class PublishProgressSink : IReleaseArtifactProgressSink
+    {
+        public List<ReleaseArtifactProgress> Events { get; } = [];
+
+        public ValueTask ReportAsync(ReleaseArtifactProgress progress, CancellationToken cancellationToken = default)
+        {
+            Events.Add(progress);
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class EnvironmentScope : IDisposable

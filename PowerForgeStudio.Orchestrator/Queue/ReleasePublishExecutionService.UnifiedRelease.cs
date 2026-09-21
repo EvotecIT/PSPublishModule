@@ -199,7 +199,8 @@ public sealed partial class ReleasePublishExecutionService
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
         CancellationToken cancellationToken,
-        PowerForgeReleaseResult? validatedUnifiedRelease = null)
+        PowerForgeReleaseResult? validatedUnifiedRelease,
+        ReleasePublicationProgressTracker progress)
     {
         var buildResult = _checkpointSerializer.TryDeserialize<ReleaseBuildExecutionResult>(signingResult.SourceCheckpointStateJson);
         if (buildResult is null || string.IsNullOrWhiteSpace(buildResult.UnifiedReleaseStateJson))
@@ -221,6 +222,10 @@ public sealed partial class ReleasePublishExecutionService
                 ?? throw new InvalidOperationException("Unified release build state could not be deserialized.");
             ApplySignedCheckpointArtifacts(builtReleaseResult, signingResult);
             cancellationToken.ThrowIfCancellationRequested();
+            await progress.StartAsync(
+                static target => string.Equals(target.AdapterKind, "UnifiedRelease", StringComparison.OrdinalIgnoreCase),
+                "The reviewed unified release targets are now in flight. An interruption requires remote-state reconciliation.",
+                cancellationToken).ConfigureAwait(false);
             var result = await Task.Run(
                     () => _publishUnifiedRelease(
                         repository.UnifiedReleaseConfigPath!,
@@ -313,6 +318,11 @@ public sealed partial class ReleasePublishExecutionService
                 receipts.Add(FailedReceipt(repository.RootPath, repository.Name, "UnifiedRelease", "GitHub release", null, result.ErrorMessage ?? "Unified GitHub publishing failed."));
 
             if (!result.Success) cancellationToken.ThrowIfCancellationRequested();
+            await progress.CompleteAsync(
+                static target => string.Equals(target.AdapterKind, "UnifiedRelease", StringComparison.OrdinalIgnoreCase),
+                receipts,
+                "The unified release engine returned no receipt for this reviewed target.",
+                cancellationToken).ConfigureAwait(false);
             return receipts;
         }
         catch (Exception ex) { throw new PublicationInterruptedException(receipts, ex); }

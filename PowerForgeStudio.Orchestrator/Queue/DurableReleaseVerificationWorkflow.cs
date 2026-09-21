@@ -12,6 +12,14 @@ public sealed record ReleaseVerificationWorkflowResult(ReleaseQueueSession Sessi
 public interface IReleaseVerificationWorkflow
 {
     Task<ReleaseVerificationWorkflowResult> VerifyAsync(ReleaseQueueSession session, CancellationToken cancellationToken = default);
+    Task<ReleaseVerificationWorkflowResult> VerifyAsync(
+        ReleaseQueueSession session,
+        CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
+        => progress is null
+            ? VerifyAsync(session, cancellationToken)
+            : Task.FromException<ReleaseVerificationWorkflowResult>(new InvalidOperationException(
+                "This verification workflow does not support live progress."));
     Task<ReleaseVerificationWorkflowResult> RetrySaveAsync(ReleaseVerificationWorkflowResult result, CancellationToken cancellationToken = default);
 }
 
@@ -27,6 +35,12 @@ public sealed class DurableReleaseVerificationWorkflow(string databasePath, IRel
     }
 
     public async Task<ReleaseVerificationWorkflowResult> VerifyAsync(ReleaseQueueSession session, CancellationToken cancellationToken = default)
+        => await VerifyAsync(session, cancellationToken, progress: null).ConfigureAwait(false);
+
+    public async Task<ReleaseVerificationWorkflowResult> VerifyAsync(
+        ReleaseQueueSession session,
+        CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
     {
         ArgumentNullException.ThrowIfNull(session);
         var item = session.Items.Single();
@@ -44,10 +58,12 @@ public sealed class DurableReleaseVerificationWorkflow(string databasePath, IRel
         if (!await database.TryAdvanceReleaseCheckpointAsync(session, marker, cancellationToken: cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("The saved release checkpoint changed or is missing. Reload it before verifying.");
 
+        var durableProgress = new DurableReleaseArtifactProgressSink(database, marker.SessionId, progress);
+
         ReleaseVerificationExecutionResult execution;
         try
         {
-            execution = await _verifier.ExecuteAsync(item, cancellationToken).ConfigureAwait(false);
+            execution = await _verifier.ExecuteAsync(item, cancellationToken, durableProgress).ConfigureAwait(false);
             if (execution.RootPath != item.RootPath || execution.Receipts.Any(receipt => receipt.RootPath != item.RootPath))
                 throw new InvalidOperationException("Verifier returned evidence for a different working copy.");
         }

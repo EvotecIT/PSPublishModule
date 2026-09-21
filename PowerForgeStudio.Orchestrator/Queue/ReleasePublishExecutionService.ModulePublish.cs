@@ -151,7 +151,8 @@ public sealed partial class ReleasePublishExecutionService
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
         CancellationToken cancellationToken,
-        bool suppressGitHub)
+        bool suppressGitHub,
+        ReleasePublicationProgressTracker progress)
     {
         ModulePublishConfigurationSet publishSet;
         try
@@ -193,6 +194,12 @@ public sealed partial class ReleasePublishExecutionService
                 {
                     if (suppressGitHub)
                         continue;
+                    await progress.StartAsync(
+                        static target =>
+                            string.Equals(target.AdapterKind, "ModuleBuild", StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(target.TargetKind, "GitHub", StringComparison.OrdinalIgnoreCase),
+                        "Publishing the signed module assets to the reviewed GitHub destination.",
+                        cancellationToken).ConfigureAwait(false);
                     receipts.Add(await ExecuteModuleGitHubPublishAsync(
                         repository,
                         publishConfig,
@@ -202,6 +209,12 @@ public sealed partial class ReleasePublishExecutionService
                     continue;
                 }
 
+                await progress.StartAsync(
+                    static target =>
+                        string.Equals(target.AdapterKind, "ModuleBuild", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(target.TargetKind, "PowerShellRepository", StringComparison.OrdinalIgnoreCase),
+                    "Publishing the signed module package to the reviewed PowerShell repository.",
+                    cancellationToken).ConfigureAwait(false);
                 receipts.Add(await ExecuteModuleRepositoryPublishAsync(
                     repository,
                     publishConfig,
@@ -209,6 +222,21 @@ public sealed partial class ReleasePublishExecutionService
                     packageDetails,
                     cancellationToken));
             }
+
+            await progress.CompleteAsync(
+                static target =>
+                    string.Equals(target.AdapterKind, "ModuleBuild", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(target.TargetKind, "PowerShellRepository", StringComparison.OrdinalIgnoreCase),
+                receipts.Where(static receipt => string.Equals(receipt.TargetKind, "PowerShellRepository", StringComparison.OrdinalIgnoreCase)).ToArray(),
+                "No PowerShell repository receipt was returned.",
+                cancellationToken).ConfigureAwait(false);
+            await progress.CompleteAsync(
+                static target =>
+                    string.Equals(target.AdapterKind, "ModuleBuild", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(target.TargetKind, "GitHub", StringComparison.OrdinalIgnoreCase),
+                receipts.Where(static receipt => string.Equals(receipt.TargetKind, "GitHub", StringComparison.OrdinalIgnoreCase)).ToArray(),
+                "No module GitHub receipt was returned.",
+                cancellationToken).ConfigureAwait(false);
 
             return receipts;
         }

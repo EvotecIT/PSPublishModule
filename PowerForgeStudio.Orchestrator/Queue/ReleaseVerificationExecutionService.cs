@@ -67,6 +67,12 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
     }
 
     public async Task<ReleaseVerificationExecutionResult> ExecuteAsync(ReleaseQueueItem queueItem, CancellationToken cancellationToken = default)
+        => await ExecuteAsync(queueItem, cancellationToken, progress: null).ConfigureAwait(false);
+
+    public async Task<ReleaseVerificationExecutionResult> ExecuteAsync(
+        ReleaseQueueItem queueItem,
+        CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
     {
         ArgumentNullException.ThrowIfNull(queueItem);
 
@@ -95,37 +101,124 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
                 ]);
         }
 
-        var receipts = new List<ReleaseVerificationReceipt>(publishResult.Receipts.Count);
-        foreach (var receipt in publishResult.Receipts)
+        for (var index = 0; index < publishResult.Receipts.Count; index++)
         {
+            var planned = publishResult.Receipts[index];
+            await progress.ReportAsync(
+                ReleaseQueueStage.Verify,
+                planned.TargetName,
+                planned.SourcePath,
+                "Planned",
+                completedItems: 0,
+                totalItems: publishResult.Receipts.Count,
+                $"Recorded {planned.TargetKind} destination ready for verification.",
+                CancellationToken.None).ConfigureAwait(false);
+        }
+
+        var receipts = new List<ReleaseVerificationReceipt>(publishResult.Receipts.Count);
+        for (var index = 0; index < publishResult.Receipts.Count; index++)
+        {
+            var receipt = publishResult.Receipts[index];
+            await progress.ReportAsync(
+                ReleaseQueueStage.Verify,
+                receipt.TargetName,
+                receipt.SourcePath,
+                "Checking",
+                index,
+                publishResult.Receipts.Count,
+                $"Checking the recorded {receipt.TargetKind} destination.",
+                CancellationToken.None).ConfigureAwait(false);
+            ReleaseVerificationReceipt result;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var result = await VerifyReceiptAsync(receipt, cancellationToken).ConfigureAwait(false);
+                result = await VerifyReceiptAsync(receipt, cancellationToken).ConfigureAwait(false);
                 // Some hosts return a failed probe when cancelled instead of throwing.
                 if (result.Status != ReleaseVerificationReceiptStatus.Verified)
                     cancellationToken.ThrowIfCancellationRequested();
-                receipts.Add(result);
             }
             catch (Exception exception)
             {
                 var cancelled = cancellationToken.IsCancellationRequested || exception is OperationCanceledException;
-                receipts.Add(FailedReceipt(receipt.RootPath, receipt.RepositoryName, receipt.AdapterKind,
+                var failed = FailedReceipt(receipt.RootPath, receipt.RepositoryName, receipt.AdapterKind,
                     receipt.TargetName, receipt.Destination,
                     cancelled ? "Verification was cancelled before this check completed."
                         : "Verification was interrupted before this check completed. Retry verification to check remote state.",
-                    receipt.TargetKind));
-                return ReleaseQueueExecutionResultFactory.CreateVerificationResult(queueItem, receipts) with
+                    receipt.TargetKind);
+                receipts.Add(failed);
+                var progressSaved = await TryReportTerminalProgressAsync(
+                    progress,
+                    ReleaseQueueStage.Verify,
+                    receipt.TargetName,
+                    receipt.SourcePath,
+                    cancelled ? "Cancelled" : "Failed",
+                    index + 1,
+                    publishResult.Receipts.Count,
+                    failed.Summary,
+                    CancellationToken.None).ConfigureAwait(false);
+                var failedResult = ReleaseQueueExecutionResultFactory.CreateVerificationResult(queueItem, receipts) with
                 {
                     WasCancelled = cancelled,
                     Summary = cancelled ? "Verification cancelled; completed check results retained."
                         : "Verification interrupted; completed check results retained."
                 };
+                return progressSaved ? failedResult : ProgressPersistenceFailure(queueItem, receipts, cancelled);
             }
+
+            receipts.Add(result);
+            var terminalSaved = await TryReportTerminalProgressAsync(
+                progress,
+                ReleaseQueueStage.Verify,
+                receipt.TargetName,
+                receipt.SourcePath,
+                result.Status.ToString(),
+                index + 1,
+                publishResult.Receipts.Count,
+                result.Summary,
+                CancellationToken.None).ConfigureAwait(false);
+            if (!terminalSaved)
+                return ProgressPersistenceFailure(queueItem, receipts, cancelled: false);
         }
 
         return ReleaseQueueExecutionResultFactory.CreateVerificationResult(queueItem, receipts);
     }
+
+    private static async Task<bool> TryReportTerminalProgressAsync(
+        IReleaseArtifactProgressSink? progress,
+        ReleaseQueueStage stage,
+        string itemName,
+        string? itemPath,
+        string state,
+        int completedItems,
+        int totalItems,
+        string detail,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await progress.ReportAsync(stage, itemName, itemPath, state, completedItems, totalItems, detail, cancellationToken)
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static ReleaseVerificationExecutionResult ProgressPersistenceFailure(
+        ReleaseQueueItem queueItem,
+        IReadOnlyList<ReleaseVerificationReceipt> receipts,
+        bool cancelled)
+        => new(
+            queueItem.RootPath,
+            false,
+            "A verification check completed, but its progress update could not be saved. Completed receipts were retained; retry verification to finish the remaining targets.",
+            queueItem.CheckpointStateJson,
+            receipts)
+        {
+            WasCancelled = cancelled
+        };
 
     private async Task<ReleaseVerificationReceipt> VerifyReceiptAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
     {

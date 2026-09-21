@@ -11,7 +11,8 @@ public sealed partial class ReleasePublishExecutionService
         PowerForgeReleaseSpec spec,
         ReleaseSigningExecutionResult signingResult,
         CancellationToken cancellationToken,
-        PowerForgeReleaseResult? validatedUnifiedRelease = null)
+        PowerForgeReleaseResult? validatedUnifiedRelease,
+        ReleasePublicationProgressTracker progress)
     {
         ValidateModulePublishCheckpoint(repository, signingResult);
         IReadOnlyList<ModulePackageReleaseLane> lanes;
@@ -98,6 +99,10 @@ public sealed partial class ReleasePublishExecutionService
                     }
                     else
                     {
+                        await progress.StartAsync(
+                            static target => string.Equals(target.TargetKind, "ModulePackages", StringComparison.OrdinalIgnoreCase),
+                            $"Publishing signed packages for module package lane '{lane.Name}'.",
+                            cancellationToken).ConfigureAwait(false);
                         foreach (var package in packages)
                         {
                             var publish = await PublishNugetPackageAsync(
@@ -143,6 +148,10 @@ public sealed partial class ReleasePublishExecutionService
                         continue;
                     }
 
+                    await progress.StartAsync(
+                        static target => string.Equals(target.TargetKind, "ModulePackages", StringComparison.OrdinalIgnoreCase),
+                        $"Publishing the signed GitHub assets for module package lane '{lane.Name}'.",
+                        cancellationToken).ConfigureAwait(false);
                     var publishSummary = await Task.Run(
                             () => _projectBuildPublishHostService.PublishGitHub(publishConfig, plan),
                             cancellationToken)
@@ -162,6 +171,12 @@ public sealed partial class ReleasePublishExecutionService
                     if (!publishSummary.Success) cancellationToken.ThrowIfCancellationRequested();
                 }
             }
+
+            await progress.CompleteAsync(
+                static target => string.Equals(target.TargetKind, "ModulePackages", StringComparison.OrdinalIgnoreCase),
+                receipts.Where(static receipt => string.Equals(receipt.TargetKind, "ModulePackages", StringComparison.OrdinalIgnoreCase)).ToArray(),
+                "No module-owned package publication receipt was returned.",
+                cancellationToken).ConfigureAwait(false);
 
             return receipts;
         }

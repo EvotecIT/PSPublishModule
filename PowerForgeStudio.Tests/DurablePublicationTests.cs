@@ -25,6 +25,8 @@ public sealed class DurablePublicationTests
             var marker = (await new ReleaseStateDatabase(path).LoadReleaseCheckpointAsync(session.SessionId))!;
             var state = new ReleaseQueueCheckpointSerializer().TryDeserialize<ReleasePublishExecutionResult>(marker.Session.Items[0].CheckpointStateJson)!;
             Assert.True(state.RequiresReconciliation); Assert.False(state.Succeeded);
+            Assert.Equal("Publishing", Assert.Single(marker.Progress).State);
+            Assert.Equal(ReleaseQueueStage.Publish, marker.Progress[0].Stage);
             await Assert.ThrowsAsync<InvalidOperationException>(() => new DurableReleasePublicationWorkflow(path, executor).PublishAsync(session));
             var signingItem = session.Items[0] with { Stage = ReleaseQueueStage.Sign, Status = ReleaseQueueItemStatus.WaitingApproval };
             var handoff = new ReleaseBuildHandoff(ReleaseQueueSessionFactory.Create(root, [signingItem], DateTimeOffset.UtcNow), []);
@@ -37,6 +39,7 @@ public sealed class DurablePublicationTests
             var reopened = (await database.LoadReleaseCheckpointAsync(session.SessionId))!;
             Assert.Equal(interrupt ? ReleaseQueueStage.Publish : ReleaseQueueStage.Verify, reopened.Session.Items[0].Stage);
             Assert.Equal(interrupt ? 0 : 1, reopened.PublishReceipts.Count);
+            Assert.Equal(interrupt ? "Publishing" : "Published", reopened.Progress[^1].State);
             await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.PublishAsync(session));
             Assert.Equal(1, executor.Calls);
         }
@@ -89,6 +92,53 @@ public sealed class DurablePublicationTests
         finally { Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public async Task ProgressJournalFailureStopsBeforeRemoteMutation()
+    {
+        var root = NewRoot();
+        try
+        {
+            var path = Path.Combine(root, "state.db");
+            var database = new ReleaseStateDatabase(path);
+            await database.InitializeAsync();
+            var session = Session(root);
+            await database.PersistQueueSessionAsync(session);
+            await new DBAClientX.SQLite().ExecuteNonQueryAsync(path,
+                "CREATE TRIGGER reject_publish_progress BEFORE INSERT ON release_execution_progress BEGIN SELECT RAISE(ABORT, 'fixture journal failure'); END;");
+            var executor = new ControlledPublisher(false);
+            executor.Finish.TrySetResult();
+
+            var result = await new DurableReleasePublicationWorkflow(path, executor).PublishAsync(session);
+
+            Assert.False(executor.RemoteMutated);
+            Assert.True(result.Execution.RequiresReconciliation);
+            Assert.Empty(result.Execution.Receipts);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task LegacyPublisherWithoutProgressContractFailsClosedBeforeRemoteMutation()
+    {
+        var root = NewRoot();
+        try
+        {
+            var path = Path.Combine(root, "state.db");
+            var database = new ReleaseStateDatabase(path);
+            await database.InitializeAsync();
+            var session = Session(root);
+            await database.PersistQueueSessionAsync(session);
+            var executor = new LegacyPublisher();
+
+            var result = await new DurableReleasePublicationWorkflow(path, executor).PublishAsync(session);
+
+            Assert.Equal(0, executor.Calls);
+            Assert.True(result.Execution.RequiresReconciliation);
+            Assert.Empty(result.Execution.Receipts);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     private static string NewRoot() => Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-durable-publish-" + Guid.NewGuid().ToString("N"))).FullName;
     private static ReleaseQueueSession Session(string root) => ReleaseQueueSessionFactory.Create(root,
         [new(root, "Fixture", default, default, 1, ReleaseQueueStage.Publish, ReleaseQueueItemStatus.ReadyToRun, "Signed", "publish.ready", "{}", DateTimeOffset.UtcNow)], DateTimeOffset.UtcNow);
@@ -96,15 +146,47 @@ public sealed class DurablePublicationTests
     private sealed class ControlledPublisher(bool interrupt, bool multiple = false) : IReleasePublishExecutionService
     {
         public int Calls;
+        public bool RemoteMutated;
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Finish { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async Task<ReleasePublishExecutionResult> ExecuteAsync(ReleaseQueueItem item, CancellationToken cancellationToken = default)
+            => await ExecuteAsync(item, cancellationToken, progress: null);
+
+        public async Task<ReleasePublishExecutionResult> ExecuteAsync(
+            ReleaseQueueItem item,
+            CancellationToken cancellationToken,
+            IReleaseArtifactProgressSink? progress)
         {
-            Calls++; Started.TrySetResult(); await Finish.Task;
+            Calls++;
+            await progress.ReportAsync(ReleaseQueueStage.Publish, "Fixture", "fixture.nupkg", "Publishing", 0, 1,
+                "Publishing fixture package.", CancellationToken.None);
+            Started.TrySetResult();
+            await Finish.Task;
             if (interrupt) throw new IOException("Unknown remote outcome");
+            RemoteMutated = true;
             var receipt = new ReleasePublishReceipt(item.RootPath, item.RepositoryName, "ProjectBuild", "Fixture", "NuGet", "fixture feed", "fixture.nupkg", ReleasePublishReceiptStatus.Published, "Published", DateTimeOffset.UtcNow);
+            await progress.ReportAsync(ReleaseQueueStage.Publish, "Fixture", "fixture.nupkg", "Published", 1, 1,
+                receipt.Summary, CancellationToken.None);
             return new(item.RootPath, true, "Published", item.CheckpointStateJson,
                 multiple ? [receipt, receipt with { Destination = "fixture release", PublishedAtUtc = receipt.PublishedAtUtc.AddSeconds(1) }] : [receipt]);
+        }
+    }
+
+    private sealed class LegacyPublisher : IReleasePublishExecutionService
+    {
+        public int Calls;
+
+        public Task<ReleasePublishExecutionResult> ExecuteAsync(
+            ReleaseQueueItem item,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(new ReleasePublishExecutionResult(
+                item.RootPath,
+                true,
+                "Legacy publisher ran.",
+                item.CheckpointStateJson,
+                []));
         }
     }
 }

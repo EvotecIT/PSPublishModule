@@ -48,6 +48,10 @@ public sealed class ReleasePublicationFlowTests
                 Assert.Equal("Release verified", release.Stage);
                 Assert.Equal("Publication and verification receipts are recorded below.", release.PublicationSummary);
                 Assert.Equal(ReleaseQueueStage.Completed, release.Handoff!.Session.Items.Single().Stage);
+                Assert.Contains(release.ExecutionProgress, item => item.Stage == ReleaseQueueStage.Publish && item.State == "Published");
+                Assert.Contains(release.ExecutionProgress, item => item.Stage == ReleaseQueueStage.Verify && item.State == "Verified");
+                Assert.Equal(1, release.ProgressCompleted);
+                Assert.Equal(1, release.ProgressTotal);
 
                 using var workspace = new WorkspaceViewModel(root, release: release);
                 workspace.ShowReleaseCommand.Execute(null);
@@ -101,32 +105,36 @@ public sealed class ReleasePublicationFlowTests
     [Fact]
     public async Task UnsavedPublicationEvidenceBlocksReleaseUntilLocalRetrySucceeds()
     {
-        var root = Path.GetTempPath();
-        var publishing = new PendingPublishing();
-        using var release = new ReleaseViewModel(new Handoff(root), new Signing(), publication: new Preview(root),
-            publishing: publishing, verification: new Verification());
-        using var workspace = new WorkspaceViewModel(root, release: release);
-        release.SetBuild(new(root, true, "Built", 1, []), false, false);
-        await release.PrepareAsync(); await release.SignAsync(); await release.InspectPublicationAsync();
-        release.ConfirmPublication = true;
+        await TestAppBuilder.RunAsync(async () =>
+        {
+            var root = Path.GetTempPath();
+            var publishing = new PendingPublishing();
+            using var release = new ReleaseViewModel(new Handoff(root), new Signing(), publication: new Preview(root),
+                publishing: publishing, verification: new Verification());
+            using var workspace = new WorkspaceViewModel(root, release: release);
+            release.SetBuild(new(root, true, "Built", 1, []), false, false);
+            await release.PrepareAsync(); await release.SignAsync(); await release.InspectPublicationAsync();
+            release.ConfirmPublication = true;
 
-        await release.PublishAsync();
+            await release.PublishAsync();
 
-        Assert.True(release.HasUnpersistedEvidence);
-        Assert.True(release.HasProtectedReleaseWork);
-        Assert.True(workspace.Build.IsReleaseRunning);
-        Assert.False(release.CanVerify);
-        Assert.Throws<InvalidOperationException>(() => release.SetBuild(null, true, false));
-        workspace.ShowReleaseCommand.Execute(null);
-        workspace.ShowFilesCommand.Execute(null);
-        Assert.True(workspace.IsReleasePage);
-        Assert.Contains("unsaved receipts", release.Status);
-        await release.RetrySaveReceiptsAsync();
-        Assert.False(release.HasUnpersistedEvidence);
-        Assert.False(workspace.Build.IsReleaseRunning);
-        Assert.True(release.CanVerify);
-        Assert.Equal(1, publishing.PublishCalls);
-        Assert.Equal(1, publishing.SaveCalls);
+            Assert.True(release.HasUnpersistedEvidence);
+            Assert.True(release.HasProtectedReleaseWork);
+            Assert.True(workspace.Build.IsReleaseRunning);
+            Assert.False(release.CanVerify);
+            Assert.Throws<InvalidOperationException>(() => release.SetBuild(null, true, false));
+            workspace.ShowReleaseCommand.Execute(null);
+            workspace.ShowFilesCommand.Execute(null);
+            Assert.True(workspace.IsReleasePage);
+            Assert.Contains("unsaved receipts", release.Status);
+            await release.RetrySaveReceiptsAsync();
+            Assert.False(release.HasUnpersistedEvidence);
+            Assert.False(workspace.Build.IsReleaseRunning);
+            Assert.True(release.CanVerify);
+            Assert.Equal(1, publishing.PublishCalls);
+            Assert.Equal(1, publishing.SaveCalls);
+            return true;
+        });
     }
 
     private sealed class Handoff(string root) : IReleaseBuildHandoffService
@@ -166,13 +174,25 @@ public sealed class ReleasePublicationFlowTests
     {
         public int Calls;
         public Task<ReleasePublicationWorkflowResult> PublishAsync(ReleaseQueueSession session, CancellationToken cancellationToken = default)
+            => PublishAsync(session, cancellationToken, progress: null);
+
+        public async Task<ReleasePublicationWorkflowResult> PublishAsync(
+            ReleaseQueueSession session,
+            CancellationToken cancellationToken,
+            IReleaseArtifactProgressSink? progress)
         {
             Calls++;
             var item = session.Items.Single();
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Publish, "Fixture.1.0.0.nupkg", "Fixture.1.0.0.nupkg", "Publishing", 0, 1,
+                    "Publishing fixture package.", DateTimeOffset.UtcNow), CancellationToken.None);
             var receipt = new ReleasePublishReceipt(item.RootPath, item.RepositoryName, "ProjectBuild", "Fixture.1.0.0.nupkg", "NuGet",
                 "https://feed.example.test/v3", "Fixture.1.0.0.nupkg", ReleasePublishReceiptStatus.Published, "Published", DateTimeOffset.UtcNow);
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Publish, receipt.TargetName, receipt.SourcePath, "Published", 1, 1,
+                    receipt.Summary, DateTimeOffset.UtcNow), CancellationToken.None);
             var execution = new ReleasePublishExecutionResult(item.RootPath, true, "Published", item.CheckpointStateJson, [receipt]);
-            return Task.FromResult(new ReleasePublicationWorkflowResult(new ReleaseQueueRunner().CompletePublish(session, item.RootPath, execution).Session, execution));
+            return new ReleasePublicationWorkflowResult(new ReleaseQueueRunner().CompletePublish(session, item.RootPath, execution).Session, execution);
         }
         public Task<ReleasePublicationWorkflowResult> RetrySaveAsync(ReleasePublicationWorkflowResult result, CancellationToken cancellationToken = default) => Task.FromResult(result);
     }
@@ -192,6 +212,20 @@ public sealed class ReleasePublicationFlowTests
             return Task.FromResult(new ReleasePublicationWorkflowResult(completed, execution)
                 { PersistenceError = "Fixture save failure", PendingCheckpoint = session });
         }
+        public async Task<ReleasePublicationWorkflowResult> PublishAsync(
+            ReleaseQueueSession session,
+            CancellationToken cancellationToken,
+            IReleaseArtifactProgressSink? progress)
+        {
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Publish, "Fixture", "Fixture.nupkg", "Publishing", 0, 1,
+                    "Publishing fixture package.", DateTimeOffset.UtcNow), CancellationToken.None);
+            var result = await PublishAsync(session, cancellationToken);
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Publish, "Fixture", "Fixture.nupkg", "Published", 1, 1,
+                    "Published.", DateTimeOffset.UtcNow), CancellationToken.None);
+            return result;
+        }
         public Task<ReleasePublicationWorkflowResult> RetrySaveAsync(ReleasePublicationWorkflowResult result, CancellationToken cancellationToken = default)
         {
             SaveCalls++;
@@ -203,13 +237,25 @@ public sealed class ReleasePublicationFlowTests
     {
         public int Calls;
         public Task<ReleaseVerificationWorkflowResult> VerifyAsync(ReleaseQueueSession session, CancellationToken cancellationToken = default)
+            => VerifyAsync(session, cancellationToken, progress: null);
+
+        public async Task<ReleaseVerificationWorkflowResult> VerifyAsync(
+            ReleaseQueueSession session,
+            CancellationToken cancellationToken,
+            IReleaseArtifactProgressSink? progress)
         {
             Calls++;
             var item = session.Items.Single();
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Verify, "Fixture.1.0.0.nupkg", "Fixture.1.0.0.nupkg", "Checking", 0, 1,
+                    "Checking fixture feed.", DateTimeOffset.UtcNow), CancellationToken.None);
             var receipt = new ReleaseVerificationReceipt(item.RootPath, item.RepositoryName, "ProjectBuild", "Fixture.1.0.0.nupkg", "NuGet",
                 "https://feed.example.test/v3", ReleaseVerificationReceiptStatus.Verified, "Verified", DateTimeOffset.UtcNow);
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Verify, receipt.TargetName, "Fixture.1.0.0.nupkg", "Verified", 1, 1,
+                    receipt.Summary, DateTimeOffset.UtcNow), CancellationToken.None);
             var execution = new ReleaseVerificationExecutionResult(item.RootPath, true, "Verified", item.CheckpointStateJson, [receipt]);
-            return Task.FromResult(new ReleaseVerificationWorkflowResult(new ReleaseQueueRunner().CompleteVerification(session, item.RootPath, execution).Session, execution));
+            return new ReleaseVerificationWorkflowResult(new ReleaseQueueRunner().CompleteVerification(session, item.RootPath, execution).Session, execution);
         }
         public Task<ReleaseVerificationWorkflowResult> RetrySaveAsync(ReleaseVerificationWorkflowResult result, CancellationToken cancellationToken = default) => Task.FromResult(result);
     }

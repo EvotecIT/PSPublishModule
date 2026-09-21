@@ -33,6 +33,8 @@ public sealed class DurableVerificationTests
             Assert.False(state.Succeeded);
             Assert.Equal(ReleaseQueueStage.Verify, marker.Session.Items[0].Stage);
             Assert.Equal(ReleaseQueueItemStatus.Failed, marker.Session.Items[0].Status);
+            Assert.Equal("Checking", Assert.Single(marker.Progress).State);
+            Assert.Equal(ReleaseQueueStage.Verify, marker.Progress[0].Stage);
             await Assert.ThrowsAsync<InvalidOperationException>(() => new DurableReleaseVerificationWorkflow(path, executor).VerifyAsync(session));
 
             var signingItem = session.Items[0] with { Stage = ReleaseQueueStage.Sign, Status = ReleaseQueueItemStatus.WaitingApproval };
@@ -48,6 +50,7 @@ public sealed class DurableVerificationTests
             var reopened = (await database.LoadReleaseCheckpointAsync(session.SessionId))!;
             Assert.Equal(interrupt ? ReleaseQueueStage.Verify : ReleaseQueueStage.Completed, reopened.Session.Items[0].Stage);
             Assert.Equal(interrupt ? 0 : 2, reopened.VerificationReceipts.Count);
+            Assert.Equal(interrupt ? "Checking" : "Verified", reopened.Progress[^1].State);
             await Assert.ThrowsAsync<InvalidOperationException>(() => workflow.VerifyAsync(session));
             Assert.Equal(1, executor.Calls);
         }
@@ -126,6 +129,55 @@ public sealed class DurableVerificationTests
     }
 
     [Fact]
+    public async Task ProgressJournalFailureStopsBeforeRemoteProbe()
+    {
+        var root = NewRoot();
+        try
+        {
+            var path = Path.Combine(root, "state.db");
+            var database = new ReleaseStateDatabase(path);
+            await database.InitializeAsync();
+            var session = Session(root);
+            await database.PersistQueueSessionAsync(session);
+            await new SQLite().ExecuteNonQueryAsync(path,
+                "CREATE TRIGGER reject_verify_progress BEFORE INSERT ON release_execution_progress BEGIN SELECT RAISE(ABORT, 'fixture journal failure'); END;");
+            var executor = new ControlledVerifier(false);
+            executor.Finish.TrySetResult();
+            using var workflow = new DurableReleaseVerificationWorkflow(path, executor);
+
+            var result = await workflow.VerifyAsync(session);
+
+            Assert.False(executor.RemoteProbed);
+            Assert.False(result.Execution.Succeeded);
+            Assert.Empty(result.Execution.Receipts);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task LegacyVerifierWithoutProgressContractFailsClosedBeforeRemoteProbe()
+    {
+        var root = NewRoot();
+        try
+        {
+            var path = Path.Combine(root, "state.db");
+            var database = new ReleaseStateDatabase(path);
+            await database.InitializeAsync();
+            var session = Session(root);
+            await database.PersistQueueSessionAsync(session);
+            var executor = new LegacyVerifier();
+            using var workflow = new DurableReleaseVerificationWorkflow(path, executor);
+
+            var result = await workflow.VerifyAsync(session);
+
+            Assert.Equal(0, executor.Calls);
+            Assert.False(result.Execution.Succeeded);
+            Assert.Empty(result.Execution.Receipts);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task EvidenceForAnotherWorkingCopyIsRejectedBeforePersistence()
     {
         var root = NewRoot();
@@ -166,20 +218,50 @@ public sealed class DurableVerificationTests
     private sealed class ControlledVerifier(bool interrupt, bool wrongRoot = false) : IReleaseVerificationExecutionService
     {
         public int Calls;
+        public bool RemoteProbed;
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Finish { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<ReleaseVerificationExecutionResult> ExecuteAsync(ReleaseQueueItem item, CancellationToken cancellationToken = default)
+            => await ExecuteAsync(item, cancellationToken, progress: null);
+
+        public async Task<ReleaseVerificationExecutionResult> ExecuteAsync(
+            ReleaseQueueItem item,
+            CancellationToken cancellationToken,
+            IReleaseArtifactProgressSink? progress)
         {
             Calls++;
+            await progress.ReportAsync(ReleaseQueueStage.Verify, "Fixture", "fixture.nupkg", "Checking", 0, 2,
+                "Checking fixture destination.", CancellationToken.None);
             Started.TrySetResult();
             await Finish.Task;
             if (interrupt) throw new OperationCanceledException("fixture secret", cancellationToken);
+            RemoteProbed = true;
             var evidenceRoot = wrongRoot ? item.RootPath + "-other" : item.RootPath;
             var receipt = new ReleaseVerificationReceipt(evidenceRoot, item.RepositoryName, "ProjectBuild", "Fixture", "NuGet",
                 "fixture feed", ReleaseVerificationReceiptStatus.Verified, "Verified", DateTimeOffset.UtcNow);
+            await progress.ReportAsync(ReleaseQueueStage.Verify, "Fixture", "fixture.nupkg", "Verified", 2, 2,
+                receipt.Summary, CancellationToken.None);
             return new(evidenceRoot, true, "Verified", item.CheckpointStateJson,
                 [receipt, receipt with { Destination = "fixture release", VerifiedAtUtc = receipt.VerifiedAtUtc.AddSeconds(1) }]);
+        }
+    }
+
+    private sealed class LegacyVerifier : IReleaseVerificationExecutionService
+    {
+        public int Calls;
+
+        public Task<ReleaseVerificationExecutionResult> ExecuteAsync(
+            ReleaseQueueItem item,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(new ReleaseVerificationExecutionResult(
+                item.RootPath,
+                true,
+                "Legacy verifier ran.",
+                item.CheckpointStateJson,
+                []));
         }
     }
 }

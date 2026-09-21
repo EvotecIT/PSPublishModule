@@ -15,6 +15,48 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class ReleaseHistoryTests
 {
     [Fact]
+    public async Task ReopensChronologicalSigningPublicationAndVerificationProgress()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-history-progress-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var path = Path.Combine(root, "history.db");
+            var database = new ReleaseStateDatabase(path);
+            await database.InitializeAsync();
+            var item = new ReleaseQueueItem(root, "Fixture", default, default, 1, ReleaseQueueStage.Completed,
+                ReleaseQueueItemStatus.Succeeded, "Verified", "release.completed", "{}", DateTimeOffset.UtcNow);
+            var session = ReleaseQueueSessionFactory.Create(root, [item], DateTimeOffset.UtcNow);
+            await database.PersistQueueSessionAsync(session);
+            var observed = DateTimeOffset.UtcNow;
+            var events = new[] {
+                new ReleaseArtifactProgress(ReleaseQueueStage.Sign, "Fixture", "fixture.nupkg", "Running", 0, 1, "Signing.", observed),
+                new ReleaseArtifactProgress(ReleaseQueueStage.Sign, "Fixture", "fixture.nupkg", "Signed", 1, 1, "Signed.", observed.AddSeconds(1)),
+                new ReleaseArtifactProgress(ReleaseQueueStage.Publish, "Fixture", "fixture.nupkg", "Publishing", 0, 1, "Publishing.", observed.AddSeconds(2)),
+                new ReleaseArtifactProgress(ReleaseQueueStage.Publish, "Fixture", "fixture.nupkg", "Published", 1, 1, "Published.", observed.AddSeconds(3)),
+                new ReleaseArtifactProgress(ReleaseQueueStage.Verify, "Fixture", "fixture.nupkg", "Checking", 0, 1, "Checking.", observed.AddSeconds(4)),
+                new ReleaseArtifactProgress(ReleaseQueueStage.Verify, "Fixture", "fixture.nupkg", "Verified", 1, 1, "Verified.", observed.AddSeconds(5))
+            };
+            foreach (var progress in events)
+                await database.AppendReleaseProgressAsync(session.SessionId, progress);
+
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                using var release = new ReleaseViewModel(history: new ReleaseHistoryService(path));
+                await release.RefreshHistoryAsync();
+                release.SelectedHistory = Assert.Single(release.History);
+                await release.OpenHistoryAsync();
+
+                Assert.Equal(events, release.ExecutionProgress);
+                Assert.Equal("Verified", release.ProgressStatus.Split('·')[1].Trim());
+                Assert.Equal(1, release.ProgressCompleted);
+                Assert.Equal(1, release.ProgressTotal);
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task FailedSaveProtectsEvidenceAndRetryPersistsWithoutSigningAgain()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-history-ui-" + Guid.NewGuid().ToString("N"))).FullName;

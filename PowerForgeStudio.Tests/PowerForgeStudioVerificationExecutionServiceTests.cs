@@ -159,13 +159,50 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
         var queueItem = CreateVerifyReadyQueueItem(publishResult.RootPath, "Contoso.ReleaseOps", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(publishResult));
         using var client = new HttpClient(new StubHttpMessageHandler(request => CreateResponse(request.RequestUri)));
         var service = new ReleaseVerificationExecutionService(client, new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))));
+        var progress = new VerificationProgressSink();
 
-        var result = await service.ExecuteAsync(queueItem);
+        var result = await service.ExecuteAsync(queueItem, CancellationToken.None, progress);
 
         Assert.True(result.Succeeded);
         Assert.Single(result.Receipts);
         Assert.Equal(ReleaseVerificationReceiptStatus.Verified, result.Receipts[0].Status);
         Assert.Contains("packages.contoso.test", result.Receipts[0].Summary);
+        Assert.Equal(["Planned", "Checking", "Verified"], progress.Events.Select(static item => item.State));
+        Assert.Equal(1, progress.Events[^1].CompletedItems);
+        Assert.Equal(1, progress.Events[^1].TotalItems);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TerminalProgressFailureRetainsVerifiedReceiptAndStopsBeforeNextProbe(bool failEveryTerminalWrite)
+    {
+        using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        var root = Path.GetDirectoryName(packageScope.PackagePath)!;
+        var first = new ReleasePublishReceipt(root, "Contoso.ReleaseOps", "ProjectBuild", "Contoso.ReleaseOps.1.2.3.nupkg", "NuGet",
+            "https://packages.contoso.test/first/index.json", packageScope.PackagePath, ReleasePublishReceiptStatus.Published,
+            "Published.", DateTimeOffset.UtcNow);
+        var second = first with { Destination = "https://packages.contoso.test/second/index.json" };
+        var published = new ReleasePublishExecutionResult(root, true, "Published.", "{}", [first, second]);
+        var queueItem = CreateVerifyReadyQueueItem(root, "Contoso.ReleaseOps", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(published));
+        var requests = new List<string>();
+        using var client = new HttpClient(new StubHttpMessageHandler(request => {
+            requests.Add(request.RequestUri!.AbsoluteUri);
+            return CreateResponse(request.RequestUri);
+        }));
+        using var service = new ReleaseVerificationExecutionService(client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))));
+        var progress = new TerminalFailingProgressSink(failEveryTerminalWrite);
+
+        var result = await service.ExecuteAsync(queueItem, CancellationToken.None, progress);
+
+        Assert.False(result.Succeeded);
+        var receipt = Assert.Single(result.Receipts);
+        Assert.Equal(ReleaseVerificationReceiptStatus.Verified, receipt.Status);
+        Assert.DoesNotContain(result.Receipts, item => item.Status == ReleaseVerificationReceiptStatus.Failed);
+        Assert.Contains("progress update could not be saved", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(requests, static request => request.Contains("v3-flatcontainer", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(progress.Events, static item => item.State == "Verified");
     }
 
     [Fact]
@@ -296,6 +333,35 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
         }
 
         return new HttpResponseMessage(HttpStatusCode.NotFound);
+    }
+
+    private sealed class VerificationProgressSink : IReleaseArtifactProgressSink
+    {
+        public List<ReleaseArtifactProgress> Events { get; } = [];
+
+        public ValueTask ReportAsync(ReleaseArtifactProgress progress, CancellationToken cancellationToken = default)
+        {
+            Events.Add(progress);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class TerminalFailingProgressSink(bool failEveryTerminalWrite) : IReleaseArtifactProgressSink
+    {
+        private bool _failed;
+        public List<ReleaseArtifactProgress> Events { get; } = [];
+
+        public ValueTask ReportAsync(ReleaseArtifactProgress progress, CancellationToken cancellationToken = default)
+        {
+            Events.Add(progress);
+            var terminal = progress.State is not ("Planned" or "Checking");
+            if (terminal && (failEveryTerminalWrite || !_failed))
+            {
+                _failed = true;
+                throw new IOException("fixture terminal journal failure");
+            }
+            return ValueTask.CompletedTask;
+        }
     }
 
     private static TemporaryPackageScope CreateTemporaryPackage(string packageId, string version)

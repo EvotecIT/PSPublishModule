@@ -12,6 +12,14 @@ public sealed record ReleasePublicationWorkflowResult(ReleaseQueueSession Sessio
 public interface IReleasePublicationWorkflow
 {
     Task<ReleasePublicationWorkflowResult> PublishAsync(ReleaseQueueSession session, CancellationToken cancellationToken = default);
+    Task<ReleasePublicationWorkflowResult> PublishAsync(
+        ReleaseQueueSession session,
+        CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
+        => progress is null
+            ? PublishAsync(session, cancellationToken)
+            : Task.FromException<ReleasePublicationWorkflowResult>(new InvalidOperationException(
+                "This publication workflow does not support live progress."));
     Task<ReleasePublicationWorkflowResult> RetrySaveAsync(ReleasePublicationWorkflowResult result, CancellationToken cancellationToken = default);
 }
 
@@ -21,6 +29,12 @@ public sealed class DurableReleasePublicationWorkflow(string databasePath, IRele
     private readonly IReleasePublishExecutionService _publisher = publisher ?? new ReleasePublishExecutionService();
 
     public async Task<ReleasePublicationWorkflowResult> PublishAsync(ReleaseQueueSession session, CancellationToken cancellationToken = default)
+        => await PublishAsync(session, cancellationToken, progress: null).ConfigureAwait(false);
+
+    public async Task<ReleasePublicationWorkflowResult> PublishAsync(
+        ReleaseQueueSession session,
+        CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
     {
         ArgumentNullException.ThrowIfNull(session);
         var item = session.Items.Single();
@@ -37,10 +51,12 @@ public sealed class DurableReleasePublicationWorkflow(string databasePath, IRele
         if (!await database.TryAdvanceReleaseCheckpointAsync(session, marker, cancellationToken: cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("The saved release checkpoint changed or is missing. Reload it before publishing.");
 
+        var durableProgress = new DurableReleaseArtifactProgressSink(database, marker.SessionId, progress);
+
         ReleasePublishExecutionResult execution;
         try
         {
-            execution = await _publisher.ExecuteAsync(item, cancellationToken).ConfigureAwait(false);
+            execution = await _publisher.ExecuteAsync(item, cancellationToken, durableProgress).ConfigureAwait(false);
             if (execution.RootPath != item.RootPath || execution.Receipts.Any(receipt => receipt.RootPath != item.RootPath))
                 throw new InvalidOperationException("Publisher returned evidence for a different working copy.");
         }

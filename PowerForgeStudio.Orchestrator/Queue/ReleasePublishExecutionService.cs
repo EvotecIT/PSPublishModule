@@ -72,6 +72,12 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
     }
 
     public async Task<ReleasePublishExecutionResult> ExecuteAsync(ReleaseQueueItem queueItem, CancellationToken cancellationToken = default)
+        => await ExecuteAsync(queueItem, cancellationToken, progress: null).ConfigureAwait(false);
+
+    public async Task<ReleasePublishExecutionResult> ExecuteAsync(
+        ReleaseQueueItem queueItem,
+        CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
     {
         ArgumentNullException.ThrowIfNull(queueItem);
 
@@ -95,24 +101,30 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         }
 
         var pendingTargets = BuildPendingTargets([queueItem]);
+        var progressTracker = new ReleasePublicationProgressTracker(pendingTargets, progress);
+        await progressTracker.InitializeAsync(cancellationToken).ConfigureAwait(false);
         var projectionFailure = pendingTargets.FirstOrDefault(static target =>
             string.Equals(target.TargetKind, "ConfigurationError", StringComparison.OrdinalIgnoreCase));
         if (projectionFailure is not null)
         {
+            var failure = FailedReceipt(
+                queueItem.RootPath,
+                queueItem.RepositoryName,
+                projectionFailure.AdapterKind,
+                "Configuration",
+                projectionFailure.SourcePath,
+                projectionFailure.Destination);
+            await progressTracker.CompleteAsync(
+                static _ => true,
+                [failure],
+                projectionFailure.Destination,
+                cancellationToken).ConfigureAwait(false);
             return new ReleasePublishExecutionResult(
                 RootPath: queueItem.RootPath,
                 Succeeded: false,
                 Summary: "Publication targets could not be validated.",
                 SourceCheckpointStateJson: queueItem.CheckpointStateJson,
-                Receipts: [
-                    FailedReceipt(
-                        queueItem.RootPath,
-                        queueItem.RepositoryName,
-                        projectionFailure.AdapterKind,
-                        "Configuration",
-                        projectionFailure.SourcePath,
-                        projectionFailure.Destination)
-                ]);
+                Receipts: [failure]);
         }
 
         if (pendingTargets.Count == 0)
@@ -135,22 +147,29 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
 
         if (!IsPublishEnabled())
         {
+            var failures = pendingTargets.Select(target => FailedReceipt(
+                queueItem.RootPath,
+                queueItem.RepositoryName,
+                target.AdapterKind,
+                target.TargetKind,
+                target.Destination,
+                "Publish is disabled. Set RELEASE_OPS_STUDIO_ENABLE_PUBLISH=true to unlock external publishing.")).ToList();
+            await progressTracker.CompleteAsync(
+                static _ => true,
+                failures,
+                "Publish is disabled.",
+                cancellationToken).ConfigureAwait(false);
             return new ReleasePublishExecutionResult(
                 RootPath: queueItem.RootPath,
                 Succeeded: false,
                 Summary: "Publish is disabled. Set RELEASE_OPS_STUDIO_ENABLE_PUBLISH=true to unlock external publishing.",
                 SourceCheckpointStateJson: queueItem.CheckpointStateJson,
-                Receipts: pendingTargets.Select(target => FailedReceipt(
-                    queueItem.RootPath,
-                    queueItem.RepositoryName,
-                    target.AdapterKind,
-                    target.TargetKind,
-                    target.Destination,
-                    "Publish is disabled. Set RELEASE_OPS_STUDIO_ENABLE_PUBLISH=true to unlock external publishing.")).ToList());
+                Receipts: failures);
         }
 
         var repository = _catalogScanner.InspectRepository(queueItem.RootPath);
         var receipts = new List<ReleasePublishReceipt>();
+        var preserveInFlightProgress = false;
         try
         {
             var unifiedValidation = PrepareUnifiedReleaseValidation(
@@ -190,7 +209,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                     repository,
                     signingResult,
                     cancellationToken,
-                    unifiedOwnsGitHub);
+                    unifiedOwnsGitHub,
+                    progressTracker);
                 receipts.AddRange(projectReceipts);
                 if (projectReceipts.Any(static receipt =>
                         receipt.Status == ReleasePublishReceiptStatus.Failed))
@@ -215,7 +235,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                     repository,
                     signingResult,
                     cancellationToken,
-                    unifiedOwnsGitHub);
+                    unifiedOwnsGitHub,
+                    progressTracker);
                 receipts.AddRange(moduleReceipts);
                 if (moduleReceipts.Any(static receipt =>
                         receipt.Status == ReleasePublishReceiptStatus.Failed))
@@ -246,7 +267,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                     directModuleSpec,
                     signingResult,
                     cancellationToken,
-                    validatedUnifiedRelease: null);
+                    validatedUnifiedRelease: null,
+                    progress: progressTracker);
                 receipts.AddRange(modulePackageReceipts);
                 if (modulePackageReceipts.Any(static receipt =>
                         receipt.Status == ReleasePublishReceiptStatus.Failed))
@@ -275,7 +297,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                         unifiedSpec,
                         signingResult,
                         cancellationToken,
-                        validatedUnifiedRelease);
+                        validatedUnifiedRelease,
+                        progressTracker);
                     receipts.AddRange(modulePackageReceipts);
                     if (modulePackageReceipts.Any(static receipt =>
                             receipt.Status == ReleasePublishReceiptStatus.Failed))
@@ -297,7 +320,8 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                     repository,
                     signingResult,
                     cancellationToken,
-                    validatedUnifiedRelease));
+                    validatedUnifiedRelease,
+                    progressTracker));
             }
 
             if (receipts.Count == 0)
@@ -309,6 +333,7 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
         }
         catch (Exception ex)
         {
+            preserveInFlightProgress = true;
             if (ex is PublicationInterruptedException interruption) receipts.AddRange(interruption.Receipts);
             var cause = ex is PublicationInterruptedException interrupted ? interrupted.InnerException! : ex;
             var cancelled = cause is OperationCanceledException || cancellationToken.IsCancellationRequested;
@@ -316,6 +341,17 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                 cancelled ? "Publication was cancelled. The current remote operation may have completed; reconcile remote state before retrying."
                     : "Publication stopped unexpectedly. The current remote operation may have completed; reconcile remote state before retrying."));
             return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts) with { WasCancelled = cancelled, RequiresReconciliation = true };
+        }
+        finally
+        {
+            if (!preserveInFlightProgress)
+            {
+                await progressTracker.CompleteAsync(
+                    static _ => true,
+                    receipts,
+                    "Publication stopped before this reviewed target returned a final receipt.",
+                    CancellationToken.None).ConfigureAwait(false);
+            }
         }
 
     }
@@ -560,7 +596,8 @@ public sealed partial class ReleasePublishExecutionService
         PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
         ReleaseSigningExecutionResult signingResult,
         CancellationToken cancellationToken,
-        bool suppressGitHub)
+        bool suppressGitHub,
+        ReleasePublicationProgressTracker progress)
     {
         var scriptPath = repository.ProjectBuildScriptPath!;
         var configPath = RepositoryPlanPreviewService.ResolveProjectConfigPath(scriptPath, repository.RootPath);
@@ -631,6 +668,12 @@ public sealed partial class ReleasePublishExecutionService
                     }
                     else
                     {
+                        await progress.StartAsync(
+                            static target =>
+                                string.Equals(target.AdapterKind, "ProjectBuild", StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(target.TargetKind, "NuGet", StringComparison.OrdinalIgnoreCase),
+                            $"Publishing {packages.Count} signed package(s) to the reviewed NuGet destination.",
+                            cancellationToken).ConfigureAwait(false);
                         foreach (var package in packages)
                         {
                             var result = await PublishNugetPackageAsync(
@@ -654,6 +697,14 @@ public sealed partial class ReleasePublishExecutionService
                         }
                     }
                 }
+
+                await progress.CompleteAsync(
+                    static target =>
+                        string.Equals(target.AdapterKind, "ProjectBuild", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(target.TargetKind, "NuGet", StringComparison.OrdinalIgnoreCase),
+                    receipts.Where(static receipt => string.Equals(receipt.TargetKind, "NuGet", StringComparison.OrdinalIgnoreCase)).ToArray(),
+                    "No NuGet publication receipt was returned.",
+                    cancellationToken).ConfigureAwait(false);
             }
 
             if (config.PublishFailFast &&
@@ -664,7 +715,21 @@ public sealed partial class ReleasePublishExecutionService
 
             if (config.PublishGitHub && !suppressGitHub)
             {
-                receipts.AddRange(await ExecuteProjectGitHubPublishAsync(repository, config, signingResult, cancellationToken));
+                await progress.StartAsync(
+                    static target =>
+                        string.Equals(target.AdapterKind, "ProjectBuild", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(target.TargetKind, "GitHub", StringComparison.OrdinalIgnoreCase),
+                    "Publishing the reviewed signed assets to GitHub.",
+                    cancellationToken).ConfigureAwait(false);
+                var githubReceipts = await ExecuteProjectGitHubPublishAsync(repository, config, signingResult, cancellationToken);
+                receipts.AddRange(githubReceipts);
+                await progress.CompleteAsync(
+                    static target =>
+                        string.Equals(target.AdapterKind, "ProjectBuild", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(target.TargetKind, "GitHub", StringComparison.OrdinalIgnoreCase),
+                    githubReceipts,
+                    "No GitHub publication receipt was returned.",
+                    cancellationToken).ConfigureAwait(false);
                 if (receipts.Any(receipt => receipt.Status == ReleasePublishReceiptStatus.Failed))
                     cancellationToken.ThrowIfCancellationRequested();
             }

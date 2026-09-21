@@ -30,7 +30,7 @@
         <Button Content="Discard unsaved receipts" Command="{Binding DiscardUnsavedReceiptsCommand}" IsEnabled="{Binding ConfirmDiscardReceipts}" />
       </StackPanel>
     </StackPanel>
-    <Grid Grid.Row="3" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+    <Grid Grid.Row="3" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
       <TextBlock IsVisible="{Binding HasArtifacts}" Text="Release artifacts" FontSize="16" FontWeight="SemiBold" />
       <ListBox Grid.Row="1" IsVisible="{Binding HasArtifacts}" MaxHeight="200" ItemsSource="{Binding Artifacts}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
@@ -46,10 +46,11 @@
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
-      <ProgressBar Grid.Row="2" Minimum="0" Maximum="{Binding ProgressTotal}" Value="{Binding ProgressCompleted}" IsVisible="{Binding HasDeterminateProgress}" Height="4" />
-      <ProgressBar Grid.Row="2" IsIndeterminate="True" IsVisible="{Binding ShowIndeterminateProgress}" Height="4" />
-      <TextBlock Grid.Row="3" Text="{Binding ProgressStatus}" IsVisible="{Binding HasExecutionProgress}" FontWeight="SemiBold" TextWrapping="Wrap" />
-      <ListBox Grid.Row="4" IsVisible="{Binding HasExecutionProgress}" MaxHeight="150" ItemsSource="{Binding ExecutionProgress}" Background="#F7F9FC">
+      <TextBlock Grid.Row="2" IsVisible="{Binding HasExecutionProgress}" Text="Release execution progress" FontSize="16" FontWeight="SemiBold" />
+      <ProgressBar Grid.Row="3" Minimum="0" Maximum="{Binding ProgressTotal}" Value="{Binding ProgressCompleted}" IsVisible="{Binding HasDeterminateProgress}" Height="4" />
+      <ProgressBar Grid.Row="3" IsIndeterminate="True" IsVisible="{Binding ShowIndeterminateProgress}" Height="4" />
+      <TextBlock Grid.Row="4" Text="{Binding ProgressStatus}" IsVisible="{Binding HasExecutionProgress}" FontWeight="SemiBold" TextWrapping="Wrap" />
+      <ListBox Grid.Row="5" IsVisible="{Binding HasExecutionProgress}" MaxHeight="180" ItemsSource="{Binding ExecutionProgress}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="queue:ReleaseArtifactProgress">
             <StackPanel Spacing="4" Margin="8">
@@ -60,8 +61,8 @@
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
-      <TextBlock Grid.Row="5" Text="Signing receipts" FontSize="16" FontWeight="SemiBold" />
-      <ListBox Grid.Row="6" MaxHeight="300" ItemsSource="{Binding Receipts}" Background="#F7F9FC">
+      <TextBlock Grid.Row="6" IsVisible="{Binding HasReceipts}" Text="Signing receipts" FontSize="16" FontWeight="SemiBold" />
+      <ListBox Grid.Row="7" IsVisible="{Binding HasReceipts}" MaxHeight="300" ItemsSource="{Binding Receipts}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="domain:ReleaseSigningReceipt">
             <StackPanel Spacing="5" Margin="8">
@@ -94,7 +95,6 @@
       </ListBox>
       <CheckBox Content="I reviewed these destinations and approve external publication" IsChecked="{Binding ConfirmPublication}" IsEnabled="{Binding CanInspectPublication}" />
       <Button Content="Publish signed artifacts" Command="{Binding PublishCommand}" IsEnabled="{Binding CanPublish}" Background="#0865FF" Foreground="White" />
-      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsPublishing}" Height="4" />
       <TextBlock IsVisible="{Binding HasPublicationReceipts}" Text="Publication receipts" FontSize="16" FontWeight="SemiBold" />
       <ListBox IsVisible="{Binding HasPublicationReceipts}" ItemsSource="{Binding PublicationReceipts}" MaxHeight="260" Background="#F7F9FC">
         <ListBox.ItemTemplate><DataTemplate x:DataType="publish:ReleasePublishReceipt">
@@ -106,7 +106,6 @@
           </StackPanel>
         </DataTemplate></ListBox.ItemTemplate>
       </ListBox>
-      <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsVerifying}" Height="4" />
       <TextBlock IsVisible="{Binding HasVerificationReceipts}" Text="Verification receipts" FontSize="16" FontWeight="SemiBold" />
       <ListBox IsVisible="{Binding HasVerificationReceipts}" ItemsSource="{Binding VerificationReceipts}" MaxHeight="260" Background="#F7F9FC">
         <ListBox.ItemTemplate><DataTemplate x:DataType="verify:ReleaseVerificationReceipt">

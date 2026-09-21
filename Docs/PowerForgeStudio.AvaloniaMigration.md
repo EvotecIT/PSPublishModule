@@ -21,7 +21,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [x] Connect cancellation, stage progress, artifacts and release receipts.
 - [x] Add per-artifact signing progress and durable process-level recovery evidence.
-- [ ] Extend per-target progress through publication and verification.
+- [x] Extend per-target progress through publication and verification.
 - [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
 - [x] Prepare release artifacts from a captured successful build using the existing queue checkpoint owner.
 - [x] Connect explicit signing, cancellation and session receipts with build/close interlocks.
@@ -573,3 +573,13 @@ Project publication fails closed when the signing state has no readable build ch
 Seventy-eight focused tests passed: all 76 project/module/unified publication cases plus the two direct project-build checkpoint cases. They prove an unchanged JSON contract publishes through controlled NuGet and GitHub delegates, changed or missing checkpoint state invokes no publisher, destination drift after signing is rejected, and drift during execution aborts the build checkpoint. The publication suite also retains its cancellation, partial-evidence, artifact-integrity and fail-fast coverage. No external feed, GitHub release or user repository was modified.
 
 Independent local review remained unavailable because the reviewer quota was exhausted. A structured primary review found and fixed the missing-checkpoint bypass before the final test run. The earlier broad build-class filter also selected the unrelated Apple source-trust matrix, whose macOS path-attestation fixtures fail on this Windows host; that run was stopped. The exact 78-test filter above is the validation boundary for this milestone.
+
+### Durable publication and verification progress
+
+Publication and verification now use the same stage-neutral durable journal as signing. The publication executor registers the exact reviewed destination rows as stable work units, records a target before its adapter enters remote work, and records the terminal published, failed or skipped outcome from returned receipts. Aggregate NuGet, module-package and unified-release rows remain aggregate by design because those are the units the operator approved. A running unified target without a terminal event is conservative reconciliation evidence: the shared engine may have reached that target before an interruption, so Studio does not present untouched remote state as known.
+
+Verification records each publication receipt independently as planned, checking and verified, failed, skipped or cancelled. Journal writes use an independent local token so cancellation does not discard the last evidence update. The durable workflows persist every progress event before forwarding it to the live Avalonia sink; an injected journal failure before the executor starts prevents the controlled remote mutation or probe. Saved release history restores signing, publication and verification rows chronologically from the same bounded 500-row database journal, while the live page retains the newest 100 rows.
+
+The Avalonia Releases page now has one labeled execution-progress surface for all three stages. It resets the current counter between stages without clearing earlier events, uses a determinate bar after the first target update, and removes the duplicate publication and verification spinners. Empty signing receipts no longer create an orphaned heading. Wide, bottom-scrolled and compact Skia renders were inspected in `Artifacts/StudioValidation/publication-progress/`.
+
+Validation passed all 49 Avalonia tests and 121 release-specific shared tests covering real controlled NuGet publication and verification adapters, durable signing/publication/verification claims, cancellation, partial evidence, state storage and schema behavior. The retained WPF host also builds without warnings. No real feed, GitHub release, PowerShell repository or external verification endpoint was modified. Abrupt process termination and a disposable authenticated end-to-end publication remain unverified.
