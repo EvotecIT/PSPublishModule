@@ -39,4 +39,24 @@ public sealed class PowerForgeStudioGitRemoteResolverTests
             try { Directory.Delete(repositoryRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task ResolveOriginUrlAsync_PropagatesCallerCancellation()
+    {
+        var repositoryRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-origin-cancel-" + Guid.NewGuid().ToString("N"))).FullName;
+        using var cancellation = new CancellationTokenSource();
+        var resolver = new GitRemoteResolver(async (_, _, token) =>
+        {
+            cancellation.Cancel();
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            throw new InvalidOperationException("Unreachable");
+        });
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                resolver.ResolveOriginUrlAsync(repositoryRoot, cancellation.Token));
+        }
+        finally { Directory.Delete(repositoryRoot, recursive: true); }
+    }
 }

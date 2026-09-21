@@ -1,4 +1,5 @@
 using System.Text;
+using System.Net;
 using PowerForge;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Orchestrator.Automation;
@@ -84,6 +85,31 @@ public sealed class WorkspaceAutomationInventoryServiceTests : IDisposable
         Assert.Contains(snapshot.Sources, source => source.Provider == "GitHub Actions" && source.State == "Unavailable");
     }
 
+    [Fact]
+    public async Task CombinedInventoryDisplaysMatchedRuntimeBesideWindowsEvidence()
+    {
+        var workflowRoot = Directory.CreateDirectory(Path.Combine(_fixture, ".github", "workflows"));
+        await File.WriteAllTextAsync(Path.Combine(workflowRoot.FullName, "nightly.yml"),
+            "on:\n  schedule:\n    - cron: '5 4 * * *'\n");
+        var runner = new InventoryRunner("[]");
+        using var client = new HttpClient(new RuntimeHandler(request =>
+            request.RequestUri!.AbsolutePath.EndsWith("/workflows")
+                ? """{"total_count":1,"workflows":[{"id":7,"path":".github/workflows/nightly.yml","state":"active"}]}"""
+                : """{"total_count":1,"workflow_runs":[{"workflow_id":7,"status":"completed","conclusion":"success","created_at":"2026-09-21T02:00:00Z","run_number":4}]}"""))
+        { BaseAddress = new Uri("https://api.github.com") };
+        using var runtime = new GitHubWorkflowRuntimeSource(client, (_, _) => Task.FromResult<string?>("EvotecIT/Fixture"));
+        using var service = new WorkspaceAutomationInventoryService(runner, new RepositorySource(_fixture), runtime);
+
+        var snapshot = await service.InspectAsync(_fixture);
+
+        var workflow = Assert.Single(snapshot.Entries);
+        Assert.Equal("Enabled", workflow.State);
+        Assert.True(workflow.HasRuntimeEvidence);
+        Assert.Contains("success", workflow.LastResult);
+        Assert.Contains(snapshot.Sources, source => source.Provider == "GitHub Actions" && source.State == "Runtime observed");
+        Assert.Contains(snapshot.Sources, source => source.Provider == "Windows Task Scheduler");
+    }
+
     public void Dispose() => Directory.Delete(_fixture, recursive: true);
 
     private sealed class RepositorySource(string root) : IWorkspaceRepositorySource
@@ -115,5 +141,14 @@ public sealed class WorkspaceAutomationInventoryServiceTests : IDisposable
             request.InvokeCompletionBoundary(result);
             return Task.FromResult(result);
         }
+    }
+
+    private sealed class RuntimeHandler(Func<HttpRequestMessage, string> json) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json(request), Encoding.UTF8, "application/json")
+            });
     }
 }

@@ -37,7 +37,7 @@
         <Button Content="Relevant" Classes="chip" Classes.active="{Binding IsRelevantFilter}" Command="{Binding ShowRelevantCommand}" />
         <Button Content="All observed" Classes="chip" Classes.active="{Binding IsAllFilter}" Command="{Binding ShowAllCommand}" />
         <Button Content="Windows" Classes="chip" Classes.active="{Binding IsWindowsFilter}" Command="{Binding ShowWindowsCommand}" />
-        <Button Content="GitHub definitions" Classes="chip" Classes.active="{Binding IsGitHubFilter}" Command="{Binding ShowGitHubCommand}" />
+        <Button Content="GitHub Actions" Classes="chip" Classes.active="{Binding IsGitHubFilter}" Command="{Binding ShowGitHubCommand}" />
         <Button Content="Needs attention" Classes="chip" Classes.active="{Binding IsAttentionFilter}" Command="{Binding ShowAttentionCommand}" />
       </WrapPanel>
       <Border Classes="card" Padding="0" MinHeight="270">
@@ -47,7 +47,7 @@
             <TextBlock Grid.Column="1" Text="Provider / project" Classes="muted" VerticalAlignment="Center" />
             <TextBlock Grid.Column="2" Text="Schedule" Classes="muted" VerticalAlignment="Center" />
             <TextBlock Grid.Column="3" Text="State" Classes="muted" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="4" Text="Next evidence" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="4" Text="Last observed run" Classes="muted" VerticalAlignment="Center" />
           </Grid>
           <ListBox Grid.Row="1" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" Background="Transparent">
             <ListBox.ItemTemplate>
@@ -57,7 +57,7 @@
                   <StackPanel Grid.Column="1"><TextBlock Text="{Binding Provider}" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding ProjectDisplay}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" /></StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding Schedule}" VerticalAlignment="Center" TextWrapping="Wrap" />
                   <TextBlock Grid.Column="3" Text="{Binding State}" VerticalAlignment="Center" Classes="automationState" Classes.attention="{Binding NeedsAttention}" />
-                  <TextBlock Grid.Column="4" Text="{Binding NextRunDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  <TextBlock Grid.Column="4" Text="{Binding LastRunDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -65,7 +65,7 @@
           <TextBlock Grid.Row="1" Text="No automation definitions match this filter." IsVisible="{Binding !HasEntries}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" />
         </Grid>
       </Border>
-      <TextBlock Text="GitHub rows are local definitions until runtime evidence is connected. Codex remains unavailable until it exposes a supported inventory API." Classes="muted" TextWrapping="Wrap" />
+      <TextBlock Text="GitHub workflow enablement and recent scheduled runs are verified when access allows; next occurrence is never inferred. Unmatched or unavailable rows remain labeled local definitions. Codex remains unavailable until it exposes a supported inventory API." Classes="muted" TextWrapping="Wrap" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

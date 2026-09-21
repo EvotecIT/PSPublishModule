@@ -5,15 +5,25 @@ using PowerForgeStudio.Orchestrator.Catalog;
 namespace PowerForgeStudio.Orchestrator.Automation;
 
 /// <summary>Combines read-only schedule evidence while preserving each provider boundary.</summary>
-public sealed class WorkspaceAutomationInventoryService : IWorkspaceAutomationInventoryService
+public sealed class WorkspaceAutomationInventoryService : IWorkspaceAutomationInventoryService, IDisposable
 {
     private readonly WindowsTaskAutomationSource _windows;
     private readonly GitHubWorkflowAutomationSource _gitHub;
+    private readonly GitHubWorkflowRuntimeSource _gitHubRuntime;
+    private readonly bool _ownsRuntime;
 
     public WorkspaceAutomationInventoryService(IProcessRunner? processRunner = null, IWorkspaceRepositorySource? repositories = null)
+        : this(processRunner, repositories, null)
+    {
+    }
+
+    internal WorkspaceAutomationInventoryService(IProcessRunner? processRunner, IWorkspaceRepositorySource? repositories,
+        GitHubWorkflowRuntimeSource? gitHubRuntime)
     {
         _windows = new WindowsTaskAutomationSource(processRunner);
         _gitHub = new GitHubWorkflowAutomationSource(repositories);
+        _gitHubRuntime = gitHubRuntime ?? new GitHubWorkflowRuntimeSource();
+        _ownsRuntime = gitHubRuntime is null;
     }
 
     public async Task<WorkspaceAutomationSnapshot> InspectAsync(string workspaceRoot, CancellationToken cancellationToken = default)
@@ -56,7 +66,8 @@ public sealed class WorkspaceAutomationInventoryService : IWorkspaceAutomationIn
     {
         try
         {
-            return await _gitHub.ReadAsync(root, token).ConfigureAwait(false);
+            var local = await _gitHub.ReadAsync(root, token).ConfigureAwait(false);
+            return await _gitHubRuntime.EnrichAsync(local, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -65,7 +76,12 @@ public sealed class WorkspaceAutomationInventoryService : IWorkspaceAutomationIn
         catch
         {
             return new([], new("GitHub Actions", "Unavailable", 0,
-                "Local GitHub workflow definitions could not be read."));
+                "GitHub workflow definitions or remote runtime evidence could not be read."));
         }
+    }
+
+    public void Dispose()
+    {
+        if (_ownsRuntime) _gitHubRuntime.Dispose();
     }
 }

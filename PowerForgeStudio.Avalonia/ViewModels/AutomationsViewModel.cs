@@ -9,12 +9,16 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
 {
     private readonly IWorkspaceAutomationInventoryService _inventory;
+    private readonly bool _ownsInventory;
     private readonly List<WorkspaceAutomationEntry> _allEntries = [];
     private CancellationTokenSource? _refreshCancellation;
     private int _refreshVersion;
 
     public AutomationsViewModel(IWorkspaceAutomationInventoryService? inventory = null)
-        => _inventory = inventory ?? new WorkspaceAutomationInventoryService();
+    {
+        _inventory = inventory ?? new WorkspaceAutomationInventoryService();
+        _ownsInventory = inventory is null;
+    }
 
     public ObservableCollection<WorkspaceAutomationEntry> Entries { get; } = [];
     public ObservableCollection<WorkspaceAutomationSourceState> Sources { get; } = [];
@@ -144,5 +148,6 @@ public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
     {
         _refreshCancellation?.Cancel();
         _refreshCancellation?.Dispose();
+        if (_ownsInventory && _inventory is IDisposable disposable) disposable.Dispose();
     }
 }

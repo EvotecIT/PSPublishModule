@@ -55,8 +55,8 @@ public sealed class WorkspaceAutomationTests
                 Assert.True(model.IsAutomationsPage);
                 Assert.Equal(4, model.Automations.Entries.Count);
                 Assert.Equal(3, model.Automations.Sources.Count);
-                Assert.Equal(1, model.Automations.AttentionCount);
-                Assert.Equal(2, model.Automations.DefinitionOnlyCount);
+                Assert.Equal(2, model.Automations.AttentionCount);
+                Assert.Equal(1, model.Automations.DefinitionOnlyCount);
 
                 var window = new MainWindow { DataContext = model, Width = 1600, Height = 1000 };
                 window.Show();
@@ -67,7 +67,8 @@ public sealed class WorkspaceAutomationTests
                     model.Automations.ShowAllCommand.Execute(null);
                     Assert.Equal(5, model.Automations.Entries.Count);
                     model.Automations.ShowAttentionCommand.Execute(null);
-                    Assert.Equal("Failed", Assert.Single(model.Automations.Entries).State);
+                    Assert.Equal(2, model.Automations.Entries.Count);
+                    Assert.All(model.Automations.Entries, entry => Assert.Equal("Failed", entry.State));
                     model.Automations.ShowRelevantCommand.Execute(null);
                 }
                 finally
@@ -121,14 +122,14 @@ public sealed class WorkspaceAutomationTests
             [
                 Entry("profile", "EvotecIT Codex Profile Sync", "Windows Task Scheduler", "Local workstation", "", "Every 30 minutes", "Upcoming", now.AddMinutes(18), now.AddMinutes(-12), "Succeeded", true, true),
                 Entry("health", "PasswordSolutionX health", "Windows Task Scheduler", "Local workstation", "PasswordSolutionX", "Hourly", "Failed", now.AddMinutes(42), now.AddMinutes(-18), "Result 0x00000001", true, true),
-                Entry("pf", "workflow-failure-sweeper.yml", "GitHub Actions", ".github/workflows", "PowerForge", "20 8 * * *", "Definition only", null, null, "Runtime not checked", false, true),
+                Entry("pf", "workflow-failure-sweeper.yml", "GitHub Actions", ".github/workflows", "PowerForge", "20 8 * * *", "Failed", null, now.AddHours(-3), "completed · failure · schedule · run #42", true, true),
                 Entry("office", "codeql.yml", "GitHub Actions", ".github/workflows", "OfficeIMO", "22 3 * * 1", "Definition only", null, null, "Runtime not checked", false, true),
                 Entry("vendor", "Vendor updater", "Windows Task Scheduler", "Local workstation", "", "Daily · 10:30", "Healthy", null, now.AddHours(-2), "Succeeded", true, false)
             ];
             WorkspaceAutomationSourceState[] sources =
             [
                 new("Windows Task Scheduler", "Available", 3, "Runtime evidence is read locally. Action arguments are never collected."),
-                new("GitHub Actions", "Definitions", 2, "Local workflow definitions only; runtime evidence is not connected."),
+                new("GitHub Actions", "Partial", 2, "One workflow has remote runtime evidence; another remains a local definition."),
                 new("Codex", "Unavailable", 0, "No supported external inventory API is available.")
             ];
             return Task.FromResult(new WorkspaceAutomationSnapshot(now, entries, sources));

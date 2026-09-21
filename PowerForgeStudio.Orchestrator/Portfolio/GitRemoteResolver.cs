@@ -26,9 +26,14 @@ internal sealed class GitRemoteResolver : IGitRemoteResolver
         try
         {
             var result = await _getRemoteUrlAsync(repositoryRoot, "origin", cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             return result.Succeeded
                 ? result.StdOut.Trim()
                 : null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
