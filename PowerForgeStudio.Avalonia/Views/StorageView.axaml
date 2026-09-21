@@ -4,14 +4,15 @@
              x:DataType="vm:StorageViewModel" x:Class="PowerForgeStudio.Avalonia.Views.StorageView">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="22,18" Spacing="14">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+      <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
         <StackPanel Spacing="4">
           <TextBlock Text="Review workspace storage" Classes="heading" />
           <TextBlock Text="Measured working copies and local evidence. Inspection never removes files." Classes="muted" TextWrapping="Wrap" />
         </StackPanel>
-        <WrapPanel Grid.Column="1" ItemSpacing="8" VerticalAlignment="Center">
+        <WrapPanel Grid.Row="1" ItemSpacing="8" LineSpacing="8" HorizontalAlignment="Right">
           <Button Content="Open selected" Click="OpenSelected" IsEnabled="{Binding SelectedEntry.Exists}" />
           <Button Content="Review removal" Click="ReviewRemoval" IsEnabled="{Binding CanReviewRemoval}" />
+          <Button Content="Review stale registrations" Click="ReviewPrune" IsEnabled="{Binding CanReviewPrune}" />
           <Button Content="Refresh inspection" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
         </WrapPanel>
       </Grid>

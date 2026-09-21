@@ -17,4 +17,14 @@ public interface IWorkspaceStorageRemovalService
         bool confirmNoExternalUse,
         bool confirmRetainedArtifacts,
         CancellationToken cancellationToken = default);
+
+    Task<WorkspaceStoragePruneReview> ReviewPruneAsync(
+        string workspaceRoot,
+        WorkspaceStorageEntry entry,
+        CancellationToken cancellationToken = default);
+
+    Task PruneAsync(
+        WorkspaceStoragePruneReview reviewed,
+        bool confirmRegistrations,
+        CancellationToken cancellationToken = default);
 }

@@ -58,6 +58,31 @@ public sealed partial class GitHubProjectService : IGitHubProjectService, IDispo
     public Task<GitHubPage<GitHubPullRequest>> FetchPullRequestsAsync(string slug, string state = "open", CancellationToken cancellationToken = default)
         => FetchPageAsync($"{RepositoryPath(slug)}/pulls?state={ValidateState(state)}", ParsePullRequest, cancellationToken);
 
+    /// <summary>Finds a merged pull request whose recorded head is exactly the supplied commit.</summary>
+    public async Task<GitHubPullRequest?> FindMergedPullRequestByHeadAsync(
+        string slug,
+        string headSha,
+        string expectedBaseBranch,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Regex.IsMatch(headSha ?? "", @"\A(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\z"))
+            throw new ArgumentException("A full commit SHA is required.", nameof(headSha));
+        if (string.IsNullOrWhiteSpace(expectedBaseBranch) ||
+            !Regex.IsMatch(expectedBaseBranch, @"\A[A-Za-z0-9][A-Za-z0-9._/-]*\z"))
+            throw new ArgumentException("A base branch name is required.", nameof(expectedBaseBranch));
+
+        var result = await FetchPageAsync(
+            $"{RepositoryPath(slug)}/commits/{headSha}/pulls",
+            ParsePullRequest,
+            cancellationToken).ConfigureAwait(false);
+        if (result.HasMore)
+            throw new InvalidDataException("GitHub returned more associated pull requests than Studio can inspect safely.");
+        return result.Items.FirstOrDefault(pull =>
+            pull.MergedAt is not null &&
+            string.Equals(pull.HeadSha, headSha, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(pull.BaseBranch, expectedBaseBranch, StringComparison.Ordinal));
+    }
+
     public async Task<GitHubIssueDetail?> FetchIssueDetailAsync(string slug, int issueNumber, CancellationToken cancellationToken = default)
     {
         var path = $"{RepositoryPath(slug)}/issues/{ValidateNumber(issueNumber)}";

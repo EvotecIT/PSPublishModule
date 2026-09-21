@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" x:DataType="vm:StorageViewModel"
+        x:Class="PowerForgeStudio.Avalonia.Views.WorktreePruneDialog"
+        Title="Review stale Git registrations" Width="760" Height="650" MinWidth="620" MinHeight="500" WindowStartupLocation="CenterOwner">
+  <Window.Styles>
+    <Style Selector="TextBlock.evidence"><Setter Property="Foreground" Value="#BA2737" /></Style>
+    <Style Selector="TextBlock.evidence.passed"><Setter Property="Foreground" Value="#169B45" /></Style>
+  </Window.Styles>
+  <Grid Margin="26" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
+    <StackPanel Spacing="4">
+      <TextBlock Text="Review stale Git registrations" Classes="heading" />
+      <TextBlock Text="Studio guards the missing path, rechecks the complete Git registry, then removes only the exact stale registration shown below." Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+    <Border Grid.Row="1" Classes="card" Padding="14">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding PruneReview.PrimaryPath}" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding PruneReview.SelectedPath, StringFormat=Selected stale path: {0}}" Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+    <ScrollViewer Grid.Row="2" x:Name="PruneReviewScroller" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="12">
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+          <TextBlock Text="Workspace containment" /><TextBlock Grid.Column="1" Text="{Binding PruneReview.ContainmentDisplay}" Classes="evidence" Classes.passed="{Binding PruneReview.ContainmentPassed}" />
+          <TextBlock Grid.Row="1" Text="Primary Git registry" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PruneReview.PrimaryDisplay}" Classes="evidence" Classes.passed="{Binding PruneReview.PrimaryPassed}" />
+          <TextBlock Grid.Row="2" Text="Complete administrative registry" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PruneReview.AdministrativeRegistryDisplay}" Classes="evidence" Classes.passed="{Binding PruneReview.AdministrativeRegistryPassed}" />
+          <TextBlock Grid.Row="3" Text="Selected path is marked prunable" /><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PruneReview.SelectedRegistrationDisplay}" Classes="evidence" Classes.passed="{Binding PruneReview.SelectedRegistrationPassed}" />
+          <TextBlock Grid.Row="4" Text="Exact cleanup target" /><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PruneReview.PrunableSetDisplay}" Classes="evidence" Classes.passed="{Binding PruneReview.PrunableSetPassed}" />
+        </Grid>
+        <Border Background="#FFF1F2" BorderBrush="#F3A3AD" BorderThickness="1" CornerRadius="6" Padding="12" IsVisible="{Binding !PruneReview.ReadyForConfirmation}">
+          <StackPanel Spacing="7">
+            <TextBlock Text="Cleanup is blocked" FontWeight="SemiBold" Foreground="#BA2737" />
+            <ItemsControl ItemsSource="{Binding PruneReview.Findings}">
+              <ItemsControl.ItemTemplate><DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" Margin="0,2" /></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+        <Border Classes="card" Padding="12">
+          <StackPanel Spacing="7">
+            <TextBlock Text="Registration Studio will remove" FontWeight="SemiBold" />
+            <ItemsControl ItemsSource="{Binding PruneReview.PrunableRegistrations}">
+              <ItemsControl.ItemTemplate><DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding Display}" FontSize="12" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+        <CheckBox IsChecked="{Binding ConfirmPrunableRegistrations}" IsEnabled="{Binding PruneReview.ReadyForConfirmation}">
+          <TextBlock Text="I reviewed this exact stale registration and its missing path." TextWrapping="Wrap" />
+        </CheckBox>
+        <TextBlock Text="{Binding PruneError}" Foreground="#BA2737" TextWrapping="Wrap" />
+      </StackPanel>
+    </ScrollViewer>
+    <WrapPanel Grid.Row="3" HorizontalAlignment="Right" ItemSpacing="9">
+      <Button Content="Refresh evidence" Click="RefreshEvidence" IsEnabled="{Binding CanReviewPrune}" />
+      <Button Content="Cancel" Click="Cancel" IsEnabled="{Binding !IsPruning}" />
+      <Button Content="Remove stale registration" Click="Prune" IsEnabled="{Binding CanPruneReviewed}" Background="#BA2737" Foreground="White" />
+    </WrapPanel>
+  </Grid>
+</Window>

@@ -205,6 +205,8 @@ public sealed class PowerForgeStudioActivityInventoryTests
 
     private sealed class FakeGitHubProjectService(HttpStatusCode? failure = null) : IGitHubProjectService
     {
+        public Task<GitHubPullRequest?> FindMergedPullRequestByHeadAsync(string slug, string headSha, string expectedBaseBranch, CancellationToken cancellationToken = default)
+            => Task.FromResult<GitHubPullRequest?>(null);
         public Task<string?> ResolveRepositoryAsync(string workingCopy, CancellationToken cancellationToken = default) => Task.FromResult<string?>("EvotecIT/SampleProject");
         public Task<GitHubPage<GitHubIssue>> FetchIssuesAsync(string slug, string state = "open", CancellationToken cancellationToken = default)
             => failure is { } status

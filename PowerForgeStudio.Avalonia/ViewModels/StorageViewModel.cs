@@ -10,10 +10,12 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
 {
     private readonly IWorkspaceStorageInspectionService _inspection;
     private readonly IWorkspaceStorageRemovalService _removal;
+    private readonly bool _ownsRemoval;
     private readonly Func<IReadOnlyCollection<string>> _protectedWorkingCopies;
     private readonly List<WorkspaceStorageEntry> _allEntries = [];
     private CancellationTokenSource? _refreshCancellation;
     private int _refreshVersion;
+    private int _reviewVersion;
 
     public StorageViewModel(
         IWorkspaceStorageInspectionService? inspection = null,
@@ -22,6 +24,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     {
         _inspection = inspection ?? new WorkspaceStorageInspectionService();
         _removal = removal ?? new WorkspaceStorageRemovalService();
+        _ownsRemoval = removal is null;
         _protectedWorkingCopies = protectedWorkingCopies ?? (() => []);
     }
 
@@ -40,6 +43,11 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _confirmNoExternalUse;
     [ObservableProperty] private bool _confirmRetainedArtifacts;
     [ObservableProperty] private string _removalError = "";
+    [ObservableProperty] private WorkspaceStoragePruneReview? _pruneReview;
+    [ObservableProperty] private bool _isReviewingPrune;
+    [ObservableProperty] private bool _isPruning;
+    [ObservableProperty] private bool _confirmPrunableRegistrations;
+    [ObservableProperty] private string _pruneError = "";
     public string WorkspaceRoot { get; private set; } = "";
     public bool HasEntries => Entries.Count > 0;
     public bool HasSelection => SelectedEntry is not null;
@@ -48,25 +56,39 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     public bool IsChangedFilter => Filter == "Changed";
     public bool IsBrokenFilter => Filter == "Broken";
 
-    public bool CanReviewRemoval => SelectedEntry is { IsPrimary: false, Exists: true } && !IsLoading && !IsReviewingRemoval && !IsRemoving;
+    public bool CanReviewRemoval => SelectedEntry is { IsPrimary: false, Exists: true } && !IsBusy;
     public bool CanRemoveReviewed => RemovalReview is { ReadyForConfirmation: true } review &&
                                      ConfirmNoExternalUse && (!review.HasRetainedArtifacts || ConfirmRetainedArtifacts) && !IsRemoving;
+    public bool CanReviewPrune => SelectedEntry is { IsPrimary: false, Exists: false, IsBroken: true } && !IsBusy;
+    public bool CanPruneReviewed => PruneReview is { ReadyForConfirmation: true } && ConfirmPrunableRegistrations && !IsPruning;
+    private bool IsBusy => IsLoading || IsReviewingRemoval || IsRemoving || IsReviewingPrune || IsPruning;
 
     partial void OnSelectedEntryChanged(WorkspaceStorageEntry? value)
     {
+        _reviewVersion++;
+        IsReviewingRemoval = false;
+        IsReviewingPrune = false;
         RemovalReview = null;
         ConfirmNoExternalUse = false;
         ConfirmRetainedArtifacts = false;
         RemovalError = "";
+        PruneReview = null;
+        ConfirmPrunableRegistrations = false;
+        PruneError = "";
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(CanReviewRemoval));
+        OnPropertyChanged(nameof(CanReviewPrune));
     }
-    partial void OnIsLoadingChanged(bool value) => OnPropertyChanged(nameof(CanReviewRemoval));
-    partial void OnIsReviewingRemovalChanged(bool value) => OnPropertyChanged(nameof(CanReviewRemoval));
-    partial void OnIsRemovingChanged(bool value) { OnPropertyChanged(nameof(CanReviewRemoval)); OnPropertyChanged(nameof(CanRemoveReviewed)); }
+    partial void OnIsLoadingChanged(bool value) => UpdateActionAvailability();
+    partial void OnIsReviewingRemovalChanged(bool value) => UpdateActionAvailability();
+    partial void OnIsRemovingChanged(bool value) => UpdateActionAvailability();
+    partial void OnIsReviewingPruneChanged(bool value) => UpdateActionAvailability();
+    partial void OnIsPruningChanged(bool value) => UpdateActionAvailability();
     partial void OnRemovalReviewChanged(WorkspaceStorageRemovalReview? value) => OnPropertyChanged(nameof(CanRemoveReviewed));
     partial void OnConfirmNoExternalUseChanged(bool value) => OnPropertyChanged(nameof(CanRemoveReviewed));
     partial void OnConfirmRetainedArtifactsChanged(bool value) => OnPropertyChanged(nameof(CanRemoveReviewed));
+    partial void OnPruneReviewChanged(WorkspaceStoragePruneReview? value) => OnPropertyChanged(nameof(CanPruneReviewed));
+    partial void OnConfirmPrunableRegistrationsChanged(bool value) => OnPropertyChanged(nameof(CanPruneReviewed));
     partial void OnFilterChanged(string value)
     {
         OnPropertyChanged(nameof(IsAllFilter));
@@ -82,6 +104,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         if (string.Equals(full, WorkspaceRoot, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
             return;
         _refreshVersion++;
+        _reviewVersion++;
         _refreshCancellation?.Cancel();
         IsLoading = false;
         WorkspaceRoot = full;
@@ -153,6 +176,9 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     {
         if (!CanReviewRemoval || SelectedEntry is not { } entry)
             return false;
+        var version = ++_reviewVersion;
+        var root = WorkspaceRoot;
+        var path = entry.Path;
         IsReviewingRemoval = true;
         RemovalError = "";
         ConfirmNoExternalUse = false;
@@ -160,11 +186,14 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         RemovalReview = null;
         try
         {
-            RemovalReview = await _removal.ReviewAsync(WorkspaceRoot, entry, _protectedWorkingCopies());
+            var review = await _removal.ReviewAsync(root, entry, _protectedWorkingCopies());
+            if (!IsCurrentReview(version, root, path)) return false;
+            RemovalReview = review;
             return true;
         }
         catch (Exception ex)
         {
+            if (!IsCurrentReview(version, root, path)) return false;
             RemovalError = ex.Message;
             Status = "Removal review failed.";
             Output += $"\n[{DateTime.Now:HH:mm:ss}] Removal review failed: {ex.Message}";
@@ -172,7 +201,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            IsReviewingRemoval = false;
+            if (version == _reviewVersion) IsReviewingRemoval = false;
         }
     }
 
@@ -205,6 +234,81 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         }
     }
 
+    public async Task<bool> ReviewSelectedPruneAsync()
+    {
+        if (!CanReviewPrune || SelectedEntry is not { } entry)
+            return false;
+        var version = ++_reviewVersion;
+        var root = WorkspaceRoot;
+        var path = entry.Path;
+        IsReviewingPrune = true;
+        PruneError = "";
+        ConfirmPrunableRegistrations = false;
+        PruneReview = null;
+        try
+        {
+            var review = await _removal.ReviewPruneAsync(root, entry);
+            if (!IsCurrentReview(version, root, path)) return false;
+            PruneReview = review;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (!IsCurrentReview(version, root, path)) return false;
+            PruneError = ex.Message;
+            Status = "Stale registration review failed.";
+            Output += $"\n[{DateTime.Now:HH:mm:ss}] Stale registration review failed: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            if (version == _reviewVersion) IsReviewingPrune = false;
+        }
+    }
+
+    public async Task<bool> PruneReviewedAsync()
+    {
+        if (!CanPruneReviewed || PruneReview is not { } review)
+            return false;
+        IsPruning = true;
+        PruneError = "";
+        try
+        {
+            await _removal.PruneAsync(review, ConfirmPrunableRegistrations);
+            PruneReview = null;
+            await RefreshAsync();
+            var refreshFailed = Status is "Storage inspection failed." or "Storage inspection cancelled.";
+            Status = refreshFailed
+                ? "Removed the reviewed stale registration; storage refresh failed."
+                : "Removed the reviewed stale registration and refreshed storage.";
+            Output += $"\n[{DateTime.Now:HH:mm:ss}] Studio removed the exact reviewed stale registration and preserved the remaining Git registry: " +
+                      string.Join(", ", review.PrunableRegistrations.Select(static item => item.Path));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            PruneError = ex.Message;
+            return false;
+        }
+        finally
+        {
+            IsPruning = false;
+        }
+    }
+
+    private void UpdateActionAvailability()
+    {
+        OnPropertyChanged(nameof(CanReviewRemoval));
+        OnPropertyChanged(nameof(CanRemoveReviewed));
+        OnPropertyChanged(nameof(CanReviewPrune));
+        OnPropertyChanged(nameof(CanPruneReviewed));
+    }
+
+    private bool IsCurrentReview(int version, string root, string path)
+        => version == _reviewVersion &&
+           string.Equals(root, WorkspaceRoot, PathComparison) &&
+           SelectedEntry is { } selected && string.Equals(path, selected.Path, PathComparison);
+
     private void ApplyFilter()
     {
         var selectedPath = SelectedEntry?.Path;
@@ -225,7 +329,13 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _reviewVersion++;
         _refreshCancellation?.Cancel();
         _refreshCancellation?.Dispose();
+        if (_ownsRemoval && _removal is IDisposable disposable) disposable.Dispose();
     }
+
+    private static StringComparison PathComparison => OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
 }

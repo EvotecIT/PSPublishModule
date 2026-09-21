@@ -13,6 +13,72 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class WorkspaceStorageTests
 {
     [Fact]
+    public async Task LateRemovalReviewIsDiscardedAfterSelectionChanges()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-storage-late-remove-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var primary = Directory.CreateDirectory(Path.Combine(root, "Product")).FullName;
+            var first = Directory.CreateDirectory(Path.Combine(root, "_worktrees", "first")).FullName;
+            var second = Directory.CreateDirectory(Path.Combine(root, "_worktrees", "second")).FullName;
+            var entries = new[]
+            {
+                Entry("Product", first, primary, "feature/first", false, 10, "Clean", 0, "Locally merged", "Review removal evidence", true),
+                Entry("Product", second, primary, "feature/second", false, 10, "Clean", 0, "Locally merged", "Review removal evidence", true)
+            };
+            var pending = new PendingStorageRemovalService();
+            using var model = new StorageViewModel(new FakeStorageInspectionService(entries), pending);
+            model.SetWorkspace(root);
+            await model.RefreshAsync();
+
+            var reviewTask = model.ReviewSelectedRemovalAsync();
+            await pending.RemovalEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            model.SelectedEntry = entries[1];
+            pending.CompleteRemoval(RemovalReview(root, entries[0]));
+
+            Assert.False(await reviewTask);
+            Assert.Null(model.RemovalReview);
+            Assert.Equal(entries[1], model.SelectedEntry);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LatePruneReviewIsDiscardedAfterWorkspaceChanges()
+    {
+        var fixture = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-storage-late-prune-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var firstRoot = Directory.CreateDirectory(Path.Combine(fixture, "First")).FullName;
+            var secondRoot = Directory.CreateDirectory(Path.Combine(fixture, "Second")).FullName;
+            var primary = Directory.CreateDirectory(Path.Combine(firstRoot, "Product")).FullName;
+            var broken = Entry("Product", Path.Combine(firstRoot, "_worktrees", "missing"), primary, "feature/missing",
+                false, 0, "Broken reference", 0, "Not checked", "Review stale registration", false, exists: false);
+            var pending = new PendingStorageRemovalService();
+            using var model = new StorageViewModel(new FakeStorageInspectionService([broken]), pending);
+            model.SetWorkspace(firstRoot);
+            await model.RefreshAsync();
+
+            var reviewTask = model.ReviewSelectedPruneAsync();
+            await pending.PruneEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            model.SetWorkspace(secondRoot);
+            pending.CompletePrune(PruneReview(firstRoot, broken));
+
+            Assert.False(await reviewTask);
+            Assert.Null(model.PruneReview);
+            Assert.Equal(Path.GetFullPath(secondRoot), model.WorkspaceRoot);
+            Assert.False(model.CanPruneReviewed);
+        }
+        finally
+        {
+            Directory.Delete(fixture, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task FailedEvidenceRefreshInvalidatesPriorRemovalReview()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-storage-review-" + Guid.NewGuid().ToString("N"))).FullName;
@@ -100,6 +166,18 @@ public sealed class WorkspaceStorageTests
                     Assert.True(model.Storage.CanRemoveReviewed);
                     removalDialog.Close();
                     await removalShown;
+                    model.Storage.SelectedEntry = Assert.Single(model.Storage.Entries, entry => entry.IsBroken);
+                    Assert.True(await model.Storage.ReviewSelectedPruneAsync());
+                    var pruneDialog = new WorktreePruneDialog { DataContext = model.Storage, Width = 760, Height = 650 };
+                    var pruneShown = pruneDialog.ShowDialog(window);
+                    Capture(pruneDialog, "worktree-prune-review.png");
+                    pruneDialog.Width = 620;
+                    pruneDialog.Height = 500;
+                    Capture(pruneDialog, "worktree-prune-review-compact.png");
+                    model.Storage.ConfirmPrunableRegistrations = true;
+                    Assert.True(model.Storage.CanPruneReviewed);
+                    pruneDialog.Close();
+                    await pruneShown;
                     window.Width = 1050;
                     window.Height = 720;
                     Capture(window, "storage-review-compact.png");
@@ -133,6 +211,26 @@ public sealed class WorkspaceStorageTests
         bool exists = true)
         => new(repository, path, primary, branch, isPrimary, exists, false, bytes, 12, changes, state,
             "main", ancestry, next, candidate, null);
+
+    private static WorkspaceStorageRemovalReview RemovalReview(string root, WorkspaceStorageEntry entry)
+        => new(Path.GetFullPath(root), entry.PrimaryPath, entry.Path,
+            new string('a', 40), "refs/heads/main", new string('b', 40),
+            true, true, true, true, true, null, null, false, true,
+            new WorkspaceExternalUseEvidence(true, 2, [], "Manual confirmation is still required."),
+            [], [], new string('c', 64), DateTimeOffset.UtcNow);
+
+    private static WorkspaceStoragePruneReview PruneReview(string root, WorkspaceStorageEntry entry)
+        => new(Path.GetFullPath(root), entry.PrimaryPath, entry.Path,
+            true, true, true, true, true,
+            [PrunableRegistration(entry)],
+            [entry.PrimaryPath], [], new string('d', 64), new string('e', 64), DateTimeOffset.UtcNow);
+
+    private static WorkspacePrunableRegistration PrunableRegistration(WorkspaceStorageEntry entry)
+    {
+        var administrative = Path.Combine(entry.PrimaryPath, ".git", "worktrees", "feature");
+        return new(entry.Path, "administrative files are missing", "feature", administrative,
+            Path.Combine(entry.Path, ".git"));
+    }
 
     private static void Capture(MainWindow window, string fileName)
     {
@@ -195,7 +293,8 @@ public sealed class WorkspaceStorageTests
             return Task.FromResult(new WorkspaceStorageRemovalReview(
                 Path.GetFullPath(workspaceRoot), entry.PrimaryPath, entry.Path,
                 new string('a', 40), "refs/heads/main", new string('b', 40),
-                true, true, true, true, true, true,
+                true, true, true, true, true, null, null, false, true,
+                new WorkspaceExternalUseEvidence(true, 2, [], "Manual confirmation is still required."),
                 [Path.Combine(entry.Path, "bin")], [], new string('c', 64), DateTimeOffset.UtcNow));
         }
 
@@ -206,5 +305,53 @@ public sealed class WorkspaceStorageTests
             bool confirmRetainedArtifacts,
             CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+
+        public Task<WorkspaceStoragePruneReview> ReviewPruneAsync(
+            string workspaceRoot,
+            WorkspaceStorageEntry entry,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new WorkspaceStoragePruneReview(
+                Path.GetFullPath(workspaceRoot), entry.PrimaryPath, entry.Path,
+                true, true, true, true, true,
+                [PrunableRegistration(entry)],
+                [entry.PrimaryPath], [], new string('d', 64), new string('e', 64), DateTimeOffset.UtcNow));
+
+        public Task PruneAsync(
+            WorkspaceStoragePruneReview reviewed,
+            bool confirmRegistrations,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class PendingStorageRemovalService : IWorkspaceStorageRemovalService
+    {
+        private readonly TaskCompletionSource<WorkspaceStorageRemovalReview> _removal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<WorkspaceStoragePruneReview> _prune = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource RemovalEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource PruneEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<WorkspaceStorageRemovalReview> ReviewAsync(string workspaceRoot, WorkspaceStorageEntry entry,
+            IReadOnlyCollection<string> protectedWorkingCopies, CancellationToken cancellationToken = default)
+        {
+            RemovalEntered.TrySetResult();
+            return await _removal.Task.WaitAsync(cancellationToken);
+        }
+
+        public Task RemoveAsync(WorkspaceStorageRemovalReview reviewed, IReadOnlyCollection<string> protectedWorkingCopies,
+            bool confirmNoExternalUse, bool confirmRetainedArtifacts, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public async Task<WorkspaceStoragePruneReview> ReviewPruneAsync(string workspaceRoot, WorkspaceStorageEntry entry,
+            CancellationToken cancellationToken = default)
+        {
+            PruneEntered.TrySetResult();
+            return await _prune.Task.WaitAsync(cancellationToken);
+        }
+
+        public Task PruneAsync(WorkspaceStoragePruneReview reviewed, bool confirmRegistrations,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public void CompleteRemoval(WorkspaceStorageRemovalReview review) => _removal.TrySetResult(review);
+        public void CompletePrune(WorkspaceStoragePruneReview review) => _prune.TrySetResult(review);
     }
 }

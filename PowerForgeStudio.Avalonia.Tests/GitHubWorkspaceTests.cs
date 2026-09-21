@@ -139,6 +139,8 @@ public sealed class GitHubWorkspaceTests
 
     private sealed class FakeGitHub : IGitHubProjectService
     {
+        public Task<GitHubPullRequest?> FindMergedPullRequestByHeadAsync(string slug, string headSha, string expectedBaseBranch, CancellationToken cancellationToken = default)
+            => Task.FromResult<GitHubPullRequest?>(null);
         public TaskCompletionSource<GitHubPage<GitHubPullRequest>>? PendingList;
         public TaskCompletionSource<GitHubPullRequestDetail?>? PendingDetail;
         public bool Error, CheckError;

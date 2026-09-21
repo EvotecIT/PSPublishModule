@@ -35,4 +35,13 @@ public sealed partial class StorageView : UserControl
             return;
         await new WorktreeRemovalDialog { DataContext = model }.ShowDialog(owner);
     }
+
+    private async void ReviewPrune(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is not StorageViewModel model || TopLevel.GetTopLevel(this) is not Window owner)
+            return;
+        if (!await model.ReviewSelectedPruneAsync())
+            return;
+        await new WorktreePruneDialog { DataContext = model }.ShowDialog(owner);
+    }
 }

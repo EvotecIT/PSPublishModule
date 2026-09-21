@@ -13,18 +13,41 @@ public static class LockInspector
     /// <summary>Returns processes locking any of the provided paths.</summary>
     public static IReadOnlyList<(int Pid, string Name)> GetLockingProcesses(IEnumerable<string> paths)
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return Array.Empty<(int, string)>();
+        return TryGetLockingProcesses(paths, out var processes, out _) ? processes : Array.Empty<(int, string)>();
+    }
+
+    /// <summary>
+    /// Tries to inspect processes locking any provided file paths. A successful empty result means
+    /// Restart Manager completed the inspection; <see langword="false"/> means the platform or API
+    /// could not provide evidence.
+    /// </summary>
+    public static bool TryGetLockingProcesses(
+        IEnumerable<string> paths,
+        out IReadOnlyList<(int Pid, string Name)> processes,
+        out int errorCode)
+    {
         var list = new List<(int, string)>();
+        processes = list;
+        errorCode = 0;
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return false;
         uint session = 0;
         string key = Guid.NewGuid().ToString();
         int res = RmStartSession(out session, 0, key);
-        if (res != 0) return list;
+        if (res != 0)
+        {
+            errorCode = res;
+            return false;
+        }
         try
         {
             var arr = (paths is null) ? Array.Empty<string>() : new List<string>(paths).ToArray();
-            if (arr.Length == 0) return list;
+            if (arr.Length == 0) return true;
             res = RmRegisterResources(session, (uint)arr.Length, arr, 0, null, 0, null);
-            if (res != 0) return list;
+            if (res != 0)
+            {
+                errorCode = res;
+                return false;
+            }
 
             uint needed = 0, count = 0, reason = 0;
             // First call to get count
@@ -43,11 +66,18 @@ public static class LockInspector
                         string name = infos[i].strAppName;
                         list.Add((pid, name));
                     }
+                    return true;
                 }
             }
+            else if (res == 0)
+            {
+                return true;
+            }
+
+            errorCode = res;
+            return false;
         }
         finally { RmEndSession(session); }
-        return list;
     }
 
     /// <summary>Attempts to terminate processes locking any of the provided paths.</summary>

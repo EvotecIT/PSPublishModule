@@ -20,14 +20,27 @@
     </Border>
     <ScrollViewer Grid.Row="2" x:Name="ReviewScroller" VerticalScrollBarVisibility="Auto">
       <StackPanel Spacing="12">
-        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
           <TextBlock Text="Workspace containment" /><TextBlock Grid.Column="1" Text="{Binding RemovalReview.ContainmentDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.ContainmentPassed}" />
           <TextBlock Grid.Row="1" Text="Exact Git registration" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RemovalReview.RegistrationDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.RegistrationPassed}" />
           <TextBlock Grid.Row="2" Text="Git worktree is unlocked" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RemovalReview.UnlockedDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.UnlockedPassed}" />
           <TextBlock Grid.Row="3" Text="Clean tracked and untracked state" /><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding RemovalReview.CleanDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.CleanPassed}" />
-          <TextBlock Grid.Row="4" Text="Exact HEAD in current remote default" /><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding RemovalReview.RemoteAncestryDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.RemoteAncestryPassed}" />
-          <TextBlock Grid.Row="5" Text="No PowerForge Studio use" /><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding RemovalReview.StudioUseDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.StudioUsePassed}" />
+          <TextBlock Grid.Row="4" Text="Exact HEAD in current remote default" /><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding RemovalReview.RemoteAncestryDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.RemoteAncestrySatisfied}" />
+          <TextBlock Grid.Row="5" Text="Exact merged pull-request head" /><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding RemovalReview.MergedPullRequestDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.MergedPullRequestSatisfied}" />
+          <TextBlock Grid.Row="6" Text="No PowerForge Studio use" /><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding RemovalReview.StudioUseDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.StudioUsePassed}" />
+          <TextBlock Grid.Row="7" Text="Windows open-handle scan" /><TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding RemovalReview.ExternalUseDisplay}" Classes="evidence" Classes.passed="{Binding RemovalReview.ExternalUseScanPassed}" TextWrapping="Wrap" MaxWidth="330" />
         </Grid>
+        <Border Classes="card" Padding="12" IsVisible="{Binding RemovalReview.HasExternalUseWarning}">
+          <TextBlock Text="{Binding RemovalReview.ExternalUseEvidence.Warning}" Classes="muted" TextWrapping="Wrap" />
+        </Border>
+        <Border Background="#FFF1F2" BorderBrush="#F3A3AD" BorderThickness="1" CornerRadius="6" Padding="12" IsVisible="{Binding RemovalReview.ExternalUseEvidence.HasDetectedProcesses}">
+          <StackPanel Spacing="7">
+            <TextBlock Text="Processes with open handles" FontWeight="SemiBold" Foreground="#BA2737" />
+            <ItemsControl ItemsSource="{Binding RemovalReview.ExternalUseEvidence.Processes}">
+              <ItemsControl.ItemTemplate><DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding Display}" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
         <Border Background="#FFF1F2" BorderBrush="#F3A3AD" BorderThickness="1" CornerRadius="6" Padding="12" IsVisible="{Binding !RemovalReview.ReadyForConfirmation}">
           <StackPanel Spacing="7">
             <TextBlock Text="Removal is blocked" FontWeight="SemiBold" Foreground="#BA2737" />

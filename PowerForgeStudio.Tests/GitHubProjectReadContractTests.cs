@@ -86,6 +86,28 @@ public sealed class GitHubProjectReadContractTests
     }
 
     [Fact]
+    public async Task MergedPullRequestEvidenceRequiresExactHeadAndBase()
+    {
+        var head = new string('a', 40);
+        using var client = Client(request =>
+        {
+            Assert.Contains("/repos/owner/repo/commits/" + head + "/pulls", request.RequestUri!.AbsolutePath);
+            return Json($$"""
+                [{"number":7,"title":"Wrong base","state":"closed","user":{"login":"dev"},"head":{"ref":"feature","sha":"{{head}}"},"base":{"ref":"release"},"labels":[],"additions":1,"deletions":0,"changed_files":1,"created_at":"2026-09-01T00:00:00Z","merged_at":"2026-09-02T00:00:00Z"},
+                 {"number":8,"title":"Exact evidence","state":"closed","user":{"login":"dev"},"head":{"ref":"feature","sha":"{{head}}"},"base":{"ref":"main"},"labels":[],"additions":1,"deletions":0,"changed_files":1,"created_at":"2026-09-01T00:00:00Z","merged_at":"2026-09-02T00:00:00Z","html_url":"https://github.com/owner/repo/pull/8"}]
+                """);
+        });
+        using var service = new GitHubProjectService(client);
+
+        var result = await service.FindMergedPullRequestByHeadAsync("owner/repo", head, "main");
+
+        Assert.NotNull(result);
+        Assert.Equal(8, result.Number);
+        Assert.Equal(head, result.HeadSha);
+        Assert.Equal("main", result.BaseBranch);
+    }
+
+    [Fact]
     public async Task DisposeCancelsPendingRequestWithoutSemaphoreReleaseFailure()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
