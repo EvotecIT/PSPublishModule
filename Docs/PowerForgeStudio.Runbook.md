@@ -1,89 +1,80 @@
-# PowerForge Studio Build And Run Guide
+# PowerForge Studio build and run guide
 
-This guide covers the practical commands for running `PowerForgeStudio.Wpf` from a local checkout and for producing a compiled build you can launch without opening the repo in an IDE.
+This guide covers the supported developer and compiled-app paths for PowerForge Studio. The default desktop host is the Avalonia application. The previous WPF host remains available through explicit compatibility switches while migration validation finishes.
 
-## What this guide targets
+## Product entry points
 
-- GUI host: `PowerForgeStudio.Wpf`
+- Desktop host: `PowerForgeStudio.Avalonia`
 - Optional headless companion: `PowerForgeStudio.Cli`
-- Repo root assumed in examples: `C:\Support\GitHub\PSPublishModule`
-- Studio worktree example: `C:\Support\GitHub\PSPublishModule-codex-studio`
+- Temporary compatibility host: `PowerForgeStudio.Wpf`
+- Workspace root: `$env:EVOTEC_GITHUB_ROOT` when set, otherwise `C:\Support\GitHub` on Windows or `~/Documents/GitHub` on macOS/Linux
 
-All commands below work from the repo root.
+Run the commands below from the repository root.
 
 ## Prerequisites
 
-- Windows machine for the WPF app
-- .NET 10 SDK installed
-- PowerShell 7 or Windows PowerShell
+- .NET 10 SDK
+- PowerShell 7 for the cross-platform scripts
+- Windows for the legacy WPF compatibility host
 
-The WPF app stores its local state under:
+The desktop app stores machine-local state under `%LOCALAPPDATA%\PowerForgeStudio` on Windows and the platform local-application-data folder elsewhere. Important files include:
 
-- `%LOCALAPPDATA%\PowerForgeStudio\state\workspace-roots.json`
-- `%LOCALAPPDATA%\PowerForgeStudio\workspaces\...`
-- `%LOCALAPPDATA%\PowerForgeStudio\releaseops.db`
-
-Per-workspace databases are created automatically by `PowerForgeStudioHostPaths`.
+- `state\workspace-roots.json` for recent and active workspace roots
+- `workspaces\...\releaseops.db` for workspace state
+- `release-history.db` for durable release sessions and receipts
+- `file-recovery\...` for Studio-managed file recovery
 
 ## Local developer usage
 
-### 1. Validate the Studio build
-
-Run the Studio-specific build script:
+### Validate Studio
 
 ```powershell
 .\Build\Build-PowerForgeStudio.ps1 -Configuration Release
 ```
 
-This does:
-
-1. `dotnet build` for `PowerForgeStudio.Wpf`
-2. `dotnet test` for `PowerForgeStudio.Wpf.Tests`
-3. `dotnet test` for `PowerForgeStudio.Tests`
-
-Useful variants:
+The default workflow builds Avalonia and runs its UI tests plus the shared Studio tests. Useful variants:
 
 ```powershell
 .\Build\Build-PowerForgeStudio.ps1 -Configuration Debug
 .\Build\Build-PowerForgeStudio.ps1 -SkipTests
 .\Build\Build-PowerForgeStudio.ps1 -NoRestore
 .\Build\Build-PowerForgeStudio.ps1 -IncludeCli
+.\Build\Build-PowerForgeStudio.ps1 -IncludeLegacyWpf
 ```
 
-### 2. Run the WPF Studio from source
+`-IncludeLegacyWpf` adds the old Windows-only host and its tests. It does not change which app the normal run and publish commands select.
+
+### Run Studio from source
 
 ```powershell
 .\Build\Run-PowerForgeStudio.ps1
 ```
 
-Default behavior:
+The command runs the Avalonia host in Debug and builds it when needed. Studio restores its last workspace root. To select a root explicitly:
 
-- runs `PowerForgeStudio.Wpf`
-- uses `Debug`
-- builds before launch
-- paints the shell first, then refreshes the workspace in the background
+```powershell
+.\Build\Run-PowerForgeStudio.ps1 -Workspace C:\Support\GitHub
+```
 
-On a large root such as `C:\Support\GitHub`, the first refresh can still take time because Studio scans repositories, enriches plan previews, and probes GitHub signals. During that phase the window should stay responsive and the status line should update instead of showing a blank white screen.
-
-Useful variants:
+Other useful variants:
 
 ```powershell
 .\Build\Run-PowerForgeStudio.ps1 -Configuration Release
-.\Build\Run-PowerForgeStudio.ps1 -Configuration Release -NoBuild
 .\Build\Run-PowerForgeStudio.ps1 -Configuration Release -NoBuild -NoRestore
+.\Build\Run-PowerForgeStudio.ps1 -LegacyWpf
 ```
 
-The direct `dotnet` form is:
+The direct Avalonia command is:
 
 ```powershell
-dotnet run --project .\PowerForgeStudio.Wpf\PowerForgeStudio.Wpf.csproj -c Debug --framework net10.0-windows
+dotnet run --project .\PowerForgeStudio.Avalonia\PowerForgeStudio.Avalonia.csproj -c Debug --framework net10.0 -- --workspace C:\Support\GitHub
 ```
 
 ## Compiled usage
 
-### 1. Publish a framework-dependent build
+### Publish a framework-dependent build
 
-Use this when the target machine already has the matching .NET desktop runtime installed.
+Use this when the target machine already has a compatible .NET 10 runtime for the selected RID and the platform GUI prerequisites required by Avalonia.
 
 ```powershell
 .\Build\Publish-PowerForgeStudio.ps1 -Runtime win-x64 -Mode FrameworkDependent
@@ -91,11 +82,11 @@ Use this when the target machine already has the matching .NET desktop runtime i
 
 Output:
 
-- `.\Artifacts\PowerForgeStudio\win-x64\framework-dependent\PowerForgeStudio.Wpf.exe`
+- `.\Artifacts\PowerForgeStudio\win-x64\framework-dependent\PowerForgeStudio.exe`
 
-### 2. Publish a self-contained build
+### Publish a self-contained build
 
-Use this when you want the app to run on a machine without a separate .NET runtime install.
+Use this when the target machine should not require a separate .NET runtime install.
 
 ```powershell
 .\Build\Publish-PowerForgeStudio.ps1 -Runtime win-x64 -Mode SelfContained
@@ -103,59 +94,59 @@ Use this when you want the app to run on a machine without a separate .NET runti
 
 Output:
 
-- `.\Artifacts\PowerForgeStudio\win-x64\self-contained\PowerForgeStudio.Wpf.exe`
+- `.\Artifacts\PowerForgeStudio\win-x64\self-contained\PowerForgeStudio.exe`
 
-### 3. Publish both outputs at once
+### Publish both outputs
 
 ```powershell
 .\Build\Publish-PowerForgeStudio.ps1 -Runtime win-x64 -Mode Both
 ```
 
-### 4. Optional single-file self-contained publish
+### Publish a single-file self-contained build
 
 ```powershell
 .\Build\Publish-PowerForgeStudio.ps1 -Runtime win-x64 -Mode SelfContained -SingleFile
 ```
 
-This keeps the publish simpler to move around, but the default multi-file self-contained output is the safer baseline when you are validating runtime behavior.
+The multi-file self-contained output remains the baseline for runtime validation. Use `-LegacyWpf` only when a migration comparison specifically needs the old host.
 
-## Optional headless CLI usage
+Avalonia also accepts `linux-x64`, `osx-x64`, and `osx-arm64` runtime identifiers. Windows is the first supported and validated product target. Other runtime outputs still require native validation and the target platform's Avalonia prerequisites before distribution.
 
-If you want a non-GUI snapshot or queue check while developing Studio, the CLI project is already in the solution:
+## Headless CLI usage
+
+The CLI uses the same shared domain and orchestration owners:
 
 ```powershell
 dotnet run --project .\PowerForgeStudio.Cli\PowerForgeStudio.Cli.csproj -- snapshot --root C:\Support\GitHub --json
 dotnet run --project .\PowerForgeStudio.Cli\PowerForgeStudio.Cli.csproj -- inbox --root C:\Support\GitHub
 ```
 
-This is optional. The main local and compiled usage path for Studio remains the WPF app.
+## Day-to-day workflow
 
-## Recommended day-to-day workflow
-
-### Local iteration
+Local iteration:
 
 ```powershell
 .\Build\Build-PowerForgeStudio.ps1 -Configuration Debug
 .\Build\Run-PowerForgeStudio.ps1 -Configuration Debug
 ```
 
-### Pre-share / pre-demo validation
+Pre-share validation:
 
 ```powershell
 .\Build\Build-PowerForgeStudio.ps1 -Configuration Release
 .\Build\Publish-PowerForgeStudio.ps1 -Runtime win-x64 -Mode Both
 ```
 
-## Notes about engine resolution
+## Engine resolution
 
-When you run Studio from a repo checkout, it prefers the local `PSPublishModule` repo manifest when available. That is the safest path while iterating on unpublished Studio and pipeline changes together.
+Studio prefers the local PSPublishModule repository manifest when it runs from a checkout. This keeps unpublished Studio and pipeline changes on the same shared PowerForge implementation.
 
-If you publish the app and run it outside the repo, Studio will still resolve its local state and workspace catalog under `%LOCALAPPDATA%\PowerForgeStudio`, but engine selection depends on what is available on that machine.
+A published app still resolves its machine-local workspace and release state under the platform application-data folder. Build, signing and publication availability then depends on the PowerForge and toolchain evidence shown by Studio Connections.
 
 ## Quick command list
 
 ```powershell
 .\Build\Build-PowerForgeStudio.ps1
-.\Build\Run-PowerForgeStudio.ps1
+.\Build\Run-PowerForgeStudio.ps1 -Workspace C:\Support\GitHub
 .\Build\Publish-PowerForgeStudio.ps1 -Runtime win-x64 -Mode Both
 ```

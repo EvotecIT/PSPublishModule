@@ -40,7 +40,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Add machine-local Settings with durable behavior and bounded Activity refresh preferences.
 - [ ] Connect GitHub automation runtime and a supported Codex adapter; add provider-owned configuration actions only where their owners expose safe APIs.
 - [ ] Validate native rendering, keyboard navigation and representative workflows.
-- [ ] Review interacting behavior, update build/run/publish entry points and retire the WPF host.
+- [ ] Review interacting behavior and retire the WPF host. The default build/run/publish entry points now select Avalonia; WPF is explicit compatibility only.
 - [ ] Clean task-owned validation artifacts and report delivery limits.
 
 ## Ownership and migration boundary
@@ -583,3 +583,13 @@ Verification records each publication receipt independently as planned, checking
 The Avalonia Releases page now has one labeled execution-progress surface for all three stages. It resets the current counter between stages without clearing earlier events, uses a determinate bar after the first target update, and removes the duplicate publication and verification spinners. Empty signing receipts no longer create an orphaned heading. Wide, bottom-scrolled and compact Skia renders were inspected in `Artifacts/StudioValidation/publication-progress/`.
 
 Validation passed all 49 Avalonia tests and 121 release-specific shared tests covering real controlled NuGet publication and verification adapters, durable signing/publication/verification claims, cancellation, partial evidence, state storage and schema behavior. The retained WPF host also builds without warnings. No real feed, GitHub release, PowerShell repository or external verification endpoint was modified. Abrupt process termination and a disposable authenticated end-to-end publication remain unverified.
+
+### Avalonia default product entry points
+
+The repository build, run and publish commands now select the Avalonia host by default. The product assembly and app host are named `PowerForgeStudio`, so a Windows publish produces `PowerForgeStudio.exe` without exposing the UI framework in the operator-facing filename. The old WPF host remains available only through `-IncludeLegacyWpf` for build comparison or `-LegacyWpf` for explicit run/publish compatibility while final migration checks remain open.
+
+`Build-PowerForgeStudio.ps1` builds Avalonia and runs its UI suite plus the shared Studio suite. `Run-PowerForgeStudio.ps1` accepts an explicit workspace and otherwise keeps the saved-root behavior; it rejects that option for the legacy host because WPF cannot honor it. `Publish-PowerForgeStudio.ps1` retains framework-dependent, self-contained and single-file modes and supports portable Avalonia runtime identifiers; Windows remains the first supported and validated target. The maintainer runbook now describes these paths and the current local state files.
+
+The exact build path produced the renamed application assembly with zero warnings and all 49 Avalonia tests passed. The full shared suite still detects existing stale Apple source-trust exception assertions and an environment-dependent station-projection case; those unrelated failures were not suppressed or removed from the wrapper. Both framework-dependent and self-contained `win-x64` publishes completed and produced `PowerForgeStudio.exe` with their expected dependency sets. The framework-dependent executable launched against the dedicated worktree, discovered its repository and exposed the complete project tree, project tabs, files surface and output dock through Windows accessibility. Native capture could not bring the validation window to the foreground (`failed to activate captured window`), so pointer and keyboard interaction remain unverified. The agent-owned process was closed afterward.
+
+Removing the WPF source and tests remains tied to final native interaction proof and confirmation that no still-useful WPF-only workflow is missing from Avalonia.

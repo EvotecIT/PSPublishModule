@@ -7,11 +7,27 @@ param(
     [string] $Mode = 'Both',
     [string] $OutputRoot,
     [switch] $NoRestore,
-    [switch] $SingleFile
+    [switch] $SingleFile,
+    [switch] $LegacyWpf
 )
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$wpfProject = Join-Path $repoRoot 'PowerForgeStudio.Wpf\PowerForgeStudio.Wpf.csproj'
+$runningOnWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Windows)
+if ($LegacyWpf -and (-not $runningOnWindows -or -not $Runtime.StartsWith('win-', [StringComparison]::OrdinalIgnoreCase))) {
+    throw 'The legacy PowerForge Studio WPF host can only publish for Windows from Windows.'
+}
+$project = if ($LegacyWpf) {
+    Join-Path $repoRoot 'PowerForgeStudio.Wpf\PowerForgeStudio.Wpf.csproj'
+} else {
+    Join-Path $repoRoot 'PowerForgeStudio.Avalonia\PowerForgeStudio.Avalonia.csproj'
+}
+$executableBaseName = if ($LegacyWpf) { 'PowerForgeStudio.Wpf' } else { 'PowerForgeStudio' }
+$executableName = if ($Runtime.StartsWith('win-', [StringComparison]::OrdinalIgnoreCase)) {
+    "$executableBaseName.exe"
+} else {
+    $executableBaseName
+}
 if (-not $PSBoundParameters.ContainsKey('OutputRoot') -or [string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $repoRoot 'Artifacts\PowerForgeStudio'
 }
@@ -35,7 +51,7 @@ $selfContainedRoot = Join-Path $publishRoot 'self-contained'
 
 $baseArguments = @(
     'publish',
-    $wpfProject,
+    $project,
     '-c', $Configuration,
     '-r', $Runtime,
     '-p:UseAppHost=true'
@@ -49,7 +65,7 @@ if ($Mode -in @('FrameworkDependent', 'Both')) {
             '--self-contained', 'false',
             '-o', $frameworkDependentRoot
         ))
-    Write-Host "Framework-dependent publish ready: $frameworkDependentRoot\PowerForgeStudio.Wpf.exe" -ForegroundColor Green
+    Write-Host "Framework-dependent publish ready: $(Join-Path $frameworkDependentRoot $executableName)" -ForegroundColor Green
 }
 
 if ($Mode -in @('SelfContained', 'Both')) {
@@ -62,7 +78,7 @@ if ($Mode -in @('SelfContained', 'Both')) {
         '-o', $selfContainedRoot
     )
     Invoke-DotNet -Arguments $selfContainedArguments
-    Write-Host "Self-contained publish ready: $selfContainedRoot\PowerForgeStudio.Wpf.exe" -ForegroundColor Green
+    Write-Host "Self-contained publish ready: $(Join-Path $selfContainedRoot $executableName)" -ForegroundColor Green
 }
 
 Write-Host "PowerForge Studio publish workflow completed." -ForegroundColor Green

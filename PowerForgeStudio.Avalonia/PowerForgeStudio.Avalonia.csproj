@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <IsPackable>false</IsPackable>
+    <AssemblyName>PowerForgeStudio</AssemblyName>
+    <RootNamespace>PowerForgeStudio.Avalonia</RootNamespace>
     <Description>PowerForge Studio portable desktop workspace.</Description>
   </PropertyGroup>
   <ItemGroup>
