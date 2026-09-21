@@ -7,6 +7,60 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineHostedOperationsTests
 {
     [Fact]
+    public void Run_RejectsInstalledDependencyRemovedByAfterInstallAction()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string corePath = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core")).FullName;
+            File.WriteAllText(Path.Combine(corePath, "Consumer.dll"), "consumer");
+            File.WriteAllText(Path.Combine(corePath, "Dependency.dll"), "dependency");
+            string installRoot = Path.Combine(root.FullName, "InstalledModules");
+            string installedModulePath = Path.Combine(installRoot, moduleName, "1.0.0");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AllowModuleImportValidation = true,
+                RejectIncompleteBinaryPayload = true,
+                InstalledBinaryPathToRemoveAfterInstall = Path.Combine(installedModulePath, "Lib", "Core", "Dependency.dll")
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(), new ThrowingPowerShellRunner(), new FakeMetadataProvider(), hostedOperations);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = true, Roots = [installRoot] },
+                Segments =
+                [
+                    new ConfigurationImportModulesSegment
+                    {
+                        ImportModules = new ImportModulesConfiguration { Self = true }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = true,
+                            At = ModulePipelineActionStage.AfterInstall,
+                            Name = "Remove installed dependency"
+                        }
+                    }
+                ]
+            };
+
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("Delivered binary dependency is missing", failure.Message, StringComparison.Ordinal);
+            Assert.True(hostedOperations.BinaryDependencyRoots.Count(path =>
+                string.Equals(path, installedModulePath, StringComparison.OrdinalIgnoreCase)) >= 2);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_RejectsExternalUnpackedModuleContentChangedAfterValidation()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -186,6 +240,8 @@ public sealed partial class ModulePipelineHostedOperationsTests
             var core = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
             File.WriteAllText(Path.Combine(core.FullName, "Consumer.dll"), "consumer");
             File.WriteAllText(Path.Combine(core.FullName, "Dependency.dll"), "dependency");
+            if (publishToRepository)
+                File.WriteAllText(Path.Combine(root.FullName, moduleName + ".powerforge-compilation.json"), "invalid canonical evidence");
             var archivePath = Path.Combine(root.FullName, "Artefacts", "Packed");
             var hostedOperations = new FakeHostedOperations
             {

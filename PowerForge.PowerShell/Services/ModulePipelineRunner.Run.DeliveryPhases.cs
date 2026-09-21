@@ -48,6 +48,7 @@ public sealed partial class ModulePipelineRunner
                                 state.SigningResult,
                                 buildResult.StagingPath,
                                 module.Path);
+                            ValidateDeliveredBinaryDependencies(plan, module.Path);
                             _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
                                 module.Path,
                                 module.Name,
@@ -146,6 +147,8 @@ public sealed partial class ModulePipelineRunner
                         validateInstalledPaths: validateInstalledTransactionally
                             ? installedPaths =>
                             {
+                                foreach (var installedPath in installedPaths)
+                                    ValidateDeliveredBinaryDependencies(plan, installedPath);
                                 if (plan.SignModule)
                                 {
                                     deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
@@ -207,5 +210,10 @@ public sealed partial class ModulePipelineRunner
         ExecuteActions(ModulePipelineActionStage.AfterInstall, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
         ValidateDeliveredArtefactIntegrity(plan, state);
+        if (state.InstallResult is not null)
+        {
+            foreach (string installedPath in state.InstallResult.InstalledPaths)
+                ValidateDeliveredBinaryDependencies(plan, installedPath);
+        }
     }
 }

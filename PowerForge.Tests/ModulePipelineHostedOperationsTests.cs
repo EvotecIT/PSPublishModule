@@ -3429,6 +3429,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
         public bool AllowModuleImportValidation { get; set; }
         public bool RejectIncompleteBinaryPayload { get; set; }
         public bool RemoveBinaryDependencyAfterArtefacts { get; set; }
+        public string? InstalledBinaryPathToRemoveAfterInstall { get; set; }
         public bool TamperPackedArtifactAfterArtefacts { get; set; }
         public string? LooseArtifactExtensionToTamper { get; set; }
         public string? ExternalLooseArtifactRootToTamper { get; set; }
@@ -3576,6 +3577,11 @@ public sealed partial class ModulePipelineHostedOperationsTests
                 var dependency = Assert.Single(Directory.EnumerateFiles(
                     artifactRoot, "Dependency.dll", SearchOption.AllDirectories));
                 File.Delete(dependency);
+            }
+            if (!string.IsNullOrWhiteSpace(InstalledBinaryPathToRemoveAfterInstall) &&
+                context.Stage == ModulePipelineActionStage.AfterInstall)
+            {
+                File.Delete(InstalledBinaryPathToRemoveAfterInstall);
             }
             if (TamperPackedArtifactAfterArtefacts && context.Stage == ModulePipelineActionStage.AfterArtefacts)
                 File.AppendAllText(Assert.Single(context.ArtefactPaths), "tampered");

@@ -236,6 +236,7 @@ public sealed partial class ModulePipelineRunner
             return Array.Empty<string>();
         }
 
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
             context.MainModulePath,
             context.ModuleName,

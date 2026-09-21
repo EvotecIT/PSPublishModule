@@ -97,6 +97,7 @@ public sealed partial class ModulePipelineRunner
         string moduleRoot,
         string moduleName)
     {
+        ValidateDeliveredBinaryDependencies(plan, moduleRoot);
         PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
             moduleRoot,
             moduleName,
