@@ -30,6 +30,8 @@ internal sealed class PowerForgeModuleReleasePlanSummary
 
     public bool NoDotnetBuild { get; set; }
 
+    public bool NoDotnetBuildWasSpecified { get; set; }
+
     public string? ModuleVersion { get; set; }
 
     public string? PreReleaseTag { get; set; }
@@ -52,6 +54,10 @@ internal sealed class PowerForgeModuleReleasePlanSummary
     public bool SkipInstall { get; set; }
 
     public bool SignModule { get; set; }
+
+    public bool SignModuleWasSpecified { get; set; }
+
+    public bool IncludeModulePublishing { get; set; } = true;
 
     public bool PowerForgeReleaseStage { get; set; }
 

@@ -1735,6 +1735,7 @@ internal sealed partial class PowerForgeReleaseService
             IncludesProjectPackages = includeProjectPackages,
             TimeoutSeconds = timeoutSeconds,
             NoDotnetBuild = buildRequest.NoDotnetBuild,
+            NoDotnetBuildWasSpecified = buildRequest.NoDotnetBuildWasSpecified,
             ModuleVersion = buildRequest.ModuleVersion,
             PreReleaseTag = NullIfEmpty(buildRequest.PreReleaseTag ?? string.Empty),
             StagingPath = buildRequest.StagingPath,
@@ -1752,6 +1753,8 @@ internal sealed partial class PowerForgeReleaseService
             NoSign = buildRequest.NoSign,
             SkipInstall = buildRequest.SkipInstall,
             SignModule = buildRequest.SignModule,
+            SignModuleWasSpecified = buildRequest.SignModuleWasSpecified,
+            IncludeModulePublishing = buildRequest.IncludeModulePublishing,
             PowerForgeReleaseStage = buildRequest.PowerForgeReleaseStage,
             UnifiedGitHubRelease = buildRequest.UnifiedGitHubRelease,
             ArtifactPaths = artifactPaths

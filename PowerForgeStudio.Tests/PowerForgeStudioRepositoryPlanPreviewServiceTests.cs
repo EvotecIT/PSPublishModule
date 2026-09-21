@@ -94,7 +94,22 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
 
         var projectBuildHostService = new ProjectBuildHostService(
             new NullLogger(),
-            executeRelease: spec => new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = "1.0.0" },
+            executeRelease: spec => new DotNetRepositoryReleaseResult
+            {
+                Success = true,
+                ResolvedVersion = "1.0.0",
+                Projects =
+                [
+                    new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "LibraryRepo",
+                        PackageId = "LibraryRepo",
+                        IsPackable = true,
+                        NewVersion = "1.0.0",
+                        Packages = [Path.Combine(repositoryRoot, "Artifacts", "LibraryRepo.1.0.0.nupkg")]
+                    }
+                ]
+            },
             publishGitHub: null,
             validateGitHubPreflight: null);
         var service = new RepositoryPlanPreviewService(
@@ -123,6 +138,8 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
         Assert.Equal(RepositoryPlanStatus.Succeeded, plan.Status);
         Assert.NotNull(plan.PlanPath);
         Assert.True(File.Exists(plan.PlanPath!));
+        Assert.Contains(plan.Actions, action => action.Action == "Build and pack project" && action.Target == "LibraryRepo");
+        Assert.Contains(plan.Actions, action => action.Action == "Create NuGet package");
     }
 
     [Fact]
@@ -146,7 +163,21 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
 
         var projectBuildHostService = new ProjectBuildHostService(
             new NullLogger(),
-            executeRelease: spec => new DotNetRepositoryReleaseResult { Success = true, ResolvedVersion = "1.0.0" },
+            executeRelease: spec => new DotNetRepositoryReleaseResult
+            {
+                Success = true,
+                ResolvedVersion = "1.0.0",
+                Projects =
+                [
+                    new DotNetRepositoryProjectResult
+                    {
+                        ProjectName = "LibraryRepo",
+                        PackageId = "LibraryRepo",
+                        IsPackable = true,
+                        NewVersion = "1.0.0"
+                    }
+                ]
+            },
             publishGitHub: null,
             validateGitHubPreflight: null);
         var service = new RepositoryPlanPreviewService(
@@ -183,13 +214,15 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
         var releaseConfig = Path.Combine(buildDirectory, "release.json");
         File.WriteAllText(releaseConfig, """{ "Tools": { "Targets": [] }, "GitHub": { "Publish": true } }""");
         string? capturedConfig = null;
+        PowerForgeReleaseRequest? capturedRequest = null;
         var service = new RepositoryPlanPreviewService(
             new ProjectBuildHostService(),
             new ProjectBuildCommandHostService(new ThrowingPowerShellRunner()),
             new ModuleBuildHostService(new ThrowingPowerShellRunner()),
-            configPath =>
+            (configPath, request) =>
             {
                 capturedConfig = configPath;
+                capturedRequest = request;
                 return new PowerForgeReleaseResult { Success = true };
             });
         var item = new RepositoryPortfolioItem(
@@ -209,10 +242,47 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
         var result = await service.PopulatePlanPreviewAsync([item], new PlanPreviewOptions { MaxRepositories = 1 });
 
         Assert.Equal(releaseConfig, capturedConfig);
+        Assert.NotNull(capturedRequest);
+        Assert.True(capturedRequest!.PlanOnly);
+        Assert.False(capturedRequest.PublishNuget);
+        Assert.False(capturedRequest.PublishProjectGitHub);
+        Assert.False(capturedRequest.PublishToolGitHub);
+        Assert.Equal(ConfigurationGateMode.Build, capturedRequest.ModuleRunMode);
+        Assert.True(capturedRequest.ModuleNoSign);
+        Assert.True(capturedRequest.ModuleSkipInstall);
+        Assert.False(capturedRequest.SubmitWinget);
         var preview = Assert.Single(Assert.Single(result).PlanResults!);
         Assert.Equal(RepositoryPlanAdapterKind.UnifiedRelease, preview.AdapterKind);
         Assert.Equal(RepositoryPlanStatus.Succeeded, preview.Status);
         Assert.Equal(releaseConfig, preview.PlanPath);
+    }
+
+    [Fact]
+    public async Task PlanRepositoryAsync_LegacyProjectAdapterRejectsEmptyPlanJson()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var repositoryRoot = scope.CreateDirectory("LegacyProjectRepo");
+        var buildScript = Path.Combine(repositoryRoot, "Build-Project.ps1");
+        File.WriteAllText(buildScript, "# test");
+        var service = new RepositoryPlanPreviewService(
+            new ProjectBuildHostService(),
+            new ProjectBuildCommandHostService(new EmptyPlanPowerShellRunner()),
+            new ModuleBuildHostService(new ThrowingPowerShellRunner()));
+        var repository = new RepositoryCatalogEntry(
+            "LegacyProjectRepo",
+            repositoryRoot,
+            ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository,
+            null,
+            buildScript,
+            false,
+            false);
+
+        var result = Assert.Single(await service.PlanRepositoryAsync(repository));
+
+        Assert.Equal(RepositoryPlanStatus.Failed, result.Status);
+        Assert.Null(result.PlanPath);
+        Assert.Contains("did not contain any buildable projects", result.ErrorTail, StringComparison.Ordinal);
     }
 
     private sealed class TemporaryDirectoryScope : IDisposable
@@ -245,5 +315,23 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
     {
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => throw new InvalidOperationException("PowerShell should not be used for project plan preview when shared host service is available.");
+    }
+
+    private sealed class EmptyPlanPowerShellRunner : IPowerShellRunner
+    {
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+        {
+            const string marker = "-PlanPath '";
+            var command = request.CommandText ?? string.Empty;
+            var start = command.IndexOf(marker, StringComparison.Ordinal);
+            Assert.True(start >= 0);
+            start += marker.Length;
+            var end = command.IndexOf('\'', start);
+            Assert.True(end > start);
+            var planPath = command[start..end].Replace("''", "'", StringComparison.Ordinal);
+            Directory.CreateDirectory(Path.GetDirectoryName(planPath)!);
+            File.WriteAllText(planPath, "{}");
+            return new PowerShellRunResult(0, "plan written", string.Empty, "test-pwsh");
+        }
     }
 }

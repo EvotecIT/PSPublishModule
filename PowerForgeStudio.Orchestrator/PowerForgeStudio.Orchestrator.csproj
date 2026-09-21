@@ -23,6 +23,7 @@
     <ProjectReference Include="$(DbaClientXRoot)\DbaClientX.Core\DbaClientX.Core.csproj" />
     <ProjectReference Include="$(DbaClientXRoot)\DbaClientX.SQLite\DbaClientX.SQLite.csproj" />
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell\PowerForge.PowerShell.csproj" />
     <ProjectReference Include="..\PowerForgeStudio.Domain\PowerForgeStudio.Domain.csproj" />
   </ItemGroup>
 
@@ -31,4 +32,3 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
   </ItemGroup>
 </Project>
-

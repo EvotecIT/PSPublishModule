@@ -2,7 +2,9 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PowerForgeStudio.Avalonia.ViewModels;
+using PowerForgeStudio.Avalonia.Views;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Orchestrator.Portfolio;
@@ -86,7 +88,18 @@ public sealed class BuildTests
         var root = Path.Combine(Path.GetTempPath(), "studio-build-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var config = Path.Combine(root, "powerforge.json");
-        await File.WriteAllTextAsync(config, """{"Build":{"Name":"SampleModule","SourcePath":".","Version":"1.0.0"}}""");
+        await File.WriteAllTextAsync(config,
+            """
+            {
+              "Build": { "Name": "SampleModule", "SourcePath": ".", "Version": "1.0.0" },
+              "Install": { "Enabled": false },
+              "Segments": [
+                { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "Artifacts/SampleModule.zip" } },
+                { "Type": "Execute", "Configuration": { "Name": "Generate release metadata", "At": "AfterBuild", "InlineScript": "Write-Output 'hidden-value'", "Environment": { "TOKEN": "hidden-value" } } },
+                { "Type": "GalleryNuget", "Configuration": { "Enabled": true, "Destination": "PowerShellGallery", "RepositoryName": "PSGallery", "ApiKey": "hidden-value" } }
+              ]
+            }
+            """);
         try
         {
             await TestAppBuilder.RunAsync(async () =>
@@ -97,6 +110,11 @@ public sealed class BuildTests
                 var result = Assert.Single(workspace.Build.Results);
                 Assert.Equal(RepositoryPlanStatus.Succeeded, result.Status);
                 Assert.Equal(config, result.PlanPath);
+                Assert.Contains(result.Actions, action => action.Action == "Stage to staging");
+                Assert.Contains(result.Actions, action => action.Action == "Run action (Generate release metadata)");
+                Assert.Contains(result.Actions, action => action.Action == "Pack Packed");
+                Assert.DoesNotContain(result.Actions, action => action.Lane is "Release" or "Install" or "Sign");
+                Assert.DoesNotContain("hidden-value", string.Join(" ", result.Actions.SelectMany(action => new[] { action.Action, action.Target, action.Detail })), StringComparison.Ordinal);
                 Assert.False(workspace.Build.IsBusy);
                 var window = new MainWindow { DataContext = workspace, Width = 1600, Height = 1000 };
                 try
@@ -113,14 +131,31 @@ public sealed class BuildTests
                         Directory.CreateDirectory(output);
                         frame.Save(Path.Combine(output, "build-plan.png"), PngBitmapEncoderOptions.Default);
                     }
+                    var buildView = Assert.Single(window.GetVisualDescendants().OfType<BuildView>());
+                    var pageScroll = buildView.GetVisualDescendants().OfType<ScrollViewer>().First();
+                    pageScroll.Offset = new global::Avalonia.Vector(0, 360);
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    using var actionsFrame = window.CaptureRenderedFrame();
+                    Assert.NotNull(actionsFrame);
+                    if (!string.IsNullOrEmpty(output)) actionsFrame.Save(Path.Combine(output, "build-plan-actions.png"), PngBitmapEncoderOptions.Default);
                     window.Width = 1050;
                     window.Height = 720;
+                    pageScroll.Offset = default;
                     window.UpdateLayout();
                     Dispatcher.UIThread.RunJobs();
                     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                     using var compact = window.CaptureRenderedFrame();
                     Assert.NotNull(compact);
                     if (!string.IsNullOrEmpty(output)) compact.Save(Path.Combine(output, "build-plan-compact.png"), PngBitmapEncoderOptions.Default);
+                    pageScroll.Offset = new global::Avalonia.Vector(0, 400);
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    using var compactActions = window.CaptureRenderedFrame();
+                    Assert.NotNull(compactActions);
+                    if (!string.IsNullOrEmpty(output)) compactActions.Save(Path.Combine(output, "build-plan-actions-compact.png"), PngBitmapEncoderOptions.Default);
                     workspace.ActiveWorkingCopyRoot = "";
                     Assert.Empty(workspace.Build.Results);
                     Assert.False(workspace.Build.CanPlan);

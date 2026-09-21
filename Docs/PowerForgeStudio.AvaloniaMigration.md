@@ -17,7 +17,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
 - [x] Add text editing, conflict-aware saves, unsaved-document choices and draft-safe navigation.
 - [x] Complete deletion/recovery behavior.
-- [ ] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
+- [x] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [x] Connect cancellation, stage progress, artifacts and release receipts.
 - [ ] Add per-artifact progress events and durable process-level recovery evidence.
@@ -232,13 +232,17 @@ Workspace-root registration, exclusions, groups, retention, runtime/terminal pro
 
 ### Build inspection milestone
 
-Build & Run now opens a working-copy-specific inspection page. Its explicit action uses RepositoryPlanPreviewService through a narrow interface; it does not construct a synthetic portfolio or execute on selection. Project and unified release contracts use their existing planning adapters. Module JSON is validated, and PowerShell module contracts export configuration. These results are distinguished in the UI: module configuration validation is not presented as a resolved build plan.
+Build & Run now opens a working-copy-specific inspection page. Its explicit action uses RepositoryPlanPreviewService through a narrow interface; it does not construct a synthetic portfolio or execute on selection. Project and unified release contracts use their existing planning adapters. Module JSON is loaded directly, and PowerShell module contracts export the same JSON contract before inspection. Each successful result now includes an ordered reviewed-action list projected from the authoritative PowerForge plan or resolved module configuration.
+
+Reviewed actions cover module staging, .NET payloads, lifecycle PowerShell actions, NuGet/package lanes, ZIP artifacts, executables, bundles, MSI, MSIX, command hooks and WinGet submission intent. Module rows follow `ModulePipelineStep.Create` order after the same build-only host overrides used for execution. Remote publishing and module installation are clearly deferred to Releases. The display model is capped at 200 rows and 240 characters per field; when a plan is longer, row 200 states how many actions were omitted and points to the plan source. It does not include inline scripts, environment values, publish credentials, raw command-hook arguments or raw WinGet arguments. The original plan/configuration remains linked as the source of truth.
 
 Catalog discovery recognizes Build/project.build.json without a PowerShell wrapper. It checks the repository's Build directory before child directories and prefers JSON within each directory. Invalid project configuration becomes a failed result. Changing working copies cancels the old request and discards late results. Synchronous adapter work may finish before cancellation is observed; the UI does not claim immediate termination.
 
-Evidence: 31 focused catalog/planner tests and four Avalonia tests passed. A controlled delayed-planner test verifies cancellation and stale-result suppression while switching working copies. The rendered page was inspected at 1600 × 1000 and 1050 × 720; the compact page scrolls its content below the output dock. Native input/scrolling proof remains open. Test dispatchers are serialized because Avalonia's application state is process-wide.
+Evidence: 17 focused reviewed-plan/planner tests cover direct module JSON, direct project JSON, unified module JSON, legacy PowerShell-generated project plans, NuGet and symbol packages, ZIPs, executable publish steps, MSI, MSIX, command hooks, WinGet, invalid plan rejection and explicit 200-row truncation. The 53 focused PowerForge module planning/preparation tests and all 46 Avalonia tests pass. PowerForge.PowerShell builds without warnings for net472, net8.0 and net10.0, and the legacy WPF host builds cleanly. A controlled delayed-planner test verifies cancellation and stale-result suppression while switching working copies. The rendered page was inspected at 1600 × 1000 and 1050 × 720, including the reviewed action list in `Artifacts/StudioValidation/build-plan-actions.png` and `build-plan-actions-compact.png`; the compact page scrolls its content below the output dock. Native input/scrolling proof remains open. Test dispatchers are serialized because Avalonia's application state is process-wide.
 
-The build-planning review found two P2 issues: nested JSON taking precedence over a root script, and validation being described as full planning. Both were corrected and confirmed in one targeted follow-up. No further review loop was started. Temporary fixtures from the interrupted dispatcher test and the failed JSON test were removed. Small rendered evidence remains under Artifacts/StudioValidation/build-plan*.png.
+The earlier build-planning review found two P2 issues: nested JSON taking precedence over a root script, and validation being described as full planning. Both were corrected and confirmed in one targeted follow-up. The reviewed-plan extension retains the established constructor contract for stored plan results; action rows are inspection-time evidence and are regenerated from the current configuration. Small rendered evidence remains under `Artifacts/StudioValidation/build-plan*.png`.
+
+Independent read-only review `/root/review_build_reviewed_plan` found three P1 request/order defects and three P2 validation/presentation defects in the first reviewed-action candidate. The shared request factories, canonical module planner, explicit truncation row, fail-closed project plan parser and status-specific badges address the complete wave. The same reviewer confirmed the six bounded remediations in patch fingerprint `d786f9e8b3000ff0add4afaf939d8667d8e7d962d63bdcd4105f21df511c41f6` with no remaining actionable P0–P3 finding. Boundary: candidate-reviewed.
 
 This inspection milestone did not build or publish a user repository. The execution milestone below extends this surface.
 
@@ -259,7 +263,7 @@ Evidence:
 
 An initially broad release-build test filter included Apple source-trust tests in unchanged code. Several expected exception types/messages differed from the current wrapper behavior, so that run was stopped and the changed execution contracts were tested separately. This milestone does not claim a green full Studio suite or verified Apple execution. Its 78 disposable Git fixture residues were removed after containment/attribute checks. The completed core test binary output (about 565 MiB) was also removed; the active app's build output remains available for continued development. No user project or public feed was modified.
 
-Remaining execution work includes complete module planning, inspectable plan contents, arbitrary executable/PowerShell task profiles, live raw process output where supported, durable activity/history and artifact provenance, release signing/publishing/verification controls, and native interaction proof. The earlier checklist remains the full replacement scope.
+Remaining execution work includes arbitrary executable/PowerShell task profiles, live raw process output where supported, durable activity/history and artifact provenance, release signing/publishing/verification controls, and native interaction proof. The earlier checklist remains the full replacement scope.
 
 ### Git Changes milestone
 

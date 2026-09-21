@@ -223,6 +223,52 @@ public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutio
         return request;
     }
 
+    internal static ProjectBuildHostRequest CreateProjectBuildRequest(
+        string configPath,
+        bool executeBuild,
+        string? planOutputPath = null,
+        CancellationToken cancellationToken = default,
+        ReleaseBuildProgressAdapter? progress = null)
+        => new()
+        {
+            ConfigPath = configPath,
+            PlanOutputPath = planOutputPath,
+            ExecuteBuild = executeBuild,
+            PlanOnly = !executeBuild,
+            UpdateVersions = false,
+            Build = true,
+            PublishNuget = false,
+            PublishGitHub = false,
+            CancellationToken = cancellationToken,
+            Progress = progress
+        };
+
+    internal static ModuleBuildHostBuildRequest CreateModuleBuildRequest(
+        PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository,
+        string stagingPath,
+        ReleaseBuildProgressAdapter? progress = null)
+    {
+        var buildInputPath = repository.ModuleBuildScriptPath
+            ?? throw new InvalidOperationException("Module build input is required.");
+        var configBacked = string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase);
+        return new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = repository.RootPath,
+            ConfigPath = configBacked ? buildInputPath : null,
+            ScriptPath = configBacked ? null : buildInputPath,
+            ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
+            Framework = configBacked ? "auto" : null,
+            RunMode = ConfigurationGateMode.Build,
+            StagingPath = stagingPath,
+            IncludeProjectPackages = string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath),
+            SkipInstall = true,
+            NoSign = true,
+            IncludeModulePublishing = false,
+            RequireBuildOnly = !configBacked,
+            Progress = progress
+        };
+    }
+
     private static PowerForgeReleaseResult ExecuteUnifiedReleaseBuild(string configPath, PowerForgeReleaseRequest request)
     {
         var spec = request.ExactConfigurationContent is null
@@ -444,17 +490,11 @@ public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutio
 
         if (!string.IsNullOrWhiteSpace(configPath))
         {
-            var execution = _projectBuildHostService.Execute(new ProjectBuildHostRequest {
-                ConfigPath = configPath,
-                ExecuteBuild = true,
-                PlanOnly = false,
-                UpdateVersions = false,
-                Build = true,
-                PublishNuget = false,
-                PublishGitHub = false,
-                CancellationToken = cancellationToken,
-                Progress = progress
-            });
+            var execution = _projectBuildHostService.Execute(CreateProjectBuildRequest(
+                configPath,
+                executeBuild: true,
+                cancellationToken: cancellationToken,
+                progress: progress));
             var artifactInfo = CollectProjectArtifacts(execution);
 
             return new ReleaseBuildAdapterResult(
@@ -492,24 +532,10 @@ public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutio
     private async Task<ReleaseBuildAdapterResult> ExecuteModuleBuildAsync(PowerForgeStudio.Domain.Catalog.RepositoryCatalogEntry repository, ReleaseBuildProgressAdapter progress, CancellationToken cancellationToken)
     {
         var buildInputPath = repository.ModuleBuildScriptPath!;
-        var configBacked = string.Equals(Path.GetExtension(buildInputPath), ".json", StringComparison.OrdinalIgnoreCase);
-        var modulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath();
         var stagingPath = ResolveModuleCheckpointStagingPath(repository.Name);
-        var execution = await _moduleBuildHostService.ExecuteBuildAsync(new ModuleBuildHostBuildRequest {
-            RepositoryRoot = repository.RootPath,
-            ConfigPath = configBacked ? buildInputPath : null,
-            ScriptPath = configBacked ? null : buildInputPath,
-            ModulePath = modulePath,
-            Framework = configBacked ? "auto" : null,
-            RunMode = ConfigurationGateMode.Build,
-            StagingPath = stagingPath,
-            IncludeProjectPackages = string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath),
-            SkipInstall = true,
-            NoSign = true,
-            IncludeModulePublishing = false,
-            RequireBuildOnly = !configBacked,
-            Progress = progress
-        }, cancellationToken);
+        var execution = await _moduleBuildHostService.ExecuteBuildAsync(
+            CreateModuleBuildRequest(repository, stagingPath, progress),
+            cancellationToken);
         var artifactInfo = CollectModuleArtifacts(repository.RootPath, buildInputPath, stagingPath);
         var succeeded = execution.Succeeded;
 

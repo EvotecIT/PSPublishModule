@@ -3,6 +3,7 @@ using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.PowerShell;
+using PowerForgeStudio.Orchestrator.Queue;
 
 namespace PowerForgeStudio.Orchestrator.Portfolio;
 
@@ -11,7 +12,8 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
     private readonly ProjectBuildHostService _projectBuildHostService;
     private readonly ProjectBuildCommandHostService _projectBuildCommandHostService;
     private readonly ModuleBuildHostService _moduleBuildHostService;
-    private readonly Func<string, PowerForgeReleaseResult> _planUnifiedRelease;
+    private readonly ModuleBuildPlanService _moduleBuildPlanService;
+    private readonly Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult> _planUnifiedRelease;
 
     public RepositoryPlanPreviewService()
         : this(new ProjectBuildHostService(), new ProjectBuildCommandHostService(), new ModuleBuildHostService())
@@ -22,11 +24,12 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
         ProjectBuildHostService projectBuildHostService,
         ProjectBuildCommandHostService projectBuildCommandHostService,
         ModuleBuildHostService moduleBuildHostService,
-        Func<string, PowerForgeReleaseResult>? planUnifiedRelease = null)
+        Func<string, PowerForgeReleaseRequest, PowerForgeReleaseResult>? planUnifiedRelease = null)
     {
         _projectBuildHostService = projectBuildHostService;
         _projectBuildCommandHostService = projectBuildCommandHostService;
         _moduleBuildHostService = moduleBuildHostService;
+        _moduleBuildPlanService = new ModuleBuildPlanService(new NullLogger());
         _planUnifiedRelease = planUnifiedRelease ?? PlanUnifiedRelease;
     }
 
@@ -78,7 +81,9 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
         cancellationToken.ThrowIfCancellationRequested();
         var results = new List<RepositoryPlanResult>();
         if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
-            results.Add(RunUnifiedReleasePlan(repository));
+            results.Add(await RunAdapterAsync(
+                RepositoryPlanAdapterKind.UnifiedRelease,
+                () => RunUnifiedReleasePlanAsync(repository, cancellationToken)).ConfigureAwait(false));
         else
         {
             if (!string.IsNullOrWhiteSpace(repository.ModuleBuildScriptPath))
@@ -105,48 +110,48 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
         }
     }
 
-    private RepositoryPlanResult RunUnifiedReleasePlan(RepositoryCatalogEntry item)
+    private async Task<RepositoryPlanResult> RunUnifiedReleasePlanAsync(
+        RepositoryCatalogEntry item,
+        CancellationToken cancellationToken)
     {
         var startedAt = DateTimeOffset.UtcNow;
-        try
+        var configPath = item.UnifiedReleaseConfigPath!;
+        var stagingPath = Path.GetDirectoryName(BuildPlanOutputPath(
+            item.Name,
+            RepositoryPlanAdapterKind.UnifiedRelease,
+            "module-staging.marker"))!;
+        var request = ReleaseBuildExecutionService.CreateUnifiedReleaseBuildRequest(
+            configPath,
+            PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
+            stagingPath);
+        request.PlanOnly = true;
+        request.CancellationToken = cancellationToken;
+        var result = _planUnifiedRelease(configPath, request);
+        var modulePipelinePlan = result.Success
+            ? await ResolveUnifiedModulePlanAsync(item, result, cancellationToken).ConfigureAwait(false)
+            : null;
+        return new RepositoryPlanResult(
+            RepositoryPlanAdapterKind.UnifiedRelease,
+            result.Success ? RepositoryPlanStatus.Succeeded : RepositoryPlanStatus.Failed,
+            result.Success ? "Unified release plan generated." : "Unified release plan failed.",
+            result.Success ? configPath : null,
+            result.Success ? 0 : 1,
+            Math.Round((DateTimeOffset.UtcNow - startedAt).TotalSeconds, 2),
+            null,
+            TrimTail(result.ErrorMessage ?? string.Empty))
         {
-            var result = _planUnifiedRelease(item.UnifiedReleaseConfigPath!);
-            return new RepositoryPlanResult(
-                RepositoryPlanAdapterKind.UnifiedRelease,
-                result.Success ? RepositoryPlanStatus.Succeeded : RepositoryPlanStatus.Failed,
-                result.Success ? "Unified release plan generated." : "Unified release plan failed.",
-                result.Success ? item.UnifiedReleaseConfigPath : null,
-                result.Success ? 0 : 1,
-                Math.Round((DateTimeOffset.UtcNow - startedAt).TotalSeconds, 2),
-                null,
-                TrimTail(result.ErrorMessage ?? string.Empty));
-        }
-        catch (Exception ex)
-        {
-            return new RepositoryPlanResult(
-                RepositoryPlanAdapterKind.UnifiedRelease,
-                RepositoryPlanStatus.Failed,
-                "Unified release plan failed.",
-                null,
-                1,
-                Math.Round((DateTimeOffset.UtcNow - startedAt).TotalSeconds, 2),
-                null,
-                TrimTail(ex.Message));
-        }
+            Actions = result.Success
+                ? RepositoryPlanActionProjectionService.FromUnified(result, modulePipelinePlan)
+                : []
+        };
     }
 
-    private static PowerForgeReleaseResult PlanUnifiedRelease(string configPath)
+    private static PowerForgeReleaseResult PlanUnifiedRelease(
+        string configPath,
+        PowerForgeReleaseRequest request)
     {
         var spec = PowerForgeReleaseService.LoadConfiguration(configPath);
-        return new PowerForgeReleaseService(new NullLogger()).Execute(
-            spec,
-            new PowerForgeReleaseRequest {
-                ConfigPath = configPath,
-                PlanOnly = true,
-                PublishNuget = false,
-                PublishProjectGitHub = false,
-                PublishToolGitHub = false
-            });
+        return new PowerForgeReleaseService(new NullLogger()).Execute(spec, request);
     }
 
     private static int GetPreviewPriority(Domain.Catalog.ReleaseRepositoryKind repositoryKind)
@@ -165,16 +170,22 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
         {
             try
             {
-                _ = new ModulePipelineConfigurationService().Load(moduleBuildInput);
+                var request = ReleaseBuildExecutionService.CreateModuleBuildRequest(
+                    item,
+                    BuildModulePlanStagingPath(item.Name));
+                var plan = _moduleBuildPlanService.Plan(request);
                 return new RepositoryPlanResult(
                     AdapterKind: RepositoryPlanAdapterKind.ModuleJsonExport,
                     Status: RepositoryPlanStatus.Succeeded,
-                    Summary: "Module JSON configuration validated; no build plan generated.",
+                    Summary: "Module JSON configuration validated and reviewed plan generated.",
                     PlanPath: moduleBuildInput,
                     ExitCode: 0,
                     DurationSeconds: 0,
                     OutputTail: null,
-                    ErrorTail: null);
+                    ErrorTail: null)
+                {
+                    Actions = RepositoryPlanActionProjectionService.FromModule(plan)
+                };
             }
             catch (Exception ex)
             {
@@ -199,6 +210,12 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
         }, cancellationToken);
         var success = execution.Succeeded && File.Exists(outputPath);
 
+        var actions = success
+            ? RepositoryPlanActionProjectionService.FromModule(_moduleBuildPlanService.Plan(
+                ReleaseBuildExecutionService.CreateModuleBuildRequest(
+                    item with { ModuleBuildScriptPath = outputPath },
+                    BuildModulePlanStagingPath(item.Name))))
+            : [];
         return new RepositoryPlanResult(
             AdapterKind: RepositoryPlanAdapterKind.ModuleJsonExport,
             Status: success ? RepositoryPlanStatus.Succeeded : RepositoryPlanStatus.Failed,
@@ -207,7 +224,10 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
             ExitCode: execution.ExitCode,
             DurationSeconds: Math.Round(execution.Duration.TotalSeconds, 2),
             OutputTail: TrimTail(execution.StandardOutput),
-            ErrorTail: TrimTail(execution.StandardError));
+            ErrorTail: TrimTail(execution.StandardError))
+        {
+            Actions = actions
+        };
     }
 
     private async Task<RepositoryPlanResult> RunProjectPlanAsync(RepositoryCatalogEntry item, CancellationToken cancellationToken)
@@ -216,16 +236,12 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
         var configPath = ResolveProjectConfigPath(item.ProjectBuildScriptPath!, item.RootPath);
         if (!string.IsNullOrWhiteSpace(configPath))
         {
-            var execution = _projectBuildHostService.Execute(new ProjectBuildHostRequest {
-                ConfigPath = configPath,
-                PlanOutputPath = outputPath,
-                ExecuteBuild = false,
-                PlanOnly = true,
-                UpdateVersions = false,
-                Build = false,
-                PublishNuget = false,
-                PublishGitHub = false
-            });
+            var execution = _projectBuildHostService.Execute(
+                ReleaseBuildExecutionService.CreateProjectBuildRequest(
+                    configPath,
+                    executeBuild: false,
+                    planOutputPath: outputPath,
+                    cancellationToken: cancellationToken));
 
             var success = execution.Success && File.Exists(outputPath);
             return new RepositoryPlanResult(
@@ -236,7 +252,10 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
                 ExitCode: success ? 0 : 1,
                 DurationSeconds: Math.Round(execution.Duration.TotalSeconds, 2),
                 OutputTail: null,
-                ErrorTail: success ? null : execution.ErrorMessage);
+                ErrorTail: success ? null : execution.ErrorMessage)
+            {
+                Actions = success ? RepositoryPlanActionProjectionService.FromProject(execution) : []
+            };
         }
 
         var powerShellExecution = await _projectBuildCommandHostService.GeneratePlanAsync(new ProjectBuildCommandPlanRequest {
@@ -254,6 +273,84 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
             failureSummary: "Project build plan failed.");
     }
 
+    private async Task<ModulePipelinePlan?> ResolveUnifiedModulePlanAsync(
+        RepositoryCatalogEntry item,
+        PowerForgeReleaseResult result,
+        CancellationToken cancellationToken)
+    {
+        var summary = result.ModulePlan;
+        if (summary is null) return null;
+
+        var repositoryRoot = string.IsNullOrWhiteSpace(summary.RepositoryRoot)
+            ? item.RootPath
+            : summary.RepositoryRoot;
+        var configPath = ResolveOptionalPath(repositoryRoot, summary.ConfigPath);
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            var scriptPath = ResolveOptionalPath(
+                repositoryRoot,
+                summary.ScriptPath ?? item.ModuleBuildScriptPath);
+            if (string.IsNullOrWhiteSpace(scriptPath))
+                throw new InvalidDataException("The unified module lane did not identify a JSON config or exportable PowerShell script.");
+
+            configPath = BuildPlanOutputPath(
+                item.Name,
+                RepositoryPlanAdapterKind.UnifiedRelease,
+                "module.powerforge.json");
+            var export = await _moduleBuildHostService.ExportPipelineJsonAsync(new ModuleBuildHostExportRequest {
+                RepositoryRoot = repositoryRoot,
+                ScriptPath = scriptPath,
+                ModulePath = string.IsNullOrWhiteSpace(summary.ModulePath)
+                    ? PowerForgeStudioHostPaths.ResolvePSPublishModulePath()
+                    : summary.ModulePath,
+                OutputPath = configPath
+            }, cancellationToken).ConfigureAwait(false);
+            if (!export.Succeeded || !File.Exists(configPath))
+                throw new InvalidDataException(
+                    $"The unified module script could not export reviewable JSON. {TrimTail(export.StandardError)}");
+        }
+
+        var request = new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = repositoryRoot,
+            ConfigPath = configPath,
+            ModulePath = string.IsNullOrWhiteSpace(summary.ModulePath)
+                ? PowerForgeStudioHostPaths.ResolvePSPublishModulePath()
+                : summary.ModulePath,
+            Configuration = summary.Configuration,
+            Framework = summary.Framework,
+            RunMode = summary.RunMode,
+            PowerForgeReleaseStage = summary.PowerForgeReleaseStage,
+            UnifiedGitHubRelease = summary.UnifiedGitHubRelease,
+            NoDotnetBuild = summary.NoDotnetBuild,
+            NoDotnetBuildWasSpecified = summary.NoDotnetBuildWasSpecified,
+            ModuleVersion = summary.ModuleVersion,
+            PreReleaseTag = summary.PreReleaseTag,
+            StagingPath = summary.StagingPath,
+            NoSign = summary.NoSign,
+            SkipInstall = summary.SkipInstall,
+            SignModule = summary.SignModule,
+            SignModuleWasSpecified = summary.SignModuleWasSpecified,
+            IncludeProjectPackages = summary.IncludesProjectPackages,
+            IncludeModulePublishing = summary.IncludeModulePublishing,
+            Timeout = summary.TimeoutSeconds > 0
+                ? TimeSpan.FromSeconds(summary.TimeoutSeconds)
+                : TimeSpan.FromHours(2)
+        };
+        return _moduleBuildPlanService.Plan(request);
+    }
+
+    private static string BuildModulePlanStagingPath(string repositoryName)
+        => Path.GetDirectoryName(BuildPlanOutputPath(
+            repositoryName,
+            RepositoryPlanAdapterKind.ModuleJsonExport,
+            "module-staging.marker"))!;
+
+    private static string? ResolveOptionalPath(string repositoryRoot, string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? null
+            : Path.GetFullPath(Path.IsPathRooted(value) ? value : Path.Combine(repositoryRoot, value));
+
     private static RepositoryPlanResult BuildResult(
         RepositoryPlanAdapterKind adapterKind,
         string outputPath,
@@ -270,7 +367,10 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
             ExitCode: execution.ExitCode,
             DurationSeconds: Math.Round(execution.Duration.TotalSeconds, 2),
             OutputTail: TrimTail(execution.StandardOutput),
-            ErrorTail: TrimTail(execution.StandardError));
+            ErrorTail: TrimTail(execution.StandardError))
+        {
+            Actions = success ? RepositoryPlanActionProjectionService.FromProjectPlanFile(outputPath) : []
+        };
     }
 
     private static string BuildPlanOutputPath(string repositoryName, RepositoryPlanAdapterKind adapterKind, string fileName)
