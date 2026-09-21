@@ -72,9 +72,10 @@ public sealed partial class ModulePipelineHostedOperationsTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Run_RejectsFilteredBinaryDependencyBeforePackedOrRepositoryDelivery(bool publishToRepository)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void Run_RejectsFilteredBinaryDependencyBeforePackedOrRepositoryDelivery(bool publishToRepository, bool scriptPacked)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -127,7 +128,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
             {
                 segments.Add(new ConfigurationArtefactSegment
                 {
-                    ArtefactType = ArtefactType.Packed,
+                    ArtefactType = scriptPacked ? ArtefactType.ScriptPacked : ArtefactType.Packed,
                     Configuration = new ArtefactConfiguration
                     {
                         Enabled = true,
@@ -155,8 +156,236 @@ public sealed partial class ModulePipelineHostedOperationsTests
                 path.Contains(
                     Path.Combine("PowerForge", publishToRepository ? "publish" : "artefacts"),
                     StringComparison.OrdinalIgnoreCase));
+            if (scriptPacked)
+                Assert.All(hostedOperations.BinaryDependencyManifestsAvailable, Assert.True);
             if (!publishToRepository)
                 Assert.False(Directory.Exists(archivePath) && Directory.EnumerateFiles(archivePath, "*.zip").Any());
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsUnpackedArtifactChangedByAfterArtefactsAction()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var core = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(core.FullName, "Consumer.dll"), "consumer");
+            File.WriteAllText(Path.Combine(core.FullName, "Dependency.dll"), "dependency");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AllowModuleImportValidation = true,
+                RejectIncompleteBinaryPayload = true,
+                RemoveBinaryDependencyAfterArtefacts = true
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationImportModulesSegment
+                    {
+                        ImportModules = new ImportModulesConfiguration { Self = true }
+                    },
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Unpacked,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(root.FullName, "Artefacts", "Unpacked")
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = true,
+                            At = ModulePipelineActionStage.AfterArtefacts,
+                            Name = "Remove dependency"
+                        }
+                    }
+                ]
+            };
+
+            var failure = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("changed after package validation", failure.Message, StringComparison.Ordinal);
+            Assert.Single(hostedOperations.ActionContexts);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_UnsignedAutoRevisionRollsBackInstalledPayloadWhenDependencyDisappears()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var core = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core"));
+            File.WriteAllText(Path.Combine(core.FullName, "Consumer.dll"), "consumer");
+            File.WriteAllText(Path.Combine(core.FullName, "Dependency.dll"), "dependency");
+            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "InstalledModules"));
+            var previous = Directory.CreateDirectory(Path.Combine(installRoot.FullName, moduleName, "0.9.0"));
+            File.WriteAllText(Path.Combine(previous.FullName, "keep.txt"), "usable previous version");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AllowModuleImportValidation = true,
+                RejectIncompleteBinaryPayload = true,
+                CorruptInstalledBinaryUnder = Path.Combine(installRoot.FullName, moduleName)
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions
+                {
+                    Enabled = true,
+                    Strategy = InstallationStrategy.AutoRevision,
+                    Roots = [installRoot.FullName]
+                },
+                Segments =
+                [
+                    new ConfigurationImportModulesSegment
+                    {
+                        ImportModules = new ImportModulesConfiguration { Self = true }
+                    }
+                ]
+            };
+
+            var failure = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("Delivered binary dependency is missing", failure.Message, StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(previous.FullName, "keep.txt")));
+            Assert.Equal(new[] { "0.9.0" }, Directory.EnumerateDirectories(
+                Path.Combine(installRoot.FullName, moduleName)).Select(Path.GetFileName).ToArray());
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_RejectsUnsignedPackedArtifactChangedAfterValidation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var hostedOperations = new FakeHostedOperations
+            {
+                TamperPackedArtifactAfterArtefacts = true
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = ArtefactType.Packed,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(root.FullName, "Artefacts", "Packed")
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = true,
+                            At = ModulePipelineActionStage.AfterArtefacts,
+                            Name = "Change packed artifact"
+                        }
+                    }
+                ]
+            };
+
+            var failure = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("changed after package validation", failure.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Unpacked, ".psm1")]
+    [InlineData(ArtefactType.Script, ".ps1")]
+    public void Run_RejectsLooseArtifactContentChangedAfterValidation(ArtefactType artifactType, string extension)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var hostedOperations = new FakeHostedOperations
+            {
+                LooseArtifactExtensionToTamper = extension
+            };
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeMetadataProvider(),
+                hostedOperations);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments =
+                [
+                    new ConfigurationArtefactSegment
+                    {
+                        ArtefactType = artifactType,
+                        Configuration = new ArtefactConfiguration
+                        {
+                            Enabled = true,
+                            Path = Path.Combine(root.FullName, "Artefacts", artifactType.ToString())
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            Enabled = true,
+                            At = ModulePipelineActionStage.AfterArtefacts,
+                            Name = "Change loose artifact"
+                        }
+                    }
+                ]
+            };
+
+            var failure = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
+            Assert.Contains("changed after package validation", failure.Message, StringComparison.Ordinal);
         }
         finally
         {

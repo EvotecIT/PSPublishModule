@@ -188,6 +188,7 @@ public sealed partial class ModulePipelineRunner
                 $"The finalized script entry point was not successfully signed: '{entryPointPath}'.");
         }
 
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, state.RequireBuildResult().ManifestPath);
         state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
         return Array.Empty<string>();
     }
@@ -228,7 +229,10 @@ public sealed partial class ModulePipelineRunner
     {
         PreparePackedReleaseProtection(plan, state, context);
         if (context.ArtefactType == ArtefactType.Script || context.ArtefactType == ArtefactType.ScriptPacked)
+        {
+            ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, state.RequireBuildResult().ManifestPath);
             return Array.Empty<string>();
+        }
 
         _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
             context.MainModulePath,

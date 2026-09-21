@@ -69,7 +69,7 @@ public sealed partial class ModulePipelineRunner
         }
         ExecuteActions(ModulePipelineActionStage.AfterArtefacts, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
+        ValidateDeliveredArtefactIntegrity(plan, state);
 
         ExecutePackageBuildsAfterModule(plan, session, state);
         ValidateRequestedReleaseVersion(plan, state);
@@ -79,11 +79,11 @@ public sealed partial class ModulePipelineRunner
         {
             ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
             ValidateFinalizedModulePayloadIntegrity(state);
-            ValidateFinalizedPackedArtefactIntegrity(state);
+            ValidateDeliveredArtefactIntegrity(plan, state);
             ExecutePublishOperations(plan, session, buildResult, state);
             ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
             ValidateFinalizedModulePayloadIntegrity(state);
-            ValidateFinalizedPackedArtefactIntegrity(state);
+            ValidateDeliveredArtefactIntegrity(plan, state);
         }
         else
         {
@@ -95,7 +95,7 @@ public sealed partial class ModulePipelineRunner
 
         ExecuteActions(ModulePipelineActionStage.BeforeInstall, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
+        ValidateDeliveredArtefactIntegrity(plan, state);
         if (plan.InstallEnabled)
         {
             session.Start(session.InstallStep);
@@ -131,46 +131,61 @@ public sealed partial class ModulePipelineRunner
                 };
                 ModuleSigningResult? installPackageSigningResult = null;
                 ModuleSigningResult? deliveredInstallSigningResult = null;
-                var validateSignedInstallTransactionally =
-                    plan.SignModule && plan.InstallStrategy == InstallationStrategy.AutoRevision;
-                state.InstallResult = plan.SignModule
-                    ? pipeline.InstallFromStagingWithManifestFinalizer(
+                var validateInstalledTransactionally =
+                    plan.InstallStrategy == InstallationStrategy.AutoRevision &&
+                    (plan.SignModule || ShouldValidateBinaryDependencies(plan));
+                state.InstallResult = pipeline.InstallFromStagingWithManifestFinalizer(
                         installSpec,
-                        (manifestPath, _) => installPackageSigningResult = SignChangedInstallManifest(
-                            plan,
-                            manifestPath,
-                            buildResult.StagingPath,
-                            state.SigningResult),
-                        validateInstalledPaths: validateSignedInstallTransactionally
+                        plan.SignModule
+                            ? (manifestPath, _) => installPackageSigningResult = SignChangedInstallManifest(
+                                plan,
+                                manifestPath,
+                                buildResult.StagingPath,
+                                state.SigningResult)
+                            : null,
+                        validateInstalledPaths: validateInstalledTransactionally
                             ? installedPaths =>
                             {
-                                deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
-                                    plan,
-                                    buildResult.StagingPath,
-                                    installPackagePath,
-                                    installedPaths,
-                                    expectedSignedInstallSourcePaths,
-                                    state.SigningResult,
-                                    installPackageSigningResult);
+                                if (plan.SignModule)
+                                {
+                                    deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
+                                        plan,
+                                        buildResult.StagingPath,
+                                        installPackagePath,
+                                        installedPaths,
+                                        expectedSignedInstallSourcePaths,
+                                        state.SigningResult,
+                                        installPackageSigningResult);
+                                }
                                 foreach (var installedPath in installedPaths)
                                     ValidateDeliveredBinaryDependencies(plan, installedPath);
                             }
                             : null,
-                        requireAllDestinationRoots: validateSignedInstallTransactionally)
-                    : pipeline.InstallFromStaging(installSpec);
-                if (!validateSignedInstallTransactionally)
-                {
-                    deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
-                        plan,
-                        buildResult.StagingPath,
-                        installPackagePath,
-                        state.InstallResult.InstalledPaths,
-                        expectedSignedInstallSourcePaths,
-                        state.SigningResult,
-                        installPackageSigningResult);
-                    foreach (var installedPath in state.InstallResult.InstalledPaths)
-                        ValidateDeliveredBinaryDependencies(plan, installedPath);
-                }
+                        requireAllDestinationRoots: validateInstalledTransactionally,
+                        validatePreparedDestination: path => ValidateDeliveredBinaryDependencies(plan, path),
+                        validateCommittedDestination: plan.InstallStrategy == InstallationStrategy.Exact
+                            ? installedPath =>
+                            {
+                                ValidateDeliveredBinaryDependencies(plan, installedPath);
+                                if (plan.SignModule)
+                                {
+                                    var signedResult = ValidateAndFinalizeSignedInstall(
+                                        plan,
+                                        buildResult.StagingPath,
+                                        installPackagePath,
+                                        new[] { installedPath },
+                                        expectedSignedInstallSourcePaths,
+                                        state.SigningResult,
+                                        installPackageSigningResult);
+                                    if (signedResult is not null)
+                                    {
+                                        deliveredInstallSigningResult = deliveredInstallSigningResult is null
+                                            ? signedResult
+                                            : AggregateSigningResults(deliveredInstallSigningResult, signedResult);
+                                    }
+                                }
+                            }
+                            : null);
                 if (deliveredInstallSigningResult is not null)
                     state.SigningResult = AggregateSigningResults(state.SigningResult, deliveredInstallSigningResult);
                 session.Done(session.InstallStep);
@@ -191,6 +206,6 @@ public sealed partial class ModulePipelineRunner
         }
         ExecuteActions(ModulePipelineActionStage.AfterInstall, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
+        ValidateDeliveredArtefactIntegrity(plan, state);
     }
 }

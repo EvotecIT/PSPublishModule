@@ -3425,8 +3425,13 @@ public sealed partial class ModulePipelineHostedOperationsTests
     private sealed class FakeHostedOperations : IModulePipelineHostedOperations
     {
         public List<string> BinaryDependencyRoots { get; } = new();
+        public List<bool> BinaryDependencyManifestsAvailable { get; } = new();
         public bool AllowModuleImportValidation { get; set; }
         public bool RejectIncompleteBinaryPayload { get; set; }
+        public bool RemoveBinaryDependencyAfterArtefacts { get; set; }
+        public bool TamperPackedArtifactAfterArtefacts { get; set; }
+        public string? LooseArtifactExtensionToTamper { get; set; }
+        public string? CorruptInstalledBinaryUnder { get; set; }
         public bool PrepareRepositoryPackageOnPublish { get; set; }
         public int RemotePublishCalls { get; private set; }
         public int DependencyInstallCalls { get; private set; }
@@ -3487,6 +3492,15 @@ public sealed partial class ModulePipelineHostedOperationsTests
         public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
         {
             BinaryDependencyRoots.Add(moduleRoot);
+            BinaryDependencyManifestsAvailable.Add(!string.IsNullOrWhiteSpace(modulePath) && File.Exists(modulePath));
+            if (!string.IsNullOrWhiteSpace(CorruptInstalledBinaryUnder) &&
+                moduleRoot.StartsWith(CorruptInstalledBinaryUnder, StringComparison.OrdinalIgnoreCase) &&
+                !Path.GetFileName(moduleRoot).StartsWith(".tmp_install_", StringComparison.OrdinalIgnoreCase))
+            {
+                var dependencyPath = Path.Combine(moduleRoot, "Lib", "Core", "Dependency.dll");
+                if (File.Exists(dependencyPath))
+                    File.Delete(dependencyPath);
+            }
             if (RejectIncompleteBinaryPayload &&
                 File.Exists(Path.Combine(moduleRoot, "Lib", "Core", "Consumer.dll")) &&
                 !File.Exists(Path.Combine(moduleRoot, "Lib", "Core", "Dependency.dll")))
@@ -3554,6 +3568,22 @@ public sealed partial class ModulePipelineHostedOperationsTests
         {
             ActionContexts.Add(context);
             ActionContextPaths.Add(contextPath);
+            if (RemoveBinaryDependencyAfterArtefacts && context.Stage == ModulePipelineActionStage.AfterArtefacts)
+            {
+                var artifactRoot = Assert.Single(context.ArtefactPaths);
+                var dependency = Assert.Single(Directory.EnumerateFiles(
+                    artifactRoot, "Dependency.dll", SearchOption.AllDirectories));
+                File.Delete(dependency);
+            }
+            if (TamperPackedArtifactAfterArtefacts && context.Stage == ModulePipelineActionStage.AfterArtefacts)
+                File.AppendAllText(Assert.Single(context.ArtefactPaths), "tampered");
+            if (!string.IsNullOrWhiteSpace(LooseArtifactExtensionToTamper) && context.Stage == ModulePipelineActionStage.AfterArtefacts)
+            {
+                var artifactRoot = Assert.Single(context.ArtefactPaths);
+                var entryPoint = Assert.Single(Directory.EnumerateFiles(
+                    artifactRoot, "*" + LooseArtifactExtensionToTamper, SearchOption.AllDirectories));
+                File.AppendAllText(entryPoint, "# changed after finalization\n");
+            }
 
             return new ModulePipelineActionResult
             {

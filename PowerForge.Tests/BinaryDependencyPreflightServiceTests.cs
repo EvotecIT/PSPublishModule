@@ -9,6 +9,32 @@ namespace PowerForge.Tests;
 public sealed class BinaryDependencyPreflightServiceTests
 {
     [Fact]
+    public void Analyze_ScriptLayoutUsesStagedManifestToExcludeUnloadedInternals()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+            var staging = Directory.CreateDirectory(Path.Combine(root.FullName, "Staging"));
+            var stagedManifest = Path.Combine(staging.FullName, "TestModule.psd1");
+            File.WriteAllText(stagedManifest, "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1'; PrivateData = @{ PSData = @{ Delivery = @{ Enable = $true } } } }");
+            var scriptRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "ScriptLayout"));
+            File.WriteAllText(Path.Combine(scriptRoot.FullName, "TestModule.ps1"), "# script artifact");
+            var internals = Directory.CreateDirectory(Path.Combine(scriptRoot.FullName, "Internals"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(internals.FullName, "Consumer.dll"));
+            var service = new BinaryDependencyPreflightService(new NullLogger());
+
+            Assert.True(service.Analyze(scriptRoot.FullName, "Core", manifestPath: null).HasIssues);
+            Assert.False(service.Analyze(scriptRoot.FullName, "Core", stagedManifest).HasIssues);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Analyze_FindsMissingProjectDependency()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

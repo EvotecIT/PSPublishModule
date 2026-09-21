@@ -301,22 +301,28 @@ public sealed class ModuleBuildPipeline
 
     internal ModuleInstallerResult InstallFromStagingWithManifestFinalizer(
         ModuleInstallSpec spec,
-        Action<string, string> finalizeChangedManifest,
+        Action<string, string>? finalizeChangedManifest,
         Action<IReadOnlyList<string>>? validateInstalledPaths,
-        bool requireAllDestinationRoots)
+        bool requireAllDestinationRoots,
+        Action<string>? validatePreparedDestination = null,
+        Action<string>? validateCommittedDestination = null)
         => InstallFromStagingCore(
             spec,
             updateManifestToResolvedVersion: null,
             finalizeChangedManifest,
             validateInstalledPaths,
-            requireAllDestinationRoots);
+            requireAllDestinationRoots,
+            validatePreparedDestination,
+            validateCommittedDestination);
 
     private ModuleInstallerResult InstallFromStagingCore(
         ModuleInstallSpec spec,
         bool? updateManifestToResolvedVersion,
         Action<string, string>? finalizeChangedManifest,
         Action<IReadOnlyList<string>>? validateInstalledPaths,
-        bool requireAllDestinationRoots)
+        bool requireAllDestinationRoots,
+        Action<string>? validatePreparedDestination = null,
+        Action<string>? validateCommittedDestination = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));        
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
@@ -384,8 +390,12 @@ public sealed class ModuleBuildPipeline
                 spec.Name,
                 resolved,
                 options,
-                validateInstalledPaths)
-            : installer.InstallFromStaging(staging, spec.Name, resolved, options);
+                validateInstalledPaths,
+                validatePreparedDestination)
+            : validatePreparedDestination is not null
+                ? installer.InstallFromStagingWithPreparedValidation(
+                    staging, spec.Name, resolved, options, validatePreparedDestination, validateCommittedDestination)
+                : installer.InstallFromStaging(staging, spec.Name, resolved, options);
     }
 
     private string ResolveModuleVersionFromManifestIfAuto(string? version, string manifestPath, string? fallbackVersion)

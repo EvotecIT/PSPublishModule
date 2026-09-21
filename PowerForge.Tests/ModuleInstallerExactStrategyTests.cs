@@ -7,6 +7,87 @@ namespace PowerForge.Tests;
 public sealed class ModuleInstallerExactStrategyTests
 {
     [Fact]
+    public void InstallFromStaging_Exact_RejectsInvalidPreparedCopyBeforeOverwritingOrPruning()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var staging = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            File.WriteAllText(Path.Combine(staging.FullName, "TestModule.psd1"), "@{ ModuleVersion = '1.0.0' }");
+            File.WriteAllText(Path.Combine(staging.FullName, "Dependency.dll"), "new dependency");
+            var modules = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(modules.FullName, "TestModule"));
+            var existing = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "1.0.0"));
+            File.WriteAllText(Path.Combine(existing.FullName, "TestModule.psd1"), "old version");
+            var older = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "0.9.0"));
+            File.WriteAllText(Path.Combine(older.FullName, "TestModule.psd1"), "older version");
+            var options = new ModuleInstallerOptions(
+                [modules.FullName], InstallationStrategy.Exact, keepVersions: 1);
+
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                new ModuleInstaller(new NullLogger()).InstallFromStagingWithPreparedValidation(
+                    staging.FullName,
+                    "TestModule",
+                    "1.0.0",
+                    options,
+                    prepared =>
+                    {
+                        File.Delete(Path.Combine(prepared, "Dependency.dll"));
+                        throw new InvalidOperationException("prepared dependency missing");
+                    }));
+
+            Assert.Equal("old version", File.ReadAllText(Path.Combine(existing.FullName, "TestModule.psd1")));
+            Assert.Equal("older version", File.ReadAllText(Path.Combine(older.FullName, "TestModule.psd1")));
+            Assert.False(File.Exists(Path.Combine(existing.FullName, "Dependency.dll")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void InstallFromStaging_Exact_RestoresPriorVersionWhenCommittedValidationFails()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var staging = Directory.CreateDirectory(Path.Combine(root.FullName, "staging"));
+            File.WriteAllText(Path.Combine(staging.FullName, "TestModule.psd1"), "new version");
+            var modules = Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(modules.FullName, "TestModule"));
+            var existing = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "1.0.0"));
+            File.WriteAllText(Path.Combine(existing.FullName, "TestModule.psd1"), "old version");
+            var older = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "0.9.0"));
+            File.WriteAllText(Path.Combine(older.FullName, "keep.txt"), "keep older version");
+            var options = new ModuleInstallerOptions(
+                [modules.FullName], InstallationStrategy.Exact, keepVersions: 1);
+
+            Assert.Throws<UnauthorizedAccessException>(() =>
+                new ModuleInstaller(new NullLogger()).InstallFromStagingWithPreparedValidation(
+                    staging.FullName,
+                    "TestModule",
+                    "1.0.0",
+                    options,
+                    prepared => Assert.True(File.Exists(Path.Combine(prepared, "TestModule.psd1"))),
+                    committed =>
+                    {
+                        File.WriteAllText(Path.Combine(committed, "TestModule.psd1"), "corrupt version");
+                        throw new InvalidOperationException("committed validation failed");
+                    }));
+
+            Assert.Equal("old version", File.ReadAllText(Path.Combine(existing.FullName, "TestModule.psd1")));
+            Assert.Equal("keep older version", File.ReadAllText(Path.Combine(older.FullName, "keep.txt")));
+            Assert.Empty(Directory.EnumerateDirectories(moduleRoot.FullName, ".backup_install_*"));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+
+    [Fact]
     public void InstallFromStaging_Exact_PreservesInstalledVersionBesideNewerLocalRevisions()
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

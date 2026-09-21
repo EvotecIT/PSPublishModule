@@ -143,8 +143,7 @@ public sealed partial class ModulePipelineRunner
 
     private void ValidateDeliveredBinaryDependencies(ModulePipelinePlan plan, string moduleRoot, string? manifestPath = null)
     {
-        var cfg = plan.ImportModules;
-        if (cfg is null || cfg.Self != true || cfg.SkipBinaryDependencyCheck == true) return;
+        if (!ShouldValidateBinaryDependencies(plan)) return;
 
         foreach (var target in GetImportValidationTargets(
             plan.CompatiblePSEditions,
@@ -158,6 +157,9 @@ public sealed partial class ModulePipelineRunner
                 target.Label);
         }
     }
+
+    private static bool ShouldValidateBinaryDependencies(ModulePipelinePlan plan)
+        => plan.ImportModules?.Self == true && plan.ImportModules.SkipBinaryDependencyCheck != true;
 
     internal static ModuleImportValidationTarget[] GetImportValidationTargets(
         IReadOnlyList<string>? compatiblePSEditions,

@@ -7,17 +7,27 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private void ValidateDeliveredArtefactIntegrity(ModulePipelinePlan plan, ModulePipelineRunState state)
+    {
+        ValidateFinalizedPackedArtefactIntegrity(state);
+        foreach (ArtefactBuildResult artefact in state.ArtefactResults)
+        {
+            if (artefact.Type is not (ArtefactType.Unpacked or ArtefactType.Script))
+                continue;
+
+            foreach (ArtefactModuleEntry module in artefact.Modules.Where(static module => module.IsMainModule))
+                ValidateDeliveredBinaryDependencies(
+                    plan,
+                    module.Path,
+                    artefact.Type == ArtefactType.Script ? state.RequireBuildResult().ManifestPath : null);
+        }
+    }
+
     private static void CaptureFinalizedPackedArtefactIntegrity(
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
         ArtefactBuildResult artefact)
     {
-        if (!plan.SignModule ||
-            (artefact.Type != ArtefactType.Packed &&
-             artefact.Type != ArtefactType.Script &&
-             artefact.Type != ArtefactType.ScriptPacked))
-            return;
-
         foreach (string path in EnumerateFinalizedPackedArtefactPaths(artefact))
         {
             if (!File.Exists(path))
@@ -28,14 +38,14 @@ public sealed partial class ModulePipelineRunner
                 state.FinalizedPackedArtefactUnixModes[path] = unixMode.Value;
         }
 
-        foreach (string root in EnumerateFinalizedScriptLayoutRoots(artefact))
+        foreach (string root in EnumerateFinalizedLooseArtefactRoots(artefact))
         {
-            state.FinalizedScriptLayoutFileInventories[root] = Directory
+            state.FinalizedLooseArtefactFileInventories[root] = Directory
                 .EnumerateFiles(root, "*", SearchOption.AllDirectories)
                 .Select(Path.GetFullPath)
                 .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
-            state.FinalizedScriptLayoutDirectoryInventories[root] = Directory
+            state.FinalizedLooseArtefactDirectoryInventories[root] = Directory
                 .EnumerateDirectories(root, "*", SearchOption.AllDirectories)
                 .Select(Path.GetFullPath)
                 .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer)
@@ -50,8 +60,8 @@ public sealed partial class ModulePipelineRunner
         CaptureFinalizedModulePayloadIntegrity(state);
         state.FinalizedPackedArtefactHashes.Clear();
         state.FinalizedPackedArtefactUnixModes.Clear();
-        state.FinalizedScriptLayoutFileInventories.Clear();
-        state.FinalizedScriptLayoutDirectoryInventories.Clear();
+        state.FinalizedLooseArtefactFileInventories.Clear();
+        state.FinalizedLooseArtefactDirectoryInventories.Clear();
         foreach (ArtefactBuildResult artefact in state.ArtefactResults)
             CaptureFinalizedPackedArtefactIntegrity(plan, state, artefact);
     }
@@ -66,11 +76,11 @@ public sealed partial class ModulePipelineRunner
                  ReadFinalizedArtefactUnixMode(expected.Key) != expectedMode))
             {
                 throw new InvalidOperationException(
-                    $"The finalized signed artefact or its evidence changed after signing: '{expected.Key}'. " +
-                    "Artifact actions must not mutate signed release outputs after finalization.");
+                    $"The finalized artefact or its evidence changed after package validation: '{expected.Key}'. " +
+                    "Artifact actions must not mutate release outputs after finalization.");
             }
         }
-        foreach (KeyValuePair<string, string[]> inventory in state.FinalizedScriptLayoutFileInventories)
+        foreach (KeyValuePair<string, string[]> inventory in state.FinalizedLooseArtefactFileInventories)
         {
             if (!Directory.Exists(inventory.Key))
                 ThrowFinalizedArtefactChanged(inventory.Key);
@@ -84,7 +94,7 @@ public sealed partial class ModulePipelineRunner
             if (changedPath is not null)
                 ThrowFinalizedArtefactChanged(changedPath);
         }
-        foreach (KeyValuePair<string, string[]> inventory in state.FinalizedScriptLayoutDirectoryInventories)
+        foreach (KeyValuePair<string, string[]> inventory in state.FinalizedLooseArtefactDirectoryInventories)
         {
             if (!Directory.Exists(inventory.Key))
                 ThrowFinalizedArtefactChanged(inventory.Key);
@@ -102,8 +112,8 @@ public sealed partial class ModulePipelineRunner
 
     private static void ThrowFinalizedArtefactChanged(string path)
         => throw new InvalidOperationException(
-            $"The finalized signed artefact or its evidence changed after signing: '{path}'. " +
-            "Artifact actions must not mutate signed release outputs after finalization.");
+            $"The finalized artefact or its evidence changed after package validation: '{path}'. " +
+            "Artifact actions must not mutate release outputs after finalization.");
 
     private static int? ReadFinalizedArtefactUnixMode(string path)
     {
@@ -131,8 +141,8 @@ public sealed partial class ModulePipelineRunner
             .Select(Path.GetFullPath)
             .Distinct(PowerShellCompilationPathSafety.PathComparer);
 
-    private static IEnumerable<string> EnumerateFinalizedScriptLayoutRoots(ArtefactBuildResult artefact)
-        => artefact.Type == ArtefactType.Script
+    private static IEnumerable<string> EnumerateFinalizedLooseArtefactRoots(ArtefactBuildResult artefact)
+        => artefact.Type is ArtefactType.Script or ArtefactType.Unpacked
             ? new[] { artefact.OutputPath }
                 .Concat(artefact.Modules
                     .Where(static module => module.IsMainModule)

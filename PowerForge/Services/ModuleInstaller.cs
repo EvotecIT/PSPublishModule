@@ -23,22 +23,34 @@ public sealed class ModuleInstaller
     /// the resolved version and installed paths.
     /// </summary>
     public ModuleInstallerResult InstallFromStaging(string stagingPath, string moduleName, string moduleVersion, ModuleInstallerOptions? options = null)
-        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validateNewDestinations: null);
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validatePreparedDestination: null, validateNewDestinations: null);
+
+    internal ModuleInstallerResult InstallFromStagingWithPreparedValidation(
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        ModuleInstallerOptions options,
+        Action<string> validatePreparedDestination,
+        Action<string>? validateCommittedDestination = null)
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validatePreparedDestination, validateNewDestinations: null, validateCommittedDestination);
 
     internal ModuleInstallerResult InstallFromStagingTransactional(
         string stagingPath,
         string moduleName,
         string moduleVersion,
         ModuleInstallerOptions options,
-        Action<IReadOnlyList<string>> validateNewDestinations)
-        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validateNewDestinations);
+        Action<IReadOnlyList<string>> validateNewDestinations,
+        Action<string>? validatePreparedDestination = null)
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validatePreparedDestination, validateNewDestinations, validateCommittedDestination: null);
 
     private ModuleInstallerResult InstallFromStagingCore(
         string stagingPath,
         string moduleName,
         string moduleVersion,
         ModuleInstallerOptions? options,
-        Action<IReadOnlyList<string>>? validateNewDestinations)
+        Action<string>? validatePreparedDestination,
+        Action<IReadOnlyList<string>>? validateNewDestinations,
+        Action<string>? validateCommittedDestination = null)
     {
         if (string.IsNullOrWhiteSpace(stagingPath) || !Directory.Exists(stagingPath))
             throw new DirectoryNotFoundException($"Staging path not found: {stagingPath}");
@@ -74,11 +86,6 @@ public sealed class ModuleInstaller
                 var moduleRoot = EnsureChildPath(rootFull, moduleName);
                 Directory.CreateDirectory(moduleRoot);
 
-                // If the user has an old "flat" install (no version folder), it can mask versioned installs.
-                // Handle it before installing the new version folder.
-                if (!options.RequireAllDestinationRoots)
-                    HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
-
                 var finalPath = EnsureChildPath(moduleRoot, resolvedVersion);
                 tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
 
@@ -100,6 +107,13 @@ public sealed class ModuleInstaller
                     tempPath = globalTemp;
                 }
 
+                validatePreparedDestination?.Invoke(tempPath);
+
+                // Legacy-flat conversion can change an existing install, so wait until the
+                // prepared copy has passed validation before doing that housekeeping.
+                if (!options.RequireAllDestinationRoots)
+                    HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
+
                 // If target exists
                 if (Directory.Exists(finalPath))
                 {
@@ -120,9 +134,8 @@ public sealed class ModuleInstaller
                     }
                     else
                     {
-                        // Exact: overwrite existing contents in place
-                        _logger.Info($"Target exists; overwriting Exact version in-place at {finalPath}");
-                        SyncDirectoryToSource(tempPath, finalPath);
+                        _logger.Info($"Target exists; replacing Exact version at {finalPath}");
+                        CommitExactVersion(tempPath, finalPath, validateCommittedDestination);
                         TryDeleteDirectory(tempPath);
                         installed.Add(finalPath);
                         var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removedInExact);
@@ -130,6 +143,16 @@ public sealed class ModuleInstaller
                         _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
                         continue;
                     }
+                }
+                if (validateCommittedDestination is not null)
+                {
+                    CommitExactVersion(tempPath, finalPath, validateCommittedDestination);
+                    TryDeleteDirectory(tempPath);
+                    installed.Add(finalPath);
+                    var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removedInExact);
+                    pruned.AddRange(removedInExact);
+                    _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
+                    continue;
                 }
                 try
                 {
@@ -212,7 +235,7 @@ public sealed class ModuleInstaller
                     throw;
 
                 throw new InvalidOperationException(
-                    "Signed install validation failed and one or more new destinations could not be rolled back: " +
+                    "Module install validation failed and one or more new destinations could not be rolled back: " +
                     string.Join("; ", rollbackFailures),
                     validationException);
             }
@@ -627,50 +650,56 @@ public sealed class ModuleInstaller
         }
     }
 
-    private void SyncDirectoryToSource(string sourceDir, string destDir)
+    private void CommitExactVersion(
+        string preparedPath,
+        string finalPath,
+        Action<string>? validateCommittedDestination)
     {
-        Directory.CreateDirectory(destDir);
-
-        // Remove stale files/dirs from dest so the installed module matches staging.
-        RemoveItemsNotInSource(sourceDir, destDir);
-        CopyDirectory(sourceDir, destDir);
-
-        void RemoveItemsNotInSource(string source, string dest)
+        string? backupPath = null;
+        if (Directory.Exists(finalPath))
         {
-            foreach (var file in Directory.EnumerateFiles(dest, "*", SearchOption.TopDirectoryOnly))
-            {
-                var name = Path.GetFileName(file);
-                var sourcePath = Path.Combine(source, name!);
-                if (File.Exists(sourcePath)) continue;
-                TryDeleteFile(file);
-            }
-
-            foreach (var dir in Directory.EnumerateDirectories(dest, "*", SearchOption.TopDirectoryOnly))
-            {
-                var name = Path.GetFileName(dir);
-                var sourcePath = Path.Combine(source, name!);
-
-                if (!Directory.Exists(sourcePath))
-                {
-                    // source has no such directory (or has a file with this name); remove it.
-                    TryDeleteStaleDirectory(dir);
-                    continue;
-                }
-
-                RemoveItemsNotInSource(sourcePath, dir);
-            }
+            backupPath = EnsureChildPath(Path.GetDirectoryName(finalPath)!, $".backup_install_{Guid.NewGuid():N}");
+            Directory.Move(finalPath, backupPath);
         }
 
-        void TryDeleteFile(string path)
+        try
         {
-            try { File.Delete(path); }
-            catch (Exception ex) { _logger.Warn($"Failed to delete stale file '{path}': {ex.Message}"); }
+            try
+            {
+                Directory.Move(preparedPath, finalPath);
+            }
+            catch (IOException) when (!Directory.Exists(finalPath))
+            {
+                CopyDirectory(preparedPath, finalPath);
+            }
+            catch (UnauthorizedAccessException) when (!Directory.Exists(finalPath))
+            {
+                CopyDirectory(preparedPath, finalPath);
+            }
+            validateCommittedDestination?.Invoke(finalPath);
+        }
+        catch (Exception installError)
+        {
+            try
+            {
+                if (Directory.Exists(finalPath))
+                    Directory.Delete(finalPath, recursive: true);
+                if (backupPath is not null)
+                    Directory.Move(backupPath, finalPath);
+            }
+            catch (Exception rollbackError)
+            {
+                throw new InvalidOperationException(
+                    $"Exact install failed and the prior version could not be restored. Backup: '{backupPath}'.",
+                    new AggregateException(installError, rollbackError));
+            }
+            throw;
         }
 
-        void TryDeleteStaleDirectory(string path)
+        if (backupPath is not null)
         {
-            try { Directory.Delete(path, recursive: true); }
-            catch (Exception ex) { _logger.Warn($"Failed to delete stale directory '{path}': {ex.Message}"); }
+            try { Directory.Delete(backupPath, recursive: true); }
+            catch (Exception ex) { _logger.Warn($"Exact install succeeded, but prior-version backup cleanup failed at '{backupPath}': {ex.Message}"); }
         }
     }
 
