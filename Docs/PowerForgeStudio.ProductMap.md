@@ -101,8 +101,8 @@ The WPF source can be removed when all of the following are true:
 - [x] Wide and compact renders cover the eight reference patterns through representative pages.
 - [x] Native Windows UI Automation can navigate the tree and invoke a real branch workflow.
 - [x] Headless rendered controls cover keyboard tree navigation, text input, save, Enter and Escape; native UI Automation covers a real mutation workflow. Foreground keyboard injection is unavailable in the current validation host and is recorded as a platform validation limit rather than a WPF dependency.
-- [ ] Build/run/publish scripts and documentation no longer offer the WPF compatibility host.
-- [ ] WPF projects, tests and framework-only package assets are removed from the solution and repository.
-- [ ] The final Avalonia package is rebuilt, launched and reviewed after removal.
+- [x] Build/run/publish scripts and documentation no longer offer the WPF compatibility host.
+- [x] WPF projects, tests and framework-only package assets are removed from the solution and repository.
+- [x] The final Avalonia package is rebuilt and launched after removal. The native window is observable through process discovery; final capture activation remains an explicit validation-host limitation.
 
 An embedded terminal and the old global queue shell are not retirement blockers. Retained portfolio-profile records remain available in Settings and in the machine-local catalog, while their dashboard-specific execution behavior is intentionally excluded from the replacement product.

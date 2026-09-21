@@ -217,7 +217,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
     "id": 202,
     "html_url": "https://github.com/EvotecIT/PSPublishModule/pull/220#discussion_r202",
     "body": "Inline review note",
-    "path": "PowerForgeStudio.Wpf/MainWindow.xaml",
+    "path": "PowerForgeStudio.Avalonia/MainWindow.axaml",
     "line": 571,
     "diff_hunk": "@@ -560,6 +571,8 @@",
     "pull_request_review_id": 55,
@@ -228,7 +228,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
     "id": 203,
     "html_url": "https://github.com/EvotecIT/PSPublishModule/pull/220#discussion_r203",
     "body": "Reply on the inline thread",
-    "path": "PowerForgeStudio.Wpf/MainWindow.xaml",
+    "path": "PowerForgeStudio.Avalonia/MainWindow.axaml",
     "in_reply_to_id": 202,
     "pull_request_review_id": 55,
     "user": { "login": "przemyslaw" },
@@ -270,7 +270,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
         Assert.Equal(3, detail.Comments.Count);
         Assert.Contains(detail.Comments, comment => comment.Kind == GitHubDiscussionCommentKind.IssueComment);
         Assert.Contains(detail.Comments, comment => comment.Kind == GitHubDiscussionCommentKind.PullRequestReviewComment
-            && comment.Path == "PowerForgeStudio.Wpf/MainWindow.xaml");
+            && comment.Path == "PowerForgeStudio.Avalonia/MainWindow.axaml");
         Assert.Contains(detail.Comments, comment => comment.ParentCommentId == 202);
         Assert.Equal(3, detail.TimelineEvents.Count);
         Assert.Contains(detail.TimelineEvents, timeline => timeline.EventName == "reviewed"
@@ -399,7 +399,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
                     "reviewer",
                     "Inline review note",
                     DateTimeOffset.Parse("2026-03-19T12:30:00Z"),
-                    Path: "PowerForgeStudio.Wpf/MainWindow.xaml",
+                    Path: "PowerForgeStudio.Avalonia/MainWindow.axaml",
                     PullRequestReviewId: 55,
                     Line: 571,
                     DiffHunk: "@@ -560,6 +571,8 @@"),
@@ -409,7 +409,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
                     "przemyslaw",
                     "Reply on the inline thread",
                     DateTimeOffset.Parse("2026-03-19T12:45:00Z"),
-                    Path: "PowerForgeStudio.Wpf/MainWindow.xaml",
+                    Path: "PowerForgeStudio.Avalonia/MainWindow.axaml",
                     ParentCommentId: 202,
                     PullRequestReviewId: 55)
             ],
@@ -420,7 +420,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
         var reviewThread = Assert.Single(entries, entry => entry.Kind == GitHubThreadEntryKind.ReviewThread);
         Assert.Equal("Review thread", reviewThread.Title);
         Assert.Equal("reviewer", reviewThread.AuthorLogin);
-        Assert.Equal("PowerForgeStudio.Wpf/MainWindow.xaml", reviewThread.Path);
+        Assert.Equal("PowerForgeStudio.Avalonia/MainWindow.axaml", reviewThread.Path);
         Assert.Contains("Inline review note", reviewThread.Markdown);
         Assert.Contains("Reply from przemyslaw", reviewThread.Markdown);
         Assert.Contains("@@ -560,6 +571,8 @@", reviewThread.Markdown);
@@ -455,7 +455,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
                     "reviewer",
                     "Inline review note",
                     DateTimeOffset.Parse("2026-03-19T12:30:00Z"),
-                    Path: "PowerForgeStudio.Wpf/MainWindow.xaml",
+                    Path: "PowerForgeStudio.Avalonia/MainWindow.axaml",
                     PullRequestReviewId: 55),
                 new GitHubDiscussionComment(
                     203,
@@ -463,7 +463,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
                     "przemyslaw",
                     "Reply on the inline thread",
                     DateTimeOffset.Parse("2026-03-19T12:45:00Z"),
-                    Path: "PowerForgeStudio.Wpf/MainWindow.xaml",
+                    Path: "PowerForgeStudio.Avalonia/MainWindow.axaml",
                     ParentCommentId: 202,
                     PullRequestReviewId: 55),
                 new GitHubDiscussionComment(
@@ -472,7 +472,7 @@ public sealed class PowerForgeStudioGitHubProjectServiceTests
                     "reviewer",
                     "Nested follow-up reply",
                     DateTimeOffset.Parse("2026-03-19T12:50:00Z"),
-                    Path: "PowerForgeStudio.Wpf/MainWindow.xaml",
+                    Path: "PowerForgeStudio.Avalonia/MainWindow.axaml",
                     ParentCommentId: 203,
                     PullRequestReviewId: 55)
             ],

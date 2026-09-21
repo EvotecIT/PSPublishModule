@@ -1,5 +1,7 @@
 # PowerForgeStudio Regroup Plan
 
+> Historical WPF regrouping record. The shared Domain/Orchestrator ownership remains relevant; the current Avalonia product and navigation are defined in [PowerForgeStudio.ProductMap.md](PowerForgeStudio.ProductMap.md).
+
 Last updated: 2026-03-12
 
 ## Purpose

@@ -7,22 +7,12 @@ param(
     [string] $Mode = 'Both',
     [string] $OutputRoot,
     [switch] $NoRestore,
-    [switch] $SingleFile,
-    [switch] $LegacyWpf
+    [switch] $SingleFile
 )
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$runningOnWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
-    [System.Runtime.InteropServices.OSPlatform]::Windows)
-if ($LegacyWpf -and (-not $runningOnWindows -or -not $Runtime.StartsWith('win-', [StringComparison]::OrdinalIgnoreCase))) {
-    throw 'The legacy PowerForge Studio WPF host can only publish for Windows from Windows.'
-}
-$project = if ($LegacyWpf) {
-    Join-Path $repoRoot 'PowerForgeStudio.Wpf\PowerForgeStudio.Wpf.csproj'
-} else {
-    Join-Path $repoRoot 'PowerForgeStudio.Avalonia\PowerForgeStudio.Avalonia.csproj'
-}
-$executableBaseName = if ($LegacyWpf) { 'PowerForgeStudio.Wpf' } else { 'PowerForgeStudio' }
+$project = Join-Path $repoRoot 'PowerForgeStudio.Avalonia\PowerForgeStudio.Avalonia.csproj'
+$executableBaseName = 'PowerForgeStudio'
 $executableName = if ($Runtime.StartsWith('win-', [StringComparison]::OrdinalIgnoreCase)) {
     "$executableBaseName.exe"
 } else {

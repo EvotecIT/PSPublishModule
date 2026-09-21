@@ -4,32 +4,17 @@ param(
     [string] $Configuration = 'Debug',
     [switch] $NoBuild,
     [switch] $NoRestore,
-    [string] $Workspace,
-    [switch] $LegacyWpf
+    [string] $Workspace
 )
 
-$runningOnWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
-    [System.Runtime.InteropServices.OSPlatform]::Windows)
-if ($LegacyWpf -and -not $runningOnWindows) {
-    throw 'The legacy PowerForge Studio WPF host can only run on Windows.'
-}
-if ($LegacyWpf -and -not [string]::IsNullOrWhiteSpace($Workspace)) {
-    throw 'The legacy WPF host cannot honor -Workspace. Omit -LegacyWpf to open that workspace in Avalonia.'
-}
-
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$project = if ($LegacyWpf) {
-    Join-Path $repoRoot 'PowerForgeStudio.Wpf\PowerForgeStudio.Wpf.csproj'
-} else {
-    Join-Path $repoRoot 'PowerForgeStudio.Avalonia\PowerForgeStudio.Avalonia.csproj'
-}
-$framework = if ($LegacyWpf) { 'net10.0-windows' } else { 'net10.0' }
+$project = Join-Path $repoRoot 'PowerForgeStudio.Avalonia\PowerForgeStudio.Avalonia.csproj'
 
 $dotnetArguments = @(
     'run',
     '--project', $project,
     '-c', $Configuration,
-    '--framework', $framework
+    '--framework', 'net10.0'
 )
 if ($NoBuild) {
     $dotnetArguments += '--no-build'
@@ -37,7 +22,7 @@ if ($NoBuild) {
 if ($NoRestore) {
     $dotnetArguments += '--no-restore'
 }
-if (-not $LegacyWpf -and -not [string]::IsNullOrWhiteSpace($Workspace)) {
+if (-not [string]::IsNullOrWhiteSpace($Workspace)) {
     $workspaceRoot = (Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
     $dotnetArguments += @('--', '--workspace', $workspaceRoot)
 }

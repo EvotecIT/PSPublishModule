@@ -1,5 +1,7 @@
 # PowerForgeStudio Foundation Plan
 
+> Historical WPF foundation record. The current Avalonia product, navigation and retirement decisions are defined in [PowerForgeStudio.ProductMap.md](PowerForgeStudio.ProductMap.md) and [PowerForgeStudio.AvaloniaMigration.md](PowerForgeStudio.AvaloniaMigration.md).
+
 Last updated: 2026-03-09
 
 ## Working Title

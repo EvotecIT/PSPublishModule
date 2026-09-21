@@ -1,12 +1,11 @@
 # PowerForge Studio build and run guide
 
-This guide covers the supported developer and compiled-app paths for PowerForge Studio. The default desktop host is the Avalonia application. The previous WPF host remains available through explicit compatibility switches while migration validation finishes.
+This guide covers the supported developer and compiled-app paths for PowerForge Studio. The desktop product is the Avalonia application over the portable shared core.
 
 ## Product entry points
 
 - Desktop host: `PowerForgeStudio.Avalonia`
 - Optional headless companion: `PowerForgeStudio.Cli`
-- Temporary compatibility host: `PowerForgeStudio.Wpf`
 - Workspace root: `$env:EVOTEC_GITHUB_ROOT` when set, otherwise `C:\Support\GitHub` on Windows or `~/Documents/GitHub` on macOS/Linux
 
 Run the commands below from the repository root.
@@ -15,7 +14,6 @@ Run the commands below from the repository root.
 
 - .NET 10 SDK
 - PowerShell 7 for the cross-platform scripts
-- Windows for the legacy WPF compatibility host
 
 The desktop app stores machine-local state under `%LOCALAPPDATA%\PowerForgeStudio` on Windows and the platform local-application-data folder elsewhere. Important files include:
 
@@ -39,10 +37,10 @@ The default workflow builds Avalonia and runs its UI tests plus the shared Studi
 .\Build\Build-PowerForgeStudio.ps1 -SkipTests
 .\Build\Build-PowerForgeStudio.ps1 -NoRestore
 .\Build\Build-PowerForgeStudio.ps1 -IncludeCli
-.\Build\Build-PowerForgeStudio.ps1 -IncludeLegacyWpf
+.\Build\Build-PowerForgeStudio.ps1 -DesktopOnlyTests
 ```
 
-`-IncludeLegacyWpf` adds the old Windows-only host and its tests. It does not change which app the normal run and publish commands select.
+The default path runs the complete shared Studio suite. `-DesktopOnlyTests` is an explicit reduced validation pass for desktop-host work: it excludes the existing Apple exact-source matrix and its environment-dependent release-station projection. Use the default path for repository-wide validation.
 
 ### Run Studio from source
 
@@ -61,7 +59,6 @@ Other useful variants:
 ```powershell
 .\Build\Run-PowerForgeStudio.ps1 -Configuration Release
 .\Build\Run-PowerForgeStudio.ps1 -Configuration Release -NoBuild -NoRestore
-.\Build\Run-PowerForgeStudio.ps1 -LegacyWpf
 ```
 
 The direct Avalonia command is:
@@ -108,7 +105,7 @@ Output:
 .\Build\Publish-PowerForgeStudio.ps1 -Runtime win-x64 -Mode SelfContained -SingleFile
 ```
 
-The multi-file self-contained output remains the baseline for runtime validation. Use `-LegacyWpf` only when a migration comparison specifically needs the old host.
+The multi-file self-contained output remains the baseline for runtime validation.
 
 Avalonia also accepts `linux-x64`, `osx-x64`, and `osx-arm64` runtime identifiers. Windows is the first supported and validated product target. Other runtime outputs still require native validation and the target platform's Avalonia prerequisites before distribution.
 
