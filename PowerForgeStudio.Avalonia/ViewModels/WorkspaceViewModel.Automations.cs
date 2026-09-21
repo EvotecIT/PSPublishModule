@@ -12,6 +12,7 @@ public sealed partial class WorkspaceViewModel
     partial void OnIsAutomationsPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
+        OnPropertyChanged(nameof(IsProjectRoute));
         OnPropertyChanged(nameof(IsWorkspaceUtilityPage));
         OnPropertyChanged(nameof(DisplayedOutput));
         OnPropertyChanged(nameof(DisplayedStatus));
@@ -21,6 +22,7 @@ public sealed partial class WorkspaceViewModel
     private async Task ShowAutomationsAsync()
     {
         if (KeepReleaseVisible()) return;
+        IsOverviewPage = false;
         IsSettingsPage = false;
         IsActivityPage = false;
         IsStoragePage = false;

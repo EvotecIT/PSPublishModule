@@ -13,6 +13,7 @@ public sealed partial class WorkspaceViewModel
     partial void OnIsSettingsPageChanged(bool value)
     {
         OnPropertyChanged(nameof(IsFilesPage));
+        OnPropertyChanged(nameof(IsProjectRoute));
         OnPropertyChanged(nameof(IsWorkspaceUtilityPage));
         OnPropertyChanged(nameof(DisplayedOutput));
         OnPropertyChanged(nameof(DisplayedStatus));
@@ -22,6 +23,7 @@ public sealed partial class WorkspaceViewModel
     private void ShowSettings()
     {
         if (KeepReleaseVisible()) return;
+        IsOverviewPage = false;
         IsActivityPage = false;
         IsStoragePage = false;
         IsAutomationsPage = false;

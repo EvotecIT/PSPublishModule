@@ -11,6 +11,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [ ] Implement the reviewed workspace shell and hierarchical project explorer.
 - [x] Apply native tree row geometry, ancestry guides, context/selection styling, vector navigation icons and Git markers.
 - [x] Restore workspace favorites, expanded folders and document tabs through shared catalog persistence.
+- [x] Add a bounded per-project overview with working-copy identity, product signals, entrypoints and prerequisites.
 - [x] Connect real file navigation, previews and explicit file operations.
 - [x] Add create, copy, move and rename dialogs over shared explorer operations; refresh affected tree branches.
 - [x] Add text editing, conflict-aware saves, unsaved-document choices and draft-safe navigation.
@@ -79,6 +80,20 @@ dotnet test PowerForgeStudio.Avalonia.Tests
 ```
 
 Set POWERFORGE_STUDIO_VISUAL_OUTPUT to a task-owned folder to retain the rendered test screenshot. The initial screenshot is retained locally under Artifacts/StudioValidation/workspace.png. No package was published, no user project was built or modified, and no existing Studio state was migrated.
+
+### Project overview milestone
+
+Selecting a project or one of its working copies now opens the `/projects/p/overview` surface before any build action. The page keeps the project tree and shared project tabs visible, identifies the selected primary checkout or worktree, shows current local Git state, summarizes the root README, and lists bounded product signals, exact build entrypoints and prerequisites. Direct actions lead to Build & Run, Files, Changes, GitHub and Releases. Selecting a folder or file continues to open Files.
+
+The reusable overview owner reads only the root and one directory level, streams at most 80 child-directory candidates and 400 file entries with cancellation checks, skips linked paths and the explorer's metadata/cache exclusions, bounds README inspection to 256 KiB and reports partial filesystem failures. Configured build paths are remapped from the primary repository into the selected worktree. JSON, PowerShell and solution entrypoints are classified without parsing or executing project code. Opening README is an explicit user action and is restricted to an existing non-linked path inside the selected working copy. User-requested Overview Refresh reacquires Git and worktree state before it rebuilds the metadata snapshot, while initial selection reuses the fresh Git query already completed by the workspace coordinator. Git refresh failures stay inside the route and produce a safe retry message.
+
+Evidence:
+
+- Two focused shared tests pass. One maps a configured JSON project contract from a primary checkout into a selected worktree, ignores 400 Git-metadata files without losing the immediate-child project signal, detects README, solution, product and prerequisite signals, and proves a marker PowerShell script was not executed. The other keeps an oversized README and missing build mapping explicit.
+- All 43 Avalonia tests pass on the final candidate. The route case uses a disposable Git repository, proves project selection opens Overview while Files remains separate, checks the detected JSON/solution entries, refreshes an externally changed Git state, keeps a corrupt-Git refresh failure inside the route without exposing its path, and confirms the marker script was not executed. A controlled race proves a newer Git snapshot for the same working copy does not cancel and strand the metadata view.
+- Actual Skia rendering was inspected at 1600 x 1000 and 1050 x 720, including the compact bottom state: `Artifacts/StudioValidation/project-overview.png`, `project-overview-compact.png` and `project-overview-compact-bottom.png`.
+
+The overview does not claim installed-tool readiness; prerequisites link the user conceptually to Connections for observed runtime evidence. Persisted run history, release history, package/download summaries, editable project descriptors and archive inspection remain separate planned routes. Native pointer, keyboard, external README opening and filesystem watcher behavior remain unverified.
 
 ### File-management milestone
 

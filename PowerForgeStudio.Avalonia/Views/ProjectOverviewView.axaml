@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             xmlns:domain="using:PowerForgeStudio.Domain.Projects"
+             x:DataType="vm:ProjectOverviewViewModel" x:Class="PowerForgeStudio.Avalonia.Views.ProjectOverviewView">
+  <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="22,18" Spacing="16">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding ProjectName}" Classes="heading" TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding Purpose}" Classes="muted" TextWrapping="Wrap" MaxWidth="900" HorizontalAlignment="Left" />
+        </StackPanel>
+        <Button Grid.Column="1" Content="Refresh" Command="{ReflectionBinding DataContext.RefreshOverviewCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" VerticalAlignment="Top" />
+      </Grid>
+
+      <WrapPanel ItemSpacing="8" LineSpacing="8">
+        <Button Content="Build &amp; Run" Command="{ReflectionBinding DataContext.ShowBuildCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" Background="#0865FF" Foreground="White" />
+        <Button Content="Files" Command="{ReflectionBinding DataContext.ShowFilesCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" />
+        <Button Content="Changes" Command="{ReflectionBinding DataContext.ShowChangesCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" />
+        <Button Content="GitHub" Command="{ReflectionBinding DataContext.ShowGitHubCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" />
+        <Button Content="Releases" Command="{ReflectionBinding DataContext.ShowReleaseCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" />
+        <Button Content="Open README" Command="{Binding OpenReadmeCommand}" IsEnabled="{Binding HasReadme}" />
+      </WrapPanel>
+
+      <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+        <Border Classes="card" Padding="15"><StackPanel Spacing="5"><TextBlock Text="Working copy" Classes="muted" /><TextBlock Text="{Binding WorkspaceKind}" FontWeight="SemiBold" /><TextBlock Text="{Binding WorkingCopyRoot}" FontSize="11" TextWrapping="Wrap" /></StackPanel></Border>
+        <Border Grid.Column="1" Classes="card" Padding="15"><StackPanel Spacing="5"><TextBlock Text="Git state" Classes="muted" /><TextBlock Text="{Binding GitState}" FontWeight="SemiBold" /><TextBlock Text="{Binding Branch}" Foreground="#0865FF" /><TextBlock Text="{Binding AheadBehind}" FontSize="11" /></StackPanel></Border>
+        <Border Grid.Column="2" Classes="card" Padding="15"><StackPanel Spacing="5"><TextBlock Text="Working copies" Classes="muted" /><TextBlock Text="{Binding WorkingCopyCount}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="Primary checkout and registered worktrees" FontSize="11" Classes="muted" TextWrapping="Wrap" /></StackPanel></Border>
+      </Grid>
+
+      <Grid ColumnDefinitions="0.8*,1.2*" ColumnSpacing="14">
+        <StackPanel Spacing="14">
+          <Border Classes="card" Padding="16">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Products" FontSize="16" FontWeight="SemiBold" />
+              <ItemsControl ItemsSource="{Binding Products}">
+                <ItemsControl.ItemTemplate><DataTemplate x:DataType="domain:ProjectOverviewItem">
+                  <Border Background="#F6F8FC" CornerRadius="5" Padding="10" Margin="0,3"><StackPanel Spacing="3"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" /><TextBlock Text="{Binding Detail}" Classes="muted" TextWrapping="Wrap" FontSize="11" /></StackPanel></Border>
+                </DataTemplate></ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+          <Border Classes="card" Padding="16">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Prerequisites" FontSize="16" FontWeight="SemiBold" />
+              <ItemsControl ItemsSource="{Binding Prerequisites}">
+                <ItemsControl.ItemTemplate><DataTemplate x:DataType="domain:ProjectOverviewItem">
+                  <StackPanel Margin="0,4" Spacing="2"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" /><TextBlock Text="{Binding Detail}" Classes="muted" TextWrapping="Wrap" FontSize="11" /></StackPanel>
+                </DataTemplate></ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Spacing="14">
+          <Border Classes="card" Padding="16">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Build entrypoints" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="Detected configuration is shown before any project code runs." Classes="muted" TextWrapping="Wrap" />
+              <ItemsControl ItemsSource="{Binding EntryPoints}">
+                <ItemsControl.ItemTemplate><DataTemplate x:DataType="domain:ProjectOverviewItem">
+                  <Border Background="#F6F8FC" CornerRadius="5" Padding="10" Margin="0,3">
+                    <StackPanel Spacing="3"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" /><TextBlock Text="{Binding Detail}" Classes="muted" /><SelectableTextBlock Text="{Binding SourceDisplay}" ToolTip.Tip="{Binding SourcePath}" FontSize="11" TextWrapping="Wrap" /></StackPanel>
+                  </Border>
+                </DataTemplate></ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+          <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="12" IsVisible="{Binding HasWarnings}">
+            <ItemsControl ItemsSource="{Binding Warnings}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+          </Border>
+          <Border Background="#EFF7F1" BorderBrush="#A9D7B4" BorderThickness="1" CornerRadius="6" Padding="12">
+            <TextBlock Text="Overview reads bounded metadata only. It never imports a module, runs a script, validates project JSON or starts a build." TextWrapping="Wrap" />
+          </Border>
+        </StackPanel>
+      </Grid>
+
+      <ProgressBar IsVisible="{Binding IsLoading}" IsIndeterminate="True" Height="3" />
+      <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

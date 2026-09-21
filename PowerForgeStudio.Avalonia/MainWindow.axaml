@@ -16,7 +16,7 @@
     <Grid Grid.Row="1" x:Name="WorkspaceLayout" ColumnDefinitions="70,326,5,*,280">
       <Border Background="#0B2745">
         <StackPanel Spacing="4" Margin="0,10">
-          <Button Classes="rail" Classes.selected="{Binding IsFilesPage}" Command="{Binding ShowFilesCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsProjectRoute}" Command="{Binding ShowOverviewCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsActivityPage}" Command="{Binding ShowActivityCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsGitHubPage}" Command="{Binding ShowGitHubCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsAutomationsPage}" Command="{Binding ShowAutomationsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Automations" HorizontalAlignment="Center" /></StackPanel></Button>
@@ -86,6 +86,7 @@
               <TextBlock Grid.Column="1" Text="{Binding Branch}" Foreground="#0865FF" VerticalAlignment="Center" />
             </Grid>
             <StackPanel Orientation="Horizontal" Spacing="20">
+              <Button Content="Overview" Command="{Binding ShowOverviewCommand}" Classes="pageTab" Classes.active="{Binding IsOverviewPage}" />
               <Button Content="Files" Command="{Binding ShowFilesCommand}" Classes="pageTab" Classes.active="{Binding IsFilesPage}" />
               <Button Content="Changes" Command="{Binding ShowChangesCommand}" Classes="pageTab" Classes.active="{Binding IsChangesPage}" />
               <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Classes="pageTab" Classes.active="{Binding IsBuildPage}" />
@@ -99,6 +100,7 @@
         <ContentControl Grid.Row="2" IsVisible="{Binding IsGitHubPage}"><views:GitHubView DataContext="{Binding GitHub}" /></ContentControl>
         <ContentControl Grid.Row="2" IsVisible="{Binding IsReleasePage}"><views:ReleaseView DataContext="{Binding Release}" /></ContentControl>
         <views:FilesView Grid.Row="2" IsVisible="{Binding IsFilesPage}" />
+        <views:ProjectOverviewView x:Name="ProjectOverviewPage" Grid.Row="2" IsVisible="{ReflectionBinding DataContext.IsOverviewPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Overview}" />
         <ContentControl Grid.Row="2" IsVisible="{Binding IsBuildPage}"><views:BuildView DataContext="{Binding Build}" /></ContentControl>
         <views:ActivityView x:Name="ActivityPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsActivityPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Activity}" />
         <views:StorageView Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsStoragePage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Storage}" />
