@@ -102,6 +102,10 @@ public sealed class WorkspaceSessionTests
                 using (var model = new WorkspaceViewModel(workspace, store))
                 {
                     await model.RefreshAsync();
+                    Assert.Equal("Favorites", model.ExplorerRoots[0].Name);
+                    Assert.Empty(model.ExplorerRoots[0].Children);
+                    Assert.Equal("Other projects", model.ExplorerRoots[1].Name);
+                    Assert.Equal(2, model.ExplorerRoots[1].Children.Count);
                     foreach (var name in new[] { "Studio.Sample", "Module.Sample" })
                     {
                         var project = Assert.Single(model.Projects, item => item.Name == name);

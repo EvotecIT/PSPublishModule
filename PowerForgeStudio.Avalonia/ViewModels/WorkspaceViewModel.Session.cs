@@ -216,20 +216,15 @@ public sealed partial class WorkspaceViewModel
         var selected = SelectedNode;
         ExplorerRoots.Clear();
         var favorites = Projects.Where(project => _favorites.Contains(project.Path)).ToArray();
-        if (favorites.Length == 0 && !FavoritesOnly)
-            foreach (var project in Projects) ExplorerRoots.Add(project);
-        else
+        var favoriteGroup = new ExplorerNode("Favorites", "", "favorite", WorkspaceRoot) { IsExpanded = true, Detail = favorites.Length == 0 ? "No favorites" : "" };
+        foreach (var project in favorites) favoriteGroup.Children.Add(project);
+        ExplorerRoots.Add(favoriteGroup);
+        var others = Projects.Except(favorites).ToArray();
+        if (others.Length > 0)
         {
-            var favoriteGroup = new ExplorerNode("Favorites", "", "favorite", WorkspaceRoot) { IsExpanded = true, Detail = favorites.Length == 0 ? "No favorites yet" : "" };
-            foreach (var project in favorites) favoriteGroup.Children.Add(project);
-            ExplorerRoots.Add(favoriteGroup);
-            var others = Projects.Except(favorites).ToArray();
-            if (others.Length > 0)
-            {
-                var group = new ExplorerNode("Other projects", "", "project", WorkspaceRoot) { IsExpanded = true };
-                foreach (var project in others) group.Children.Add(project);
-                ExplorerRoots.Add(group);
-            }
+            var group = new ExplorerNode("Other projects", "", "project", WorkspaceRoot) { IsExpanded = true };
+            foreach (var project in others) group.Children.Add(project);
+            ExplorerRoots.Add(group);
         }
         if (selected is not null && LoadedNodes().Contains(selected)) SelectedNode = selected;
     }

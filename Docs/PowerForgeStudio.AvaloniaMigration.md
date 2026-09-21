@@ -38,7 +38,7 @@ The desktop GUI is PowerForgeStudio.Avalonia, a thin presentation host over the 
 - [x] Show cancellable storage-scan progress and expose a bounded read-only storage CLI for large workspaces.
 - [x] Add current-remote, Studio-use and retained-artifact checks with guarded no-force worktree removal.
 - [x] Add matching merged-PR-head fallback, reviewed broken-reference pruning and bounded external process detection where available.
-- [ ] Bring the persistent project tree closer to the approved reference hierarchy: Favorites, working-copy branches and files, followed by other projects.
+- [x] Keep the persistent project tree in the approved reference hierarchy: Favorites, working-copy branches and files, followed by other projects, even before the first favorite is saved.
 - [x] Inventory Windows schedules and local GitHub workflow definitions with explicit provider evidence boundaries.
 - [x] Add secret-free GitHub, registry, Licensing, IntelligenceX and local-toolchain connection evidence.
 - [x] Add a cross-project Activity inbox over existing portfolio, release, GitHub issue/PR/CI and automation owners.
@@ -646,3 +646,5 @@ Eleven service tests cover exact-head approval, moved-head rejection before POST
 ### Native Windows storage interaction (2026-09-21)
 
 The current Release build launched as one native `PowerForge Studio` window at 1600 × 1030. Windows capture showed the populated project tree and the Storage route with live progress against the 194-repository workspace. A pointer click on Cancel scan stopped the inspection promptly. That check exposed a misleading empty-table message after cancellation; the page now says that inspection was cancelled and offers Refresh inspection. The focused Avalonia test and a second native launch confirmed the corrected rendered state. Both agent-owned validation windows were closed. This is native pointer and capture evidence for the Storage route; it does not establish native keyboard, modal, signing or publishing behavior across the whole application.
+
+The tree now retains Favorites and Other projects sections even when the favorite set is empty. A 1600 × 1000 headless render at `Artifacts/StudioValidation/reference-tree/workspace.png` was inspected with a selected project, branch, folders and files; all 54 Avalonia tests passed. The native recheck for this final tree change was interrupted by the user's Escape key, so this exact tree revision has headless visual evidence only.
