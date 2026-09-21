@@ -8,6 +8,13 @@ public sealed partial class GitHubView : UserControl
 {
     public GitHubView() => InitializeComponent();
 
+    private async void ReviewAction(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is not GitHubViewModel model || !model.PrepareActionReview() ||
+            TopLevel.GetTopLevel(this) is not Window owner) return;
+        await new GitHubActionReviewDialog { DataContext = model }.ShowDialog(owner);
+    }
+
     private async void OpenOnGitHub(object? sender, RoutedEventArgs args)
     {
         if (DataContext is not GitHubViewModel model || !model.HasSelection || TopLevel.GetTopLevel(this) is not { } top) return;

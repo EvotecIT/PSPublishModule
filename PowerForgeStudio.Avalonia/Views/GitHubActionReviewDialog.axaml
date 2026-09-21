@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+        x:Class="PowerForgeStudio.Avalonia.Views.GitHubActionReviewDialog" x:DataType="vm:GitHubViewModel"
+        Title="Review GitHub action" Width="660" SizeToContent="Height" MaxHeight="760" CanResize="False" WindowStartupLocation="CenterOwner">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="26" Spacing="13">
+      <TextBlock Text="Review GitHub action" Classes="heading" />
+      <TextBlock Text="Nothing is sent until you submit this captured plan." Classes="muted" TextWrapping="Wrap" />
+      <TextBlock Text="Action" Classes="muted" />
+      <TextBlock Text="{Binding PendingAction.ActionDisplay}" FontWeight="SemiBold" />
+      <TextBlock Text="Target" Classes="muted" />
+      <TextBlock Text="{Binding PendingAction.TargetDisplay}" FontWeight="SemiBold" TextWrapping="Wrap" />
+      <TextBlock Text="Evidence" Classes="muted" />
+      <SelectableTextBlock Text="{Binding PendingAction.RevisionDisplay}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" TextWrapping="Wrap" />
+      <Border IsVisible="{Binding HasActionBody}" Background="#F7F9FC" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="5" Padding="12">
+        <StackPanel Spacing="6">
+          <TextBlock Text="Text to send" Classes="muted" />
+          <SelectableTextBlock Text="{Binding PendingAction.Body}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <TextBlock Text="{Binding ActionStatus}" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="9">
+        <Button Content="Cancel" Click="Cancel" IsEnabled="{Binding !IsActionRunning}" />
+        <Button Content="Submit reviewed action" Classes="primary" Click="Submit" IsEnabled="{Binding CanSubmitPendingAction}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

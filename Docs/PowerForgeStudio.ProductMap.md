@@ -15,7 +15,7 @@ The left rail is workspace-wide. Project tabs are scoped to the selected working
 | Project | Changes | Branches, status, diff, stage, unstage and commit | Project Git service |
 | Project | History | Bounded commit list, changed paths and patch | Project Git service |
 | Project | Build & Run | Inspect configuration, plan intent, execute and cancel | Build planning/execution services |
-| Project | GitHub | Issues, pull requests, checks, discussion and changed files for this repository | GitHub project service |
+| Project | GitHub | Issues, pull requests, checks, discussion, changed files and explicitly reviewed item actions for this repository | GitHub project services |
 | Project | Releases | Prepare, sign, publish, verify, recover and reopen durable receipts | Durable release workflows |
 | Workspace | Activity | Cross-project readiness, releases, reviews, CI and schedules needing attention | Activity inventory |
 | Workspace | GitHub | The Activity catalog prefiltered to cross-project GitHub evidence | Activity inventory |
@@ -33,12 +33,12 @@ These are states within an owning surface, not additional top-level pages:
 - Files: document editor, unsaved-change choice, create/copy/move/rename, recoverable deletion and recovery.
 - Changes: local branch selector, new branch field, change list, diff and commit form.
 - Build & Run: discovered contracts, reviewed plan, running progress, cancellation, artifacts and output.
-- GitHub: issues, pull requests, discussion/checks and changed-file patch.
+- GitHub: issues, pull requests, discussion/checks, changed-file patch, action draft and reviewed-action confirmation.
 - Releases: prepared plan, signing, destination review, publication, verification, saved history and local-save recovery.
 - Storage: filters, selected-row evidence, removal review and broken-registration prune review.
 - Connections: catalog evidence and provider-owned configuration handoff. Secret values never appear here.
 
-Dialogs are used only when the operator must confirm a target, resolve a collision, choose what happens to unsaved work, or authorize a destructive/external effect. A successful read or simple navigation does not need a dialog.
+Dialogs are used only when the operator must confirm a target, resolve a collision, choose what happens to unsaved work, or authorize a destructive/external effect. GitHub comments, issue state changes and PR reviews show the captured item state or exact PR head before submission. Merge and branch deletion remain in the repository settlement workflow. A successful read or simple navigation does not need a dialog.
 
 ## Eight visual references
 

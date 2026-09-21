@@ -26,8 +26,16 @@ public sealed partial class GitHubViewModel
         OnPropertyChanged(nameof(PatchPreview)); OnPropertyChanged(nameof(PatchNotice));
         OnPropertyChanged(nameof(FilePath)); OnPropertyChanged(nameof(PreviousFilePath));
     }
-    partial void OnHeadShaChanged(string value) => OnPropertyChanged(nameof(CanReviewFiles));
-    partial void OnIsDetailLoadingChanged(bool value) => OnPropertyChanged(nameof(CanReviewFiles));
+    partial void OnHeadShaChanged(string value)
+    {
+        OnPropertyChanged(nameof(CanReviewFiles));
+        OnPropertyChanged(nameof(CanPrepareAction));
+    }
+    partial void OnIsDetailLoadingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanReviewFiles));
+        OnPropertyChanged(nameof(CanPrepareAction));
+    }
     partial void OnIsFilesLoadingChanged(bool value) => OnPropertyChanged(nameof(CanReviewFiles));
 
     private void ClearFiles()

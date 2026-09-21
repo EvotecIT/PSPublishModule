@@ -29,7 +29,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingTreeSelection;
     private int _refreshVersion;
 
-    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null, IWorkspaceStorageRemovalService? storageRemoval = null, IWorkspaceAutomationInventoryService? automations = null, IWorkspaceConnectionInventoryService? connections = null, IWorkspaceActivityInventoryService? activity = null, PowerForgeStudio.Orchestrator.Projects.IProjectOverviewService? overview = null, IProjectHistoryService? history = null)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null, IWorkspaceStorageRemovalService? storageRemoval = null, IWorkspaceAutomationInventoryService? automations = null, IWorkspaceConnectionInventoryService? connections = null, IWorkspaceActivityInventoryService? activity = null, PowerForgeStudio.Orchestrator.Projects.IProjectOverviewService? overview = null, IProjectHistoryService? history = null, IGitHubProjectActionService? gitHubActions = null)
     {
         Release = release ?? new ReleaseViewModel();
         Storage = new StorageViewModel(storage, storageRemoval, GetProtectedWorkingCopies);
@@ -39,7 +39,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Overview = new ProjectOverviewViewModel(overview);
         History = new ProjectHistoryViewModel(history);
         Settings = new SettingsViewModel(stateStore as IWorkspaceRootCatalogService, stateStore as IWorkspacePreferenceService);
-        GitHub = new GitHubViewModel(gitHub);
+        GitHub = new GitHubViewModel(gitHub, gitHubActions);
         WorkspaceRoot = Path.GetFullPath(root);
         _stateStore = stateStore;
         _files = files ?? new FileExplorerService();

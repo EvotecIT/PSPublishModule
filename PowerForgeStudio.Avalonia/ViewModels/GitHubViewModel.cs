@@ -16,16 +16,20 @@ public sealed record GitHubItemRow(int Number, string Title, string State, strin
 public sealed partial class GitHubViewModel : ObservableObject, IDisposable
 {
     private readonly IGitHubProjectService _service;
+    private readonly IGitHubProjectActionService _actionService;
     private readonly bool _ownsService;
+    private readonly bool _ownsActionService;
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _listing, _detail;
     private int _contextVersion, _detailVersion;
     private bool _disposed;
 
-    public GitHubViewModel(IGitHubProjectService? service = null)
+    public GitHubViewModel(IGitHubProjectService? service = null, IGitHubProjectActionService? actionService = null)
     {
         _service = service ?? new GitHubProjectService();
+        _actionService = actionService ?? new GitHubProjectActionService();
         _ownsService = service is null;
+        _ownsActionService = actionService is null;
     }
 
     public ObservableCollection<GitHubItemRow> Items { get; } = [];
@@ -57,6 +61,8 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
     partial void OnSelectedChanged(GitHubItemRow? value)
     {
         OnPropertyChanged(nameof(HasSelection)); OnPropertyChanged(nameof(HasChecks)); OnPropertyChanged(nameof(SelectedUrl));
+        ResetActionDraft();
+        UpdateActionOptions();
         SelectionLoad = LoadSelectionAsync();
     }
 
@@ -72,6 +78,8 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
         ++_contextVersion;
         _listing?.Cancel(); _detail?.Cancel();
         Slug = ""; Selected = null; Items.Clear(); ClearDetail();
+        ResetActionDraft();
+        UpdateActionOptions();
         IsLoading = false;
         Status = "Refresh to load GitHub for this working copy and filter.";
         OnPropertyChanged(nameof(CanRefresh)); OnPropertyChanged(nameof(HasSelection)); OnPropertyChanged(nameof(SelectedUrl));
@@ -81,9 +89,9 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
     [RelayCommand] private void ShowIssueList() => ShowPullRequests = false;
 
     [RelayCommand]
-    public async Task RefreshAsync()
+    public async Task<bool> RefreshAsync()
     {
-        if (!CanRefresh) return;
+        if (!CanRefresh) return false;
         Invalidate();
         var version = _contextVersion;
         var root = Root; var state = StateFilter; var pulls = ShowPullRequests;
@@ -93,8 +101,8 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
         try
         {
             var slug = await _service.ResolveRepositoryAsync(root, read.Token);
-            if (!Current(version)) return;
-            if (slug is null) { Status = "No supported github.com origin found for this working copy."; return; }
+            if (!Current(version)) return false;
+            if (slug is null) { Status = "No supported github.com origin found for this working copy."; return false; }
             Slug = slug;
             GitHubItemRow[] rows;
             bool more;
@@ -110,13 +118,14 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
                 more = result.HasMore;
                 rows = result.Select(item => new GitHubItemRow(item.Number, item.Title, item.StateDisplay, item.AuthorLogin, false)).ToArray();
             }
-            if (!Current(version)) return;
+            if (!Current(version)) return false;
             foreach (var row in rows) Items.Add(row);
             Status = $"{rows.Length} {(pulls ? "pull requests" : "issues")} loaded · {DateTime.Now:t}" +
                 (more ? " · Partial listing: more items exist on GitHub." : "");
+            return true;
         }
-        catch (OperationCanceledException) { if (Current(version)) Status = "GitHub request cancelled or timed out. Refresh to retry."; }
-        catch (Exception ex) { if (Current(version)) Status = SafeError(ex); }
+        catch (OperationCanceledException) { if (Current(version)) Status = "GitHub request cancelled or timed out. Refresh to retry."; return false; }
+        catch (Exception ex) { if (Current(version)) Status = SafeError(ex); return false; }
         finally { if (ReferenceEquals(_listing, read)) _listing = null; if (Current(version)) IsLoading = false; }
     }
 
@@ -130,10 +139,10 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    public async Task LoadSelectionAsync()
+    public async Task<bool> LoadSelectionAsync()
     {
         _detail?.Cancel(); ClearDetail();
-        if (_disposed || Selected is not { } selected || Slug.Length == 0) return;
+        if (_disposed || Selected is not { } selected || Slug.Length == 0) return false;
         var context = _contextVersion; var version = _detailVersion; var slug = Slug;
         using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _detail = read;
@@ -141,13 +150,14 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
         IsDetailLoading = true; DetailTitle = selected.Caption; DetailStatus = "Loading discussion…";
         try
         {
+            var complete = true;
             IReadOnlyList<GitHubThreadEntry> entries;
             bool more;
             if (selected.IsPullRequest)
             {
                 var result = await _service.FetchPullRequestDetailAsync(slug, selected.Number, read.Token);
-                if (!CurrentDetail()) return;
-                if (result is null) { DetailStatus = "Pull request is unavailable."; return; }
+                if (!CurrentDetail()) return false;
+                if (result is null) { DetailStatus = "Pull request is unavailable."; return false; }
                 entries = GitHubThreadEntryBuilder.BuildPullRequestEntries(result.PullRequest, result);
                 HeadSha = result.PullRequest.HeadSha ?? "";
                 more = result.HasMoreDiscussion;
@@ -155,8 +165,8 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
             else
             {
                 var result = await _service.FetchIssueDetailAsync(slug, selected.Number, read.Token);
-                if (!CurrentDetail()) return;
-                if (result is null) { DetailStatus = "Issue is unavailable."; return; }
+                if (!CurrentDetail()) return false;
+                if (result is null) { DetailStatus = "Issue is unavailable."; return false; }
                 entries = GitHubThreadEntryBuilder.BuildIssueEntries(result.Issue, result);
                 more = result.HasMoreDiscussion;
             }
@@ -168,18 +178,19 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
                 try
                 {
                     var checks = await _service.FetchChecksAsync(slug, HeadSha, read.Token);
-                    if (!CurrentDetail()) return;
+                    if (!CurrentDetail()) return false;
                     foreach (var check in checks) Checks.Add(check);
                     ChecksStatus = $"{checks.Count} checks/statuses observed; {checks.Count(item => item.IsFailure)} need attention." +
                         (checks.HasMore ? " Partial listing." : "") + " Merge requirements have not been evaluated.";
                 }
-                catch (OperationCanceledException) { if (CurrentDetail()) ChecksStatus = "Checks request cancelled or timed out. Reload to retry."; }
-                catch (Exception ex) { if (CurrentDetail()) ChecksStatus = SafeError(ex); }
+                catch (OperationCanceledException) { if (CurrentDetail()) ChecksStatus = "Checks request cancelled or timed out. Reload to retry."; complete = false; }
+                catch (Exception ex) { if (CurrentDetail()) ChecksStatus = SafeError(ex); complete = false; }
             }
-            else if (selected.IsPullRequest) ChecksStatus = "GitHub did not return a PR head SHA; checks unavailable.";
+            else if (selected.IsPullRequest) { ChecksStatus = "GitHub did not return a PR head SHA; checks unavailable."; complete = false; }
+            return complete;
         }
-        catch (OperationCanceledException) { if (CurrentDetail()) DetailStatus = "Discussion request cancelled or timed out. Reload to retry."; }
-        catch (Exception ex) { if (CurrentDetail()) DetailStatus = SafeError(ex); }
+        catch (OperationCanceledException) { if (CurrentDetail()) DetailStatus = "Discussion request cancelled or timed out. Reload to retry."; return false; }
+        catch (Exception ex) { if (CurrentDetail()) DetailStatus = SafeError(ex); return false; }
         finally { if (ReferenceEquals(_detail, read)) _detail = null; if (CurrentDetail()) IsDetailLoading = false; }
     }
 
@@ -193,5 +204,6 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true; ++_contextVersion; ++_detailVersion; _lifetime.Cancel();
         if (_ownsService && _service is IDisposable disposable) disposable.Dispose();
+        if (_ownsActionService && _actionService is IDisposable actionDisposable) actionDisposable.Dispose();
     }
 }

@@ -1,7 +1,9 @@
 using System.Net;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Orchestrator.Hub;
@@ -10,6 +12,96 @@ namespace PowerForgeStudio.Avalonia.Tests;
 
 public sealed class GitHubWorkspaceTests
 {
+    [Fact]
+    public async Task ReviewedActionsCapturePrHeadAndIssueStateBeforeMutation()
+    {
+        await TestAppBuilder.RunAsync(async () =>
+        {
+            var reads = new FakeGitHub();
+            var actions = new FakeActions();
+            using var model = new GitHubViewModel(reads, actions);
+            model.SetWorkingCopy("first");
+            await model.RefreshAsync();
+            model.Selected = Assert.Single(model.Items);
+            await model.SelectionLoad;
+            model.SelectedAction = Assert.Single(model.AvailableActions,
+                option => option.Kind == GitHubProjectActionKind.RequestPullRequestChanges);
+            model.ActionBody = "Please keep cancellation evidence with the final result.";
+
+            Assert.True(model.PrepareActionReview());
+            Assert.Equal(new string('a', 40), model.PendingAction!.ExpectedHeadSha);
+            Assert.True(await model.SubmitPreparedActionAsync());
+            Assert.Equal(GitHubProjectActionKind.RequestPullRequestChanges, actions.Plans[0].Kind);
+            Assert.Contains("Refreshed from GitHub", model.ActionStatus);
+
+            model.ShowIssueListCommand.Execute(null);
+            await model.RefreshAsync();
+            model.Selected = Assert.Single(model.Items);
+            await model.SelectionLoad;
+            model.SelectedAction = Assert.Single(model.AvailableActions,
+                option => option.Kind == GitHubProjectActionKind.CloseIssue);
+            model.ActionBody = "This text must not be attached to a state-only action.";
+
+            Assert.True(model.PrepareActionReview());
+            Assert.Equal("open", model.PendingAction!.ExpectedState);
+            Assert.Empty(model.PendingAction.Body);
+            Assert.True(await model.SubmitPreparedActionAsync());
+            Assert.Equal(GitHubProjectActionKind.CloseIssue, actions.Plans[1].Kind);
+            return true;
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CompletedActionReportsPostWriteRefreshFailureWithoutRetrying(bool issue)
+    {
+        await TestAppBuilder.RunAsync(async () =>
+        {
+            var reads = new FakeGitHub();
+            var actions = new FakeActions();
+            using var model = new GitHubViewModel(reads, actions);
+            model.SetWorkingCopy("first");
+            if (issue) model.ShowIssueListCommand.Execute(null);
+            await model.RefreshAsync();
+            model.Selected = Assert.Single(model.Items);
+            await model.SelectionLoad;
+            model.SelectedAction = Assert.Single(model.AvailableActions,
+                option => option.Kind == (issue ? GitHubProjectActionKind.CloseIssue : GitHubProjectActionKind.ApprovePullRequest));
+            Assert.True(model.PrepareActionReview());
+            if (issue) reads.Error = true;
+            else reads.CheckError = true;
+
+            Assert.True(await model.SubmitPreparedActionAsync());
+
+            Assert.Single(actions.Plans);
+            Assert.Null(model.PendingAction);
+            Assert.Contains(issue ? "Issue closed" : "PR approval submitted", model.ActionStatus);
+            Assert.Contains("refresh did not complete", model.ActionStatus);
+            Assert.DoesNotContain("Refreshed from GitHub", model.ActionStatus);
+            if (issue)
+            {
+                Assert.False(model.HasSelection);
+                Assert.True(model.HasActionOutcome);
+                var view = new PowerForgeStudio.Avalonia.Views.GitHubView { DataContext = model };
+                var window = new Window { Content = view, Width = 1050, Height = 700 };
+                window.Show();
+                try
+                {
+                    window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(),
+                        block => block.Text?.Contains("refresh did not complete", StringComparison.Ordinal) == true && block.IsEffectivelyVisible);
+                    using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
+                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    if (!string.IsNullOrWhiteSpace(output))
+                        frame.Save(Path.Combine(output, "workspace-github-action-failed-refresh.png"), PngBitmapEncoderOptions.Default);
+                }
+                finally { window.Close(); }
+            }
+            return true;
+        });
+    }
+
     [Fact]
     public async Task ProjectSwitchAndFilterRejectLateListsAndDiscussions()
     {
@@ -78,6 +170,21 @@ public sealed class GitHubWorkspaceTests
                         frame.Save(Path.Combine(output, compact ? "workspace-github-compact.png" : "workspace-github.png"), PngBitmapEncoderOptions.Default);
                     }
                 }
+                workspace.GitHub.SelectedAction = Assert.Single(workspace.GitHub.AvailableActions,
+                    option => option.Kind == GitHubProjectActionKind.RequestPullRequestChanges);
+                workspace.GitHub.ActionBody = "Keep the cancellation receipt with the final build evidence.";
+                Assert.True(workspace.GitHub.PrepareActionReview());
+                var review = new PowerForgeStudio.Avalonia.Views.GitHubActionReviewDialog { DataContext = workspace.GitHub };
+                review.Show();
+                try
+                {
+                    review.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    using var frame = review.CaptureRenderedFrame(); Assert.NotNull(frame);
+                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    if (!string.IsNullOrWhiteSpace(output))
+                        frame.Save(Path.Combine(output, "workspace-github-action-review.png"), PngBitmapEncoderOptions.Default);
+                }
+                finally { review.Close(); }
                 await workspace.GitHub.ReviewFilesAsync();
                 Assert.True(workspace.GitHub.IsFilesReview);
                 Assert.Equal(2, workspace.GitHub.ChangedFiles.Count);
@@ -169,6 +276,25 @@ public sealed class GitHubWorkspaceTests
         {
             if (CheckError) throw new GitHubAccessException(HttpStatusCode.Forbidden);
             return Task.FromResult(new GitHubPage<GitHubCheck>([new("Windows · build and tests", "failure", "check run", null)], false));
+        }
+    }
+
+    private sealed class FakeActions : IGitHubProjectActionService
+    {
+        public List<GitHubProjectActionPlan> Plans { get; } = [];
+
+        public Task<GitHubProjectActionReceipt> ExecuteAsync(
+            GitHubProjectActionPlan plan,
+            CancellationToken cancellationToken = default)
+        {
+            Plans.Add(plan);
+            return Task.FromResult(new GitHubProjectActionReceipt(
+                plan.Kind,
+                plan.RepositorySlug,
+                plan.Number,
+                plan.IsPullRequest,
+                null,
+                DateTimeOffset.UtcNow));
         }
     }
 }
