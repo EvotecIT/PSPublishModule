@@ -53,6 +53,7 @@ public sealed partial class ModulePipelineRunner
                                 module.Name,
                                 deliveredSigningResult,
                                 plan.Signing);
+                            ValidateDeliveredBinaryDependencies(plan, module.Path);
                         }
                     }
                     state.ArtefactResults.Add(result);
@@ -110,6 +111,7 @@ public sealed partial class ModulePipelineRunner
                     plan.Delivery,
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
                     finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
+                ValidateDeliveredBinaryDependencies(plan, installPackagePath);
                 var expectedSignedInstallSourcePaths = CaptureExpectedSignedInstallSourcePaths(
                     state.SigningResult,
                     buildResult.StagingPath,
@@ -140,14 +142,19 @@ public sealed partial class ModulePipelineRunner
                             buildResult.StagingPath,
                             state.SigningResult),
                         validateInstalledPaths: validateSignedInstallTransactionally
-                            ? installedPaths => deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
-                                plan,
-                                buildResult.StagingPath,
-                                installPackagePath,
-                                installedPaths,
-                                expectedSignedInstallSourcePaths,
-                                state.SigningResult,
-                                installPackageSigningResult)
+                            ? installedPaths =>
+                            {
+                                deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
+                                    plan,
+                                    buildResult.StagingPath,
+                                    installPackagePath,
+                                    installedPaths,
+                                    expectedSignedInstallSourcePaths,
+                                    state.SigningResult,
+                                    installPackageSigningResult);
+                                foreach (var installedPath in installedPaths)
+                                    ValidateDeliveredBinaryDependencies(plan, installedPath);
+                            }
                             : null,
                         requireAllDestinationRoots: validateSignedInstallTransactionally)
                     : pipeline.InstallFromStaging(installSpec);
@@ -161,6 +168,8 @@ public sealed partial class ModulePipelineRunner
                         expectedSignedInstallSourcePaths,
                         state.SigningResult,
                         installPackageSigningResult);
+                    foreach (var installedPath in state.InstallResult.InstalledPaths)
+                        ValidateDeliveredBinaryDependencies(plan, installedPath);
                 }
                 if (deliveredInstallSigningResult is not null)
                     state.SigningResult = AggregateSigningResults(state.SigningResult, deliveredInstallSigningResult);

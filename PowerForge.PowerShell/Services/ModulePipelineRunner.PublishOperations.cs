@@ -17,6 +17,7 @@ public sealed partial class ModulePipelineRunner
         }
 
         var publishBuildResult = BindSynchronizedReleasePayload(plan, buildResult, state);
+        PreflightRepositoryPublishPayload(plan, publishBuildResult, state);
         var publishOrder = ResolvePublishOrder(plan);
         var packageNuGetPublished = false;
         var packageGitHubPublished = false;
@@ -58,6 +59,50 @@ public sealed partial class ModulePipelineRunner
 
         ExecuteModulePublishes(plan, session, publishBuildResult, state, modulePublished, PublishDestination.PowerShellGallery);
         ExecuteModulePublishes(plan, session, publishBuildResult, state, modulePublished, PublishDestination.GitHub);
+    }
+
+    private void PreflightRepositoryPublishPayload(
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        ModulePipelineRunState state)
+    {
+        if (plan.ImportModules?.Self != true || plan.ImportModules.SkipBinaryDependencyCheck == true ||
+            !(plan.Publishes?.Any(static publish =>
+                publish?.Configuration is { Enabled: true, Destination: PublishDestination.PowerShellGallery }) ?? false))
+        {
+            return;
+        }
+
+        string? packagePath = null;
+        try
+        {
+            packagePath = ModulePublisher.PrepareModulePackageForRepositoryPublish(
+                buildResult.StagingPath,
+                plan.ModuleName,
+                plan.Information,
+                plan.Delivery,
+                includeScriptFolders: !state.PackageWithoutScriptFolders,
+                finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
+            FinalizeAndValidateRepositoryModulePayload(plan, state, packagePath, plan.ModuleName);
+        }
+        finally
+        {
+            ModulePublisher.CleanupTemporaryPublishPath(packagePath);
+        }
+    }
+
+    private void FinalizeAndValidateRepositoryModulePayload(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state,
+        string moduleRoot,
+        string moduleName)
+    {
+        PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
+            moduleRoot,
+            moduleName,
+            state.SigningResult,
+            plan.Signing);
+        ValidateDeliveredBinaryDependencies(plan, moduleRoot);
     }
 
     private void PreflightSynchronizedPackageGitHubRetrySafety(
@@ -333,11 +378,7 @@ public sealed partial class ModulePipelineRunner
                     remotePublishAttempted: guardedRemotePublishAttempted,
                     remoteSideEffectObserved: guardedRemoteSideEffectObserved,
                     finalizeRepositoryModule: (root, moduleName) =>
-                        PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
-                            root,
-                            moduleName,
-                            state.SigningResult,
-                            plan.Signing),
+                        FinalizeAndValidateRepositoryModulePayload(plan, state, root, moduleName),
                     gitHubProgress: gitHubProgress));
             session.Done(step);
         }

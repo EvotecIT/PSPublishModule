@@ -138,18 +138,23 @@ public sealed partial class ModulePipelineRunner
 
     private void RunBinaryDependencyPreflight(ModulePipelinePlan plan, ModuleBuildResult buildResult)
     {
+        ValidateDeliveredBinaryDependencies(plan, buildResult.StagingPath, buildResult.ManifestPath);
+    }
+
+    private void ValidateDeliveredBinaryDependencies(ModulePipelinePlan plan, string moduleRoot, string? manifestPath = null)
+    {
         var cfg = plan.ImportModules;
         if (cfg is null || cfg.Self != true || cfg.SkipBinaryDependencyCheck == true) return;
 
         foreach (var target in GetImportValidationTargets(
             plan.CompatiblePSEditions,
-            buildResult.StagingPath,
+            moduleRoot,
             plan.Manifest?.PowerShellVersion))
         {
             _hostedOperations.EnsureBinaryDependenciesValid(
-                buildResult.StagingPath,
+                moduleRoot,
                 target.PowerShellEdition,
-                buildResult.ManifestPath,
+                manifestPath ?? Path.Combine(moduleRoot, plan.ModuleName + ".psd1"),
                 target.Label);
         }
     }

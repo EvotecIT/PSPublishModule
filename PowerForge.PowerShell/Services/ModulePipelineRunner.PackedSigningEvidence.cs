@@ -145,6 +145,7 @@ public sealed partial class ModulePipelineRunner
             context.ModuleName,
             signingResult,
             signing);
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
         return externalEvidence;
     }
@@ -234,6 +235,7 @@ public sealed partial class ModulePipelineRunner
             context.ModuleName,
             signingResult: null,
             signing: plan.Signing);
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         return Array.Empty<string>();
     }
 
