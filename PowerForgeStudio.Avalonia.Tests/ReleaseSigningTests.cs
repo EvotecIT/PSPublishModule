@@ -30,6 +30,10 @@ public sealed class ReleaseSigningTests
             Assert.True(release.CanSign);
             var signing = release.SignAsync();
             await fake.Started.Task;
+            Assert.True(release.HasExecutionProgress);
+            Assert.Equal(1, release.ProgressTotal);
+            Assert.Equal(0, release.ProgressCompleted);
+            Assert.Contains("Running", release.ProgressStatus);
             Assert.True(workspace.Build.IsReleaseRunning);
             Assert.False(workspace.Build.CanBuild);
             Assert.False(release.CanPrepare);
@@ -45,6 +49,8 @@ public sealed class ReleaseSigningTests
             activeWindow.Close();
             Assert.False(workspace.Build.IsReleaseRunning);
             Assert.Single(release.Receipts);
+            Assert.Equal(1, release.ProgressCompleted);
+            Assert.Contains(cancel ? "Cancelled" : "Signed", release.ProgressStatus);
             Assert.Equal(root, release.SigningResult!.RootPath);
             Assert.Equal(cancel, release.RequiresRebuild);
             Assert.Equal(!cancel, release.SigningResult.Succeeded);
@@ -152,11 +158,23 @@ public sealed class ReleaseSigningTests
     {
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Finish { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem item, CancellationToken token = default)
+        public Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem item, CancellationToken token = default)
+            => ExecuteAsync(item, token, null);
+
+        public async Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem item, CancellationToken token,
+            IReleaseArtifactProgressSink? progress)
         {
+            var artifactPath = Path.Combine(item.RootPath, "artifacts", "StudioSigningFixture.1.0.0.nupkg");
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Sign, "StudioSigningFixture.1.0.0.nupkg", artifactPath,
+                    "Running", 0, 1, "Signing package.", DateTimeOffset.UtcNow), CancellationToken.None);
             Started.TrySetResult(); await Finish.Task;
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Sign, "StudioSigningFixture.1.0.0.nupkg", artifactPath,
+                    token.IsCancellationRequested ? "Cancelled" : "Signed", 1, 1,
+                    token.IsCancellationRequested ? "Signing was cancelled." : "Package signed.", DateTimeOffset.UtcNow), CancellationToken.None);
             return new(item.RootPath, true, "Signed 1 artifact; publication has not run.", item.CheckpointStateJson,
-                [new(item.RootPath, item.RepositoryName, "Project", Path.Combine(item.RootPath, "artifacts", "StudioSigningFixture.1.0.0.nupkg"), "NuGet", ReleaseSigningReceiptStatus.Signed,
+                [new(item.RootPath, item.RepositoryName, "Project", artifactPath, "NuGet", ReleaseSigningReceiptStatus.Signed,
                     "Package signed using configured certificate.", DateTimeOffset.UtcNow)]);
         }
     }

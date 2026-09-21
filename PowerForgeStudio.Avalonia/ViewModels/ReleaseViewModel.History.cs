@@ -101,7 +101,8 @@ public sealed partial class ReleaseViewModel
             var snapshot = await Task.Run(() => _history.LoadAsync(selected.SessionId));
             if (_disposed || version != _version) return;
             if (snapshot is null) { Status = "Saved release was not found."; return; }
-            _candidate = null; Handoff = null; ResetPublicationState(); SigningResult = null; Artifacts.Clear(); Receipts.Clear();
+            _candidate = null; Handoff = null; ResetPublicationState(); SigningResult = null; Artifacts.Clear(); Receipts.Clear(); ResetExecutionProgress();
+            foreach (var progress in snapshot.Progress) ApplyExecutionProgress(progress);
             foreach (var receipt in snapshot.SigningReceipts) Receipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary) });
             foreach (var receipt in snapshot.PublishReceipts)
                 PublicationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.Sanitize(receipt.Destination) });

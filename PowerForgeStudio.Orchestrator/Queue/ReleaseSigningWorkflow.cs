@@ -13,6 +13,8 @@ public sealed record ReleaseSigningWorkflowResult(ReleaseQueueSession Session, R
 public interface IReleaseSigningWorkflow
 {
     Task<ReleaseSigningWorkflowResult> SignAsync(ReleaseBuildHandoff handoff, CancellationToken cancellationToken = default);
+    Task<ReleaseSigningWorkflowResult> SignAsync(ReleaseBuildHandoff handoff, CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress) => SignAsync(handoff, cancellationToken);
 }
 
 /// <summary>Executes only the captured handoff's signing stage through the canonical executor and queue transitions.</summary>
@@ -20,13 +22,17 @@ public sealed class ReleaseSigningWorkflow(IReleaseSigningExecutionService? sign
 {
     private readonly IReleaseSigningExecutionService _signing = signing ?? new ReleaseSigningExecutionService();
 
-    public async Task<ReleaseSigningWorkflowResult> SignAsync(ReleaseBuildHandoff handoff, CancellationToken cancellationToken = default)
+    public Task<ReleaseSigningWorkflowResult> SignAsync(ReleaseBuildHandoff handoff, CancellationToken cancellationToken = default)
+        => SignAsync(handoff, cancellationToken, null);
+
+    public async Task<ReleaseSigningWorkflowResult> SignAsync(ReleaseBuildHandoff handoff, CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
     {
         ArgumentNullException.ThrowIfNull(handoff);
         var item = handoff.Session.Items.Single();
         if (item.Stage != ReleaseQueueStage.Sign || item.Status != ReleaseQueueItemStatus.WaitingApproval)
             throw new InvalidOperationException("Prepare a successful build before signing.");
-        var result = await _signing.ExecuteAsync(item, cancellationToken).ConfigureAwait(false);
+        var result = await _signing.ExecuteAsync(item, cancellationToken, progress).ConfigureAwait(false);
         if (cancellationToken.IsCancellationRequested)
             result = result with { Succeeded = false, RequiresRebuild = true,
                 Summary = "Signing cancelled; completed receipts retained. Rebuild before signing again." };

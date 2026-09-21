@@ -12,7 +12,10 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 public sealed record ReleaseCheckpointSnapshot(ReleaseQueueSession Session,
     IReadOnlyList<ReleaseSigningReceipt> SigningReceipts,
     IReadOnlyList<ReleasePublishReceipt> PublishReceipts,
-    IReadOnlyList<ReleaseVerificationReceipt> VerificationReceipts);
+    IReadOnlyList<ReleaseVerificationReceipt> VerificationReceipts)
+{
+    public IReadOnlyList<ReleaseArtifactProgress> Progress { get; init; } = [];
+}
 
 public sealed partial class ReleaseStateDatabase
 {
@@ -60,7 +63,8 @@ public sealed partial class ReleaseStateDatabase
             var signing = await ReadReceiptSetAsync(transaction, sessionId, SigningReceiptTable, token).ConfigureAwait(false);
             var publish = await ReadReceiptSetAsync(transaction, sessionId, PublishReceiptTable, token).ConfigureAwait(false);
             var verify = await ReadReceiptSetAsync(transaction, sessionId, VerificationReceiptTable, token).ConfigureAwait(false);
-            return new ReleaseCheckpointSnapshot(session, signing, publish, verify);
+            var progress = await ReadReleaseProgressCoreAsync(transaction, sessionId, token).ConfigureAwait(false);
+            return new ReleaseCheckpointSnapshot(session, signing, publish, verify) { Progress = progress };
         }, cancellationToken).ConfigureAwait(false);
     }
 

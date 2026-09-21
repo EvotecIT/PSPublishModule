@@ -13,7 +13,11 @@ public sealed class DurableReleaseSigningWorkflow(string databasePath, IReleaseS
 {
     private readonly IReleaseSigningWorkflow _signing = signing ?? new ReleaseSigningWorkflow();
 
-    public async Task<ReleaseSigningWorkflowResult> SignAsync(ReleaseBuildHandoff handoff, CancellationToken cancellationToken = default)
+    public Task<ReleaseSigningWorkflowResult> SignAsync(ReleaseBuildHandoff handoff, CancellationToken cancellationToken = default)
+        => SignAsync(handoff, cancellationToken, null);
+
+    public async Task<ReleaseSigningWorkflowResult> SignAsync(ReleaseBuildHandoff handoff, CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
     {
         ArgumentNullException.ThrowIfNull(handoff);
         var item = handoff.Session.Items.Single();
@@ -29,7 +33,8 @@ public sealed class DurableReleaseSigningWorkflow(string databasePath, IReleaseS
         // The session identity is a single-use claim. No executor starts unless this insertion commits.
         if (!await database.TryAdvanceReleaseCheckpointAsync(null, marker, cancellationToken: cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("This release session already has an execution record. Reopen its saved state before taking another action.");
-        var result = await _signing.SignAsync(handoff, cancellationToken).ConfigureAwait(false);
+        var durableProgress = new DurableReleaseArtifactProgressSink(database, marker.SessionId, progress);
+        var result = await _signing.SignAsync(handoff, cancellationToken, durableProgress).ConfigureAwait(false);
         using var finalization = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         return await RetrySaveAsync(result with { PendingCheckpoint = marker }, finalization.Token).ConfigureAwait(false);
     }

@@ -39,7 +39,11 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
         _signNuGetPackageAsync = signNuGetPackageAsync;
     }
 
-    public async Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem queueItem, CancellationToken cancellationToken = default)
+    public Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem queueItem, CancellationToken cancellationToken = default)
+        => ExecuteAsync(queueItem, cancellationToken, null);
+
+    public async Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem queueItem, CancellationToken cancellationToken,
+        IReleaseArtifactProgressSink? progress)
     {
         ArgumentNullException.ThrowIfNull(queueItem);
 
@@ -84,28 +88,42 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
 
         var receipts = new List<ReleaseSigningReceipt>(manifest.Count);
         var cancelled = false;
-        foreach (var artifact in manifest)
+        for (var index = 0; index < manifest.Count; index++)
         {
+            var artifact = manifest[index];
             if (cancelled || cancellationToken.IsCancellationRequested)
             {
                 cancelled = true;
-                receipts.Add(FailedReceipt(queueItem.RootPath, artifact, "Not attempted: signing was cancelled.", DateTimeOffset.UtcNow));
+                var cancelledReceipt = FailedReceipt(queueItem.RootPath, artifact, "Not attempted: signing was cancelled.", DateTimeOffset.UtcNow);
+                receipts.Add(cancelledReceipt);
+                await progress.ReportAsync(ReleaseQueueStage.Sign, artifact.DisplayName, artifact.ArtifactPath,
+                    "Cancelled", index + 1, manifest.Count, cancelledReceipt.Summary, CancellationToken.None).ConfigureAwait(false);
                 continue;
             }
+            await progress.ReportAsync(ReleaseQueueStage.Sign, artifact.DisplayName, artifact.ArtifactPath,
+                "Running", index, manifest.Count, "Signing artifact.", CancellationToken.None).ConfigureAwait(false);
+            ReleaseSigningReceipt receipt;
+            string state;
             try
             {
-                receipts.Add(await SignArtifactAsync(queueItem.RootPath, artifact, settings, cancellationToken));
+                receipt = await SignArtifactAsync(queueItem.RootPath, artifact, settings, cancellationToken);
+                state = receipt.Status.ToString();
             }
             catch (OperationCanceledException)
             {
                 cancelled = true;
-                receipts.Add(FailedReceipt(queueItem.RootPath, artifact, "Signing was interrupted; this artifact may be partially signed. Rebuild before retrying.", DateTimeOffset.UtcNow));
+                receipt = FailedReceipt(queueItem.RootPath, artifact, "Signing was interrupted; this artifact may be partially signed. Rebuild before retrying.", DateTimeOffset.UtcNow);
+                state = "Interrupted";
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.Cryptography.CryptographicException)
             {
-                receipts.Add(FailedReceipt(queueItem.RootPath, artifact,
-                    StudioOutputSanitizer.Sanitize(FirstLine(ex.Message) ?? "Signing failed for this artifact."), DateTimeOffset.UtcNow));
+                receipt = FailedReceipt(queueItem.RootPath, artifact,
+                    StudioOutputSanitizer.Sanitize(FirstLine(ex.Message) ?? "Signing failed for this artifact."), DateTimeOffset.UtcNow);
+                state = "Failed";
             }
+            receipts.Add(receipt);
+            await progress.ReportAsync(ReleaseQueueStage.Sign, artifact.DisplayName, artifact.ArtifactPath,
+                state, index + 1, manifest.Count, receipt.Summary, CancellationToken.None).ConfigureAwait(false);
         }
 
         cancelled |= cancellationToken.IsCancellationRequested;
@@ -113,6 +131,13 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             RefreshUnifiedArchives(queueItem, receipts);
         CaptureIntegrityDigests(receipts);
         cancelled |= cancellationToken.IsCancellationRequested;
+
+        for (var index = 0; index < receipts.Count; index++)
+        {
+            var receipt = receipts[index];
+            await progress.ReportAsync(ReleaseQueueStage.Sign, receipt.ArtifactName, receipt.ArtifactPath,
+                "Finalized " + receipt.Status, index + 1, receipts.Count, receipt.Summary, CancellationToken.None).ConfigureAwait(false);
+        }
 
         var failed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Failed);
         var signed = receipts.Count(receipt => receipt.Status == ReleaseSigningReceiptStatus.Signed);

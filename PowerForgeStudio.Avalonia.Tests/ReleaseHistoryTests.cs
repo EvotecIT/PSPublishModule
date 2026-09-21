@@ -65,6 +65,9 @@ public sealed class ReleaseHistoryTests
                     using var reopened = new ReleaseViewModel(history: history);
                     await reopened.RefreshHistoryAsync(); reopened.SelectedHistory = Assert.Single(reopened.History);
                     await reopened.OpenHistoryAsync(); Assert.Single(reopened.Receipts); Assert.False(reopened.CanSign);
+                    Assert.Equal(2, reopened.ExecutionProgress.Count);
+                    Assert.Equal("Signed", reopened.ExecutionProgress[^1].State);
+                    Assert.Equal(1, reopened.ProgressCompleted);
                     Assert.False(reopened.CanPrepare); Assert.Equal(root, reopened.BuildRoot);
                     using var reopenedWorkspace = new WorkspaceViewModel(root, release: reopened);
                     reopenedWorkspace.ShowReleaseCommand.Execute(null); window.DataContext = reopenedWorkspace;
@@ -106,13 +109,23 @@ public sealed class ReleaseHistoryTests
     {
         public int Calls;
         public Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem item, CancellationToken token = default)
+            => ExecuteAsync(item, token, null);
+
+        public async Task<ReleaseSigningExecutionResult> ExecuteAsync(ReleaseQueueItem item, CancellationToken token,
+            IReleaseArtifactProgressSink? progress)
         {
             Calls++;
             var package = Path.Combine(item.RootPath, "fixture.nupkg");
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Sign, "fixture.nupkg", package, "Running", 0, 1,
+                    "Signing fixture.", DateTimeOffset.UtcNow), CancellationToken.None);
             File.WriteAllText(package, "signed package fixture");
             var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(package)));
-            return Task.FromResult(new ReleaseSigningExecutionResult(item.RootPath, true, "Signed fixture", item.CheckpointStateJson,
-                [new(item.RootPath, item.RepositoryName, "ProjectBuild", package, "File", ReleaseSigningReceiptStatus.Signed, "Signed fixture", DateTimeOffset.UtcNow) { ContentSha256 = hash }]));
+            if (progress is not null)
+                await progress.ReportAsync(new(ReleaseQueueStage.Sign, "fixture.nupkg", package, "Signed", 1, 1,
+                    "Signed fixture.", DateTimeOffset.UtcNow), CancellationToken.None);
+            return new ReleaseSigningExecutionResult(item.RootPath, true, "Signed fixture", item.CheckpointStateJson,
+                [new(item.RootPath, item.RepositoryName, "ProjectBuild", package, "File", ReleaseSigningReceiptStatus.Signed, "Signed fixture", DateTimeOffset.UtcNow) { ContentSha256 = hash }]);
         }
     }
 }

@@ -17,7 +17,7 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed partial class ReleaseStateDatabase
 {
-    private const string CurrentSchemaVersion = "20";
+    private const string CurrentSchemaVersion = "21";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
@@ -445,6 +445,24 @@ public sealed partial class ReleaseStateDatabase
             """
             CREATE INDEX IF NOT EXISTS idx_release_verification_receipt_session
             ON release_verification_receipt(session_id, root_path, status);
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS release_execution_progress (
+                progress_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                item_path TEXT NULL,
+                state TEXT NOT NULL,
+                completed_items INTEGER NOT NULL,
+                total_items INTEGER NOT NULL,
+                detail TEXT NOT NULL,
+                observed_at_utc TEXT NOT NULL
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_release_execution_progress_session
+            ON release_execution_progress(session_id, progress_id);
             """,
             """
             CREATE TABLE IF NOT EXISTS release_git_quick_action_receipt (

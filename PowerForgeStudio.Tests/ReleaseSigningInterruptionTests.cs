@@ -19,10 +19,14 @@ public sealed class ReleaseSigningInterruptionTests
         {
             var files = Enumerable.Range(1, 3).Select(i => Path.Combine(root, i + ".ps1")).ToArray();
             foreach (var file in files) await File.WriteAllTextAsync(file, "unsigned");
+            var progress = new ProgressSink();
             var calls = 0;
             var service = CreateService((request, token) =>
             {
                 calls++;
+                var running = Assert.IsType<ReleaseArtifactProgress>(progress.Events.LastOrDefault());
+                Assert.Equal("Running", running.State);
+                Assert.EndsWith(request.IncludePatterns[0], running.ItemPath, StringComparison.OrdinalIgnoreCase);
                 if (calls == 2)
                 {
                     File.WriteAllText(Path.Combine(request.SigningPath, request.IncludePatterns[0]), "partially signed");
@@ -31,7 +35,7 @@ public sealed class ReleaseSigningInterruptionTests
                 File.WriteAllText(Path.Combine(request.SigningPath, request.IncludePatterns[0]), "signed");
                 return Task.FromResult(new AuthenticodeSigningHostResult { ExitCode = 0 });
             });
-            var result = await service.ExecuteAsync(Item(root, files));
+            var result = await service.ExecuteAsync(Item(root, files), default, progress);
             Assert.False(result.Succeeded); Assert.True(result.RequiresRebuild); Assert.Equal(3, result.Receipts.Count);
             Assert.Equal(ReleaseSigningReceiptStatus.Signed, result.Receipts[0].Status);
             Assert.False(string.IsNullOrEmpty(result.Receipts[0].ContentSha256));
@@ -46,6 +50,8 @@ public sealed class ReleaseSigningInterruptionTests
             var batchRetry = runner.RetryFailedItems(failedSession, _ => true);
             Assert.Equal(ReleaseQueueStage.Build, Assert.Single(batchRetry.Session.Items).Stage);
             Assert.Equal(cancellation ? 2 : 3, calls);
+            Assert.Equal(cancellation ? 2 : 3, progress.Events.Count(entry => entry.State == "Running"));
+            Assert.Equal(3, progress.Events.Count(entry => entry.State.StartsWith("Finalized ", StringComparison.Ordinal)));
             if (cancellation)
             {
                 Assert.Contains("Not attempted", result.Receipts[2].Summary);
@@ -74,6 +80,29 @@ public sealed class ReleaseSigningInterruptionTests
     }
 
     [Fact]
+    public async Task JournalFailureAfterArtifactMutationIsNotConvertedIntoDuplicateSigningReceipt()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-sign-progress-failure-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var file = Path.Combine(root, "one.ps1"); await File.WriteAllTextAsync(file, "unsigned");
+            var calls = 0;
+            var service = CreateService((request, _) =>
+            {
+                calls++;
+                File.WriteAllText(Path.Combine(request.SigningPath, request.IncludePatterns[0]), "signed");
+                return Task.FromResult(new AuthenticodeSigningHostResult { ExitCode = 0 });
+            });
+
+            await Assert.ThrowsAsync<IOException>(() => service.ExecuteAsync(Item(root, [file]), default, new FailingOutcomeProgressSink()));
+
+            Assert.Equal(1, calls);
+            Assert.Equal("signed", await File.ReadAllTextAsync(file));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task MissingOrFailedBuildCheckpointCannotAdvanceSigning()
     {
         var service = CreateService((_, _) => throw new InvalidOperationException("Must not sign"));
@@ -93,4 +122,24 @@ public sealed class ReleaseSigningInterruptionTests
         => new(new ReleaseBuildCheckpointReader(), new ReleaseSigningHostSettingsResolver(name => name == "RELEASE_OPS_STUDIO_SIGN_THUMBPRINT" ? "test-thumbprint" : null, () => "fixture-module"),
             new CertificateFingerprintResolver((_, _) => "test-fingerprint"), sign,
             (_, _) => throw new InvalidOperationException("No NuGet signing in this fixture"));
+
+    private sealed class ProgressSink : IReleaseArtifactProgressSink
+    {
+        public List<ReleaseArtifactProgress> Events { get; } = [];
+        public ValueTask ReportAsync(ReleaseArtifactProgress progress, CancellationToken cancellationToken = default)
+        {
+            Events.Add(progress);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class FailingOutcomeProgressSink : IReleaseArtifactProgressSink
+    {
+        private int _calls;
+        public ValueTask ReportAsync(ReleaseArtifactProgress progress, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _calls) == 2) throw new IOException("Fixture journal failure.");
+            return ValueTask.CompletedTask;
+        }
+    }
 }

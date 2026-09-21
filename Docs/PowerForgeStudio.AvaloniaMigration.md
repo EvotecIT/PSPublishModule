@@ -20,7 +20,8 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Expose reviewed execution plans for JSON, PowerShell, .NET and executable workflows.
 - [x] Add explicit working-copy contract inspection and available plan generation through the shared planner.
 - [x] Connect cancellation, stage progress, artifacts and release receipts.
-- [ ] Add per-artifact progress events and durable process-level recovery evidence.
+- [x] Add per-artifact signing progress and durable process-level recovery evidence.
+- [ ] Extend per-target progress through publication and verification.
 - [x] Connect build execution, structured phase output, cancellation and artifact results to the shared executor.
 - [x] Prepare release artifacts from a captured successful build using the existing queue checkpoint owner.
 - [x] Connect explicit signing, cancellation and session receipts with build/close interlocks.
@@ -466,6 +467,17 @@ Validation uses a controlled signer and a real disposable database. An injected 
 Independent review /root/review_release_history identified a P2 Windows case-variant lease bypass. The focused Windows regression failed before normalizing casing and passed afterward. Targeted confirmation found the correction addressed, fingerprint f110df7600bd10eacf73a5f003f4ab03ef3c5f96. Final validation passed ten shared tests and five Avalonia tests. A small subsequent guard resets discard confirmation for every new build/signing result; the UI regression checks that an earlier checked value cannot authorize discarding a later failed save. Review boundary: candidate-reviewed. No further full review loop was run.
 
 Cross-process OS interaction remains unverified independently; the tests exercise competing handles/instances in the same process. Execution resume, publication, verification and external-artifact mutation exclusion remain incomplete. Task-owned shared-test binaries were removed after containment, tracked-file, link and process checks; active Avalonia outputs and small visual evidence remain for ongoing work.
+
+
+### Durable per-artifact signing progress
+
+Signing now emits ordered Running, outcome and finalized updates for every captured artifact. The durable workflow commits each update to the release database before forwarding it to the live Avalonia view. A failed first progress write therefore leaves the existing interruption marker and prevents the signing executor from reaching artifact mutation. Updates use the captured release session, retain stage, artifact path, completed/total counts and a bounded sanitized detail, and keep the latest 500 rows per session.
+
+The Releases page shows determinate signing progress and a bounded 100-row live journal. Opening saved release history restores the same durable events, so an interrupted or completed session retains the last observed artifact state after an application restart. Progress evidence is observational: Running proves the signer was about to enter that artifact operation, while an absent completion or finalized update means the outcome remains uncertain and requires the existing rebuild/reconciliation path.
+
+Focused validation covers the real signing executor's event order, cancellation and partial failure, trigger-injected progress write failures before and after mutation, restart readback, schema-20 direct-open migration, live UI updates and saved-history restoration. The final signing/schema set passed 24 shared tests, and the signing/history surface passed four Avalonia tests. All 48 Avalonia tests passed before the direct-open correction; the affected four passed again afterward. Another 460 shared tests passed with the known unrelated Apple exact-exception and environment-dependent release-station cases excluded. The retained WPF host builds without warnings. Wide and compact Skia renders were inspected in `Artifacts/StudioValidation/signing-progress/`, including completed, cancelled and reopened-history states. Real certificate signing and abrupt process termination remain unverified. Publication and verification still expose stage-level progress only and are the next extension of this journal.
+
+Independent read-only review `/root/review_signing_progress` found no actionable P0-P2 issue in the frozen candidate, fingerprint `5d997ed5f9c0d849af42c5833639a9464ce3b026c88181910ffccafe523ef51c`. A subsequent primary call-site audit found that direct history loading did not initialize an older journal before reading the new table. `ReleaseHistoryService.LoadAsync` now migrates an existing journal first and returns null without creating a database when the file is absent. The same reviewer accepted that bounded correction and its schema-20 regression in remediated fingerprint `649efc849aaa613a5a22f39c237138e269fab46dd687a22679ec15e90f99cc78`. Boundary: candidate-reviewed with targeted confirmation.
 
 
 ### Publication destination inspection

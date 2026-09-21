@@ -25,6 +25,11 @@ public sealed class ReleaseHistoryService(string databasePath) : IReleaseHistory
             row => new ReleaseHistoryEntry(row.GetString(0), row.GetString(1), DateTimeOffset.Parse(row.GetString(2))), cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<ReleaseCheckpointSnapshot?> LoadAsync(string sessionId, CancellationToken cancellationToken = default)
-        => new ReleaseStateDatabase(databasePath).LoadReleaseCheckpointAsync(sessionId, cancellationToken);
+    public async Task<ReleaseCheckpointSnapshot?> LoadAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(databasePath)) return null;
+        var database = new ReleaseStateDatabase(databasePath);
+        await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
+        return await database.LoadReleaseCheckpointAsync(sessionId, cancellationToken).ConfigureAwait(false);
+    }
 }

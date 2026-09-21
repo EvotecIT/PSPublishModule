@@ -41,7 +41,7 @@ public sealed class PublicationSchemaTests
             Assert.Single(recovered, value => value.Destination == "feed-b");
             Assert.Equal(original, Assert.Single(await database.LoadPublishReceiptsAsync("legacy")));
             var version = await sqlite.QueryReadOnlyAsListAsync(path, "SELECT value FROM app_schema WHERE key = 'schema_version';", reader => reader.GetString(0));
-            Assert.Equal("20", Assert.Single(version));
+            Assert.Equal("21", Assert.Single(version));
         }
         finally { Directory.Delete(root, true); }
     }

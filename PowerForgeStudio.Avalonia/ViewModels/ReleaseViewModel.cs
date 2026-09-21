@@ -33,6 +33,7 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
         if (_disposed) return;
         if (HasProtectedReleaseWork) throw new InvalidOperationException("A build cannot replace an active release operation or unsaved receipt evidence.");
         ResetPublicationState();
+        ResetExecutionProgress();
         SigningResult = null; Receipts.Clear(); RequiresRebuild = false; ConfirmDiscardReceipts = false;
         ++_version; _preparing?.Cancel(); _candidate = !running && !cancelled ? build : null;
         Handoff = null; Artifacts.Clear(); IsPreparing = false;

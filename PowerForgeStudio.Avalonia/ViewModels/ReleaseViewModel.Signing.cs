@@ -18,7 +18,11 @@ public sealed partial class ReleaseViewModel
     public bool HasArtifacts => Artifacts.Count > 0;
     public bool HasReceipts => Receipts.Count > 0;
     partial void OnRequiresRebuildChanged(bool value) => NotifyReleaseState();
-    partial void OnIsSigningChanged(bool value) => NotifyReleaseState();
+    partial void OnIsSigningChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowIndeterminateProgress));
+        NotifyReleaseState();
+    }
     private void NotifyReleaseState()
     {
         OnPropertyChanged(nameof(CanInspectPublication)); OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(CanSign));
@@ -31,12 +35,14 @@ public sealed partial class ReleaseViewModel
     public async Task SignAsync()
     {
         if (!CanSign || Handoff is not { } captured) return;
+        ResetExecutionProgress();
         using var cancellation = new CancellationTokenSource(); _signingCancellation = cancellation;
         IsSigning = true; Stage = "Signing";
         Status = "Signing captured artifacts using the configured certificate. Publication will not run automatically.";
         try
         {
-            var result = await Task.Run(() => _signing.SignAsync(captured, cancellation.Token));
+            var progress = new LiveProgressSink(this);
+            var result = await Task.Run(() => _signing.SignAsync(captured, cancellation.Token, progress));
             ConfirmDiscardReceipts = false;
             _pendingSave = result.PersistenceError is null ? null : result;
             HasUnpersistedEvidence = _pendingSave is not null;
