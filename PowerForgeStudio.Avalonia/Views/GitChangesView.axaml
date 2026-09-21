@@ -3,18 +3,34 @@
              x:Class="PowerForgeStudio.Avalonia.Views.GitChangesView" x:DataType="vm:GitChangesViewModel">
   <Grid Margin="18">
   <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-  <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10" MinHeight="560" Height="{Binding #PageScroll.Bounds.Height}">
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10" MinHeight="620" Height="{Binding #PageScroll.Bounds.Height}">
     <StackPanel Spacing="6">
       <TextBlock Text="Changes" FontSize="22" FontWeight="SemiBold" />
       <SelectableTextBlock Text="{Binding Root}" TextWrapping="Wrap" FontSize="12" />
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
     </StackPanel>
-    <WrapPanel Grid.Row="1">
+    <Border Grid.Row="1" Background="#F7F9FC" BorderBrush="#DCE3ED" BorderThickness="1" CornerRadius="6" Padding="10">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Branch" FontWeight="SemiBold" />
+        <WrapPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,18,8">
+            <ComboBox Width="220" ItemsSource="{Binding Branches}" SelectedItem="{Binding SelectedBranch, Mode=TwoWay}"
+                      PlaceholderText="Select local branch" Margin="0,0,8,0" />
+            <Button Content="Switch" Command="{Binding SwitchBranchCommand}" IsEnabled="{Binding CanSwitchBranch}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBox Width="260" Text="{Binding NewBranchName}" PlaceholderText="feature/my-branch" Margin="0,0,8,0" />
+            <Button Content="Create &amp; switch" Command="{Binding CreateBranchCommand}" IsEnabled="{Binding CanCreateBranch}" />
+          </StackPanel>
+        </WrapPanel>
+      </StackPanel>
+    </Border>
+    <WrapPanel Grid.Row="2">
       <Button Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
       <Button Content="Stage selected" Command="{Binding StageCommand}" IsEnabled="{Binding CanStage}" Margin="0,0,8,0" />
       <Button Content="Unstage selected" Command="{Binding UnstageCommand}" IsEnabled="{Binding CanUnstage}" />
     </WrapPanel>
-    <Grid Grid.Row="2" ColumnDefinitions="2*,5,3*">
+    <Grid Grid.Row="3" ColumnDefinitions="2*,5,3*">
       <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding Selected, Mode=TwoWay}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:GitChangeRow">
@@ -33,7 +49,7 @@
         </ScrollViewer>
       </Border>
     </Grid>
-    <StackPanel Grid.Row="3" Spacing="8">
+    <StackPanel Grid.Row="4" Spacing="8">
       <TextBlock Text="Commit all currently staged changes" FontWeight="SemiBold" />
       <TextBox Text="{Binding CommitMessage}" PlaceholderText="Commit message" AcceptsReturn="True" MinHeight="58" MaxHeight="100" />
       <Button Content="Commit staged changes" Command="{Binding CommitCommand}" IsEnabled="{Binding CanCommit}" Background="#0865FF" Foreground="White" HorizontalAlignment="Left" />

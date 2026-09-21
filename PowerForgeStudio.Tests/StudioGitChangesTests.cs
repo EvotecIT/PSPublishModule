@@ -7,6 +7,50 @@ namespace PowerForgeStudio.Tests;
 public sealed class StudioGitChangesTests
 {
     [Fact]
+    public async Task BranchCreationAndSwitchingRequireValidLocalBranchesAndSurfaceGitFailures()
+    {
+        using var fixture = new RepositoryFixture();
+        await fixture.Run("init", "-b", "main");
+        await fixture.Run("config", "user.name", "Studio validation");
+        await fixture.Run("config", "user.email", "studio-validation@example.invalid");
+        await fixture.Run("config", "commit.gpgSign", "false");
+        await File.WriteAllTextAsync(Path.Combine(fixture.Root, "file.txt"), "main\n");
+        await fixture.Run("add", "file.txt");
+        await fixture.Run("commit", "-m", "initial");
+
+        var service = new ProjectGitService(fixture.Git);
+        Assert.True(await service.CreateBranchAsync(fixture.Root, "feature/studio-branches"));
+        var created = await service.GetStatusAsync(fixture.Root);
+        Assert.Equal("feature/studio-branches", created.BranchName);
+        Assert.Contains("main", created.Branches);
+        Assert.Contains("feature/studio-branches", created.Branches);
+
+        Assert.True(await service.SwitchBranchAsync(fixture.Root, "main"));
+        Assert.Equal("main", (await service.GetStatusAsync(fixture.Root)).BranchName);
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateBranchAsync(fixture.Root, "../unsafe"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.CreateBranchAsync(fixture.Root, "@{-1}"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SwitchBranchAsync(fixture.Root, "HEAD~1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateBranchAsync(fixture.Root, "feature/studio-branches"));
+        Assert.Equal("main", (await service.GetStatusAsync(fixture.Root)).BranchName);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task BranchValidationNeverReportsGitStartupOrTimeoutFailuresAsInvalidInput(bool timedOut, bool startFailed)
+    {
+        using var fixture = new RepositoryFixture();
+        var runner = new StubRunner(_ => new ProcessRunResult(
+            128, "", "git unavailable", "git", TimeSpan.Zero, timedOut,
+            standardOutputLimitExceeded: false, standardErrorLimitExceeded: false, startFailed));
+        var service = new ProjectGitService(new GitClient(runner));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateBranchAsync(fixture.Root, "feature/valid-name"));
+        Assert.Single(runner.Requests);
+        Assert.Equal(new[] { "check-ref-format", "refs/heads/feature/valid-name" }, runner.Requests[0].Arguments);
+    }
+
+    [Fact]
     public async Task MergeConflictsRemainVisibleAndCannotBeCommitted()
     {
         using var fixture = new RepositoryFixture();

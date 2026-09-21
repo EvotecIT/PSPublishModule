@@ -25,11 +25,15 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     private int _contextVersion, _diffVersion;
     private bool _disposed;
     private readonly Dictionary<string, string> _drafts = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _branchDrafts = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     public ObservableCollection<GitChangeRow> Files { get; } = [];
+    public ObservableCollection<string> Branches { get; } = [];
     [ObservableProperty] private string _root = "";
     [ObservableProperty] private string _status = "Select a working copy.";
     [ObservableProperty] private string _diff = "Select a change to review.";
     [ObservableProperty] private string _commitMessage = "";
+    [ObservableProperty] private string _newBranchName = "";
+    [ObservableProperty] private string? _selectedBranch;
     [ObservableProperty] private string _lastOperation = "";
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isMutating;
@@ -39,23 +43,35 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     public bool CanStage => CanAct && Selected is { Staged: false };
     public bool CanUnstage => CanAct && Selected is { Staged: true };
     public bool CanCommit => CanAct && Snapshot is { StagedCount: > 0, HasConflicts: false } && !string.IsNullOrWhiteSpace(CommitMessage);
+    public bool CanCreateBranch => CanAct && !string.IsNullOrWhiteSpace(NewBranchName);
+    public bool CanSwitchBranch => CanAct && !string.IsNullOrWhiteSpace(SelectedBranch)
+        && !string.Equals(Snapshot?.BranchName, SelectedBranch, StringComparison.Ordinal);
     private void NotifyActions()
     {
         OnPropertyChanged(nameof(CanAct)); OnPropertyChanged(nameof(CanStage));
         OnPropertyChanged(nameof(CanUnstage)); OnPropertyChanged(nameof(CanCommit));
+        OnPropertyChanged(nameof(CanCreateBranch)); OnPropertyChanged(nameof(CanSwitchBranch));
     }
     partial void OnIsLoadingChanged(bool value) => NotifyActions();
     partial void OnIsMutatingChanged(bool value) => NotifyActions();
     partial void OnSnapshotChanged(ProjectGitStatus? value) => NotifyActions();
     partial void OnCommitMessageChanged(string value) => NotifyActions();
+    partial void OnNewBranchNameChanged(string value) => NotifyActions();
+    partial void OnSelectedBranchChanged(string? value) => NotifyActions();
     partial void OnSelectedChanged(GitChangeRow? value) { NotifyActions(); _ = LoadDiffAsync(value); }
 
     public void SetWorkingCopy(string root)
     {
         if (string.Equals(root, Root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
-        if (!string.IsNullOrEmpty(Root)) _drafts[Root] = CommitMessage;
+        if (!string.IsNullOrEmpty(Root))
+        {
+            _drafts[Root] = CommitMessage;
+            _branchDrafts[Root] = NewBranchName;
+        }
         Root = root;
         CommitMessage = _drafts.GetValueOrDefault(root, "");
+        NewBranchName = _branchDrafts.GetValueOrDefault(root, "");
+        SelectedBranch = null;
         _ = RefreshAsync();
     }
 
@@ -67,7 +83,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
         _read?.Cancel();
         using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _read = read;
-        Snapshot = null; Selected = null; Files.Clear(); Diff = "Select a change to review.";
+        Snapshot = null; Selected = null; Files.Clear(); Branches.Clear(); Diff = "Select a change to review.";
         if (string.IsNullOrEmpty(Root)) { IsLoading = false; Status = "Select a working copy."; _read = null; return; }
         var root = Root;
         IsLoading = true;
@@ -77,6 +93,11 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
             var snapshot = await _git.GetStatusAsync(root, read.Token);
             if (_disposed || version != _contextVersion) return;
             Snapshot = snapshot;
+            foreach (var branch in snapshot.Branches) Branches.Add(branch);
+            SelectedBranch = snapshot.Branches.Contains(SelectedBranch, StringComparer.Ordinal)
+                ? SelectedBranch
+                : snapshot.Branches.Contains(snapshot.BranchName, StringComparer.Ordinal) ? snapshot.BranchName
+                : snapshot.Branches.FirstOrDefault();
             foreach (var file in snapshot.StagedChanges) Files.Add(new GitChangeRow(file, true));
             foreach (var file in snapshot.UnstagedChanges.Concat(snapshot.UntrackedFiles)) Files.Add(new GitChangeRow(file, false));
             Status = !snapshot.IsGitRepository ? "This folder is not a Git working copy."
@@ -124,7 +145,26 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
         return CanCommit ? MutateAsync("Commit staged changes", (root, ct) => _git.CommitAsync(root, message, ct), committedMessage: message) : Task.CompletedTask;
     }
 
-    private async Task MutateAsync(string action, Func<string, CancellationToken, Task<bool>> execute, string? committedMessage = null)
+    [RelayCommand]
+    private Task CreateBranchAsync()
+    {
+        var branchName = NewBranchName.Trim();
+        return CanCreateBranch
+            ? MutateAsync("Create and switch branch", (root, ct) => _git.CreateBranchAsync(root, branchName, ct), createdBranch: branchName)
+            : Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private Task SwitchBranchAsync()
+    {
+        var branchName = SelectedBranch;
+        return CanSwitchBranch && branchName is not null
+            ? MutateAsync($"Switch to {branchName}", (root, ct) => _git.SwitchBranchAsync(root, branchName, ct))
+            : Task.CompletedTask;
+    }
+
+    private async Task MutateAsync(string action, Func<string, CancellationToken, Task<bool>> execute,
+        string? committedMessage = null, string? createdBranch = null)
     {
         var root = Root;
         IsMutating = true;
@@ -136,6 +176,12 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
             {
                 if (Root == root && CommitMessage == committedMessage) CommitMessage = "";
                 if (_drafts.GetValueOrDefault(root) == committedMessage) _drafts.Remove(root);
+            }
+            if (createdBranch is not null)
+            {
+                if (string.Equals(Root, root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                    && string.Equals(NewBranchName.Trim(), createdBranch, StringComparison.Ordinal)) NewBranchName = "";
+                if (string.Equals(_branchDrafts.GetValueOrDefault(root)?.Trim(), createdBranch, StringComparison.Ordinal)) _branchDrafts.Remove(root);
             }
         }
         catch (OperationCanceledException) { LastOperation = $"{action} was interrupted in {root}. Refresh its Git state before retrying."; }

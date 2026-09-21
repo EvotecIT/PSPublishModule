@@ -261,10 +261,39 @@ public sealed partial class ProjectGitService : IProjectHistoryService
     }
 
     public async Task<bool> CreateBranchAsync(string repositoryRoot, string branchName, CancellationToken cancellationToken = default)
-        => (await _gitClient.CreateBranchAsync(repositoryRoot, branchName, cancellationToken).ConfigureAwait(false)).Succeeded;
+    {
+        var normalized = await ValidateBranchNameAsync(repositoryRoot, branchName, cancellationToken).ConfigureAwait(false);
+        return await RunMutationAsync(repositoryRoot, ["switch", "-c", normalized], cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task<bool> SwitchBranchAsync(string repositoryRoot, string branchName, CancellationToken cancellationToken = default)
-        => (await _gitClient.RunRawAsync(repositoryRoot, ["switch", branchName], cancellationToken: cancellationToken).ConfigureAwait(false)).Succeeded;
+    {
+        var normalized = await ValidateBranchNameAsync(repositoryRoot, branchName, cancellationToken).ConfigureAwait(false);
+        var exists = await _gitClient.RunRawAsync(repositoryRoot,
+            ["show-ref", "--verify", "--quiet", $"refs/heads/{normalized}"], cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!exists.Succeeded)
+        {
+            EnsureExpectedAbsence(exists);
+            throw new ArgumentException("Select an existing local branch.", nameof(branchName));
+        }
+        return await RunMutationAsync(repositoryRoot, ["switch", normalized], cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> ValidateBranchNameAsync(string repositoryRoot, string branchName, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(branchName);
+        var normalized = branchName.Trim();
+        if (normalized.StartsWith("-", StringComparison.Ordinal))
+            throw new ArgumentException("Branch names cannot start with a dash.", nameof(branchName));
+        var result = await _gitClient.RunRawAsync(repositoryRoot,
+            ["check-ref-format", $"refs/heads/{normalized}"], cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            EnsureExpectedAbsence(result);
+            throw new ArgumentException("Enter a valid Git branch name.", nameof(branchName));
+        }
+        return normalized;
+    }
 
     public async Task<bool> CreateWorktreeAsync(string repositoryRoot, string path, string branchName, CancellationToken cancellationToken = default)
         => (await _gitClient.RunRawAsync(repositoryRoot, ["worktree", "add", path, "-b", branchName], cancellationToken: cancellationToken).ConfigureAwait(false)).Succeeded;
@@ -275,7 +304,7 @@ public sealed partial class ProjectGitService : IProjectHistoryService
     private async Task<IReadOnlyList<string>> GetBranchListAsync(string repositoryRoot, CancellationToken cancellationToken)
     {
         var result = await _gitClient.RunRawAsync(repositoryRoot, ["branch", "--format=%(refname:short)"], cancellationToken: cancellationToken).ConfigureAwait(false);
-        if (!result.Succeeded) return [];
+        EnsureSuccess(result);
 
         return result.StdOut
             .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)

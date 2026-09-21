@@ -8,7 +8,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 
 - [x] Inspect current WPF host, shared owners and project state.
 - [x] Isolate implementation on feature/studio-avalonia.
-- [ ] Implement the reviewed workspace shell and hierarchical project explorer.
+- [x] Implement the reviewed workspace shell and hierarchical project explorer.
 - [x] Apply native tree row geometry, ancestry guides, context/selection styling, vector navigation icons and Git markers.
 - [x] Restore workspace favorites, expanded folders and document tabs through shared catalog persistence.
 - [x] Add a bounded per-project overview with working-copy identity, product signals, entrypoints and prerequisites.
@@ -28,6 +28,7 @@ The existing GUI is PowerForgeStudio.Wpf. Its domain and orchestration projects 
 - [x] Journal signing, reopen saved receipt history and recover failed local saves.
 - [x] Connect inspected targets, explicit publication approval, durable publication and verification.
 - [x] Connect Git status, diffs, staging, unstaging and local commits through the shared Git owner.
+- [x] Add validated local branch creation and switching to the Changes workspace.
 - [ ] Complete issues, PR review actions and provider status through existing owners.
 - [x] Connect selected-project issues, PR discussions and checks at the captured PR head.
 - [x] Add PR changed-file lists and bounded patch previews with revision checks.
@@ -593,3 +594,13 @@ The repository build, run and publish commands now select the Avalonia host by d
 The exact build path produced the renamed application assembly with zero warnings and all 49 Avalonia tests passed. The full shared suite still detects existing stale Apple source-trust exception assertions and an environment-dependent station-projection case; those unrelated failures were not suppressed or removed from the wrapper. Both framework-dependent and self-contained `win-x64` publishes completed and produced `PowerForgeStudio.exe` with their expected dependency sets. The framework-dependent executable launched against the dedicated worktree, discovered its repository and exposed the complete project tree, project tabs, files surface and output dock through Windows accessibility. Native capture could not bring the validation window to the foreground (`failed to activate captured window`), so pointer and keyboard interaction remain unverified. The agent-owned process was closed afterward.
 
 Removing the WPF source and tests remains tied to final native interaction proof and confirmation that no still-useful WPF-only workflow is missing from Avalonia.
+
+### Avalonia branch management
+
+The Changes page now keeps local branch work beside status, diff, staging and commit operations. It lists branches observed by the shared Git owner, disables switching to the current branch, and offers an explicit `Create & switch` action. The controls wrap as two intact field/action groups at compact widths. Unfinished branch names are kept separately for each working copy, and an operation that completes after the user selects another project cannot clear or replace that project's draft.
+
+`ProjectGitService` owns the mutation boundary. It validates full `refs/heads/...` names, rejects option-like and Git shorthand expressions, verifies that switch targets are existing local branches, and turns Git failures into the same sanitized exception contract as other Studio mutations. Failed creation retains the entered name for correction. No branch action fetches, pushes, deletes a branch or changes a remote.
+
+Validation passed all 50 Avalonia tests and the eight focused shared Git-change tests. Real disposable repositories cover creation, switching, duplicate-name failures, invalid names, local-target enforcement, operational Git failure classification, unchanged repository state after rejection, and staging/commit/rename behavior. A delayed-process test switches projects while branch creation is paused and proves the original repository remains the mutation target while the newly selected project's draft survives. Wide and compact Skia renders were inspected in `Artifacts/StudioValidation/branch-management/`, including the scrolled compact commit state.
+
+Native Windows UI Automation selected the disposable project, opened Changes, set the branch value, invoked create/switch, selected `main`, invoked Switch and confirmed each result from the real repository. Windows still refused foreground keyboard delivery to the agent-started window, and a foreground screenshot could not be captured; the resulting desktop-only image was discarded. Native keyboard interaction therefore remains part of the final migration gate.

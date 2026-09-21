@@ -7,6 +7,73 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class GitChangesNavigationTests
 {
     [Fact]
+    public async Task SwitchingProjectsDuringBranchCreationKeepsTheNewProjectContextAndDraft()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-git-branch-navigation-" + Guid.NewGuid().ToString("N"));
+        var first = Path.Combine(root, "first");
+        var second = Path.Combine(root, "second");
+        var runner = new DelayedBranchRunner();
+        var service = new ProjectGitService(new GitClient(runner));
+        try
+        {
+            foreach (var path in new[] { first, second })
+            {
+                Directory.CreateDirectory(path);
+                async Task Run(params string[] args)
+                {
+                    var result = await new GitClient().RunRawAsync(path, args);
+                    Assert.True(result.Succeeded, result.StdErr);
+                }
+                await Run("init", "-b", "main");
+                await Run("config", "user.name", "Studio validation");
+                await Run("config", "user.email", "studio-validation@example.invalid");
+                await Run("config", "commit.gpgSign", "false");
+                await File.WriteAllTextAsync(Path.Combine(path, "file.txt"), path);
+                await Run("add", "file.txt");
+                await Run("commit", "-m", "initial");
+            }
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                using var changes = new GitChangesViewModel(service);
+                changes.SetWorkingCopy(first);
+                await changes.RefreshAsync();
+                changes.NewBranchName = "feature/original-root";
+                var creating = changes.CreateBranchCommand.ExecuteAsync(null);
+                await runner.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+                changes.SetWorkingCopy(second);
+                await changes.RefreshAsync();
+                changes.NewBranchName = "feature/second-draft";
+                runner.Continue.TrySetResult();
+                await creating;
+
+                Assert.Equal(second, changes.Root);
+                Assert.Equal("feature/second-draft", changes.NewBranchName);
+                Assert.Equal("main", changes.Snapshot!.BranchName);
+                Assert.Equal(first, runner.BranchRoot);
+                Assert.Equal("feature/original-root", (await service.GetStatusAsync(first)).BranchName);
+                changes.SetWorkingCopy(first);
+                await changes.RefreshAsync();
+                Assert.Empty(changes.NewBranchName);
+                changes.SetWorkingCopy(second);
+                await changes.RefreshAsync();
+                Assert.Equal("feature/second-draft", changes.NewBranchName);
+                return true;
+            });
+        }
+        finally
+        {
+            runner.Continue.TrySetResult();
+            if (Directory.Exists(root))
+            {
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 }))
+                    if (file.IsReadOnly) file.IsReadOnly = false;
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task SwitchingProjectsDuringCommitRetainsOriginalTargetAndSeparateDrafts()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-git-navigation-" + Guid.NewGuid().ToString("N"));
@@ -83,6 +150,23 @@ public sealed class GitChangesNavigationTests
             if (request.Arguments[0] == "commit")
             {
                 CommitRoot = request.WorkingDirectory;
+                Entered.TrySetResult();
+                await Continue.Task.WaitAsync(cancellationToken);
+            }
+            return await new ProcessRunner().RunAsync(request, cancellationToken);
+        }
+    }
+
+    private sealed class DelayedBranchRunner : IProcessRunner
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Continue { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public string? BranchRoot { get; private set; }
+        public async Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request.Arguments.Count >= 2 && request.Arguments[0] == "switch" && request.Arguments[1] == "-c")
+            {
+                BranchRoot = request.WorkingDirectory;
                 Entered.TrySetResult();
                 await Continue.Task.WaitAsync(cancellationToken);
             }
