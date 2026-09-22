@@ -215,6 +215,13 @@ public sealed class WorkspaceStorageTests
                 try
                 {
                     Capture(window, "storage-review.png");
+                    var pathExpander = window.FindControl<Expander>("StoragePathExpander");
+                    Assert.NotNull(pathExpander);
+                    pathExpander.IsExpanded = true;
+                    var pathBox = Assert.IsType<TextBox>(pathExpander.Content);
+                    Assert.Equal(model.Storage.SelectedEntry?.Path, pathBox.Text);
+                    Capture(window, "storage-inspector-path.png");
+                    pathExpander.IsExpanded = false;
                     model.Storage.SelectedEntry = Assert.Single(model.Storage.Entries, entry => entry.IsReviewCandidate);
                     Assert.True(await model.Storage.ReviewSelectedRemovalAsync());
                     var removalDialog = new WorktreeRemovalDialog { DataContext = model.Storage, Width = 760, Height = 680 };

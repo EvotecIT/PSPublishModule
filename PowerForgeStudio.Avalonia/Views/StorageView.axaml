@@ -3,16 +3,22 @@
              xmlns:workspace="using:PowerForgeStudio.Domain.Workspace"
              xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:DataType="vm:StorageViewModel" x:Class="PowerForgeStudio.Avalonia.Views.StorageView">
+  <UserControl.Styles>
+    <Style Selector="ListBoxItem"><Setter Property="Padding" Value="0" /></Style>
+  </UserControl.Styles>
   <ScrollViewer x:Name="StorageScroller" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="22,18" Spacing="14">
       <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
-        <StackPanel Spacing="4">
-          <TextBlock Text="Review workspace storage" Classes="heading" />
-          <TextBlock Text="Measured working copies and local evidence. Inspection never removes files." Classes="muted" TextWrapping="Wrap" />
-        </StackPanel>
+        <Grid ColumnDefinitions="32,*" ColumnSpacing="10">
+          <controls:NavigationIcon Kind="storage" Width="28" Height="28" Ink="#142B4D" VerticalAlignment="Top" Margin="0,2,0,0" />
+          <StackPanel Grid.Column="1" Spacing="4">
+            <TextBlock Text="Review workspace storage" Classes="heading" />
+            <TextBlock Text="Measured working copies and local evidence. Inspection never removes files." Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Grid>
         <WrapPanel Grid.Row="1" ItemSpacing="8" LineSpacing="8" HorizontalAlignment="Right">
           <Button Content="Open selected" Click="OpenSelected" IsEnabled="{Binding SelectedEntry.Exists}" />
-          <Button Content="Review removal" Click="ReviewRemoval" IsEnabled="{Binding CanReviewRemoval}" />
+          <Button Content="Review removal" Click="ReviewRemoval" IsEnabled="{Binding CanReviewRemoval}" Classes="primary" />
           <Button Content="Review stale registrations" Click="ReviewPrune" IsEnabled="{Binding CanReviewPrune}" />
           <Button Content="Refresh inspection" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
         </WrapPanel>
@@ -52,24 +58,28 @@
       </WrapPanel>
       <Border Classes="card" Padding="0" MinHeight="280">
         <Grid RowDefinitions="42,*">
-          <Grid ColumnDefinitions="2*,90,1.2*,1.5*" ColumnSpacing="12" Margin="16,0">
-            <TextBlock Text="Working copy" Classes="muted" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Text="Size" Classes="muted" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="2" Text="Local state" Classes="muted" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="3" Text="Next check" Classes="muted" VerticalAlignment="Center" />
-          </Grid>
+          <Border Background="#F4F8FD" BorderBrush="#D9E3F0" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="2*,90,1.2*,1.5*" ColumnSpacing="12" Margin="16,0">
+              <TextBlock Text="Working copy" Classes="muted" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="Size" Classes="muted" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="Local state" Classes="muted" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="3" Text="Next check" Classes="muted" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
           <ListBox Grid.Row="1" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" Background="Transparent">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="workspace:WorkspaceStorageEntry">
-                <Grid ColumnDefinitions="2*,90,1.2*,1.5*" ColumnSpacing="12" Margin="10,8">
-                  <StackPanel><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" /><TextBlock Text="{Binding KindDisplay}" Classes="muted" FontSize="12" /></StackPanel>
-                  <TextBlock Grid.Column="1" Text="{Binding SizeDisplay}" VerticalAlignment="Center" />
-                  <Grid Grid.Column="2" ColumnDefinitions="18,*" ColumnSpacing="7" VerticalAlignment="Center">
-                    <controls:StatusIcon IsError="{Binding IsBroken}" IsWarning="{Binding IsChanged}" IsSuccess="{Binding !IsBroken}" Width="18" Height="18" ToolTip.Tip="{Binding LocalStateDisplay}" />
-                    <TextBlock Grid.Column="1" Text="{Binding LocalStateDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                <Border BorderBrush="#E5ECF5" BorderThickness="0,0,0,1">
+                  <Grid ColumnDefinitions="2*,90,1.2*,1.5*" ColumnSpacing="12" Margin="16,6">
+                    <StackPanel><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" /><TextBlock Text="{Binding KindDisplay}" Classes="muted" FontSize="11" /></StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding SizeDisplay}" VerticalAlignment="Center" />
+                    <Grid Grid.Column="2" ColumnDefinitions="18,*" ColumnSpacing="7" VerticalAlignment="Center">
+                      <controls:StatusIcon IsError="{Binding IsBroken}" IsWarning="{Binding IsChanged}" IsSuccess="{Binding !IsBroken}" Width="18" Height="18" ToolTip.Tip="{Binding LocalStateDisplay}" />
+                      <TextBlock Grid.Column="1" Text="{Binding LocalStateDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </Grid>
+                    <TextBlock Grid.Column="3" Text="{Binding NextCheck}" VerticalAlignment="Center" TextWrapping="Wrap" />
                   </Grid>
-                  <TextBlock Grid.Column="3" Text="{Binding NextCheck}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                </Grid>
+                </Border>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
