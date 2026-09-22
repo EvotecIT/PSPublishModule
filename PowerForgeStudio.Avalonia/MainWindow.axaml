@@ -51,17 +51,17 @@
     <Grid Grid.Row="1" x:Name="WorkspaceLayout" ColumnDefinitions="70,326,5,*,280">
       <Border Background="#0B2745">
         <StackPanel Spacing="4" Margin="0,10">
-          <Button Classes="rail" Classes.selected="{Binding IsProjectRoute}" Command="{Binding ShowOverviewCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" Classes.selected="{Binding IsActivityRailSelected}" Command="{Binding ShowActivityCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" Classes.selected="{Binding IsGitHubActivityPage}" Command="{Binding ShowGitHubActivityCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" Classes.selected="{Binding IsAutomationsPage}" Command="{Binding ShowAutomationsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Automations" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" Classes.selected="{Binding IsStoragePage}" Command="{Binding ShowStorageCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" Classes.selected="{Binding IsPackagesPage}" Command="{Binding ShowPackagesCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="packages" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Packages" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" Classes.selected="{Binding IsConnectionsPage}" Command="{Binding ShowConnectionsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
-          <Button Classes="rail" Classes.selected="{Binding IsSettingsPage}" Command="{Binding ShowSettingsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="settings" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Settings" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button x:Name="ProjectsRailButton" Classes="rail" AutomationProperties.Name="Projects" Classes.selected="{Binding IsProjectRoute}" Command="{Binding ShowOverviewCommand}" Click="ShowProjectsFromRail"><StackPanel Spacing="7"><controls:NavigationIcon Kind="projects" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Projects" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" AutomationProperties.Name="Activity" Classes.selected="{Binding IsActivityRailSelected}" Command="{Binding ShowActivityCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="activity" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Activity" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" AutomationProperties.Name="GitHub" Classes.selected="{Binding IsGitHubActivityPage}" Command="{Binding ShowGitHubActivityCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" AutomationProperties.Name="Automations" Classes.selected="{Binding IsAutomationsPage}" Command="{Binding ShowAutomationsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Automations" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" AutomationProperties.Name="Storage" Classes.selected="{Binding IsStoragePage}" Command="{Binding ShowStorageCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" AutomationProperties.Name="Packages" Classes.selected="{Binding IsPackagesPage}" Command="{Binding ShowPackagesCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="packages" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Packages" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" AutomationProperties.Name="Connections" Classes.selected="{Binding IsConnectionsPage}" Command="{Binding ShowConnectionsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" AutomationProperties.Name="Settings" Classes.selected="{Binding IsSettingsPage}" Command="{Binding ShowSettingsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="settings" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Settings" HorizontalAlignment="Center" /></StackPanel></Button>
         </StackPanel>
       </Border>
-      <Border Grid.Column="1" Background="#FBFCFF" BorderBrush="#DDE5EF" BorderThickness="0,0,1,0">
+      <Border Grid.Column="1" x:Name="ProjectTreePanel" Background="#FBFCFF" BorderBrush="#DDE5EF" BorderThickness="0,0,1,0">
         <Grid RowDefinitions="58,42,36,Auto,*,28">
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="17,8">
             <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold" Foreground="#101B30" VerticalAlignment="Center" />
@@ -101,6 +101,7 @@
       <Grid Grid.Column="3" Background="White">
         <Grid.RowDefinitions><RowDefinition Height="43" /><RowDefinition Height="93" /><RowDefinition Height="*" /><RowDefinition Height="{Binding OutputPaneHeight}" /></Grid.RowDefinitions>
         <Border Background="#EFF4FB" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1">
+          <Grid ColumnDefinitions="*,Auto">
           <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
             <StackPanel Orientation="Horizontal">
               <Button Content="Workspace" Command="{Binding ShowWorkspaceCommand}" Classes="documentTab" Classes.active="{Binding IsWorkspaceTab}" />
@@ -121,6 +122,9 @@
               </ItemsControl>
             </StackPanel>
           </ScrollViewer>
+          <Button Grid.Column="1" x:Name="CompactContextButton" Content="Details" Click="ToggleCompactContext" IsVisible="False"
+                  Classes="toolbar" AutomationProperties.Name="Show details" Margin="5,4,10,4" />
+          </Grid>
         </Border>
         <Border Grid.Row="1" Background="White" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="22,14" IsVisible="{Binding !IsWorkspaceUtilityPage}">
           <StackPanel Spacing="12">

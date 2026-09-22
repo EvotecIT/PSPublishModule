@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -254,10 +255,40 @@ public sealed class WorkspaceStorageTests
                     window.Width = 1050;
                     window.Height = 720;
                     Capture(window, "storage-review-compact.png");
+                    var context = window.FindControl<Border>("ContextPanel")!;
+                    var tree = window.FindControl<Border>("ProjectTreePanel")!;
+                    var details = window.FindControl<Button>("CompactContextButton")!;
+                    Assert.False(context.IsVisible);
+                    Assert.True(tree.IsVisible);
+                    Assert.True(details.IsVisible);
+                    details.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Capture(window, "storage-review-compact-details.png");
+                    Assert.True(context.IsVisible);
+                    Assert.False(tree.IsVisible);
+                    Assert.Equal("Projects", details.Content);
+                    Assert.Equal("Show project tree", ToolTip.GetTip(details));
+                    Assert.Equal(model.Storage.SelectedEntry?.Path, pathBox.Text);
+                    window.Width = 1600;
+                    Capture(window, "storage-review-wide-restored.png");
+                    Assert.True(context.IsVisible);
+                    Assert.True(tree.IsVisible);
+                    Assert.False(details.IsVisible);
+                    window.Width = 1050;
+                    Capture(window, "storage-review-compact-restored.png");
+                    Assert.False(context.IsVisible);
+                    Assert.True(tree.IsVisible);
+                    Assert.Equal("Details", details.Content);
+                    Assert.Equal("Show selected item details", ToolTip.GetTip(details));
                     var storageScroller = Assert.Single(window.GetVisualDescendants().OfType<ScrollViewer>(), scroll => scroll.Name == "StorageScroller");
                     storageScroller.Offset = new global::Avalonia.Vector(0, storageScroller.Extent.Height);
                     Capture(window, "storage-review-compact-bottom.png");
                     Assert.True(storageScroller.Offset.Y > 0);
+                    details.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.True(context.IsVisible);
+                    window.FindControl<Button>("ProjectsRailButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.False(context.IsVisible);
+                    Assert.True(tree.IsVisible);
+                    Assert.Equal("Details", details.Content);
                 }
                 finally
                 {

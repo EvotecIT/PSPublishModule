@@ -4,6 +4,8 @@ Status: canonical navigation and WPF retirement map.
 
 PowerForge Studio uses one workspace shell. The project tree, document tabs, context panel and output dock stay in place while the center surface changes. The product does not need one mockup for every loading, empty, error and dialog state. Eight representative visual references define the shell and reusable page patterns; runtime tests cover the state matrix.
 
+At compact widths, Details temporarily shows the same context panel in place of the project tree. Projects in the document bar or rail restores the tree; widening the window restores the tree and inspector together.
+
 ## Navigation model
 
 The left rail is workspace-wide. Project tabs are scoped to the selected working copy. A rail entry must never silently behave like a project tab.

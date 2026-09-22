@@ -10,6 +10,7 @@ namespace PowerForgeStudio.Avalonia;
 public sealed partial class MainWindow : Window
 {
     private bool? _compactLayout;
+    private bool _compactDetailsOpen;
     private bool _closeAfterSave;
     private bool _savingOnClose;
     private bool _discardOnNextClose;
@@ -28,7 +29,10 @@ public sealed partial class MainWindow : Window
         DataContextChanged += (_, _) =>
         {
             if (DataContext is WorkspaceViewModel model)
+            {
                 model.ResolveUnsavedChanges = documents => new UnsavedChangesDialog(documents).ShowDialog<UnsavedChangesChoice>(this);
+                if (_compactLayout is { } compact) model.CompactViewport = compact;
+            }
         };
     }
 
@@ -57,11 +61,40 @@ public sealed partial class MainWindow : Window
     {
         var compact = width < 1280;
         if (_compactLayout == compact) return;
+        if (compact && _compactLayout == false) _compactDetailsOpen = false;
         _compactLayout = compact;
         if (DataContext is WorkspaceViewModel model) model.CompactViewport = compact;
-        ContextPanel.IsVisible = !compact;
-        WorkspaceLayout.ColumnDefinitions[4].Width = new GridLength(compact ? 0 : 280);
-        WorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(compact ? 270 : 326);
+        UpdateContextLayout();
+    }
+
+    private void ToggleCompactContext(object? sender, RoutedEventArgs args)
+    {
+        if (_compactLayout != true) return;
+        _compactDetailsOpen = !_compactDetailsOpen;
+        UpdateContextLayout();
+    }
+
+    private void ShowProjectsFromRail(object? sender, RoutedEventArgs args)
+    {
+        if (_compactLayout != true || !_compactDetailsOpen) return;
+        _compactDetailsOpen = false;
+        UpdateContextLayout();
+    }
+
+    private void UpdateContextLayout()
+    {
+        var compact = _compactLayout == true;
+        var showContext = !compact || _compactDetailsOpen;
+        ContextPanel.IsVisible = showContext;
+        ProjectTreePanel.IsVisible = !compact || !_compactDetailsOpen;
+        CompactContextButton.IsVisible = compact;
+        CompactContextButton.Content = _compactDetailsOpen ? "Projects" : "Details";
+        global::Avalonia.Automation.AutomationProperties.SetName(CompactContextButton,
+            _compactDetailsOpen ? "Show projects" : "Show details");
+        ToolTip.SetTip(CompactContextButton,
+            _compactDetailsOpen ? "Show project tree" : "Show selected item details");
+        WorkspaceLayout.ColumnDefinitions[4].Width = new GridLength(showContext ? (compact ? 300 : 280) : 0);
+        WorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(compact ? (_compactDetailsOpen ? 0 : 270) : 326);
     }
 
     private async void QuickProjectSearchKeyDown(object? sender, KeyEventArgs args)
