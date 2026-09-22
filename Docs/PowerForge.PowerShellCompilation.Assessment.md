@@ -207,7 +207,9 @@ The full-module differential test replaces only retained `Get-CimData` and `Get-
 
 Focused qualification passed **18/18** in **4m37s**, followed by **3/3** in **3m04s** after strengthening the full-module observers. PowerShell 7.6.5 / `net10.0` and Windows PowerShell 5.1 / `net472` match across **565 conversion observations per host**, including cultures, invalid destination types, operand/cast callbacks, and continuation. Native and retained scalar/vector variants preserve constraints, type shape, stopping, reuse, and reimport; the unchanged BIOS workflow now emits a complete method. The selected three full-module workflows match across **219 observations per host**, plus **six cancellation/reuse observations per host**. Success assertions check actual transformed values and provider cleanup, and Strict still rejects `-as`. The shared host Release `net472` build passes with zero warnings/errors.
 
-The initial UAC candidate still needs return propagation from captured statement output; generic-rights conversion still needs dynamic static-member access. They are not counted as newly complete. Independent review and the full compiler gate remain pending for this expansion.
+Independent read-only review (`native_as_coverage_review`) of `9169d209d..8dad115f1` found no actionable P0–P3 issue in the new conversion/storage owners or their workflow fixtures; no confirmation was needed. The boundary remains current. The first full-gate attempt exposed a census fixture that still expected Hybrid `-as` to be unsupported and was stopped early. That ranking fixture now explicitly assesses Strict semantic counterfactuals before whole-artifact rejection; all **24 census tests pass**. This subsequent change is test-only, with no production correction after review.
+
+The initial UAC candidate still needs return propagation from captured statement output; generic-rights conversion still needs dynamic static-member access. They are not counted as newly complete. The restarted full compiler gate remains pending for this expansion.
 
 ## Prior evidence and next work
 

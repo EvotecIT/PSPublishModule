@@ -20,7 +20,9 @@ public sealed partial class PowerShellCompilationCensusTests
             "function Get-Three { return 1 }");
         try
         {
-            var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
+            // Rank semantic counterfactuals before Strict's whole-artifact rejection. Hybrid supports -as.
+            var result = new PowerShellCompilationCensusRunner().RunWithOptions(new[] { source },
+                new PowerShellCompilationCensusOptions { TargetFramework = "net10.0", Mode = PowerShellCompilationMode.Strict, Recurse = false });
 
             var conversion = Assert.Single(result.Frontier, impact => impact.FeatureId == "operator.as");
             Assert.Equal(2, conversion.AffectedUnits);
