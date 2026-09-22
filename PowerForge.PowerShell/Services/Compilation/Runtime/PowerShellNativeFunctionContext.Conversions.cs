@@ -10,6 +10,7 @@ namespace PowerForge.Generated.Runtime
     public sealed partial class PowerShellNativeFunctionContext
     {
         private static readonly ConcurrentDictionary<Type, Func<object?, object?>> ConversionSites = new();
+        private static readonly Lazy<Func<object?, Type, object?>> AsOperation = new(CreateAsOperation);
         private static readonly Lazy<Func<object?, object?>> CustomObjectConversionSite = new(CreateCustomObjectConversionSite);
         private static readonly Lazy<ConstructorInfo> RuntimeTypeNameConstructor = new(() => typeof(PSObject).Assembly
             .GetType("System.Management.Automation.Language.TypeName", true)!
@@ -26,6 +27,27 @@ namespace PowerForge.Generated.Runtime
         {
             EnsureActive();
             return CustomObjectConversionSite.Value(value);
+        }
+
+        /// <summary>Applies PowerShell's nonthrowing value conversion after evaluating both operands.</summary>
+        /// <remarks>Invalid destination types still fail through the host's type conversion, as with authored -as.</remarks>
+        public object? EvaluateAs(object? value, object? destination)
+        {
+            EnsureActive();
+            var type = (Type)ConvertValue(typeof(Type), destination)!;
+            return AsOperation.Value(value, type);
+        }
+
+        private static Func<object?, Type, object?> CreateAsOperation()
+        {
+            var method = typeof(PSObject).Assembly.GetType("System.Management.Automation.TypeOps", true)!
+                .GetMethod("AsOperator", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                    null, new[] { typeof(object), typeof(Type) }, null)
+                ?? throw new NotSupportedException("PowerShell's native -as conversion operation is unavailable.");
+            var value = Expression.Parameter(typeof(object), "value");
+            var destination = Expression.Parameter(typeof(Type), "destination");
+            return Expression.Lambda<Func<object?, Type, object?>>(
+                Expression.Call(method, value, destination), value, destination).Compile();
         }
 
         private static Func<object?, object?> CreateCustomObjectConversionSite()

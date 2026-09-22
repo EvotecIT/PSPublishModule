@@ -57,7 +57,8 @@ internal enum PowerShellBoundBinaryOperator
     NativeNotMatch,
     NativeSplit,
     NativeReplace,
-    NativeRange
+    NativeRange,
+    NativeAs
 }
 
 internal enum PowerShellBoundUnaryOperator

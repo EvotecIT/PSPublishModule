@@ -18,7 +18,7 @@ internal static partial class PowerShellOperatorSemanticBinder
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             operation is "Ilike" or "Clike" or "Inotlike" or "Cnotlike" or
                 "Match" or "Imatch" or "Cmatch" or "Notmatch" or "Inotmatch" or "Cnotmatch" or
-                "Isplit" or "Csplit" or "Ireplace" or "Creplace" or "DotDot")
+                "Isplit" or "Csplit" or "Ireplace" or "Creplace" or "DotDot" or "As" or "Ias")
         {
             var nativeLeft = bindOperand(syntax.Left);
             var nativeRight = bindOperand(syntax.Right);

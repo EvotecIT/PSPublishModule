@@ -81,7 +81,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                node is ConvertExpressionAst conversion && conversion.Parent is CommandExpressionAst { Parent: PipelineAst discardPipeline } &&
                    PowerShellCompilationConversionPolicy.IsStatementDiscard(conversion) && IsCapturedPipeline(discardPipeline) ||
                node is SubExpressionAst or BinaryExpressionAst { Operator: TokenKind.Join or TokenKind.Isplit or TokenKind.Csplit or TokenKind.Ireplace or TokenKind.Creplace or
-                   TokenKind.Imatch or TokenKind.Cmatch or TokenKind.Inotmatch or TokenKind.Cnotmatch or TokenKind.DotDot or
+                   TokenKind.Imatch or TokenKind.Cmatch or TokenKind.Inotmatch or TokenKind.Cnotmatch or TokenKind.DotDot or TokenKind.As or
                    TokenKind.Icontains or TokenKind.Ccontains or TokenKind.Inotcontains or TokenKind.Cnotcontains or
                    TokenKind.Iin or TokenKind.Cin or TokenKind.Inotin or TokenKind.Cnotin } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||

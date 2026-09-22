@@ -12,6 +12,7 @@ internal static partial class PowerShellOperatorSemanticBinder
             left.Type.ClrType == typeof(void) || right.Type.ClrType == typeof(void)) return null;
         PowerShellBoundBinaryOperator? bound = operation switch
         {
+            "As" or "Ias" => PowerShellBoundBinaryOperator.NativeAs,
             "Ilike" or "Clike" => PowerShellBoundBinaryOperator.NativeLike,
             "Inotlike" or "Cnotlike" => PowerShellBoundBinaryOperator.NativeNotLike,
             "Match" or "Imatch" or "Cmatch" => PowerShellBoundBinaryOperator.NativeMatch,

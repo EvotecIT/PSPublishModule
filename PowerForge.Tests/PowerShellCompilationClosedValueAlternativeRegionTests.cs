@@ -95,8 +95,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void CompleteWorkflow_ClosedScalarVectorAlternativePreservesTypeShapeAndConstraint(
         string framework,
         string host)
+        => AssertClosedScalarVectorAlternative(framework, host, completeFunction: false);
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void CompleteWorkflow_NativeScalarVectorSlotsPreserveTypeShapeAndConstraint(string framework, string host)
+        => AssertClosedScalarVectorAlternative(framework, host, completeFunction: true);
+
+    private static void AssertClosedScalarVectorAlternative(string framework, string host, bool completeFunction)
     {
-        using var fixture = ArtifactFixture.Create(ClosedValueAlternativeModule, ".psm1");
+        var source = completeFunction ? ClosedValueAlternativeModule.Replace("data RetainedBarrier { }", "", StringComparison.Ordinal) : ClosedValueAlternativeModule;
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -105,7 +115,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.PromotedTypedRegions);
+        if (completeFunction)
+        {
+            var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, entry => entry.Name == "Test-ConditionalValue");
+            Assert.True(unit.EmittedClrMethod);
+            Assert.True(unit.UsesNativeFunctionBinding);
+            Assert.False(unit.RetainedHostedSource);
+        }
+        else Assert.Equal(1, result.Manifest!.PromotedTypedRegions);
 
         const string probe = """
             $cases = @(
@@ -191,7 +208,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.PromotedTypedRegions >= 1);
+        var bios = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == "Get-ComputerBios");
+        Assert.True(bios.EmittedClrMethod);
+        Assert.True(bios.UsesNativeFunctionBinding);
+        Assert.False(bios.RetainedHostedSource);
 
         const string probe = """
             foreach ($all in $true,$false,$false,$true) {

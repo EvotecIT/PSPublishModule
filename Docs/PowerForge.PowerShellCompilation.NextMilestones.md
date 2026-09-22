@@ -31,8 +31,8 @@ Prioritize useful Hybrid script/module coverage. Extend Strict only where a comp
 
 - [x] Reproduce and correct plain Strict self-contained Windows x64 closure rejection while preserving exact target/content evidence and missing-dependency rejection. Focused artifact tests and a direct executable pass; broader integration remains separate.
 - [x] Refresh the pinned PSSharedGoods baseline: 188/282 complete emitted functions, 36 promoted regions. No coverage growth is claimed for the deployment correction.
-- [ ] Select the bounded workflow set and record all co-blockers before implementation. Initial `-as` candidates show distinct blockers: disk reporting needs language conversion; UAC conversion also needs return propagation out of captured statement output; generic-rights conversion also needs dynamic static-member access. An operator-only change cannot claim all three complete.
-- [ ] Implement and qualify the selected complete workflows through existing binding, IR, analysis, lowering, and runtime owners. Record exactly what remains hosted and keep unrelated shapes rejected or retained.
+- [x] Select three complete pinned workflows: `Get-ComputerDisk`, `Get-ComputerWindowsFeatures`, and `Get-ComputerSMBShareList`. They cover inventory transformation/filtering and share-enumeration lifecycle. Disk reporting needs native `-as` conversion and native scalar/vector slot admission; optional-feature reporting needs the slot correction; share enumeration needs `-as [type]`. Initial UAC and generic-rights candidates retain their separate captured-return and dynamic static-member blockers.
+- [x] Implement and qualify the selected complete workflows through existing binding, IR, analysis, lowering, and runtime owners. Both supported hosted lanes match the unchanged full module with isolated providers, including failures, stopping, cancellation, cleanup, and reuse. The census increases to 196/282 complete functions and 29 promoted regions; seven former prefixes are now inside complete methods. This is Hybrid coverage, not new Strict language admission or live-provider qualification.
 - [ ] Complete proportionate independent review and the compiler gate, update measured outcomes, and clean task outputs. No PR, merge, or package publication is part of this goal.
 
 ## Milestone 24 — Preserve values, collections, and error continuation
@@ -49,7 +49,7 @@ Hybrid native functions additionally use the active host for computed members, m
 
 **Boundaries to preserve:** borrowed compiled reference mutation, arbitrary object/ETS transfer, arbitrary enumerators, multidimensional/open arrays, unproved local ownership, and general local-call collection factories remain retained or rejected. A later qualified Hybrid slice must not silently broaden Strict admission.
 
-**Gate for any expansion:** select three complete previously blocked workflows from at least two families, including one Strict artifact when claiming runtime-free growth. Compare original/generated behavior for empty, singleton, nested, null, overflow, malformed input, and injected acquisition/advance/current/disposal failures on each claimed host. Track all co-blockers and state which operations still execute in PowerShell.
+**Gate for any expansion:** select three complete previously blocked workflows from at least two families, including one Strict artifact when claiming runtime-free growth. Compare original/generated behavior for the selected workflows and consequential reachable failure paths on each claimed host. Include empty, singleton, nested, null, overflow, malformed input, and acquisition/advance/current/disposal failures where the changed contract can encounter them; existing qualified enumeration owners do not require a new unrelated fault framework for every operator. Track all co-blockers and state which operations still execute in PowerShell.
 
 ## Milestone 25 — Compile complete pipelines and advanced functions
 

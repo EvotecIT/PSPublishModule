@@ -4,6 +4,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private string EmitNativeBinary(PowerShellLoweredBinaryExpression expression, string left, string right)
     {
+        if (expression.Operation == PowerShellBoundBinaryOperator.NativeAs)
+            return "__nativeFunction.EvaluateAs(" + left + ", " + right + ")";
         if (expression.Operation == PowerShellBoundBinaryOperator.NativeRange)
         {
             var rangeFunction = _sourceFunction!;
