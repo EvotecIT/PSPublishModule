@@ -48,20 +48,25 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
         using var cancellation = new CancellationTokenSource();
         var count = scenario == "last-success" ? 1 : 3;
         var receipts = Enumerable.Range(1, count).Select(index => new ReleasePublishReceipt(root, "Fixture", "ProjectBuild",
-            $"Release {index}", "GitHub", $"https://github.test/release/{index}", null,
-            ReleasePublishReceiptStatus.Published, "Published", DateTimeOffset.UtcNow)).ToArray();
+            $"Release {index}", "GitHub", $"https://github.com/Fixture/Release/releases/tag/v{index}", null,
+            ReleasePublishReceiptStatus.Published, "Published", DateTimeOffset.UtcNow) {
+                GitHubAssets = new Dictionary<string, long>()
+            }).ToArray();
         var published = new ReleasePublishExecutionResult(root, true, "Published", "{}", receipts);
         var item = CreateVerifyReadyQueueItem(root, "Fixture", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(published));
         var requests = new List<string>();
         using var client = new HttpClient(new StubHttpMessageHandler(request => {
             requests.Add(request.RequestUri!.AbsolutePath);
-            if (scenario is "between" or "last-success") cancellation.Cancel();
-            if (scenario == "during" && request.RequestUri.AbsolutePath == "/release/2")
+            if (scenario == "between" && request.RequestUri.AbsolutePath.EndsWith("/tags/v2", StringComparison.Ordinal))
+                cancellation.Cancel();
+            if (scenario == "during" && request.RequestUri.AbsolutePath.EndsWith("/tags/v2", StringComparison.Ordinal))
             {
                 cancellation.Cancel();
                 throw new OperationCanceledException("fixture-secret-must-not-escape", cancellation.Token);
             }
-            return new HttpResponseMessage(HttpStatusCode.OK);
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent("{\"draft\":false,\"assets\":[]}")
+            };
         }));
         using var service = new ReleaseVerificationExecutionService(client,
             new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => throw new InvalidOperationException())));
@@ -71,7 +76,7 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
         Assert.Equal(scenario != "last-success", result.WasCancelled);
         Assert.Equal(scenario == "before" ? 0 : 1, result.Receipts.Count(value => value.Status == ReleaseVerificationReceiptStatus.Verified));
         Assert.Equal(scenario == "last-success" ? 0 : 1, result.Receipts.Count(value => value.Status == ReleaseVerificationReceiptStatus.Failed));
-        Assert.DoesNotContain("/release/3", requests);
+        Assert.DoesNotContain(requests, path => path.EndsWith("/tags/v3", StringComparison.Ordinal));
         if (scenario == "before") Assert.Empty(requests);
         Assert.DoesNotContain("fixture-secret", JsonSerializer.Serialize(result));
         var database = new ReleaseStateDatabase(Path.Combine(root, "state.db"));

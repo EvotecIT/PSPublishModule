@@ -336,7 +336,8 @@ public sealed partial class ReleasePublishExecutionService
             execution.ReleaseUrl ?? $"{publishConfig.UserName}/{repoName}",
             execution.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
             execution.Succeeded ? $"GitHub release {tag} published." : execution.ErrorMessage!,
-            zipAssets.FirstOrDefault());
+            zipAssets.FirstOrDefault(),
+            githubAssetPaths: zipAssets);
     }
 
     private static IReadOnlyList<string> ResolveModuleGitHubAssets(

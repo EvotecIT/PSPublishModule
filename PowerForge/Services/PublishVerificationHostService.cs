@@ -102,19 +102,61 @@ public sealed class PublishVerificationHostService : IDisposable
 
     private async Task<PublishVerificationResult> VerifyGitHubAsync(PublishVerificationRequest request, CancellationToken cancellationToken)
     {
-        if (!Uri.TryCreate(request.Destination, UriKind.Absolute, out var uri))
-        {
-            return Failed("GitHub destination URL was not recorded.");
-        }
+        if (request.GitHubAssets is null)
+            return Failed("The saved GitHub publication has no asset inventory; republish or reconcile the release before marking it verified.");
+        if (!Uri.TryCreate(request.Destination, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps || !uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+            return Failed("A supported GitHub release URL was not recorded.");
+        var segments = uri.AbsolutePath.Trim('/').Split('/');
+        if (segments.Length < 5 || segments[2] != "releases" || segments[3] != "tag" ||
+            string.IsNullOrWhiteSpace(segments[0]) || string.IsNullOrWhiteSpace(segments[1]))
+            return Failed("The recorded GitHub destination is not a tagged release URL.");
 
-        var response = await SendProbeAsync(uri, cancellationToken).ConfigureAwait(false);
-        if (!response.Succeeded)
+        var owner = Uri.UnescapeDataString(segments[0]);
+        var repository = Uri.UnescapeDataString(segments[1]);
+        var tag = Uri.UnescapeDataString(string.Join("/", segments.Skip(4)));
+        var apiUri = new Uri($"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/releases/tags/{Uri.EscapeDataString(tag)}");
+        try
         {
-            return Failed("GitHub release probe did not return a success status.");
-        }
+            using var response = await _httpClient.GetAsync(apiUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return Failed($"GitHub release metadata could not be read ({(int)response.StatusCode}).");
+            using var stream = await FrameworkCompatibility.ReadAsStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var release = document.RootElement;
+            if (!release.TryGetProperty("draft", out var draft) || draft.ValueKind != JsonValueKind.False ||
+                !release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
+                return Failed("GitHub did not return a published release with an asset inventory.");
 
-        var statusCode = response.StatusCode.GetValueOrDefault();
-        return Verified($"GitHub release probe succeeded with {(int)statusCode} {statusCode}.");
+            var remoteAssets = new Dictionary<string, long>(StringComparer.Ordinal);
+            foreach (var asset in assets.EnumerateArray())
+            {
+                if (!asset.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String ||
+                    !asset.TryGetProperty("size", out var sizeElement) || !sizeElement.TryGetInt64(out var size) ||
+                    !asset.TryGetProperty("state", out var state) || state.GetString() != "uploaded")
+                    continue;
+                var name = nameElement.GetString();
+                if (name is not null)
+                {
+                    if (remoteAssets.ContainsKey(name))
+                        return Failed("GitHub returned duplicate release asset names.");
+                    remoteAssets.Add(name, size);
+                }
+            }
+            foreach (var expected in request.GitHubAssets)
+            {
+                if (!remoteAssets.TryGetValue(expected.Key, out var actualSize))
+                    return Failed($"GitHub release is missing the expected asset {expected.Key}.");
+                if (actualSize != expected.Value)
+                    return Failed($"GitHub release asset {expected.Key} has a different byte size than the published artifact.");
+            }
+            return Verified($"GitHub release is published; {request.GitHubAssets.Count} expected asset(s) match by name and byte size.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or IOException or InvalidOperationException)
+        {
+            return Failed("GitHub release metadata could not be read or parsed.");
+        }
     }
 
     private async Task<PublishVerificationResult> VerifyNuGetAsync(PublishVerificationRequest request, CancellationToken cancellationToken)

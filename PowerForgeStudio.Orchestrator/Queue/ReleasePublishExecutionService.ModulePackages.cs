@@ -175,7 +175,11 @@ public sealed partial class ReleasePublishExecutionService
                                     ? "Signed checkpointed project release published without rebuilding."
                                     : projectResult.ErrorMessage ?? "Project GitHub publishing failed.",
                                 plan.Projects.FirstOrDefault(project =>
-                                    string.Equals(project.ProjectName, projectResult.ProjectName, StringComparison.OrdinalIgnoreCase))?.ReleaseZipPath));
+                                    string.Equals(project.ProjectName, projectResult.ProjectName, StringComparison.OrdinalIgnoreCase))?.ReleaseZipPath,
+                                githubAssetPaths: plan.Projects
+                                    .Where(project => string.Equals(project.ProjectName, projectResult.ProjectName, StringComparison.OrdinalIgnoreCase))
+                                    .Select(project => project.ReleaseZipPath!)
+                                    .ToArray()));
                         }
                     }
                     else
@@ -193,7 +197,9 @@ public sealed partial class ReleasePublishExecutionService
                                 : publishSummary.Success
                                     ? "Signed checkpointed package release published without rebuilding."
                                     : publishSummary.ErrorMessage ?? "Package GitHub publishing failed.",
-                            plan.Projects.Select(static project => project.ReleaseZipPath).FirstOrDefault(File.Exists)));
+                            plan.Projects.Select(static project => project.ReleaseZipPath).FirstOrDefault(File.Exists),
+                            githubAssetPaths: plan.Projects.Where(static project => project.IsPackable)
+                                .Select(static project => project.ReleaseZipPath!).ToArray()));
                     }
                     if (!publishSummary.Success) cancellationToken.ThrowIfCancellationRequested();
                 }

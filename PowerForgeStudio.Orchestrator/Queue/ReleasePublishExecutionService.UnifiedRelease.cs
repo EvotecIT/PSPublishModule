@@ -243,7 +243,8 @@ public sealed partial class ReleasePublishExecutionService
                     release.ReleaseUrl ?? $"{release.Owner}/{release.Repository}",
                     release.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                     release.Success ? $"GitHub release {release.TagName} published." : release.ErrorMessage ?? "Tool GitHub release failed.",
-                    release.AssetPaths.FirstOrDefault()))
+                    release.AssetPaths.FirstOrDefault(),
+                    githubAssetPaths: release.AssetPaths))
                 .ToList());
 
             if (result.UnifiedGitHubRelease is { } unified)
@@ -257,7 +258,8 @@ public sealed partial class ReleasePublishExecutionService
                     unified.ReleaseUrl ?? $"{unified.Owner}/{unified.Repository}",
                     unified.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                     unified.Success ? $"GitHub release {unified.TagName} published." : unified.ErrorMessage ?? "Unified GitHub release failed.",
-                    unified.AssetPaths.FirstOrDefault()));
+                    unified.AssetPaths.FirstOrDefault(),
+                    githubAssetPaths: unified.AssetPaths));
             }
 
             if (result.WingetSubmission is { } winget)

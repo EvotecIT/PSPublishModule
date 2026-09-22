@@ -19,6 +19,8 @@ public sealed record ReleasePublishReceipt(
     public string? PackageVersion { get; init; }
     /// <summary>Credentials or query values were omitted from the saved destination; authenticated probes need a separate credential source.</summary>
     public bool DestinationCredentialsOmitted { get; init; }
+    /// <summary>Published GitHub asset names and byte sizes captured from the checkpointed files. Null means no inventory was recorded.</summary>
+    public Dictionary<string, long>? GitHubAssets { get; init; }
     public string PackageIdentityDisplay => string.IsNullOrWhiteSpace(PackageId) || string.IsNullOrWhiteSpace(PackageVersion)
         ? string.Empty : $"{PackageId} {PackageVersion}";
     public bool HasPackageIdentity => PackageIdentityDisplay.Length > 0;

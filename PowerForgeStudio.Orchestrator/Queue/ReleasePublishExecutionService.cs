@@ -796,7 +796,8 @@ public sealed partial class ReleasePublishExecutionService
                 .Where(project => project.IsPackable)
                 .Select(project => {
                     var publishResult = publishSummary.Results.FirstOrDefault(result => string.Equals(result.ProjectName, project.ProjectName, StringComparison.OrdinalIgnoreCase));
-                    var sourcePath = ResolveProjectGitHubAssets(plan, project.ProjectName).FirstOrDefault();
+                    var projectAssets = ResolveProjectGitHubAssets(plan, project.ProjectName);
+                    var sourcePath = projectAssets.FirstOrDefault();
                     return ReleaseQueueReceiptFactory.CreatePublishReceipt(
                         repository.RootPath,
                         repository.Name,
@@ -808,7 +809,8 @@ public sealed partial class ReleasePublishExecutionService
                         publishResult?.Success == true
                             ? $"GitHub release {publishResult.TagName} published."
                             : publishResult?.ErrorMessage ?? "GitHub publish failed.",
-                        sourcePath);
+                        sourcePath,
+                        githubAssetPaths: projectAssets);
                 })
                 .ToList();
         }
@@ -833,7 +835,8 @@ public sealed partial class ReleasePublishExecutionService
                 publishSummary.Success
                     ? $"GitHub release {publishSummary.SummaryTag} published with {assets.Count} asset(s)."
                     : publishSummary.ErrorMessage ?? "GitHub publish failed.",
-                assets.FirstOrDefault())
+                assets.FirstOrDefault(),
+                githubAssetPaths: assets)
         ];
     }
 }

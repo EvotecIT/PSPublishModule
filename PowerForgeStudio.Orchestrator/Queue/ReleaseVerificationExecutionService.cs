@@ -413,7 +413,8 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
             SourcePath = publishReceipt.SourcePath,
             PackageId = publishReceipt.PackageId,
             PackageVersion = publishReceipt.PackageVersion,
-            ExpectedContentSha256 = expectedContentSha256
+            ExpectedContentSha256 = expectedContentSha256,
+            GitHubAssets = publishReceipt.GitHubAssets
         }, cancellationToken).ConfigureAwait(false);
 
     private static ReleaseVerificationReceipt MapReceipt(ReleasePublishReceipt publishReceipt, PublishVerificationResult result)

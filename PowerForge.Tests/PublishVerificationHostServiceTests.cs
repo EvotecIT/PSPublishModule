@@ -8,6 +8,55 @@ namespace PowerForge.Tests;
 
 public sealed class PublishVerificationHostServiceTests
 {
+    [Theory]
+    [InlineData("[{\"name\":\"app.zip\",\"size\":12,\"state\":\"uploaded\"},{\"name\":\"symbols.zip\",\"size\":5,\"state\":\"uploaded\"}]", true)]
+    [InlineData("[{\"name\":\"app.zip\",\"size\":12,\"state\":\"uploaded\"}]", false)]
+    [InlineData("[{\"name\":\"app.zip\",\"size\":13,\"state\":\"uploaded\"},{\"name\":\"symbols.zip\",\"size\":5,\"state\":\"uploaded\"}]", false)]
+    public async Task VerifyAsync_GitHubRelease_ComparesSavedAssetInventory(string remoteAssets, bool expectedSuccess)
+    {
+        var calls = 0;
+        using var client = new HttpClient(new StubHttpMessageHandler(request => {
+            calls++;
+            Assert.Equal("api.github.com", request.RequestUri!.Host);
+            Assert.Equal("/repos/Contoso/ReleaseOps/releases/tags/v1.2.3", request.RequestUri.AbsolutePath);
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent($"{{\"draft\":false,\"assets\":{remoteAssets}}}")
+            };
+        }));
+        using var service = new PublishVerificationHostService(client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ =>
+                throw new InvalidOperationException("PowerShell was not expected."))));
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            TargetKind = "GitHub",
+            Destination = "https://github.com/Contoso/ReleaseOps/releases/tag/v1.2.3",
+            GitHubAssets = new Dictionary<string, long> { ["app.zip"] = 12, ["symbols.zip"] = 5 }
+        });
+
+        Assert.Equal(expectedSuccess ? PublishVerificationStatus.Verified : PublishVerificationStatus.Failed, result.Status);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_GitHubRelease_LegacyReceiptCannotPassOnUrlAlone()
+    {
+        var calls = 0;
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => {
+            calls++;
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }));
+        using var service = new PublishVerificationHostService(client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ =>
+                throw new InvalidOperationException("PowerShell was not expected."))));
+
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            TargetKind = "GitHub",
+            Destination = "https://github.com/Contoso/ReleaseOps/releases/tag/v1.2.3"
+        });
+
+        Assert.Equal(PublishVerificationStatus.Failed, result.Status);
+        Assert.Equal(0, calls);
+    }
+
     [Fact]
     public void PackageIdentityReader_UsesArchiveMetadataInsteadOfFileName()
     {

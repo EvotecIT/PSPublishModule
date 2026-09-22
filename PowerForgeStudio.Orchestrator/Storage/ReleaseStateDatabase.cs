@@ -17,7 +17,7 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed partial class ReleaseStateDatabase
 {
-    private const string CurrentSchemaVersion = "23";
+    private const string CurrentSchemaVersion = "24";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
@@ -102,6 +102,7 @@ public sealed partial class ReleaseStateDatabase
             package_id,
             package_version,
             destination_credentials_omitted,
+            github_assets_json,
             status,
             summary,
             published_at_utc)
@@ -117,6 +118,7 @@ public sealed partial class ReleaseStateDatabase
             @PackageId,
             @PackageVersion,
             @DestinationCredentialsOmitted,
+            @GitHubAssetsJson,
             @Status,
             @Summary,
             @PublishedAtUtc);
@@ -133,6 +135,7 @@ public sealed partial class ReleaseStateDatabase
                package_id,
                package_version,
                destination_credentials_omitted,
+               github_assets_json,
                status,
                summary,
                published_at_utc
@@ -152,6 +155,7 @@ public sealed partial class ReleaseStateDatabase
             ["@PackageId"] = receipt.PackageId,
             ["@PackageVersion"] = receipt.PackageVersion,
             ["@DestinationCredentialsOmitted"] = receipt.DestinationCredentialsOmitted || StudioOutputSanitizer.DestinationCredentialsOmitted(receipt.Destination),
+            ["@GitHubAssetsJson"] = receipt.GitHubAssets is null ? null : System.Text.Json.JsonSerializer.Serialize(receipt.GitHubAssets),
             ["@Status"] = receipt.Status.ToString(),
             ["@Summary"] = StudioOutputSanitizer.Sanitize(receipt.Summary),
             ["@PublishedAtUtc"] = receipt.PublishedAtUtc.ToString("O")
@@ -164,12 +168,13 @@ public sealed partial class ReleaseStateDatabase
             TargetKind: reader.GetString(4),
             Destination: reader.IsDBNull(5) ? null : reader.GetString(5),
             SourcePath: reader.IsDBNull(6) ? null : reader.GetString(6),
-            Status: Enum.Parse<ReleasePublishReceiptStatus>(reader.GetString(10), ignoreCase: true),
-            Summary: reader.GetString(11),
-            PublishedAtUtc: DateTimeOffset.Parse(reader.GetString(12))) {
+            Status: Enum.Parse<ReleasePublishReceiptStatus>(reader.GetString(11), ignoreCase: true),
+            Summary: reader.GetString(12),
+            PublishedAtUtc: DateTimeOffset.Parse(reader.GetString(13))) {
             PackageId = reader.IsDBNull(7) ? null : reader.GetString(7),
             PackageVersion = reader.IsDBNull(8) ? null : reader.GetString(8),
-            DestinationCredentialsOmitted = reader.GetInt32(9) != 0
+            DestinationCredentialsOmitted = reader.GetInt32(9) != 0,
+            GitHubAssets = reader.IsDBNull(10) ? null : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, long>>(reader.GetString(10))
         });
     private static readonly ReceiptTableDefinition<ReleaseVerificationReceipt> VerificationReceiptTable = new(
         TableName: "release_verification_receipt",

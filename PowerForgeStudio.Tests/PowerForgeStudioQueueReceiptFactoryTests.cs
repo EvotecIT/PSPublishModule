@@ -8,6 +8,33 @@ namespace PowerForgeStudio.Tests;
 public sealed class PowerForgeStudioQueueReceiptFactoryTests
 {
     [Fact]
+    public void GitHubReceiptCapturesEveryPublishedAssetSize()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"powerforge-github-assets-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var first = Path.Combine(root, "app.zip");
+            var second = Path.Combine(root, "symbols.zip");
+            File.WriteAllBytes(first, new byte[12]);
+            File.WriteAllBytes(second, new byte[5]);
+
+            var receipt = ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Fixture", "ProjectBuild",
+                "GitHub release", "GitHub", "https://github.com/Contoso/Fixture/releases/tag/v1",
+                ReleasePublishReceiptStatus.Published, "Published.", first, githubAssetPaths: [first, second]);
+
+            Assert.Equal(12, receipt.GitHubAssets!["app.zip"]);
+            Assert.Equal(5, receipt.GitHubAssets["symbols.zip"]);
+            File.Delete(second);
+            var incomplete = ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Fixture", "ProjectBuild",
+                "GitHub release", "GitHub", "https://github.com/Contoso/Fixture/releases/tag/v1",
+                ReleasePublishReceiptStatus.Published, "Published.", first, githubAssetPaths: [first, second]);
+            Assert.Null(incomplete.GitHubAssets);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void FailedPublishReceipt_UsesTargetNameAsFallbackTargetKind()
     {
         var receipt = ReleaseQueueReceiptFactory.FailedPublishReceipt(

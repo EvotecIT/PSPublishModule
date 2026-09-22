@@ -11,6 +11,29 @@ namespace PowerForgeStudio.Tests;
 
 public sealed class PublicationSchemaTests
 {
+    [Fact]
+    public async Task GitHubAssetInventorySurvivesPublicationReceiptStorage()
+    {
+        var root = NewRoot();
+        try
+        {
+            var database = new ReleaseStateDatabase(Path.Combine(root, "state.db"));
+            await database.InitializeAsync();
+            var receipt = ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Fixture", "ProjectBuild",
+                "GitHub release", "GitHub", "https://github.com/Contoso/Fixture/releases/tag/v1.2.3",
+                ReleasePublishReceiptStatus.Published, "Published.") with {
+                    GitHubAssets = new Dictionary<string, long> { ["app.zip"] = 123, ["symbols.zip"] = 45 }
+                };
+
+            await database.PersistPublishReceiptsAsync("release", [receipt]);
+            var recovered = Assert.Single(await database.LoadPublishReceiptsAsync("release"));
+
+            Assert.NotNull(recovered.GitHubAssets);
+            Assert.Equal(receipt.GitHubAssets, recovered.GitHubAssets);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     private const string LegacyTable = """
         CREATE TABLE release_publish_receipt (
             session_id TEXT NOT NULL, root_path TEXT NOT NULL, repository_name TEXT NOT NULL,
@@ -72,7 +95,7 @@ public sealed class PublicationSchemaTests
             Assert.Single(recovered, value => value.Destination == "feed-b");
             Assert.Equal(original, Assert.Single(await database.LoadPublishReceiptsAsync("legacy")));
             var version = await sqlite.QueryReadOnlyAsListAsync(path, "SELECT value FROM app_schema WHERE key = 'schema_version';", reader => reader.GetString(0));
-            Assert.Equal("23", Assert.Single(version));
+            Assert.Equal("24", Assert.Single(version));
         }
         finally { Directory.Delete(root, true); }
     }

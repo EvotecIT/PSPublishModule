@@ -17,7 +17,8 @@ public static class ReleaseQueueReceiptFactory
         string summary,
         string? sourcePath = null,
         string? packageId = null,
-        string? packageVersion = null)
+        string? packageVersion = null,
+        IReadOnlyList<string>? githubAssetPaths = null)
         => new(
             RootPath: rootPath,
             RepositoryName: repositoryName,
@@ -31,8 +32,21 @@ public static class ReleaseQueueReceiptFactory
             PublishedAtUtc: DateTimeOffset.UtcNow) {
             PackageId = packageId,
             PackageVersion = packageVersion,
-            DestinationCredentialsOmitted = StudioOutputSanitizer.DestinationCredentialsOmitted(destination)
+            DestinationCredentialsOmitted = StudioOutputSanitizer.DestinationCredentialsOmitted(destination),
+            GitHubAssets = githubAssetPaths is null ? null : CaptureGitHubAssets(githubAssetPaths)
         };
+
+    private static Dictionary<string, long>? CaptureGitHubAssets(IReadOnlyList<string> paths)
+    {
+        var assets = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+            var name = Path.GetFileName(path);
+            if (string.IsNullOrWhiteSpace(name) || !assets.TryAdd(name, new FileInfo(path).Length)) return null;
+        }
+        return assets;
+    }
 
     public static ReleasePublishReceipt FailedPublishReceipt(
         string rootPath,

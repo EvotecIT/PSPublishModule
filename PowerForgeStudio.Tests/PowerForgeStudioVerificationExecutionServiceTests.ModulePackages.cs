@@ -201,20 +201,24 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ModuleOwnedGitHubRelease_ProbesRecordedUrl()
+    public async Task ExecuteAsync_ModuleOwnedGitHubRelease_ChecksSavedAssetInventory()
     {
         const string root = "C:/workspace/Contoso.ReleaseOps";
         var receipt = ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Contoso.ReleaseOps", "UnifiedRelease",
             "Docs GitHub release", "ModulePackages", "https://github.com/Contoso/ReleaseOps/releases/tag/v1.2.3",
-            ReleasePublishReceiptStatus.Published, "Published.");
+            ReleasePublishReceiptStatus.Published, "Published.") with {
+                GitHubAssets = new Dictionary<string, long> { ["release.zip"] = 12 }
+            };
         var published = new ReleasePublishExecutionResult(root, true, "Published.", "{}", [receipt]);
         var item = CreateVerifyReadyQueueItem(root, "Contoso.ReleaseOps", ReleaseRepositoryKind.Module,
             JsonSerializer.Serialize(published));
         var calls = 0;
         using var client = new HttpClient(new StubHttpMessageHandler(request => {
             calls++;
-            Assert.Equal("github.com", request.RequestUri!.Host);
-            return new HttpResponseMessage(HttpStatusCode.OK);
+            Assert.Equal("api.github.com", request.RequestUri!.Host);
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent("{\"draft\":false,\"assets\":[{\"name\":\"release.zip\",\"size\":12,\"state\":\"uploaded\"}]}")
+            };
         }));
         using var service = new ReleaseVerificationExecutionService(client,
             new PowerShellRepositoryResolver(new StubPowerShellRunner(_ =>

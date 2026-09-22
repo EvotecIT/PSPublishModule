@@ -34,4 +34,7 @@ public sealed class PublishVerificationRequest
 
     /// <summary>SHA-256 of the approved package artifact captured before publication, when available.</summary>
     public string? ExpectedContentSha256 { get; set; }
+
+    /// <summary>Expected GitHub release asset names and byte sizes. Null means the publish receipt has no asset inventory.</summary>
+    public IReadOnlyDictionary<string, long>? GitHubAssets { get; set; }
 }
