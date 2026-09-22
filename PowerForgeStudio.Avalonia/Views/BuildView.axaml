@@ -22,7 +22,7 @@
       <Border Background="#EEF4FF" CornerRadius="6" Padding="11">
         <StackPanel Spacing="4">
           <TextBlock Text="Review before execution" FontWeight="SemiBold" Foreground="#0865FF" />
-          <TextBlock Text="JSON is planned without running scripts. Inspecting PowerShell may execute trusted project code to export configuration. Script contents, credentials, environment values and raw arguments stay hidden." TextWrapping="Wrap" />
+          <TextBlock Text="JSON plans run no scripts. PowerShell inspection can run trusted code. Reviewed actions hide raw arguments; project output may contain secrets." TextWrapping="Wrap" />
         </StackPanel>
       </Border>
       <StackPanel Orientation="Horizontal" Spacing="10">

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Domain.Projects;
+using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Projects;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
@@ -165,7 +166,7 @@ public sealed partial class ProjectOverviewViewModel : ObservableObject, IDispos
         Products.Clear(); foreach (var item in snapshot.Products) Products.Add(item);
         EntryPoints.Clear(); foreach (var item in snapshot.EntryPoints) EntryPoints.Add(item);
         Prerequisites.Clear(); foreach (var item in snapshot.Prerequisites) Prerequisites.Add(item);
-        Warnings.Clear(); foreach (var warning in snapshot.Warnings) Warnings.Add(warning);
+        Warnings.Clear(); foreach (var warning in snapshot.Warnings) Warnings.Add(StudioOutputSanitizer.Sanitize(warning));
         OnPropertyChanged(nameof(HasWarnings));
         Status = $"Overview observed at {snapshot.InspectedAtUtc.LocalDateTime:t}.";
         Output = $"Observed {Products.Count} product signal(s), {EntryPoints.Count} entrypoint(s) and {Prerequisites.Count} prerequisite(s).\n" +

@@ -47,7 +47,7 @@ public sealed partial class BuildViewModel
         var progress = new Progress<ReleaseBuildProgress>(update =>
         {
             if (_disposed || version != _buildVersion) return;
-            var line = $"{update.Phase} · {update.State} · {update.Detail}";
+            var line = StudioOutputSanitizer.Sanitize($"{update.Phase} · {update.State} · {update.Detail}");
             var text = BuildOutput + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
             BuildOutput = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
         });

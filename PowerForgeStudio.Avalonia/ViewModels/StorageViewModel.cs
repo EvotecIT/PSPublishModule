@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Workspace;
+using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
@@ -156,7 +157,10 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
                     OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                 return;
             _allEntries.Clear();
-            _allEntries.AddRange(snapshot.Entries);
+            _allEntries.AddRange(snapshot.Entries.Select(entry => entry with
+            {
+                Warning = entry.Warning is null ? null : StudioOutputSanitizer.Sanitize(entry.Warning)
+            }));
             IndexedDisplay = snapshot.IndexedDisplay;
             WorktreeDisplay = snapshot.WorktreeDisplay;
             CandidateCount = snapshot.ReviewCandidateCount;

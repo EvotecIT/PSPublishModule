@@ -107,6 +107,33 @@ public sealed class BuildTests
     }
 
     [Fact]
+    public async Task PlanResultDiagnosticsAreRedactedBeforeDisplay()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-plan-diagnostic-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Build"));
+        await File.WriteAllTextAsync(Path.Combine(root, "Build", "project.build.json"), "{}");
+        var planner = new DelayedPlanner();
+        try
+        {
+            using var model = new BuildViewModel(planner);
+            model.SetWorkingCopy(root);
+            var pending = model.PlanAsync();
+            await planner.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            planner.Complete.SetResult([new RepositoryPlanResult(RepositoryPlanAdapterKind.ProjectPlan,
+                RepositoryPlanStatus.Failed, "Failed with --Token=fixture-secret", null, 1, 0,
+                "stdout --ApiKey=fixture-secret", "stderr --Password=fixture-secret")]);
+            await pending;
+
+            var result = Assert.Single(model.Results);
+            Assert.Contains("<redacted>", result.Summary);
+            Assert.Contains("<redacted>", result.OutputTail);
+            Assert.Contains("<redacted>", result.ErrorTail);
+            Assert.DoesNotContain("fixture-secret", string.Join(" ", result.Summary, result.OutputTail, result.ErrorTail), StringComparison.Ordinal);
+        }
+        finally { planner.Complete.TrySetResult([]); Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task ModuleJsonPlanningRendersAndChangingWorkingCopyClearsResults()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-build-test-" + Guid.NewGuid().ToString("N"));

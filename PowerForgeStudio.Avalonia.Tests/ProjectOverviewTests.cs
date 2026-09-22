@@ -31,6 +31,22 @@ public sealed class ProjectOverviewTests
     }
 
     [Fact]
+    public async Task SuccessfulOverviewSanitizesFilesystemWarnings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-overview-warning-" + Guid.NewGuid().ToString("N"));
+        var repository = new RepositoryCatalogEntry("Sample", root, ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository, null, null, false, false);
+        using var model = new ProjectOverviewViewModel(new WarningOverviewService());
+        model.SetProject(repository, root, Git("main", 0));
+
+        await model.RefreshAsync();
+
+        Assert.StartsWith("Overview observed", model.Status, StringComparison.Ordinal);
+        Assert.Contains("<redacted>", Assert.Single(model.Warnings));
+        Assert.DoesNotContain("fixture-secret", Assert.Single(model.Warnings), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task NewGitSnapshotDoesNotCancelMetadataForTheSameWorkingCopy()
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "studio-overview-race-" + Guid.NewGuid().ToString("N")));
@@ -160,5 +176,14 @@ public sealed class ProjectOverviewTests
         public Task<ProjectOverviewSnapshot> InspectAsync(RepositoryCatalogEntry repository, string workingCopyRoot,
             ProjectGitStatus git, CancellationToken cancellationToken = default)
             => Task.FromException<ProjectOverviewSnapshot>(new InvalidOperationException("Inspection failed with --Token=fixture-secret"));
+    }
+
+    private sealed class WarningOverviewService : IProjectOverviewService
+    {
+        public Task<ProjectOverviewSnapshot> InspectAsync(RepositoryCatalogEntry repository, string workingCopyRoot,
+            ProjectGitStatus git, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ProjectOverviewSnapshot(DateTimeOffset.UtcNow, repository.Name, "Library", "Primary repository",
+                workingCopyRoot, workingCopyRoot, "Observed purpose", null, git.BranchDisplay, git.StatusSummary,
+                git.AheadBehindDisplay, 1, [], [], [], ["Could not read README: --Token=fixture-secret"]));
     }
 }

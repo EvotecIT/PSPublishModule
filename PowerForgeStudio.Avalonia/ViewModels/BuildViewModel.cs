@@ -89,7 +89,12 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
             Status = "Inspecting configuration and generating available plans…";
             var results = await Task.Run(() => _planner.PlanRepositoryAsync(repository, cancellation.Token), cancellation.Token);
             if (_disposed || version != _contextVersion) return;
-            foreach (var result in results) Results.Add(result);
+            foreach (var result in results) Results.Add(result with
+            {
+                Summary = StudioOutputSanitizer.Sanitize(result.Summary),
+                OutputTail = result.OutputTail is null ? null : StudioOutputSanitizer.Sanitize(result.OutputTail),
+                ErrorTail = result.ErrorTail is null ? null : StudioOutputSanitizer.Sanitize(result.ErrorTail)
+            });
             HasSuccessfulInspection = results.Count > 0 && results.All(x => x.Status == RepositoryPlanStatus.Succeeded);
             Status = results.Any(x => x.Status == RepositoryPlanStatus.Failed) ? "Inspection failed. Review the details below." : "Inspection complete. Each result states whether configuration was validated, exported or planned.";
         }

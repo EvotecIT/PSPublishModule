@@ -14,6 +14,22 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class WorkspaceStorageTests
 {
     [Fact]
+    public async Task InspectionWarningIsRedactedBeforeShowingSelectedWorkingCopy()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-storage-warning-" + Guid.NewGuid().ToString("N"));
+        var entry = Entry("Sample", Path.Combine(root, "worktree"), Path.Combine(root, "Sample"),
+            "feature/test", false, 10, "Inspection failed", 0, "Not checked", "Inspect", false)
+            with { Warning = "Could not inspect --Token=fixture-secret" };
+        using var model = new StorageViewModel(new FakeStorageInspectionService([entry]));
+        model.SetWorkspace(root);
+
+        await model.RefreshAsync();
+
+        Assert.Contains("<redacted>", Assert.Single(model.Entries).Warning);
+        Assert.DoesNotContain("fixture-secret", Assert.Single(model.Entries).Warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LongStorageScanShowsProgressAndCanBeCancelled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
