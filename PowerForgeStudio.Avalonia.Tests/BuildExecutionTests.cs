@@ -102,9 +102,15 @@ public sealed class BuildExecutionTests
                     await workspace.Build.BuildAsync();
                     Assert.NotNull(workspace.Build.BuildResult);
                     Assert.False(workspace.Build.BuildResult.Succeeded);
+                    Assert.Equal("Build failed. Review diagnostics below; output from earlier runs may remain on disk.", workspace.Build.BuildStatus);
                     Assert.False(workspace.Release.HasHandoff);
                     Assert.False(workspace.Release.CanPrepare);
                     Assert.Contains(workspace.Build.BuildResult.AdapterResults, x => !string.IsNullOrWhiteSpace(x.ErrorTail));
+                    Assert.All(workspace.Build.BuildResult.AdapterResults, adapter =>
+                    {
+                        Assert.Empty(adapter.ArtifactFiles);
+                        Assert.Empty(adapter.ArtifactDirectories);
+                    });
                     Assert.True(workspace.Build.CanBuild);
                     window.UpdateLayout();
                     scroll.ScrollToEnd();

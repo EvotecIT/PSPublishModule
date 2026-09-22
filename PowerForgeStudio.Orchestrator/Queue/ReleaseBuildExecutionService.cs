@@ -495,7 +495,7 @@ public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutio
                 executeBuild: true,
                 cancellationToken: cancellationToken,
                 progress: progress));
-            var artifactInfo = CollectProjectArtifacts(execution);
+            var artifactInfo = execution.Success ? CollectProjectArtifacts(execution) : new ArtifactCollection([], []);
 
             return new ReleaseBuildAdapterResult(
                 AdapterKind: ReleaseBuildAdapterKind.ProjectBuild,
@@ -517,8 +517,8 @@ public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutio
             OutputLineReceived = line => progress.ProjectBuildOutputLine(line, isError: false),
             ErrorLineReceived = line => progress.ProjectBuildOutputLine(line, isError: true)
         }, cancellationToken);
-        var fallbackArtifactInfo = CollectProjectArtifacts(repository.RootPath);
         var succeeded = powerShellExecution.Succeeded;
+        var fallbackArtifactInfo = succeeded ? CollectProjectArtifacts(repository.RootPath) : new ArtifactCollection([], []);
 
         return new ReleaseBuildAdapterResult(
             AdapterKind: ReleaseBuildAdapterKind.ProjectBuild,

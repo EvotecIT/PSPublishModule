@@ -62,7 +62,9 @@ public sealed partial class BuildViewModel
             }).ToArray() };
             BuildStatus = cancellation.IsCancellationRequested
                 ? "Build stopped after cancellation was requested. Review any completed artifacts below."
-                : StudioOutputSanitizer.Sanitize(result.Summary);
+                : result.Succeeded
+                    ? StudioOutputSanitizer.Sanitize(result.Summary)
+                    : "Build failed. Review diagnostics below; output from earlier runs may remain on disk.";
         }
         catch (OperationCanceledException) { if (!_disposed) BuildStatus = "Build cancelled. Partial output may remain in the build directories."; }
         catch (Exception ex) { if (!_disposed) BuildStatus = $"Build failed: {StudioOutputSanitizer.Sanitize(ex.Message)}"; }
