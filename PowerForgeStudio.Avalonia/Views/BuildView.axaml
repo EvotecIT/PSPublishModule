@@ -6,25 +6,21 @@
              xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.BuildView" x:DataType="vm:BuildViewModel">
   <ScrollViewer x:Name="PageScroll">
-    <StackPanel Margin="22,14" Spacing="10">
+    <StackPanel Margin="22,12" Spacing="8">
       <StackPanel Orientation="Horizontal" Spacing="10">
         <controls:NavigationIcon Kind="output" Width="26" Height="26" Ink="#0865FF" VerticalAlignment="Center" />
         <TextBlock Text="Build &amp; Run" Classes="heading" />
       </StackPanel>
-      <TextBlock Text="Inspect the working copy, review local actions, then build." Classes="muted" TextWrapping="Wrap" />
-      <Border Classes="card" Padding="10">
-        <StackPanel Spacing="5">
-          <TextBlock Text="Working copy" Classes="muted" FontSize="11" />
-          <SelectableTextBlock Text="{Binding WorkingCopyRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding WorkingCopyRoot}" FontSize="12" />
-          <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
-        </StackPanel>
+      <Border Classes="card" Padding="10,7">
+        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*" ColumnSpacing="9" RowSpacing="3">
+          <TextBlock Text="Working copy" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+          <SelectableTextBlock Grid.Column="1" Text="{Binding WorkingCopyRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding WorkingCopyRoot}" FontSize="12" />
+          <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Status}" TextWrapping="Wrap" />
+        </Grid>
       </Border>
       <TextBlock Text="Save or discard this working copy's drafts before inspecting or building. Build commands use files on disk." IsVisible="{Binding HasUnsavedChanges}" Foreground="#B45309" TextWrapping="Wrap" />
-      <Border Background="#EEF4FF" CornerRadius="6" Padding="11" IsVisible="{Binding ShowBuildContractSection}">
-        <StackPanel Spacing="4">
-          <TextBlock Text="Review before execution" FontWeight="SemiBold" Foreground="#0865FF" />
-          <TextBlock Text="Studio does not request a build or publication while planning. Script-backed contracts can run trusted PowerShell to export a plan and may have side effects. Reviewed actions omit arguments; output may contain secrets." TextWrapping="Wrap" />
-        </StackPanel>
+      <Border Background="#EEF4FF" CornerRadius="6" Padding="10,7" IsVisible="{Binding ShowBuildContractSection}">
+        <TextBlock Text="{Binding PlanningNotice}" TextWrapping="Wrap" Foreground="#263E67" FontSize="12" />
       </Border>
       <StackPanel Orientation="Horizontal" Spacing="10">
         <Button Content="Inspect &amp; plan" Command="{Binding PlanCommand}" IsEnabled="{Binding CanPlan}" Classes.primary="{Binding EmphasizePlan}" />
@@ -32,14 +28,16 @@
         <Button Content="Build current configuration" Command="{Binding BuildCommand}" IsEnabled="{Binding CanBuild}" IsVisible="{Binding ShowBuildContractSection}" Classes.primary="{Binding CanBuild}" />
       </StackPanel>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
-      <TextBlock Text="Detected contracts" FontWeight="SemiBold" IsVisible="{Binding ShowBuildContractSection}" />
-      <SelectableTextBlock Text="{Binding ContractDisplay}" ToolTip.Tip="{Binding Contracts}" TextWrapping="Wrap" FontSize="12" IsVisible="{Binding ShowBuildContractSection}" />
+      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" IsVisible="{Binding ShowBuildContractSection}">
+        <TextBlock Text="Detected contracts" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <SelectableTextBlock Grid.Column="1" Text="{Binding ContractDisplay}" ToolTip.Tip="{Binding Contracts}" TextWrapping="Wrap" FontSize="12" VerticalAlignment="Center" />
+      </Grid>
       <ItemsControl ItemsSource="{Binding Results}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="domain:RepositoryPlanResult">
-            <Border Classes="card" Padding="0" Margin="0,0,0,10" ClipToBounds="True">
+            <Border Classes="card" Padding="0" Margin="0,0,0,6" ClipToBounds="True">
               <StackPanel>
-                <Border Background="#F7F9FC" Padding="14,11" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1">
+                <Border Background="#F7F9FC" Padding="11,8" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1">
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel Spacing="2">
                     <TextBlock Text="{Binding AdapterKind}" FontWeight="SemiBold" />
@@ -56,24 +54,24 @@
                   </Border>
                 </Grid>
                 </Border>
-                <StackPanel Margin="14,12" Spacing="9">
+                <StackPanel Margin="11,8" Spacing="6">
                   <Grid ColumnDefinitions="Auto,*">
                     <TextBlock Text="Reviewed actions" FontWeight="SemiBold" />
-                    <TextBlock Grid.Column="1" Text="Build executes local actions; publishing and installation continue in Releases." Classes="muted" TextWrapping="Wrap" HorizontalAlignment="Right" />
+                    <TextBlock Grid.Column="1" Text="Local build only · publishing continues in Releases" Classes="muted" TextWrapping="Wrap" HorizontalAlignment="Right" />
                   </Grid>
                   <ItemsControl ItemsSource="{Binding Actions}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="domain:RepositoryPlanAction">
-                        <Border Background="#F8FAFD" BorderBrush="#E4EAF2" BorderThickness="1" CornerRadius="5" Padding="10" Margin="0,0,0,6">
-                          <Grid ColumnDefinitions="32,92,*" RowDefinitions="Auto,Auto">
-                            <Border Width="24" Height="24" CornerRadius="12" Background="#E4EFFF" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <Border Background="#F8FAFD" BorderBrush="#E4EAF2" BorderThickness="1" CornerRadius="5" Padding="8,6" Margin="0,0,0,4">
+                          <Grid ColumnDefinitions="28,78,*" RowDefinitions="Auto,Auto">
+                            <Border Width="22" Height="22" CornerRadius="11" Background="#E4EFFF" HorizontalAlignment="Left" VerticalAlignment="Top">
                               <TextBlock Text="{Binding Sequence}" Foreground="#0865FF" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
-                            <Border Grid.Column="1" Background="#EEF2F7" CornerRadius="11" Padding="8,2" HorizontalAlignment="Left" VerticalAlignment="Top">
+                            <Border Grid.Column="1" Background="#EEF2F7" CornerRadius="11" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Top">
                               <TextBlock Text="{Binding Lane}" FontSize="10" FontWeight="SemiBold" />
                             </Border>
                             <TextBlock Grid.Column="2" Text="{Binding Action}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                            <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,4,0,0" Spacing="2">
+                            <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,2,0,0" Spacing="1">
                               <SelectableTextBlock Text="{Binding Target}" TextWrapping="Wrap" FontSize="12" />
                               <TextBlock Text="{Binding Detail}" Classes="muted" TextWrapping="Wrap" FontSize="11" />
                             </StackPanel>

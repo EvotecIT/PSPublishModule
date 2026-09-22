@@ -83,6 +83,28 @@ public sealed class BuildTests
     }
 
     [Fact]
+    public async Task ScriptInspectionKeepsTheExecutionWarning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-script-notice-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Build"));
+        await File.WriteAllTextAsync(Path.Combine(root, "Build", "Build-Project.ps1"), "# Planning fixture only");
+        var planner = new DelayedPlanner();
+        try
+        {
+            using var model = new BuildViewModel(planner);
+            model.SetWorkingCopy(root);
+            var pending = model.PlanAsync();
+            await planner.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            planner.Complete.SetResult([]);
+            await pending;
+            Assert.True(model.PlanningUsesScript);
+            Assert.Contains("side effects", model.PlanningNotice, StringComparison.Ordinal);
+            Assert.Contains("Project scripts", model.ContextSafetyNotice, StringComparison.Ordinal);
+        }
+        finally { planner.Complete.TrySetResult([]); Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task PlannerFailureRedactsRecognizedSecretArgumentsAndRestoresInspectionAction()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-build-error-" + Guid.NewGuid().ToString("N"));
@@ -163,6 +185,8 @@ public sealed class BuildTests
                 Assert.Equal(RepositoryPlanStatus.Succeeded, result.Status);
                 Assert.Equal(config, result.PlanPath);
                 Assert.Equal("powerforge.json", workspace.Build.ContractDisplay);
+                Assert.False(workspace.Build.PlanningUsesScript);
+                Assert.Contains("JSON inspection", workspace.Build.PlanningNotice, StringComparison.Ordinal);
                 Assert.Contains(result.Actions, action => action.Action == "Stage to staging");
                 Assert.Contains(result.Actions, action => action.Action == "Run action (Generate release metadata)");
                 Assert.Contains(result.Actions, action => action.Action == "Pack Packed");

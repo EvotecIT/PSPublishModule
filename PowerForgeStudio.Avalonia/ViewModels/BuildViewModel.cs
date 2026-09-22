@@ -13,6 +13,8 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 /// <summary>Explicit planning for the selected working copy through the shared planner.</summary>
 public sealed partial class BuildViewModel : ObservableObject, IDisposable
 {
+    private const string ScriptPlanningNotice = "Planning requests no build or publication. Script-backed contracts can still run trusted PowerShell with side effects; inspect their scripts first. Reviewed actions omit arguments, and output may contain secrets.";
+    private const string JsonPlanningNotice = "JSON inspection generates a build-only plan without requesting project scripts or publication. Review the local actions below before building.";
     private readonly IRepositoryPlanPreviewService _planner;
     private CancellationTokenSource? _operation;
     private int _contextVersion;
@@ -27,6 +29,16 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
     public ObservableCollection<RepositoryPlanResult> Results { get; } = [];
     [ObservableProperty] private string _workingCopyRoot = "";
     [ObservableProperty] private string _status = "Select a working copy to inspect its build contract.";
+    [ObservableProperty] private bool _planningUsesScript = true;
+    public string PlanningNotice => PlanningUsesScript ? ScriptPlanningNotice : JsonPlanningNotice;
+    public string ContextSafetyNotice => PlanningUsesScript
+        ? "Studio requests build-only execution. Project scripts can ignore switches or have external effects; inspect artifacts before a Studio release."
+        : "JSON-only inspection does not run project scripts or publish. Review the plan, then inspect built artifacts before a Studio release.";
+    partial void OnPlanningUsesScriptChanged(bool value)
+    {
+        OnPropertyChanged(nameof(PlanningNotice));
+        OnPropertyChanged(nameof(ContextSafetyNotice));
+    }
     [ObservableProperty] private string _contracts = "No contract inspected.";
     public string ContractDisplay => string.IsNullOrEmpty(WorkingCopyRoot) ? Contracts : string.Join("\n", Contracts.Split('\n')
         .Select(path => Path.IsPathFullyQualified(path) ? Path.GetRelativePath(WorkingCopyRoot, path) : path));
@@ -61,6 +73,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
         ClearTaskSelection();
         HasSuccessfulInspection = false;
         HasDetectedBuildContract = false;
+        PlanningUsesScript = true;
         Contracts = "No contract inspected.";
         Status = string.IsNullOrEmpty(root) ? "Select a working copy to inspect its build contract." : "Ready to inspect and plan this working copy.";
         OnPropertyChanged(nameof(CanPlan));
@@ -86,6 +99,9 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
             cancellation.Token.ThrowIfCancellationRequested();
             if (_disposed || version != _contextVersion) return;
             HasDetectedBuildContract = repository.IsReleaseManaged;
+            PlanningUsesScript = !string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath) ||
+                                 IsPowerShellScript(repository.ModuleBuildScriptPath) ||
+                                 IsPowerShellScript(repository.ProjectBuildScriptPath);
             Contracts = string.Join("\n", new[] { repository.UnifiedReleaseConfigPath, repository.ModuleBuildScriptPath, repository.ProjectBuildScriptPath }
                 .Where(x => !string.IsNullOrEmpty(x)).Distinct());
             await LoadTasksAsync(root, version, cancellation.Token);
@@ -117,6 +133,9 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void Cancel() { Status = "Cancellation requested; waiting for the planner to stop…"; _operation?.Cancel(); }
+
+    private static bool IsPowerShellScript(string? path)
+        => path?.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) == true;
 
     public void Dispose() { _disposed = true; ++_contextVersion; _operation?.Cancel(); _buildCancellation?.Cancel(); _taskCancellation?.Cancel(); }
 }
