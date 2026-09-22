@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PowerForge;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Avalonia.Views;
@@ -230,6 +231,10 @@ public sealed class WorkspaceStorageTests
                     window.Width = 1050;
                     window.Height = 720;
                     Capture(window, "storage-review-compact.png");
+                    var storageScroller = Assert.Single(window.GetVisualDescendants().OfType<ScrollViewer>(), scroll => scroll.Name == "StorageScroller");
+                    storageScroller.Offset = new global::Avalonia.Vector(0, storageScroller.Extent.Height);
+                    Capture(window, "storage-review-compact-bottom.png");
+                    Assert.True(storageScroller.Offset.Y > 0);
                 }
                 finally
                 {

@@ -165,25 +165,34 @@
             </StackPanel>
           </ScrollViewer>
           <ScrollViewer IsVisible="{Binding IsStoragePage}">
-            <StackPanel Spacing="14" DataContext="{Binding Storage}">
+            <StackPanel Spacing="12" DataContext="{Binding Storage}">
               <TextBlock Text="Review evidence" FontWeight="SemiBold" FontSize="16" />
-              <TextBlock Text="{Binding SelectedEntry.DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap" />
-              <TextBox Text="{Binding SelectedEntry.Path}" IsReadOnly="True" TextWrapping="Wrap" Height="52" FontSize="12"
-                       BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="Select and copy the full path" />
-              <TextBlock Text="Local changes" Classes="muted" />
-              <TextBlock Text="{Binding SelectedEntry.LocalStateDisplay}" TextWrapping="Wrap" />
-              <TextBlock Text="Default-branch ancestry" Classes="muted" />
-              <TextBlock Text="{Binding SelectedEntry.AncestryDisplay}" TextWrapping="Wrap" />
-              <TextBlock Text="Remote / PR evidence" Classes="muted" />
-              <TextBlock Text="Not checked" Foreground="#B45309" />
-              <TextBlock Text="Active task or process" Classes="muted" />
-              <TextBlock Text="Not checked" />
-              <TextBlock Text="Retained artifacts" Classes="muted" />
-              <TextBlock Text="Not checked" />
-              <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10">
-                <TextBlock Text="Candidate rows are local evidence. Use Review removal to refresh remote, Studio-use and retained-content checks." TextWrapping="Wrap" />
-              </Border>
-              <TextBlock Text="{Binding SelectedEntry.Warning}" Foreground="#BA2737" TextWrapping="Wrap" />
+              <TextBlock Text="Select a working copy to inspect its local evidence." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasSelection}" />
+              <StackPanel Spacing="12" IsVisible="{Binding HasSelection}">
+                <TextBlock Text="{Binding SelectedEntry.DisplayName}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
+                <TextBox Text="{Binding SelectedEntry.Path}" IsReadOnly="True" TextWrapping="Wrap" Height="52" FontSize="12"
+                         BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="Select and copy the full path" />
+                <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
+                <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="13" ColumnSpacing="8">
+                  <TextBlock Text="Local changes" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                    <controls:StatusIcon IsError="{Binding SelectedEntry.IsBroken}" IsWarning="{Binding SelectedEntry.IsChanged}" IsSuccess="{Binding !SelectedEntry.IsBroken}" Width="16" Height="16" />
+                    <TextBlock Text="{Binding SelectedEntry.LocalStateDisplay}" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <TextBlock Grid.Row="1" Text="Ancestry" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedEntry.AncestryDisplay}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="2" Text="Remote / PR" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="2" Grid.Column="1" Text="Not checked" Foreground="#B45309" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="3" Text="Active use" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="3" Grid.Column="1" Text="Not checked" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="4" Text="Retained artifacts" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="4" Grid.Column="1" Text="Not checked" TextWrapping="Wrap" />
+                </Grid>
+                <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10">
+                  <TextBlock Text="Candidate rows are local evidence. Use Review removal to refresh remote, Studio-use and retained-content checks." TextWrapping="Wrap" />
+                </Border>
+                <TextBlock Text="{Binding SelectedEntry.Warning}" Foreground="#BA2737" TextWrapping="Wrap" />
+              </StackPanel>
             </StackPanel>
           </ScrollViewer>
           <ScrollViewer IsVisible="{Binding IsAutomationsPage}">

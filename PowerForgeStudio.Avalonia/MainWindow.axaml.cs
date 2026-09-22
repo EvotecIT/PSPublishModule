@@ -30,6 +30,7 @@ public sealed partial class MainWindow : Window
         var compact = width < 1280;
         if (_compactLayout == compact) return;
         _compactLayout = compact;
+        if (DataContext is WorkspaceViewModel model) model.CompactViewport = compact;
         ContextPanel.IsVisible = !compact;
         WorkspaceLayout.ColumnDefinitions[4].Width = new GridLength(compact ? 0 : 280);
         WorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(compact ? 270 : 326);

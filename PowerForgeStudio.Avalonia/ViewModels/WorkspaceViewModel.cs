@@ -127,7 +127,13 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public GitHubViewModel GitHub { get; }
     [ObservableProperty] private bool _isGitHubPage;
     partial void OnIsGitHubPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(OutputPaneHeight)); }
-    public global::Avalonia.Controls.GridLength OutputPaneHeight => new(IsGitHubPage || IsReleasePage ? 0 : IsHistoryPage ? 110 : 170);
+    private bool _compactViewport;
+    public bool CompactViewport
+    {
+        get => _compactViewport;
+        set { if (SetProperty(ref _compactViewport, value)) OnPropertyChanged(nameof(OutputPaneHeight)); }
+    }
+    public global::Avalonia.Controls.GridLength OutputPaneHeight => new(IsGitHubPage || IsReleasePage ? 0 : IsHistoryPage || CompactViewport ? 110 : 170);
     [RelayCommand] private void ShowGitHub() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsReleasePage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
