@@ -35,7 +35,7 @@
             </StackPanel>
           </Grid>
           <TextBlock Text="{Binding GitState}" Classes="muted" FontSize="12" TextTrimming="CharacterEllipsis" />
-          <TextBox Text="{Binding WorkingCopyRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="20" FontSize="11"
+          <TextBox Text="{Binding WorkingCopyRoot}" IsReadOnly="True" TextWrapping="Wrap" MinHeight="20" MaxHeight="52" FontSize="11"
                    BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding WorkingCopyRoot}" AutomationProperties.Name="Working copy path" />
         </StackPanel>
       </Border>
