@@ -1,8 +1,8 @@
 # PowerShell compilation readiness assessment
 
-Updated: 2026-09-22. M28 run/watch implementation: `3823979bd305cb530fd5586e75eff46dc49f5db8` on `feature/powershell-compiler`. Earlier audit baseline: `419620a88000a714cfb4450821a02fb8e5364583`; corrections: `18e443a1401611e7e144c39cc52b27f3e9c25ab0`; stopping-fixture consolidation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1`.
+Updated: 2026-09-22. M28 NuGet packaging implementation: `7ba90d82352152195472e5526e57fc4f18adbdbc`. M28 run/watch implementation: `3823979bd305cb530fd5586e75eff46dc49f5db8` on `feature/powershell-compiler`. Earlier audit baseline: `419620a88000a714cfb4450821a02fb8e5364583`; corrections: `18e443a1401611e7e144c39cc52b27f3e9c25ab0`; stopping-fixture consolidation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1`.
 
-The compiler has a substantial semantic architecture and useful bounded Hybrid/Strict workflows. The September 22 audit findings are closed with implementation and artifact evidence. M28 now includes executable run/watch through the existing project owner and thin CLI. Packaging integration, grouped diagnostics, observed debugging, and complete library/module quickstarts remain open. Integration, public distribution, and additional platform qualification remain separate work.
+The compiler has a substantial semantic architecture and useful bounded Hybrid/Strict workflows. The September 22 audit findings are closed with implementation and artifact evidence. M28 now includes executable run/watch and Strict library NuGet packaging through existing owners and thin CLI surfaces. Grouped diagnostics, observed debugging, the module quickstart, and additional host qualification remain open. Integration, public distribution, and additional platform qualification remain separate work.
 
 The independent read-only audit covered the three latest baseline implementation commits (`bc925783a`, `c589eea3c`, `419620a88`) and surrounding contracts. Primary inspection also covered target policy, native host bridges, the compiler gate, CI wiring, and roadmap consistency. This is not an exhaustive audit of all 975 changed files in the continuation. One targeted read-only confirmation of the corrective implementation reported no actionable P0–P3 findings.
 
@@ -77,6 +77,37 @@ Strict packet `powerforge-public-powershell-modules-net10-v1`, SHA-256 `ef647810
 | Multifile application | 11 | `4f6ad817d9cef16739f9959a7c68662de3b554ff555bc7ce20e0a18cc3a1b1eb` |
 
 The recurring gate now requires passing run, watch lifecycle, launch-integrity, and CLI-stream families in addition to the existing compiler/package/provider families. M28 remains partial; its remaining acceptance checklist is maintained in [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md).
+
+## M28 project NuGet packaging
+
+`project pack --format nuget` now delegates one tested Strict library to the existing `PowerShellCompilationLibraryPackageBuilder`. The project supplies explicit metadata and an optional generated-ABI baseline. ZIP remains the default format, and project install continues to consume ZIPs. The [library quickstart](PowerForge.PowerShellCompilation.LibraryPackages.md) covers the complete local-feed consumer path.
+
+Packaging validates the exact build receipt and current test evidence, then uses the isolated project package environment for the independent rebuild. Generated source now retains the exact NuGet lock and enables locked restore. The shared packer verifies that lock against the artifact's recorded hash, owns the rebuild process tree, and preserves existing output when cancellation or validation fails before publication. There is no new packer, dependency resolver, or ABI checker.
+
+Qualification before the broad gate:
+
+- **34/34** focused project API, CLI, library-packaging, ABI, publication, and project-workflow tests passed with zero failures/skips in **2m36s**. Ordinary local-feed consumers built and ran both `net10.0` and Windows `net472` libraries without loading PowerShell. Tests exercised explicit metadata/target selection, required test evidence, emitted lock retention, ABI rejection, artifact tampering, cancellation, and existing ZIP/install behavior.
+- **2/2** provider dependency cases passed in **18s**. The Strict case also packages through the project workflow and runs an ordinary consumer using the reviewed adapter and its managed dependency. Changing the provider package blocks repacking and preserves the previous output.
+- The documented CLI quickstart ran directly through init → lock → restore → build → test → NuGet pack → `dotnet add package` → consumer run, printing **42**. Its package SHA-256 was `087a391a27ae3d9f6b288a64f0ae53f8d3fe41bfda64a5d00ca53921296752b9`.
+- Shared `PowerForge.PowerShell` Release `net472` build passed with **zero warnings/errors**. The repository/compiler gate selects SDK **10.0.303**; the standalone quickstart consumer outside that SDK selection used **10.0.400**. PowerShell **7.6.5**, Windows PowerShell **5.1.26100.9444**, Windows x64.
+- One fresh read-only local review (`nuget_project_review`) found no actionable P0–P3 issue in staged patch `a187ea23df9a0499bae3507c8a6b09783568cb52`. The reviewed packaging/integrity boundary is current; no confirmation pass was needed.
+
+The first added provider-project consumer exceeded the Windows consumer toolchain's path-length limit in the deeply nested temporary fixture. The fixture now uses the same compact task-owned root pattern as other artifact consumers. This is not long-path qualification; M29 retains that requirement. NuGet packaging supports one selected framework per package, unsigned Strict input, and restore/rebuild upgrades. Public feeds, signing, binary drop-in upgrades, additional platforms, and general PowerShell compatibility remain separate work.
+
+The full compiler gate passed **1,111/1,111**, zero failures/skips, in **44m09s**, followed by **6/6 Strict programs**, **24 emitted units**, and zero failures/regressions on `net10.0` / `win-x64`. The gate now requires project NuGet consumer and CLI families in addition to existing library/provider/ABI/publication coverage. The implementation is `7ba90d82352152195472e5526e57fc4f18adbdbc`; only evidence and roadmap prose changed afterward.
+
+Gate evidence identities: test TRX SHA-256 `cb3944eeb5968add60ab5cccf5cbdae887a8941d85dddc3d8101bfcb05d51304`; compiler assembly `8df8ac7db77332cd04d18bc1bf24260e1a8147d5b86fa0e99ba5147238b04648`; test assembly `5e53209e3a6a0eb3bfd8968dc36febcd3777ff75cb87cd1a419873e04ae4f5e6`. Strict packet `powerforge-public-powershell-modules-net10-v1` retains input SHA-256 `ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e`; result JSON SHA-256 `fd355ca0f3a81534fb82baa4ffd0bac819d766c8888266d7ee8632ee904cf21f`.
+
+| Strict program | Emitted units | Artifact SHA-256 |
+| --- | --- | --- |
+| Number theory | 3 | `96f427d25ffba1851fdbccb79f4a27ed43e5d827caff4c5fdd86fdbdbcb52a06` |
+| Calendar rules | 3 | `ed30c86939ab80bd5bd399746e536b2c04b95ed4d0da7d54446aaf621307c05e` |
+| Recursion/local call | 3 | `4dc0fa65441329076aa47e21eb29ae665a2329493a0f78c292eadfccef3a3156` |
+| Collection mutation | 2 | `0faed6b75502d774f486325ab0a0067a6b54b27bcf283d4d97bce6b4db40bc7f` |
+| Switch/control flow | 2 | `747d99c94f8d39259ca6d88b0483ade8dca98fd7255693dde3cf20468676f47e` |
+| Multifile application | 11 | `6bc917641df750de1a4f25a30b2f9aeb89b841947a75ee02cfc3fe4d41e87d1c` |
+
+No PR, GitHub CI run, merge, or public package release was created for this goal. Local implementation and qualification do not replace M29 integration/release gates. Task-owned transient outputs are removed after this evidence is recorded.
 
 ## Design and compatibility boundaries
 
