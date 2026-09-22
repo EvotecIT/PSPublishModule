@@ -3,6 +3,9 @@ using PowerForge;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Verification;
+using PowerForgeStudio.Orchestrator.Catalog;
+using PowerForgeStudio.Orchestrator.Host;
+using PowerForgeStudio.Orchestrator.Portfolio;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
@@ -262,8 +265,39 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
 
     private async Task<ReleaseVerificationReceipt> VerifyNuGetAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
     {
-        var result = await VerifyWithHostAsync(publishReceipt, cancellationToken);
+        string? destinationOverride = null;
+        if (publishReceipt.DestinationCredentialsOmitted && publishReceipt.PublicRegistry is null)
+        {
+            destinationOverride = TryResolveCurrentNuGetDestination(publishReceipt);
+            if (destinationOverride is null)
+                return FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind,
+                    publishReceipt.TargetName, publishReceipt.Destination,
+                    "The saved NuGet destination omitted URL credentials or query values. The matching current project configuration is unavailable, so remote verification could not run.",
+                    publishReceipt.TargetKind);
+        }
+        var result = await VerifyWithHostAsync(publishReceipt, cancellationToken, destinationOverride);
         return MapReceipt(publishReceipt, result);
+    }
+
+    private static string? TryResolveCurrentNuGetDestination(ReleasePublishReceipt receipt)
+    {
+        if (!string.Equals(receipt.AdapterKind, "ProjectBuild", StringComparison.OrdinalIgnoreCase) ||
+            !Directory.Exists(receipt.RootPath)) return null;
+        try
+        {
+            var repository = new RepositoryCatalogScanner().InspectRepository(receipt.RootPath);
+            if (string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath)) return null;
+            var configPath = RepositoryPlanPreviewService.ResolveProjectConfigPath(repository.ProjectBuildScriptPath, receipt.RootPath);
+            if (string.IsNullOrWhiteSpace(configPath)) return null;
+            var current = new ProjectBuildPublishHostService().ResolvePublishDestinationForVerification(configPath);
+            return StudioOutputSanitizer.DestinationCredentialsOmitted(current) &&
+                   string.Equals(StudioOutputSanitizer.SanitizeDestination(current), receipt.Destination, StringComparison.Ordinal)
+                ? current : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task<ReleaseVerificationReceipt> VerifyPowerShellRepositoryAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
@@ -290,14 +324,14 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
     private static ReleaseVerificationReceipt FailedReceipt(string rootPath, string repositoryName, string adapterKind, string targetName, string? destination, string summary, string? targetKind = null)
         => ReleaseQueueReceiptFactory.FailedVerificationReceipt(rootPath, repositoryName, adapterKind, targetName, destination, summary, targetKind);
 
-    private async Task<PublishVerificationResult> VerifyWithHostAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
+    private async Task<PublishVerificationResult> VerifyWithHostAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken, string? destinationOverride = null)
         => await _verificationHostService.VerifyAsync(new PublishVerificationRequest {
             RootPath = publishReceipt.RootPath,
             RepositoryName = publishReceipt.RepositoryName,
             AdapterKind = publishReceipt.AdapterKind,
             TargetName = publishReceipt.TargetName,
             TargetKind = publishReceipt.TargetKind,
-            Destination = publishReceipt.Destination,
+            Destination = destinationOverride ?? publishReceipt.Destination,
             SourcePath = publishReceipt.SourcePath,
             PackageId = publishReceipt.PackageId,
             PackageVersion = publishReceipt.PackageVersion

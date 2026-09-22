@@ -180,6 +180,110 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
         Assert.Contains("saved publication identity", Assert.Single(reopened.Receipts).Summary);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_RedactedPrivateFeed_FailsClearlyWithoutUnauthenticatedProbe()
+    {
+        const string address = "https://user:password@packages.contoso.test/nuget/v3/index.json?token=secret";
+        var receipt = ReleaseQueueReceiptFactory.CreatePublishReceipt("root", "Package", "ProjectBuild", "Package.1.2.3.nupkg",
+            "NuGet", address, ReleasePublishReceiptStatus.Published, "Published.", packageId: "Package", packageVersion: "1.2.3");
+        var publishResult = new ReleasePublishExecutionResult("root", true, "Published.", "{}", [receipt]);
+        var queueItem = CreateVerifyReadyQueueItem("root", "Package", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(publishResult));
+        var calls = 0;
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => { calls++; return new HttpResponseMessage(HttpStatusCode.OK); }));
+        using var service = new ReleaseVerificationExecutionService(client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))));
+
+        var result = await service.ExecuteAsync(queueItem);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(0, calls);
+        Assert.Contains("matching current project configuration is unavailable", Assert.Single(result.Receipts).Summary);
+        Assert.DoesNotContain("password", JsonSerializer.Serialize(result));
+        Assert.DoesNotContain("secret", JsonSerializer.Serialize(result));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RedactedPrivateFeed_ReopensMatchingConfigOnlyForInMemoryProbe()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-private-feed-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var build = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+            File.WriteAllText(Path.Combine(root, "Package.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            const string address = "https://packages.contoso.test/nuget/v3/index.json?token=private-secret";
+            File.WriteAllText(Path.Combine(build, "project.build.json"), JsonSerializer.Serialize(new { PublishSource = address }));
+            var receipt = ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Package", "ProjectBuild", "Package.1.2.3.nupkg",
+                "NuGet", address, ReleasePublishReceiptStatus.Published, "Published.", packageId: "Package", packageVersion: "1.2.3");
+            var publish = new ReleasePublishExecutionResult(root, true, "Published.", "{}", [receipt]);
+            var item = CreateVerifyReadyQueueItem(root, "Package", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(publish));
+            var requests = new List<Uri>();
+            using var client = new HttpClient(new StubHttpMessageHandler(request => {
+                requests.Add(request.RequestUri!);
+                return CreateResponse(request.RequestUri);
+            }));
+            using var service = new ReleaseVerificationExecutionService(client,
+                new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))));
+
+            var result = await service.ExecuteAsync(item);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(ReleaseVerificationReceiptStatus.Verified, Assert.Single(result.Receipts).Status);
+            Assert.Contains(requests, request => request.AbsolutePath.EndsWith("index.json") && request.Query.Contains("private-secret"));
+            Assert.DoesNotContain("private-secret", JsonSerializer.Serialize(result));
+
+            File.WriteAllText(Path.Combine(build, "project.build.json"),
+                JsonSerializer.Serialize(new { PublishSource = "https://other.contoso.test/nuget/v3/index.json?token=rotated" }));
+            var priorCalls = requests.Count;
+            var changed = await service.ExecuteAsync(item);
+            Assert.False(changed.Succeeded);
+            Assert.Equal(priorCalls, requests.Count);
+            Assert.Contains("matching current project configuration is unavailable", Assert.Single(changed.Receipts).Summary);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_PrivateFeedUserInfo_UsesBasicAuthOnlyForMatchingOrigin(bool crossOriginPackage)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-private-feed-auth-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var build = Directory.CreateDirectory(Path.Combine(root, "Build")).FullName;
+            File.WriteAllText(Path.Combine(root, "Package.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+            const string address = "https://feed-user:feed-password@packages.contoso.test/nuget/v3/index.json";
+            File.WriteAllText(Path.Combine(build, "project.build.json"), JsonSerializer.Serialize(new { PublishSource = address }));
+            var receipt = ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Package", "ProjectBuild", "Package.1.2.3.nupkg",
+                "NuGet", address, ReleasePublishReceiptStatus.Published, "Published.", packageId: "Package", packageVersion: "1.2.3");
+            var item = CreateVerifyReadyQueueItem(root, "Package", ReleaseRepositoryKind.Library,
+                JsonSerializer.Serialize(new ReleasePublishExecutionResult(root, true, "Published.", "{}", [receipt])));
+            var observed = new List<(Uri Address, string? Auth)>();
+            using var client = new HttpClient(new StubHttpMessageHandler(request => {
+                observed.Add((request.RequestUri!, request.Headers.Authorization?.ToString()));
+                if (request.RequestUri!.AbsolutePath.EndsWith("/index.json", StringComparison.OrdinalIgnoreCase))
+                    return new HttpResponseMessage(HttpStatusCode.OK) {
+                        Content = new StringContent("{\"resources\":[{\"@id\":\"https://" +
+                            (crossOriginPackage ? "other.contoso.test" : "packages.contoso.test") +
+                            "/v3-flatcontainer/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}" )
+                    };
+                return CreateResponse(request.RequestUri);
+            }));
+            using var service = new ReleaseVerificationExecutionService(client,
+                new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))));
+
+            var result = await service.ExecuteAsync(item);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(2, observed.Count);
+            Assert.All(observed, request => Assert.DoesNotContain("feed-password", request.Address.AbsoluteUri));
+            Assert.StartsWith("Basic ", observed[0].Auth);
+            Assert.Equal(crossOriginPackage ? null : observed[0].Auth, observed[1].Auth);
+            Assert.DoesNotContain("feed-password", JsonSerializer.Serialize(result));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

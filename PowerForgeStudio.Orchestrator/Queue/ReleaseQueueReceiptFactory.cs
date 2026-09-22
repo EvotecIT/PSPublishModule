@@ -1,5 +1,6 @@
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Verification;
+using PowerForgeStudio.Orchestrator.Host;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
@@ -23,13 +24,14 @@ public static class ReleaseQueueReceiptFactory
             AdapterKind: adapterKind,
             TargetName: targetName,
             TargetKind: targetKind,
-            Destination: destination,
+            Destination: StudioOutputSanitizer.SanitizeDestination(destination),
             SourcePath: sourcePath,
             Status: status,
-            Summary: summary,
+            Summary: StudioOutputSanitizer.Sanitize(summary),
             PublishedAtUtc: DateTimeOffset.UtcNow) {
             PackageId = packageId,
-            PackageVersion = packageVersion
+            PackageVersion = packageVersion,
+            DestinationCredentialsOmitted = StudioOutputSanitizer.DestinationCredentialsOmitted(destination)
         };
 
     public static ReleasePublishReceipt FailedPublishReceipt(
@@ -82,9 +84,9 @@ public static class ReleaseQueueReceiptFactory
             AdapterKind: publishReceipt.AdapterKind,
             TargetName: publishReceipt.TargetName,
             TargetKind: publishReceipt.TargetKind,
-            Destination: publishReceipt.Destination,
+            Destination: StudioOutputSanitizer.SanitizeDestination(publishReceipt.Destination),
             Status: status,
-            Summary: summary,
+            Summary: StudioOutputSanitizer.Sanitize(summary),
             VerifiedAtUtc: DateTimeOffset.UtcNow);
 
     public static ReleaseVerificationReceipt FailedVerificationReceipt(
@@ -101,8 +103,8 @@ public static class ReleaseQueueReceiptFactory
             AdapterKind: adapterKind,
             TargetName: targetName,
             TargetKind: string.IsNullOrWhiteSpace(targetKind) ? targetName : targetKind!,
-            Destination: destination,
+            Destination: StudioOutputSanitizer.SanitizeDestination(destination),
             Status: ReleaseVerificationReceiptStatus.Failed,
-            Summary: summary,
+            Summary: StudioOutputSanitizer.Sanitize(summary),
             VerifiedAtUtc: DateTimeOffset.UtcNow);
 }

@@ -112,7 +112,7 @@ public sealed partial class ReleaseViewModel
             PublicationReceipts.Clear();
             SelectedPublicationReceipt = null;
             foreach (var receipt in result.Execution.Receipts)
-                PublicationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.Sanitize(receipt.Destination) });
+                PublicationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.SanitizeDestination(receipt.Destination) });
             OnPropertyChanged(nameof(HasPublicationReceipts)); ResetPublicationApproval();
             PublicationSummary = result.Execution.Succeeded
                 ? "The inspected destinations are shown above. Publication receipts are recorded below."
@@ -155,7 +155,7 @@ public sealed partial class ReleaseViewModel
             Handoff = captured with { Session = result.Session };
             VerificationReceipts.Clear();
             foreach (var receipt in result.Execution.Receipts)
-                VerificationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.Sanitize(receipt.Destination) });
+                VerificationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.SanitizeDestination(receipt.Destination) });
             OnPropertyChanged(nameof(HasVerificationReceipts));
             PublicationSummary = result.Execution.Succeeded
                 ? "Publication and verification receipts are recorded below."

@@ -1,4 +1,5 @@
 using PowerForgeStudio.Domain.Publish;
+using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Domain.Verification;
 using PowerForgeStudio.Orchestrator.Queue;
 
@@ -45,5 +46,54 @@ public sealed class PowerForgeStudioQueueReceiptFactoryTests
         Assert.Equal(publishReceipt.RootPath, verificationReceipt.RootPath);
         Assert.Equal(publishReceipt.TargetKind, verificationReceipt.TargetKind);
         Assert.Equal(ReleaseVerificationReceiptStatus.Verified, verificationReceipt.Status);
+    }
+
+    [Fact]
+    public void PublicationReceiptsPersistOnlySafeDestinationAndSummary()
+    {
+        const string address = "https://feed-user:feed-password@packages.example.test/v3/index.json?token=query-secret#fragment-secret";
+        var published = ReleaseQueueReceiptFactory.CreatePublishReceipt(
+            "root", "Package", "ProjectBuild", "Package.1.0.0.nupkg", "NuGet", address,
+            ReleasePublishReceiptStatus.Published, $"Published to {address}.");
+        var verified = ReleaseQueueReceiptFactory.CreateVerificationReceipt(published,
+            ReleaseVerificationReceiptStatus.Verified, $"Verified at {address}.");
+
+        Assert.Equal("https://packages.example.test/v3/index.json", published.Destination);
+        Assert.True(published.DestinationCredentialsOmitted);
+        Assert.DoesNotContain("feed-password", System.Text.Json.JsonSerializer.Serialize(published));
+        Assert.DoesNotContain("query-secret", System.Text.Json.JsonSerializer.Serialize(published));
+        Assert.DoesNotContain("feed-password", System.Text.Json.JsonSerializer.Serialize(verified));
+        Assert.DoesNotContain("query-secret", System.Text.Json.JsonSerializer.Serialize(verified));
+    }
+
+    [Fact]
+    public async Task PublicationProgressOmitsCredentialsFromPlannedAndFailedDetails()
+    {
+        const string address = "https://feed-user:feed-password@packages.example.test/v3/index.json?token=query-secret";
+        var target = new ReleasePublishTarget("root", "Package", "ProjectBuild", "NuGet", "NuGet", "Package.1.0.0.nupkg", address);
+        var sink = new CapturingProgressSink();
+        var tracker = new ReleasePublicationProgressTracker([target], sink);
+
+        await tracker.InitializeAsync(CancellationToken.None);
+        await tracker.CompleteAsync(static _ => true, [], $"Push failed at {address}", CancellationToken.None);
+
+        Assert.Equal(2, sink.Events.Count);
+        foreach (var update in sink.Events)
+        {
+            Assert.DoesNotContain("feed-password", update.Detail);
+            Assert.DoesNotContain("query-secret", update.Detail);
+            Assert.Contains("https://packages.example.test/v3/index.json", update.Detail);
+        }
+    }
+
+    private sealed class CapturingProgressSink : IReleaseArtifactProgressSink
+    {
+        public List<ReleaseArtifactProgress> Events { get; } = [];
+
+        public ValueTask ReportAsync(ReleaseArtifactProgress progress, CancellationToken cancellationToken = default)
+        {
+            Events.Add(progress);
+            return ValueTask.CompletedTask;
+        }
     }
 }

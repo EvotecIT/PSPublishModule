@@ -27,6 +27,8 @@ public sealed class PublicationPreviewTests
             Assert.Equal(githubPackages ? "https://nuget.pkg.github.com/EvotecIT/index.json" : "https://api.nuget.org/v3/index.json", preview.NuGetDestination, ignoreCase: true);
             Assert.Equal("EvotecIT/Fixture", preview.GitHubRepository);
             Assert.DoesNotContain("must-not-appear", JsonSerializer.Serialize(preview));
+            Assert.Equal(preview.NuGetDestination,
+                new ProjectBuildPublishHostService().ResolvePublishDestinationForVerification(config));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -35,6 +37,7 @@ public sealed class PublicationPreviewTests
     [InlineData("https://user:password@example.test/feed?key=private#secret", "https://example.test/feed")]
     [InlineData("https://user:password@example.test:bad/feed?key=private#secret", "Invalid publication URL (details omitted)")]
     [InlineData("https://user:password@[invalid/feed?key=private#secret", "Invalid publication URL (details omitted)")]
+    [InlineData("https:/user:password@example.test/feed?key=private", "Invalid publication URL (details omitted)")]
     public void PreviewRemovesUriCredentialComponents(string source, string expected)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-preview-redaction-" + Guid.NewGuid().ToString("N"))).FullName;

@@ -170,6 +170,23 @@ public sealed class PowerForgeStudioStateDatabaseTests
     }
 
     [Fact]
+    public async Task PersistReleaseReceiptsAsync_RemovesUrlCredentialsAtStorageBoundary()
+    {
+        var stateDatabase = await CreateStateDatabaseAsync();
+        const string address = "https://feed-user:feed-password@packages.example.test/v3/index.json?token=query-secret";
+        await stateDatabase.PersistPublishReceiptsAsync("secret-session", [
+            new ReleasePublishReceipt("root", "Package", "ProjectBuild", "NuGet", "NuGet", address,
+                "Package.1.0.0.nupkg", ReleasePublishReceiptStatus.Published, $"Published to {address}", DateTimeOffset.UtcNow)
+        ]);
+
+        var receipt = Assert.Single(await stateDatabase.LoadPublishReceiptsAsync("secret-session"));
+        Assert.Equal("https://packages.example.test/v3/index.json", receipt.Destination);
+        Assert.True(receipt.DestinationCredentialsOmitted);
+        Assert.DoesNotContain("feed-password", receipt.Summary);
+        Assert.DoesNotContain("query-secret", receipt.Summary);
+    }
+
+    [Fact]
     public async Task PersistSigningReceiptsAsync_RoundTripsArtifactMetadata()
     {
         var stateDatabase = await CreateStateDatabaseAsync();

@@ -1,5 +1,6 @@
 using DBAClientX;
 using PowerForgeStudio.Orchestrator.Queue;
+using PowerForgeStudio.Orchestrator.Host;
 
 namespace PowerForgeStudio.Orchestrator.Storage;
 
@@ -86,12 +87,12 @@ public sealed partial class ReleaseStateDatabase
         => new() {
             ["@SessionId"] = sessionId,
             ["@Stage"] = progress.Stage.ToString(),
-            ["@ItemName"] = progress.ItemName,
-            ["@ItemPath"] = progress.ItemPath,
-            ["@State"] = progress.State,
+            ["@ItemName"] = StudioOutputSanitizer.Sanitize(progress.ItemName),
+            ["@ItemPath"] = progress.ItemPath is null ? null : StudioOutputSanitizer.Sanitize(progress.ItemPath),
+            ["@State"] = StudioOutputSanitizer.Sanitize(progress.State),
             ["@CompletedItems"] = progress.CompletedItems,
             ["@TotalItems"] = progress.TotalItems,
-            ["@Detail"] = progress.Detail,
+            ["@Detail"] = StudioOutputSanitizer.Sanitize(progress.Detail),
             ["@ObservedAtUtc"] = progress.ObservedAtUtc.ToString("O")
         };
 }

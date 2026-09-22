@@ -1,5 +1,6 @@
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
+using PowerForgeStudio.Orchestrator.Host;
 
 namespace PowerForgeStudio.Orchestrator.Queue;
 
@@ -24,7 +25,7 @@ internal sealed class ReleasePublicationProgressTracker(
                 "Planned",
                 completedItems: 0,
                 totalItems: targets.Count,
-                $"Destination: {target.Destination}",
+                $"Destination: {StudioOutputSanitizer.SanitizeDestination(target.Destination)}",
                 CancellationToken.None).ConfigureAwait(false);
         }
     }
@@ -43,7 +44,7 @@ internal sealed class ReleasePublicationProgressTracker(
                 "Publishing",
                 _completed.Count,
                 targets.Count,
-                detail,
+                StudioOutputSanitizer.Sanitize(detail),
                 CancellationToken.None).ConfigureAwait(false);
         }
     }
@@ -75,7 +76,7 @@ internal sealed class ReleasePublicationProgressTracker(
                 state,
                 _completed.Count,
                 targets.Count,
-                detail,
+                StudioOutputSanitizer.Sanitize(detail),
                 CancellationToken.None).ConfigureAwait(false);
         }
     }

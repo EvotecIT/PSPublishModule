@@ -15,6 +15,7 @@ public sealed partial class ReleaseStateDatabase
             source_path TEXT NULL,
             package_id TEXT NULL,
             package_version TEXT NULL,
+            destination_credentials_omitted INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL,
             summary TEXT NOT NULL,
             published_at_utc TEXT NOT NULL
@@ -35,6 +36,8 @@ public sealed partial class ReleaseStateDatabase
                 await transaction.ExecuteNonQueryAsync("ALTER TABLE release_publish_receipt ADD COLUMN package_id TEXT NULL;", cancellationToken: token).ConfigureAwait(false);
             if (!columns.Any(column => column.Name == "package_version"))
                 await transaction.ExecuteNonQueryAsync("ALTER TABLE release_publish_receipt ADD COLUMN package_version TEXT NULL;", cancellationToken: token).ConfigureAwait(false);
+            if (!columns.Any(column => column.Name == "destination_credentials_omitted"))
+                await transaction.ExecuteNonQueryAsync("ALTER TABLE release_publish_receipt ADD COLUMN destination_credentials_omitted INTEGER NOT NULL DEFAULT 0;", cancellationToken: token).ConfigureAwait(false);
             if (columns.Any(column => column.Name == "receipt_id" && column.Type.Equals("INTEGER", StringComparison.OrdinalIgnoreCase) && column.PrimaryKey == 1))
                 return;
 

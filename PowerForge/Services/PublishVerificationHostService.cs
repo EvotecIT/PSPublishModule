@@ -144,7 +144,8 @@ public sealed class PublishVerificationHostService : IDisposable
             return Skipped("A probeable package endpoint could not be derived from the recorded NuGet destination.");
         }
 
-        var response = await ProbeNuGetPackageAsync(probeUri, cancellationToken).ConfigureAwait(false);
+        var credentialSource = Uri.TryCreate(destination, UriKind.Absolute, out var destinationUri) ? destinationUri : null;
+        var response = await ProbeNuGetPackageAsync(probeUri, credentialSource, cancellationToken).ConfigureAwait(false);
         if (!response.Succeeded)
         {
             return Failed($"Package probe failed for {identity.Id} {identity.Version} against {probeUri.Host}.");
@@ -200,8 +201,9 @@ public sealed class PublishVerificationHostService : IDisposable
             return Failed($"PowerShell repository '{destination}' could not be resolved to a probeable endpoint.");
         }
 
+        var repositorySource = resolvedRepository.SourceUri ?? resolvedRepository.PublishUri ?? destination;
         var probeUri = await ResolveNuGetPackageProbeUriAsync(
-            resolvedRepository.SourceUri ?? resolvedRepository.PublishUri ?? destination,
+            repositorySource,
             new NuGetPackageIdentity(metadata.ModuleName, moduleVersion),
             cancellationToken).ConfigureAwait(false);
         if (probeUri is null)
@@ -209,7 +211,8 @@ public sealed class PublishVerificationHostService : IDisposable
             return Skipped("A probeable package endpoint could not be derived from the configured PowerShell repository.");
         }
 
-        var probeResponse = await ProbeNuGetPackageAsync(probeUri, cancellationToken).ConfigureAwait(false);
+        var credentialSource = Uri.TryCreate(repositorySource, UriKind.Absolute, out var repositoryUri) ? repositoryUri : null;
+        var probeResponse = await ProbeNuGetPackageAsync(probeUri, credentialSource, cancellationToken).ConfigureAwait(false);
         if (!probeResponse.Succeeded)
         {
             return Failed($"Repository probe failed for {metadata.ModuleName} {moduleVersion} against {probeUri.Host}.");
@@ -252,7 +255,7 @@ public sealed class PublishVerificationHostService : IDisposable
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, serviceIndexUri);
+            using var request = CreatePackageRequest(HttpMethod.Get, serviceIndexUri, serviceIndexUri);
             using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             if ((int)response.StatusCode >= 400)
             {
@@ -335,9 +338,9 @@ public sealed class PublishVerificationHostService : IDisposable
         }
     }
 
-    private async Task<ProbeResponse> ProbeNuGetPackageAsync(Uri uri, CancellationToken cancellationToken)
+    private async Task<ProbeResponse> ProbeNuGetPackageAsync(Uri uri, Uri? credentialSource, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        using var request = CreatePackageRequest(HttpMethod.Get, uri, credentialSource);
         request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 3);
         try
         {
@@ -367,6 +370,25 @@ public sealed class PublishVerificationHostService : IDisposable
         {
             return ProbeResponse.Failed;
         }
+    }
+
+    private static HttpRequestMessage CreatePackageRequest(HttpMethod method, Uri uri, Uri? credentialSource)
+    {
+        var requestUri = string.IsNullOrEmpty(uri.UserInfo)
+            ? uri
+            : new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty }.Uri;
+        var request = new HttpRequestMessage(method, requestUri);
+        var source = !string.IsNullOrEmpty(uri.UserInfo) ? uri : credentialSource;
+        if (source is not null && !string.IsNullOrEmpty(source.UserInfo) &&
+            source.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+            uri.Scheme.Equals(source.Scheme, StringComparison.OrdinalIgnoreCase) &&
+            uri.Host.Equals(source.Host, StringComparison.OrdinalIgnoreCase) && uri.Port == source.Port)
+        {
+            var credentials = Uri.UnescapeDataString(source.UserInfo);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(credentials)));
+        }
+        return request;
     }
 
     private static Uri BuildFlatContainerPackageUri(Uri baseUri, NuGetPackageIdentity identity)

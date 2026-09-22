@@ -17,7 +17,7 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed partial class ReleaseStateDatabase
 {
-    private const string CurrentSchemaVersion = "22";
+    private const string CurrentSchemaVersion = "23";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
@@ -101,6 +101,7 @@ public sealed partial class ReleaseStateDatabase
             source_path,
             package_id,
             package_version,
+            destination_credentials_omitted,
             status,
             summary,
             published_at_utc)
@@ -115,6 +116,7 @@ public sealed partial class ReleaseStateDatabase
             @SourcePath,
             @PackageId,
             @PackageVersion,
+            @DestinationCredentialsOmitted,
             @Status,
             @Summary,
             @PublishedAtUtc);
@@ -130,6 +132,7 @@ public sealed partial class ReleaseStateDatabase
                source_path,
                package_id,
                package_version,
+               destination_credentials_omitted,
                status,
                summary,
                published_at_utc
@@ -144,12 +147,13 @@ public sealed partial class ReleaseStateDatabase
             ["@AdapterKind"] = receipt.AdapterKind,
             ["@TargetName"] = receipt.TargetName,
             ["@TargetKind"] = receipt.TargetKind,
-            ["@Destination"] = receipt.Destination,
+            ["@Destination"] = StudioOutputSanitizer.SanitizeDestination(receipt.Destination),
             ["@SourcePath"] = receipt.SourcePath,
             ["@PackageId"] = receipt.PackageId,
             ["@PackageVersion"] = receipt.PackageVersion,
+            ["@DestinationCredentialsOmitted"] = receipt.DestinationCredentialsOmitted || StudioOutputSanitizer.DestinationCredentialsOmitted(receipt.Destination),
             ["@Status"] = receipt.Status.ToString(),
-            ["@Summary"] = receipt.Summary,
+            ["@Summary"] = StudioOutputSanitizer.Sanitize(receipt.Summary),
             ["@PublishedAtUtc"] = receipt.PublishedAtUtc.ToString("O")
         },
         Map: static reader => new ReleasePublishReceipt(
@@ -160,11 +164,12 @@ public sealed partial class ReleaseStateDatabase
             TargetKind: reader.GetString(4),
             Destination: reader.IsDBNull(5) ? null : reader.GetString(5),
             SourcePath: reader.IsDBNull(6) ? null : reader.GetString(6),
-            Status: Enum.Parse<ReleasePublishReceiptStatus>(reader.GetString(9), ignoreCase: true),
-            Summary: reader.GetString(10),
-            PublishedAtUtc: DateTimeOffset.Parse(reader.GetString(11))) {
+            Status: Enum.Parse<ReleasePublishReceiptStatus>(reader.GetString(10), ignoreCase: true),
+            Summary: reader.GetString(11),
+            PublishedAtUtc: DateTimeOffset.Parse(reader.GetString(12))) {
             PackageId = reader.IsDBNull(7) ? null : reader.GetString(7),
-            PackageVersion = reader.IsDBNull(8) ? null : reader.GetString(8)
+            PackageVersion = reader.IsDBNull(8) ? null : reader.GetString(8),
+            DestinationCredentialsOmitted = reader.GetInt32(9) != 0
         });
     private static readonly ReceiptTableDefinition<ReleaseVerificationReceipt> VerificationReceiptTable = new(
         TableName: "release_verification_receipt",
@@ -215,9 +220,9 @@ public sealed partial class ReleaseStateDatabase
             ["@AdapterKind"] = receipt.AdapterKind,
             ["@TargetName"] = receipt.TargetName,
             ["@TargetKind"] = receipt.TargetKind,
-            ["@Destination"] = receipt.Destination,
+            ["@Destination"] = StudioOutputSanitizer.SanitizeDestination(receipt.Destination),
             ["@Status"] = receipt.Status.ToString(),
-            ["@Summary"] = receipt.Summary,
+            ["@Summary"] = StudioOutputSanitizer.Sanitize(receipt.Summary),
             ["@VerifiedAtUtc"] = receipt.VerifiedAtUtc.ToString("O")
         },
         Map: static reader => new ReleaseVerificationReceipt(
@@ -551,6 +556,7 @@ public sealed partial class ReleaseStateDatabase
 
         await MigratePublicationReceiptsAsync(cancellationToken).ConfigureAwait(false);
         await MigrateVerificationReceiptsAsync(cancellationToken).ConfigureAwait(false);
+        await MigrateStoredReleaseSecretsAsync(cancellationToken).ConfigureAwait(false);
 
         await EnsureColumnExistsAsync(
             tableName: "release_signing_receipt",

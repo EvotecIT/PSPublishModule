@@ -5,6 +5,7 @@ using PowerForgeStudio.Domain.Signing;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Verification;
 using PowerForgeStudio.Orchestrator.Queue;
+using PowerForgeStudio.Orchestrator.Host;
 
 namespace PowerForgeStudio.Orchestrator.Storage;
 
@@ -198,9 +199,9 @@ public sealed partial class ReleaseStateDatabase
                 ["@QueueOrder"] = item.QueueOrder,
                 ["@Stage"] = item.Stage.ToString(),
                 ["@Status"] = item.Status.ToString(),
-                ["@Summary"] = item.Summary,
+                ["@Summary"] = StudioOutputSanitizer.Sanitize(item.Summary),
                 ["@CheckpointKey"] = item.CheckpointKey,
-                ["@CheckpointStateJson"] = item.CheckpointStateJson,
+                ["@CheckpointStateJson"] = ReleaseCheckpointEvidenceSanitizer.Sanitize(item.CheckpointStateJson),
                 ["@UpdatedAtUtc"] = item.UpdatedAtUtc.ToString("O")
             },
             cancellationToken: cancellationToken).ConfigureAwait(false);

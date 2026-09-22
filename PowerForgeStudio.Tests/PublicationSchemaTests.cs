@@ -2,6 +2,10 @@ using DBAClientX;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Orchestrator.Queue;
 using PowerForgeStudio.Orchestrator.Storage;
+using PowerForgeStudio.Domain.Catalog;
+using PowerForgeStudio.Domain.Queue;
+using PowerForgeStudio.Domain.Verification;
+using System.Text.Json;
 
 namespace PowerForgeStudio.Tests;
 
@@ -68,7 +72,7 @@ public sealed class PublicationSchemaTests
             Assert.Single(recovered, value => value.Destination == "feed-b");
             Assert.Equal(original, Assert.Single(await database.LoadPublishReceiptsAsync("legacy")));
             var version = await sqlite.QueryReadOnlyAsListAsync(path, "SELECT value FROM app_schema WHERE key = 'schema_version';", reader => reader.GetString(0));
-            Assert.Equal("22", Assert.Single(version));
+            Assert.Equal("23", Assert.Single(version));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -126,6 +130,65 @@ public sealed class PublicationSchemaTests
             var database = new ReleaseStateDatabase(path); await database.InitializeAsync();
             var receipt = Assert.Single(await database.LoadPublishReceiptsAsync("legacy"));
             Assert.Null(receipt.SourcePath); Assert.Equal("Original evidence", receipt.Summary);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task UpgradeScrubsOlderReceiptsProgressAndNestedQueueCheckpoints()
+    {
+        var root = NewRoot();
+        try
+        {
+            var path = Path.Combine(root, "state.db");
+            var database = new ReleaseStateDatabase(path);
+            await database.InitializeAsync();
+            const string address = "https://user:password@packages.example.test/v3/index.json?token=query-secret";
+            var receipt = new ReleasePublishReceipt(root, "Fixture", "ProjectBuild", "Package", "NuGet", address,
+                null, ReleasePublishReceiptStatus.Published, $"Published to {address}", DateTimeOffset.UtcNow);
+            var publish = new ReleasePublishExecutionResult(root, true, "Published", JsonSerializer.Serialize(new { Destination = address }), [receipt]);
+            var item = new ReleaseQueueItem(root, "Fixture", ReleaseRepositoryKind.Library, ReleaseWorkspaceKind.PrimaryRepository,
+                1, ReleaseQueueStage.Verify, ReleaseQueueItemStatus.ReadyToRun, "Ready", "verify.ready",
+                JsonSerializer.Serialize(publish), DateTimeOffset.UtcNow);
+            var session = ReleaseQueueSessionFactory.Create(root, [item], DateTimeOffset.UtcNow);
+            await database.PersistReleaseCheckpointAsync(session, publishReceipts: [receipt]);
+            await database.PersistVerificationReceiptsAsync(session.SessionId, [
+                new ReleaseVerificationReceipt(root, "Fixture", "ProjectBuild", "Package", "NuGet", address,
+                    ReleaseVerificationReceiptStatus.Verified, $"Verified at {address}", DateTimeOffset.UtcNow)
+            ]);
+            await database.AppendReleaseProgressAsync(session.SessionId,
+                new ReleaseArtifactProgress(ReleaseQueueStage.Publish, "Package", null, "Planned", 0, 1, "Safe", DateTimeOffset.UtcNow));
+
+            var sqlite = new SQLite();
+            await sqlite.ExecuteNonQueryAsync(path,
+                "UPDATE release_publish_receipt SET destination = @Address, summary = @Summary, destination_credentials_omitted = 0; " +
+                "UPDATE release_verification_receipt SET destination = @Address, summary = @Summary; " +
+                "UPDATE release_queue_item SET checkpoint_state_json = @Checkpoint; " +
+                "UPDATE release_execution_progress SET detail = @Summary; " +
+                "UPDATE app_schema SET value = '22' WHERE key = 'schema_version';",
+                new Dictionary<string, object?> {
+                    ["@Address"] = address,
+                    ["@Summary"] = $"Published to {address}",
+                    ["@Checkpoint"] = JsonSerializer.Serialize(publish)
+                });
+
+            await new ReleaseStateDatabase(path).InitializeAsync();
+
+            var reopened = new ReleaseStateDatabase(path);
+            var savedReceipt = Assert.Single(await reopened.LoadPublishReceiptsAsync(session.SessionId));
+            Assert.True(savedReceipt.DestinationCredentialsOmitted);
+            Assert.Equal("https://packages.example.test/v3/index.json", savedReceipt.Destination);
+            var savedVerification = Assert.Single(await reopened.LoadVerificationReceiptsAsync(session.SessionId));
+            Assert.Equal(savedReceipt.Destination, savedVerification.Destination);
+            Assert.DoesNotContain("query-secret", savedVerification.Summary);
+            var checkpoint = (await reopened.LoadReleaseCheckpointAsync(session.SessionId))!;
+            var savedItem = Assert.Single(checkpoint.Session.Items);
+            Assert.DoesNotContain("password", savedItem.CheckpointStateJson);
+            Assert.DoesNotContain("query-secret", savedItem.CheckpointStateJson);
+            var savedPublish = new ReleaseQueueCheckpointSerializer().TryDeserialize<ReleasePublishExecutionResult>(savedItem.CheckpointStateJson)!;
+            Assert.True(Assert.Single(savedPublish.Receipts).DestinationCredentialsOmitted);
+            Assert.DoesNotContain("query-secret", savedPublish.SourceCheckpointStateJson);
+            Assert.DoesNotContain("password", Assert.Single(checkpoint.Progress).Detail);
         }
         finally { Directory.Delete(root, true); }
     }

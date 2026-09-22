@@ -17,6 +17,8 @@ public sealed record ReleasePublishReceipt(
     public string? PackageId { get; init; }
     /// <summary>Exact package version captured before publishing.</summary>
     public string? PackageVersion { get; init; }
+    /// <summary>Credentials or query values were omitted from the saved destination; authenticated probes need a separate credential source.</summary>
+    public bool DestinationCredentialsOmitted { get; init; }
     public string PackageIdentityDisplay => string.IsNullOrWhiteSpace(PackageId) || string.IsNullOrWhiteSpace(PackageVersion)
         ? string.Empty : $"{PackageId} {PackageVersion}";
     public bool HasPackageIdentity => PackageIdentityDisplay.Length > 0;
