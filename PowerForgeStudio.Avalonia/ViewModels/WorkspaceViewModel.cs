@@ -303,10 +303,25 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var existing = node.Children.Where(x => x.Path.Length > 0)
             .ToDictionary(x => x.Path, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         node.Children.Clear();
-        foreach (var entry in entries)
+        foreach (var entry in node.Kind == "branch" ? OrderWorkingCopyRoot(entries) : entries)
             node.Children.Add(existing.TryGetValue(entry.FullPath, out var child) && child.Kind == Kind(entry) ? child
                 : new ExplorerNode(entry.Name, entry.FullPath, Kind(entry), node.RepositoryRoot, entry.IsDirectory ? LoadDirectoryAsync : null));
         if (_gitSnapshots.TryGetValue(node.RepositoryRoot, out var snapshot)) UpdateGitDecorations(node.RepositoryRoot, snapshot);
+    }
+
+    private static IEnumerable<FileSystemEntry> OrderWorkingCopyRoot(IReadOnlyList<FileSystemEntry> entries)
+        => entries.OrderBy(RootEntryRank).ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase);
+
+    private static int RootEntryRank(FileSystemEntry entry)
+    {
+        if (!entry.IsDirectory) return 4;
+        if (entry.Name.Equals("Build", StringComparison.OrdinalIgnoreCase)) return 0;
+        if (entry.Name.Equals("Docs", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (entry.Name.Equals("artifacts", StringComparison.OrdinalIgnoreCase) ||
+            entry.Name.Equals("artefacts", StringComparison.OrdinalIgnoreCase) ||
+            entry.Name.Equals("_temp", StringComparison.OrdinalIgnoreCase) ||
+            entry.Name.Equals("_reports", StringComparison.OrdinalIgnoreCase)) return 5;
+        return entry.Name.StartsWith('.') ? 3 : 2;
     }
 
     public async Task SelectAsync(ExplorerNode node)

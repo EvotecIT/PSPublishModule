@@ -45,9 +45,12 @@
               <TreeDataTemplate x:DataType="vm:ExplorerNode" ItemsSource="{Binding Children}">
                 <Grid ColumnDefinitions="20,*,Auto,Auto" ColumnSpacing="7" Height="30" ToolTip.Tip="{Binding Path}">
                   <controls:ProjectIcon Kind="{Binding IconKind}" Width="20" Height="20" />
-                  <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="{Binding NodeWeight}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                   <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="muted" FontSize="12" VerticalAlignment="Center" MaxWidth="70" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="3" Text="{Binding StatusMarker}" Foreground="#0865FF" FontSize="12" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding HasStatusMarker}">
+                    <Ellipse Width="8" Height="8" Fill="{Binding StatusBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding StatusMarker}" Foreground="{Binding StatusBrush}" FontSize="12" MaxWidth="64" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                  </StackPanel>
                 </Grid>
               </TreeDataTemplate>
             </TreeView.ItemTemplate>

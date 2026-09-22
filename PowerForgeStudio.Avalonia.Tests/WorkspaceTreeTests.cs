@@ -29,6 +29,9 @@ public sealed class WorkspaceTreeTests
             {
                 Directory.CreateDirectory(Path.Combine(repository, "Build"));
                 Directory.CreateDirectory(Path.Combine(repository, "Docs"));
+                Directory.CreateDirectory(Path.Combine(repository, "Source"));
+                Directory.CreateDirectory(Path.Combine(repository, ".github"));
+                Directory.CreateDirectory(Path.Combine(repository, "Artifacts"));
                 await File.WriteAllTextAsync(Path.Combine(repository, "README.md"), "# Studio sample\n");
                 await File.WriteAllTextAsync(Path.Combine(repository, "Build", "Build-Project.ps1"), "# Sample build entry point\n");
                 await File.WriteAllTextAsync(Path.Combine(repository, "Build", "project.build.json"), "{}\n");
@@ -50,6 +53,8 @@ public sealed class WorkspaceTreeTests
                 var project = Assert.Single(model.Projects, item => item.Name == "Studio.Sample");
                 await project.EnsureLoadedAsync(); project.IsExpanded = true;
                 var checkout = project.Children[0];
+                Assert.Equal(["Build", "Docs", "Source", ".github", "README.md", "Studio.Sample.slnx", "Artifacts"],
+                    checkout.Children.Select(child => child.Name));
                 var build = Assert.Single(checkout.Children, item => item.Name == "Build");
                 await build.EnsureLoadedAsync(); build.IsExpanded = true;
                 var worktreeGroup = Assert.Single(project.Children, item => item.Name.StartsWith("Worktrees"));
