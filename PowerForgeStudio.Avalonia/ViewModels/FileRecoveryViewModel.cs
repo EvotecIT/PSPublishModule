@@ -42,7 +42,7 @@ public sealed partial class FileRecoveryViewModel(WorkspaceViewModel workspace) 
         }
         catch (Exception ex)
         {
-            Error = ex.Message;
+            Error = StudioDisplayError.From(ex);
         }
         finally
         {

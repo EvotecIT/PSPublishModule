@@ -196,7 +196,7 @@ public sealed partial class GitHubViewModel : ObservableObject, IDisposable
     }
 
     private bool Current(int version) => !_disposed && version == _contextVersion;
-    private static string SafeError(Exception ex) => ex is GitHubAccessException ? ex.Message :
+    private static string SafeError(Exception ex) => ex is GitHubAccessException ? StudioDisplayError.From(ex) :
         ex is InvalidDataException or System.Text.Json.JsonException ? "GitHub returned an invalid or oversized response. Reload to retry." :
         "Unable to load GitHub data. Check connectivity and authentication, then retry.";
 

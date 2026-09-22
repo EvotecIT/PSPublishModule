@@ -15,6 +15,22 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class ProjectOverviewTests
 {
     [Fact]
+    public async Task FailedOverviewInspectionDoesNotShowRecognizedSecretArguments()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-overview-error-" + Guid.NewGuid().ToString("N"));
+        var repository = new RepositoryCatalogEntry("Sample", root, ReleaseRepositoryKind.Library,
+            ReleaseWorkspaceKind.PrimaryRepository, null, null, false, false);
+        using var model = new ProjectOverviewViewModel(new FailingOverviewService());
+        model.SetProject(repository, root, Git("main", 0));
+
+        await model.RefreshAsync();
+
+        Assert.Equal("Could not inspect the selected project.", model.Status);
+        Assert.Contains("<redacted>", model.Output);
+        Assert.DoesNotContain("fixture-secret", model.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task NewGitSnapshotDoesNotCancelMetadataForTheSameWorkingCopy()
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "studio-overview-race-" + Guid.NewGuid().ToString("N")));
@@ -137,5 +153,12 @@ public sealed class ProjectOverviewTests
         }
 
         public void Complete() => _complete.TrySetResult();
+    }
+
+    private sealed class FailingOverviewService : IProjectOverviewService
+    {
+        public Task<ProjectOverviewSnapshot> InspectAsync(RepositoryCatalogEntry repository, string workingCopyRoot,
+            ProjectGitStatus git, CancellationToken cancellationToken = default)
+            => Task.FromException<ProjectOverviewSnapshot>(new InvalidOperationException("Inspection failed with --Token=fixture-secret"));
     }
 }

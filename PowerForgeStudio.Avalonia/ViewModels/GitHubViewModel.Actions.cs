@@ -151,7 +151,7 @@ public sealed partial class GitHubViewModel
         }
         catch (InvalidOperationException ex)
         {
-            if (OriginalSelection()) ActionStatus = ex.Message;
+            if (OriginalSelection()) ActionStatus = StudioDisplayError.From(ex);
             return false;
         }
         catch (Exception ex)

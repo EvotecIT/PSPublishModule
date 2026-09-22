@@ -63,7 +63,7 @@ public sealed partial class WorkspaceViewModel
             ApplyFilter();
             OnPropertyChanged(nameof(FavoriteActionLabel));
         }
-        catch (Exception ex) { StateError = "Could not save favorite: " + ex.Message; }
+        catch (Exception ex) { StateError = "Could not save favorite: " + StudioDisplayError.From(ex); }
     }
 
     private async Task LoadSessionAsync(string root, int refresh)
@@ -87,7 +87,7 @@ public sealed partial class WorkspaceViewModel
             if (!_disposed && refresh == _refreshVersion && SamePath(root, WorkspaceRoot))
             {
                 _loadedStateRoot = root;
-                StateError = "Could not read saved workspace state: " + ex.Message;
+                StateError = "Could not read saved workspace state: " + StudioDisplayError.From(ex);
             }
         }
     }
@@ -185,7 +185,7 @@ public sealed partial class WorkspaceViewModel
             await Task.Run(() => _stateStore.SaveSession(root, documents, active, expanded));
             if (SamePath(root, WorkspaceRoot)) StateError = "";
         }
-        catch (Exception ex) { if (SamePath(root, WorkspaceRoot)) StateError = "Could not save workspace state: " + ex.Message; }
+        catch (Exception ex) { if (SamePath(root, WorkspaceRoot)) StateError = "Could not save workspace state: " + StudioDisplayError.From(ex); }
         finally { _sessionSave.Release(); }
     }
 
@@ -208,7 +208,7 @@ public sealed partial class WorkspaceViewModel
             if (_stateStore is IWorkspaceRootCatalogService catalog) await Task.Run(() => catalog.SaveActive(root));
             return true;
         }
-        catch (Exception ex) { StateError = "Could not save the active workspace: " + ex.Message; return false; }
+        catch (Exception ex) { StateError = "Could not save the active workspace: " + StudioDisplayError.From(ex); return false; }
     }
 
     private void RebuildExplorerGroups()

@@ -42,7 +42,7 @@ public sealed partial class WorkspaceViewModel
             var snapshot = await _files.OpenTextDocumentAsync(document.Reference.WorkingCopyRoot, document.Location, _lifetime.Token);
             if (!_disposed && Documents.Contains(document)) document.Load(snapshot);
         }
-        catch (Exception ex) { document.Error = ex.Message; Report(ex); }
+        catch (Exception ex) { document.Error = StudioDisplayError.From(ex); Report(ex); }
         finally { document.IsBusy = false; }
     }
 
@@ -64,7 +64,7 @@ public sealed partial class WorkspaceViewModel
             Status = $"Saved {document.Name}";
             return !document.IsDirty;
         }
-        catch (Exception ex) { document.Error = ex.Message; Report(ex); return false; }
+        catch (Exception ex) { document.Error = StudioDisplayError.From(ex); Report(ex); return false; }
         finally { document.IsBusy = false; }
     }
 

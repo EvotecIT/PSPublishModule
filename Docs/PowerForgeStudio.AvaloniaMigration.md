@@ -43,6 +43,7 @@ The desktop GUI is PowerForgeStudio.Avalonia, a thin presentation host over the 
 - [x] Add secret-free GitHub, registry, Licensing, IntelligenceX and local-toolchain connection evidence.
 - [x] Add a cross-project Activity inbox over existing portfolio, release, GitHub issue/PR/CI and automation owners.
 - [x] Add machine-local Settings with durable behavior and bounded Activity refresh preferences.
+- [x] Route exception details shown by the Avalonia shell, provider catalogs and project pages through the shared bounded diagnostic sanitizer.
 - [x] Connect bounded, read-only GitHub Actions workflow state and scheduled-run evidence to local definitions.
 - [x] Consolidate the visual direction into eight proposed concepts with explicit image-model corrections in [PowerForgeStudio.VisualReview.md](PowerForgeStudio.VisualReview.md).
 - [ ] Align native typography, icon treatment, density and state colors across the eight product-map references, then inspect each rendered page against the approved visual direction.

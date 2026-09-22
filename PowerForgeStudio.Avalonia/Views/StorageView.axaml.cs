@@ -22,7 +22,7 @@ public sealed partial class StorageView : UserControl
             if (DataContext is StorageViewModel model)
             {
                 model.Status = "Could not open the selected working copy.";
-                model.Output = ex.Message;
+                model.Output = ViewModels.StudioDisplayError.From(ex);
             }
         }
     }

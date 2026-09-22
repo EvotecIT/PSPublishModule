@@ -25,7 +25,7 @@ public sealed partial class App : Application
             if (index < 0)
             {
                 try { root = catalog.Load(root).ActiveWorkspaceRoot; }
-                catch (Exception ex) { startupError = "Could not read the workspace catalog: " + ex.Message; }
+                catch (Exception ex) { startupError = "Could not read the workspace catalog: " + StudioDisplayError.From(ex); }
             }
             var model = new WorkspaceViewModel(root, catalog);
             if (startupError is not null) model.StateError = startupError;

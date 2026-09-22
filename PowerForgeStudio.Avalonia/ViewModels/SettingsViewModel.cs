@@ -135,7 +135,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             Status = "Could not load Studio settings.";
-            Output = ex.Message;
+            Output = StudioDisplayError.From(ex);
         }
     }
 
@@ -170,7 +170,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             if (version == _saveVersion)
             {
                 Status = "Could not save Studio settings.";
-                Output = ex.Message;
+                Output = StudioDisplayError.From(ex);
             }
         }
         finally
@@ -206,7 +206,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Output = "Could not open the configuration folder: " + ex.Message;
+            Output = "Could not open the configuration folder: " + StudioDisplayError.From(ex);
         }
     }
 

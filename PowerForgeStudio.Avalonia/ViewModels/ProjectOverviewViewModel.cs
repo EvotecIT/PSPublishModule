@@ -126,7 +126,7 @@ public sealed partial class ProjectOverviewViewModel : ObservableObject, IDispos
             if (version == _version)
             {
                 Status = "Could not inspect the selected project.";
-                Output = ex.Message;
+                Output = StudioDisplayError.From(ex);
             }
         }
         finally
@@ -144,7 +144,7 @@ public sealed partial class ProjectOverviewViewModel : ObservableObject, IDispos
             Process.Start(new ProcessStartInfo(ReadmePath) { UseShellExecute = true });
             Output = "Opened README.md with the configured desktop application.";
         }
-        catch (Exception ex) { Output = "Could not open README.md: " + ex.Message; }
+        catch (Exception ex) { Output = "Could not open README.md: " + StudioDisplayError.From(ex); }
     }
 
     private void Apply(ProjectOverviewSnapshot snapshot)

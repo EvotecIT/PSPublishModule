@@ -89,7 +89,7 @@ public sealed partial class ExplorerNode : ObservableObject
         catch (Exception ex)
         {
             Children.Clear();
-            Children.Add(new ExplorerNode("Unable to load", "", "error", RepositoryRoot) { Detail = ex.Message });
+            Children.Add(new ExplorerNode("Unable to load", "", "error", RepositoryRoot) { Detail = StudioDisplayError.From(ex) });
             IsExpanded = false;
         }
         finally { _loading = null; }

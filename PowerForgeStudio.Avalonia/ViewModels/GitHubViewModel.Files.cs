@@ -67,7 +67,7 @@ public sealed partial class GitHubViewModel
             FilesStatus = $"{result.Files.Count} files loaded." + (result.Files.HasMore ? " Partial listing; more files may exist on GitHub." : "") + " Snapshot checked before and after loading.";
             SelectedChangedFile = ChangedFiles.FirstOrDefault();
         }
-        catch (GitHubRevisionChangedException ex) { if (IsCurrent()) FilesStatus = ex.Message; }
+        catch (GitHubRevisionChangedException ex) { if (IsCurrent()) FilesStatus = StudioDisplayError.From(ex); }
         catch (OperationCanceledException) { if (IsCurrent()) FilesStatus = "File request cancelled or timed out. Retry to load files."; }
         catch (Exception ex) { if (IsCurrent()) FilesStatus = SafeError(ex); }
         finally { if (ReferenceEquals(_fileRead, read)) _fileRead = null; if (IsCurrent()) IsFilesLoading = false; }

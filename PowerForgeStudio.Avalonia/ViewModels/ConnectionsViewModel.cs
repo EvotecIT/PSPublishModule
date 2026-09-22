@@ -97,7 +97,7 @@ public sealed partial class ConnectionsViewModel : ObservableObject, IDisposable
             if (version == _refreshVersion)
             {
                 Status = "Connection inspection failed.";
-                Output = ex.Message;
+                Output = StudioDisplayError.From(ex);
             }
         }
         finally

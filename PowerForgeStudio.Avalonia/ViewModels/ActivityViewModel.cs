@@ -139,7 +139,7 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
             if (version == _refreshVersion)
             {
                 Status = "Activity inspection failed.";
-                Output = ex.Message;
+                Output = StudioDisplayError.From(ex);
             }
         }
         finally
@@ -188,7 +188,7 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            Output = "Could not open the selected source: " + ex.Message;
+            Output = "Could not open the selected source: " + StudioDisplayError.From(ex);
         }
     }
 

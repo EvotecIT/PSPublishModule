@@ -181,7 +181,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
             if (version == _refreshVersion)
             {
                 Status = "Storage inspection failed.";
-                Output = ex.Message;
+                Output = StudioDisplayError.From(ex);
                 if (_allEntries.Count == 0)
                     EmptyMessage = "Inspection failed. Review the output and refresh.";
             }
@@ -228,9 +228,9 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             if (!IsCurrentReview(version, root, path)) return false;
-            RemovalError = ex.Message;
+            RemovalError = StudioDisplayError.From(ex);
             Status = "Removal review failed.";
-            Output += $"\n[{DateTime.Now:HH:mm:ss}] Removal review failed: {ex.Message}";
+            Output += $"\n[{DateTime.Now:HH:mm:ss}] Removal review failed: {StudioDisplayError.From(ex)}";
             return false;
         }
         finally
@@ -259,7 +259,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            RemovalError = ex.Message;
+            RemovalError = StudioDisplayError.From(ex);
             return false;
         }
         finally
@@ -289,9 +289,9 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             if (!IsCurrentReview(version, root, path)) return false;
-            PruneError = ex.Message;
+            PruneError = StudioDisplayError.From(ex);
             Status = "Stale registration review failed.";
-            Output += $"\n[{DateTime.Now:HH:mm:ss}] Stale registration review failed: {ex.Message}";
+            Output += $"\n[{DateTime.Now:HH:mm:ss}] Stale registration review failed: {StudioDisplayError.From(ex)}";
             return false;
         }
         finally
@@ -321,7 +321,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            PruneError = ex.Message;
+            PruneError = StudioDisplayError.From(ex);
             return false;
         }
         finally

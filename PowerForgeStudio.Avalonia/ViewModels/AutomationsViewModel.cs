@@ -99,7 +99,7 @@ public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
             if (version == _refreshVersion)
             {
                 Status = "Automation inspection failed.";
-                Output = ex.Message;
+                Output = StudioDisplayError.From(ex);
             }
         }
         finally

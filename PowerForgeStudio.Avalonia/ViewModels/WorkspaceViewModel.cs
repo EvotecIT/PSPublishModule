@@ -390,7 +390,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             await SaveSessionAsync();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (version == _selectionVersion) { Preview = "Unable to load this selection: " + ex.Message; Report(ex); } }
+        catch (Exception ex) { if (version == _selectionVersion) { Preview = "Unable to load this selection: " + StudioDisplayError.From(ex); Report(ex); } }
         finally { if (version == _selectionVersion) IsSelectionLoading = false; }
     }
 
@@ -422,7 +422,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private static bool SamePath(string first, string second) => string.Equals(Path.GetFullPath(first).TrimEnd(Path.DirectorySeparatorChar),
         Path.GetFullPath(second).TrimEnd(Path.DirectorySeparatorChar), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
-    private void Report(Exception error) { Status = error.Message; AppendOutput(error.Message); }
+    private void Report(Exception error) { var message = StudioDisplayError.From(error); Status = message; AppendOutput(message); }
     private void AppendOutput(string line)
     {
         var text = Output + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
