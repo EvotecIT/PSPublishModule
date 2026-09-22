@@ -122,7 +122,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     }
     public ReleaseViewModel Release { get; }
     [ObservableProperty] private bool _isReleasePage;
-    partial void OnIsReleasePageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(OutputPaneHeight)); }
+    partial void OnIsReleasePageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(ShowGenericProjectContext)); OnPropertyChanged(nameof(OutputPaneHeight)); }
     [RelayCommand] private void ShowRelease() { IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true; }
     public GitHubViewModel GitHub { get; }
     [ObservableProperty] private bool _isGitHubPage;
@@ -138,7 +138,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
-    public bool ShowGenericProjectContext => !IsOverviewPage && !IsChangesPage && !IsGitHubPage;
+    public bool ShowGenericProjectContext => !IsOverviewPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;
     partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(ShowGenericProjectContext)); OnPropertyChanged(nameof(DisplayedOutput)); }
     [ObservableProperty] private bool _isBuildPage;
     public bool IsFilesPage => !IsOverviewPage && !IsHistoryPage && !IsSettingsPage && !IsActivityPage && !IsStoragePage && !IsAutomationsPage && !IsConnectionsPage && !IsBuildPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;

@@ -202,6 +202,37 @@
                 <TextBlock Text="Review the Overview warning card before building." IsVisible="{Binding HasWarnings}" Foreground="#B45309" TextWrapping="Wrap" FontSize="12" />
               </StackPanel>
             </ScrollViewer>
+            <ScrollViewer IsVisible="{Binding IsReleasePage}">
+              <StackPanel Spacing="12" DataContext="{Binding Release}">
+                <TextBlock Text="Release checkpoint" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="{Binding Stage}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" FontSize="12" />
+                <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
+                <StackPanel Spacing="5" IsVisible="{Binding HasBuildRoot}">
+                  <TextBlock Text="Captured working copy" Classes="muted" FontSize="12" />
+                  <TextBox Text="{Binding BuildRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
+                           BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding BuildRoot}" AutomationProperties.Name="Release working copy path" />
+                </StackPanel>
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12" ColumnSpacing="8">
+                  <TextBlock Text="Prepared artifacts" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Column="1" Text="{Binding Artifacts.Count}" FontWeight="SemiBold" />
+                  <TextBlock Grid.Row="1" Text="Signing receipts" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Receipts.Count}" FontWeight="SemiBold" />
+                  <TextBlock Grid.Row="2" Text="Publication receipts" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PublicationReceipts.Count}" FontWeight="SemiBold" />
+                  <TextBlock Grid.Row="3" Text="Verification receipts" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding VerificationReceipts.Count}" FontWeight="SemiBold" />
+                </Grid>
+                <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding HasUnpersistedEvidence}">
+                  <TextBlock Text="Receipts are not saved. Retry saving in the main pane before leaving this release." TextWrapping="Wrap" FontSize="12" />
+                </Border>
+                <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding RequiresRebuild}">
+                  <TextBlock Text="Artifact state changed during signing. Rebuild before another release attempt." TextWrapping="Wrap" FontSize="12" />
+                </Border>
+                <TextBlock Text="Receipt counts show recorded attempts. Check each receipt in the release workflow before treating a destination as published or verified."
+                           Classes="muted" TextWrapping="Wrap" FontSize="11" />
+              </StackPanel>
+            </ScrollViewer>
             <ScrollViewer IsVisible="{Binding IsChangesPage}">
             <StackPanel Spacing="12" DataContext="{Binding Changes}">
               <TextBlock Text="Selected change" FontWeight="SemiBold" FontSize="16" />

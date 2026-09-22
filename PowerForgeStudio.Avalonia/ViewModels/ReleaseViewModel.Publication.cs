@@ -37,6 +37,10 @@ public sealed partial class ReleaseViewModel
         && Handoff?.Session.Items.SingleOrDefault() is { Stage: ReleaseQueueStage.Verify, Status: ReleaseQueueItemStatus.ReadyToRun };
     public bool HasPublicationReceipts => PublicationReceipts.Count > 0;
     public bool HasVerificationReceipts => VerificationReceipts.Count > 0;
+    public bool HasPublicationTargets => PublicationTargets.Count > 0;
+    public bool CanReviewPublication => CanInspectPublication && _publicationSnapshot is not null && HasPublicationTargets;
+    public bool ShowPublicationDetails => CanInspectPublication || IsInspectingPublication || IsPublishing || CanVerify || IsVerifying
+        || HasPublicationReceipts || HasVerificationReceipts;
 
     partial void OnIsInspectingPublicationChanged(bool value) => NotifyReleaseState();
     partial void OnIsPublishingChanged(bool value)
@@ -59,12 +63,14 @@ public sealed partial class ReleaseViewModel
         IsInspectingPublication = true;
         ResetPublicationApproval();
         PublicationTargets.Clear();
+        OnPropertyChanged(nameof(HasPublicationTargets));
         PublicationSummary = "Inspecting destinations…";
         try
         {
             var preview = await _publication.PreviewAsync(handoff.Session);
             if (_disposed || version != _version || !ReferenceEquals(Handoff, handoff)) return;
             foreach (var target in preview.Targets) PublicationTargets.Add(target);
+            OnPropertyChanged(nameof(HasPublicationTargets));
             _publicationSnapshot = preview;
             _inspectedSession = handoff.Session;
             PublicationSummary = preview.Summary;
@@ -172,6 +178,7 @@ public sealed partial class ReleaseViewModel
     private void ResetPublicationState()
     {
         ResetPublicationApproval(); PublicationTargets.Clear(); PublicationReceipts.Clear(); VerificationReceipts.Clear(); PublicationSummary = "";
-        OnPropertyChanged(nameof(HasPublicationReceipts)); OnPropertyChanged(nameof(HasVerificationReceipts));
+        OnPropertyChanged(nameof(HasPublicationTargets)); OnPropertyChanged(nameof(HasPublicationReceipts)); OnPropertyChanged(nameof(HasVerificationReceipts));
+        NotifyReleaseState();
     }
 }

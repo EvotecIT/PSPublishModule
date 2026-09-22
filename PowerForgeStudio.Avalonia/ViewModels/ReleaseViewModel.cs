@@ -27,6 +27,8 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
     public bool CanPrepare => !_disposed && !IsPreparing && !HasProtectedReleaseWork && !IsLoadingHistory && !RequiresRebuild && SigningResult?.Succeeded != true && _candidate?.Succeeded == true;
     public bool EmphasizePrepare => CanPrepare && !HasHandoff;
     public bool HasHandoff => Handoff is not null;
+    public bool HasBuildRoot => !string.IsNullOrWhiteSpace(BuildRoot);
+    partial void OnBuildRootChanged(string value) => OnPropertyChanged(nameof(HasBuildRoot));
     partial void OnIsPreparingChanged(bool value) => NotifyReleaseState();
 
     public void SetBuild(ReleaseBuildExecutionResult? build, bool running, bool cancelled)

@@ -28,6 +28,7 @@ public sealed partial class ReleaseViewModel
         OnPropertyChanged(nameof(CanInspectPublication)); OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(EmphasizePrepare)); OnPropertyChanged(nameof(CanSign));
         OnPropertyChanged(nameof(CanPublish)); OnPropertyChanged(nameof(CanVerify));
         OnPropertyChanged(nameof(HasArtifacts)); OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));
+        OnPropertyChanged(nameof(ShowPublicationDetails)); OnPropertyChanged(nameof(CanReviewPublication));
         OnPropertyChanged(nameof(HasProtectedReleaseWork)); OnPropertyChanged(nameof(CanBrowseHistory));
     }
 

@@ -93,15 +93,16 @@
         </ListBox.ItemTemplate>
       </ListBox>
     </Grid>
-    <StackPanel Grid.Row="4" Spacing="8">
+    <StackPanel Grid.Row="4" Spacing="8" IsVisible="{Binding ShowPublicationDetails}">
+      <TextBlock Text="Publication destinations" FontSize="16" FontWeight="SemiBold" />
       <WrapPanel>
-        <Button Content="Inspect publication targets" Command="{Binding InspectPublicationCommand}" IsEnabled="{Binding CanInspectPublication}" Margin="0,0,8,4" />
+        <Button Content="Inspect publication targets" Command="{Binding InspectPublicationCommand}" IsVisible="{Binding CanInspectPublication}" Margin="0,0,8,4" />
         <Button Content="Cancel publication" Command="{Binding CancelPublicationCommand}" IsVisible="{Binding IsPublishing}" Margin="0,0,8,4" />
-        <Button Content="Verify published targets" Command="{Binding VerifyCommand}" IsEnabled="{Binding CanVerify}" Margin="0,0,8,4" />
+        <Button Content="Verify published targets" Command="{Binding VerifyCommand}" IsVisible="{Binding CanVerify}" Margin="0,0,8,4" />
         <Button Content="Cancel verification" Command="{Binding CancelVerificationCommand}" IsVisible="{Binding IsVerifying}" Margin="0,0,8,4" />
       </WrapPanel>
       <TextBlock Text="{Binding PublicationSummary}" TextWrapping="Wrap" />
-      <ListBox ItemsSource="{Binding PublicationTargets}" MaxHeight="260">
+      <ListBox ItemsSource="{Binding PublicationTargets}" IsVisible="{Binding HasPublicationTargets}" MaxHeight="260">
         <ListBox.ItemTemplate><DataTemplate x:DataType="publish:ReleasePublishTarget">
           <StackPanel Spacing="5" Margin="8">
             <TextBlock Text="{Binding TargetName}" FontWeight="SemiBold" />
@@ -111,8 +112,8 @@
           </StackPanel>
         </DataTemplate></ListBox.ItemTemplate>
       </ListBox>
-      <CheckBox Content="I reviewed these destinations and approve external publication" IsChecked="{Binding ConfirmPublication}" IsEnabled="{Binding CanInspectPublication}" />
-      <Button Content="Publish signed artifacts" Command="{Binding PublishCommand}" IsEnabled="{Binding CanPublish}" Background="#0865FF" Foreground="White" />
+      <CheckBox Content="I reviewed these destinations and approve external publication" IsChecked="{Binding ConfirmPublication}" IsVisible="{Binding CanReviewPublication}" />
+      <Button Content="Publish signed artifacts" Command="{Binding PublishCommand}" IsEnabled="{Binding CanPublish}" IsVisible="{Binding CanReviewPublication}" Background="#0865FF" Foreground="White" />
       <TextBlock IsVisible="{Binding HasPublicationReceipts}" Text="Publication receipts" FontSize="16" FontWeight="SemiBold" />
       <ListBox IsVisible="{Binding HasPublicationReceipts}" ItemsSource="{Binding PublicationReceipts}" MaxHeight="260" Background="#F7F9FC">
         <ListBox.ItemTemplate><DataTemplate x:DataType="publish:ReleasePublishReceipt">

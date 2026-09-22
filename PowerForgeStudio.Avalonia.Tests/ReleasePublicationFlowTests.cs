@@ -32,7 +32,10 @@ public sealed class ReleasePublicationFlowTests
                 await release.PrepareAsync();
                 await release.SignAsync();
                 Assert.True(release.CanInspectPublication);
+                Assert.True(release.ShowPublicationDetails);
+                Assert.False(release.CanReviewPublication);
                 await release.InspectPublicationAsync();
+                Assert.True(release.CanReviewPublication);
                 Assert.False(release.CanPublish);
                 release.ConfirmPublication = true;
                 Assert.True(release.CanPublish);
@@ -41,6 +44,7 @@ public sealed class ReleasePublicationFlowTests
 
                 Assert.Equal(1, publishing.Calls);
                 Assert.Single(release.PublicationReceipts);
+                Assert.False(release.CanReviewPublication);
                 Assert.True(release.CanVerify);
                 await release.VerifyAsync();
                 Assert.Equal(1, verification.Calls);
@@ -55,11 +59,14 @@ public sealed class ReleasePublicationFlowTests
 
                 using var workspace = new WorkspaceViewModel(root, release: release);
                 workspace.ShowReleaseCommand.Execute(null);
+                Assert.False(workspace.ShowGenericProjectContext);
                 var window = new MainWindow { DataContext = workspace, Width = 1600, Height = 1000 };
                 window.Show();
                 try
                 {
                     window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    var context = Assert.Single(window.GetVisualDescendants().OfType<Border>(), border => border.Name == "ContextPanel");
+                    Assert.Contains(context.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "Release checkpoint" && block.IsEffectivelyVisible);
                     using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
                     var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
                     if (!string.IsNullOrEmpty(output))

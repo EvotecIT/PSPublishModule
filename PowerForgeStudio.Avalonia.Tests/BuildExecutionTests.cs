@@ -79,6 +79,7 @@ public sealed class BuildExecutionTests
                     Assert.True(workspace.Release.CanPrepare);
                     await workspace.Release.PrepareAsync();
                     Assert.True(workspace.Release.HasHandoff, workspace.Release.Status);
+                    Assert.False(workspace.Release.ShowPublicationDetails);
                     Assert.Contains(workspace.Release.Artifacts, artifact => artifact.ArtifactPath == package);
                     Assert.Equal(root, workspace.Release.Handoff!.Session.Items.Single().RootPath);
                     Assert.False(workspace.IsFilesPage);

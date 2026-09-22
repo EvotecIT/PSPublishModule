@@ -110,7 +110,7 @@ public sealed class ReleaseHistoryTests
                     Assert.Equal(2, reopened.ExecutionProgress.Count);
                     Assert.Equal("Signed", reopened.ExecutionProgress[^1].State);
                     Assert.Equal(1, reopened.ProgressCompleted);
-                    Assert.False(reopened.CanPrepare); Assert.Equal(root, reopened.BuildRoot);
+                    Assert.False(reopened.CanPrepare); Assert.Equal(root, reopened.BuildRoot); Assert.True(reopened.HasBuildRoot);
                     using var reopenedWorkspace = new WorkspaceViewModel(root, release: reopened);
                     reopenedWorkspace.ShowReleaseCommand.Execute(null); window.DataContext = reopenedWorkspace;
                     Capture(window, "release-history.png"); window.Width = 1050; window.Height = 720;
