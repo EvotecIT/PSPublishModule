@@ -1,12 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
              xmlns:domain="using:PowerForgeStudio.Domain.Projects"
+             xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:DataType="vm:ProjectOverviewViewModel" x:Class="PowerForgeStudio.Avalonia.Views.ProjectOverviewView">
   <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="22,18" Spacing="16">
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
         <StackPanel Spacing="4">
-          <TextBlock Text="{Binding ProjectName}" Classes="heading" TextTrimming="CharacterEllipsis" />
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <controls:NavigationIcon Kind="projects" Width="24" Height="24" Ink="#0865FF" />
+            <TextBlock Text="Project overview" Classes="heading" />
+          </StackPanel>
           <TextBlock Text="{Binding Purpose}" Classes="muted" TextWrapping="Wrap" MaxWidth="900" HorizontalAlignment="Left" />
         </StackPanel>
         <Button Grid.Column="1" Content="Refresh" Command="{ReflectionBinding DataContext.RefreshOverviewCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" VerticalAlignment="Top" />
@@ -22,7 +26,7 @@
       </WrapPanel>
 
       <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
-        <Border Classes="card" Padding="15"><StackPanel Spacing="5"><TextBlock Text="Working copy" Classes="muted" /><TextBlock Text="{Binding WorkspaceKind}" FontWeight="SemiBold" /><TextBlock Text="{Binding WorkingCopyRoot}" FontSize="11" TextWrapping="Wrap" /></StackPanel></Border>
+        <Border Classes="card" Padding="15"><StackPanel Spacing="5"><TextBlock Text="Working copy" Classes="muted" /><TextBlock Text="{Binding WorkspaceKind}" FontWeight="SemiBold" /><TextBox Text="{Binding WorkingCopyRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="25" FontSize="11" BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="Select and copy the full path" /></StackPanel></Border>
         <Border Grid.Column="1" Classes="card" Padding="15"><StackPanel Spacing="5"><TextBlock Text="Git state" Classes="muted" /><TextBlock Text="{Binding GitState}" FontWeight="SemiBold" /><TextBlock Text="{Binding Branch}" Foreground="#0865FF" /><TextBlock Text="{Binding AheadBehind}" FontSize="11" /></StackPanel></Border>
         <Border Grid.Column="2" Classes="card" Padding="15"><StackPanel Spacing="5"><TextBlock Text="Working copies" Classes="muted" /><TextBlock Text="{Binding WorkingCopyCount}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="Primary checkout and registered worktrees" FontSize="11" Classes="muted" TextWrapping="Wrap" /></StackPanel></Border>
       </Grid>

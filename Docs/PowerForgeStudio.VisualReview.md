@@ -70,8 +70,9 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] Storage and Activity evidence rows now pair shared vector state cues with their text labels; Storage summary cards use the same navigation icon system.
 - [x] The project tree prioritizes Build and Docs at working-copy roots; Storage evidence is aligned in the inspector, and compact Storage can scroll through the complete table above a shorter output dock.
 - [x] Activity source cards now fit on one row; compact Activity keeps provider state visible while showing the first actionable rows without scrolling.
+- [x] Overview names the page separately from the selected project and keeps the full working-copy path copyable without letting it dominate compact layout.
 - [ ] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.
 - [ ] Capture final native Windows and headless evidence after the last visual change.
 
-The fresh renders show the remaining gap clearly: page headings and data cards are still visually sparse beside the concepts, and inspectors outside Storage still repeat labels. Compact Storage has a checked scroll path to its lower rows, and compact Activity shows its first actionable items. Preserve the accurate source and safety information while tightening those layouts. Do not replace these gaps with image-only decorations or unimplemented controls.
+The fresh renders show the remaining gap clearly: several page headings and data cards are still visually sparse beside the concepts, and inspectors outside Storage still repeat labels. Compact Storage has a checked scroll path to its lower rows, and compact Activity shows its first actionable items. Preserve the accurate source and safety information while tightening those layouts. Do not replace these gaps with image-only decorations or unimplemented controls.
