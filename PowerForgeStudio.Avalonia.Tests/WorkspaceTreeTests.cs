@@ -161,11 +161,13 @@ public sealed class WorkspaceTreeTests
                     model.FavoritesOnly = true;
                     Assert.Empty(model.Projects);
                     Assert.Same(quickMatch, Assert.Single(model.QuickProjectMatches));
+                    model.ChangedProjectsOnly = true;
                     await model.OpenQuickProjectAsync(quickMatch);
                     Assert.Equal("Module.Sample", model.ProjectName);
                     Assert.Equal(other, model.ActiveWorkingCopyRoot);
                     Assert.Empty(model.Filter);
                     Assert.False(model.FavoritesOnly);
+                    Assert.False(model.ChangedProjectsOnly);
                     Assert.False(model.HasQuickProjectQuery);
                     // Filtering must retain expansion and project identity, not clone its hierarchy.
                     model.Filter = "Studio";

@@ -56,7 +56,7 @@
         </StackPanel>
       </Border>
       <Border Grid.Column="1" Background="#FBFCFF" BorderBrush="#DDE5EF" BorderThickness="0,0,1,0">
-        <Grid RowDefinitions="58,42,36,*,28">
+        <Grid RowDefinitions="58,42,36,Auto,*,28">
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="17,8">
             <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold" Foreground="#101B30" VerticalAlignment="Center" />
             <Button Grid.Column="1" ToolTip.Tip="Choose workspace folder" Click="ChooseWorkspace" Classes="toolbar"><controls:NavigationIcon Kind="plus" Width="18" Height="18" Ink="#25354E" /></Button>
@@ -66,8 +66,11 @@
           <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="16,0,16,5">
             <Button Content="Favorites" Classes="chip" Classes.active="{Binding FavoritesOnly}" Command="{Binding ShowFavoriteProjectsCommand}" />
             <Button Content="All" Classes="chip" Classes.active="{Binding AllProjects}" Command="{Binding ShowAllProjectsCommand}" />
+            <Button Content="Changed" Classes="chip" Classes.active="{Binding ChangedProjectsOnly}" Command="{Binding ShowChangedProjectsCommand}" IsEnabled="{Binding CanShowChangedProjects}" />
+            <Button Content="Cancel" Classes="toolbar" Command="{Binding CancelProjectChangeRefreshCommand}" IsVisible="{Binding IsProjectChangeLoading}" AutomationProperties.Name="Cancel changed-project scan" />
           </StackPanel>
-          <TreeView Grid.Row="3" x:Name="ProjectTree" ItemsSource="{Binding ExplorerRoots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}" Background="Transparent" Margin="6,0" ItemContainerTheme="{StaticResource WorkspaceTreeItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <TextBlock Grid.Row="3" Text="{Binding ProjectChangeStatus}" IsVisible="{Binding HasProjectChangeStatus}" Classes="muted" FontSize="11" TextWrapping="Wrap" Margin="17,1,12,6" />
+          <TreeView Grid.Row="4" x:Name="ProjectTree" ItemsSource="{Binding ExplorerRoots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}" Background="Transparent" Margin="6,0" ItemContainerTheme="{StaticResource WorkspaceTreeItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <TreeView.ItemTemplate>
               <TreeDataTemplate x:DataType="vm:ExplorerNode" ItemsSource="{Binding Children}">
                 <Grid ColumnDefinitions="20,*,Auto,Auto" ColumnSpacing="7" Height="30" ToolTip.Tip="{Binding Path}">
@@ -83,7 +86,7 @@
               </TreeDataTemplate>
             </TreeView.ItemTemplate>
           </TreeView>
-          <Border Grid.Row="4" BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" Padding="16,4">
+          <Border Grid.Row="5" BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" Padding="16,4">
             <TextBlock Text="{Binding RepositoryCount}" Classes="muted" FontSize="12" />
           </Border>
         </Grid>

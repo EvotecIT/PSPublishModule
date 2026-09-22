@@ -30,7 +30,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool _updatingTreeSelection;
     private int _refreshVersion;
 
-    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null, IWorkspaceStorageRemovalService? storageRemoval = null, IWorkspaceAutomationInventoryService? automations = null, IWorkspaceConnectionInventoryService? connections = null, IWorkspaceActivityInventoryService? activity = null, PowerForgeStudio.Orchestrator.Projects.IProjectOverviewService? overview = null, IProjectHistoryService? history = null, IGitHubProjectActionService? gitHubActions = null, IWorkspacePackageCatalogService? packages = null)
+    public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null, IWorkspaceStorageRemovalService? storageRemoval = null, IWorkspaceAutomationInventoryService? automations = null, IWorkspaceConnectionInventoryService? connections = null, IWorkspaceActivityInventoryService? activity = null, PowerForgeStudio.Orchestrator.Projects.IProjectOverviewService? overview = null, IProjectHistoryService? history = null, IGitHubProjectActionService? gitHubActions = null, IWorkspacePackageCatalogService? packages = null, IWorkspaceProjectChangeService? projectChanges = null)
     {
         Release = release ?? new ReleaseViewModel(openPublicPackage: OpenPublicPackageAsync);
         Storage = new StorageViewModel(storage, storageRemoval, GetProtectedWorkingCopies);
@@ -47,6 +47,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         _files = files ?? new FileExplorerService();
         _recovery = recovery ?? new FileRecoveryService();
         _repositories = repositories ?? new WorkspaceRepositorySource();
+        _projectChanges = projectChanges ?? new WorkspaceProjectChangeService();
         Changes.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(GitChangesViewModel.LastOperation)) OnPropertyChanged(nameof(DisplayedOutput));
@@ -265,6 +266,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             return;
         }
         var refresh = ++_refreshVersion;
+        var root = WorkspaceRoot;
+        BeginProjectCatalogRefresh(root);
         try
         {
             CaptureSessionBeforeRefresh();
@@ -280,7 +283,6 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             Files.Clear();
             PreviewTitle = "Workspace";
             Preview = "Select a project to browse its files and working copies.";
-            var root = WorkspaceRoot;
             Storage.SetWorkspace(root);
             Automations.SetWorkspace(root);
             Connections.SetWorkspace(root);
@@ -296,6 +298,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             _gitSnapshots.Clear();
             ApplyFilter();
             RefreshQuickProjectMatches();
+            CompleteProjectCatalogRefresh(root);
             RepositoryCount = $"{found.Count} repositories";
             Status = "Local discovery complete";
             AppendOutput($"Discovered {found.Count} repositories in {root}.");
@@ -309,12 +312,15 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!_disposed && refresh == _refreshVersion) Report(ex); }
+        finally { EndProjectCatalogRefresh(root, refresh); }
     }
 
     private void ApplyFilter()
     {
         Projects.Clear();
-        foreach (var entry in _catalog.Where(x => x.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase) && (!FavoritesOnly || _favorites.Contains(x.RootPath))))
+        foreach (var entry in _catalog.Where(x => x.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase) &&
+                                                  (!FavoritesOnly || _favorites.Contains(x.RootPath)) &&
+                                                  (!ChangedProjectsOnly || !_hasProjectChangeSnapshot || _changedProjectRoots.Contains(x.RootPath))))
         {
             if (!_projectNodes.TryGetValue(entry.RootPath, out var node))
                 _projectNodes[entry.RootPath] = node = new ExplorerNode(entry.Name, entry.RootPath, "project", entry.RootPath, LoadProjectAsync);
@@ -464,5 +470,5 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var text = Output + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
         Output = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; Build.Dispose(); Changes.Dispose(); History.Dispose(); GitHub.Dispose(); Release.Dispose(); Storage.Dispose(); Automations.Dispose(); Connections.Dispose(); Packages.Dispose(); Activity.Dispose(); Overview.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; DisposeProjectChangeInventory(); Build.Dispose(); Changes.Dispose(); History.Dispose(); GitHub.Dispose(); Release.Dispose(); Storage.Dispose(); Automations.Dispose(); Connections.Dispose(); Packages.Dispose(); Activity.Dispose(); Overview.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 }

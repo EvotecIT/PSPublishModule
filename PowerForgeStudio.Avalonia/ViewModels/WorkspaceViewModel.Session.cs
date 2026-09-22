@@ -21,7 +21,7 @@ public sealed partial class WorkspaceViewModel
     [ObservableProperty] private WorkspaceDocumentViewModel? _activeDocument;
     [ObservableProperty] private bool _favoritesOnly;
     [ObservableProperty] private string _stateError = "";
-    public bool AllProjects => !FavoritesOnly;
+    public bool AllProjects => !FavoritesOnly && !ChangedProjectsOnly;
     public bool IsWorkspaceTab => ActiveDocument is null;
     public bool HasStateError => !string.IsNullOrEmpty(StateError);
     public bool HasActiveProject => _projectNodes.Values.Any(project => project.IsContextProject);
@@ -30,15 +30,15 @@ public sealed partial class WorkspaceViewModel
     public string DisplayedStatus => HasStateError ? StateError : IsOverviewPage ? Overview.Status : IsHistoryPage ? History.DetailStatus : IsSettingsPage ? Settings.Status : IsActivityPage ? Activity.Status : IsStoragePage ? Storage.Status : IsAutomationsPage ? Automations.Status : IsConnectionsPage ? Connections.Status : IsPackagesPage ? Packages.Status : Status;
     partial void OnStatusChanged(string value) => OnPropertyChanged(nameof(DisplayedStatus));
     partial void OnStateErrorChanged(string value) { OnPropertyChanged(nameof(HasStateError)); OnPropertyChanged(nameof(DisplayedStatus)); }
-    partial void OnFavoritesOnlyChanged(bool value) { OnPropertyChanged(nameof(AllProjects)); ApplyFilter(); }
+    partial void OnFavoritesOnlyChanged(bool value) { if (value) ChangedProjectsOnly = false; OnPropertyChanged(nameof(AllProjects)); ApplyFilter(); }
     partial void OnActiveDocumentChanged(WorkspaceDocumentViewModel? value)
     {
         OnPropertyChanged(nameof(IsWorkspaceTab));
         foreach (var document in Documents) document.IsActive = ReferenceEquals(document, value);
         NotifyEditorChanged();
     }
-    [RelayCommand] private void ShowAllProjects() => FavoritesOnly = false;
-    [RelayCommand] private void ShowFavoriteProjects() => FavoritesOnly = true;
+    [RelayCommand] private void ShowAllProjects() { FavoritesOnly = false; ChangedProjectsOnly = false; }
+    [RelayCommand] private void ShowFavoriteProjects() { ChangedProjectsOnly = false; FavoritesOnly = true; }
 
     [RelayCommand]
     private async Task ShowWorkspaceAsync()
@@ -216,7 +216,7 @@ public sealed partial class WorkspaceViewModel
         var selected = SelectedNode;
         ExplorerRoots.Clear();
         var favorites = Projects.Where(project => _favorites.Contains(project.Path)).ToArray();
-        var favoriteGroup = new ExplorerNode("Favorites", "", "favorite", WorkspaceRoot) { IsExpanded = true, Detail = favorites.Length == 0 ? "No favorites" : "" };
+        var favoriteGroup = new ExplorerNode("Favorites", "", "favorite", WorkspaceRoot) { IsExpanded = true, Detail = favorites.Length == 0 ? ChangedProjectsOnly && _hasProjectChangeSnapshot ? "No changed favorites" : "No favorites" : "" };
         foreach (var project in favorites) favoriteGroup.Children.Add(project);
         ExplorerRoots.Add(favoriteGroup);
         var others = Projects.Except(favorites).ToArray();

@@ -52,6 +52,7 @@ public sealed partial class WorkspaceViewModel
         if (node.Kind != "project" || !_catalog.Any(entry => SamePath(entry.RootPath, node.Path))) return;
         QuickProjectQuery = "";
         FavoritesOnly = false;
+        ChangedProjectsOnly = false;
         Filter = "";
         ApplyFilter();
         ShowOverviewCommand.Execute(null);

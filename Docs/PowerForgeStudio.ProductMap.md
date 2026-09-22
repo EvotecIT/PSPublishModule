@@ -29,6 +29,8 @@ Projects in the rail returns to the selected project's Overview. It remains high
 
 The title-bar field is a Ctrl+K repository jump over the loaded workspace catalog. It shows bounded matching repositories without changing the sidebar tree while typing; choosing one clears any tree filter and opens that project's Overview. The sidebar field only filters project names in the tree. The title-bar field does not search files, commits, issues or remote providers.
 
+The Changed tree chip performs an explicit read-only local Git scan over primary checkouts and registered worktrees. The completed observation filters project groups and shows its UTC time plus any working copies that could not be inspected. A refresh keeps the previous result visible until the new scan completes. It does not fetch remotes, measure workspace storage or classify a worktree as safe to remove.
+
 ## Subpages and overlays
 
 These are states within an owning surface, not additional top-level pages:
