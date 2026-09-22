@@ -83,6 +83,30 @@ public sealed class BuildTests
     }
 
     [Fact]
+    public async Task PlannerFailureRedactsRecognizedSecretArgumentsAndRestoresInspectionAction()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-build-error-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Build"));
+        await File.WriteAllTextAsync(Path.Combine(root, "Build", "project.build.json"), "{}");
+        var planner = new DelayedPlanner();
+        try
+        {
+            using var model = new BuildViewModel(planner);
+            model.SetWorkingCopy(root);
+            Assert.True(model.EmphasizePlan);
+            var pending = model.PlanAsync();
+            await planner.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            planner.Complete.SetException(new InvalidOperationException("Planner failed with --Token=fixture-secret"));
+            await pending;
+            Assert.Contains("<redacted>", model.Status);
+            Assert.DoesNotContain("fixture-secret", model.Status, StringComparison.Ordinal);
+            Assert.True(model.EmphasizePlan);
+            Assert.False(model.CanBuild);
+        }
+        finally { planner.Complete.TrySetResult([]); Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task ModuleJsonPlanningRendersAndChangingWorkingCopyClearsResults()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-build-test-" + Guid.NewGuid().ToString("N"));
@@ -110,6 +134,7 @@ public sealed class BuildTests
                 var result = Assert.Single(workspace.Build.Results);
                 Assert.Equal(RepositoryPlanStatus.Succeeded, result.Status);
                 Assert.Equal(config, result.PlanPath);
+                Assert.Equal("powerforge.json", workspace.Build.ContractDisplay);
                 Assert.Contains(result.Actions, action => action.Action == "Stage to staging");
                 Assert.Contains(result.Actions, action => action.Action == "Run action (Generate release metadata)");
                 Assert.Contains(result.Actions, action => action.Action == "Pack Packed");

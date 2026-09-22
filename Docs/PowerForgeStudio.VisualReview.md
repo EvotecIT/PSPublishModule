@@ -74,18 +74,19 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] Releases now shows the captured checkpoint state above a compact five-stage guide, keeps artifact paths secondary, and emphasizes the action available at that checkpoint.
 - [x] Changes uses the right panel for selected-file Git evidence and the applicable stage action instead of repeating generic working-copy labels.
 - [x] Project GitHub uses the right panel for the selected issue or PR, including its observed state and PR-only head/check evidence.
-- [ ] Compare current Avalonia wide and compact renders for each pattern against this set.
+- [x] Build & Run keeps the working copy and trust boundary compact, shows contract paths relative to that copy, and highlights Build after a successful inspection.
+- [x] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.
 - [ ] Capture final native Windows and headless evidence after the last visual change.
 
-The 1600 × 1000 renders have now been compared with all eight concepts. The runtime captures are test fixtures, so their project names and counts differ from the illustrative designs. Compact Release, Activity and Storage were also inspected; the other compact routes still need a final side-by-side pass.
+The 1600 × 1000 and 1050 × 720 renders have now been compared with all eight concepts. The runtime captures are test fixtures, so their project names and counts differ from the illustrative designs. Compact Changes, History, Build & Run, Activity and Storage also have scrolled captures for content below the first viewport.
 
 | Pattern | Current rendering | Remaining visual work |
 |---|---|---|
 | Workspace and files | The tree, file list, preview, tabs and output dock use the shared shell. | Give the selected file a more useful context panel; avoid repeating a long path in several places. |
 | Overview | Identity, observed products, entrypoints and prerequisites form readable cards. | Tighten card density and reduce the generic context panel. Do not invent recent activity or tool health. |
 | Changes and history | Branch actions, changed paths, patch, commit form and selected-change context are present. | Improve patch readability and finish the compact diff/commit pass. |
-| Build & Run | Validated contracts and reviewed local actions are visible before execution. | Make source, intent, progress and artifacts easier to scan without hiding the trust boundary or raw-output access. |
+| Build & Run | Validated contracts, reviewed local actions and the available build action are visible; recognized secret arguments are removed from planning errors. | Give build progress and artifacts a denser result layout without hiding the trust boundary or raw-output access. |
 | Releases | The captured state, available action and artifacts are clear at wide and compact sizes. | Group publication controls and receipts by stage; do not imply that a destination was published until a receipt exists. |
 | Project GitHub | Issues, PR details, checks, files and reviewed actions are functional; the context panel follows the selected item. | Reduce the empty space in the list/detail split and finish compact discussion and patch scrolling. |
 | Activity catalog | Source availability, counts, filters, actionable rows and evidence remain visible. | Keep the compact inspector readable when provider explanations are long. |

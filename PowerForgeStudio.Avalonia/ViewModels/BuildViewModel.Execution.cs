@@ -21,11 +21,12 @@ public sealed partial class BuildViewModel
     [ObservableProperty] private ReleaseBuildExecutionResult? _buildResult;
     public bool HasBuild => !string.IsNullOrEmpty(BuildRoot);
     public bool CanBuild => HasSuccessfulInspection && !HasUnsavedChanges && !IsBusy && !IsBuilding && !IsReleaseRunning && !_disposed;
-    partial void OnHasSuccessfulInspectionChanged(bool value) => OnPropertyChanged(nameof(CanBuild));
+    partial void OnHasSuccessfulInspectionChanged(bool value) { OnPropertyChanged(nameof(CanBuild)); OnPropertyChanged(nameof(EmphasizePlan)); }
     partial void OnIsBuildingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanBuild));
         OnPropertyChanged(nameof(CanPlan));
+        OnPropertyChanged(nameof(EmphasizePlan));
     }
     partial void OnBuildRootChanged(string value) => OnPropertyChanged(nameof(HasBuild));
 

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Orchestrator.Catalog;
+using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Portfolio;
 using PowerForgeStudio.Orchestrator.Queue;
 
@@ -24,6 +25,9 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _workingCopyRoot = "";
     [ObservableProperty] private string _status = "Select a working copy to inspect its build contract.";
     [ObservableProperty] private string _contracts = "No contract inspected.";
+    public string ContractDisplay => string.IsNullOrEmpty(WorkingCopyRoot) ? Contracts : string.Join("\n", Contracts.Split('\n')
+        .Select(path => Path.IsPathFullyQualified(path) ? Path.GetRelativePath(WorkingCopyRoot, path) : path));
+    partial void OnContractsChanged(string value) => OnPropertyChanged(nameof(ContractDisplay));
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private bool _hasUnsavedChanges;
     partial void OnHasUnsavedChangesChanged(bool value)
@@ -36,10 +40,12 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
             HasSuccessfulInspection = false;
             Status = "Configuration changed. Save or discard drafts, then inspect again.";
         }
-        OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(CanBuild));
+        OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(EmphasizePlan)); OnPropertyChanged(nameof(CanBuild));
     }
     public bool CanPlan => !HasUnsavedChanges && !IsBusy && !IsBuilding && !_disposed && !string.IsNullOrEmpty(WorkingCopyRoot);
-    partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(CanBuild)); }
+    public bool EmphasizePlan => CanPlan && !HasSuccessfulInspection;
+    partial void OnWorkingCopyRootChanged(string value) { OnPropertyChanged(nameof(EmphasizePlan)); OnPropertyChanged(nameof(ContractDisplay)); }
+    partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(EmphasizePlan)); OnPropertyChanged(nameof(CanBuild)); }
 
     public void SetWorkingCopy(string root)
     {
@@ -52,6 +58,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
         Contracts = "No contract inspected.";
         Status = string.IsNullOrEmpty(root) ? "Select a working copy to inspect its build contract." : "Ready to inspect and plan this working copy.";
         OnPropertyChanged(nameof(CanPlan));
+        OnPropertyChanged(nameof(EmphasizePlan));
     }
 
     [RelayCommand]
@@ -87,7 +94,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
             Status = results.Any(x => x.Status == RepositoryPlanStatus.Failed) ? "Inspection failed. Review the details below." : "Inspection complete. Each result states whether configuration was validated, exported or planned.";
         }
         catch (OperationCanceledException) { if (!_disposed && version == _contextVersion) Status = "Planning cancelled."; }
-        catch (Exception ex) { if (!_disposed && version == _contextVersion) Status = ex.Message; }
+        catch (Exception ex) { if (!_disposed && version == _contextVersion) Status = StudioOutputSanitizer.Sanitize(ex.Message); }
         finally { if (ReferenceEquals(_operation, cancellation)) _operation = null; IsBusy = false; }
     }
 

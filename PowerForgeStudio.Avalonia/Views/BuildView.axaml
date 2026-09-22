@@ -2,28 +2,37 @@
              xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
              xmlns:domain="using:PowerForgeStudio.Domain.Portfolio"
              xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue"
+             xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.BuildView" x:DataType="vm:BuildViewModel">
   <ScrollViewer>
-    <StackPanel Margin="22,18" Spacing="14">
-      <TextBlock Text="Build configuration &amp; plans" FontSize="22" FontWeight="SemiBold" />
-      <TextBlock Text="Working copy" Classes="muted" />
-      <SelectableTextBlock Text="{Binding WorkingCopyRoot}" TextWrapping="Wrap" />
+    <StackPanel Margin="22,14" Spacing="10">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <controls:NavigationIcon Kind="output" Width="26" Height="26" Ink="#0865FF" VerticalAlignment="Center" />
+        <TextBlock Text="Build &amp; Run" Classes="heading" />
+      </StackPanel>
+      <TextBlock Text="Inspect the working copy, review local actions, then build." Classes="muted" TextWrapping="Wrap" />
+      <Border Classes="card" Padding="10">
+        <StackPanel Spacing="5">
+          <TextBlock Text="Working copy" Classes="muted" FontSize="11" />
+          <SelectableTextBlock Text="{Binding WorkingCopyRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding WorkingCopyRoot}" FontSize="12" />
+          <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
       <TextBlock Text="Save or discard this working copy's drafts before inspecting or building. Build commands use files on disk." IsVisible="{Binding HasUnsavedChanges}" Foreground="#B45309" TextWrapping="Wrap" />
-      <Border Background="#EEF4FF" CornerRadius="6" Padding="14">
+      <Border Background="#EEF4FF" CornerRadius="6" Padding="11">
         <StackPanel Spacing="4">
           <TextBlock Text="Review before execution" FontWeight="SemiBold" Foreground="#0865FF" />
-          <TextBlock Text="JSON contracts are planned directly. PowerShell contracts may run trusted project code only to export their configuration. The reviewed list hides script contents, environment values, credentials, and raw command arguments." TextWrapping="Wrap" />
+          <TextBlock Text="JSON is planned without running scripts. Inspecting PowerShell may execute trusted project code to export configuration. Script contents, credentials, environment values and raw arguments stay hidden." TextWrapping="Wrap" />
         </StackPanel>
       </Border>
       <StackPanel Orientation="Horizontal" Spacing="10">
-        <Button Content="Inspect &amp; plan" Command="{Binding PlanCommand}" IsEnabled="{Binding CanPlan}" Background="#0865FF" Foreground="White" />
+        <Button Content="Inspect &amp; plan" Command="{Binding PlanCommand}" IsEnabled="{Binding CanPlan}" Classes.primary="{Binding EmphasizePlan}" />
         <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
-        <Button Content="Build current configuration" Command="{Binding BuildCommand}" IsEnabled="{Binding CanBuild}" />
+        <Button Content="Build current configuration" Command="{Binding BuildCommand}" IsEnabled="{Binding CanBuild}" Classes.primary="{Binding CanBuild}" />
       </StackPanel>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
-      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
       <TextBlock Text="Detected contracts" FontWeight="SemiBold" />
-      <SelectableTextBlock Text="{Binding Contracts}" TextWrapping="Wrap" FontSize="12" />
+      <SelectableTextBlock Text="{Binding ContractDisplay}" ToolTip.Tip="{Binding Contracts}" TextWrapping="Wrap" FontSize="12" />
       <ItemsControl ItemsSource="{Binding Results}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="domain:RepositoryPlanResult">
