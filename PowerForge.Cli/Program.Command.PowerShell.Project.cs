@@ -9,13 +9,15 @@ internal static partial class Program
 
     private static int CommandPowerShellProject(string[] args, bool outputJson, ILogger logger)
     {
-        if (args.Length == 0 || args.Any(IsHelpArgument))
+        if (args.Length == 0 || args.TakeWhile(static argument => argument != "--").Any(IsHelpArgument))
         {
             WritePowerShellProjectHelp(outputJson);
             return 0;
         }
         var operation = args[0].ToLowerInvariant();
         var operationArgs = args.Skip(1).ToArray();
+        if (operation is "run" or "watch")
+            return CommandPowerShellProjectRun(operation, operationArgs, outputJson);
         if (operation == "init")
             return CommandPowerShellProjectInit(operationArgs, outputJson, logger);
         if (operation is not ("analyze" or "explain" or "recommend" or "lock" or "restore" or "build" or "test" or "pack" or "install" or "diagnose"))
@@ -164,9 +166,13 @@ internal static partial class Program
                 Command = "powershell.project",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { usage = PowerShellProjectUsage })
+                Result = JsonSerializer.SerializeToElement(new { usage = PowerShellProjectUsage, runUsage = PowerShellProjectRunUsage })
             });
         }
-        else Console.WriteLine(PowerShellProjectUsage);
+        else
+        {
+            Console.WriteLine(PowerShellProjectUsage);
+            Console.WriteLine(PowerShellProjectRunUsage);
+        }
     }
 }

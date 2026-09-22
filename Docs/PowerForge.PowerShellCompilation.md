@@ -1,6 +1,6 @@
 # PowerShell Compilation
 
-Last updated: 2026-09-17
+Last updated: 2026-09-22
 
 PowerForge can turn a `.ps1`, `.psm1`, `.psd1`, or conventional module directory into three different artifact shapes:
 
@@ -62,6 +62,8 @@ Code signing establishes publisher identity and artifact integrity; it does not 
 ## Use the CLI
 
 ### Reproducible project workflow
+
+For executable development, see the [source-first run/watch guide](PowerForge.PowerShellCompilation.Development.md), including arguments, cancellation, incremental rebuilds, and the boundary between development edits and reviewed distribution artifacts.
 
 For a repeatable artifact matrix, create one portable project manifest instead of repeating command switches in a repository-specific build script:
 

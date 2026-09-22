@@ -244,6 +244,9 @@ public sealed class PowerShellCompilationBuildSpec
     /// </summary>
     public PowerShellCompilationDependencyGraph? ExpectedDependencyLock { get; set; }
 
+    // Only the project development workflow can admit source-only changes against this reviewed baseline.
+    internal string? DevelopmentBaselineLockSha256 { get; set; }
+
     /// <summary>Optional equivalent-workload runtime boundary profile to bind into manifest evidence.</summary>
     public PowerShellCompilationBoundaryRuntimeProfile? BoundaryRuntimeProfile { get; set; }
 
@@ -441,6 +444,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Whether the build consumed a separately supplied and validated dependency lock.</summary>
     public bool DependencyLockReviewed { get; set; }
+
+    /// <summary>Reviewed baseline for development-only source/resource edits; the effective graph itself was not reviewed.</summary>
+    public string? DevelopmentBaselineLockSha256 { get; set; }
 
     /// <summary>Versioned command semantic providers used by compiled methods.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();

@@ -1,8 +1,8 @@
 # PowerShell compiler: next major milestones
 
-Updated: 2026-09-22. Qualified continuation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1` on `feature/powershell-compiler`; production corrections are in `18e443a14`.
+Updated: 2026-09-22. Active continuation: `feature/powershell-compiler`. The readiness assessment records the qualified revisions and remaining integration boundaries.
 
-M24–M27 have completed their bounded local implementation gates. The September 22 stopping failure was traced to a test handshake race and corrected across eight fixtures without changing runtime semantics. Package cancellation, metadata, and coverage corrections pass the 1,097-test compiler gate, six-program Strict corpus, and final 55-case focused suite. **M28 is next.** Completion of an implementation milestone does not establish general PowerShell compatibility, a released package, or qualification on an untested host.
+M24–M27 have completed their bounded local implementation gates, including the September 22 audit corrections. **M28 is in progress:** executable run/watch is implemented through the existing project owner, while packaging integration, grouped diagnostics, debugger qualification, and complete library/module quickstarts remain open below. Completion of an implementation milestone does not establish general PowerShell compatibility, a released package, or qualification on an untested host.
 
 The [readiness assessment](PowerForge.PowerShellCompilation.Assessment.md) owns findings and dated validation. The [architecture roadmap](PowerForge.PowerShellCompilation.Roadmap.md) owns design and M0–M23. The [compilation guide](PowerForge.PowerShellCompilation.md) owns commands. This document owns the remaining execution order; earlier per-commit journals are available in Git history.
 
@@ -105,14 +105,14 @@ Native shared-library exports remain deferred until a concrete non-.NET embeddin
 
 **Outcome:** users develop from PowerShell source without treating generated C# or temporary build paths as the main interface.
 
-The [project CLI](../PowerForge.Cli/Program.Command.PowerShell.Project.cs) already exposes `init`, `analyze`, `explain`, `recommend`, `lock`, `restore`, `build`, `test`, `pack`, `install`, and `diagnose` through `PowerShellCompilationProjectWorkflowService`. Preserve that owner and its existing workflow. Current project `pack` produces a qualified ZIP; the Strict CLR library NuGet builder is a separate shared API. Neither `run` nor `watch` is currently a project command.
+The [project CLI](../PowerForge.Cli/Program.Command.PowerShell.Project.cs) exposes `init`, `analyze`, `explain`, `recommend`, `lock`, `restore`, `build`, `run`, `watch`, `test`, `pack`, `install`, and `diagnose` through `PowerShellCompilationProjectWorkflowService`. The [development guide](PowerForge.PowerShellCompilation.Development.md) covers executable run/watch, arguments, cancellation, and reviewed-lock boundaries. Current project `pack` produces a qualified ZIP; the Strict CLR library NuGet builder remains a separate shared API.
 
-- [ ] Add run to the existing project owner and thin surfaces, preserving declared target, arguments, stdin/stdout/stderr, exit codes, cancellation, and locks.
-- [ ] Add project watch and incremental rebuild using the [existing artifact cache](../PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuildCache.cs) and fingerprints. Cover callee, resource, provider, profile, and dependency changes, rapid edits, failed builds, and verified no-change reuse. Never execute the last successful artifact as though it were the result of a failed new build.
+- [x] Add executable run to the existing project owner and thin CLI, preserving declared target, argument vectors, inherited stdin/stdout/stderr, exit codes, cancellation, and locks. Run checks inputs and the authenticated artifact inventory at the launch boundary; canceled/failed builds do not execute old output.
+- [x] Add executable watch and incremental rebuild using the [existing artifact cache](../PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuildCache.cs) and content fingerprints. Stop the preceding process tree before rebuilding, debounce rapid edits, recover after invalid source, and verify no-change reuse. Local script/resource bytes may change against a reviewed graph; dependency topology, providers, profiles, and target changes require explicit lock/restore. Development artifacts identify the reviewed baseline without labeling the edited source graph as fully reviewed.
 - [ ] Integrate the existing library NuGet builder with the documented project packaging path and reuse existing ABI-baseline checks. Keep qualified ZIP delivery and NuGet consumption explicit; do not create another packer or compatibility checker.
 - [ ] Extend existing explain/diagnose output to group blockers by complete function/workflow and show causal dependencies, source positions, and retained/rejected behavior. Keep semantic, shaping, dependency, and target failures distinct.
 - [ ] Observe debugging directly: source breakpoints, stepping, locals, stacks, and exceptions across a typed call and a Hybrid boundary. State boundaries that cannot be stepped through; PDB presence alone is insufficient.
-- [ ] Provide contributor-independent EXE and library/module quickstarts and actionable supported-host diagnostics.
+- [ ] Complete library/module consumer quickstarts and qualify additional supported-host diagnostics. The executable [run/watch quickstart](PowerForge.PowerShellCompilation.Development.md) is implemented with Windows host diagnostics; this does not qualify other platforms or source debugging.
 
 **Exit gate:** clean init → lock → restore → run/test → edit → rebuild → diagnose/debug → pack through documented entrypoints. Verify argument quoting, redirected streams, cancellation, offline restore, stale-output prevention, invalidation, and source-line accuracy.
 

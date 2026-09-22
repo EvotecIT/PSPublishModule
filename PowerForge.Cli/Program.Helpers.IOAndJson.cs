@@ -749,6 +749,7 @@ internal static partial class Program
 
     static bool IsJsonOutput(string[] argv)
     {
+        argv = argv.TakeWhile(static argument => argument != "--").ToArray();
         foreach (var a in argv)
         {
             if (a.Equals("--output-json", StringComparison.OrdinalIgnoreCase) || a.Equals("--json", StringComparison.OrdinalIgnoreCase))

@@ -123,6 +123,7 @@ internal static partial class Program
         for (int i = 0; i < args.Length; i++)
         {
             var a = args[i];
+            if (a == "--") break;
             if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
             {
                 verbose = true;
@@ -186,6 +187,11 @@ internal static partial class Program
         for (int i = 0; i < args.Length; i++)
         {
             var a = args[i];
+            if (a == "--")
+            {
+                list.AddRange(args.Skip(i));
+                break;
+            }
             if (IsGlobalArg(a)) continue;
 
             if (a.Equals("--view", StringComparison.OrdinalIgnoreCase))

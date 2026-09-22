@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace PowerForge.Tests;
 
 [Trait("Category", "PowerShellCompilation")]
-public sealed class PowerForgeCliPowerShellCompilationTests
+public sealed partial class PowerForgeCliPowerShellCompilationTests
 {
     [Theory]
     [InlineData("powershell build missing.ps1 --kind exe --sing --output json", "powershell.build", "--sing")]
@@ -574,7 +574,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         var baseline = Path.Combine(root, "census.json");
         Directory.CreateDirectory(product);
         var source = Path.Combine(product, "Functions.psm1");
-        File.WriteAllText(source, "function Add-TypedValue { param([int] $Number) [int] $result = $Number; $result += 1; return $result }");
+        File.WriteAllText(source, "function Add-TypedValue { [CmdletBinding()] param([int] $Number) [int] $result = $Number; $result += 1; return $result }");
 
         try
         {
@@ -591,7 +591,9 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 Assert.True(result.GetProperty("passed").GetBoolean());
             }
 
-            File.WriteAllText(source, "function Add-TypedValue { throw 'regression' }");
+            // A throw statement is supported. Use the same unsupported -as contract
+            // exercised by the census frontier tests to produce an actual coverage regression.
+            File.WriteAllText(source, "function Add-TypedValue { [CmdletBinding()] param([string] $Value) return ($Value -as [string]) }");
             var regression = await RunCliAsync(
                 repositoryRoot,
                 $"powershell census \"{product}\" --framework net10.0 --baseline \"{baseline}\" --output json");

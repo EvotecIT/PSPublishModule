@@ -31,7 +31,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string projectPath,
         string publishDirectory,
         string? runtimeIdentifier,
-        bool restoreCompleted)
+        bool restoreCompleted,
+        CancellationToken cancellationToken)
     {
         var arguments = new List<string>
         {
@@ -49,14 +50,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add(runtimeIdentifier!);
         }
 
-        var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
                 "dotnet",
                 Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
                 arguments,
                 TimeSpan.FromSeconds(spec.TimeoutSeconds),
-                GetNuGetEnvironment(spec)))
+                GetNuGetEnvironment(spec)), cancellationToken)
             .GetAwaiter()
             .GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
         var output = string.IsNullOrWhiteSpace(run.StdErr)
             ? run.StdOut
             : run.StdOut + Environment.NewLine + run.StdErr;
@@ -66,7 +68,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static GeneratedBuildProcessResult RunDotNetRestore(
         PowerShellCompilationBuildSpec spec,
         string projectPath,
-        string? runtimeIdentifier)
+        string? runtimeIdentifier,
+        CancellationToken cancellationToken)
     {
         var arguments = new List<string>
         {
@@ -89,12 +92,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add("--runtime");
             arguments.Add(runtimeIdentifier!);
         }
-        var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
             "dotnet",
             Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
             arguments,
             TimeSpan.FromSeconds(spec.TimeoutSeconds),
-            GetNuGetEnvironment(spec))).GetAwaiter().GetResult();
+            GetNuGetEnvironment(spec)), cancellationToken).GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
         var output = string.IsNullOrWhiteSpace(run.StdErr) ? run.StdOut : run.StdOut + Environment.NewLine + run.StdErr;
         return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
     }

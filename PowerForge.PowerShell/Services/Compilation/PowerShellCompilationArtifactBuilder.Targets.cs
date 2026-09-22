@@ -103,7 +103,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static PowerShellCompilationToolchainEvidence CaptureToolchain(
         string workspace,
         PowerShellCompilationTargetContract target,
-        PowerShellCompilationDependencyGraph dependencyGraph)
+        PowerShellCompilationDependencyGraph dependencyGraph,
+        CancellationToken cancellationToken)
     {
         var sdkVersion = PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk().Version;
         WriteSdkSelection(workspace, sdkVersion);
@@ -111,7 +112,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             "dotnet",
             workspace,
             new[] { "--version" },
-            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
+            TimeSpan.FromSeconds(30)), cancellationToken).GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
         if (!workspaceSdk.Succeeded || !workspaceSdk.StdOut.Trim().Equals(sdkVersion, StringComparison.Ordinal))
             throw new InvalidOperationException("Generated compilation workspace did not select the recorded dotnet SDK identity.");
         return new PowerShellCompilationToolchainEvidence
@@ -187,7 +189,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 ? string.Empty
                 : ComputeSha256(spec.NuGetLockFilePath!),
             generatedSourceSha256,
-            reviewedDependencyLock = spec.ExpectedDependencyLock is not null,
+            reviewedDependencyLock = spec.ExpectedDependencyLock is not null && spec.DevelopmentBaselineLockSha256 is null,
+            developmentBaselineLockSha256 = spec.DevelopmentBaselineLockSha256,
             reviewedProviderLock = providerLock.Packages.Length > 0 && spec.ExpectedProviderLock is not null,
             toolchain,
             sources,

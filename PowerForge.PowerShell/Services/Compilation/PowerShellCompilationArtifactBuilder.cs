@@ -31,8 +31,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     /// <summary>Builds the requested PowerShell artifact.</summary>
     public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec)
+        => Build(spec, CancellationToken.None);
+
+    /// <summary>Builds an artifact, canceling child build processes and checking cancellation before publication.</summary>
+    public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec, CancellationToken cancellationToken)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
+        cancellationToken.ThrowIfCancellationRequested();
         ApplyExplicitTargetContract(spec);
         ValidateSpec(spec);
         var runtimeIdentifier = ResolveRuntimeIdentifier(spec);
@@ -88,7 +93,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             if (dependencyGraph.Cycles.Length > 0)
                 throw new InvalidOperationException("PowerShell compilation dependency graph contains a static dependency cycle: " + string.Join(" -> ", dependencyGraph.Cycles[0]));
             var targetContract = ResolveTargetContract(spec, runtimeIdentifier);
-            var toolchain = CaptureToolchain(workspace, targetContract, dependencyGraph);
+            var toolchain = CaptureToolchain(workspace, targetContract, dependencyGraph, cancellationToken);
             WriteTargetContract(workspace, targetContract);
             var missingDependencies = dependencyPlan
                 .Where(static dependency => dependency.Disposition == PowerShellCompilationDependencyDisposition.Missing)
@@ -363,7 +368,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             if (spec.UseBuildCache || !string.IsNullOrWhiteSpace(spec.NuGetLockFilePath))
             {
                 failureStage = PowerShellCompilationFailureStage.Restore;
-                restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier);
+                restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier, cancellationToken);
                 if (restore.TimedOut)
                     throw new TimeoutException($"Generated .NET restore exceeded {spec.TimeoutSeconds} seconds.");
                 if (restore.ExitCode != 0)
@@ -380,7 +385,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 : PowerShellCompilationFailureStage.Optimization;
             var process = PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory)
                 ? new GeneratedBuildProcessResult(0, "PowerForge compilation build cache: verified content-addressed hit.", timedOut: false)
-                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null);
+                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             result.BuildOutput = BoundOutput(string.Join(Environment.NewLine,
                 new[] { restore?.Output, process.Output }.Where(static output => !string.IsNullOrWhiteSpace(output))));
             if (process.TimedOut)
@@ -590,7 +596,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
                     Dependencies = dependencyPlan,
                     DependencyGraph = dependencyGraph,
-                    DependencyLockReviewed = spec.ExpectedDependencyLock is not null,
+                    DependencyLockReviewed = spec.ExpectedDependencyLock is not null && spec.DevelopmentBaselineLockSha256 is null,
+                    DevelopmentBaselineLockSha256 = spec.DevelopmentBaselineLockSha256,
                     CommandProviders = commandProviders,
                     ProviderLock = providerResolution.Lock.Packages.Length == 0 ? null : providerResolution.Lock,
                     ProviderLockReviewed = providerResolution.Lock.Packages.Length > 0 && spec.ExpectedProviderLock is not null,
@@ -603,7 +610,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 };
                 var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
                 WriteManifest(Path.Combine(artifactStagingDirectory, Path.GetFileName(manifestPath)), manifest);
-            PowerShellArtifactSetPublisher.Commit(
+                cancellationToken.ThrowIfCancellationRequested();
+                PowerShellArtifactSetPublisher.Commit(
                     artifactStagingDirectory,
                     spec.OutputDirectory,
                     artifactName,
@@ -628,6 +636,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             {
                 PowerShellArtifactSetPublisher.TryDeleteDirectory(artifactStagingDirectory);
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
