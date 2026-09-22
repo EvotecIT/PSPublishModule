@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 
 namespace PowerForge.Tests;
 
@@ -95,6 +96,122 @@ public sealed class PublishVerificationHostServiceTests
 
         Assert.Equal(PublishVerificationStatus.Failed, result.Status);
         Assert.Contains("differs from the saved", result.Summary);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_LocalNuGetFeed_ConfirmsCopiedBytesAndRejectsDrift()
+    {
+        using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        var feed = Directory.CreateDirectory(Path.Combine(packageScope.RootPath, "feed")).FullName;
+        var publishedPath = Path.Combine(feed, Path.GetFileName(packageScope.PackagePath));
+        File.Copy(packageScope.PackagePath, publishedPath);
+        var approvedDigest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packageScope.PackagePath)));
+        using var service = new PublishVerificationHostService();
+        var request = new PublishVerificationRequest {
+            RootPath = packageScope.RootPath,
+            RepositoryName = "Contoso.ReleaseOps",
+            AdapterKind = "ProjectBuild",
+            TargetName = Path.GetFileName(packageScope.PackagePath),
+            TargetKind = "NuGet",
+            Destination = feed,
+            SourcePath = packageScope.PackagePath,
+            PackageId = "Contoso.ReleaseOps",
+            PackageVersion = "1.2.3",
+            ExpectedContentSha256 = approvedDigest
+        };
+
+        var matching = await service.VerifyAsync(request);
+        Assert.Equal(PublishVerificationStatus.Verified, matching.Status);
+        Assert.Contains("bytes match", matching.Summary);
+
+        using (var archive = ZipFile.Open(publishedPath, ZipArchiveMode.Update))
+            archive.CreateEntry("changed-after-publish.txt");
+        var changed = await service.VerifyAsync(request);
+        Assert.Equal(PublishVerificationStatus.Failed, changed.Status);
+        Assert.Contains("bytes differ", changed.Summary);
+
+        using (var archive = ZipFile.Open(packageScope.PackagePath, ZipArchiveMode.Update))
+            archive.CreateEntry("changed-local-artifact.txt");
+        var changedSource = await service.VerifyAsync(request);
+        Assert.Equal(PublishVerificationStatus.Failed, changedSource.Status);
+        Assert.Contains("approved digest", changedSource.Summary);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_LocalNuGetFileUri_UsesApprovedDigestAfterSourceRemoval()
+    {
+        using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        var feed = Directory.CreateDirectory(Path.Combine(packageScope.RootPath, "feed")).FullName;
+        var publishedPath = Path.Combine(feed, Path.GetFileName(packageScope.PackagePath));
+        File.Copy(packageScope.PackagePath, publishedPath);
+        var approvedDigest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packageScope.PackagePath)));
+        File.Delete(packageScope.PackagePath);
+        using var service = new PublishVerificationHostService();
+        var request = new PublishVerificationRequest {
+            RootPath = packageScope.RootPath,
+            RepositoryName = "Contoso.ReleaseOps",
+            AdapterKind = "ProjectBuild",
+            TargetName = Path.GetFileName(publishedPath),
+            TargetKind = "NuGet",
+            Destination = new Uri(feed).AbsoluteUri,
+            SourcePath = packageScope.PackagePath,
+            PackageId = "Contoso.ReleaseOps",
+            PackageVersion = "1.2.3",
+            ExpectedContentSha256 = approvedDigest
+        };
+
+        var delivered = await service.VerifyAsync(request);
+        Assert.Equal(PublishVerificationStatus.Verified, delivered.Status);
+        Assert.Contains("digest", delivered.Summary);
+
+        using (var archive = ZipFile.Open(publishedPath, ZipArchiveMode.Update))
+            archive.CreateEntry("replaced-package.txt");
+        var replaced = await service.VerifyAsync(request);
+        Assert.Equal(PublishVerificationStatus.Failed, replaced.Status);
+        Assert.Contains("bytes differ", replaced.Summary);
+
+        var noDigest = await service.VerifyAsync(new PublishVerificationRequest {
+            RootPath = request.RootPath,
+            RepositoryName = request.RepositoryName,
+            AdapterKind = request.AdapterKind,
+            TargetName = request.TargetName,
+            TargetKind = request.TargetKind,
+            Destination = request.Destination,
+            SourcePath = request.SourcePath,
+            PackageId = request.PackageId,
+            PackageVersion = request.PackageVersion
+        });
+        Assert.Equal(PublishVerificationStatus.Failed, noDigest.Status);
+        Assert.Contains("no approved digest", noDigest.Summary);
+
+        File.Delete(publishedPath);
+        var missing = await service.VerifyAsync(request);
+        Assert.Equal(PublishVerificationStatus.Failed, missing.Status);
+        Assert.Contains("does not contain", missing.Summary);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_RelativeLocalNuGetFeed_UsesPackageDirectory()
+    {
+        using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        var feed = Directory.CreateDirectory(Path.Combine(packageScope.RootPath, "feed")).FullName;
+        File.Copy(packageScope.PackagePath, Path.Combine(feed, Path.GetFileName(packageScope.PackagePath)));
+        using var service = new PublishVerificationHostService();
+
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            RootPath = packageScope.RootPath,
+            RepositoryName = "Contoso.ReleaseOps",
+            AdapterKind = "ProjectBuild",
+            TargetName = Path.GetFileName(packageScope.PackagePath),
+            TargetKind = "NuGet",
+            Destination = "." + Path.DirectorySeparatorChar + "feed",
+            SourcePath = packageScope.PackagePath,
+            PackageId = "Contoso.ReleaseOps",
+            PackageVersion = "1.2.3"
+        });
+
+        Assert.Equal(PublishVerificationStatus.Verified, result.Status);
+        Assert.Contains("bytes match", result.Summary);
     }
 
     [Fact]

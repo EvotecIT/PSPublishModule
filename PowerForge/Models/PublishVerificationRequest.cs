@@ -31,4 +31,7 @@ public sealed class PublishVerificationRequest
 
     /// <summary>Exact package version captured from the published artifact, when available.</summary>
     public string? PackageVersion { get; set; }
+
+    /// <summary>SHA-256 of the approved package artifact captured before publication, when available.</summary>
+    public string? ExpectedContentSha256 { get; set; }
 }

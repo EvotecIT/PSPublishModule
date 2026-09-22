@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -138,6 +139,10 @@ public sealed class PublishVerificationHostService : IDisposable
             return Skipped("NuGet destination URL was not recorded, so remote verification was skipped.");
 
         var destination = request.Destination!;
+        var localFeed = TryResolveLocalNuGetFeed(destination, request.SourcePath);
+        if (localFeed is not null)
+            return await VerifyLocalNuGetFeedAsync(localFeed, identity, request.SourcePath, request.ExpectedContentSha256, cancellationToken).ConfigureAwait(false);
+
         var probeUri = await ResolveNuGetPackageProbeUriAsync(destination, identity, cancellationToken).ConfigureAwait(false);
         if (probeUri is null)
         {
@@ -153,6 +158,93 @@ public sealed class PublishVerificationHostService : IDisposable
 
         return Verified($"Package probe succeeded for {identity.Id} {identity.Version} against {probeUri.Host}." +
             (hasLocalPackage ? string.Empty : " The local package is unavailable; verification used its saved publication identity."));
+    }
+
+    private static string? TryResolveLocalNuGetFeed(string destination, string? sourcePath)
+    {
+        if (Uri.TryCreate(destination, UriKind.Absolute, out var uri))
+            return uri.IsFile ? uri.LocalPath : null;
+        var normalized = PathValueResolver.NormalizeSeparators(destination);
+        if (Path.IsPathRooted(normalized)) return normalized;
+        if (string.IsNullOrWhiteSpace(sourcePath) || !Path.IsPathRooted(sourcePath) ||
+            !(normalized.StartsWith(".", StringComparison.Ordinal) ||
+              normalized.IndexOf(Path.DirectorySeparatorChar) >= 0))
+            return null;
+        var packageDirectory = Path.GetDirectoryName(sourcePath);
+        return packageDirectory is null ? null : Path.GetFullPath(Path.Combine(packageDirectory, normalized));
+    }
+
+    private static async Task<PublishVerificationResult> VerifyLocalNuGetFeedAsync(
+        string feedPath,
+        NuGetPackageIdentity identity,
+        string? sourcePath,
+        string? expectedContentSha256,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            var root = Path.GetFullPath(feedPath);
+            if (!Directory.Exists(root)) return Failed("The recorded local NuGet feed is unavailable.");
+            if (expectedContentSha256 is not null &&
+                (expectedContentSha256.Length != 64 || !expectedContentSha256.All(Uri.IsHexDigit)))
+                return Failed("The captured NuGet artifact digest is invalid.");
+            var expectedHash = expectedContentSha256 is null ? null : Enumerable.Range(0, 32)
+                .Select(index => Convert.ToByte(expectedContentSha256.Substring(index * 2, 2), 16))
+                .ToArray();
+            var fileName = $"{identity.Id}.{identity.Version}.nupkg";
+            var lowerFileName = fileName.ToLowerInvariant();
+            var candidates = new[] {
+                Path.Combine(root, fileName),
+                Path.Combine(root, lowerFileName),
+                Path.Combine(root, identity.Id, identity.Version, fileName),
+                Path.Combine(root, identity.Id.ToLowerInvariant(), identity.Version.ToLowerInvariant(), lowerFileName)
+            }.Distinct(FrameworkCompatibility.PathStringComparison() == StringComparison.OrdinalIgnoreCase
+                ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            var hasSource = !string.IsNullOrWhiteSpace(sourcePath) && File.Exists(sourcePath);
+            byte[]? sourceHash = null;
+            if (!hasSource && expectedContentSha256 is null)
+                return Failed("The captured NuGet artifact is unavailable and no approved digest was recorded.");
+            foreach (var candidate in candidates)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!File.Exists(candidate)) continue;
+                var publishedIdentity = NuGetPackageIdentityReader.TryRead(candidate);
+                if (publishedIdentity is null ||
+                    !string.Equals(publishedIdentity.Id, identity.Id, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(publishedIdentity.Version, identity.Version, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (hasSource)
+                {
+                    sourceHash ??= await ComputeFileSha256Async(sourcePath!, cancellationToken).ConfigureAwait(false);
+                    if (expectedHash is not null && !sourceHash.SequenceEqual(expectedHash))
+                        return Failed("The local NuGet artifact differs from its approved digest.");
+                }
+                var publishedHash = await ComputeFileSha256Async(candidate, cancellationToken).ConfigureAwait(false);
+                if (expectedHash is not null
+                    ? !publishedHash.SequenceEqual(expectedHash)
+                    : !sourceHash!.SequenceEqual(publishedHash))
+                    return Failed($"Local NuGet feed contains {identity.Id} {identity.Version}, but its package bytes differ from the captured artifact.");
+                return Verified($"Local NuGet feed contains {identity.Id} {identity.Version}. Package bytes match the captured artifact" +
+                    (expectedContentSha256 is null ? "." : " digest."));
+            }
+            return Failed($"Local NuGet feed does not contain {identity.Id} {identity.Version} at a supported package path.");
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return Failed("The recorded local NuGet feed could not be read.");
+        }
+    }
+
+    private static async Task<byte[]> ComputeFileSha256Async(string path, CancellationToken cancellationToken)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[81920];
+        int count;
+        while ((count = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
+            hash.AppendData(buffer, 0, count);
+        return hash.GetHashAndReset();
     }
 
     private async Task<PublishVerificationResult> VerifyPowerShellRepositoryAsync(PublishVerificationRequest request, CancellationToken cancellationToken)

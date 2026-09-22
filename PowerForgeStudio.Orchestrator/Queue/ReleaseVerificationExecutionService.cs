@@ -2,6 +2,7 @@ using System.Net.Http;
 using PowerForge;
 using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Domain.Queue;
+using PowerForgeStudio.Domain.Signing;
 using PowerForgeStudio.Domain.Verification;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Host;
@@ -104,6 +105,9 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
                 ]);
         }
 
+        var signingResult = _checkpointSerializer.TryDeserialize<ReleaseSigningExecutionResult>(
+            publishResult.SourceCheckpointStateJson);
+
         for (var index = 0; index < publishResult.Receipts.Count; index++)
         {
             var planned = publishResult.Receipts[index];
@@ -135,7 +139,7 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                result = await VerifyReceiptAsync(receipt, cancellationToken).ConfigureAwait(false);
+                result = await VerifyReceiptAsync(receipt, signingResult?.Receipts, cancellationToken).ConfigureAwait(false);
                 // Some hosts return a failed probe when cancelled instead of throwing.
                 if (result.Status != ReleaseVerificationReceiptStatus.Verified)
                     cancellationToken.ThrowIfCancellationRequested();
@@ -223,7 +227,10 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
             WasCancelled = cancelled
         };
 
-    private async Task<ReleaseVerificationReceipt> VerifyReceiptAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
+    private async Task<ReleaseVerificationReceipt> VerifyReceiptAsync(
+        ReleasePublishReceipt publishReceipt,
+        IReadOnlyList<ReleaseSigningReceipt>? signingReceipts,
+        CancellationToken cancellationToken)
     {
         if (publishReceipt.Status == ReleasePublishReceiptStatus.Skipped)
         {
@@ -249,7 +256,7 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
         return publishReceipt.TargetKind switch
         {
             "GitHub" => await VerifyGitHubAsync(publishReceipt, cancellationToken),
-            "NuGet" => await VerifyNuGetAsync(publishReceipt, cancellationToken),
+            "NuGet" => await VerifyNuGetAsync(publishReceipt, signingReceipts, cancellationToken),
             "PowerShellRepository" => await VerifyPowerShellRepositoryAsync(publishReceipt, cancellationToken),
             _ => FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind,
                 publishReceipt.TargetName, publishReceipt.Destination,
@@ -263,7 +270,10 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
         return MapReceipt(publishReceipt, result);
     }
 
-    private async Task<ReleaseVerificationReceipt> VerifyNuGetAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
+    private async Task<ReleaseVerificationReceipt> VerifyNuGetAsync(
+        ReleasePublishReceipt publishReceipt,
+        IReadOnlyList<ReleaseSigningReceipt>? signingReceipts,
+        CancellationToken cancellationToken)
     {
         string? destinationOverride = null;
         if (publishReceipt.DestinationCredentialsOmitted && publishReceipt.PublicRegistry is null)
@@ -275,7 +285,12 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
                     "The saved NuGet destination omitted URL credentials or query values. The matching current project configuration is unavailable, so remote verification could not run.",
                     publishReceipt.TargetKind);
         }
-        var result = await VerifyWithHostAsync(publishReceipt, cancellationToken, destinationOverride);
+        var expectedDigest = signingReceipts?.FirstOrDefault(signing =>
+            signing.Status == ReleaseSigningReceiptStatus.Signed &&
+            string.Equals(signing.ArtifactPath, publishReceipt.SourcePath,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
+            string.Equals(signing.AdapterKind, publishReceipt.AdapterKind, StringComparison.OrdinalIgnoreCase))?.ContentSha256;
+        var result = await VerifyWithHostAsync(publishReceipt, cancellationToken, destinationOverride, expectedDigest);
         return MapReceipt(publishReceipt, result);
     }
 
@@ -324,7 +339,11 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
     private static ReleaseVerificationReceipt FailedReceipt(string rootPath, string repositoryName, string adapterKind, string targetName, string? destination, string summary, string? targetKind = null)
         => ReleaseQueueReceiptFactory.FailedVerificationReceipt(rootPath, repositoryName, adapterKind, targetName, destination, summary, targetKind);
 
-    private async Task<PublishVerificationResult> VerifyWithHostAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken, string? destinationOverride = null)
+    private async Task<PublishVerificationResult> VerifyWithHostAsync(
+        ReleasePublishReceipt publishReceipt,
+        CancellationToken cancellationToken,
+        string? destinationOverride = null,
+        string? expectedContentSha256 = null)
         => await _verificationHostService.VerifyAsync(new PublishVerificationRequest {
             RootPath = publishReceipt.RootPath,
             RepositoryName = publishReceipt.RepositoryName,
@@ -334,7 +353,8 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
             Destination = destinationOverride ?? publishReceipt.Destination,
             SourcePath = publishReceipt.SourcePath,
             PackageId = publishReceipt.PackageId,
-            PackageVersion = publishReceipt.PackageVersion
+            PackageVersion = publishReceipt.PackageVersion,
+            ExpectedContentSha256 = expectedContentSha256
         }, cancellationToken).ConfigureAwait(false);
 
     private static ReleaseVerificationReceipt MapReceipt(ReleasePublishReceipt publishReceipt, PublishVerificationResult result)
