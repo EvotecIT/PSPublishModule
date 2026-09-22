@@ -9,6 +9,7 @@ using PowerForgeStudio.Orchestrator.Hub;
 using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Portfolio;
 using PowerForgeStudio.Orchestrator.Storage;
+using PowerForgeStudio.Orchestrator.Workspace;
 using PowerForgeStudio.Domain.Queue;
 
 namespace PowerForgeStudio.Orchestrator.Activity;
@@ -27,6 +28,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
     private readonly IWorkspaceAutomationInventoryService _automations;
     private readonly IReleaseHistoryService _releaseHistory;
     private readonly IGitHubProjectService _gitHubProjects;
+    private readonly IWorkspaceExplorerStateStore _explorerState;
     private readonly bool _ownsGitHubServices;
 
     public WorkspaceActivityInventoryService()
@@ -52,7 +54,8 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         IWorkspaceAutomationInventoryService automations,
         IGitHubProjectService gitHubProjects,
         IReleaseHistoryService releaseHistory,
-        bool ownsGitHubServices = false)
+        bool ownsGitHubServices = false,
+        IWorkspaceExplorerStateStore? explorerState = null)
     {
         _catalog = catalog;
         _portfolio = portfolio;
@@ -62,6 +65,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         _automations = automations;
         _releaseHistory = releaseHistory;
         _gitHubProjects = gitHubProjects;
+        _explorerState = explorerState ?? new WorkspaceRootCatalogService();
         _ownsGitHubServices = ownsGitHubServices;
     }
 
@@ -86,6 +90,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         cancellationToken.ThrowIfCancellationRequested();
         var managed = entries.Where(static entry => entry.IsReleaseManaged).ToArray();
         var portfolio = await Task.Run(() => _portfolio.BuildPortfolio(managed), cancellationToken).ConfigureAwait(false);
+        var probeOrder = PrioritizeGitHubProbes(root, portfolio);
         using var gitHubDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         gitHubDeadline.CancelAfter(TimeSpan.FromSeconds(options.GitHubTimeoutSeconds));
         IReadOnlyList<RepositoryPortfolioItem> enriched;
@@ -93,14 +98,14 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         try
         {
             enriched = await _gitHubInbox.PopulateInboxAsync(
-                portfolio,
+                probeOrder,
                 new GitHubInboxOptions { MaxRepositories = options.MaxGitHubRepositories },
                 gitHubDeadline.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             gitHubTimedOut = true;
-            enriched = portfolio.Select(static item => item with
+            enriched = probeOrder.Select(static item => item with
             {
                 GitHubInbox = new RepositoryGitHubInbox(
                     RepositoryGitHubInboxStatus.NotProbed, null, null, null, null, null, null, null, null,
@@ -160,6 +165,33 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
             .ToArray();
 
         return new WorkspaceActivitySnapshot(DateTimeOffset.UtcNow, displayed, sources, managed.Length, ordered.Length);
+    }
+
+    private IReadOnlyList<RepositoryPortfolioItem> PrioritizeGitHubProbes(
+        string workspaceRoot, IReadOnlyList<RepositoryPortfolioItem> portfolio)
+    {
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        HashSet<string> favorites;
+        HashSet<string> archived;
+        try
+        {
+            var state = _explorerState.LoadExplorer(workspaceRoot);
+            favorites = new HashSet<string>(state.FavoriteProjectRoots, comparer);
+            archived = new HashSet<string>(state.ArchivedProjectRoots ?? [], comparer);
+        }
+        catch
+        {
+            // A damaged local preference catalog must not prevent workspace evidence from loading.
+            favorites = new HashSet<string>(comparer);
+            archived = new HashSet<string>(comparer);
+        }
+
+        return portfolio
+            .OrderBy(item => archived.Contains(item.RootPath) ? 1 : 0)
+            .ThenBy(item => favorites.Contains(item.RootPath) ? 0 : 1)
+            .ThenBy(item => item.ReadinessKind == RepositoryReadinessKind.Attention || item.Git.IsDirty ? 0 : 1)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private List<WorkspaceActivityEntry> BuildPortfolioEntries(
@@ -315,9 +347,9 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
             "Authentication required" => "GitHub issue reads require a valid provider credential.",
             "Access denied" => "GitHub denied issue access. The credential may not cover these repositories.",
             "Rate limited" => "GitHub refused or rate-limited issue reads. Retry after the provider recovers.",
-            "Partial" => $"Issue evidence loaded for {successful} repository(s); {Math.Max(unavailable + deferred, providerGaps)} had unavailable or deferred GitHub signals.",
+            "Partial" => $"Issue evidence loaded for {successful} repository(s); {Math.Max(unavailable + deferred, providerGaps)} had unavailable or deferred GitHub signals. The bounded scan prioritizes non-archived favorites and local attention.",
             "Available" => $"Open issues were observed for {successful} repository(s).",
-            "Deferred" => "GitHub evidence was intentionally deferred by the bounded repository limit.",
+            "Deferred" => "GitHub evidence was intentionally deferred by the bounded repository limit. The scan prioritizes non-archived favorites and local attention.",
             "Absent" => "No release-managed GitHub repositories were detected.",
             _ => "GitHub issue evidence could not be observed. Empty results are not assumed."
         };

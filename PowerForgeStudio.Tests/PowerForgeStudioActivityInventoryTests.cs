@@ -12,11 +12,54 @@ using PowerForgeStudio.Orchestrator.Hub;
 using PowerForgeStudio.Orchestrator.Portfolio;
 using PowerForgeStudio.Orchestrator.Queue;
 using PowerForgeStudio.Orchestrator.Storage;
+using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Tests;
 
 public sealed class PowerForgeStudioActivityInventoryTests
 {
+    [Fact]
+    public async Task InspectAsync_ProbesFavoriteBeforeAlphabeticallyEarlierRepository()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-activity-priority-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            foreach (var name in new[] { "Alpha", "Beta" })
+            {
+                var repository = Directory.CreateDirectory(Path.Combine(root, name)).FullName;
+                Directory.CreateDirectory(Path.Combine(repository, "Build"));
+                await File.WriteAllTextAsync(Path.Combine(repository, "Build", "Build-Project.ps1"), "# Inventory must not run this script");
+                Assert.True((await new GitClient().RunRawAsync(repository, ["init", "-b", "main"])).Succeeded);
+            }
+
+            var explorer = new WorkspaceRootCatalogService(Path.Combine(root, "workspace-roots.json"));
+            explorer.SetFavorite(root, Path.Combine(root, "Beta"), true);
+            var requests = new List<string>();
+            using var http = new HttpClient(new StubHttpMessageHandler(request =>
+            {
+                var path = request.RequestUri?.PathAndQuery ?? "";
+                requests.Add(path);
+                if (path == "/repos/EvotecIT/Beta") return Json("""{ "default_branch": "main" }""");
+                return CreateGitHubResponse(request);
+            })) { BaseAddress = new Uri("https://api.github.com") };
+            using var service = new WorkspaceActivityInventoryService(
+                new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
+                new GitHubInboxService(http, new NamedGitRemoteResolver()),
+                new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
+                new FakeAutomationInventory(), new FakeGitHubProjectService(),
+                new ReleaseHistoryService(Path.Combine(root, "history.db")), explorerState: explorer);
+
+            var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(1, 1, 50));
+
+            Assert.NotEmpty(requests);
+            Assert.All(requests, path => Assert.Contains("/repos/EvotecIT/Beta", path, StringComparison.Ordinal));
+            Assert.Contains(snapshot.Entries, entry => entry.Kind == "Issue" && entry.Project == "Beta");
+            Assert.Equal("Partial", Assert.Single(snapshot.Sources, source => source.Provider == "GitHub").State);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public async Task InspectAsync_TracksSavedReleaseStatesInsideSelectedWorkspace()
     {
@@ -253,6 +296,12 @@ public sealed class PowerForgeStudioActivityInventoryTests
     {
         public Task<string?> ResolveOriginUrlAsync(string repositoryRoot, CancellationToken cancellationToken = default)
             => Task.FromResult(origin);
+    }
+
+    private sealed class NamedGitRemoteResolver : IGitRemoteResolver
+    {
+        public Task<string?> ResolveOriginUrlAsync(string repositoryRoot, CancellationToken cancellationToken = default)
+            => Task.FromResult<string?>($"https://github.com/EvotecIT/{Path.GetFileName(repositoryRoot)}.git");
     }
 
     private sealed class BlockingGitRemoteResolver : IGitRemoteResolver
