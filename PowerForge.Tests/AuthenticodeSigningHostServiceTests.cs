@@ -27,8 +27,24 @@ public sealed class AuthenticodeSigningHostServiceTests
         Assert.Equal(@"C:\repo\Artifacts", captured.WorkingDirectory);
         Assert.Contains("Register-Certificate", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("-Thumbprint 'thumb'", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("-LocalStore 'CurrentUser'", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("-Include @('*.ps1', '*.psd1')", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task SignAsync_RejectsStoreInjectionBeforeLaunchingPowerShell()
+    {
+        var launched = false;
+        var service = new AuthenticodeSigningHostService(new StubPowerShellRunner(_ => {
+            launched = true;
+            return new PowerShellRunResult(0, "", "", "pwsh");
+        }));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SignAsync(new AuthenticodeSigningHostRequest {
+            SigningPath = "fixture", ModulePath = "module", Thumbprint = "thumb",
+            StoreName = "CurrentUser; Write-Host injected", TimeStampServer = "https://timestamp.example.test"
+        }));
+        Assert.False(launched);
     }
 
     private sealed class StubPowerShellRunner : IPowerShellRunner

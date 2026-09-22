@@ -28,11 +28,14 @@
         <Border Grid.Column="4" Classes="releaseStep"><TextBlock Text="5  History" Classes="releaseStepText" /></Border>
       </Grid>
     </StackPanel>
-    <WrapPanel Grid.Row="1">
-      <Button Content="Prepare built artifacts" Command="{Binding PrepareCommand}" IsEnabled="{Binding CanPrepare}" Classes.primary="{Binding EmphasizePrepare}" Margin="0,0,12,5" />
-      <Button Content="Sign artifacts" Command="{Binding SignCommand}" IsEnabled="{Binding CanSign}" Classes.primary="{Binding CanSign}" Margin="0,0,12,5" />
-      <Button Content="Cancel signing" Command="{Binding CancelSigningCommand}" IsVisible="{Binding IsSigning}" Margin="0,0,12,5" />
-    </WrapPanel>
+    <StackPanel Grid.Row="1" Spacing="5">
+      <WrapPanel>
+        <Button Content="Prepare built artifacts" Command="{Binding PrepareCommand}" IsEnabled="{Binding CanPrepare}" Classes.primary="{Binding EmphasizePrepare}" Margin="0,0,12,5" />
+        <Button Content="Sign artifacts" Command="{Binding SignCommand}" IsEnabled="{Binding CanSign}" Classes.primary="{Binding CanSign}" Margin="0,0,12,5" />
+        <Button Content="Cancel signing" Command="{Binding CancelSigningCommand}" IsVisible="{Binding IsSigning}" Margin="0,0,12,5" />
+      </WrapPanel>
+      <TextBlock Text="{Binding SigningConfigurationStatus}" IsVisible="{Binding ShowSigningConfiguration}" Classes="muted" TextWrapping="Wrap" FontSize="12" />
+    </StackPanel>
     <StackPanel Grid.Row="2" Spacing="8">
       <TextBlock Text="{Binding HistoryScopeDisplay}" FontWeight="SemiBold" />
       <TextBlock Text="{Binding HistoryStatus}" Classes="muted" FontSize="12" TextWrapping="Wrap" />

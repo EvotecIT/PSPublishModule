@@ -151,6 +151,20 @@ For a repository with `Build/project.build.json`, Studio plans and builds throug
 
 Studio Releases requires `Build/project.build.json` for project publication so targets and destinations can be reviewed. Script-only repositories can plan and build locally, but cannot publish through Studio until that JSON configuration is added.
 
+For a JSON-backed project, declare the non-secret signing certificate selection in the existing `Build/project.build.json`:
+
+```json
+{
+  "CertificateThumbprint": "YOUR-CERTIFICATE-THUMBPRINT",
+  "CertificateStore": "CurrentUser",
+  "TimeStampServer": "http://timestamp.digicert.com"
+}
+```
+
+Studio checks that the certificate is available when you prepare a release. `CertificateStore` accepts `CurrentUser` or `LocalMachine`. For project build artifacts, a certificate named in JSON takes precedence over `RELEASE_OPS_STUDIO_SIGN_THUMBPRINT`; other build adapters in a mixed release use the host setting. The preparation status shows the prerequisite for each adapter, and signing stays disabled until every required certificate is available. A changed project JSON invalidates the captured build checkpoint, so rebuild before signing. `SignPackages=false` in project JSON controls signing during **Build & Run**; the separate **Releases > Sign artifacts** step signs the captured package after preparation. Studio shows missing prerequisites without revealing certificate or credential values. After making a certificate available, choose **Prepare built artifacts** again; after editing JSON, rebuild first.
+
+Publication remains a separate reviewed action. Configure the intended JSON destinations, inspect them in Releases, explicitly approve the displayed targets and enable `RELEASE_OPS_STUDIO_ENABLE_PUBLISH=true` only for the Studio process that should publish. A local NuGet feed can be used for a disposable end-to-end check without public credentials.
+
 A published app still resolves its machine-local workspace and release state under the platform application-data folder. Build, signing and publication availability then depends on the PowerForge and toolchain evidence shown by Studio Connections.
 
 ## Quick command list

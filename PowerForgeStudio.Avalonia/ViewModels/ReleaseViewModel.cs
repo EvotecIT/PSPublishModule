@@ -16,6 +16,8 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
 {
     private readonly IReleaseBuildHandoffService _service = service ?? new ReleaseBuildHandoffService();
     private readonly IReleaseSigningWorkflow _signing = signing ?? new DurableReleaseSigningWorkflow(PowerForgeStudioHostPaths.GetReleaseHistoryDatabasePath());
+    private readonly ReleaseSigningSettingsService _signingSettings = new();
+    private readonly bool _usesDefaultSigningWorkflow = service is null && signing is null;
     private ReleaseBuildExecutionResult? _candidate;
     private CancellationTokenSource? _preparing;
     private int _version;
@@ -44,6 +46,7 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
         SigningResult = null; Receipts.Clear(); RequiresRebuild = false; ConfirmDiscardReceipts = false;
         ++_version; _preparing?.Cancel(); _candidate = !running && !cancelled ? build : null;
         Handoff = null; Artifacts.Clear(); IsPreparing = false;
+        SigningConfigurationStatus = ""; SigningConfigurationAvailable = false;
         BuildRoot = build?.RootPath ?? "";
         Stage = "Build required";
         Status = running ? "Build is running. Release preparation will be available after successful completion."
@@ -66,7 +69,13 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
         {
             var handoff = await _service.PrepareAsync(candidate, read.Token);
             if (_disposed || version != _version) return;
+            var readiness = _usesDefaultSigningWorkflow
+                ? await Task.Run(() => _signingSettings.Check(handoff.Session.Items.Single(), candidate), read.Token)
+                : new ReleaseSigningReadiness(true, "");
+            if (_disposed || version != _version) return;
             Handoff = handoff;
+            SigningConfigurationStatus = readiness.Status;
+            SigningConfigurationAvailable = readiness.IsAvailable;
             foreach (var artifact in handoff.Artifacts) Artifacts.Add(artifact);
             Stage = "Prepared for signing";
             Status = $"{Artifacts.Count} artifacts found. Signing, publication and verification have not run.";

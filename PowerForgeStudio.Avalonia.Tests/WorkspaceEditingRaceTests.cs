@@ -19,7 +19,15 @@ public sealed class WorkspaceEditingRaceTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "first.txt"), "first original");
         File.WriteAllText(Path.Combine(_root, "second.txt"), "second original");
     }
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    public void Dispose()
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { Directory.Delete(_root, recursive: true); return; }
+            catch (IOException) when (attempt < 9) { Thread.Sleep(200); }
+            catch (UnauthorizedAccessException) when (attempt < 9) { Thread.Sleep(200); }
+        }
+    }
 
     [Fact]
     public async Task RefreshRetainsNewDraftAndDoesNotReopenATabClosedDuringDiscovery()

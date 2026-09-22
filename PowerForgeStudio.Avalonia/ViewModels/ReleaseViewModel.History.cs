@@ -160,7 +160,7 @@ public sealed partial class ReleaseViewModel
                 HistoryStatus = "Opened a saved release outside the 100 most recently created sessions.";
             }
             SelectedHistory = selected;
-            _candidate = null; Handoff = null; ResetPublicationState(); SigningResult = null; Artifacts.Clear(); Receipts.Clear(); ResetExecutionProgress();
+            _candidate = null; Handoff = null; SigningConfigurationStatus = ""; SigningConfigurationAvailable = false; ResetPublicationState(); SigningResult = null; Artifacts.Clear(); Receipts.Clear(); ResetExecutionProgress();
             foreach (var progress in snapshot.Progress) ApplyExecutionProgress(progress);
             foreach (var receipt in snapshot.SigningReceipts) Receipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary) });
             foreach (var receipt in snapshot.PublishReceipts)

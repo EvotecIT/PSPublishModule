@@ -10,7 +10,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
 {
     private static readonly string[] AuthenticodeDirectoryIncludes = ["*.ps1", "*.psm1", "*.psd1", "*.dll", "*.exe", "*.cat"];
     private readonly ReleaseBuildCheckpointReader _checkpointReader;
-    private readonly ReleaseSigningHostSettingsResolver _settingsResolver;
+    private readonly ReleaseSigningSettingsService _settingsService;
     private readonly CertificateFingerprintResolver _certificateFingerprintResolver;
     private readonly Func<AuthenticodeSigningHostRequest, CancellationToken, Task<AuthenticodeSigningHostResult>> _signAuthenticodeAsync;
     private readonly Func<DotNetNuGetSignRequest, CancellationToken, Task<DotNetNuGetSignResult>> _signNuGetPackageAsync;
@@ -33,7 +33,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
         Func<DotNetNuGetSignRequest, CancellationToken, Task<DotNetNuGetSignResult>> signNuGetPackageAsync)
     {
         _checkpointReader = checkpointReader;
-        _settingsResolver = settingsResolver;
+        _settingsService = new ReleaseSigningSettingsService(settingsResolver, certificateFingerprintResolver);
         _certificateFingerprintResolver = certificateFingerprintResolver;
         _signAuthenticodeAsync = signAuthenticodeAsync;
         _signNuGetPackageAsync = signNuGetPackageAsync;
@@ -67,13 +67,31 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
                 Receipts: []);
         }
 
-        var settings = _settingsResolver.Resolve();
-        if (!settings.IsConfigured)
+        IReadOnlyDictionary<string, ReleaseSigningSettingsSelection> settings;
+        try { settings = _settingsService.Resolve(queueItem, build); }
+        catch (InvalidOperationException ex)
         {
+            return new ReleaseSigningExecutionResult(queueItem.RootPath, false, ex.Message,
+                queueItem.CheckpointStateJson, manifest.Select(artifact => FailedReceipt(
+                    queueItem.RootPath, artifact, ex.Message, DateTimeOffset.UtcNow)).ToList())
+            { RequiresRebuild = true };
+        }
+        if (manifest.Any(artifact => !settings.ContainsKey(artifact.AdapterKind)))
+        {
+            const string message = "Signing manifest contains an adapter that is absent from the build checkpoint. Rebuild before signing.";
+            return new ReleaseSigningExecutionResult(queueItem.RootPath, false, message,
+                queueItem.CheckpointStateJson, manifest.Select(artifact => FailedReceipt(
+                    queueItem.RootPath, artifact, message, DateTimeOffset.UtcNow)).ToList())
+            { RequiresRebuild = true };
+        }
+        var unconfigured = settings.FirstOrDefault(selection => !selection.Value.Settings.IsConfigured);
+        if (unconfigured.Value is not null)
+        {
+            var message = $"{unconfigured.Key}: {unconfigured.Value.Settings.MissingConfigurationMessage}";
             return new ReleaseSigningExecutionResult(
                 RootPath: queueItem.RootPath,
                 Succeeded: false,
-                Summary: settings.MissingConfigurationMessage!,
+                Summary: message,
                 SourceCheckpointStateJson: queueItem.CheckpointStateJson,
                 Receipts: manifest.Select(artifact => new ReleaseSigningReceipt(
                     RootPath: queueItem.RootPath,
@@ -82,8 +100,17 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
                     ArtifactPath: artifact.ArtifactPath,
                     ArtifactKind: artifact.ArtifactKind,
                     Status: ReleaseSigningReceiptStatus.Failed,
-                    Summary: settings.MissingConfigurationMessage!,
+                    Summary: message,
                     SignedAtUtc: DateTimeOffset.UtcNow)).ToList());
+        }
+        var unavailable = settings.FirstOrDefault(selection => string.IsNullOrWhiteSpace(
+            _certificateFingerprintResolver.ResolveSha256(selection.Value.Settings.Thumbprint!, selection.Value.Settings.StoreName)));
+        if (unavailable.Value is not null)
+        {
+            var message = $"{unavailable.Key} signing certificate is unavailable in {unavailable.Value.Settings.StoreName}\\My. Make it available and prepare again.";
+            return new ReleaseSigningExecutionResult(queueItem.RootPath, false, message,
+                queueItem.CheckpointStateJson, manifest.Select(artifact => FailedReceipt(
+                    queueItem.RootPath, artifact, message, DateTimeOffset.UtcNow)).ToList());
         }
 
         var receipts = new List<ReleaseSigningReceipt>(manifest.Count);
@@ -106,7 +133,7 @@ public sealed class ReleaseSigningExecutionService : IReleaseSigningExecutionSer
             string state;
             try
             {
-                receipt = await SignArtifactAsync(queueItem.RootPath, artifact, settings, cancellationToken);
+                receipt = await SignArtifactAsync(queueItem.RootPath, artifact, settings[artifact.AdapterKind].Settings, cancellationToken);
                 state = receipt.Status.ToString();
             }
             catch (OperationCanceledException)

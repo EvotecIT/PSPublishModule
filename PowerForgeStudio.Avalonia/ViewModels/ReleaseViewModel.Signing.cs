@@ -14,10 +14,14 @@ public sealed partial class ReleaseViewModel
     public ReleaseSigningExecutionResult? SigningResult { get; private set; }
     [ObservableProperty] private bool _isSigning;
     [ObservableProperty] private bool _requiresRebuild;
-    public bool CanSign => !_disposed && !IsProjectTaskRunning && !HasProtectedReleaseWork && !IsLoadingHistory && !IsPreparing && Handoff is not null && SigningResult is null && !RequiresRebuild;
+    [ObservableProperty] private string _signingConfigurationStatus = "";
+    [ObservableProperty] private bool _signingConfigurationAvailable;
+    public bool CanSign => !_disposed && !IsProjectTaskRunning && !HasProtectedReleaseWork && !IsLoadingHistory && !IsPreparing && Handoff is not null && SigningResult is null && !RequiresRebuild && SigningConfigurationAvailable;
+    public bool ShowSigningConfiguration => Handoff is not null && SigningResult is null && !string.IsNullOrWhiteSpace(SigningConfigurationStatus);
     public bool HasArtifacts => Artifacts.Count > 0;
     public bool HasReceipts => Receipts.Count > 0;
     partial void OnRequiresRebuildChanged(bool value) => NotifyReleaseState();
+    partial void OnSigningConfigurationAvailableChanged(bool value) => NotifyReleaseState();
     partial void OnIsSigningChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowIndeterminateProgress));
@@ -25,7 +29,7 @@ public sealed partial class ReleaseViewModel
     }
     private void NotifyReleaseState()
     {
-        OnPropertyChanged(nameof(CanInspectPublication)); OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(EmphasizePrepare)); OnPropertyChanged(nameof(CanSign));
+        OnPropertyChanged(nameof(CanInspectPublication)); OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(EmphasizePrepare)); OnPropertyChanged(nameof(CanSign)); OnPropertyChanged(nameof(ShowSigningConfiguration));
         OnPropertyChanged(nameof(CanPublish)); OnPropertyChanged(nameof(CanVerify));
         OnPropertyChanged(nameof(CanInspectPublicPackage));
         OnPropertyChanged(nameof(HasArtifacts)); OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));

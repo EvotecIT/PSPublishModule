@@ -42,6 +42,46 @@ public sealed class ReleaseSigningHostSettingsResolverTests
         Assert.Equal("https://timestamp.contoso.test", settings.TimeStampServer);
         Assert.Equal(@"C:\Temp\PSPublishModule.psd1", settings.ModulePath);
     }
+
+    [Fact]
+    public void Resolve_ProjectCertificateTakesPrecedenceOverHostCertificate()
+    {
+        var resolver = new ReleaseSigningHostSettingsResolver(
+            name => name switch {
+                "RELEASE_OPS_STUDIO_SIGN_THUMBPRINT" => "host-thumbprint",
+                "RELEASE_OPS_STUDIO_SIGN_STORE" => "CurrentUser",
+                _ => null
+            }, () => "module");
+
+        var settings = resolver.Resolve(new ProjectBuildSigningConfiguration(
+            " project-thumbprint ", " LocalMachine ", " https://timestamp.example.test "));
+
+        Assert.Equal("project-thumbprint", settings.Thumbprint);
+        Assert.Equal("LocalMachine", settings.StoreName);
+        Assert.Equal("https://timestamp.example.test", settings.TimeStampServer);
+        Assert.Equal("module", settings.ModulePath);
+    }
+
+    [Theory]
+    [InlineData("CurrentUser; Remove-Item C:\\*")]
+    [InlineData("UnknownStore")]
+    public void Resolve_RejectsUnsupportedProjectStore(string store)
+    {
+        var resolver = new ReleaseSigningHostSettingsResolver(_ => null, () => "module");
+        Assert.Throws<InvalidOperationException>(() => resolver.Resolve(
+            new ProjectBuildSigningConfiguration("project-thumbprint", store, null)));
+    }
+
+    [Fact]
+    public void Resolve_ProjectOverrideIgnoresIrrelevantInvalidHostStore()
+    {
+        var resolver = new ReleaseSigningHostSettingsResolver(
+            name => name == "RELEASE_OPS_STUDIO_SIGN_STORE" ? "invalid-host-store" : null,
+            () => "module");
+        var settings = resolver.Resolve(new ProjectBuildSigningConfiguration("project-thumbprint", "CurrentUser", null));
+        Assert.Equal("project-thumbprint", settings.Thumbprint);
+        Assert.Equal("CurrentUser", settings.StoreName);
+    }
 }
 
 public sealed class CertificateFingerprintResolverTests

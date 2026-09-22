@@ -33,12 +33,15 @@ public sealed class AuthenticodeSigningHostService
         ValidateRequired(request.Thumbprint, nameof(request.Thumbprint));
         ValidateRequired(request.StoreName, nameof(request.StoreName));
         ValidateRequired(request.TimeStampServer, nameof(request.TimeStampServer));
+        if (!request.StoreName.Equals("CurrentUser", StringComparison.OrdinalIgnoreCase) &&
+            !request.StoreName.Equals("LocalMachine", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("StoreName must be CurrentUser or LocalMachine.", nameof(request.StoreName));
 
         var includes = string.Join(", ", (request.IncludePatterns ?? Array.Empty<string>()).Select(QuoteLiteral));
         var script = string.Join("; ", new[] {
             "$ErrorActionPreference = 'Stop'",
             BuildModuleImportClause(request.ModulePath),
-            $"Register-Certificate -Path {QuoteLiteral(request.SigningPath)} -LocalStore {request.StoreName} -Thumbprint {QuoteLiteral(request.Thumbprint)} -TimeStampServer {QuoteLiteral(request.TimeStampServer)} -Include @({includes}) -Confirm:$false -WarningAction Stop -ErrorAction Stop | Out-Null"
+            $"Register-Certificate -Path {QuoteLiteral(request.SigningPath)} -LocalStore {QuoteLiteral(request.StoreName)} -Thumbprint {QuoteLiteral(request.Thumbprint)} -TimeStampServer {QuoteLiteral(request.TimeStampServer)} -Include @({includes}) -Confirm:$false -WarningAction Stop -ErrorAction Stop | Out-Null"
         });
 
         var startedAt = Stopwatch.StartNew();
