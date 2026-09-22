@@ -97,6 +97,28 @@ public sealed class StudioGitChangesTests
         Assert.Single(runner.Requests);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedWorktreeProbeDoesNotMasqueradeAsNoWorktrees(bool timeout)
+    {
+        using var fixture = new RepositoryFixture();
+        Directory.CreateDirectory(Path.Combine(fixture.Root, ".git"));
+        var runner = new StubRunner(request => request.Arguments[0] switch
+        {
+            "status" => new ProcessRunResult(0, "# branch.head main\0", "", "git", TimeSpan.Zero, false),
+            "branch" => new ProcessRunResult(0, "main\n", "", "git", TimeSpan.Zero, false),
+            "worktree" => new ProcessRunResult(128, "", "worktree metadata unavailable", "git", TimeSpan.Zero, timeout),
+            _ => throw new InvalidOperationException("Unexpected Git command")
+        });
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ProjectGitService(new GitClient(runner)).GetStatusAsync(fixture.Root));
+
+        Assert.Contains(timeout ? "timed out" : "metadata unavailable", error.Message);
+        Assert.Equal(["status", "branch", "worktree"], runner.Requests.Select(request => request.Arguments[0]));
+    }
+
     [Fact]
     public async Task FailedHeadProbeNeverRemovesIndexEntries()
     {

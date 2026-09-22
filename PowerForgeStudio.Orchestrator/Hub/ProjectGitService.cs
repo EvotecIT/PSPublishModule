@@ -316,7 +316,7 @@ public sealed partial class ProjectGitService : IProjectHistoryService
     private async Task<IReadOnlyList<GitWorktreeEntry>> GetWorktreeListAsync(string repositoryRoot, CancellationToken cancellationToken)
     {
         var result = await _gitClient.RunRawAsync(repositoryRoot, ["worktree", "list", "--porcelain"], cancellationToken: cancellationToken).ConfigureAwait(false);
-        if (!result.Succeeded) return [];
+        EnsureSuccess(result);
         return ParseWorktreeList(result.StdOut);
     }
 
