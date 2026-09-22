@@ -6,12 +6,21 @@ set -Eeuo pipefail
 umask 077
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
+GIT_NO_REPLACE_OBJECTS=1
+GIT_CONFIG_NOSYSTEM=1
+GIT_CONFIG_GLOBAL=/dev/null
+export GIT_NO_REPLACE_OBJECTS GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL
 
 fail() { printf 'powerforge-site-source-fetch: %s\n' "$*" >&2; exit 1; }
 [[ $# -eq 1 && $1 =~ ^[a-z0-9][a-z0-9.-]{0,62}$ ]] || fail 'usage: powerforge-site-source-fetch <site>'
 [[ $(id -u) -eq 0 ]] || fail 'run as root'
 site=$1
 config=/etc/powerforge/site-pull/${site}.env
+for config_dir in /etc /etc/powerforge /etc/powerforge/site-pull /etc/powerforge/repository-ssh; do
+  [[ -d $config_dir && ! -L $config_dir && $(stat -c %u "$config_dir") -eq 0 ]] || fail "configuration directory is not root-controlled: $config_dir"
+  mode=$(stat -c %a "$config_dir")
+  (( (8#$mode & 0022) == 0 )) || fail "configuration directory is writable by another account: $config_dir"
+done
 [[ -f $config && ! -L $config && $(stat -c %u "$config") -eq 0 ]] || fail 'missing root-owned site configuration'
 mode=$(stat -c %a "$config")
 (( (8#$mode & 0022) == 0 )) || fail 'site configuration must not be group or world writable'
@@ -33,6 +42,8 @@ source "$config"
 [[ $SOURCE_SSH_KNOWN_HOSTS_FILE =~ ^/etc/powerforge/repository-ssh/[A-Za-z0-9_.-]+$ ]] || fail 'invalid known-hosts path'
 for file in "$SOURCE_SSH_IDENTITY_FILE" "$SOURCE_SSH_KNOWN_HOSTS_FILE"; do
   [[ -f $file && ! -L $file && $(stat -c %u "$file") -eq 0 ]] || fail "missing root-owned SSH file: $file"
+  mode=$(stat -c %a "$file")
+  (( (8#$mode & 0022) == 0 )) || fail "SSH trust file is writable by another account: $file"
 done
 [[ $(stat -c %a "$SOURCE_SSH_IDENTITY_FILE") == 600 ]] || fail 'SSH identity must have mode 0600'
 part=$SOURCE_REPOSITORY_PATH/.git
@@ -43,8 +54,13 @@ while [[ $part != / ]]; do
   part=${part%/*}
   [[ -n $part ]] || part=/
 done
+unsafe=$(find "$SOURCE_REPOSITORY_PATH/.git" -xdev \( ! -user root -o -perm /022 -o -type l \) -print -quit)
+[[ -z $unsafe ]] || fail "source Git metadata is not exclusively root-controlled: $unsafe"
 
 ssh_command="ssh -F /dev/null -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$SOURCE_SSH_KNOWN_HOSTS_FILE -i $SOURCE_SSH_IDENTITY_FILE"
+if git -c "safe.directory=$SOURCE_REPOSITORY_PATH" -C "$SOURCE_REPOSITORY_PATH" config --get-regexp '^url\..*\.insteadof$' >/dev/null; then
+  fail 'source checkout must not rewrite Git repository URLs'
+fi
 GIT_SSH_COMMAND=$ssh_command git -c "safe.directory=$SOURCE_REPOSITORY_PATH" \
   -c protocol.file.allow=never -C "$SOURCE_REPOSITORY_PATH" fetch --no-tags \
   "$SOURCE_REPOSITORY" "+refs/heads/$SOURCE_BRANCH:refs/remotes/powerforge/$SOURCE_BRANCH"
