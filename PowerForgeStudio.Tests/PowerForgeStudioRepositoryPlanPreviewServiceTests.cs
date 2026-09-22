@@ -287,6 +287,38 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
     }
 
     [Fact]
+    public async Task PlanRepositoryAsync_RejectsPlanWhosePreflightFailedDespiteZeroExitCode()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var name = "FailedScriptPlan" + Guid.NewGuid().ToString("N")[..8];
+        var repositoryRoot = scope.CreateDirectory(name);
+        var buildScript = Path.Combine(repositoryRoot, "Build-Project.ps1");
+        File.WriteAllText(buildScript, "# test");
+        var planPath = PowerForgeStudioHostPaths.GetPlansFilePath(name, RepositoryPlanAdapterKind.ProjectPlan.ToString(), "project.plan.json");
+        try
+        {
+            var service = new RepositoryPlanPreviewService(
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(new EmptyPlanPowerShellRunner("""{"Success":false,"Projects":[{"ProjectName":"FailedProject","IsPackable":true}]}""")),
+                new ModuleBuildHostService(new ThrowingPowerShellRunner()));
+            var repository = new RepositoryCatalogEntry(name, repositoryRoot, ReleaseRepositoryKind.Library,
+                ReleaseWorkspaceKind.PrimaryRepository, null, buildScript, false, false);
+
+            var result = Assert.Single(await service.PlanRepositoryAsync(repository));
+
+            Assert.Equal(RepositoryPlanStatus.Failed, result.Status);
+            Assert.Null(result.PlanPath);
+            Assert.Contains("failed build preflight", result.ErrorTail, StringComparison.Ordinal);
+        }
+        finally
+        {
+            var repositoryPlanDirectory = Directory.GetParent(Path.GetDirectoryName(planPath)!)!.FullName;
+            if (Directory.Exists(repositoryPlanDirectory))
+                Directory.Delete(repositoryPlanDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PlanRepositoryAsync_DoesNotAcceptAnOlderPlanWhenScriptWritesNothing()
     {
         using var scope = new TemporaryDirectoryScope();
@@ -352,6 +384,10 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
 
     private sealed class EmptyPlanPowerShellRunner : IPowerShellRunner
     {
+        private readonly string _planJson;
+
+        public EmptyPlanPowerShellRunner(string planJson = "{}") => _planJson = planJson;
+
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
             const string marker = "-PlanPath '";
@@ -366,7 +402,7 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
             Assert.True(end > start);
             var planPath = command[start..end].Replace("''", "'", StringComparison.Ordinal);
             Directory.CreateDirectory(Path.GetDirectoryName(planPath)!);
-            File.WriteAllText(planPath, "{}");
+            File.WriteAllText(planPath, _planJson);
             return new PowerShellRunResult(0, "plan written", string.Empty, "test-pwsh");
         }
     }

@@ -124,6 +124,8 @@ internal static class RepositoryPlanActionProjectionService
     {
         if (release is null)
             throw new InvalidDataException($"The project plan from '{source}' did not contain a release plan.");
+        if (!release.Success)
+            throw new InvalidDataException($"The project plan from '{source}' reported a failed build preflight.");
         if (release.Projects.Count == 0)
             throw new InvalidDataException($"The project plan from '{source}' did not contain any buildable projects.");
     }

@@ -508,7 +508,6 @@ public sealed partial class ReleasePublishExecutionService
                 RepositoryRoot = repository.RootPath,
                 PlanOutputPath = planPath,
                 ConfigPath = configPath,
-                ScriptPath = scriptPath,
                 ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath()
             }, cancellationToken);
             if (!execution.Succeeded || !File.Exists(planPath))
@@ -606,7 +605,7 @@ public sealed partial class ReleasePublishExecutionService
         if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
         {
             return [
-                FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ProjectBuild.ToString(), "Project publish", null, $"Project config was not found at {configPath}.")
+                FailedReceipt(repository.RootPath, repository.Name, ReleaseBuildAdapterKind.ProjectBuild.ToString(), "Project publish", null, "Studio project publication requires Build/project.build.json so targets and destinations can be reviewed.")
             ];
         }
 

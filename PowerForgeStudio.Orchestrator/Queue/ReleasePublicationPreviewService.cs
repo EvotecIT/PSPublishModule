@@ -34,7 +34,7 @@ public sealed class ReleasePublicationPreviewService : IReleasePublicationPrevie
         if (!string.IsNullOrEmpty(repository.ProjectBuildScriptPath))
         {
             var path = RepositoryPlanPreviewService.ResolveProjectConfigPath(repository.ProjectBuildScriptPath, item.RootPath);
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) throw new InvalidOperationException("Project publication configuration is missing.");
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) throw new InvalidOperationException("Studio project publication requires Build/project.build.json so targets and destinations can be reviewed.");
             var config = new ProjectBuildPublishHostService().PreviewConfiguration(path);
             targets = targets.Where(target => target.AdapterKind != "ProjectBuild" ||
                 (target.TargetKind != "NuGet" || config.PublishNuGet) && (target.TargetKind != "GitHub" || config.PublishGitHub)).Select(target =>
