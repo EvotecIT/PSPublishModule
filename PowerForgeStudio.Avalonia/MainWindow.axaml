@@ -128,7 +128,8 @@
       </Grid>
       <Border Grid.Column="4" x:Name="ContextPanel" Background="White" BorderBrush="#DDE5EF" BorderThickness="1,0,0,0" Padding="20,23">
         <Grid>
-          <StackPanel Spacing="18" IsVisible="{Binding !IsWorkspaceUtilityPage}">
+          <Grid IsVisible="{Binding !IsWorkspaceUtilityPage}">
+            <StackPanel Spacing="18" IsVisible="{Binding !IsChangesPage}">
             <TextBlock Text="Selected working copy" FontWeight="SemiBold" FontSize="16" />
             <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
             <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
@@ -141,7 +142,35 @@
                      BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="Select and copy the full path" />
             <TextBlock Text="Local discovery" Classes="muted" />
             <TextBlock Text="Build outputs and package caches are hidden in the explorer." TextWrapping="Wrap" />
-          </StackPanel>
+            </StackPanel>
+            <ScrollViewer IsVisible="{Binding IsChangesPage}">
+            <StackPanel Spacing="12" DataContext="{Binding Changes}">
+              <TextBlock Text="Selected change" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Text="Select a file to inspect its Git state and stage it." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasSelection}" />
+              <StackPanel Spacing="12" IsVisible="{Binding HasSelection}">
+                <TextBlock Text="{Binding Selected.Path}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
+                <Grid ColumnDefinitions="85,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="12" ColumnSpacing="8">
+                  <TextBlock Text="State" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Column="1" Text="{Binding Selected.State}" />
+                  <TextBlock Grid.Row="1" Text="Change" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.ChangeType}" />
+                  <TextBlock Grid.Row="2" Text="Branch" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Snapshot.BranchDisplay}" TextWrapping="Wrap" />
+                </Grid>
+                <Button Content="Stage selected" Command="{Binding StageCommand}" IsEnabled="{Binding CanStage}" IsVisible="{Binding CanStage}" />
+                <Button Content="Unstage selected" Command="{Binding UnstageCommand}" IsEnabled="{Binding CanUnstage}" IsVisible="{Binding CanUnstage}" />
+                <TextBlock Text="The patch and commit form remain in Changes." Classes="muted" TextWrapping="Wrap" FontSize="12" />
+              </StackPanel>
+              <Border Background="#F3F7FD" BorderBrush="#D9E3F0" BorderThickness="1" CornerRadius="6" Padding="10">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Working-copy summary" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Snapshot.StatusSummary}" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+            </ScrollViewer>
+          </Grid>
           <ScrollViewer IsVisible="{Binding IsActivityPage}">
             <StackPanel Spacing="14" DataContext="{Binding Activity}">
               <TextBlock Text="Activity evidence" FontWeight="SemiBold" FontSize="16" />

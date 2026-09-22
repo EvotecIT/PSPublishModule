@@ -13,6 +13,7 @@ public sealed record GitChangeRow(GitFileChange Change, bool Staged)
     public string Path => Change.Path;
     public string State => Staged ? "Staged" : Change.Kind == GitChangeKind.Untracked ? "Untracked" : "Working copy";
     public string Kind => Change.KindDisplay;
+    public string ChangeType => Change.Kind.ToString();
 }
 
 /// <summary>Shows the current index and working-copy changes; mutations capture their original root.</summary>
@@ -39,6 +40,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isMutating;
     [ObservableProperty] private ProjectGitStatus? _snapshot;
     [ObservableProperty] private GitChangeRow? _selected;
+    public bool HasSelection => Selected is not null;
     public bool CanAct => !IsLoading && !IsMutating && Snapshot?.IsGitRepository == true && !_disposed;
     public bool CanStage => CanAct && Selected is { Staged: false };
     public bool CanUnstage => CanAct && Selected is { Staged: true };
@@ -58,7 +60,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     partial void OnCommitMessageChanged(string value) => NotifyActions();
     partial void OnNewBranchNameChanged(string value) => NotifyActions();
     partial void OnSelectedBranchChanged(string? value) => NotifyActions();
-    partial void OnSelectedChanged(GitChangeRow? value) { NotifyActions(); _ = LoadDiffAsync(value); }
+    partial void OnSelectedChanged(GitChangeRow? value) { OnPropertyChanged(nameof(HasSelection)); NotifyActions(); _ = LoadDiffAsync(value); }
 
     public void SetWorkingCopy(string root)
     {
