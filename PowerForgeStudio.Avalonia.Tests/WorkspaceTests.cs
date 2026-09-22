@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Automation.Peers;
 using Avalonia.Headless;
@@ -104,6 +105,8 @@ public sealed class WorkspaceTests
                     Assert.Equal(model.GitSummary, window.FindControl<TextBlock>("StatusGitSummary")?.Text);
                     Assert.Equal(model.RepositoryCount, window.FindControl<TextBlock>("StatusRepositoryCount")?.Text);
                     Assert.Equal("1 repository", model.RepositoryCount);
+                    Assert.Equal(AutomationLiveSetting.Polite,
+                        ControlAutomationPeer.CreatePeerForElement(window.FindControl<TextBlock>("StatusMessage")!)?.GetLiveSetting());
                     using var frame = window.CaptureRenderedFrame();
                     Assert.NotNull(frame);
                     var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");

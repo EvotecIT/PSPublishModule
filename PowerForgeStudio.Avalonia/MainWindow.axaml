@@ -511,7 +511,8 @@
     </Grid>
     <Border Grid.Row="2" Background="#F5F8FD" BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" Padding="15,5">
       <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="14">
-        <TextBlock x:Name="StatusMessage" Text="{Binding DisplayedStatus}" ToolTip.Tip="{Binding DisplayedStatus}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <TextBlock x:Name="StatusMessage" Text="{Binding DisplayedStatus}" ToolTip.Tip="{Binding DisplayedStatus}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                   AutomationProperties.LiveSetting="Polite" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasWorkingCopy}">
             <controls:NavigationIcon Kind="branch" Ink="#52647D" Width="14" Height="14" VerticalAlignment="Center" />
