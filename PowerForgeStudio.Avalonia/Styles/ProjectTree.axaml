@@ -5,6 +5,7 @@
       <Setter Property="MinHeight" Value="30" />
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="Background" Value="{ReflectionBinding ContextBackground}" />
+      <Setter Property="FocusAdorner" Value="{x:Null}" />
       <Setter Property="Template">
         <ControlTemplate>
           <StackPanel>
@@ -29,7 +30,7 @@
       <Style Selector="^ /template/ Border#PART_LayoutRoot:pointerover"><Setter Property="Background" Value="#EDF3FB" /></Style>
       <Style Selector="^:selected /template/ Border#PART_LayoutRoot"><Setter Property="Background" Value="#DCEBFF" /></Style>
       <Style Selector="^:selected /template/ Border#PART_LayoutRoot:pointerover"><Setter Property="Background" Value="#DCEBFF" /></Style>
-      <Style Selector="^:focus-visible /template/ Border#PART_LayoutRoot"><Setter Property="BorderBrush" Value="#247CFF" /><Setter Property="BorderThickness" Value="1" /></Style>
+      <Style Selector="^:focus /template/ Border#PART_LayoutRoot"><Setter Property="BorderBrush" Value="#247CFF" /><Setter Property="BorderThickness" Value="1" /></Style>
     </ControlTheme>
   </Styles.Resources>
 </Styles>
