@@ -73,7 +73,8 @@
                 <Grid ColumnDefinitions="20,*,Auto,Auto" ColumnSpacing="7" Height="30" ToolTip.Tip="{Binding Path}">
                   <controls:ProjectIcon Kind="{Binding IconKind}" Width="20" Height="20" />
                   <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="{Binding NodeWeight}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="muted" FontSize="12" VerticalAlignment="Center" MaxWidth="70" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="muted" FontSize="12" VerticalAlignment="Center" MaxWidth="70" TextTrimming="CharacterEllipsis"
+                             IsVisible="{ReflectionBinding !DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}" />
                   <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding HasStatusMarker}">
                     <Ellipse Width="8" Height="8" Fill="{Binding StatusBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding StatusMarker}" Foreground="{Binding StatusBrush}" FontSize="12" MaxWidth="64" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
@@ -114,9 +115,18 @@
         </Border>
         <Border Grid.Row="1" Background="White" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="22,14" IsVisible="{Binding !IsWorkspaceUtilityPage}">
           <StackPanel Spacing="12">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
-              <TextBlock Text="{Binding ProjectName}" Classes="heading" TextTrimming="CharacterEllipsis" />
-              <TextBlock Grid.Column="1" Text="{Binding Branch}" Foreground="#0865FF" VerticalAlignment="Center" />
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+              <controls:NavigationIcon Kind="projects" Ink="#26334B" Width="28" Height="28" VerticalAlignment="Center" IsVisible="{Binding HasWorkingCopy}" />
+              <TextBlock Grid.Column="1" Text="{Binding ProjectName}" Classes="heading" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              <Border Grid.Column="2" Background="#F7FAFE" BorderBrush="#D6E2F1" BorderThickness="1" CornerRadius="16" Padding="10,5"
+                      IsVisible="{Binding HasWorkingCopy}" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <controls:NavigationIcon Kind="github" Ink="#0865FF" Width="16" Height="16" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Branch}" Foreground="#26334B" VerticalAlignment="Center" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+                  <Border Background="#CBD7E7" Width="1" Margin="2,2" />
+                  <TextBlock Text="{Binding GitSummary}" Foreground="#64748B" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </Border>
             </Grid>
             <WrapPanel ItemSpacing="20" LineSpacing="8">
               <Button Content="Overview" Command="{Binding ShowOverviewCommand}" Classes="pageTab" Classes.active="{Binding IsOverviewPage}" />

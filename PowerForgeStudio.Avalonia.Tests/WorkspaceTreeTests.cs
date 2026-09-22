@@ -81,7 +81,22 @@ public sealed class WorkspaceTreeTests
                     using var frame = window.CaptureRenderedFrame();
                     Assert.NotNull(frame);
                     var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
-                    if (!string.IsNullOrEmpty(output)) frame.Save(Path.Combine(output, "workspace-tree.png"), PngBitmapEncoderOptions.Default);
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        frame.Save(Path.Combine(output, "workspace-tree.png"), PngBitmapEncoderOptions.Default);
+                        window.Width = 1050;
+                        window.Height = 720;
+                        window.UpdateLayout();
+                        Dispatcher.UIThread.RunJobs();
+                        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var compactFrame = window.CaptureRenderedFrame();
+                        Assert.NotNull(compactFrame);
+                        compactFrame.Save(Path.Combine(output, "workspace-tree-compact.png"), PngBitmapEncoderOptions.Default);
+                        window.Width = 1600;
+                        window.Height = 1000;
+                        window.UpdateLayout();
+                        Dispatcher.UIThread.RunJobs();
+                    }
                     window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
                     window.KeyRelease(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
                     Assert.True(window.FindControl<TextBox>("QuickProjectSearchBox")!.IsFocused);
