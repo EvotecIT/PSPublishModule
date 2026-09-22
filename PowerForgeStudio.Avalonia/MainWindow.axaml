@@ -129,6 +129,7 @@
       <Border Grid.Column="4" x:Name="ContextPanel" Background="White" BorderBrush="#DDE5EF" BorderThickness="1,0,0,0" Padding="20,23">
         <Grid>
           <Grid IsVisible="{Binding !IsWorkspaceUtilityPage}">
+            <Grid IsVisible="{Binding !IsFilesPage}">
             <StackPanel Spacing="18" IsVisible="{Binding ShowGenericProjectContext}">
             <TextBlock Text="Selected working copy" FontWeight="SemiBold" FontSize="16" />
             <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
@@ -143,6 +144,28 @@
             <TextBlock Text="Local discovery" Classes="muted" />
             <TextBlock Text="Build outputs and package caches are hidden in the explorer." TextWrapping="Wrap" />
             </StackPanel>
+            </Grid>
+            <ScrollViewer IsVisible="{Binding IsFilesPage}">
+              <StackPanel Spacing="12">
+                <TextBlock Text="Selected file" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="Select a file or folder to inspect its details." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasSelectedFile}" />
+                <StackPanel Spacing="12" IsVisible="{Binding HasSelectedFile}">
+                  <TextBlock Text="{Binding SelectedFile.Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
+                  <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="12" ColumnSpacing="8">
+                    <TextBlock Text="Type" Classes="muted" FontSize="12" />
+                    <TextBlock Grid.Column="1" Text="{Binding SelectedFile.KindLabel}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="1" Text="Size" Classes="muted" FontSize="12" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedFile.DetailSizeDisplay}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="2" Text="Modified" Classes="muted" FontSize="12" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedFile.ModifiedDisplay}" TextWrapping="Wrap" />
+                  </Grid>
+                  <TextBlock Text="In working copy" Classes="muted" FontSize="12" />
+                  <SelectableTextBlock Text="{Binding SelectedFileRelativePath}" ToolTip.Tip="{Binding SelectedFile.FullPath}" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding SelectedFile.ContextHint}" Classes="muted" TextWrapping="Wrap" FontSize="12" />
+                </StackPanel>
+              </StackPanel>
+            </ScrollViewer>
             <ScrollViewer IsVisible="{Binding IsChangesPage}">
             <StackPanel Spacing="12" DataContext="{Binding Changes}">
               <TextBlock Text="Selected change" FontWeight="SemiBold" FontSize="16" />

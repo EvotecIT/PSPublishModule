@@ -184,6 +184,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isSelectionLoading;
     public bool HasWorkingCopy => !string.IsNullOrEmpty(ActiveWorkingCopyRoot);
     public bool HasSelectedFile => SelectedFile is not null;
+    public string SelectedFileRelativePath => SelectedFile is null || string.IsNullOrEmpty(ActiveWorkingCopyRoot)
+        ? "" : Path.GetRelativePath(ActiveWorkingCopyRoot, SelectedFile.FullPath);
     public bool CanManageFiles => HasWorkingCopy && !IsSelectionLoading && !IsFileOperationRunning;
 
     partial void OnActiveWorkingCopyRootChanged(string value)
@@ -201,6 +203,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         History.SetWorkingCopy(value);
         GitHub.SetWorkingCopy(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
+        OnPropertyChanged(nameof(SelectedFileRelativePath));
         OnPropertyChanged(nameof(CanManageFiles));
     }
     partial void OnIsFileOperationRunningChanged(bool value) { OnPropertyChanged(nameof(CanManageFiles)); NotifyEditorChanged(); }
@@ -208,6 +211,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     partial void OnSelectedFileChanged(FileItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedFile));
+        OnPropertyChanged(nameof(SelectedFileRelativePath));
         if (!_updatingFileList && value is not null && !value.IsDirectory) _ = OpenEntryAsync(value);
     }
 

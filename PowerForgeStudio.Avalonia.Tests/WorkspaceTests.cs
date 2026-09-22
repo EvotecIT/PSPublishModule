@@ -62,6 +62,8 @@ public sealed class WorkspaceTests
                 await archive.EnsureLoadedAsync();
                 archive.IsExpanded = true;
                 model.SelectedFile = Assert.Single(model.Files, x => x.Name == "README.md");
+                Assert.Equal("README.md", model.SelectedFileRelativePath);
+                Assert.Equal("MD file", model.SelectedFile.KindLabel);
                 await model.OpenEntryAsync(model.SelectedFile);
                 var window = new MainWindow { DataContext = model, Width = 1600, Height = 1000 };
                 try
@@ -86,6 +88,7 @@ public sealed class WorkspaceTests
                     Assert.Same(script, tree.SelectedItem);
                     await model.SelectAsync(script);
                     Assert.Equal("# Fixture only", model.Preview);
+                    Assert.Equal(Path.Combine("Build", "Build-Project.ps1"), model.SelectedFileRelativePath);
                     window.UpdateLayout();
                     Dispatcher.UIThread.RunJobs();
                     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
