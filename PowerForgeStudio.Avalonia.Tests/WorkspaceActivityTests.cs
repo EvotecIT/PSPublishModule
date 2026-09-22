@@ -184,6 +184,17 @@ public sealed class WorkspaceActivityTests
                 {
                     model.Activity.SelectedEntry = model.Activity.Entries[0];
                     Capture(window, "activity-attention.png");
+                    var providerEvidence = window.FindControl<ActivityView>("ActivityPage")!
+                        .FindControl<Expander>("ProviderEvidenceExpander");
+                    Assert.NotNull(providerEvidence);
+                    providerEvidence.IsExpanded = true;
+                    window.UpdateLayout();
+                    var providerScroll = window.FindControl<ActivityView>("ActivityPage")!
+                        .FindControl<ScrollViewer>("PageScroll")!;
+                    providerScroll.Offset = new global::Avalonia.Vector(0, providerScroll.Extent.Height);
+                    Capture(window, "activity-provider-evidence.png");
+                    providerScroll.Offset = new global::Avalonia.Vector(0, 0);
+                    providerEvidence.IsExpanded = false;
                     await model.ShowGitHubActivityCommand.ExecuteAsync(null);
                     Assert.True(model.IsGitHubActivityPage);
                     Capture(window, "activity-github.png");
@@ -209,6 +220,10 @@ public sealed class WorkspaceActivityTests
                 try
                 {
                     Capture(compact, "activity-attention-compact.png");
+                    var githubSource = model.Activity.Sources[1];
+                    model.Activity.Sources[1] = githubSource with { State = "Authentication required" };
+                    Capture(compact, "activity-auth-required-compact.png");
+                    model.Activity.Sources[1] = githubSource;
                     var page = compact.FindControl<ActivityView>("ActivityPage");
                     var scroller = page?.FindControl<ScrollViewer>("PageScroll");
                     Assert.NotNull(scroller);

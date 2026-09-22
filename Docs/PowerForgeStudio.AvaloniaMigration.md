@@ -42,6 +42,7 @@ The desktop GUI is PowerForgeStudio.Avalonia, a thin presentation host over the 
 - [x] Inventory Windows schedules and local GitHub workflow definitions with explicit provider evidence boundaries.
 - [x] Add secret-free GitHub, registry, Licensing, IntelligenceX and local-toolchain connection evidence.
 - [x] Add a cross-project Activity inbox over existing portfolio, release, GitHub issue/PR/CI and automation owners.
+- [x] Keep Activity's provider states visible without displacing the actionable list; retain detailed source evidence on demand.
 - [x] Add machine-local Settings with durable behavior and bounded Activity refresh preferences.
 - [x] Route exception details shown by the Avalonia shell, provider catalogs and project pages through the shared bounded diagnostic sanitizer.
 - [x] Connect bounded, read-only GitHub Actions workflow state and scheduled-run evidence to local definitions.
