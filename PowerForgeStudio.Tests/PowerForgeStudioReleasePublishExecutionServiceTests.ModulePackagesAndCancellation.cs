@@ -235,8 +235,10 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
         }
     }
 
-    [Fact]
-    public async Task ExecuteAsync_publishes_signed_module_owned_github_assets_without_rebuilding()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_publishes_signed_module_owned_github_assets_without_rebuilding(bool perProject)
     {
         var repositoryRoot = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -259,9 +261,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                   </PropertyGroup>
                 </Project>
                 """);
-            File.WriteAllText(
-                moduleConfig,
-                """
+            var packageConfig = """
                 {
                   "Build": { "Name": "Sample", "SourcePath": "." },
                   "Segments": [
@@ -284,7 +284,11 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     }
                   ]
                 }
-                """);
+                """;
+            if (perProject)
+                packageConfig = packageConfig.Replace("\"PublishGitHub\": true,",
+                    "\"PublishGitHub\": true, \"GitHubReleaseMode\": \"PerProject\",", StringComparison.Ordinal);
+            File.WriteAllText(moduleConfig, packageConfig);
             File.WriteAllText(
                 releaseConfig,
                 """{ "Module": { "RepositoryRoot": "..", "ConfigPath": "powerforge.json", "IncludesPackages": true } }""");
@@ -312,11 +316,19 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 request =>
                 {
                     capturedPublish = request;
-                    return new ProjectBuildGitHubPublishSummary
+                    var summary = new ProjectBuildGitHubPublishSummary
                     {
                         Success = true,
-                        SummaryReleaseUrl = "https://example.test/release"
+                        PerProject = perProject,
+                        SummaryReleaseUrl = perProject ? null : "https://example.test/release"
                     };
+                    if (perProject)
+                        summary.Results.Add(new ProjectBuildGitHubResult {
+                            ProjectName = "Sample.Library",
+                            Success = true,
+                            ReleaseUrl = "https://example.test/release"
+                        });
+                    return summary;
                 });
             var service = new ReleasePublishExecutionService(
                 new RepositoryCatalogScanner(),
@@ -349,6 +361,9 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 receipt =>
                     receipt.TargetKind == "ModulePackages" &&
                     receipt.Status == ReleasePublishReceiptStatus.Published);
+            var publishedRelease = Assert.Single(result.Receipts);
+            Assert.Equal("https://example.test/release", publishedRelease.Destination);
+            if (perProject) Assert.Contains("Sample.Library", publishedRelease.TargetName);
         }
         finally
         {

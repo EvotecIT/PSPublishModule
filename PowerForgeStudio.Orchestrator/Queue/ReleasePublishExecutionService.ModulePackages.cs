@@ -159,18 +159,42 @@ public sealed partial class ReleasePublishExecutionService
                             () => _projectBuildPublishHostService.PublishGitHub(publishConfig, plan),
                             cancellationToken)
                         .ConfigureAwait(false);
-                    receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                        repository.RootPath,
-                        repository.Name,
-                        "UnifiedRelease",
-                        $"{lane.Name} GitHub release",
-                        "ModulePackages",
-                        publishSummary.SummaryReleaseUrl ?? $"{publishConfig.GitHubUsername}/{publishConfig.GitHubRepositoryName}",
-                        publishSummary.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                        publishSummary.Success
-                            ? "Signed checkpointed package release published without rebuilding."
-                            : publishSummary.ErrorMessage ?? "Package GitHub publishing failed.",
-                        plan.Projects.Select(static project => project.ReleaseZipPath).FirstOrDefault(File.Exists)));
+                    if (publishSummary.PerProject && publishSummary.Results.Count > 0)
+                    {
+                        foreach (var projectResult in publishSummary.Results)
+                        {
+                            receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                                repository.RootPath,
+                                repository.Name,
+                                "UnifiedRelease",
+                                $"{lane.Name} / {projectResult.ProjectName} GitHub release",
+                                "ModulePackages",
+                                projectResult.ReleaseUrl,
+                                projectResult.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                                projectResult.Success
+                                    ? "Signed checkpointed project release published without rebuilding."
+                                    : projectResult.ErrorMessage ?? "Project GitHub publishing failed.",
+                                plan.Projects.FirstOrDefault(project =>
+                                    string.Equals(project.ProjectName, projectResult.ProjectName, StringComparison.OrdinalIgnoreCase))?.ReleaseZipPath));
+                        }
+                    }
+                    else
+                    {
+                        receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                            repository.RootPath,
+                            repository.Name,
+                            "UnifiedRelease",
+                            $"{lane.Name} GitHub release",
+                            "ModulePackages",
+                            publishSummary.PerProject ? null : publishSummary.SummaryReleaseUrl,
+                            publishSummary.PerProject ? ReleasePublishReceiptStatus.Failed
+                                : publishSummary.Success ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                            publishSummary.PerProject ? "No per-project GitHub release result was recorded."
+                                : publishSummary.Success
+                                    ? "Signed checkpointed package release published without rebuilding."
+                                    : publishSummary.ErrorMessage ?? "Package GitHub publishing failed.",
+                            plan.Projects.Select(static project => project.ReleaseZipPath).FirstOrDefault(File.Exists)));
+                    }
                     if (!publishSummary.Success) cancellationToken.ThrowIfCancellationRequested();
                 }
             }

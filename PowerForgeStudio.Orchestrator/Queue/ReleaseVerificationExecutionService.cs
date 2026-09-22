@@ -257,6 +257,7 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
         {
             "GitHub" => await VerifyGitHubAsync(publishReceipt, cancellationToken),
             "NuGet" => await VerifyNuGetAsync(publishReceipt, signingReceipts, cancellationToken),
+            "ModulePackages" => await VerifyModulePackageAsync(publishReceipt, signingReceipts, cancellationToken),
             "PowerShellRepository" => await VerifyPowerShellRepositoryAsync(publishReceipt, cancellationToken),
             _ => FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind,
                 publishReceipt.TargetName, publishReceipt.Destination,
@@ -264,16 +265,40 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
         };
     }
 
-    private async Task<ReleaseVerificationReceipt> VerifyGitHubAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
+    private async Task<ReleaseVerificationReceipt> VerifyModulePackageAsync(
+        ReleasePublishReceipt publishReceipt,
+        IReadOnlyList<ReleaseSigningReceipt>? signingReceipts,
+        CancellationToken cancellationToken)
     {
-        var result = await VerifyWithHostAsync(publishReceipt, cancellationToken);
+        if (publishReceipt.HasPackageIdentity &&
+            publishReceipt.SourcePath?.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) == true)
+            return await VerifyNuGetAsync(publishReceipt, signingReceipts, cancellationToken, "NuGet").ConfigureAwait(false);
+
+        if (publishReceipt.TargetName.EndsWith(" GitHub release", StringComparison.OrdinalIgnoreCase) &&
+            Uri.TryCreate(publishReceipt.Destination, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp))
+            return await VerifyGitHubAsync(publishReceipt, cancellationToken, "GitHub").ConfigureAwait(false);
+
+        return FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind,
+            publishReceipt.TargetName, publishReceipt.Destination,
+            "The module-owned package receipt does not identify a verifiable NuGet package or GitHub release.",
+            publishReceipt.TargetKind);
+    }
+
+    private async Task<ReleaseVerificationReceipt> VerifyGitHubAsync(
+        ReleasePublishReceipt publishReceipt,
+        CancellationToken cancellationToken,
+        string? hostTargetKind = null)
+    {
+        var result = await VerifyWithHostAsync(publishReceipt, cancellationToken, hostTargetKind: hostTargetKind);
         return MapReceipt(publishReceipt, result);
     }
 
     private async Task<ReleaseVerificationReceipt> VerifyNuGetAsync(
         ReleasePublishReceipt publishReceipt,
         IReadOnlyList<ReleaseSigningReceipt>? signingReceipts,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? hostTargetKind = null)
     {
         string? destinationOverride = null;
         if (publishReceipt.DestinationCredentialsOmitted && publishReceipt.PublicRegistry is null)
@@ -289,8 +314,10 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
             signing.Status == ReleaseSigningReceiptStatus.Signed &&
             string.Equals(signing.ArtifactPath, publishReceipt.SourcePath,
                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
-            string.Equals(signing.AdapterKind, publishReceipt.AdapterKind, StringComparison.OrdinalIgnoreCase))?.ContentSha256;
-        var result = await VerifyWithHostAsync(publishReceipt, cancellationToken, destinationOverride, expectedDigest);
+            (string.Equals(signing.AdapterKind, publishReceipt.AdapterKind, StringComparison.OrdinalIgnoreCase) ||
+             (publishReceipt.TargetKind == "ModulePackages" &&
+              string.Equals(signing.AdapterKind, "ModuleBuild", StringComparison.OrdinalIgnoreCase))))?.ContentSha256;
+        var result = await VerifyWithHostAsync(publishReceipt, cancellationToken, destinationOverride, expectedDigest, hostTargetKind);
         return MapReceipt(publishReceipt, result);
     }
 
@@ -343,13 +370,14 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
         ReleasePublishReceipt publishReceipt,
         CancellationToken cancellationToken,
         string? destinationOverride = null,
-        string? expectedContentSha256 = null)
+        string? expectedContentSha256 = null,
+        string? hostTargetKind = null)
         => await _verificationHostService.VerifyAsync(new PublishVerificationRequest {
             RootPath = publishReceipt.RootPath,
             RepositoryName = publishReceipt.RepositoryName,
             AdapterKind = publishReceipt.AdapterKind,
             TargetName = publishReceipt.TargetName,
-            TargetKind = publishReceipt.TargetKind,
+            TargetKind = hostTargetKind ?? publishReceipt.TargetKind,
             Destination = destinationOverride ?? publishReceipt.Destination,
             SourcePath = publishReceipt.SourcePath,
             PackageId = publishReceipt.PackageId,
