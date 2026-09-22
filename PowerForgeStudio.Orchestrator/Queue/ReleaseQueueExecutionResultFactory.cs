@@ -21,7 +21,7 @@ public static class ReleaseQueueExecutionResultFactory
 
         var succeeded = adapterResults.Count > 0 && adapterResults.All(result => result.Succeeded);
         var summary = succeeded
-            ? $"Build completed for {adapterResults.Count} adapter(s) with PowerForge publishing disabled."
+            ? $"Build completed for {adapterResults.Count} adapter(s). Studio did not run its publication stage."
             : FirstLine(adapterResults.FirstOrDefault(result => !result.Succeeded)?.ErrorTail
                 ?? adapterResults.FirstOrDefault(result => !result.Succeeded)?.OutputTail
                 ?? "Build execution failed.");

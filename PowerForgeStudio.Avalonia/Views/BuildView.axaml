@@ -133,7 +133,7 @@
           <SelectableTextBlock Text="{Binding TaskOutput}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
-      <TextBlock Text="Build runs the current configuration with publishing disabled through PowerForge. Project scripts and build hooks execute code; project builds may perform configured local signing. Changing projects leaves an active build running; its working copy is shown below." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding ShowBuildContractSection}" />
+      <TextBlock Text="Studio requests a build with publishing disabled. JSON-backed PowerForge builds enforce this; project scripts and build hooks execute code and may ignore switches or have external effects. Changing projects leaves an active build running; its working copy is shown below." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding ShowBuildContractSection}" />
       <Border IsVisible="{Binding HasBuild}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="14">
         <StackPanel Spacing="10">
           <TextBlock x:Name="BuildResultHeading" Text="Build result" FontSize="18" FontWeight="SemiBold" />

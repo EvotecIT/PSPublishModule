@@ -11,6 +11,9 @@ public sealed class ProjectBuildCommandBuildRequest
     /// <summary>Optional project build config path.</summary>
     public string? ConfigPath { get; set; }
 
+    /// <summary>Discovered project build script used when no JSON config is available.</summary>
+    public string? ScriptPath { get; set; }
+
     /// <summary>Resolved PSPublishModule path used for Import-Module.</summary>
     public string ModulePath { get; set; } = string.Empty;
 

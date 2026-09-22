@@ -299,7 +299,7 @@
                   </StackPanel>
                 </Border>
                 <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding ShowBuildContractSection}">
-                  <TextBlock Text="Build runs local project code with PowerForge publishing disabled. Inspect the captured artifacts in Releases before signing or publishing."
+                  <TextBlock Text="Studio requests build-only execution. Project scripts can ignore switches or have external effects; inspect artifacts before a Studio release."
                              TextWrapping="Wrap" FontSize="12" />
                 </Border>
                 <Border Background="#FFF8E8" BorderBrush="#E8CA80" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding HasTasks}">

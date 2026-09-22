@@ -233,6 +233,7 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
     private async Task<RepositoryPlanResult> RunProjectPlanAsync(RepositoryCatalogEntry item, CancellationToken cancellationToken)
     {
         var outputPath = BuildPlanOutputPath(item.Name, RepositoryPlanAdapterKind.ProjectPlan, "project.plan.json");
+        if (File.Exists(outputPath)) File.Delete(outputPath);
         var configPath = ResolveProjectConfigPath(item.ProjectBuildScriptPath!, item.RootPath);
         if (!string.IsNullOrWhiteSpace(configPath))
         {
@@ -262,6 +263,7 @@ public sealed class RepositoryPlanPreviewService : IRepositoryPlanPreviewService
             RepositoryRoot = item.RootPath,
             PlanOutputPath = outputPath,
             ConfigPath = configPath,
+            ScriptPath = item.ProjectBuildScriptPath,
             ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath()
         }, cancellationToken);
 

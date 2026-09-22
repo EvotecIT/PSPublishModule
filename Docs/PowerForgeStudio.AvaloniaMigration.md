@@ -274,6 +274,8 @@ After a successful inspection, Build current configuration invokes ReleaseBuildE
 
 The shared executor disables PowerForge publication. Project builds may perform configured local signing; module builds request Build mode with signing, installation and module publishing disabled. Legacy module scripts must expose the required controls before invocation, otherwise they fail with an actionable error. This is a build-only contract check, not a sandbox for arbitrary scripts or hooks. The PowerShell project fallback now forwards cancellation to the shared cancellable runner instead of cancelling only its waiting task.
 
+Script-only `Build-Project.ps1` repositories now use the discovered script for plan and build-only requests when no sibling `project.build.json` exists. The script must accept the standard plan/build and publish switches; Studio does not assume a custom script obeys them. Existing generated project plans are removed before each preview or publication replan, so a successful process that writes no fresh plan cannot reuse an older one. A disposable script-only repository completed plan and build through the native Avalonia UI; its temporary repository, fake module and plan were removed after validation.
+
 Evidence:
 
 - Six Avalonia workflow tests passed. A JSON-only fixture produced a real NuGet package containing lib/net10.0/StudioFixture.dll. A subsequent real compiler failure produced visible diagnostics and left the build action available. A controlled execution test proved that navigation retains the running build's root and that explicit cancellation reaches that run.

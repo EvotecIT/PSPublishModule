@@ -147,6 +147,8 @@ Pre-share validation:
 
 Studio prefers the local PSPublishModule repository manifest when it runs from a checkout. This keeps unpublished Studio and pipeline changes on the same shared PowerForge implementation.
 
+For a repository with `Build/project.build.json`, Studio plans and builds through the shared JSON engine. If only `Build-Project.ps1` is present, Studio invokes that script with `-Plan`, `-PlanPath`, and build and publish switches set to false for inspection; Build & Run later invokes it with `-Build` true and publish and version-update switches false. That script must accept these parameters and write a reviewable PowerForge project plan. Studio requests a build-only run, but a custom script can ignore switches or perform other actions; inspect and trust it before using Build & Run.
+
 A published app still resolves its machine-local workspace and release state under the platform application-data folder. Build, signing and publication availability then depends on the PowerForge and toolchain evidence shown by Studio Connections.
 
 ## Quick command list

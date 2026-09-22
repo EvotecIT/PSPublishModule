@@ -4,7 +4,7 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>
-/// Shared PowerShell-host fallback for invoking <c>Invoke-ProjectBuild</c> when config-backed C# execution is not available.
+/// Shared PowerShell-host fallback for invoking a discovered project script, or <c>Invoke-ProjectBuild</c> when a config path is supplied.
 /// </summary>
 public sealed class ProjectBuildCommandHostService
 {
@@ -24,7 +24,7 @@ public sealed class ProjectBuildCommandHostService
     }
 
     /// <summary>
-    /// Generates a plan through <c>Invoke-ProjectBuild -Plan</c>.
+    /// Generates a plan through the discovered script or <c>Invoke-ProjectBuild -Plan</c>.
     /// </summary>
     public Task<ProjectBuildCommandHostExecutionResult> GeneratePlanAsync(ProjectBuildCommandPlanRequest request, CancellationToken cancellationToken = default)
     {
@@ -33,7 +33,10 @@ public sealed class ProjectBuildCommandHostService
         ValidateRequiredPath(request.PlanOutputPath, nameof(request.PlanOutputPath));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
 
-        var command = new StringBuilder("Invoke-ProjectBuild -Plan:$true -PlanPath ");
+        var scriptFallback = string.IsNullOrWhiteSpace(request.ConfigPath) && !string.IsNullOrWhiteSpace(request.ScriptPath);
+        var command = new StringBuilder(scriptFallback
+            ? $"& {QuoteLiteral(request.ScriptPath!)} -Plan:$true -Build:$false -PublishNuget:$false -PublishGitHub:$false -UpdateVersions:$false -PlanPath "
+            : "Invoke-ProjectBuild -Plan:$true -PlanPath ");
         command.Append(QuoteLiteral(request.PlanOutputPath));
         if (!string.IsNullOrWhiteSpace(request.ConfigPath))
         {
@@ -48,7 +51,7 @@ public sealed class ProjectBuildCommandHostService
     }
 
     /// <summary>
-    /// Executes a build through <c>Invoke-ProjectBuild -Build</c> with publish disabled.
+    /// Requests a build through the discovered script or <c>Invoke-ProjectBuild -Build</c> with publish switches disabled.
     /// </summary>
     public Task<ProjectBuildCommandHostExecutionResult> ExecuteBuildAsync(ProjectBuildCommandBuildRequest request, CancellationToken cancellationToken = default)
     {
@@ -56,7 +59,10 @@ public sealed class ProjectBuildCommandHostService
         ValidateRequiredPath(request.RepositoryRoot, nameof(request.RepositoryRoot));
         ValidateRequiredPath(request.ModulePath, nameof(request.ModulePath));
 
-        var command = new StringBuilder("Invoke-ProjectBuild -Build:$true -PublishNuget:$false -PublishGitHub:$false -UpdateVersions:$false");
+        var scriptFallback = string.IsNullOrWhiteSpace(request.ConfigPath) && !string.IsNullOrWhiteSpace(request.ScriptPath);
+        var command = new StringBuilder(scriptFallback
+            ? $"& {QuoteLiteral(request.ScriptPath!)} -Build:$true -PublishNuget:$false -PublishGitHub:$false -UpdateVersions:$false"
+            : "Invoke-ProjectBuild -Build:$true -PublishNuget:$false -PublishGitHub:$false -UpdateVersions:$false");
         if (!string.IsNullOrWhiteSpace(request.ConfigPath))
         {
             var configPath = request.ConfigPath!;

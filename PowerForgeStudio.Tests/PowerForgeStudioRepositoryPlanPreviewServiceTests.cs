@@ -1,6 +1,7 @@
 using PowerForge;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Portfolio;
+using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Portfolio;
 
 namespace PowerForgeStudio.Tests;
@@ -285,6 +286,38 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
         Assert.Contains("did not contain any buildable projects", result.ErrorTail, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task PlanRepositoryAsync_DoesNotAcceptAnOlderPlanWhenScriptWritesNothing()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var name = "ScriptOnly" + Guid.NewGuid().ToString("N")[..8];
+        var repositoryRoot = scope.CreateDirectory(name);
+        var buildScript = Path.Combine(repositoryRoot, "Build-Project.ps1");
+        File.WriteAllText(buildScript, "# test");
+        var planPath = PowerForgeStudioHostPaths.GetPlansFilePath(name, RepositoryPlanAdapterKind.ProjectPlan.ToString(), "project.plan.json");
+        File.WriteAllText(planPath, """{"Success":true,"Projects":[{"ProjectName":"OldPlan","IsPackable":true}]}""");
+        try
+        {
+            var service = new RepositoryPlanPreviewService(
+                new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(new NoPlanPowerShellRunner()),
+                new ModuleBuildHostService(new ThrowingPowerShellRunner()));
+            var repository = new RepositoryCatalogEntry(name, repositoryRoot, ReleaseRepositoryKind.Library,
+                ReleaseWorkspaceKind.PrimaryRepository, null, buildScript, false, false);
+
+            var result = Assert.Single(await service.PlanRepositoryAsync(repository));
+
+            Assert.Equal(RepositoryPlanStatus.Failed, result.Status);
+            Assert.Null(result.PlanPath);
+            Assert.False(File.Exists(planPath));
+        }
+        finally
+        {
+            var repositoryPlanDirectory = Directory.GetParent(Path.GetDirectoryName(planPath)!)!.FullName;
+            Directory.Delete(repositoryPlanDirectory, recursive: true);
+        }
+    }
+
     private sealed class TemporaryDirectoryScope : IDisposable
     {
         public TemporaryDirectoryScope()
@@ -323,6 +356,9 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
         {
             const string marker = "-PlanPath '";
             var command = request.CommandText ?? string.Empty;
+            Assert.Contains("Build-Project.ps1' -Plan:$true -Build:$false -PublishNuget:$false -PublishGitHub:$false -UpdateVersions:$false",
+                command, StringComparison.Ordinal);
+            Assert.DoesNotContain("Invoke-ProjectBuild -Plan", command, StringComparison.Ordinal);
             var start = command.IndexOf(marker, StringComparison.Ordinal);
             Assert.True(start >= 0);
             start += marker.Length;
@@ -333,5 +369,11 @@ public sealed class PowerForgeStudioRepositoryPlanPreviewServiceTests
             File.WriteAllText(planPath, "{}");
             return new PowerShellRunResult(0, "plan written", string.Empty, "test-pwsh");
         }
+    }
+
+    private sealed class NoPlanPowerShellRunner : IPowerShellRunner
+    {
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+            => new(0, "script returned without writing a plan", string.Empty, "test-pwsh");
     }
 }

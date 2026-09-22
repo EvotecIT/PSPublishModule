@@ -480,6 +480,7 @@ public sealed partial class ReleasePublishExecutionService
         var scriptPath = repository.ProjectBuildScriptPath!;
         var configPath = RepositoryPlanPreviewService.ResolveProjectConfigPath(scriptPath, repository.RootPath);
         var planPath = PowerForgeStudioHostPaths.GetRuntimeFilePath(repository.Name, "project-publish", "project.publish.plan.json");
+        if (File.Exists(planPath)) File.Delete(planPath);
         if (!string.IsNullOrWhiteSpace(configPath))
         {
             var execution = _projectBuildHostService.Execute(new ProjectBuildHostRequest {
@@ -507,6 +508,7 @@ public sealed partial class ReleasePublishExecutionService
                 RepositoryRoot = repository.RootPath,
                 PlanOutputPath = planPath,
                 ConfigPath = configPath,
+                ScriptPath = scriptPath,
                 ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath()
             }, cancellationToken);
             if (!execution.Succeeded || !File.Exists(planPath))

@@ -512,6 +512,7 @@ public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutio
         var powerShellExecution = await _projectBuildCommandHostService.ExecuteBuildAsync(new ProjectBuildCommandBuildRequest {
             RepositoryRoot = repository.RootPath,
             ConfigPath = configPath,
+            ScriptPath = scriptPath,
             ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
             OutputLineReceived = line => progress.ProjectBuildOutputLine(line, isError: false),
             ErrorLineReceived = line => progress.ProjectBuildOutputLine(line, isError: true)
@@ -522,7 +523,7 @@ public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutio
         return new ReleaseBuildAdapterResult(
             AdapterKind: ReleaseBuildAdapterKind.ProjectBuild,
             Succeeded: succeeded,
-            Summary: succeeded ? "Project build completed with publish disabled." : "Project build failed.",
+            Summary: succeeded ? "Project script completed after build-only switches were requested." : "Project build failed.",
             ExitCode: powerShellExecution.ExitCode,
             DurationSeconds: Math.Round(powerShellExecution.Duration.TotalSeconds, 2),
             ArtifactDirectories: fallbackArtifactInfo.Directories,
