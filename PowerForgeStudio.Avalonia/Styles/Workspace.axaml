@@ -35,6 +35,9 @@
   <Style Selector="Button.rail:disabled /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="Transparent" /><Setter Property="Foreground" Value="#8298B3" /></Style>
   <Style Selector="Button.rail:disabled"><Setter Property="Opacity" Value="0.55" /></Style>
   <Style Selector="Button.toolbar"><Setter Property="Padding" Value="8,5" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style>
+  <Style Selector="Button.chrome"><Setter Property="Width" Value="46" /><Setter Property="Height" Value="48" /><Setter Property="Padding" Value="0" /><Setter Property="CornerRadius" Value="0" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style>
+  <Style Selector="Button.chrome:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#315372" /></Style>
+  <Style Selector="Button.chrome.close:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#C72B3A" /></Style>
   <Style Selector="Button.projectMenu"><Setter Property="Padding" Value="10,6" /><Setter Property="Background" Value="#F7FAFE" /><Setter Property="BorderBrush" Value="#CAD8EA" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="6" /><Setter Property="Foreground" Value="#26334B" /></Style>
   <Style Selector="Button.projectMenu:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#E8F1FF" /><Setter Property="BorderBrush" Value="#9ABCEB" /></Style>
   <Style Selector="Button.fileAction"><Setter Property="Padding" Value="9,6" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderBrush" Value="Transparent" /><Setter Property="CornerRadius" Value="5" /><Setter Property="FontSize" Value="13" /></Style>

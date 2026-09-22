@@ -151,6 +151,7 @@ public sealed class WorkspaceActivityTests
                 Assert.False(model.IsProjectRoute);
                 Assert.True(model.IsWorkspaceUtilityPage);
                 Assert.Equal(5, model.Activity.Entries.Count);
+                Assert.Same(model.Activity.Entries[0], model.Activity.SelectedEntry);
                 Assert.Equal(5, model.Activity.ActionableCount);
                 Assert.Equal(2, model.Activity.CriticalCount);
                 Assert.Equal(2, model.Activity.ReviewCount);
@@ -164,6 +165,7 @@ public sealed class WorkspaceActivityTests
                 Assert.False(model.IsActivityRailSelected);
                 Assert.False(model.IsGitHubPage);
                 Assert.Equal(3, model.Activity.Entries.Count);
+                Assert.Same(model.Activity.Entries[0], model.Activity.SelectedEntry);
                 await model.ShowActivityCommand.ExecuteAsync(null);
                 Assert.True(model.Activity.IsAttentionFilter);
                 Assert.True(model.IsActivityRailSelected);

@@ -8,21 +8,35 @@
   </UserControl.Styles>
   <ScrollViewer x:Name="StorageScroller" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="22,18" Spacing="14">
-      <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
-        <Grid ColumnDefinitions="32,*" ColumnSpacing="10">
+      <WrapPanel ItemSpacing="18" LineSpacing="12">
+        <Grid Width="340" ColumnDefinitions="32,*" ColumnSpacing="10" VerticalAlignment="Center">
           <controls:NavigationIcon Kind="storage" Width="28" Height="28" Ink="#142B4D" VerticalAlignment="Top" Margin="0,2,0,0" />
           <StackPanel Grid.Column="1" Spacing="4">
             <TextBlock Text="Review workspace storage" Classes="heading" />
             <TextBlock Text="Measured working copies and local evidence. Inspection never removes files." Classes="muted" TextWrapping="Wrap" />
           </StackPanel>
         </Grid>
-        <WrapPanel Grid.Row="1" ItemSpacing="8" LineSpacing="8" HorizontalAlignment="Right">
-          <Button Content="Open selected" Click="OpenSelected" IsEnabled="{Binding SelectedEntry.Exists}" />
-          <Button Content="Review removal" Click="ReviewRemoval" IsEnabled="{Binding CanReviewRemoval}" Classes="primary" />
-          <Button Content="Review stale registrations" Click="ReviewPrune" IsEnabled="{Binding CanReviewPrune}" />
-          <Button Content="Refresh inspection" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
-        </WrapPanel>
-      </Grid>
+        <Grid Width="510" ColumnDefinitions="*,*,*" ColumnSpacing="8" VerticalAlignment="Center">
+        <Border Classes="card" Padding="12">
+          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
+            <controls:NavigationIcon Kind="storage" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1"><TextBlock Text="{Binding IndexedDisplay}" FontSize="19" FontWeight="SemiBold" /><TextBlock Text="indexed" Classes="muted" FontSize="12" /></StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="1" Classes="card" Padding="12">
+          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
+            <controls:NavigationIcon Kind="projects" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1"><TextBlock Text="{Binding WorktreeDisplay}" FontSize="19" FontWeight="SemiBold" /><TextBlock Text="in worktrees" Classes="muted" FontSize="12" /></StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="2" Classes="card" Padding="12">
+          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
+            <controls:NavigationIcon Kind="review" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1"><TextBlock Text="{Binding CandidateCount}" FontSize="19" FontWeight="SemiBold" /><TextBlock Text="review candidates" Classes="muted" FontSize="12" /></StackPanel>
+          </Grid>
+        </Border>
+        </Grid>
+      </WrapPanel>
       <StackPanel Spacing="6" IsVisible="{Binding IsLoading}">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
           <TextBlock Text="{Binding Status}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
@@ -30,31 +44,17 @@
         </Grid>
         <ProgressBar Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent}" Height="5" />
       </StackPanel>
-      <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
-        <Border Classes="card" Padding="16">
-          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
-            <controls:NavigationIcon Kind="storage" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
-            <StackPanel Grid.Column="1"><TextBlock Text="{Binding IndexedDisplay}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="indexed" Classes="muted" /></StackPanel>
-          </Grid>
-        </Border>
-        <Border Grid.Column="1" Classes="card" Padding="16">
-          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
-            <controls:NavigationIcon Kind="projects" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
-            <StackPanel Grid.Column="1"><TextBlock Text="{Binding WorktreeDisplay}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="in worktrees" Classes="muted" /></StackPanel>
-          </Grid>
-        </Border>
-        <Border Grid.Column="2" Classes="card" Padding="16">
-          <Grid ColumnDefinitions="30,*" ColumnSpacing="10">
-            <controls:NavigationIcon Kind="review" Width="24" Height="24" Ink="#20324F" VerticalAlignment="Center" />
-            <StackPanel Grid.Column="1"><TextBlock Text="{Binding CandidateCount}" FontSize="22" FontWeight="SemiBold" /><TextBlock Text="review candidates" Classes="muted" /></StackPanel>
-          </Grid>
-        </Border>
-      </Grid>
       <WrapPanel ItemSpacing="8" LineSpacing="8">
         <Button Content="All working copies" Classes="chip" Classes.active="{Binding IsAllFilter}" Command="{Binding ShowAllCommand}" />
         <Button Content="Review candidates" Classes="chip" Classes.active="{Binding IsCandidatesFilter}" Command="{Binding ShowCandidatesCommand}" />
         <Button Content="Changed" Classes="chip" Classes.active="{Binding IsChangedFilter}" Command="{Binding ShowChangedCommand}" />
         <Button Content="Broken references" Classes="chip" Classes.active="{Binding IsBrokenFilter}" Command="{Binding ShowBrokenCommand}" />
+      </WrapPanel>
+      <WrapPanel ItemSpacing="8" LineSpacing="8">
+        <Button Content="Open selected" Click="OpenSelected" IsEnabled="{Binding SelectedEntry.Exists}" />
+        <Button Content="Review removal" Click="ReviewRemoval" IsEnabled="{Binding CanReviewRemoval}" Classes="primary" />
+        <Button Content="Review stale registrations" Click="ReviewPrune" IsEnabled="{Binding CanReviewPrune}" />
+        <Button Content="Refresh inspection" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
       </WrapPanel>
       <Border Classes="card" Padding="0" MinHeight="280">
         <Grid RowDefinitions="42,*">

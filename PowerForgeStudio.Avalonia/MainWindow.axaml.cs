@@ -20,12 +20,24 @@ public sealed partial class MainWindow : Window
         SizeChanged += (_, args) => ApplyResponsiveLayout(args.NewSize.Width);
         KeyDown += FocusQuickProjectSearch;
         Closing += SaveBeforeClosing;
+        PropertyChanged += (_, args) =>
+        {
+            if (args.Property == WindowStateProperty)
+                MaximizeWindowIcon.Kind = WindowState == WindowState.Maximized ? "restore" : "maximize";
+        };
         DataContextChanged += (_, _) =>
         {
             if (DataContext is WorkspaceViewModel model)
                 model.ResolveUnsavedChanges = documents => new UnsavedChangesDialog(documents).ShowDialog<UnsavedChangesChoice>(this);
         };
     }
+
+    private void MinimizeWindow(object? sender, RoutedEventArgs args) => WindowState = WindowState.Minimized;
+
+    private void ToggleMaximizeWindow(object? sender, RoutedEventArgs args)
+        => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void CloseWindow(object? sender, RoutedEventArgs args) => Close();
 
     private void FocusQuickProjectSearch(object? sender, KeyEventArgs args)
     {

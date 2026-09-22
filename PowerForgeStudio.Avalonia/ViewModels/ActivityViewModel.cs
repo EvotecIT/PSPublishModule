@@ -223,7 +223,8 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         };
         Entries.Clear();
         foreach (var entry in visible) Entries.Add(entry);
-        SelectedEntry = selectedId is null ? null : Entries.FirstOrDefault(entry => entry.Id == selectedId);
+        SelectedEntry = (selectedId is null ? null : Entries.FirstOrDefault(entry => entry.Id == selectedId))
+            ?? Entries.FirstOrDefault();
         OnPropertyChanged(nameof(HasEntries));
     }
 

@@ -3,14 +3,15 @@
         xmlns:views="using:PowerForgeStudio.Avalonia.Views"
         xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
         x:Class="PowerForgeStudio.Avalonia.MainWindow" x:DataType="vm:WorkspaceViewModel"
-        Width="1600" Height="1000" MinWidth="1050" MinHeight="700" Title="PowerForge Studio">
+        Width="1600" Height="1000" MinWidth="1050" MinHeight="700" Title="PowerForge Studio"
+        WindowDecorations="None" ExtendClientAreaToDecorationsHint="True">
   <Grid RowDefinitions="48,*,30">
-    <Border Grid.Row="0">
+    <Border x:Name="TitleBand" Grid.Row="0" WindowDecorationProperties.ElementRole="TitleBar">
       <Border.Background><LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%"><GradientStop Color="#193958" /><GradientStop Color="#061A34" Offset="1" /></LinearGradientBrush></Border.Background>
-      <Grid ColumnDefinitions="360,*,280" Margin="22,0">
+      <Grid ColumnDefinitions="360,*,205,138" Margin="22,0,0,0">
         <TextBlock Text="Project workspace" Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
         <Grid Grid.Column="1" MaxWidth="550" HorizontalAlignment="Stretch" VerticalAlignment="Center">
-          <TextBox x:Name="QuickProjectSearchBox" Text="{Binding QuickProjectQuery}" PlaceholderText="Jump to a repository…" Padding="32,6,70,6" Background="#EEF3FA" BorderBrush="#B8CAE0" KeyDown="QuickProjectSearchKeyDown" GotFocus="QuickProjectSearchGotFocus" />
+          <TextBox x:Name="QuickProjectSearchBox" AutomationProperties.Name="Repository jump" WindowDecorationProperties.ElementRole="User" Text="{Binding QuickProjectQuery}" PlaceholderText="Jump to a repository…" Padding="32,6,70,6" Background="#EEF3FA" BorderBrush="#B8CAE0" KeyDown="QuickProjectSearchKeyDown" GotFocus="QuickProjectSearchGotFocus" />
           <controls:NavigationIcon Kind="search" Width="17" Height="17" Ink="#617189" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False" />
           <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="#F7FAFE" BorderBrush="#CBD7E7" BorderThickness="1" CornerRadius="3" Padding="5,1" Margin="0,0,7,0" IsHitTestVisible="False">
             <TextBlock Text="Ctrl + K" Foreground="#677892" FontSize="11" />
@@ -40,6 +41,11 @@
           </Popup>
         </Grid>
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right"><controls:NavigationIcon Kind="monitor" Width="21" Height="21" Ink="#D6E4F7" /><TextBlock Text="Local workspace" Foreground="#D6E4F7" /></StackPanel>
+        <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+          <Button x:Name="MinimizeWindowButton" Classes="chrome" AutomationProperties.Name="Minimize window" ToolTip.Tip="Minimize" Click="MinimizeWindow" WindowDecorationProperties.ElementRole="MinimizeButton"><controls:NavigationIcon Kind="minimize" Width="15" Height="15" Ink="#D6E4F7" /></Button>
+          <Button x:Name="MaximizeWindowButton" Classes="chrome" AutomationProperties.Name="Maximize or restore window" ToolTip.Tip="Maximize or restore" Click="ToggleMaximizeWindow" WindowDecorationProperties.ElementRole="MaximizeButton"><controls:NavigationIcon x:Name="MaximizeWindowIcon" Kind="maximize" Width="15" Height="15" Ink="#D6E4F7" /></Button>
+          <Button x:Name="CloseWindowButton" Classes="chrome close" AutomationProperties.Name="Close window" ToolTip.Tip="Close" Click="CloseWindow" WindowDecorationProperties.ElementRole="CloseButton"><controls:NavigationIcon Kind="close" Width="15" Height="15" Ink="#D6E4F7" /></Button>
+        </StackPanel>
       </Grid>
     </Border>
     <Grid Grid.Row="1" x:Name="WorkspaceLayout" ColumnDefinitions="70,326,5,*,280">
@@ -544,5 +550,15 @@
         </StackPanel>
       </Grid>
     </Border>
+    <Grid Grid.RowSpan="3" Panel.ZIndex="100">
+      <Border Height="6" Margin="12,0" VerticalAlignment="Top" Background="Transparent" WindowDecorationProperties.ElementRole="ResizeN" />
+      <Border Height="6" Margin="12,0" VerticalAlignment="Bottom" Background="Transparent" WindowDecorationProperties.ElementRole="ResizeS" />
+      <Border Width="6" Margin="0,12" HorizontalAlignment="Left" Background="Transparent" WindowDecorationProperties.ElementRole="ResizeW" />
+      <Border Width="6" Margin="0,12" HorizontalAlignment="Right" Background="Transparent" WindowDecorationProperties.ElementRole="ResizeE" />
+      <Border Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Top" Background="Transparent" WindowDecorationProperties.ElementRole="ResizeNW" />
+      <Border Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Top" Background="Transparent" WindowDecorationProperties.ElementRole="ResizeNE" />
+      <Border Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Bottom" Background="Transparent" WindowDecorationProperties.ElementRole="ResizeSW" />
+      <Border x:Name="SoutheastResizeGrip" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" Background="Transparent" WindowDecorationProperties.ElementRole="ResizeSE" />
+    </Grid>
   </Grid>
 </Window>
