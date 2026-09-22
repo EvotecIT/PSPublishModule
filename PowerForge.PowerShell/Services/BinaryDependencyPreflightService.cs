@@ -89,6 +89,25 @@ public sealed class BinaryDependencyPreflightService
             throw new DirectoryNotFoundException($"Module root not found: {root}");
 
         var edition = NormalizeEdition(powerShellEdition);
+        // An explicitly named DLL is needed for import even if no other assembly
+        // references it. Check the delivered root before graph analysis can discard it.
+        if (!string.IsNullOrWhiteSpace(manifestPath) && File.Exists(manifestPath))
+        {
+            var missingDeclaredAssemblies = ResolveManifestAssemblyPaths(root, manifestPath!)
+                .Where(static path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) && !File.Exists(path))
+                .Select(path => new BinaryDependencyPreflightIssue(
+                    Path.GetFileName(manifestPath!),
+                    Path.GetFileNameWithoutExtension(path),
+                    referencedVersion: null))
+                .ToArray();
+            if (missingDeclaredAssemblies.Length > 0)
+            {
+                return new BinaryDependencyPreflightResult(
+                    edition, root, root, string.Empty, missingDeclaredAssemblies,
+                    $"{missingDeclaredAssemblies.Length} missing manifest-declared assembl{(missingDeclaredAssemblies.Length == 1 ? "y" : "ies")}");
+            }
+        }
+
         var assemblyRoots = ResolveAssemblyRoots(root, edition);
         if (assemblyRoots.Length == 0)
         {
@@ -230,7 +249,7 @@ public sealed class BinaryDependencyPreflightService
         }
 
         var availableAssemblyNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var assemblyPath in scoped.CandidateAssemblyPaths.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        foreach (var assemblyPath in scoped.CandidateAssemblyPaths.OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer))
         {
             var name = GetSimpleAssemblyName(assemblyPath);
             if (string.IsNullOrWhiteSpace(name) || availableAssemblyNames.ContainsKey(name))
@@ -243,7 +262,7 @@ public sealed class BinaryDependencyPreflightService
 
         var issues = new List<BinaryDependencyPreflightIssue>();
         var seenIssues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var visitedAssemblies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visitedAssemblies = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var queue = new Queue<string>(scoped.EntryAssemblyPaths);
 
         while (queue.Count > 0)
@@ -378,36 +397,37 @@ public sealed class BinaryDependencyPreflightService
 
         var fullAssemblyPath = Path.GetFullPath(assemblyPath);
         if (explicitlyIncludedPaths is { Count: > 0 } &&
-            explicitlyIncludedPaths.Contains(fullAssemblyPath, StringComparer.OrdinalIgnoreCase))
+            explicitlyIncludedPaths.Contains(fullAssemblyPath, PowerShellCompilationPathSafety.PathComparer))
             return false;
 
         if (explicitlyIncludedDirectories is { Count: > 0 })
         {
             var directory = Path.GetDirectoryName(fullAssemblyPath);
             if (!string.IsNullOrWhiteSpace(directory) &&
-                explicitlyIncludedDirectories.Contains(Path.GetFullPath(directory), StringComparer.OrdinalIgnoreCase))
+                explicitlyIncludedDirectories.Contains(Path.GetFullPath(directory), PowerShellCompilationPathSafety.PathComparer))
                 return false;
         }
 
         var relative = FrameworkCompatibility.GetRelativePath(assemblyRoot, assemblyPath)
-            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            .Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)
             .TrimStart(Path.DirectorySeparatorChar);
 
         if (string.IsNullOrWhiteSpace(relative))
             return false;
 
+        var comparison = PowerShellCompilationPathSafety.GetPathComparison(assemblyRoot);
         foreach (var excluded in excludedRelativePaths)
         {
             if (string.IsNullOrWhiteSpace(excluded)) continue;
 
-            var normalized = excluded.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            var normalized = excluded.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)
                 .Trim()
                 .TrimStart(Path.DirectorySeparatorChar)
                 .TrimEnd(Path.DirectorySeparatorChar);
             if (string.IsNullOrWhiteSpace(normalized)) continue;
 
-            if (relative.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
-                relative.StartsWith(normalized + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            if (relative.Equals(normalized, comparison) ||
+                relative.StartsWith(normalized + Path.DirectorySeparatorChar, comparison))
                 return true;
         }
 
@@ -460,23 +480,23 @@ public sealed class BinaryDependencyPreflightService
         var entryAssemblyPaths = ResolveManifestAssemblyPaths(moduleRoot, manifestPath!)
             .Where(static path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             .Where(File.Exists)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
 
-        var explicitlyIncluded = new HashSet<string>(entryAssemblyPaths, StringComparer.OrdinalIgnoreCase);
+        var explicitlyIncluded = new HashSet<string>(entryAssemblyPaths, PowerShellCompilationPathSafety.PathComparer);
         var explicitlyIncludedDirectories = new HashSet<string>(
             entryAssemblyPaths
                 .Select(Path.GetDirectoryName)
                 .Where(static path => !string.IsNullOrWhiteSpace(path))
                 .Select(static path => Path.GetFullPath(path!)),
-            StringComparer.OrdinalIgnoreCase);
+            PowerShellCompilationPathSafety.PathComparer);
         var excludedRelativePaths = ResolveRootScanExcludedPaths(manifestPath!);
         var candidateAssemblyPaths = EnumerateCandidateAssemblies(
                 moduleRoot,
                 excludedRelativePaths,
                 explicitlyIncluded,
                 explicitlyIncludedDirectories)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
 
         return new ScopedRootAnalysis(candidateAssemblyPaths, entryAssemblyPaths);
@@ -507,7 +527,7 @@ public sealed class BinaryDependencyPreflightService
         }
 
         return list
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
     }
 
@@ -517,7 +537,8 @@ public sealed class BinaryDependencyPreflightService
         if (string.IsNullOrWhiteSpace(trimmed))
             return string.Empty;
 
-        return Path.GetFullPath(Path.IsPathRooted(trimmed) ? trimmed : Path.Combine(moduleRoot, trimmed));
+        var normalized = trimmed.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        return Path.GetFullPath(Path.IsPathRooted(normalized) ? normalized : Path.Combine(moduleRoot, normalized));
     }
 
     private static string[] ResolveRootScanExcludedPaths(string manifestPath)
@@ -534,7 +555,7 @@ public sealed class BinaryDependencyPreflightService
         return list
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => path.Trim())
-            .Select(static path => path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar))
+            .Select(static path => path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar))
             .Select(static path => path.TrimStart(Path.DirectorySeparatorChar))
             .Select(static path => path.TrimEnd(Path.DirectorySeparatorChar))
             .Where(static path => !string.IsNullOrWhiteSpace(path))

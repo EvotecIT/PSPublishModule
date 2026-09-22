@@ -3424,6 +3424,19 @@ public sealed partial class ModulePipelineHostedOperationsTests
 
     private sealed class FakeHostedOperations : IModulePipelineHostedOperations
     {
+        public List<string> BinaryDependencyRoots { get; } = new();
+        public List<bool> BinaryDependencyManifestsAvailable { get; } = new();
+        public bool AllowModuleImportValidation { get; set; }
+        public bool RejectIncompleteBinaryPayload { get; set; }
+        public bool RemoveBinaryDependencyAfterArtefacts { get; set; }
+        public string? InstalledBinaryPathToRemoveAfterInstall { get; set; }
+        public bool TamperPackedArtifactAfterArtefacts { get; set; }
+        public string? LooseArtifactExtensionToTamper { get; set; }
+        public string? ExternalLooseArtifactRootToTamper { get; set; }
+        public string? LooseArtifactDirectoryToChangeMode { get; set; }
+        public string? CorruptInstalledBinaryUnder { get; set; }
+        public bool PrepareRepositoryPackageOnPublish { get; set; }
+        public int RemotePublishCalls { get; private set; }
         public int DependencyInstallCalls { get; private set; }
         public List<IReadOnlyList<ModuleDependency>> DependencyCalls { get; } = new();
         public IReadOnlyList<ModuleDependency> LastDependencies { get; private set; } = Array.Empty<ModuleDependency>();
@@ -3480,7 +3493,24 @@ public sealed partial class ModulePipelineHostedOperationsTests
             => throw new InvalidOperationException("Not used in this test.");
 
         public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            BinaryDependencyRoots.Add(moduleRoot);
+            BinaryDependencyManifestsAvailable.Add(!string.IsNullOrWhiteSpace(modulePath) && File.Exists(modulePath));
+            if (!string.IsNullOrWhiteSpace(CorruptInstalledBinaryUnder) &&
+                moduleRoot.StartsWith(CorruptInstalledBinaryUnder, StringComparison.OrdinalIgnoreCase) &&
+                !Path.GetFileName(moduleRoot).StartsWith(".tmp_install_", StringComparison.OrdinalIgnoreCase))
+            {
+                var dependencyPath = Path.Combine(moduleRoot, "Lib", "Core", "Dependency.dll");
+                if (File.Exists(dependencyPath))
+                    File.Delete(dependencyPath);
+            }
+            if (RejectIncompleteBinaryPayload &&
+                File.Exists(Path.Combine(moduleRoot, "Lib", "Core", "Consumer.dll")) &&
+                !File.Exists(Path.Combine(moduleRoot, "Lib", "Core", "Dependency.dll")))
+            {
+                throw new InvalidOperationException("Delivered binary dependency is missing.");
+            }
+        }
 
         public ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec)
             => NextTestSuiteResult ?? throw new InvalidOperationException("Not used in this test.");
@@ -3495,7 +3525,31 @@ public sealed partial class ModulePipelineHostedOperationsTests
             Action? remoteSideEffectObserved,
             Action<string, string>? finalizeRepositoryModule,
             IGitHubReleaseProgressReporter? gitHubProgress)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            if (!PrepareRepositoryPackageOnPublish)
+                throw new InvalidOperationException("Not used in this test.");
+
+            string packagePath = ModulePublisher.PrepareModulePackageForRepositoryPublish(
+                buildResult.StagingPath,
+                plan.ModuleName,
+                plan.Information,
+                plan.Delivery,
+                includeScriptFolders,
+                buildResult.FinalizedPayloadFiles);
+            try
+            {
+                finalizeRepositoryModule?.Invoke(packagePath, plan.ModuleName);
+                RemotePublishCalls++;
+                remotePublishAttempted?.Invoke();
+                return new ModulePublishResult(
+                    publish.Destination, publish.RepositoryName, null, null,
+                    plan.ResolvedVersion, false, Array.Empty<string>(), null, true, null);
+            }
+            finally
+            {
+                Directory.Delete(packagePath, recursive: true);
+            }
+        }
 
         public void ValidateModuleImports(
             string manifestPath,
@@ -3504,7 +3558,10 @@ public sealed partial class ModulePipelineHostedOperationsTests
             bool importSelf,
             bool verbose,
             ModuleImportValidationTarget[] targets)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            if (!AllowModuleImportValidation)
+                throw new InvalidOperationException("Not used in this test.");
+        }
 
         public ModulePipelineActionResult RunAction(
             ModulePipelineActionConfiguration action,
@@ -3514,6 +3571,40 @@ public sealed partial class ModulePipelineHostedOperationsTests
         {
             ActionContexts.Add(context);
             ActionContextPaths.Add(contextPath);
+            if (RemoveBinaryDependencyAfterArtefacts && context.Stage == ModulePipelineActionStage.AfterArtefacts)
+            {
+                var artifactRoot = Assert.Single(context.ArtefactPaths);
+                var dependency = Assert.Single(Directory.EnumerateFiles(
+                    artifactRoot, "Dependency.dll", SearchOption.AllDirectories));
+                File.Delete(dependency);
+            }
+            if (!string.IsNullOrWhiteSpace(InstalledBinaryPathToRemoveAfterInstall) &&
+                context.Stage == ModulePipelineActionStage.AfterInstall)
+            {
+                File.Delete(InstalledBinaryPathToRemoveAfterInstall);
+            }
+            if (TamperPackedArtifactAfterArtefacts && context.Stage == ModulePipelineActionStage.AfterArtefacts)
+                File.AppendAllText(Assert.Single(context.ArtefactPaths), "tampered");
+            if (!string.IsNullOrWhiteSpace(LooseArtifactExtensionToTamper) && context.Stage == ModulePipelineActionStage.AfterArtefacts)
+            {
+                var artifactRoot = Assert.Single(context.ArtefactPaths);
+                var entryPoint = Assert.Single(Directory.EnumerateFiles(
+                    artifactRoot, "*" + LooseArtifactExtensionToTamper, SearchOption.AllDirectories));
+                File.AppendAllText(entryPoint, "# changed after finalization\n");
+            }
+            if (!string.IsNullOrWhiteSpace(ExternalLooseArtifactRootToTamper) && context.Stage == ModulePipelineActionStage.AfterArtefacts)
+            {
+                string moduleFile = Assert.Single(Directory.EnumerateFiles(
+                    ExternalLooseArtifactRootToTamper, "*.psm1", SearchOption.AllDirectories));
+                File.AppendAllText(moduleFile, "# changed outside artifact output\n");
+            }
+            if (!OperatingSystem.IsWindows() &&
+                !string.IsNullOrWhiteSpace(LooseArtifactDirectoryToChangeMode) &&
+                context.Stage == ModulePipelineActionStage.AfterArtefacts)
+            {
+                string directory = LooseArtifactDirectoryToChangeMode;
+                File.SetUnixFileMode(directory, File.GetUnixFileMode(directory) ^ UnixFileMode.OtherWrite);
+            }
 
             return new ModulePipelineActionResult
             {

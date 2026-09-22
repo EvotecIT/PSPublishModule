@@ -17,6 +17,7 @@ public sealed partial class ModulePipelineRunner
             return FinalizeSignedScriptArtefact(plan, state, context);
 
         PreparePackedReleaseProtection(plan, state, context);
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
             "Signing is enabled but no signing options were provided.");
         string manifestDirectory = Path.GetDirectoryName(context.ManifestPath)
@@ -145,6 +146,7 @@ public sealed partial class ModulePipelineRunner
             context.ModuleName,
             signingResult,
             signing);
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
         return externalEvidence;
     }
@@ -155,6 +157,7 @@ public sealed partial class ModulePipelineRunner
         PackedArtefactFinalizationContext context)
     {
         PreparePackedReleaseProtection(plan, state, context);
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, state.RequireBuildResult().ManifestPath);
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
             "Signing is enabled but no signing options were provided.");
         string rootPath = Path.GetFullPath(context.RootPath);
@@ -187,6 +190,7 @@ public sealed partial class ModulePipelineRunner
                 $"The finalized script entry point was not successfully signed: '{entryPointPath}'.");
         }
 
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, state.RequireBuildResult().ManifestPath);
         state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
         return Array.Empty<string>();
     }
@@ -227,13 +231,18 @@ public sealed partial class ModulePipelineRunner
     {
         PreparePackedReleaseProtection(plan, state, context);
         if (context.ArtefactType == ArtefactType.Script || context.ArtefactType == ArtefactType.ScriptPacked)
+        {
+            ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, state.RequireBuildResult().ManifestPath);
             return Array.Empty<string>();
+        }
 
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
             context.MainModulePath,
             context.ModuleName,
             signingResult: null,
             signing: plan.Signing);
+        ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         return Array.Empty<string>();
     }
 

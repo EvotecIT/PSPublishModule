@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Installs a staged module to user module directories in a versioned layout.
 /// </summary>
-public sealed class ModuleInstaller
+public sealed partial class ModuleInstaller
 {
     private readonly ILogger _logger;
     private static readonly char[] PathSeparators = { '/', '\\' };
@@ -23,22 +23,34 @@ public sealed class ModuleInstaller
     /// the resolved version and installed paths.
     /// </summary>
     public ModuleInstallerResult InstallFromStaging(string stagingPath, string moduleName, string moduleVersion, ModuleInstallerOptions? options = null)
-        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validateNewDestinations: null);
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validatePreparedDestination: null, validateNewDestinations: null);
+
+    internal ModuleInstallerResult InstallFromStagingWithPreparedValidation(
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        ModuleInstallerOptions options,
+        Action<string> validatePreparedDestination,
+        Action<string>? validateCommittedDestination = null)
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validatePreparedDestination, validateNewDestinations: null, validateCommittedDestination);
 
     internal ModuleInstallerResult InstallFromStagingTransactional(
         string stagingPath,
         string moduleName,
         string moduleVersion,
         ModuleInstallerOptions options,
-        Action<IReadOnlyList<string>> validateNewDestinations)
-        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validateNewDestinations);
+        Action<IReadOnlyList<string>> validateNewDestinations,
+        Action<string>? validatePreparedDestination = null)
+        => InstallFromStagingCore(stagingPath, moduleName, moduleVersion, options, validatePreparedDestination, validateNewDestinations, validateCommittedDestination: null);
 
     private ModuleInstallerResult InstallFromStagingCore(
         string stagingPath,
         string moduleName,
         string moduleVersion,
         ModuleInstallerOptions? options,
-        Action<IReadOnlyList<string>>? validateNewDestinations)
+        Action<string>? validatePreparedDestination,
+        Action<IReadOnlyList<string>>? validateNewDestinations,
+        Action<string>? validateCommittedDestination = null)
     {
         if (string.IsNullOrWhiteSpace(stagingPath) || !Directory.Exists(stagingPath))
             throw new DirectoryNotFoundException($"Staging path not found: {stagingPath}");
@@ -56,6 +68,15 @@ public sealed class ModuleInstaller
 
         options ??= new ModuleInstallerOptions();
         var roots = ResolveDestinationRoots(options.DestinationRoots);
+        using var installLock = options.OperationLockHeld
+            ? null
+            : ModuleInstallOperationLock.Acquire(roots, moduleName, options.RequireAllDestinationRoots);
+        roots = installLock?.LockedRoots ?? roots;
+        if (installLock is not null)
+        {
+            foreach (var failure in installLock.Failures)
+                _logger.Warn($"Skipping module root because its install lock could not be acquired: {failure}");
+        }
         var installed = new List<string>();
         var installedModuleRoots = new List<string>();
         var pruned = new List<string>();
@@ -73,11 +94,6 @@ public sealed class ModuleInstaller
                 var rootFull = Path.GetFullPath(root.Trim().Trim('"'));
                 var moduleRoot = EnsureChildPath(rootFull, moduleName);
                 Directory.CreateDirectory(moduleRoot);
-
-                // If the user has an old "flat" install (no version folder), it can mask versioned installs.
-                // Handle it before installing the new version folder.
-                if (!options.RequireAllDestinationRoots)
-                    HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
 
                 var finalPath = EnsureChildPath(moduleRoot, resolvedVersion);
                 tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
@@ -100,6 +116,8 @@ public sealed class ModuleInstaller
                     tempPath = globalTemp;
                 }
 
+                validatePreparedDestination?.Invoke(tempPath);
+
                 // If target exists
                 if (Directory.Exists(finalPath))
                 {
@@ -120,16 +138,29 @@ public sealed class ModuleInstaller
                     }
                     else
                     {
-                        // Exact: overwrite existing contents in place
-                        _logger.Info($"Target exists; overwriting Exact version in-place at {finalPath}");
-                        SyncDirectoryToSource(tempPath, finalPath);
+                        _logger.Info($"Target exists; replacing Exact version at {finalPath}");
+                        CommitExactVersion(tempPath, finalPath, validateCommittedDestination);
                         TryDeleteDirectory(tempPath);
                         installed.Add(finalPath);
+                        if (!options.RequireAllDestinationRoots)
+                            FinishLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
                         var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removedInExact);
                         pruned.AddRange(removedInExact);
                         _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
                         continue;
                     }
+                }
+                if (validateCommittedDestination is not null)
+                {
+                    CommitExactVersion(tempPath, finalPath, validateCommittedDestination);
+                    TryDeleteDirectory(tempPath);
+                    installed.Add(finalPath);
+                    if (!options.RequireAllDestinationRoots)
+                        FinishLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
+                    var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removedInExact);
+                    pruned.AddRange(removedInExact);
+                    _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
+                    continue;
                 }
                 try
                 {
@@ -167,6 +198,7 @@ public sealed class ModuleInstaller
                 // Prune old versions
                 if (!options.RequireAllDestinationRoots)
                 {
+                    FinishLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
                     var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, resolvedVersion, out var removed);
                     pruned.AddRange(removed);
                     _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
@@ -212,7 +244,7 @@ public sealed class ModuleInstaller
                     throw;
 
                 throw new InvalidOperationException(
-                    "Signed install validation failed and one or more new destinations could not be rolled back: " +
+                    "Module install validation failed and one or more new destinations could not be rolled back: " +
                     string.Join("; ", rollbackFailures),
                     validationException);
             }
@@ -246,6 +278,19 @@ public sealed class ModuleInstaller
             catch (Exception ex) { failures.Add($"{path}: {ex.Message}"); }
         }
         return failures;
+    }
+
+    private void FinishLegacyFlatInstall(
+        string moduleRoot,
+        string moduleName,
+        LegacyFlatModuleHandling handling,
+        ISet<string> preserveVersions)
+    {
+        try { HandleLegacyFlatInstall(moduleRoot, moduleName, handling, preserveVersions); }
+        catch (Exception ex)
+        {
+            _logger.Warn($"The module install was committed at '{moduleRoot}', but post-install legacy housekeeping failed: {ex.Message}");
+        }
     }
 
     private void HandleLegacyFlatInstall(
@@ -340,6 +385,7 @@ public sealed class ModuleInstaller
             if (name.Length == 0) continue;
             if (IsVersionFolderName(name)) continue;
             if (name.StartsWith(".tmp_install_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (name.StartsWith(".backup_install_", StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(name, "_legacy_flat", StringComparison.OrdinalIgnoreCase)) continue;
             TryDeleteDirectory(dir);
         }
@@ -363,6 +409,7 @@ public sealed class ModuleInstaller
             if (name.Length == 0) continue;
             if (IsVersionFolderName(name)) continue;
             if (name.StartsWith(".tmp_install_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (name.StartsWith(".backup_install_", StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(name, "_legacy_flat", StringComparison.OrdinalIgnoreCase)) continue;
 
             var target = Path.Combine(destinationRoot, name);
@@ -624,53 +671,6 @@ public sealed class ModuleInstaller
             var name = Path.GetFileName(dir);
             var target = Path.Combine(destDir, name!);
             CopyDirectory(dir, target);
-        }
-    }
-
-    private void SyncDirectoryToSource(string sourceDir, string destDir)
-    {
-        Directory.CreateDirectory(destDir);
-
-        // Remove stale files/dirs from dest so the installed module matches staging.
-        RemoveItemsNotInSource(sourceDir, destDir);
-        CopyDirectory(sourceDir, destDir);
-
-        void RemoveItemsNotInSource(string source, string dest)
-        {
-            foreach (var file in Directory.EnumerateFiles(dest, "*", SearchOption.TopDirectoryOnly))
-            {
-                var name = Path.GetFileName(file);
-                var sourcePath = Path.Combine(source, name!);
-                if (File.Exists(sourcePath)) continue;
-                TryDeleteFile(file);
-            }
-
-            foreach (var dir in Directory.EnumerateDirectories(dest, "*", SearchOption.TopDirectoryOnly))
-            {
-                var name = Path.GetFileName(dir);
-                var sourcePath = Path.Combine(source, name!);
-
-                if (!Directory.Exists(sourcePath))
-                {
-                    // source has no such directory (or has a file with this name); remove it.
-                    TryDeleteStaleDirectory(dir);
-                    continue;
-                }
-
-                RemoveItemsNotInSource(sourcePath, dir);
-            }
-        }
-
-        void TryDeleteFile(string path)
-        {
-            try { File.Delete(path); }
-            catch (Exception ex) { _logger.Warn($"Failed to delete stale file '{path}': {ex.Message}"); }
-        }
-
-        void TryDeleteStaleDirectory(string path)
-        {
-            try { Directory.Delete(path, recursive: true); }
-            catch (Exception ex) { _logger.Warn($"Failed to delete stale directory '{path}': {ex.Message}"); }
         }
     }
 

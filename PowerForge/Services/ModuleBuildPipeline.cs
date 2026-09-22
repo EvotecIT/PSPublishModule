@@ -301,22 +301,28 @@ public sealed class ModuleBuildPipeline
 
     internal ModuleInstallerResult InstallFromStagingWithManifestFinalizer(
         ModuleInstallSpec spec,
-        Action<string, string> finalizeChangedManifest,
+        Action<string, string>? finalizeChangedManifest,
         Action<IReadOnlyList<string>>? validateInstalledPaths,
-        bool requireAllDestinationRoots)
+        bool requireAllDestinationRoots,
+        Action<string>? validatePreparedDestination = null,
+        Action<string>? validateCommittedDestination = null)
         => InstallFromStagingCore(
             spec,
             updateManifestToResolvedVersion: null,
             finalizeChangedManifest,
             validateInstalledPaths,
-            requireAllDestinationRoots);
+            requireAllDestinationRoots,
+            validatePreparedDestination,
+            validateCommittedDestination);
 
     private ModuleInstallerResult InstallFromStagingCore(
         ModuleInstallSpec spec,
         bool? updateManifestToResolvedVersion,
         Action<string, string>? finalizeChangedManifest,
         Action<IReadOnlyList<string>>? validateInstalledPaths,
-        bool requireAllDestinationRoots)
+        bool requireAllDestinationRoots,
+        Action<string>? validatePreparedDestination = null,
+        Action<string>? validateCommittedDestination = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));        
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
@@ -331,7 +337,7 @@ public sealed class ModuleBuildPipeline
             fallbackVersion: null);
 
         var originalStrategy = spec.Strategy;
-        using var installLock = originalStrategy == InstallationStrategy.AutoRevision
+        using var installLock = originalStrategy is InstallationStrategy.AutoRevision or InstallationStrategy.Exact
             ? ModuleInstallOperationLock.Acquire(spec.Roots, spec.Name, requireAllDestinationRoots)
             : null;
         var installRoots = installLock?.LockedRoots ?? spec.Roots;
@@ -377,15 +383,22 @@ public sealed class ModuleBuildPipeline
             legacyFlatHandling: spec.LegacyFlatHandling,
             preserveVersions: spec.PreserveVersions,
             requireNewDestination: originalStrategy == InstallationStrategy.AutoRevision,
-            requireAllDestinationRoots: requireAllDestinationRoots);
+            requireAllDestinationRoots: requireAllDestinationRoots)
+        {
+            OperationLockHeld = installLock is not null
+        };
         return requireAllDestinationRoots && validateInstalledPaths is not null
             ? installer.InstallFromStagingTransactional(
                 staging,
                 spec.Name,
                 resolved,
                 options,
-                validateInstalledPaths)
-            : installer.InstallFromStaging(staging, spec.Name, resolved, options);
+                validateInstalledPaths,
+                validatePreparedDestination)
+            : validatePreparedDestination is not null
+                ? installer.InstallFromStagingWithPreparedValidation(
+                    staging, spec.Name, resolved, options, validatePreparedDestination, validateCommittedDestination)
+                : installer.InstallFromStaging(staging, spec.Name, resolved, options);
     }
 
     private string ResolveModuleVersionFromManifestIfAuto(string? version, string manifestPath, string? fallbackVersion)
