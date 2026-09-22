@@ -25,4 +25,10 @@ public sealed class PublishVerificationRequest
 
     /// <summary>Recorded local source path used during publish.</summary>
     public string? SourcePath { get; set; }
+
+    /// <summary>Package identifier captured from the published artifact, when available.</summary>
+    public string? PackageId { get; set; }
+
+    /// <summary>Exact package version captured from the published artifact, when available.</summary>
+    public string? PackageVersion { get; set; }
 }

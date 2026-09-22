@@ -298,7 +298,9 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
             TargetName = publishReceipt.TargetName,
             TargetKind = publishReceipt.TargetKind,
             Destination = publishReceipt.Destination,
-            SourcePath = publishReceipt.SourcePath
+            SourcePath = publishReceipt.SourcePath,
+            PackageId = publishReceipt.PackageId,
+            PackageVersion = publishReceipt.PackageVersion
         }, cancellationToken).ConfigureAwait(false);
 
     private static ReleaseVerificationReceipt MapReceipt(ReleasePublishReceipt publishReceipt, PublishVerificationResult result)

@@ -45,6 +45,88 @@ public sealed class PublishVerificationHostServiceTests
     }
 
     [Fact]
+    public async Task VerifyAsync_NuGetFeed_UsesSavedIdentityWhenLocalPackageWasRemoved()
+    {
+        using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        File.Delete(packageScope.PackagePath);
+        using var client = new HttpClient(new StubHttpMessageHandler(request => CreateResponse(request.RequestUri)));
+        using var service = new PublishVerificationHostService(
+            client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))),
+            new ModuleManifestMetadataReader());
+
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            RootPath = packageScope.RootPath,
+            RepositoryName = "Contoso.ReleaseOps",
+            AdapterKind = "ProjectBuild",
+            TargetName = "Contoso.ReleaseOps.1.2.3.nupkg",
+            TargetKind = "NuGet",
+            Destination = "https://packages.contoso.test/nuget/v3/index.json",
+            SourcePath = packageScope.PackagePath,
+            PackageId = "Contoso.ReleaseOps",
+            PackageVersion = "1.2.3"
+        });
+
+        Assert.Equal(PublishVerificationStatus.Verified, result.Status);
+        Assert.Contains("saved publication identity", result.Summary);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_NuGetFeed_RejectsArtifactDriftFromSavedIdentity()
+    {
+        using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => throw new InvalidOperationException("Unexpected remote request")));
+        using var service = new PublishVerificationHostService(
+            client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))),
+            new ModuleManifestMetadataReader());
+
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            RootPath = packageScope.RootPath,
+            RepositoryName = "Contoso.ReleaseOps",
+            AdapterKind = "ProjectBuild",
+            TargetName = "Contoso.ReleaseOps.1.2.3.nupkg",
+            TargetKind = "NuGet",
+            Destination = "https://packages.contoso.test/nuget/v3/index.json",
+            SourcePath = packageScope.PackagePath,
+            PackageId = "Other.Package",
+            PackageVersion = "1.2.3"
+        });
+
+        Assert.Equal(PublishVerificationStatus.Failed, result.Status);
+        Assert.Contains("differs from the saved", result.Summary);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_NuGetFeed_RejectsHtmlLoginPageAtPackageEndpoint()
+    {
+        using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        File.Delete(packageScope.PackagePath);
+        using var client = new HttpClient(new StubHttpMessageHandler(request =>
+            request.RequestUri?.AbsolutePath.EndsWith("/index.json", StringComparison.OrdinalIgnoreCase) == true
+                ? CreateResponse(request.RequestUri)
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<html>Sign in</html>") }));
+        using var service = new PublishVerificationHostService(
+            client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ => new PowerShellRunResult(1, string.Empty, string.Empty, "pwsh"))),
+            new ModuleManifestMetadataReader());
+
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            RootPath = packageScope.RootPath,
+            RepositoryName = "Contoso.ReleaseOps",
+            AdapterKind = "ProjectBuild",
+            TargetName = "Contoso.ReleaseOps.1.2.3.nupkg",
+            TargetKind = "NuGet",
+            Destination = "https://packages.contoso.test/nuget/v3/index.json",
+            SourcePath = packageScope.PackagePath,
+            PackageId = "Contoso.ReleaseOps",
+            PackageVersion = "1.2.3"
+        });
+
+        Assert.Equal(PublishVerificationStatus.Failed, result.Status);
+    }
+
+    [Fact]
     public async Task VerifyAsync_PowerShellRepository_UsesSharedRepositoryResolverAndManifestReader()
     {
         using var moduleScope = CreateTemporaryModule("ContosoModule", "2.5.0", "preview1");
@@ -92,7 +174,9 @@ public sealed class PublishVerificationHostServiceTests
 
         if (path.Contains("/v3-flatcontainer/", StringComparison.OrdinalIgnoreCase))
         {
-            return new HttpResponseMessage(HttpStatusCode.OK);
+            return new HttpResponseMessage(HttpStatusCode.PartialContent) {
+                Content = new ByteArrayContent([0x50, 0x4B, 0x03, 0x04])
+            };
         }
 
         return new HttpResponseMessage(HttpStatusCode.NotFound);

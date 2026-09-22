@@ -1,4 +1,5 @@
 using NuGet.Packaging;
+using NuGet.Versioning;
 
 namespace PowerForge;
 
@@ -13,12 +14,23 @@ public static class NuGetPackageIdentityReader
         {
             using var reader = new PackageArchiveReader(packagePath);
             var identity = reader.GetIdentity();
-            return identity is null || string.IsNullOrWhiteSpace(identity.Id) || identity.Version is null
-                ? null : new NuGetPackageIdentity(identity.Id, identity.Version.ToNormalizedString());
+            return identity is null || identity.Version is null
+                ? null : TryCreate(identity.Id, identity.Version.ToNormalizedString());
         }
         catch (Exception)
         {
             return null;
         }
+    }
+
+    internal static NuGetPackageIdentity? TryCreate(string? id, string? version)
+    {
+        if (id is null || id.Length == 0 || id.Length > 180 ||
+            !id.Any(static character => char.IsLetterOrDigit(character)) ||
+            !id.All(static character => char.IsLetterOrDigit(character) || character is '.' or '_' or '-') ||
+            version is null || version.Length == 0 || version.Length > 128 ||
+            !NuGetVersion.TryParse(version, out var parsed))
+            return null;
+        return new NuGetPackageIdentity(id, parsed.ToNormalizedString());
     }
 }

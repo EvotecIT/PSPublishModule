@@ -153,7 +153,10 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
                     Status: ReleasePublishReceiptStatus.Published,
                     Summary: "Published.",
                     PublishedAtUtc: DateTimeOffset.UtcNow,
-                    SourcePath: packageScope.PackagePath)
+                    SourcePath: packageScope.PackagePath) {
+                    PackageId = "Contoso.ReleaseOps",
+                    PackageVersion = "1.2.3"
+                }
             ]);
 
         var queueItem = CreateVerifyReadyQueueItem(publishResult.RootPath, "Contoso.ReleaseOps", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(publishResult));
@@ -170,6 +173,11 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
         Assert.Equal(["Planned", "Checking", "Verified"], progress.Events.Select(static item => item.State));
         Assert.Equal(1, progress.Events[^1].CompletedItems);
         Assert.Equal(1, progress.Events[^1].TotalItems);
+
+        File.Delete(packageScope.PackagePath);
+        var reopened = await service.ExecuteAsync(queueItem);
+        Assert.True(reopened.Succeeded);
+        Assert.Contains("saved publication identity", Assert.Single(reopened.Receipts).Summary);
     }
 
     [Theory]
@@ -329,7 +337,9 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
 
         if (path.Contains("/v3-flatcontainer/", StringComparison.OrdinalIgnoreCase))
         {
-            return new HttpResponseMessage(HttpStatusCode.OK);
+            return new HttpResponseMessage(HttpStatusCode.PartialContent) {
+                Content = new ByteArrayContent([0x50, 0x4B, 0x03, 0x04])
+            };
         }
 
         return new HttpResponseMessage(HttpStatusCode.NotFound);

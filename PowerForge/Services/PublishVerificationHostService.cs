@@ -118,37 +118,40 @@ public sealed class PublishVerificationHostService : IDisposable
 
     private async Task<PublishVerificationResult> VerifyNuGetAsync(PublishVerificationRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.SourcePath) || !File.Exists(request.SourcePath))
-        {
-            return Failed("NuGet package path is missing or no longer exists locally.");
-        }
+        var hasRecordedIdentity = request.PackageId is not null || request.PackageVersion is not null;
+        var recordedIdentity = NuGetPackageIdentityReader.TryCreate(request.PackageId, request.PackageVersion);
+        if (hasRecordedIdentity && recordedIdentity is null)
+            return Failed("Recorded NuGet package identity is incomplete or invalid.");
+
+        var hasLocalPackage = !string.IsNullOrWhiteSpace(request.SourcePath) && File.Exists(request.SourcePath);
+        var identity = hasLocalPackage ? NuGetPackageIdentityReader.TryRead(request.SourcePath!) : recordedIdentity;
+        if (identity is null)
+            return Failed(hasLocalPackage
+                ? "NuGet package identity could not be read from the .nupkg."
+                : "NuGet package path is missing and no saved package identity is available.");
+        if (hasLocalPackage && recordedIdentity is not null &&
+            (!string.Equals(identity.Id, recordedIdentity.Id, StringComparison.OrdinalIgnoreCase) ||
+             !string.Equals(identity.Version, recordedIdentity.Version, StringComparison.OrdinalIgnoreCase)))
+            return Failed("The local NuGet package identity differs from the saved publication receipt.");
 
         if (string.IsNullOrWhiteSpace(request.Destination))
-        {
             return Skipped("NuGet destination URL was not recorded, so remote verification was skipped.");
-        }
-
-        var sourcePath = request.SourcePath!;
-        var identity = NuGetPackageIdentityReader.TryRead(sourcePath);
-        if (identity is null)
-        {
-            return Failed("NuGet package identity could not be read from the .nupkg.");
-        }
 
         var destination = request.Destination!;
         var probeUri = await ResolveNuGetPackageProbeUriAsync(destination, identity, cancellationToken).ConfigureAwait(false);
         if (probeUri is null)
         {
-            return Skipped($"PowerForgeStudio could not derive a probeable package endpoint from {request.Destination}.");
+            return Skipped("A probeable package endpoint could not be derived from the recorded NuGet destination.");
         }
 
-        var response = await SendProbeAsync(probeUri, cancellationToken).ConfigureAwait(false);
+        var response = await ProbeNuGetPackageAsync(probeUri, cancellationToken).ConfigureAwait(false);
         if (!response.Succeeded)
         {
             return Failed($"Package probe failed for {identity.Id} {identity.Version} against {probeUri.Host}.");
         }
 
-        return Verified($"Package probe succeeded for {identity.Id} {identity.Version} against {probeUri.Host}.");
+        return Verified($"Package probe succeeded for {identity.Id} {identity.Version} against {probeUri.Host}." +
+            (hasLocalPackage ? string.Empty : " The local package is unavailable; verification used its saved publication identity."));
     }
 
     private async Task<PublishVerificationResult> VerifyPowerShellRepositoryAsync(PublishVerificationRequest request, CancellationToken cancellationToken)
@@ -203,10 +206,10 @@ public sealed class PublishVerificationHostService : IDisposable
             cancellationToken).ConfigureAwait(false);
         if (probeUri is null)
         {
-            return Skipped($"PowerForgeStudio could not derive a probeable package endpoint from {resolvedRepository.DisplaySource}.");
+            return Skipped("A probeable package endpoint could not be derived from the configured PowerShell repository.");
         }
 
-        var probeResponse = await SendProbeAsync(probeUri, cancellationToken).ConfigureAwait(false);
+        var probeResponse = await ProbeNuGetPackageAsync(probeUri, cancellationToken).ConfigureAwait(false);
         if (!probeResponse.Succeeded)
         {
             return Failed($"Repository probe failed for {metadata.ModuleName} {moduleVersion} against {probeUri.Host}.");
@@ -222,7 +225,9 @@ public sealed class PublishVerificationHostService : IDisposable
             return null;
         }
 
-        if (destinationUri.Host.Contains("nuget.org", StringComparison.OrdinalIgnoreCase))
+        if (destinationUri.Host.Equals("nuget.org", StringComparison.OrdinalIgnoreCase) ||
+            destinationUri.Host.Equals("api.nuget.org", StringComparison.OrdinalIgnoreCase) ||
+            destinationUri.Host.Equals("www.nuget.org", StringComparison.OrdinalIgnoreCase))
         {
             return BuildFlatContainerPackageUri(new Uri("https://api.nuget.org/v3-flatcontainer/"), identity);
         }
@@ -323,6 +328,40 @@ public sealed class PublishVerificationHostService : IDisposable
             return (int)getResponse.StatusCode < 400
                 ? new ProbeResponse(true, getResponse.StatusCode)
                 : ProbeResponse.Failed;
+        }
+        catch
+        {
+            return ProbeResponse.Failed;
+        }
+    }
+
+    private async Task<ProbeResponse> ProbeNuGetPackageAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 3);
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if ((int)response.StatusCode < 200 || (int)response.StatusCode >= 300 || response.Content is null)
+                return ProbeResponse.Failed;
+
+            using var stream = await FrameworkCompatibility.ReadAsStreamAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            var signature = new byte[4];
+            var read = 0;
+            while (read < signature.Length)
+            {
+                var count = await stream.ReadAsync(signature, read, signature.Length - read, cancellationToken).ConfigureAwait(false);
+                if (count == 0) return ProbeResponse.Failed;
+                read += count;
+            }
+            return signature[0] == (byte)'P' && signature[1] == (byte)'K' &&
+                   signature[2] == 3 && signature[3] == 4
+                ? new ProbeResponse(true, response.StatusCode)
+                : ProbeResponse.Failed;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
