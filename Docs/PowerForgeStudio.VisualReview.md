@@ -10,7 +10,7 @@ This is the complete concept set for the Avalonia workspace: eight representativ
 | Build & Run | [04](Assets/PowerForgeStudio/04-build-run.png) | Reviewed source configuration, build-only intent, stages, artifacts and output |
 | Releases | [05](Assets/PowerForgeStudio/05-releases.png) | Prepare, sign, destination review, publish, verify and saved receipts |
 | Project GitHub | [06](Assets/PowerForgeStudio/06-project-github.png) | Issues, PRs, checks, discussion, changed files and draft-first actions |
-| Workspace catalog | [07](Assets/PowerForgeStudio/07-activity.png) | Cross-project activity list and evidence inspector; Automations and Connections reuse the catalog pattern |
+| Workspace catalog | [07](Assets/PowerForgeStudio/07-activity.png) | Cross-project activity list and evidence inspector; Automations, Packages and Connections reuse the catalog pattern |
 | Storage review | [08](Assets/PowerForgeStudio/08-storage.png) | Measured working copies, candidate evidence, guarded review and output |
 
 ## Concept screens
@@ -59,6 +59,7 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - The Releases image mixes illustrative package names and claims readiness while its sample output says the build has not started. The app must derive readiness from its durable checkpoints. WinGet and Microsoft Store are distinct destinations. Never display credential values.
 - GitHub actions use the captured repository/item and exact PR head. A review or comment opens a draft and explicit confirmation. The picture's PR, checks, and reviewer controls are illustrative, not proof of current provider capability.
 - Activity totals and states are observed provider evidence with time and source, not synthesized success claims. Automations and Connections may have unavailable or partial provider states.
+- Packages reads the public PowerForge.Web ecosystem artifact. It shows generation time and source warnings, and keeps the last observation visible on refresh failure. Private feeds and licensing require separate provider connections.
 - Storage sizes are logical measurements, not guaranteed reclaimable space. Broken references belong in an Inspect/Repair group. Refresh remote, active-use and retained-artifact evidence before any removal.
 
 ## Review status

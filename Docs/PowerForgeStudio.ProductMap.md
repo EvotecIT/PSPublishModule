@@ -21,6 +21,7 @@ The left rail is workspace-wide. Project tabs are scoped to the selected working
 | Workspace | GitHub | The Activity catalog prefiltered to cross-project GitHub evidence | Activity inventory |
 | Workspace | Automations | Provider-owned schedules and workflow definitions | Automation inventory |
 | Workspace | Storage | Measured working copies, cleanup candidates and guarded removal review | Storage inspection/removal services |
+| Workspace | Packages | Public NuGet and PowerShell Gallery versions and downloads with source freshness and warnings | PowerForge.Web ecosystem snapshot consumer |
 | Workspace | Connections | Secret-free capability and endpoint evidence for GitHub, registries, Licensing, IntelligenceX and toolchains | Connection inventory |
 | Workspace | Settings | Local roots, restore behavior, limits and diagnostics preferences | Local Studio settings |
 
@@ -36,6 +37,7 @@ These are states within an owning surface, not additional top-level pages:
 - GitHub: issues, pull requests, discussion/checks, changed-file patch, action draft and reviewed-action confirmation.
 - Releases: prepared plan, signing, destination review, publication, verification, saved history and local-save recovery.
 - Storage: filters, selected-row evidence, removal review and broken-registration prune review.
+- Packages: NuGet/Gallery filters, ID search, selected package evidence and an explicit provider-page handoff. The public snapshot does not cover private feeds or licensing.
 - Connections: catalog evidence and provider-owned configuration handoff. Secret values never appear here.
 
 Dialogs are used only when the operator must confirm a target, resolve a collision, choose what happens to unsaved work, or authorize a destructive/external effect. GitHub comments, issue state changes and PR reviews show the captured item state or exact PR head before submission. Merge and branch deletion remain in the repository settlement workflow. A successful read or simple navigation does not need a dialog.
@@ -50,7 +52,7 @@ One wide and one compact runtime render may be captured from the same reference 
 4. Build & Run with reviewed plan, live stages, cancellation and artifacts.
 5. Releases with destination review, progress, receipts and saved history.
 6. Project GitHub with issue/PR/check context and changed files.
-7. Workspace catalog pattern represented by Activity; Automations and Connections reuse it.
+7. Workspace catalog pattern represented by Activity; Automations, Packages and Connections reuse it.
 8. Storage review with measured candidates, evidence inspector and guarded removal.
 
 Screenshots demonstrate hierarchy, density, spacing, typography, icons and responsive composition. They do not freeze sample repository names, versions, statuses or invented data into product requirements.

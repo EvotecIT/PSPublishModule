@@ -27,6 +27,7 @@ public sealed partial class WorkspaceViewModel
         IsActivityPage = false;
         IsStoragePage = false;
         IsAutomationsPage = false;
+        IsPackagesPage = false;
         IsReleasePage = false;
         IsGitHubPage = false;
         IsBuildPage = false;

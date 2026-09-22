@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             xmlns:packages="using:PowerForgeStudio.Domain.Packages"
+             x:DataType="vm:PackagesViewModel" x:Class="PowerForgeStudio.Avalonia.Views.PackagesView">
+  <Grid Margin="22,18" RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="12">
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Packages" Classes="heading" />
+        <TextBlock Text="Published NuGet and PowerShell Gallery packages across Evotec projects. Read-only public evidence." Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+      <Button Grid.Column="1" Content="Refresh snapshot" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" VerticalAlignment="Center" />
+    </Grid>
+    <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="10">
+      <Border Classes="card" Padding="12"><StackPanel Spacing="2"><TextBlock Text="{Binding NuGetDownloads}" FontSize="21" FontWeight="SemiBold" Foreground="#0865FF" /><TextBlock Text="NuGet downloads" Classes="muted" /><TextBlock Text="{Binding NuGetCountLabel}" FontSize="11" /></StackPanel></Border>
+      <Border Grid.Column="1" Classes="card" Padding="12"><StackPanel Spacing="2"><TextBlock Text="{Binding PowerShellGalleryDownloads}" FontSize="21" FontWeight="SemiBold" Foreground="#0865FF" /><TextBlock Text="Gallery downloads" Classes="muted" /><TextBlock Text="{Binding PowerShellGalleryCountLabel}" FontSize="11" /></StackPanel></Border>
+      <Border Grid.Column="2" Classes="card" Padding="12"><StackPanel Spacing="2"><TextBlock Text="{Binding TotalDownloads}" FontSize="21" FontWeight="SemiBold" Foreground="#0865FF" /><TextBlock Text="Total downloads" Classes="muted" /><TextBlock Text="{Binding TotalCount, StringFormat='{}{0} public packages'}" FontSize="11" /></StackPanel></Border>
+    </Grid>
+    <StackPanel Grid.Row="2" Spacing="4">
+      <TextBlock Text="{Binding SourceStatus}" Classes="muted" FontSize="12" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="12" />
+      <TextBlock Text="{Binding WarningSummary}" IsVisible="{Binding HasWarnings}" Foreground="#98620C" FontSize="12" TextWrapping="Wrap" />
+    </StackPanel>
+    <Grid Grid.Row="3" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+      <WrapPanel ItemSpacing="6">
+        <Button Content="All" Classes="chip" Classes.active="{Binding IsAllFilter}" Command="{Binding ShowAllCommand}" />
+        <Button Content="NuGet" Classes="chip" Classes.active="{Binding IsNuGetFilter}" Command="{Binding ShowNuGetCommand}" />
+        <Button Content="PowerShell Gallery" Classes="chip" Classes.active="{Binding IsGalleryFilter}" Command="{Binding ShowGalleryCommand}" />
+      </WrapPanel>
+      <TextBox Grid.Column="1" Text="{Binding Search, Mode=TwoWay}" PlaceholderText="Filter loaded package IDs…" />
+    </Grid>
+    <Border Grid.Row="4" Classes="card" Padding="0">
+      <Grid RowDefinitions="40,*">
+        <Grid ColumnDefinitions="*,125,110,120" ColumnSpacing="10" Margin="16,0">
+          <TextBlock Text="Package" Classes="muted" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="Registry" Classes="muted" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="2" Text="Latest" Classes="muted" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="3" Text="Downloads" Classes="muted" VerticalAlignment="Center" TextAlignment="Right" />
+        </Grid>
+        <ListBox Grid.Row="1" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="packages:WorkspacePackageMetric">
+              <Grid ColumnDefinitions="*,125,110,120" ColumnSpacing="10" Margin="10,7">
+                <TextBlock Text="{Binding Id}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding Registry}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding VersionDisplay}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="3" Text="{Binding DownloadsDisplay}" TextAlignment="Right" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Grid.Row="1" Text="No packages match this filter, or no snapshot has been loaded." IsVisible="{Binding !HasEntries}" Classes="muted" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" Margin="20" />
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

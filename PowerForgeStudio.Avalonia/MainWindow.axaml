@@ -24,6 +24,7 @@
           <Button Classes="rail" Classes.selected="{Binding IsGitHubActivityPage}" Command="{Binding ShowGitHubActivityCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="github" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="GitHub" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsAutomationsPage}" Command="{Binding ShowAutomationsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="schedules" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Automations" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsStoragePage}" Command="{Binding ShowStorageCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="storage" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Storage" HorizontalAlignment="Center" /></StackPanel></Button>
+          <Button Classes="rail" Classes.selected="{Binding IsPackagesPage}" Command="{Binding ShowPackagesCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="packages" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Packages" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsConnectionsPage}" Command="{Binding ShowConnectionsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="connections" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Connections" HorizontalAlignment="Center" /></StackPanel></Button>
           <Button Classes="rail" Classes.selected="{Binding IsSettingsPage}" Command="{Binding ShowSettingsCommand}"><StackPanel Spacing="7"><controls:NavigationIcon Kind="settings" Width="24" Height="24" HorizontalAlignment="Center" /><TextBlock Text="Settings" HorizontalAlignment="Center" /></StackPanel></Button>
         </StackPanel>
@@ -114,6 +115,7 @@
         <views:StorageView Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsStoragePage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Storage}" />
         <views:AutomationsView x:Name="AutomationsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsAutomationsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Automations}" />
         <views:ConnectionsView x:Name="ConnectionsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsConnectionsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Connections}" />
+        <views:PackagesView x:Name="PackagesPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsPackagesPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Packages}" />
         <views:SettingsView x:Name="SettingsPage" Grid.Row="1" Grid.RowSpan="2" IsVisible="{ReflectionBinding DataContext.IsSettingsPage, RelativeSource={RelativeSource AncestorType=Window}}" DataContext="{Binding Settings}" />
         <Border Grid.Row="3" Background="#102236" BorderBrush="#2D4157" BorderThickness="0,1,0,0">
           <Grid RowDefinitions="38,*">
@@ -407,6 +409,23 @@
               </Border>
               <Border Background="#EFF7F1" BorderBrush="#A9D7B4" BorderThickness="1" CornerRadius="6" Padding="10">
                 <TextBlock Text="No secret value is loaded into the Connections page." TextWrapping="Wrap" />
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+          <ScrollViewer IsVisible="{Binding IsPackagesPage}">
+            <StackPanel Spacing="14" DataContext="{Binding Packages}">
+              <TextBlock Text="Package evidence" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Text="{Binding SelectedEntry.Id}" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SelectedEntry.Registry}" Foreground="#0865FF" />
+              <TextBlock Text="Latest published version" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.VersionDisplay}" />
+              <TextBlock Text="Downloads" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.DownloadsDisplay}" />
+              <Button Content="Open package page" Command="{Binding OpenSelectedCommand}" IsEnabled="{Binding CanOpenSelected}" />
+              <TextBlock Text="Source" Classes="muted" />
+              <TextBlock Text="{Binding SourceStatus}" TextWrapping="Wrap" />
+              <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10">
+                <TextBlock Text="Public snapshot only. Private feeds, package ownership, and licensing are not included." TextWrapping="Wrap" />
               </Border>
             </StackPanel>
           </ScrollViewer>

@@ -37,6 +37,7 @@ public sealed partial class WorkspaceViewModel
         IsStoragePage = false;
         IsAutomationsPage = false;
         IsConnectionsPage = false;
+        IsPackagesPage = false;
         IsReleasePage = false;
         IsGitHubPage = false;
         IsBuildPage = false;
@@ -54,6 +55,7 @@ public sealed partial class WorkspaceViewModel
         if (IsStoragePage) return Storage.RefreshAsync();
         if (IsAutomationsPage) return Automations.RefreshAsync();
         if (IsConnectionsPage) return Connections.RefreshAsync();
+        if (IsPackagesPage) return Packages.RefreshAsync();
         if (IsSettingsPage && Settings.CanReload) Settings.Reload();
         return Task.CompletedTask;
     }
