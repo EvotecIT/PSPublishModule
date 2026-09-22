@@ -61,9 +61,12 @@ public sealed partial class PowerForgeReleaseServiceTests
         finally { TryDelete(root); }
     }
 
-    [Fact]
-    public void UnifiedGitHubRelease_PublishesProducedModuleArchivesWithoutOptionalFeatures()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnifiedGitHubRelease_PublishesProducedModuleArchivesWithoutOptionalFeatures(bool lockStaleArchive)
     {
+        if (lockStaleArchive && !OperatingSystem.IsWindows()) return;
         var root = CreateSandbox();
         try
         {
@@ -76,6 +79,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             var full = Path.Combine(artifacts, "SampleModule.v1.2.3-FullPackage.zip");
             var stale = Path.Combine(artifacts, "SampleModule.v1.2.2.zip");
             WriteArchive(stale, "1.2.2");
+            using var staleLock = lockStaleArchive
+                ? File.Open(stale, FileMode.Open, FileAccess.Read, FileShare.None)
+                : null;
             GitHubReleasePublishRequest? publication = null;
             var service = CreateReleaseService(root, new List<ModuleExecutionSnapshot>(),
                 new PowerForgeToolReleaseResult { Success = true },
