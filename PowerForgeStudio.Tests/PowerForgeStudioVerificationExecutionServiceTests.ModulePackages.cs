@@ -57,6 +57,9 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
             var requests = new List<Uri>();
             using var client = new HttpClient(new StubHttpMessageHandler(request => {
                 requests.Add(request.RequestUri!);
+                if (request.RequestUri!.AbsolutePath.Contains("/v3-flatcontainer/", StringComparison.OrdinalIgnoreCase) &&
+                    !request.RequestUri.Query.Contains("module-secret", StringComparison.Ordinal))
+                    return new HttpResponseMessage(HttpStatusCode.Forbidden);
                 return CreateResponse(request.RequestUri);
             }));
             using var service = new ReleaseVerificationExecutionService(client,
@@ -66,7 +69,8 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
             var verified = await service.ExecuteAsync(item);
             Assert.True(verified.Succeeded, verified.Summary);
             Assert.Equal(ReleaseVerificationReceiptStatus.Verified, Assert.Single(verified.Receipts).Status);
-            Assert.Contains(requests, request => request.Query.Contains("module-secret", StringComparison.Ordinal));
+            Assert.Contains(requests, request => request.AbsolutePath.Contains("/v3-flatcontainer/", StringComparison.OrdinalIgnoreCase) &&
+                request.Query.Contains("module-secret", StringComparison.Ordinal));
             Assert.DoesNotContain("module-secret", JsonSerializer.Serialize(verified));
 
             if (referencedProjectBuild)

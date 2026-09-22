@@ -337,7 +337,12 @@ public sealed class PublishVerificationHostService : IDisposable
             destinationUri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
         {
             var packageBaseUri = await ResolvePackageBaseAddressAsync(destinationUri, cancellationToken).ConfigureAwait(false);
-            return packageBaseUri is null ? null : BuildFlatContainerPackageUri(packageBaseUri, identity);
+            if (packageBaseUri is null) return null;
+            var packageUri = BuildFlatContainerPackageUri(packageBaseUri, identity);
+            if (string.IsNullOrEmpty(packageBaseUri.Query) && !string.IsNullOrEmpty(destinationUri.Query) &&
+                SameOrigin(destinationUri, packageUri))
+                packageUri = new UriBuilder(packageUri) { Query = destinationUri.Query.TrimStart('?') }.Uri;
+            return packageUri;
         }
 
         return null;
@@ -485,18 +490,18 @@ public sealed class PublishVerificationHostService : IDisposable
 
     private static Uri BuildFlatContainerPackageUri(Uri baseUri, NuGetPackageIdentity identity)
     {
-        var builder = new StringBuilder(baseUri.AbsoluteUri.TrimEnd('/'));
-        builder.Append('/');
-        builder.Append(Uri.EscapeDataString(identity.Id.ToLowerInvariant()));
-        builder.Append('/');
-        builder.Append(Uri.EscapeDataString(identity.Version.ToLowerInvariant()));
-        builder.Append('/');
-        builder.Append(Uri.EscapeDataString(identity.Id.ToLowerInvariant()));
-        builder.Append('.');
-        builder.Append(Uri.EscapeDataString(identity.Version.ToLowerInvariant()));
-        builder.Append(".nupkg");
-        return new Uri(builder.ToString(), UriKind.Absolute);
+        var id = Uri.EscapeDataString(identity.Id.ToLowerInvariant());
+        var version = Uri.EscapeDataString(identity.Version.ToLowerInvariant());
+        return new UriBuilder(baseUri) {
+            Path = $"{baseUri.AbsolutePath.TrimEnd('/')}/{id}/{version}/{id}.{version}.nupkg",
+            Fragment = string.Empty
+        }.Uri;
     }
+
+    private static bool SameOrigin(Uri first, Uri second)
+        => first.Scheme.Equals(second.Scheme, StringComparison.OrdinalIgnoreCase) &&
+           first.Host.Equals(second.Host, StringComparison.OrdinalIgnoreCase) &&
+           first.Port == second.Port;
 
     private static PublishVerificationResult Verified(string summary)
         => new() { Status = PublishVerificationStatus.Verified, Summary = summary };

@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace PowerForge.Tests;
 
@@ -43,6 +44,89 @@ public sealed class PublishVerificationHostServiceTests
 
         Assert.Equal(PublishVerificationStatus.Verified, result.Status);
         Assert.Contains("packages.contoso.test", result.Summary);
+    }
+
+    [Theory]
+    [InlineData("https://packages.contoso.test/v3-flatcontainer/", "token=private-secret")]
+    [InlineData("https://packages.contoso.test/v3-flatcontainer/?signed=package-secret", "signed=package-secret")]
+    public async Task VerifyAsync_NuGetFeed_UsesSameOriginQueryOnFinalPackageRequest(string packageBase, string expectedQuery)
+    {
+        var requests = new List<Uri>();
+        using var client = new HttpClient(new StubHttpMessageHandler(request => {
+            var uri = request.RequestUri!;
+            requests.Add(uri);
+            if (uri.AbsolutePath.EndsWith("/index.json", StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.Equal("?token=private-secret", uri.Query);
+                return new HttpResponseMessage(HttpStatusCode.OK) {
+                    Content = new StringContent(JsonSerializer.Serialize(new { resources = new[] {
+                        new Dictionary<string, string> { ["@id"] = packageBase, ["@type"] = "PackageBaseAddress/3.0.0" }
+                    } }))
+                };
+            }
+            Assert.Equal("/v3-flatcontainer/contoso.releaseops/1.2.3/contoso.releaseops.1.2.3.nupkg", uri.AbsolutePath);
+            Assert.Equal("?" + expectedQuery, uri.Query);
+            return new HttpResponseMessage(HttpStatusCode.PartialContent) {
+                Content = new ByteArrayContent([0x50, 0x4B, 0x03, 0x04])
+            };
+        }));
+        using var service = new PublishVerificationHostService(client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ =>
+                throw new InvalidOperationException("PowerShell was not expected."))));
+
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            RootPath = "C:/workspace/Contoso.ReleaseOps",
+            RepositoryName = "Contoso.ReleaseOps",
+            AdapterKind = "ProjectBuild",
+            TargetName = "Contoso.ReleaseOps.1.2.3.nupkg",
+            TargetKind = "NuGet",
+            Destination = "https://packages.contoso.test/nuget/v3/index.json?token=private-secret",
+            PackageId = "Contoso.ReleaseOps",
+            PackageVersion = "1.2.3"
+        });
+
+        Assert.Equal(PublishVerificationStatus.Verified, result.Status);
+        Assert.Equal(2, requests.Count);
+        Assert.DoesNotContain("private-secret", result.Summary);
+        Assert.DoesNotContain("package-secret", result.Summary);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_NuGetFeed_DoesNotForwardQueryToCrossOriginPackageBase()
+    {
+        var requests = new List<Uri>();
+        using var client = new HttpClient(new StubHttpMessageHandler(request => {
+            var uri = request.RequestUri!;
+            requests.Add(uri);
+            if (uri.AbsolutePath.EndsWith("/index.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK) {
+                    Content = new StringContent("{\"resources\":[{\"@id\":\"https://cdn.contoso.test/v3-flatcontainer/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}")
+                };
+            }
+            Assert.Equal("cdn.contoso.test", uri.Host);
+            Assert.Empty(uri.Query);
+            return new HttpResponseMessage(HttpStatusCode.PartialContent) {
+                Content = new ByteArrayContent([0x50, 0x4B, 0x03, 0x04])
+            };
+        }));
+        using var service = new PublishVerificationHostService(client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ =>
+                throw new InvalidOperationException("PowerShell was not expected."))));
+
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            RootPath = "C:/workspace/Contoso.ReleaseOps",
+            RepositoryName = "Contoso.ReleaseOps",
+            AdapterKind = "ProjectBuild",
+            TargetName = "Contoso.ReleaseOps.1.2.3.nupkg",
+            TargetKind = "NuGet",
+            Destination = "https://packages.contoso.test/nuget/v3/index.json?token=private-secret",
+            PackageId = "Contoso.ReleaseOps",
+            PackageVersion = "1.2.3"
+        });
+
+        Assert.Equal(PublishVerificationStatus.Verified, result.Status);
+        Assert.Equal(2, requests.Count);
     }
 
     [Fact]
