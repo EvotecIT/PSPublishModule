@@ -39,9 +39,7 @@ public sealed partial class WorkspaceViewModel
                      .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                      .Take(8))
         {
-            if (!_projectNodes.TryGetValue(entry.RootPath, out var node))
-                _projectNodes[entry.RootPath] = node = new ExplorerNode(entry.Name, entry.RootPath, "project", entry.RootPath, LoadProjectAsync);
-            QuickProjectMatches.Add(node);
+            QuickProjectMatches.Add(GetOrCreateProjectNode(entry));
         }
         OnPropertyChanged(nameof(HasQuickProjectMatches));
     }
@@ -55,6 +53,11 @@ public sealed partial class WorkspaceViewModel
         ChangedProjectsOnly = false;
         Filter = "";
         ApplyFilter();
+        if (_archived.Contains(node.Path))
+        {
+            var archivedGroup = ExplorerRoots.FirstOrDefault(group => group.Kind == "archive");
+            if (archivedGroup is not null) archivedGroup.IsExpanded = true;
+        }
         ShowOverviewCommand.Execute(null);
         await node.EnsureLoadedAsync();
         node.IsExpanded = true;

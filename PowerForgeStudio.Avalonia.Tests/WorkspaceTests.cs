@@ -104,7 +104,8 @@ public sealed class WorkspaceTests
                         Directory.CreateDirectory(output);
                         frame.Save(Path.Combine(output, "workspace.png"), PngBitmapEncoderOptions.Default);
                     }
-                    var more = Assert.Single(window.GetVisualDescendants().OfType<Button>(), button => button.Flyout is MenuFlyout);
+                    var more = Assert.Single(window.GetVisualDescendants().OfType<Button>(),
+                        button => button.Classes.Contains("fileAction") && button.Flyout is MenuFlyout);
                     var namedActions = window.GetVisualDescendants().OfType<Button>()
                         .Where(button => button.Classes.Contains("fileAction"))
                         .Select(button => ControlAutomationPeer.CreatePeerForElement(button)?.GetName())

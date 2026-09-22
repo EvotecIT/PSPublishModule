@@ -21,17 +21,20 @@ public sealed class WorkspaceExplorerPersistenceTests : IDisposable
         var project = Path.Combine(_root, "Project");
         var reference = new WorkspaceDocumentReference(project, Path.Combine(project, "README.md"));
         store.SetFavorite(_root, project, true);
+        store.SetProjectArchived(_root, project, true);
         store.SaveSession(_root, [reference], reference, [project]);
         store.SaveProfile(new WorkspaceProfile("release", "Release", null, null, null, [], _root, null, null, null));
         store.SaveActive(_root, "release");
         var restored = new WorkspaceRootCatalogService(CatalogPath);
         var state = restored.LoadExplorer(_root + Path.DirectorySeparatorChar);
         Assert.Equal(project, Assert.Single(state.FavoriteProjectRoots));
+        Assert.Equal(project, Assert.Single(state.ArchivedProjectRoots!));
         Assert.Equal(reference, Assert.Single(state.OpenDocuments));
         Assert.Equal(reference, state.ActiveDocument);
         Assert.Equal("release", restored.Load(_root).ActiveProfileId);
         using var json = JsonDocument.Parse(File.ReadAllText(CatalogPath));
         Assert.Equal(42, json.RootElement.GetProperty("futureSetting").GetProperty("value").GetInt32());
+        Assert.Equal(project, json.RootElement.GetProperty("explorerStates")[0].GetProperty("archivedProjectRoots")[0].GetString());
         Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
     }
 

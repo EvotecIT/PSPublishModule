@@ -19,6 +19,12 @@ public sealed class ProjectIcon : Control
         if (Kind == "favorite")
             context.DrawGeometry(Brush.Parse("#FFD569"), new Pen(Brush.Parse("#EBA200"), 1.2),
                 Geometry.Parse("M12,2 L15,8 22,9 17,14 18,22 12,18 6,22 7,14 2,9 9,8 Z"));
+        else if (Kind == "archive")
+        {
+            context.DrawRectangle(Brush.Parse("#F4F7FB"), ink, new Rect(4,7,16,13), 1, 1);
+            context.DrawRectangle(Brush.Parse("#DDE6F1"), ink, new Rect(3,4,18,4), 1, 1);
+            context.DrawLine(ink, new Point(9,12), new Point(15,12));
+        }
         else if (Kind is "folder" or "project")
         {
             var accent = Kind == "project" ? "#EBA200" : "#0873FF";

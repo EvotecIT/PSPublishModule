@@ -5,7 +5,7 @@ using PowerForgeStudio.Orchestrator.Host;
 
 namespace PowerForgeStudio.Orchestrator.Workspace;
 
-public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogService, IWorkspaceExplorerStateStore, IWorkspacePreferenceService
+public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogService, IWorkspaceExplorerStateStore, IWorkspaceProjectVisibilityStore, IWorkspacePreferenceService
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web) {
         WriteIndented = true

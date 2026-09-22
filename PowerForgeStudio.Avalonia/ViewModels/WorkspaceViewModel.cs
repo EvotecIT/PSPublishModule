@@ -229,6 +229,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
                     worktree.Kind == "branch" && !string.IsNullOrEmpty(worktree.Path) && SamePath(worktree.Path, value))));
         OnPropertyChanged(nameof(HasActiveProject));
         OnPropertyChanged(nameof(FavoriteActionLabel));
+        OnPropertyChanged(nameof(ArchiveActionLabel));
         Build.SetWorkingCopy(value);
         NotifyEditorChanged();
         Changes.SetWorkingCopy(value);
@@ -319,14 +320,20 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     {
         Projects.Clear();
         foreach (var entry in _catalog.Where(x => x.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase) &&
+                                                  !_archived.Contains(x.RootPath) &&
                                                   (!FavoritesOnly || _favorites.Contains(x.RootPath)) &&
                                                   (!ChangedProjectsOnly || !_hasProjectChangeSnapshot || _changedProjectRoots.Contains(x.RootPath))))
         {
-            if (!_projectNodes.TryGetValue(entry.RootPath, out var node))
-                _projectNodes[entry.RootPath] = node = new ExplorerNode(entry.Name, entry.RootPath, "project", entry.RootPath, LoadProjectAsync);
-            Projects.Add(node);
+            Projects.Add(GetOrCreateProjectNode(entry));
         }
         RebuildExplorerGroups();
+    }
+
+    private ExplorerNode GetOrCreateProjectNode(RepositoryCatalogEntry entry)
+    {
+        if (!_projectNodes.TryGetValue(entry.RootPath, out var node))
+            _projectNodes[entry.RootPath] = node = new ExplorerNode(entry.Name, entry.RootPath, "project", entry.RootPath, LoadProjectAsync);
+        return node;
     }
 
     private async Task LoadProjectAsync(ExplorerNode node)

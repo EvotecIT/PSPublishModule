@@ -10,6 +10,7 @@ public sealed partial class WorkspaceViewModel
 {
     private readonly IWorkspaceExplorerStateStore? _stateStore;
     private readonly HashSet<string> _favorites = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private readonly HashSet<string> _archived = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly SemaphoreSlim _sessionSave = new(1, 1);
     private string? _loadedStateRoot;
     private int _restoringSession;
@@ -27,6 +28,8 @@ public sealed partial class WorkspaceViewModel
     public bool HasActiveProject => _projectNodes.Values.Any(project => project.IsContextProject);
     public string FavoriteActionLabel => _projectNodes.Values.FirstOrDefault(project => project.IsContextProject) is { } project && _favorites.Contains(project.Path)
         ? "Remove favorite" : "Add favorite";
+    public string ArchiveActionLabel => _projectNodes.Values.FirstOrDefault(project => project.IsContextProject) is { } project && _archived.Contains(project.Path)
+        ? "Restore project" : "Archive project";
     public string DisplayedStatus => HasStateError ? StateError : IsOverviewPage ? Overview.Status : IsHistoryPage ? History.DetailStatus : IsSettingsPage ? Settings.Status : IsActivityPage ? Activity.Status : IsStoragePage ? Storage.Status : IsAutomationsPage ? Automations.Status : IsConnectionsPage ? Connections.Status : IsPackagesPage ? Packages.Status : Status;
     partial void OnStatusChanged(string value) => OnPropertyChanged(nameof(DisplayedStatus));
     partial void OnStateErrorChanged(string value) { OnPropertyChanged(nameof(HasStateError)); OnPropertyChanged(nameof(DisplayedStatus)); }
@@ -66,11 +69,35 @@ public sealed partial class WorkspaceViewModel
         catch (Exception ex) { StateError = "Could not save favorite: " + StudioDisplayError.From(ex); }
     }
 
+    [RelayCommand]
+    private async Task ToggleProjectArchivedAsync()
+    {
+        var project = _projectNodes.Values.FirstOrDefault(item => item.IsContextProject);
+        if (project is null) return;
+        var root = WorkspaceRoot;
+        var archived = !_archived.Contains(project.Path);
+        try
+        {
+            if (_stateStore is IWorkspaceProjectVisibilityStore store)
+                await Task.Run(() => store.SetProjectArchived(root, project.Path, archived));
+            if (_disposed || !SamePath(root, WorkspaceRoot)) return;
+            if (archived) _archived.Add(project.Path); else _archived.Remove(project.Path);
+            StateError = "";
+            ApplyFilter();
+            RefreshQuickProjectMatches();
+            OnPropertyChanged(nameof(ArchiveActionLabel));
+            Status = archived
+                ? $"Archived {project.Name} locally. Its repository files were not changed."
+                : $"Restored {project.Name} to the active project tree.";
+        }
+        catch (Exception ex) { StateError = "Could not save project visibility: " + StudioDisplayError.From(ex); }
+    }
+
     private async Task LoadSessionAsync(string root, int refresh)
     {
         if (_loadedStateRoot is not null && SamePath(_loadedStateRoot, root)) return;
         _loadedStateRoot = null;
-        Documents.Clear(); ActiveDocument = null; _favorites.Clear(); _pendingRestore = null;
+        Documents.Clear(); ActiveDocument = null; _favorites.Clear(); _archived.Clear(); _pendingRestore = null;
         StateError = "";
         if (_stateStore is null) { _loadedStateRoot = root; return; }
         try
@@ -81,6 +108,7 @@ public sealed partial class WorkspaceViewModel
             _pendingRestore = state;
             _restoreDocumentsFromDisk = _restoreOpenDocuments;
             foreach (var favorite in state.FavoriteProjectRoots) _favorites.Add(Path.GetFullPath(favorite));
+            foreach (var archived in state.ArchivedProjectRoots ?? []) _archived.Add(Path.GetFullPath(archived));
         }
         catch (Exception ex)
         {
@@ -224,6 +252,18 @@ public sealed partial class WorkspaceViewModel
         {
             var group = new ExplorerNode("Other projects", "", "project", WorkspaceRoot) { IsExpanded = true };
             foreach (var project in others) group.Children.Add(project);
+            ExplorerRoots.Add(group);
+        }
+        var archivedEntries = _catalog.Where(entry => _archived.Contains(entry.RootPath) &&
+                                                       entry.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase) &&
+                                                       (!FavoritesOnly || _favorites.Contains(entry.RootPath)) &&
+                                                       (!ChangedProjectsOnly || !_hasProjectChangeSnapshot || _changedProjectRoots.Contains(entry.RootPath)))
+            .ToArray();
+        var archivedCount = _catalog.Count(entry => _archived.Contains(entry.RootPath));
+        if (archivedCount > 0)
+        {
+            var group = new ExplorerNode($"Archived ({archivedCount})", "", "archive", WorkspaceRoot);
+            foreach (var entry in archivedEntries) group.Children.Add(GetOrCreateProjectNode(entry));
             ExplorerRoots.Add(group);
         }
         if (selected is not null && LoadedNodes().Contains(selected)) SelectedNode = selected;

@@ -118,7 +118,7 @@
         </Border>
         <Border Grid.Row="1" Background="White" BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" Padding="22,14" IsVisible="{Binding !IsWorkspaceUtilityPage}">
           <StackPanel Spacing="12">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
               <controls:NavigationIcon Kind="projects" Ink="#26334B" Width="28" Height="28" VerticalAlignment="Center" IsVisible="{Binding HasWorkingCopy}" />
               <TextBlock Grid.Column="1" Text="{Binding ProjectName}" Classes="heading" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
               <Border Grid.Column="2" Background="#F7FAFE" BorderBrush="#D6E2F1" BorderThickness="1" CornerRadius="16" Padding="10,5"
@@ -130,6 +130,14 @@
                   <TextBlock Text="{Binding GitSummary}" Foreground="#64748B" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
               </Border>
+              <Button Grid.Column="3" Content="Project actions" Classes="toolbar" IsVisible="{Binding HasActiveProject}" VerticalAlignment="Center">
+                <Button.Flyout>
+                  <MenuFlyout>
+                    <MenuItem Header="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" />
+                    <MenuItem Header="{Binding ArchiveActionLabel}" Command="{Binding ToggleProjectArchivedCommand}" />
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
             </Grid>
             <WrapPanel ItemSpacing="20" LineSpacing="8">
               <Button Content="Overview" Command="{Binding ShowOverviewCommand}" Classes="pageTab" Classes.active="{Binding IsOverviewPage}" />
@@ -139,7 +147,6 @@
               <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Classes="pageTab" Classes.active="{Binding IsBuildPage}" />
               <Button Content="GitHub" Command="{Binding ShowGitHubCommand}" Classes="pageTab" Classes.active="{Binding IsGitHubPage}" />
               <Button Content="Releases" Command="{Binding ShowReleaseCommand}" Classes="pageTab" Classes.active="{Binding IsReleasePage}" />
-              <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" Classes="pageTab" />
             </WrapPanel>
           </StackPanel>
         </Border>
@@ -177,6 +184,7 @@
             <StackPanel Spacing="18" IsVisible="{Binding ShowGenericProjectContext}">
             <TextBlock Text="Selected working copy" FontWeight="SemiBold" FontSize="16" />
             <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
+            <Button Content="{Binding ArchiveActionLabel}" Command="{Binding ToggleProjectArchivedCommand}" IsEnabled="{Binding HasActiveProject}" />
             <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
             <TextBlock Text="Working copy" Classes="muted" />
             <TextBlock Text="{Binding Branch}" />
@@ -216,6 +224,9 @@
                 <TextBlock Text="{Binding ProjectName}" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <Button Content="{ReflectionBinding DataContext.FavoriteActionLabel, RelativeSource={RelativeSource AncestorType=Window}}"
                         Command="{ReflectionBinding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        IsEnabled="{Binding HasProject}" />
+                <Button Content="{ReflectionBinding DataContext.ArchiveActionLabel, RelativeSource={RelativeSource AncestorType=Window}}"
+                        Command="{ReflectionBinding DataContext.ToggleProjectArchivedCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                         IsEnabled="{Binding HasProject}" />
                 <TextBlock Text="{ReflectionBinding DataContext.StateError, RelativeSource={RelativeSource AncestorType=Window}}"
                            IsVisible="{ReflectionBinding DataContext.HasStateError, RelativeSource={RelativeSource AncestorType=Window}}"

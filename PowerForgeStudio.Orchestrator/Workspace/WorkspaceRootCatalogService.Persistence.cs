@@ -26,6 +26,20 @@ public sealed partial class WorkspaceRootCatalogService
         return state;
     }
 
+    public WorkspaceExplorerState SetProjectArchived(string workspaceRoot, string projectRoot, bool archived)
+    {
+        workspaceRoot = NormalizeRoot(workspaceRoot);
+        projectRoot = NormalizeRoot(projectRoot);
+        using var writeLock = AcquireWriteLock();
+        var document = LoadDocument(strict: true) ?? EmptyDocument(workspaceRoot);
+        var state = FindExplorer(document, workspaceRoot);
+        var archivedRoots = (state.ArchivedProjectRoots ?? []).Where(path => !PathComparer.Equals(path, projectRoot)).ToList();
+        if (archived) archivedRoots.Add(projectRoot);
+        state = state with { ArchivedProjectRoots = archivedRoots };
+        PersistExplorer(document, state);
+        return state;
+    }
+
     public WorkspaceExplorerState SaveSession(string workspaceRoot, IReadOnlyList<WorkspaceDocumentReference> documents,
         WorkspaceDocumentReference? activeDocument, IReadOnlyList<string> expandedPaths)
     {
@@ -69,7 +83,7 @@ public sealed partial class WorkspaceRootCatalogService
             {
                 if (state is null || string.IsNullOrWhiteSpace(state.WorkspaceRoot) || !Path.IsPathFullyQualified(state.WorkspaceRoot)
                     || state.FavoriteProjectRoots is null || state.OpenDocuments is null || state.ExpandedPaths is null
-                    || state.FavoriteProjectRoots.Concat(state.ExpandedPaths).Any(path => string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
+                    || state.FavoriteProjectRoots.Concat(state.ExpandedPaths).Concat(state.ArchivedProjectRoots ?? []).Any(path => string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
                     || state.OpenDocuments.Any(reference => !ValidDocument(reference)) || state.ActiveDocument is not null && !ValidDocument(state.ActiveDocument))
                     throw new JsonException("The saved explorer state contains invalid paths or missing collections.");
             }

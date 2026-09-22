@@ -93,6 +93,7 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] Files shows the current folder relative to the working copy, with the absolute path on hover. The file list and preview share compact divided headers, and the Edit action sits beside the preview title. Wide and compact headless renders were inspected.
 - [x] The selected project header now has a project icon and a bounded branch/status chip. Compact tree rows hide secondary branch detail so the branch name remains readable; wide and compact workspace renders were inspected.
 - [x] Focused tree rows use a thin blue outline that remains visible during keyboard navigation; wide and compact headless renders were inspected in `Artifacts/StudioValidation/tree-focus/`.
+- [x] Dormant projects can move into a counted Archived tree group without changing repository files; wide and compact renders were inspected in `Artifacts/StudioValidation/archived-projects/`.
 - [x] The output dock now wraps long lines and can expand to show more build or inspection output. Wide and compact expanded captures were inspected; the compact page gives most of its remaining height to the dock until it is collapsed.
 - [x] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.

@@ -31,6 +31,8 @@ The title-bar field is a Ctrl+K repository jump over the loaded workspace catalo
 
 The Changed tree chip performs an explicit read-only local Git scan over primary checkouts and registered worktrees. The completed observation filters project groups and shows its UTC time plus any working copies that could not be inspected. A refresh keeps the previous result visible until the new scan completes. It does not fetch remotes, measure workspace storage or classify a worktree as safe to remove.
 
+Archiving a project is reversible machine-local tree organization. It records the repository root in the existing workspace JSON and moves the project under a counted Archived group. It does not move, delete, clean or rewrite repository content. Restoring returns the project to the active groups and preserves its favorite state.
+
 ## Subpages and overlays
 
 These are states within an owning surface, not additional top-level pages:
