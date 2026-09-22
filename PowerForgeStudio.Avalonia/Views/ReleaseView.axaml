@@ -158,14 +158,17 @@
         <ListBox.ItemTemplate><DataTemplate x:DataType="publish:ReleasePublishReceipt">
           <StackPanel Spacing="5" Margin="8">
             <TextBlock Text="{Binding TargetName}" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding Status}" Foreground="#0865FF" />
+            <TextBlock Text="{Binding StatusDisplay}" Foreground="#0865FF" />
             <TextBlock Text="{Binding PackageIdentityDisplay}" IsVisible="{Binding HasPackageIdentity}" FontSize="12" Foreground="#4C5F79" />
             <TextBlock Text="{Binding Destination}" TextWrapping="Wrap" />
             <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
           </StackPanel>
         </DataTemplate></ListBox.ItemTemplate>
       </ListBox>
-      <Button Content="Compare selected package with public snapshot" Command="{Binding InspectPublicPackageCommand}" IsEnabled="{Binding CanInspectPublicPackage}" IsVisible="{Binding HasPublicationReceipts}" HorizontalAlignment="Left" />
+      <WrapPanel>
+        <Button Content="Compare selected package with public snapshot" Command="{Binding InspectPublicPackageCommand}" IsVisible="{Binding CanInspectPublicPackage}" Margin="0,0,8,4" />
+        <Button Content="Open WinGet PR" Command="{Binding OpenWingetPullRequestCommand}" IsVisible="{Binding CanOpenWingetPullRequest}" Margin="0,0,8,4" />
+      </WrapPanel>
       <TextBlock x:Name="VerificationHeading" IsVisible="{Binding HasVerificationReceipts}" Text="Verification receipts" FontSize="16" FontWeight="SemiBold" />
       <ListBox IsVisible="{Binding HasVerificationReceipts}" ItemsSource="{Binding VerificationReceipts}" MaxHeight="260" Background="#F7F9FC">
         <ListBox.ItemTemplate><DataTemplate x:DataType="verify:ReleaseVerificationReceipt">

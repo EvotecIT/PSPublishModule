@@ -112,6 +112,7 @@ internal sealed class WingetSubmissionService
                 PackageIdentifier = entry.PackageIdentifier,
                 PackageVersion = entry.PackageVersion,
                 ManifestPath = entry.ManifestPath,
+                PullRequestUrl = FindPullRequestUrl(process.StdOut) ?? FindPullRequestUrl(process.StdErr),
                 RedactedArguments = entry.RedactedArguments,
                 ExitCode = process.ExitCode,
                 Succeeded = process.Succeeded,
@@ -152,6 +153,34 @@ internal sealed class WingetSubmissionService
             ErrorMessage = "Winget submission was cancelled. Reconcile attempted packages before retrying.",
             Entries = results.ToArray()
         };
+
+    private static string? FindPullRequestUrl(string? output)
+    {
+        if (string.IsNullOrEmpty(output)) return null;
+
+        const string prefix = "https://github.com/microsoft/winget-pkgs/pull/";
+        var searchFrom = 0;
+        while (searchFrom < output.Length)
+        {
+            var start = output.IndexOf(prefix, searchFrom, StringComparison.OrdinalIgnoreCase);
+            if (start < 0) return null;
+            searchFrom = start + prefix.Length;
+            if (start > 0 && !char.IsWhiteSpace(output[start - 1]) && output[start - 1] is not ('(' or '<'))
+                continue;
+
+            var end = searchFrom;
+            while (end < output.Length && char.IsAsciiDigit(output[end]) && end - searchFrom < 15) end++;
+            if (end == searchFrom || end < output.Length &&
+                (char.IsLetterOrDigit(output[end]) || output[end] is '-' or '_'))
+                continue;
+
+            var number = output.AsSpan(searchFrom, end - searchFrom);
+            if (!long.TryParse(number, out var value) || value <= 0) continue;
+            return prefix + value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        return null;
+    }
 
     private static PowerForgeWingetSubmissionEntryPlan BuildEntry(
         PowerForgeReleaseWingetOptions winget,

@@ -12,7 +12,8 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
     PowerForgeStudio.Orchestrator.Storage.IReleaseHistoryService? history = null, IReleasePublicationPreviewService? publication = null,
     IReleasePublicationWorkflow? publishing = null, IReleaseVerificationWorkflow? verification = null,
     Func<PowerForgeStudio.Domain.Publish.ReleasePublishReceipt, Task>? openPublicPackage = null,
-    PowerForgeStudio.Orchestrator.Hub.IGitHubReleaseCatalogService? githubReleases = null) : ObservableObject, IDisposable
+    PowerForgeStudio.Orchestrator.Hub.IGitHubReleaseCatalogService? githubReleases = null,
+    Action<string>? openWingetPullRequest = null) : ObservableObject, IDisposable
 {
     private readonly IReleaseBuildHandoffService _service = service ?? new ReleaseBuildHandoffService();
     private readonly IReleaseSigningWorkflow _signing = signing ?? new DurableReleaseSigningWorkflow(PowerForgeStudioHostPaths.GetReleaseHistoryDatabasePath());

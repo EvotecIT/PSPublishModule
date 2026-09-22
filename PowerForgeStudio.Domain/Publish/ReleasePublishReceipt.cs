@@ -12,7 +12,9 @@ public sealed record ReleasePublishReceipt(
     string Summary,
     DateTimeOffset PublishedAtUtc)
 {
-    public string StatusDisplay => Status.ToString();
+    public string StatusDisplay => TargetKind == "Winget" && Status == ReleasePublishReceiptStatus.Published
+        ? "Submitted · catalog unverified"
+        : Status.ToString();
     /// <summary>Identity captured from the published package, when this receipt represents a package.</summary>
     public string? PackageId { get; init; }
     /// <summary>Exact package version captured before publishing.</summary>
@@ -40,4 +42,21 @@ public sealed record ReleasePublishReceipt(
         }
     }
     public bool CanInspectPublicPackage => PublicRegistry is not null;
+
+    public string? WingetPullRequestUrl
+    {
+        get
+        {
+            if (TargetKind != "Winget" || !Uri.TryCreate(Destination, UriKind.Absolute, out var uri) ||
+                uri.Scheme != Uri.UriSchemeHttps || uri.Host != "github.com" || !uri.IsDefaultPort ||
+                !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) ||
+                !string.IsNullOrEmpty(uri.Fragment)) return null;
+
+            var parts = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 4 || parts[0] != "microsoft" || parts[1] != "winget-pkgs" ||
+                parts[2] != "pull" || !long.TryParse(parts[3], out var number) || number <= 0) return null;
+            return $"https://github.com/microsoft/winget-pkgs/pull/{number}";
+        }
+    }
+    public bool CanOpenWingetPullRequest => WingetPullRequestUrl is not null;
 }

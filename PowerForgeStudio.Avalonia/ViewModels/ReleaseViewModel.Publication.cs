@@ -6,6 +6,7 @@ using PowerForgeStudio.Domain.Verification;
 using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Queue;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
@@ -38,13 +39,30 @@ public sealed partial class ReleaseViewModel
         && Handoff?.Session.Items.SingleOrDefault() is { Stage: ReleaseQueueStage.Verify, Status: ReleaseQueueItemStatus.ReadyToRun };
     public bool HasPublicationReceipts => PublicationReceipts.Count > 0;
     public bool CanInspectPublicPackage => !_disposed && !HasProtectedReleaseWork && openPublicPackage is not null && SelectedPublicationReceipt?.CanInspectPublicPackage == true;
-    partial void OnSelectedPublicationReceiptChanged(ReleasePublishReceipt? value) => OnPropertyChanged(nameof(CanInspectPublicPackage));
+    public bool CanOpenWingetPullRequest => !_disposed && SelectedPublicationReceipt?.CanOpenWingetPullRequest == true;
+    partial void OnSelectedPublicationReceiptChanged(ReleasePublishReceipt? value)
+    {
+        OnPropertyChanged(nameof(CanInspectPublicPackage));
+        OnPropertyChanged(nameof(CanOpenWingetPullRequest));
+    }
 
     [RelayCommand]
     private async Task InspectPublicPackageAsync()
     {
         if (!CanInspectPublicPackage || SelectedPublicationReceipt is not { } receipt) return;
         await openPublicPackage!(receipt);
+    }
+
+    [RelayCommand]
+    private void OpenWingetPullRequest()
+    {
+        if (!CanOpenWingetPullRequest || SelectedPublicationReceipt?.WingetPullRequestUrl is not { } url) return;
+        try
+        {
+            if (openWingetPullRequest is not null) openWingetPullRequest(url);
+            else Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex) { Status = StudioOutputSanitizer.Sanitize(ex.Message); }
     }
     public bool HasVerificationReceipts => VerificationReceipts.Count > 0;
     public bool HasPublicationTargets => PublicationTargets.Count > 0;

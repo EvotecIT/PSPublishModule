@@ -101,6 +101,7 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] Compact Studio now offers a Details toggle that temporarily replaces the tree with the existing context panel. A native Windows Storage pass opened selected working-copy evidence and returned to Projects; headless wide/compact renders and route-transition checks cover the same layout. The rail buttons expose their route names to Windows UI Automation. Captures are in `Artifacts/StudioValidation/compact-context/`.
 - [x] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [x] Build & Run now places four reviewed actions in the first wide viewport and the first action in the compact viewport. JSON-only inspection has a concise safety notice; script-backed inspection retains the side-effect warning. Wide, compact and scrolled headless captures were inspected in `Artifacts/StudioValidation/build-density-20260923/`.
+- [x] WinGet submission receipts use a clear submitted-but-unverified label and show an Open PR action only for a recognized upstream link; failed and submitted wide/compact renders were inspected in `Artifacts/StudioValidation/winget-review-link/`.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.
 - [ ] Capture final native Windows and headless evidence after the last visual change.
 

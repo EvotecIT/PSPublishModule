@@ -1029,6 +1029,8 @@ internal sealed class PowerForgeWingetSubmissionEntryResult
 
     public string ManifestPath { get; set; } = string.Empty;
 
+    public string? PullRequestUrl { get; set; }
+
     public string[] RedactedArguments { get; set; } = Array.Empty<string>();
 
     public int ExitCode { get; set; }

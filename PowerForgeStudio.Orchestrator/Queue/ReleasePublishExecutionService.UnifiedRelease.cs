@@ -285,7 +285,8 @@ public sealed partial class ReleasePublishExecutionService
                             ? "" : " " + entry.PackageVersion.Trim();
                         receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
                             repository.RootPath, repository.Name, "UnifiedRelease",
-                            $"{package}{version} WinGet submission", "Winget", "Windows Package Manager",
+                            $"{package}{version} WinGet submission", "Winget",
+                            string.IsNullOrWhiteSpace(entry.PullRequestUrl) ? "Windows Package Manager" : entry.PullRequestUrl,
                             entry.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                             entry.Succeeded
                                 ? "WinGet submission command completed; catalog acceptance and availability are not verified."

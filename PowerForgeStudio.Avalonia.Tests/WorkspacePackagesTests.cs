@@ -15,6 +15,70 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class WorkspacePackagesTests
 {
     [Fact]
+    public async Task WingetReceiptOpensOnlyRecognizedUpstreamPullRequest()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-winget-review-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                var receipt = new ReleasePublishReceipt(root, "Sample", "UnifiedRelease", "EvotecIT.Tool WinGet submission",
+                    "Winget", "https://github.com/microsoft/winget-pkgs/pull/120206", "manifest.yaml",
+                    ReleasePublishReceiptStatus.Failed, "Reconcile this submission.", DateTimeOffset.UtcNow);
+                Assert.Equal("Submitted · catalog unverified", (receipt with { Status = ReleasePublishReceiptStatus.Published }).StatusDisplay);
+                var restored = System.Text.Json.JsonSerializer.Deserialize<ReleasePublishReceipt>(
+                    System.Text.Json.JsonSerializer.Serialize(receipt));
+                Assert.Equal(receipt.WingetPullRequestUrl, restored?.WingetPullRequestUrl);
+                using var workspace = new WorkspaceViewModel(root);
+                workspace.ShowReleaseCommand.Execute(null);
+                workspace.Release.PublicationReceipts.Add(receipt);
+                workspace.Release.SelectedPublicationReceipt = receipt;
+                var window = new MainWindow { DataContext = workspace, Width = 1600, Height = 900 };
+                window.Show();
+                try
+                {
+                    var release = window.GetVisualDescendants().OfType<ReleaseView>().Single();
+                    release.GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+                    Assert.Contains(release.GetVisualDescendants().OfType<Button>(), button =>
+                        Equals(button.Content, "Open WinGet PR") && button.IsVisible);
+                    Capture(window, "winget-review-wide.png");
+                    window.Width = 1050; window.Height = 720; window.UpdateLayout();
+                    release.GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+                    Capture(window, "winget-review-compact.png");
+
+                    var submitted = receipt with {
+                        Status = ReleasePublishReceiptStatus.Published,
+                        Summary = "Submission command completed; catalog availability is unverified."
+                    };
+                    workspace.Release.PublicationReceipts.Clear();
+                    workspace.Release.PublicationReceipts.Add(submitted);
+                    workspace.Release.SelectedPublicationReceipt = submitted;
+                    window.Width = 1600; window.Height = 900; window.UpdateLayout();
+                    release.GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+                    Capture(window, "winget-submitted-wide.png");
+                    window.Width = 1050; window.Height = 720; window.UpdateLayout();
+                    release.GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+                    Capture(window, "winget-submitted-compact.png");
+                }
+                finally { window.Close(); }
+
+                string? opened = null;
+                using var model = new ReleaseViewModel(openWingetPullRequest: url => opened = url);
+                model.SelectedPublicationReceipt = receipt;
+                model.OpenWingetPullRequestCommand.Execute(null);
+                Assert.Equal("https://github.com/microsoft/winget-pkgs/pull/120206", opened);
+
+                model.SelectedPublicationReceipt = receipt with { Destination = "https://github.com.evil.example/microsoft/winget-pkgs/pull/120206" };
+                Assert.False(model.CanOpenWingetPullRequest);
+                model.OpenWingetPullRequestCommand.Execute(null);
+                Assert.Equal("https://github.com/microsoft/winget-pkgs/pull/120206", opened);
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task SavedPublicationOpensExactPackageInPublicSnapshotWithoutClaimingVersionDownloads()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-package-handoff-" + Guid.NewGuid().ToString("N"))).FullName;

@@ -162,7 +162,9 @@ public sealed class WingetSubmissionServiceTests
             new StubProcessRunner(request =>
             {
                 capturedRequest = request;
-                return Success();
+                return new ProcessRunResult(0,
+                    "Pull request can be found here: https://github.com/microsoft/winget-pkgs/pull/120206?token=discard",
+                    string.Empty, "wingetcreate", TimeSpan.FromMilliseconds(1), timedOut: false);
             }));
         var plan = new PowerForgeWingetSubmissionPlan
         {
@@ -190,6 +192,7 @@ public sealed class WingetSubmissionServiceTests
         Assert.Equal("wingetcreate", capturedRequest!.FileName);
         Assert.Equal(new[] { "submit", "Evotec.Test.yaml" }, capturedRequest.Arguments);
         Assert.Equal(60, capturedRequest.Timeout.TotalSeconds);
+        Assert.Equal("https://github.com/microsoft/winget-pkgs/pull/120206", Assert.Single(result.Entries).PullRequestUrl);
     }
 
     [Fact]
@@ -228,6 +231,27 @@ public sealed class WingetSubmissionServiceTests
         var attempted = Assert.Single(result.Entries);
         Assert.Equal("Evotec.First", attempted.PackageIdentifier);
         Assert.Contains("cancelled", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(17, "Pull request can be found here: https://github.com/microsoft/winget-pkgs/pull/42", "https://github.com/microsoft/winget-pkgs/pull/42")]
+    [InlineData(0, "https://evil.example/https://github.com/microsoft/winget-pkgs/pull/42", null)]
+    public void Run_KeepsOnlyRecognizedUpstreamReviewLink(int exitCode, string output, string? expectedUrl)
+    {
+        var service = new WingetSubmissionService(new NullLogger(),
+            new StubProcessRunner(_ => new ProcessRunResult(exitCode, output, string.Empty, "wingetcreate",
+                TimeSpan.FromMilliseconds(1), timedOut: false)));
+        var plan = new PowerForgeWingetSubmissionPlan {
+            Enabled = true, ToolPath = "wingetcreate", WorkingDirectory = Path.GetTempPath(), TimeoutSeconds = 60,
+            Entries = [new PowerForgeWingetSubmissionEntryPlan {
+                PackageIdentifier = "Evotec.Test", PackageVersion = "1.2.3", ManifestPath = "Evotec.Test.yaml"
+            }]
+        };
+
+        var result = service.Run(plan);
+
+        Assert.Equal(exitCode == 0, result.Succeeded);
+        Assert.Equal(expectedUrl, Assert.Single(result.Entries).PullRequestUrl);
     }
 
     private static ProcessRunResult Success()

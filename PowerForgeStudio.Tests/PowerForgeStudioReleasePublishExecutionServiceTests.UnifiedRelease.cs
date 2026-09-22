@@ -326,7 +326,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                     Succeeded = true,
                     Entries = [
                         new PowerForgeWingetSubmissionEntryResult {
-                            PackageIdentifier = "EvotecIT.Tool", PackageVersion = "1.0.0", ManifestPath = manifestPath, Succeeded = true
+                            PackageIdentifier = "EvotecIT.Tool", PackageVersion = "1.0.0", ManifestPath = manifestPath,
+                            PullRequestUrl = "https://github.com/microsoft/winget-pkgs/pull/120206", Succeeded = true
                         },
                         new PowerForgeWingetSubmissionEntryResult {
                             PackageIdentifier = "EvotecIT.Helper", PackageVersion = "2.0.0", ManifestPath = secondManifestPath, Succeeded = true
@@ -348,7 +349,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Assert.Equal(2, result.Receipts.Count);
             Assert.All(result.Receipts, receipt => Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status));
             Assert.Contains(result.Receipts, receipt => receipt.TargetKind == "Winget" &&
-                receipt.PackageId == "EvotecIT.Tool" && receipt.PackageVersion == "1.0.0" && receipt.SourcePath == manifestPath);
+                receipt.PackageId == "EvotecIT.Tool" && receipt.PackageVersion == "1.0.0" && receipt.SourcePath == manifestPath &&
+                receipt.WingetPullRequestUrl == "https://github.com/microsoft/winget-pkgs/pull/120206");
             Assert.Contains(result.Receipts, receipt => receipt.PackageId == "EvotecIT.Helper" &&
                 receipt.PackageVersion == "2.0.0" && receipt.SourcePath == secondManifestPath);
 
