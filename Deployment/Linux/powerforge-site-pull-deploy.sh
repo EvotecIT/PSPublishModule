@@ -46,6 +46,8 @@ source "$config"
 : "${PUBLIC_URL:?}"
 : "${SMOKE_PATHS:=/}"
 : "${DOTNET_ROOT:=/usr/lib/dotnet}"
+: "${REBUILD_ON_RELEASES:=0}"
+: "${RELEASE_MAX_PAGES:=}"
 [[ $SOURCE_NAME =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail 'invalid source repository name'
 if [[ -n ${SOURCE_REPOSITORY_PATH:-} ]]; then
   [[ $SOURCE_REPOSITORY == "git@github.com:${SOURCE_NAME}.git" ]] || fail 'private source repository name and SSH URL disagree'
@@ -59,11 +61,29 @@ fi
 [[ $WORK_ROOT == /* && $WORK_ROOT != / && $WORK_ROOT != /tmp && $WORK_ROOT != /var/tmp ]] || fail 'invalid work root'
 [[ $CURRENT_LINK == /* && $CURRENT_LINK != / ]] || fail 'invalid current release link'
 [[ $PUBLIC_URL =~ ^https://[A-Za-z0-9.-]+$ ]] || fail 'public URL must be an HTTPS origin'
+[[ $REBUILD_ON_RELEASES == 0 || $REBUILD_ON_RELEASES == 1 ]] || fail 'REBUILD_ON_RELEASES must be 0 or 1'
+[[ $REBUILD_ON_RELEASES == 0 || -z ${SOURCE_REPOSITORY_PATH:-} ]] || fail 'release polling requires a public source repository'
+[[ $REBUILD_ON_RELEASES == 0 || $RELEASE_MAX_PAGES =~ ^([1-9]|10)$ ]] || fail 'release polling requires RELEASE_MAX_PAGES between 1 and 10'
 [[ $DOTNET_ROOT == /* && -x $DOTNET_ROOT/dotnet ]] || fail 'DOTNET_ROOT must contain an executable dotnet host'
 PATH=$DOTNET_ROOT:$PATH
 export DOTNET_ROOT PATH
 [[ -d $WORK_ROOT && ! -L $WORK_ROOT && $(stat -c %u "$WORK_ROOT") -eq $(id -u) ]] || fail 'work root must be a real directory owned by the build account'
 [[ $(stat -c %a "$WORK_ROOT") == 700 ]] || fail 'work root must have mode 0700'
+for required in git dotnet tar jq curl sha256sum flock mktemp sudo getent; do
+  command -v "$required" >/dev/null || fail "missing command: $required"
+done
+assert_dedicated_group() {
+  local user_uid=$1 group_gid=$2 user_name group_line group_number group_members other_primary
+  user_name=$(getent passwd "$user_uid" | cut -d: -f1)
+  [[ -n $user_name && $(id -g "$user_name") == "$group_gid" ]] || fail 'build account must own its primary group'
+  group_line=$(getent group "$group_gid")
+  IFS=: read -r _ _ group_number group_members <<<"$group_line"
+  [[ $group_number == "$group_gid" ]] || fail 'build account must have a dedicated primary group'
+  [[ -z $group_members || $group_members == "$user_name" ]] || fail 'build group has another member'
+  other_primary=$(getent passwd | awk -F: -v uid="$user_uid" -v gid="$group_gid" '$4 == gid && $3 != uid { print $1; exit }')
+  [[ -z $other_primary ]] || fail "build group is also primary for $other_primary"
+}
+assert_dedicated_group "$(id -u)" "$(id -g)"
 cd "$WORK_ROOT"
 site_pull_config_sha=$(sha256sum "$config" | awk '{print $1}')
 
@@ -82,16 +102,20 @@ assert_root_checkout() {
   [[ -z $unsafe ]] || fail "Git metadata is not exclusively root-controlled: $unsafe"
 }
 assert_root_checkout "$ENGINE_REPOSITORY_PATH"
+engine_origin=$(git -c "safe.directory=$ENGINE_REPOSITORY_PATH" -C "$ENGINE_REPOSITORY_PATH" config --local --get remote.origin.url)
+[[ $engine_origin == https://github.com/EvotecIT/PSPublishModule.git ]] || fail 'engine checkout origin must be the canonical PowerForge repository'
 
-for required in git dotnet tar jq curl sha256sum flock mktemp sudo; do
-  command -v "$required" >/dev/null || fail "missing command: $required"
-done
 exec 9>"$WORK_ROOT/.deploy.lock"
 flock -n 9 || fail 'another pull deployment is running'
 
 git -c "safe.directory=$ENGINE_REPOSITORY_PATH" -C "$ENGINE_REPOSITORY_PATH" \
   cat-file -e "${ENGINE_SHA}^{commit}" || fail 'pinned engine revision is absent locally'
 if [[ -n ${SOURCE_REPOSITORY_PATH:-} ]]; then
+  for snapshot_parent in /var /var/lib /var/lib/powerforge /var/lib/powerforge/site-sources; do
+    [[ -d $snapshot_parent && ! -L $snapshot_parent && $(stat -c %u "$snapshot_parent") -eq 0 ]] || fail "snapshot parent is not root-controlled: $snapshot_parent"
+    snapshot_mode=$(stat -c %a "$snapshot_parent")
+    (( (8#$snapshot_mode & 0022) == 0 )) || fail "snapshot parent is writable by another account: $snapshot_parent"
+  done
   source_snapshot=/var/lib/powerforge/site-sources/$site
   [[ -d $source_snapshot && ! -L $source_snapshot && $(stat -c %u "$source_snapshot") -eq 0 ]] || fail 'missing root-owned private source snapshot'
   [[ $(stat -c '%g %a' "$source_snapshot") == "$(id -g) 750" ]] || fail 'private source snapshot must be mode 0750 and shared only with the build account'
@@ -105,9 +129,23 @@ else
   remote_sha=${remote_line%%[[:space:]]*}
 fi
 [[ $remote_sha =~ ^[0-9a-f]{40}$ ]] || fail 'source branch did not resolve to an exact revision'
+release_digest=''
+if [[ $REBUILD_ON_RELEASES == 1 ]]; then
+  release_json_pages=()
+  for ((release_page=1; release_page<=RELEASE_MAX_PAGES; release_page++)); do
+    release_json=$(curl -fsS --retry 3 --retry-all-errors --max-time 30 \
+      -H 'Accept: application/vnd.github+json' \
+      "https://api.github.com/repos/${SOURCE_NAME}/releases?per_page=100&page=${release_page}")
+    release_count=$(jq -er 'if type == "array" then length else error("GitHub releases response is not an array") end' <<<"$release_json")
+    release_json_pages+=("$release_json")
+    (( release_count == 100 )) || break
+  done
+  release_digest=$(printf '%s\n' "${release_json_pages[@]}" | jq -ecS -s '[.[][] | {id,tag_name,name,body,draft,prerelease,published_at,updated_at,assets:[.assets[]? | {id,name,size,content_type,created_at,updated_at,browser_download_url,state}]}]' \
+    | sha256sum | awk '{print $1}')
+fi
 if [[ $build_only -eq 0 && -L $CURRENT_LINK && -f $CURRENT_LINK/_powerforge/deployment.json ]]; then
-  if jq -e --arg source "$remote_sha" --arg engine "$ENGINE_SHA" --arg config "$site_pull_config_sha" \
-    '.sourceSha == $source and .engineSha == $engine and .sitePullConfigSha256 == $config and .deploymentOrigin == "host-pull"' \
+  if jq -e --arg source "$remote_sha" --arg engine "$ENGINE_SHA" --arg config "$site_pull_config_sha" --arg releases "$release_digest" \
+    '.sourceSha == $source and .engineSha == $engine and .sitePullConfigSha256 == $config and .releaseDigest == $releases and .deploymentOrigin == "host-pull"' \
     "$CURRENT_LINK/_powerforge/deployment.json" >/dev/null; then
     printf 'already-current source=%s engine=%s\n' "$remote_sha" "$ENGINE_SHA"
     exit 0
@@ -157,14 +195,17 @@ printf 'source=%s engine=%s\n' "$source_sha" "$ENGINE_SHA"
 mkdir "$run_root/engine"
 git -c "safe.directory=$ENGINE_REPOSITORY_PATH" -C "$ENGINE_REPOSITORY_PATH" \
   archive "$ENGINE_SHA" | tar -xf - -C "$run_root/engine"
-export DOTNET_CLI_HOME="$WORK_ROOT/dotnet-home"
-export NUGET_PACKAGES="$WORK_ROOT/nuget-packages"
-mkdir -p "$DOTNET_CLI_HOME" "$NUGET_PACKAGES"
+export HOME="$run_root/home"
+export DOTNET_CLI_HOME="$run_root/dotnet-home"
+export NUGET_PACKAGES="$run_root/nuget-packages"
+mkdir -p "$HOME" "$DOTNET_CLI_HOME" "$NUGET_PACKAGES"
 (cd "$run_root/engine" && dotnet build PowerForge.Web.Cli/PowerForge.Web.Cli.csproj \
   --configuration Release --framework net10.0 --nologo \
   --configfile .github/nuget.public.config 9>&-)
 cli="$run_root/engine/PowerForge.Web.Cli/bin/Release/net10.0/PowerForge.Web.Cli.dll"
 [[ -s $cli ]] || fail 'pinned engine CLI build produced no executable'
+HOME=$(getent passwd "$(id -u)" | cut -d: -f6)
+export HOME
 (cd "$website" && dotnet "$cli" pipeline --config "$PIPELINE_CONFIG" --mode ci 9>&-)
 site_output="$website/_site"
 [[ -s $site_output/index.html ]] || fail 'website pipeline produced no index.html'
@@ -177,9 +218,9 @@ tar --dereference --hard-dereference --directory "$site_output" -cf "$stage/arti
 artifact_sha=$(sha256sum "$stage/artifact.tar" | awk '{print $1}')
 jq -n --arg repository "$SOURCE_NAME" --arg source "$source_sha" \
   --arg engine "$ENGINE_SHA" --arg run "$run_id" --arg artifact "$artifact_sha" \
-  --arg config "$site_pull_config_sha" \
+  --arg config "$site_pull_config_sha" --arg releases "$release_digest" \
   --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '{schemaVersion:1,sourceRepository:$repository,sourceSha:$source,engineMode:"source",engineRepository:"EvotecIT/PSPublishModule",engineRef:$engine,engineSha:$engine,workflowRunId:$run,workflowRunAttempt:"1",artifactSha256:$artifact,deployedAtUtc:$time,deploymentOrigin:"host-pull",sitePullConfigSha256:$config}' \
+  '{schemaVersion:1,sourceRepository:$repository,sourceSha:$source,engineMode:"source",engineRepository:"EvotecIT/PSPublishModule",engineRef:$engine,engineSha:$engine,workflowRunId:$run,workflowRunAttempt:"1",artifactSha256:$artifact,deployedAtUtc:$time,deploymentOrigin:"host-pull",sitePullConfigSha256:$config,releaseDigest:$releases}' \
   >"$stage/deployment.json"
 
 if [[ $build_only -eq 1 ]]; then
@@ -193,7 +234,7 @@ promotion=$(sudo -n /usr/local/sbin/powerforge-site-deploy --site "$site" \
 pending_release=$(sed -n 's/^POWERFORGE_RELEASE_ID=//p' <<<"$promotion" | tail -1)
 [[ $pending_release =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || fail 'promoter returned no valid release identity'
 
-marker=$(curl -fsS --retry 3 --max-time 30 "${PUBLIC_URL}/_powerforge/deployment.json?powerforge-deploy=${run_id}-1")
+marker=$(curl -fsS --retry 3 --retry-all-errors --max-time 30 "${PUBLIC_URL}/_powerforge/deployment.json?powerforge-deploy=${run_id}-1")
 jq -e --arg source "$source_sha" --arg artifact "$artifact_sha" --arg run "$run_id" \
   '.sourceSha == $source and .artifactSha256 == $artifact and .workflowRunId == $run and .workflowRunAttempt == "1"' \
   <<<"$marker" >/dev/null || fail 'public site does not serve the promoted release'
@@ -201,7 +242,7 @@ for smoke_path in $SMOKE_PATHS; do
   [[ $smoke_path == /* ]] || fail 'smoke path must start with /'
   separator='?'
   [[ $smoke_path != *\?* ]] || separator='&'
-  curl -fsSL --max-redirs 5 --retry 3 --max-time 30 --output /dev/null \
+  curl -fsSL --max-redirs 5 --retry 3 --retry-all-errors --max-time 30 --output /dev/null \
     "${PUBLIC_URL}${smoke_path}${separator}powerforge-deploy=${run_id}-1"
 done
 sudo -n /usr/local/sbin/powerforge-site-deploy --site "$site" --finalize --release-id "$pending_release" 9>&-

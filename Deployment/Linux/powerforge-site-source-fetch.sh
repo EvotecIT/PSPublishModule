@@ -68,9 +68,33 @@ source_sha=$(git -c "safe.directory=$SOURCE_REPOSITORY_PATH" -C "$SOURCE_REPOSIT
   rev-parse --verify "refs/remotes/powerforge/${SOURCE_BRANCH}^{commit}")
 [[ $source_sha =~ ^[0-9a-f]{40}$ ]] || fail 'fetched branch did not resolve to an exact revision'
 [[ -d $WORK_ROOT && ! -L $WORK_ROOT ]] || fail 'missing build account work directory'
+build_uid=$(stat -c %u "$WORK_ROOT")
 build_gid=$(stat -c %g "$WORK_ROOT")
-[[ $(stat -c %u "$WORK_ROOT") -ne 0 && $(stat -c %a "$WORK_ROOT") == 700 ]] || fail 'build account work directory has unexpected ownership or mode'
+[[ $build_uid -ne 0 && $(stat -c %a "$WORK_ROOT") == 700 ]] || fail 'build account work directory has unexpected ownership or mode'
+build_user=$(getent passwd "$build_uid" | cut -d: -f1)
+[[ -n $build_user && $(id -g "$build_user") == "$build_gid" ]] || fail 'build account must own its primary group'
+group_line=$(getent group "$build_gid")
+IFS=: read -r _ _ group_number group_members <<<"$group_line"
+[[ $group_number == "$build_gid" ]] || fail 'build account must have a dedicated primary group'
+[[ -z $group_members || $group_members == "$build_user" ]] || fail 'build group has another member'
+other_primary=$(getent passwd | awk -F: -v uid="$build_uid" -v gid="$build_gid" '$4 == gid && $3 != uid { print $1; exit }')
+[[ -z $other_primary ]] || fail "build group is also primary for $other_primary"
 snapshot=/var/lib/powerforge/site-sources/$site
+for snapshot_parent in /var /var/lib /var/lib/powerforge; do
+  [[ -d $snapshot_parent && ! -L $snapshot_parent && $(stat -c %u "$snapshot_parent") -eq 0 ]] || fail "snapshot parent is not root-controlled: $snapshot_parent"
+  mode=$(stat -c %a "$snapshot_parent")
+  (( (8#$mode & 0022) == 0 )) || fail "snapshot parent is writable by another account: $snapshot_parent"
+done
+if [[ -e /var/lib/powerforge/site-sources || -L /var/lib/powerforge/site-sources ]]; then
+  [[ -d /var/lib/powerforge/site-sources && ! -L /var/lib/powerforge/site-sources && $(stat -c %u /var/lib/powerforge/site-sources) -eq 0 ]] || fail 'source snapshot parent is not root-controlled'
+  mode=$(stat -c %a /var/lib/powerforge/site-sources)
+  (( (8#$mode & 0022) == 0 )) || fail 'source snapshot parent is writable by another account'
+fi
+if [[ -e $snapshot || -L $snapshot ]]; then
+  [[ -d $snapshot && ! -L $snapshot && $(stat -c %u "$snapshot") -eq 0 ]] || fail 'source snapshot directory is not root-controlled'
+  mode=$(stat -c %a "$snapshot")
+  (( (8#$mode & 0022) == 0 )) || fail 'source snapshot directory is writable by another account'
+fi
 install -d -o root -g root -m 755 /var/lib/powerforge/site-sources
 install -d -o root -g "$build_gid" -m 750 "$snapshot"
 if [[ -f $snapshot/source.tar && -f $snapshot/source.sha && ! -L $snapshot/source.tar && ! -L $snapshot/source.sha \
