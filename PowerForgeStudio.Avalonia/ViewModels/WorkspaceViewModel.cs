@@ -138,7 +138,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
-    public bool ShowGenericProjectContext => !IsChangesPage && !IsGitHubPage;
+    public bool ShowGenericProjectContext => !IsOverviewPage && !IsChangesPage && !IsGitHubPage;
     partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(ShowGenericProjectContext)); OnPropertyChanged(nameof(DisplayedOutput)); }
     [ObservableProperty] private bool _isBuildPage;
     public bool IsFilesPage => !IsOverviewPage && !IsHistoryPage && !IsSettingsPage && !IsActivityPage && !IsStoragePage && !IsAutomationsPage && !IsConnectionsPage && !IsBuildPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;

@@ -92,6 +92,7 @@ public sealed class ProjectOverviewTests
                 await model.SelectAsync(project);
 
                 Assert.True(model.IsOverviewPage);
+                Assert.False(model.ShowGenericProjectContext);
                 Assert.True(model.IsProjectRoute);
                 Assert.False(model.IsFilesPage);
                 Assert.Equal(Path.GetFileName(root), model.ProjectName);

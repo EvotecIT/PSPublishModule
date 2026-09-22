@@ -76,6 +76,7 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] Project GitHub uses the right panel for the selected issue or PR, including its observed state and PR-only head/check evidence.
 - [x] Build & Run keeps the working copy and trust boundary compact, shows contract paths relative to that copy, and highlights Build after a successful inspection.
 - [x] Files uses the right panel for selected file or folder metadata and a working-copy-relative path, instead of repeating generic working-copy labels.
+- [x] Overview moves observed project and Git context into its inspector; compact view retains a short working-copy summary when the inspector collapses.
 - [x] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.
 - [ ] Capture final native Windows and headless evidence after the last visual change.
@@ -85,7 +86,7 @@ The 1600 × 1000 and 1050 × 720 renders have now been compared with all eight c
 | Pattern | Current rendering | Remaining visual work |
 |---|---|---|
 | Workspace and files | The tree, file list, preview, tabs and output dock use the shared shell; selected file metadata occupies the right panel. | Check selected-file context and editing layout in the final native pass. |
-| Overview | Identity, observed products, entrypoints and prerequisites form readable cards. | Tighten card density and reduce the generic context panel. Do not invent recent activity or tool health. |
+| Overview | Products, entrypoints and prerequisites now start higher; the inspector shows observed project and Git context, while compact view keeps a short summary. | Check native density and long-path interaction; do not invent recent activity or tool health. |
 | Changes and history | Branch actions, changed paths, patch, commit form and selected-change context are present. | Improve patch readability and finish the compact diff/commit pass. |
 | Build & Run | Validated contracts, reviewed local actions and the available build action are visible; recognized secret arguments are removed from planning errors. | Give build progress and artifacts a denser result layout without hiding the trust boundary or raw-output access. |
 | Releases | The captured state, available action and artifacts are clear at wide and compact sizes. | Group publication controls and receipts by stage; do not imply that a destination was published until a receipt exists. |
@@ -93,4 +94,4 @@ The 1600 × 1000 and 1050 × 720 renders have now been compared with all eight c
 | Activity catalog | Source availability, counts, filters, actionable rows and evidence remain visible. | Keep the compact inspector readable when provider explanations are long. |
 | Storage | Measured sizes, candidate rows and guarded evidence align closely with the reference. | Keep long paths and safety explanations readable at compact width. |
 
-The shared right panel is still generic on Overview, Build & Run and Releases, even when the center surface already has selected-item detail. Preserve source and safety information while changing its placement; do not fill the panel with illustrative values or controls that have no owner.
+The shared right panel is still generic on Build & Run and Releases, even when the center surface already has selected-item detail. Preserve source and safety information while changing its placement; do not fill the panel with illustrative values or controls that have no owner.

@@ -14,6 +14,7 @@ public sealed partial class WorkspaceViewModel
     {
         OnPropertyChanged(nameof(IsFilesPage));
         OnPropertyChanged(nameof(IsProjectRoute));
+        OnPropertyChanged(nameof(ShowGenericProjectContext));
         OnPropertyChanged(nameof(DisplayedOutput));
         OnPropertyChanged(nameof(DisplayedStatus));
     }

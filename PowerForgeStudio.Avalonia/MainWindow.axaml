@@ -166,6 +166,42 @@
                 </StackPanel>
               </StackPanel>
             </ScrollViewer>
+            <ScrollViewer IsVisible="{Binding IsOverviewPage}">
+              <StackPanel Spacing="12" DataContext="{Binding Overview}">
+                <TextBlock Text="Project context" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="{Binding ProjectName}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <Button Content="{ReflectionBinding DataContext.FavoriteActionLabel, RelativeSource={RelativeSource AncestorType=Window}}"
+                        Command="{ReflectionBinding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        IsEnabled="{Binding HasProject}" />
+                <TextBlock Text="{ReflectionBinding DataContext.StateError, RelativeSource={RelativeSource AncestorType=Window}}"
+                           IsVisible="{ReflectionBinding DataContext.HasStateError, RelativeSource={RelativeSource AncestorType=Window}}"
+                           TextWrapping="Wrap" Foreground="#B45309" />
+                <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
+                <Grid ColumnDefinitions="105,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12" ColumnSpacing="8">
+                  <TextBlock Text="Project type" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Column="1" Text="{Binding ProjectKind}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="1" Text="Working copy" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding WorkspaceKind}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="2" Text="Branch" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Branch}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="3" Text="Git state" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding GitState}" TextWrapping="Wrap" />
+                </Grid>
+                <TextBlock Text="Working copies" Classes="muted" FontSize="12" />
+                <TextBlock Text="{Binding WorkingCopyCount}" FontWeight="SemiBold" FontSize="20" />
+                <TextBlock Text="Path" Classes="muted" FontSize="12" />
+                <TextBox Text="{Binding WorkingCopyRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
+                         BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding WorkingCopyRoot}" AutomationProperties.Name="Working copy path" />
+                <Border Background="#F3F7FD" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="10">
+                  <StackPanel Spacing="5">
+                    <TextBlock Text="Local observation" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="12" />
+                    <TextBlock Text="Project metadata and Git state only. Scripts and builds do not run here." Classes="muted" TextWrapping="Wrap" FontSize="11" />
+                  </StackPanel>
+                </Border>
+                <TextBlock Text="Review the Overview warning card before building." IsVisible="{Binding HasWarnings}" Foreground="#B45309" TextWrapping="Wrap" FontSize="12" />
+              </StackPanel>
+            </ScrollViewer>
             <ScrollViewer IsVisible="{Binding IsChangesPage}">
             <StackPanel Spacing="12" DataContext="{Binding Changes}">
               <TextBlock Text="Selected change" FontWeight="SemiBold" FontSize="16" />
