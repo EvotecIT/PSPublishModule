@@ -252,7 +252,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Transpile_PinnedComputerPropertySelectorsPromoteAsOneReusableFamily()
+    public void Transpile_PinnedComputerPropertySelectorsUseCompleteMethodsOrRetainedRegions()
     {
         var cases = new[]
         {
@@ -274,6 +274,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
                 new[] { source }, "PowerForge.Compiled", name + "Methods", "net10.0",
                 PowerShellCompilationCapabilities.HybridModule);
+            if (name is not ("Get-ComputerDiskLogical" or "Get-ComputerOperatingSystem"))
+            {
+                Assert.Single(typed.Methods, method => method.SourceName == name);
+                Assert.DoesNotContain(typed.PromotedRegions, region => region.SourceName == name);
+                continue;
+            }
             var matching = typed.PromotedRegions.Where(candidate =>
                 candidate.SourceName.Equals(name, StringComparison.OrdinalIgnoreCase) &&
                 candidate.ContinuationLocals.Any(static local => local.Alternatives.Count > 0)).ToArray();
