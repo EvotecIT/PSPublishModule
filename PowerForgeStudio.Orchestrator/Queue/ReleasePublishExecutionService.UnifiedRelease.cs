@@ -264,16 +264,45 @@ public sealed partial class ReleasePublishExecutionService
 
             if (result.WingetSubmission is { } winget)
             {
-                receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
-                    repository.RootPath,
-                    repository.Name,
-                    "UnifiedRelease",
-                    "WinGet submission",
-                    "Winget",
-                    "Windows Package Manager",
-                    winget.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
-                    winget.Succeeded ? "WinGet manifests submitted." : winget.ErrorMessage ?? "WinGet submission failed.",
-                    result.WingetManifestPaths.FirstOrDefault()));
+                if (winget.Entries.Length == 0)
+                {
+                    receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                        repository.RootPath, repository.Name, "UnifiedRelease", "WinGet submission", "Winget",
+                        "Windows Package Manager",
+                        winget.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                        winget.Succeeded
+                            ? "WinGet submission command completed; catalog acceptance and availability are not verified."
+                            : winget.ErrorMessage ?? "WinGet submission failed without per-package evidence; reconcile external state before retrying.",
+                        result.WingetManifestPaths.FirstOrDefault()));
+                }
+                else
+                {
+                    foreach (var entry in winget.Entries)
+                    {
+                        var package = string.IsNullOrWhiteSpace(entry.PackageIdentifier)
+                            ? "Unidentified package" : entry.PackageIdentifier.Trim();
+                        var version = string.IsNullOrWhiteSpace(entry.PackageVersion)
+                            ? "" : " " + entry.PackageVersion.Trim();
+                        receipts.Add(ReleaseQueueReceiptFactory.CreatePublishReceipt(
+                            repository.RootPath, repository.Name, "UnifiedRelease",
+                            $"{package}{version} WinGet submission", "Winget", "Windows Package Manager",
+                            entry.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
+                            entry.Succeeded
+                                ? "WinGet submission command completed; catalog acceptance and availability are not verified."
+                                : $"WinGet submission command failed with exit code {entry.ExitCode}; reconcile external state before retrying.",
+                            string.IsNullOrWhiteSpace(entry.ManifestPath) ? result.WingetManifestPaths.FirstOrDefault() : entry.ManifestPath,
+                            string.IsNullOrWhiteSpace(entry.PackageIdentifier) ? null : entry.PackageIdentifier.Trim(),
+                            string.IsNullOrWhiteSpace(entry.PackageVersion) ? null : entry.PackageVersion.Trim()));
+                    }
+
+                    if (!winget.Succeeded && winget.Entries.All(static entry => entry.Succeeded))
+                    {
+                        receipts.Add(ReleaseQueueReceiptFactory.FailedPublishReceipt(
+                            repository.RootPath, repository.Name, "UnifiedRelease", "WinGet submission", "Windows Package Manager",
+                            winget.ErrorMessage ?? "WinGet reported a failed submission after successful package commands; reconcile external state before retrying.",
+                            "Winget"));
+                    }
+                }
             }
 
             if (result.VirusTotalMonitor is { } virusTotal)

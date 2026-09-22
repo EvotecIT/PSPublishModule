@@ -134,6 +134,28 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WingetSubmissionRemainsUnverifiedUntilCatalogAcceptance()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-winget-verification");
+        var publishResult = new ReleasePublishExecutionResult(
+            root, true, "Submission command completed.", "{}",
+            [ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Tool", "UnifiedRelease",
+                "EvotecIT.Tool 1.0.0 WinGet submission", "Winget", "Windows Package Manager",
+                ReleasePublishReceiptStatus.Published, "Submission command completed.",
+                packageId: "EvotecIT.Tool", packageVersion: "1.0.0")]);
+        var queueItem = CreateVerifyReadyQueueItem(root, "Tool", ReleaseRepositoryKind.Library,
+            JsonSerializer.Serialize(publishResult));
+
+        var result = await new ReleaseVerificationExecutionService().ExecuteAsync(queueItem);
+
+        Assert.False(result.Succeeded);
+        var receipt = Assert.Single(result.Receipts);
+        Assert.Equal("Winget", receipt.TargetKind);
+        Assert.Equal(ReleaseVerificationReceiptStatus.Failed, receipt.Status);
+        Assert.Contains("catalog availability have not been verified", receipt.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_CustomNuGetV3Feed_VerifiesPackageAgainstConfiguredFeed()
     {
         using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");

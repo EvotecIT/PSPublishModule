@@ -70,7 +70,7 @@ internal sealed class WingetSubmissionService
         };
     }
 
-    public PowerForgeWingetSubmissionResult Run(PowerForgeWingetSubmissionPlan plan)
+    public PowerForgeWingetSubmissionResult Run(PowerForgeWingetSubmissionPlan plan, CancellationToken cancellationToken = default)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
@@ -87,14 +87,25 @@ internal sealed class WingetSubmissionService
 
         foreach (var entry in plan.Entries)
         {
+            if (cancellationToken.IsCancellationRequested)
+                return Cancelled(results);
+
             _logger.Info($"Submitting Winget manifest for {entry.PackageIdentifier} {entry.PackageVersion}.");
-            var process = _processRunner.RunAsync(new ProcessRunRequest(
-                plan.ToolPath,
-                plan.WorkingDirectory,
-                entry.Arguments,
-                TimeSpan.FromSeconds(plan.TimeoutSeconds),
-                captureOutput: !plan.UsesInteractiveAuthentication,
-                captureError: !plan.UsesInteractiveAuthentication)).GetAwaiter().GetResult();
+            ProcessRunResult process;
+            try
+            {
+                process = _processRunner.RunAsync(new ProcessRunRequest(
+                    plan.ToolPath,
+                    plan.WorkingDirectory,
+                    entry.Arguments,
+                    TimeSpan.FromSeconds(plan.TimeoutSeconds),
+                    captureOutput: !plan.UsesInteractiveAuthentication,
+                    captureError: !plan.UsesInteractiveAuthentication), cancellationToken).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return Cancelled(results);
+            }
 
             var entryResult = new PowerForgeWingetSubmissionEntryResult
             {
@@ -109,6 +120,9 @@ internal sealed class WingetSubmissionService
                 StdErr = process.StdErr
             };
             results.Add(entryResult);
+
+            if (cancellationToken.IsCancellationRequested)
+                return Cancelled(results);
 
             if (!entryResult.Succeeded)
             {
@@ -130,6 +144,14 @@ internal sealed class WingetSubmissionService
             Entries = results.ToArray()
         };
     }
+
+    private static PowerForgeWingetSubmissionResult Cancelled(List<PowerForgeWingetSubmissionEntryResult> results)
+        => new()
+        {
+            Succeeded = false,
+            ErrorMessage = "Winget submission was cancelled. Reconcile attempted packages before retrying.",
+            Entries = results.ToArray()
+        };
 
     private static PowerForgeWingetSubmissionEntryPlan BuildEntry(
         PowerForgeReleaseWingetOptions winget,

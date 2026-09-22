@@ -889,6 +889,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         try
         {
             PowerForgeWingetSubmissionPlan? capturedPlan = null;
+            using var cancellation = new CancellationTokenSource();
+            var cancelOnSubmit = false;
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
                 executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run during staged publishing."),
@@ -901,6 +903,17 @@ public sealed partial class PowerForgeReleaseServiceTests
                 submitWinget: plan =>
                 {
                     capturedPlan = plan;
+                    if (cancelOnSubmit)
+                    {
+                        cancellation.Cancel();
+                        return new PowerForgeWingetSubmissionResult {
+                            Succeeded = false,
+                            Entries = [new PowerForgeWingetSubmissionEntryResult {
+                                PackageIdentifier = "EvotecIT.Tool", PackageVersion = "1.0.0",
+                                ManifestPath = plan.Entries[0].ManifestPath, ExitCode = 130
+                            }]
+                        };
+                    }
                     return new PowerForgeWingetSubmissionResult { Succeeded = true };
                 });
             var spec = new PowerForgeReleaseSpec {
@@ -938,6 +951,22 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.NotNull(capturedPlan);
             Assert.True(capturedPlan!.Enabled);
             Assert.True(result.WingetSubmission?.Succeeded);
+
+            cancelOnSubmit = true;
+            var cancelled = service.PublishBuiltReleaseOutputs(
+                spec,
+                new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    CancellationToken = cancellation.Token
+                },
+                new PowerForgeReleaseResult {
+                    Success = true,
+                    WingetManifestPaths = [manifestPath],
+                    WingetManifests = built.WingetManifests
+                });
+            Assert.False(cancelled.Success);
+            Assert.Single(cancelled.WingetSubmission!.Entries);
+            Assert.Equal("EvotecIT.Tool", cancelled.WingetSubmission.Entries[0].PackageIdentifier);
         }
         finally
         {

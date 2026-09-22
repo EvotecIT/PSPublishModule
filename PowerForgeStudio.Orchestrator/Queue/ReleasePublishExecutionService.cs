@@ -329,7 +329,11 @@ public sealed partial class ReleasePublishExecutionService : IReleasePublishExec
                 receipts.Add(FailedReceipt(queueItem.RootPath, queueItem.RepositoryName, "Publish", "Publish", null, "No publish-capable adapter execution was produced."));
             }
 
-            return ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+            var completed = ReleaseQueueExecutionResultFactory.CreatePublishResult(queueItem, receipts);
+            return receipts.Any(static receipt => receipt.TargetKind == "Winget" &&
+                           receipt.Status == ReleasePublishReceiptStatus.Failed)
+                ? completed with { RequiresReconciliation = true }
+                : completed;
         }
         catch (Exception ex)
         {

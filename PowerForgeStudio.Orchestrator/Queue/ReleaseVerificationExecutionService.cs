@@ -259,6 +259,10 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
             "NuGet" => await VerifyNuGetAsync(publishReceipt, signingReceipts, cancellationToken),
             "ModulePackages" => await VerifyModulePackageAsync(publishReceipt, signingReceipts, cancellationToken),
             "PowerShellRepository" => await VerifyPowerShellRepositoryAsync(publishReceipt, cancellationToken),
+            "Winget" => FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind,
+                publishReceipt.TargetName, publishReceipt.Destination,
+                "WinGet submission is recorded, but upstream manifest acceptance and catalog availability have not been verified. Inspect the provider state before retrying or closing this release.",
+                publishReceipt.TargetKind),
             _ => FailedReceipt(publishReceipt.RootPath, publishReceipt.RepositoryName, publishReceipt.AdapterKind,
                 publishReceipt.TargetName, publishReceipt.Destination,
                 $"Verification is not available for published {publishReceipt.TargetKind} targets. Delivery remains unverified.", publishReceipt.TargetKind)

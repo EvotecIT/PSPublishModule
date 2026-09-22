@@ -62,7 +62,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<string, string, IEnumerable<string>, CancellationToken, string[]>? _restorePublishedNuGetAssets;
     private readonly Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? _restorePublishedModuleAssets;
     private readonly Func<string, string, string, string, GitHubReleaseVersionOccupancy> _probeGitHubReleaseVersion;
-    private readonly Func<PowerForgeWingetSubmissionPlan, PowerForgeWingetSubmissionResult> _submitWinget;
+    private readonly Func<PowerForgeWingetSubmissionPlan, CancellationToken, PowerForgeWingetSubmissionResult> _submitWinget;
     private readonly Func<AppleAppArchiveRequest, AppleAppArchiveResult> _archiveAppleApp;
     private readonly Func<AppleAppArchiveUploadRequest, AppleAppArchiveUploadResult> _uploadAppleApp;
     private readonly Func<AppStoreConnectReleasePreparationRequest, AppStoreConnectReleasePreparationResult> _prepareAppleDistribution;
@@ -108,7 +108,7 @@ internal sealed partial class PowerForgeReleaseService
             (spec, configPath, request, selectedOutputs) => PlanDotNetTools(logger, spec, configPath, request, selectedOutputs),
             plan => new DotNetPublishPipelineRunner(logger).Run(plan, progress: null),
             publishRequest => new GitHubReleasePublisher(logger).PublishRelease(publishRequest),
-            plan => new WingetSubmissionService(logger).Run(plan),
+            null,
             request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult(),
             request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult(),
             null,
@@ -140,7 +140,7 @@ internal sealed partial class PowerForgeReleaseService
             (spec, configPath, request, selectedOutputs) => PlanDotNetTools(logger, spec, configPath, request, selectedOutputs),
             plan => new DotNetPublishPipelineRunner(logger).Run(plan, progress: null),
             publishGitHubRelease,
-            plan => new WingetSubmissionService(logger).Run(plan),
+            null,
             request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult(),
             request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult(),
             null,
@@ -188,7 +188,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
         Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null,
         Func<VirusTotalMonitorPublishRequest, CancellationToken, VirusTotalMonitorPublishResult>? publishVirusTotalMonitor = null,
-        Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null)
+        Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null,
+        Func<PowerForgeWingetSubmissionPlan, CancellationToken, PowerForgeWingetSubmissionResult>? submitWingetWithCancellation = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -215,7 +216,10 @@ internal sealed partial class PowerForgeReleaseService
         _restorePublishedModuleAssets = restorePublishedModuleAssets;
         _probeGitHubReleaseVersion = probeGitHubReleaseVersion
             ?? GitHubReleaseVersionAvailabilityService.Probe;
-        _submitWinget = submitWinget ?? (plan => new WingetSubmissionService(logger).Run(plan));
+        _submitWinget = submitWingetWithCancellation
+            ?? (submitWinget is null
+                ? (plan, cancellationToken) => new WingetSubmissionService(logger).Run(plan, cancellationToken)
+                : (plan, _) => submitWinget(plan));
         _archiveAppleApp = archiveAppleApp ?? (request => new AppleAppArchiveService().CreateArchiveAsync(request).GetAwaiter().GetResult());
         _uploadAppleApp = uploadAppleApp ?? (request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult());
         _prepareAppleDistribution = prepareAppleDistribution ?? PrepareAppleDistribution;
@@ -1386,6 +1390,12 @@ internal sealed partial class PowerForgeReleaseService
         ValidatePostBuildSourceState(request);
         request.CancellationToken.ThrowIfCancellationRequested();
         SubmitWingetOutputs(spec, request, configDirectory, builtResult);
+        if (request.CancellationToken.IsCancellationRequested && builtResult.WingetSubmission is not null)
+        {
+            builtResult.Success = false;
+            builtResult.ErrorMessage ??= "WinGet submission was cancelled; reconcile attempted packages before retrying.";
+            return builtResult;
+        }
         request.CancellationToken.ThrowIfCancellationRequested();
         if (!builtResult.Success)
             return builtResult;
@@ -3805,7 +3815,7 @@ internal sealed partial class PowerForgeReleaseService
         if (!plan.Enabled)
             return;
 
-        var submission = _submitWinget(plan);
+        var submission = _submitWinget(plan, request.CancellationToken);
         result.WingetSubmission = submission;
         if (!submission.Succeeded)
         {

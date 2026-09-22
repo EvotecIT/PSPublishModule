@@ -192,6 +192,44 @@ public sealed class WingetSubmissionServiceTests
         Assert.Equal(60, capturedRequest.Timeout.TotalSeconds);
     }
 
+    [Fact]
+    public void Run_CancellationAfterFirstCommand_PreservesAttemptAndSkipsNextPackage()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var commands = 0;
+        var service = new WingetSubmissionService(
+            new NullLogger(),
+            new StubProcessRunner((_, token) =>
+            {
+                Assert.Equal(cancellation.Token, token);
+                commands++;
+                cancellation.Cancel();
+                return Success();
+            }));
+        var plan = new PowerForgeWingetSubmissionPlan {
+            Enabled = true,
+            ToolPath = "wingetcreate",
+            WorkingDirectory = Path.GetTempPath(),
+            TimeoutSeconds = 60,
+            Entries = [
+                new PowerForgeWingetSubmissionEntryPlan {
+                    PackageIdentifier = "Evotec.First", PackageVersion = "1.0.0", ManifestPath = "first.yaml"
+                },
+                new PowerForgeWingetSubmissionEntryPlan {
+                    PackageIdentifier = "Evotec.Second", PackageVersion = "1.0.0", ManifestPath = "second.yaml"
+                }
+            ]
+        };
+
+        var result = service.Run(plan, cancellation.Token);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(1, commands);
+        var attempted = Assert.Single(result.Entries);
+        Assert.Equal("Evotec.First", attempted.PackageIdentifier);
+        Assert.Contains("cancelled", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ProcessRunResult Success()
         => new(0, "ok", string.Empty, "wingetcreate", TimeSpan.FromMilliseconds(1), timedOut: false);
 
@@ -212,14 +250,17 @@ public sealed class WingetSubmissionServiceTests
 
     private sealed class StubProcessRunner : IProcessRunner
     {
-        private readonly Func<ProcessRunRequest, ProcessRunResult> _execute;
+        private readonly Func<ProcessRunRequest, CancellationToken, ProcessRunResult> _execute;
 
         public StubProcessRunner(Func<ProcessRunRequest, ProcessRunResult> execute)
         {
-            _execute = execute;
+            _execute = (request, _) => execute(request);
         }
 
+        public StubProcessRunner(Func<ProcessRunRequest, CancellationToken, ProcessRunResult> execute)
+            => _execute = execute;
+
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
-            => Task.FromResult(_execute(request));
+            => Task.FromResult(_execute(request, cancellationToken));
     }
 }

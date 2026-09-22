@@ -277,12 +277,14 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             }
             """);
         var manifestPath = Path.Combine(repositoryRoot, "Artifacts", "Winget", "EvotecIT.Tool.yaml");
+        var secondManifestPath = Path.Combine(repositoryRoot, "Artifacts", "Winget", "EvotecIT.Helper.yaml");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         File.WriteAllText(manifestPath, "PackageIdentifier: EvotecIT.Tool");
+        File.WriteAllText(secondManifestPath, "PackageIdentifier: EvotecIT.Helper");
         var unified = new PowerForgeReleaseResult {
             Success = true,
             ConfigPath = releaseConfig,
-            WingetManifestPaths = [manifestPath]
+            WingetManifestPaths = [manifestPath, secondManifestPath]
         };
         var buildResult = new ReleaseBuildExecutionResult(
             repositoryRoot,
@@ -319,9 +321,17 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
             publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult {
                 Success = true,
-                WingetManifestPaths = [manifestPath],
+                WingetManifestPaths = [manifestPath, secondManifestPath],
                 WingetSubmission = new PowerForgeWingetSubmissionResult {
-                    Succeeded = true
+                    Succeeded = true,
+                    Entries = [
+                        new PowerForgeWingetSubmissionEntryResult {
+                            PackageIdentifier = "EvotecIT.Tool", PackageVersion = "1.0.0", ManifestPath = manifestPath, Succeeded = true
+                        },
+                        new PowerForgeWingetSubmissionEntryResult {
+                            PackageIdentifier = "EvotecIT.Helper", PackageVersion = "2.0.0", ManifestPath = secondManifestPath, Succeeded = true
+                        }
+                    ]
                 }
             });
 
@@ -335,9 +345,88 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             var result = await service.ExecuteAsync(queueItem);
 
             Assert.True(result.Succeeded);
-            var receipt = Assert.Single(result.Receipts);
-            Assert.Equal("Winget", receipt.TargetKind);
-            Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
+            Assert.Equal(2, result.Receipts.Count);
+            Assert.All(result.Receipts, receipt => Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status));
+            Assert.Contains(result.Receipts, receipt => receipt.TargetKind == "Winget" &&
+                receipt.PackageId == "EvotecIT.Tool" && receipt.PackageVersion == "1.0.0" && receipt.SourcePath == manifestPath);
+            Assert.Contains(result.Receipts, receipt => receipt.PackageId == "EvotecIT.Helper" &&
+                receipt.PackageVersion == "2.0.0" && receipt.SourcePath == secondManifestPath);
+
+            var partialService = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(), new ModuleBuildHostService(), new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(), new ProjectBuildPublishHostService(),
+                (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+                publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult {
+                    Success = false,
+                    WingetManifestPaths = [manifestPath, secondManifestPath],
+                    WingetSubmission = new PowerForgeWingetSubmissionResult {
+                        Succeeded = false,
+                        Entries = [
+                            new PowerForgeWingetSubmissionEntryResult {
+                                PackageIdentifier = "EvotecIT.Tool", PackageVersion = "1.0.0", ManifestPath = manifestPath, Succeeded = true
+                            },
+                            new PowerForgeWingetSubmissionEntryResult {
+                                PackageIdentifier = "EvotecIT.Helper", PackageVersion = "2.0.0", ManifestPath = secondManifestPath,
+                                Succeeded = false, ExitCode = 17
+                            }
+                        ]
+                    }
+                });
+            var partial = await partialService.ExecuteAsync(queueItem);
+            Assert.False(partial.Succeeded);
+            Assert.True(partial.RequiresReconciliation);
+            Assert.Equal(ReleasePublishReceiptStatus.Published, partial.Receipts[0].Status);
+            Assert.Equal(ReleasePublishReceiptStatus.Failed, partial.Receipts[1].Status);
+            Assert.Contains("exit code 17", partial.Receipts[1].Summary, StringComparison.Ordinal);
+
+            var failedFirstService = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(), new ModuleBuildHostService(), new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(), new ProjectBuildPublishHostService(),
+                (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+                publishUnifiedRelease: (_, _) => new PowerForgeReleaseResult {
+                    Success = false,
+                    WingetManifestPaths = [manifestPath, secondManifestPath],
+                    WingetSubmission = new PowerForgeWingetSubmissionResult {
+                        Succeeded = false,
+                        Entries = [new PowerForgeWingetSubmissionEntryResult {
+                            PackageIdentifier = "EvotecIT.Tool", PackageVersion = "1.0.0", ManifestPath = manifestPath,
+                            Succeeded = false, ExitCode = 18
+                        }]
+                    }
+                });
+            var failedFirst = await failedFirstService.ExecuteAsync(queueItem);
+            Assert.False(failedFirst.Succeeded);
+            Assert.True(failedFirst.RequiresReconciliation);
+            var failedReceipt = Assert.Single(failedFirst.Receipts);
+            Assert.Equal("EvotecIT.Tool", failedReceipt.PackageId);
+            Assert.Equal(ReleasePublishReceiptStatus.Failed, failedReceipt.Status);
+
+            using var cancellation = new CancellationTokenSource();
+            var cancelledService = new ReleasePublishExecutionService(
+                new RepositoryCatalogScanner(), new ModuleBuildHostService(), new ProjectBuildHostService(),
+                new ProjectBuildCommandHostService(), new ProjectBuildPublishHostService(),
+                (request, _) => Task.FromResult(new DotNetNuGetPushResult(0, string.Empty, string.Empty, "dotnet", TimeSpan.Zero, false, null)),
+                publishUnifiedReleaseWithCancellation: (_, _, _) =>
+                {
+                    cancellation.Cancel();
+                    return new PowerForgeReleaseResult {
+                        Success = false,
+                        WingetManifestPaths = [manifestPath, secondManifestPath],
+                        WingetSubmission = new PowerForgeWingetSubmissionResult {
+                            Succeeded = false,
+                            Entries = [new PowerForgeWingetSubmissionEntryResult {
+                                PackageIdentifier = "EvotecIT.Tool", PackageVersion = "1.0.0",
+                                ManifestPath = manifestPath, Succeeded = true
+                            }]
+                        }
+                    };
+                });
+            var cancelled = await cancelledService.ExecuteAsync(queueItem, cancellation.Token);
+            Assert.False(cancelled.Succeeded);
+            Assert.True(cancelled.WasCancelled);
+            Assert.True(cancelled.RequiresReconciliation);
+            Assert.Contains(cancelled.Receipts, receipt => receipt.TargetKind == "Winget" &&
+                receipt.PackageId == "EvotecIT.Tool" && receipt.Status == ReleasePublishReceiptStatus.Published);
         }
         finally
         {

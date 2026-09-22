@@ -29,6 +29,8 @@ The left rail is workspace-wide. Project tabs are scoped to the selected working
 
 Projects in the rail returns to the selected project's Overview. It remains highlighted for every project tab. GitHub in the rail opens the cross-project Activity filter; GitHub in the project tab stays bound to the selected working copy.
 
+Releases distinguishes submission from verified availability. WinGet shows a receipt for each attempted package command, including its package ID, version, manifest and command outcome. A failed command requires external reconciliation before retrying, even when it is the first package attempted. A successful command does not prove upstream manifest acceptance or catalog availability, so verification remains incomplete until that evidence can be checked.
+
 The title-bar field is a Ctrl+K repository jump over the loaded workspace catalog. It shows bounded matching repositories without changing the sidebar tree while typing; choosing one clears any tree filter and opens that project's Overview. The sidebar field only filters project names in the tree. The title-bar field does not search files, commits, issues or remote providers.
 
 The Changed tree chip performs an explicit read-only local Git scan over primary checkouts and registered worktrees. The completed observation filters project groups and shows its UTC time plus any working copies that could not be inspected. A refresh keeps the previous result visible until the new scan completes. It does not fetch remotes, measure workspace storage or classify a worktree as safe to remove.
