@@ -11,6 +11,7 @@ public sealed record FileItemViewModel(FileSystemEntry Entry)
     public string Extension => Entry.Extension;
     public string KindLabel => IsDirectory ? "Folder" : string.IsNullOrEmpty(Extension) ? "File" : $"{Extension.TrimStart('.').ToUpperInvariant()} file";
     public string ModifiedDisplay => Entry.LastModifiedUtc.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'");
+    public string ModifiedDateDisplay => Entry.LastModifiedUtc.ToUniversalTime().ToString("yyyy-MM-dd");
     public string SizeDisplay => IsDirectory ? "" : Entry.SizeBytes >= 1024 * 1024
         ? $"{Entry.SizeBytes / (1024d * 1024):0.0} MiB"
         : Entry.SizeBytes >= 1024 ? $"{Entry.SizeBytes / 1024d:0.#} KiB" : $"{Entry.SizeBytes} B";

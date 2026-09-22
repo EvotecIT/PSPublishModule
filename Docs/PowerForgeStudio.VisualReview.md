@@ -82,6 +82,7 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] Changes keeps branch switching and creation in an expandable section so compact view shows the selected patch and staged-file list sooner; the raw patch remains selectable and scrollable.
 - [x] Changes, History and PR files use one bounded diff viewer that distinguishes metadata, hunks, additions and removals. Raw mode preserves all patch text loaded by the source; GitHub excerpts remain explicitly labeled as excerpts. Compact History and PR files keep a useful diff pane height with page scrolling.
 - [x] Project GitHub keeps checks and conversation in the first wide viewport; the reviewed-action draft is available from a collapsed section rather than occupying the default detail view.
+- [x] Files shows observed modification dates beside names and sizes at wide width; compact width keeps the name and size columns legible, with the full UTC timestamp available in the inspector.
 - [x] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.
 - [ ] Capture final native Windows and headless evidence after the last visual change.
@@ -90,7 +91,7 @@ The 1600 × 1000 and 1050 × 720 renders have now been compared with all eight c
 
 | Pattern | Current rendering | Remaining visual work |
 |---|---|---|
-| Workspace and files | The tree, file list, preview, tabs and output dock use the shared shell; selected file metadata occupies the right panel. | Check selected-file context and editing layout in the final native pass. |
+| Workspace and files | The tree, file list, preview, tabs and output dock use the shared shell; selected file metadata occupies the right panel. The wide list has name, modified date and size columns, while compact width prioritizes the file name. | Check selected-file context and editing layout in the final native pass. |
 | Overview | Products, entrypoints and prerequisites now start higher; the inspector shows observed project and Git context, while compact view keeps a short summary. | Check native density and long-path interaction; do not invent recent activity or tool health. |
 | Changes and history | Branch actions, changed paths, patch, commit form and selected-change context are present. Compact History can scroll the page to show a useful diff pane. The shared viewer colors additions, removals and hunk boundaries, with a selectable Raw view. | Validate compact navigation and raw-text selection in the final native pass. |
 | Build & Run | Validated contracts, reviewed local actions and the available build action are visible; the inspector follows the current working copy and captured build, while result paths fit compact rows. Recognized secret arguments are removed from planning errors. | Check a real native build with long paths and review the raw output dock at compact size. |

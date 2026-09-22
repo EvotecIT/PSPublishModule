@@ -46,15 +46,23 @@
     <Grid Grid.Row="3" ColumnDefinitions="0.85*,14,1.15*">
       <Border Classes="card" IsVisible="{Binding IsPreviewVisible}">
         <Grid RowDefinitions="42,*">
-          <TextBlock Text="Name" Margin="15,12" FontWeight="SemiBold" />
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="9" Margin="15,12">
+            <TextBlock Text="Name" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="Modified" FontWeight="SemiBold"
+                       IsVisible="{ReflectionBinding !DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <TextBlock Grid.Column="2" Text="Size" FontWeight="SemiBold" MinWidth="45" TextAlignment="Right" />
+          </Grid>
           <ListBox Grid.Row="1" x:Name="FileList" ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
                    DoubleTapped="OpenFile" KeyDown="FileKeyDown" Background="Transparent">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:FileItemViewModel">
-                <Grid ColumnDefinitions="20,*,Auto" ColumnSpacing="9" ToolTip.Tip="{Binding FullPath}">
+                <Grid ColumnDefinitions="20,*,Auto,Auto" ColumnSpacing="9" ToolTip.Tip="{Binding FullPath}">
                   <controls:ProjectIcon Kind="{Binding IconKind}" Width="20" Height="20" />
                   <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="2" Text="{Binding SizeDisplay}" Classes="muted" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                  <TextBlock Grid.Column="2" Text="{Binding ModifiedDateDisplay}" Classes="muted" FontSize="11" VerticalAlignment="Center"
+                             ToolTip.Tip="{Binding ModifiedDisplay}"
+                             IsVisible="{ReflectionBinding !DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}" />
+                  <TextBlock Grid.Column="3" Text="{Binding SizeDisplay}" Classes="muted" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Right" MinWidth="45" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
