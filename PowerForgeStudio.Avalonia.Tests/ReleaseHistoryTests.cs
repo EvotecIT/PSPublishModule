@@ -15,6 +15,64 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class ReleaseHistoryTests
 {
     [Fact]
+    public async Task ReleasesTabShowsOnlySelectedWorkingCopyAndClearsOpenedHistoryOnSwitch()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-project-releases-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var first = Directory.CreateDirectory(Path.Combine(root, "First")).FullName;
+            var second = Directory.CreateDirectory(Path.Combine(root, "Second")).FullName;
+            var database = new ReleaseStateDatabase(Path.Combine(root, "history.db"));
+            await database.InitializeAsync();
+            foreach (var workingCopy in new[] { first, second })
+            {
+                var item = new ReleaseQueueItem(workingCopy, Path.GetFileName(workingCopy), default, default,
+                    1, ReleaseQueueStage.Completed, ReleaseQueueItemStatus.Succeeded,
+                    "Published", "release.completed", "{}", DateTimeOffset.UtcNow);
+                await database.PersistQueueSessionAsync(ReleaseQueueSessionFactory.Create(root, [item], DateTimeOffset.UtcNow));
+            }
+
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                using var release = new ReleaseViewModel(history: new ReleaseHistoryService(database.DatabasePath));
+                using var workspace = new WorkspaceViewModel(root, release: release);
+                workspace.ActiveWorkingCopyRoot = first;
+                workspace.ShowReleaseCommand.Execute(null);
+                await release.RefreshHistoryAsync();
+                Assert.Equal(first, Assert.Single(release.History).WorkingCopy);
+                release.SelectedHistory = release.History[0];
+                Assert.True(release.CanOpenHistory);
+                await release.OpenHistoryAsync();
+                Assert.Equal(first, release.BuildRoot);
+
+                workspace.ActiveWorkingCopyRoot = second;
+                Assert.Empty(release.History);
+                Assert.Null(release.SelectedHistory);
+                Assert.False(release.CanOpenHistory);
+                Assert.Equal("Build required", release.Stage);
+                await release.RefreshHistoryAsync();
+                Assert.Equal(second, Assert.Single(release.History).WorkingCopy);
+
+                var wide = new MainWindow { DataContext = workspace, Width = 1600, Height = 1000 };
+                wide.Show();
+                try { Capture(wide, "release-project-history-wide.png"); }
+                finally { wide.Close(); }
+                var compact = new MainWindow { DataContext = workspace, Width = 1050, Height = 720 };
+                compact.Show();
+                try { Capture(compact, "release-project-history-compact.png"); }
+                finally { compact.Close(); }
+
+                await workspace.RefreshAsync();
+                Assert.Empty(release.History);
+                Assert.Equal("", release.HistoryScopeRoot);
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task ReopensChronologicalSigningPublicationAndVerificationProgress()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-history-progress-" + Guid.NewGuid().ToString("N"))).FullName;

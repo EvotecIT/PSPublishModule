@@ -34,12 +34,14 @@
       <Button Content="Cancel signing" Command="{Binding CancelSigningCommand}" IsVisible="{Binding IsSigning}" Margin="0,0,12,5" />
     </WrapPanel>
     <StackPanel Grid.Row="2" Spacing="8">
+      <TextBlock Text="{Binding HistoryScopeDisplay}" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding HistoryStatus}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
       <WrapPanel>
         <Button Content="Refresh saved releases" Command="{Binding RefreshHistoryCommand}" IsEnabled="{Binding CanBrowseHistory}" Margin="0,0,8,4" />
         <ComboBox ItemsSource="{Binding History}" SelectedItem="{Binding SelectedHistory}" Width="260" PlaceholderText="Recent releases (up to 100)" Margin="0,0,8,4">
           <ComboBox.ItemTemplate><DataTemplate x:DataType="storage:ReleaseHistoryEntry"><TextBlock Text="{Binding DisplayName}" ToolTip.Tip="{Binding WorkingCopy}" /></DataTemplate></ComboBox.ItemTemplate>
         </ComboBox>
-        <Button Content="Open saved release" Command="{Binding OpenHistoryCommand}" IsEnabled="{Binding CanBrowseHistory}" Margin="0,0,0,4" />
+        <Button Content="Open saved release" Command="{Binding OpenHistoryCommand}" IsEnabled="{Binding CanOpenHistory}" Margin="0,0,0,4" />
       </WrapPanel>
       <StackPanel IsVisible="{Binding HasUnpersistedEvidence}" Spacing="6">
         <TextBlock Text="Receipts have not been saved. Retry saving before leaving this release." TextWrapping="Wrap" Foreground="#B45309" />

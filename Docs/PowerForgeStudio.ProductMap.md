@@ -35,7 +35,7 @@ These are states within an owning surface, not additional top-level pages:
 - Changes: local branch selector, new branch field, change list, diff and commit form.
 - Build & Run: discovered contracts, reviewed plan, running progress, cancellation, artifacts and output.
 - GitHub: issues, pull requests, discussion/checks, changed-file patch, action draft and reviewed-action confirmation.
-- Releases: prepared plan, signing, destination review, publication, verification, saved history and local-save recovery.
+- Releases: prepared plan, signing, destination review, publication, verification, saved history for the selected working copy and local-save recovery. A multi-project release can appear in each participating project's history, but its shared progress is shown only in the full journal because those events cannot be assigned safely to one project.
 - Storage: filters, selected-row evidence, removal review and broken-registration prune review.
 - Packages: NuGet/Gallery filters, ID search, selected package evidence and an explicit provider-page handoff. The public snapshot does not cover private feeds or licensing.
 - Connections: catalog evidence and provider-owned configuration handoff. Secret values never appear here.

@@ -130,7 +130,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public ReleaseViewModel Release { get; }
     [ObservableProperty] private bool _isReleasePage;
     partial void OnIsReleasePageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(ShowGenericProjectContext)); OnPropertyChanged(nameof(OutputPaneHeight)); }
-    [RelayCommand] private void ShowRelease() { IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true; }
+    [RelayCommand] private void ShowRelease() { IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true; Release.SetHistoryScope(ActiveWorkingCopyRoot); }
     public GitHubViewModel GitHub { get; }
     [ObservableProperty] private bool _isGitHubPage;
     partial void OnIsGitHubPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(ShowGenericProjectContext)); OnPropertyChanged(nameof(OutputPaneHeight)); }
@@ -210,6 +210,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Changes.SetWorkingCopy(value);
         History.SetWorkingCopy(value);
         GitHub.SetWorkingCopy(value);
+        if (_sessionReady || !string.IsNullOrEmpty(value)) Release.SetHistoryScope(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
         OnPropertyChanged(nameof(SelectedFileRelativePath));
         OnPropertyChanged(nameof(CanManageFiles));
@@ -276,6 +277,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             if (!_disposed && refresh == _refreshVersion && SamePath(root, WorkspaceRoot))
             {
                 _sessionReady = true;
+                Release.SetHistoryScope(ActiveWorkingCopyRoot);
                 await RefreshActiveUtilityPageAsync();
             }
         }

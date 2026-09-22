@@ -29,7 +29,7 @@ public sealed partial class ReleaseViewModel
         OnPropertyChanged(nameof(CanPublish)); OnPropertyChanged(nameof(CanVerify));
         OnPropertyChanged(nameof(HasArtifacts)); OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));
         OnPropertyChanged(nameof(ShowPublicationDetails)); OnPropertyChanged(nameof(CanReviewPublication));
-        OnPropertyChanged(nameof(HasProtectedReleaseWork)); OnPropertyChanged(nameof(CanBrowseHistory));
+        OnPropertyChanged(nameof(HasProtectedReleaseWork)); OnPropertyChanged(nameof(CanBrowseHistory)); OnPropertyChanged(nameof(CanOpenHistory));
     }
 
     [RelayCommand]

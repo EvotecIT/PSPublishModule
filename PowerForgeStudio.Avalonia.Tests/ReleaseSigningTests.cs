@@ -44,6 +44,7 @@ public sealed class ReleaseSigningTests
             Assert.Throws<InvalidOperationException>(() => release.SetBuild(null, true, false));
             workspace.ActiveWorkingCopyRoot = Path.Combine(root, "another-project");
             Assert.Equal(root, release.BuildRoot);
+            Assert.Equal(Path.Combine(root, "another-project"), release.HistoryScopeRoot);
             if (cancel) release.CancelSigningCommand.Execute(null);
             fake.Finish.TrySetResult(); await signing;
             activeWindow.Close();

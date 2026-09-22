@@ -15,6 +15,7 @@ public sealed record ReleaseCheckpointSnapshot(ReleaseQueueSession Session,
     IReadOnlyList<ReleaseVerificationReceipt> VerificationReceipts)
 {
     public IReadOnlyList<ReleaseArtifactProgress> Progress { get; init; } = [];
+    public bool IsScopedBatch { get; init; }
 }
 
 public sealed partial class ReleaseStateDatabase

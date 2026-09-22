@@ -13,14 +13,44 @@ public sealed partial class ReleaseViewModel
     private ReleaseSigningWorkflowResult? _pendingSave;
     private ReleasePublicationWorkflowResult? _pendingPublicationSave;
     private ReleaseVerificationWorkflowResult? _pendingVerificationSave;
+    private int _historyVersion;
     public ObservableCollection<ReleaseHistoryEntry> History { get; } = [];
     [ObservableProperty] private ReleaseHistoryEntry? _selectedHistory;
+    [ObservableProperty] private string _historyScopeRoot = "";
+    [ObservableProperty] private string _historyStatus = "Refresh saved releases to inspect durable receipts.";
     [ObservableProperty] private bool _isLoadingHistory;
     [ObservableProperty] private bool _isSavingReceipts;
     [ObservableProperty] private bool _hasUnpersistedEvidence;
     [ObservableProperty] private bool _confirmDiscardReceipts;
     public bool HasProtectedReleaseWork => IsSigning || IsPublishing || IsVerifying || IsSavingReceipts || HasUnpersistedEvidence;
     public bool CanBrowseHistory => !_disposed && !HasProtectedReleaseWork && !IsPreparing && !IsLoadingHistory;
+    public bool CanOpenHistory => CanBrowseHistory && SelectedHistory is not null;
+    public string HistoryScopeDisplay => string.IsNullOrWhiteSpace(HistoryScopeRoot)
+        ? "Workspace release history" : $"Saved releases for {Path.GetFileName(HistoryScopeRoot)}";
+
+    partial void OnHistoryScopeRootChanged(string value) => OnPropertyChanged(nameof(HistoryScopeDisplay));
+    partial void OnSelectedHistoryChanged(ReleaseHistoryEntry? value) => OnPropertyChanged(nameof(CanOpenHistory));
+
+    public void SetHistoryScope(string? workingCopyRoot)
+    {
+        if (_disposed) return;
+        var root = string.IsNullOrWhiteSpace(workingCopyRoot) ? "" : Path.TrimEndingDirectorySeparator(Path.GetFullPath(workingCopyRoot));
+        if (string.Equals(root, HistoryScopeRoot,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
+        ++_historyVersion;
+        HistoryScopeRoot = root;
+        History.Clear();
+        SelectedHistory = null;
+        IsLoadingHistory = false;
+        HistoryStatus = root.Length == 0 ? "Refresh saved releases for the workspace."
+            : "Refresh saved releases for this working copy.";
+        if (HasProtectedReleaseWork || IsPreparing || !Stage.StartsWith("Saved release", StringComparison.Ordinal)) return;
+        Handoff = null; SigningResult = null; Artifacts.Clear(); Receipts.Clear();
+        ResetPublicationState(); ResetExecutionProgress();
+        BuildRoot = ""; Stage = "Build required";
+        Status = "Selected working copy changed. Open a saved release from this project's history or run a new build.";
+        NotifyReleaseState();
+    }
     partial void OnHasUnpersistedEvidenceChanged(bool value) => NotifyReleaseState();
     partial void OnIsSavingReceiptsChanged(bool value) => NotifyReleaseState();
     partial void OnIsLoadingHistoryChanged(bool value) => NotifyReleaseState();
@@ -80,26 +110,39 @@ public sealed partial class ReleaseViewModel
     public async Task RefreshHistoryAsync()
     {
         if (!CanBrowseHistory) return;
+        var version = ++_historyVersion;
+        var root = HistoryScopeRoot;
         IsLoadingHistory = true;
         try
         {
-            var entries = await Task.Run(() => _history.ListAsync());
-            if (_disposed) return;
+            var entries = root.Length == 0
+                ? await _history.ListAsync()
+                : await _history.ListForWorkingCopyAsync(root);
+            if (_disposed || version != _historyVersion) return;
             History.Clear(); foreach (var entry in entries) History.Add(entry);
+            SelectedHistory = null;
+            var scope = root.Length == 0 ? "workspace" : "working copy";
+            HistoryStatus = entries.Count == 0 ? $"No saved releases were found for this {scope}."
+                : $"{entries.Count} saved release(s) found for this {scope}.";
         }
-        catch (Exception ex) { Status = StudioOutputSanitizer.Sanitize(ex.Message); }
-        finally { IsLoadingHistory = false; }
+        catch (Exception ex) { if (!_disposed && version == _historyVersion) HistoryStatus = StudioOutputSanitizer.Sanitize(ex.Message); }
+        finally { if (version == _historyVersion) IsLoadingHistory = false; }
     }
 
     [RelayCommand]
     public async Task OpenHistoryAsync()
     {
         if (!CanBrowseHistory || SelectedHistory is not { } selected) return;
-        var version = ++_version; IsLoadingHistory = true;
+        var version = ++_version;
+        var historyVersion = _historyVersion;
+        var root = HistoryScopeRoot;
+        IsLoadingHistory = true;
         try
         {
-            var snapshot = await Task.Run(() => _history.LoadAsync(selected.SessionId));
-            if (_disposed || version != _version) return;
+            var snapshot = root.Length == 0
+                ? await _history.LoadAsync(selected.SessionId)
+                : await _history.LoadForWorkingCopyAsync(selected.SessionId, root);
+            if (_disposed || version != _version || historyVersion != _historyVersion) return;
             if (snapshot is null) { Status = "Saved release was not found."; return; }
             _candidate = null; Handoff = null; ResetPublicationState(); SigningResult = null; Artifacts.Clear(); Receipts.Clear(); ResetExecutionProgress();
             foreach (var progress in snapshot.Progress) ApplyExecutionProgress(progress);
@@ -109,12 +152,13 @@ public sealed partial class ReleaseViewModel
             foreach (var receipt in snapshot.VerificationReceipts)
                 VerificationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.Sanitize(receipt.Destination) });
             OnPropertyChanged(nameof(HasPublicationReceipts)); OnPropertyChanged(nameof(HasVerificationReceipts));
-            BuildRoot = snapshot.Session.WorkspaceRoot;
+            BuildRoot = root.Length == 0 ? snapshot.Session.WorkspaceRoot : root;
             Stage = "Saved release · " + string.Join(", ", snapshot.Session.Items.Select(x => x.StageDisplay + " / " + x.StatusDisplay));
             Status = string.Join(" ", snapshot.Session.Items.Select(x => StudioOutputSanitizer.Sanitize(x.Summary)))
+                + (snapshot.IsScopedBatch ? " This release was part of a multi-project batch; shared progress is omitted from this project view." : "")
                 + " Saved records are view-only here; start a new build for a new signing attempt.";
         }
-        catch (Exception ex) { if (!_disposed && version == _version) Status = StudioOutputSanitizer.Sanitize(ex.Message); }
-        finally { IsLoadingHistory = false; NotifyReleaseState(); }
+        catch (Exception ex) { if (!_disposed && version == _version && historyVersion == _historyVersion) Status = StudioOutputSanitizer.Sanitize(ex.Message); }
+        finally { if (historyVersion == _historyVersion) { IsLoadingHistory = false; NotifyReleaseState(); } }
     }
 }
