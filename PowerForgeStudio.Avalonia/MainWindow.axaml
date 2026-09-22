@@ -129,7 +129,7 @@
       <Border Grid.Column="4" x:Name="ContextPanel" Background="White" BorderBrush="#DDE5EF" BorderThickness="1,0,0,0" Padding="20,23">
         <Grid>
           <Grid IsVisible="{Binding !IsWorkspaceUtilityPage}">
-            <StackPanel Spacing="18" IsVisible="{Binding !IsChangesPage}">
+            <StackPanel Spacing="18" IsVisible="{Binding ShowGenericProjectContext}">
             <TextBlock Text="Selected working copy" FontWeight="SemiBold" FontSize="16" />
             <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
             <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
@@ -169,6 +169,33 @@
                 </StackPanel>
               </Border>
             </StackPanel>
+            </ScrollViewer>
+            <ScrollViewer IsVisible="{Binding IsGitHubPage}">
+              <StackPanel Spacing="12" DataContext="{Binding GitHub}">
+                <TextBlock Text="Selected GitHub item" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="Select an issue or pull request to inspect its observed state." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasSelection}" />
+                <StackPanel Spacing="12" IsVisible="{Binding HasSelection}">
+                  <TextBlock Text="{Binding Selected.Caption}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
+                  <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12" ColumnSpacing="8">
+                    <TextBlock Text="Type" Classes="muted" FontSize="12" />
+                    <TextBlock Grid.Column="1" Text="{Binding Selected.KindLabel}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="1" Text="State" Classes="muted" FontSize="12" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.State}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="2" Text="Author" Classes="muted" FontSize="12" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Author}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="3" Text="Source" Classes="muted" FontSize="12" />
+                    <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedUrl}" TextWrapping="Wrap" FontSize="11" />
+                  </Grid>
+                  <StackPanel Spacing="5" IsVisible="{Binding HasChecks}">
+                    <TextBlock Text="PR head and checks" FontWeight="SemiBold" />
+                    <SelectableTextBlock Text="{Binding HeadSha}" TextWrapping="Wrap" FontSize="11" />
+                    <TextBlock Text="{Binding ChecksStatus}" TextWrapping="Wrap" FontSize="12" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding DetailStatus}" Classes="muted" TextWrapping="Wrap" FontSize="12" />
+                  <TextBlock Text="Review the draft and captured target in the main pane before sending an action." Classes="muted" TextWrapping="Wrap" FontSize="12" />
+                </StackPanel>
+              </StackPanel>
             </ScrollViewer>
           </Grid>
           <ScrollViewer IsVisible="{Binding IsActivityPage}">

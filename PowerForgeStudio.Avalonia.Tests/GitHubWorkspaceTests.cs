@@ -206,6 +206,22 @@ public sealed class GitHubWorkspaceTests
                 Assert.NotEmpty(workspace.GitHub.Discussion);
                 Assert.Empty(workspace.GitHub.Checks);
                 Assert.Contains("denied", workspace.GitHub.ChecksStatus);
+                workspace.GitHub.ShowIssueListCommand.Execute(null);
+                await workspace.GitHub.RefreshAsync();
+                workspace.GitHub.Selected = Assert.Single(workspace.GitHub.Items);
+                await workspace.GitHub.SelectionLoad;
+                Assert.False(workspace.GitHub.HasChecks);
+                window.Width = 1600; window.Height = 1000;
+                window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                var context = Assert.Single(window.GetVisualDescendants().OfType<Border>(), border => border.Name == "ContextPanel");
+                Assert.Contains(context.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "Issue" && block.IsEffectivelyVisible);
+                Assert.DoesNotContain(context.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "PR head and checks" && block.IsEffectivelyVisible);
+                using (var issueFrame = window.CaptureRenderedFrame())
+                {
+                    Assert.NotNull(issueFrame);
+                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    if (!string.IsNullOrWhiteSpace(output)) issueFrame.Save(Path.Combine(output, "workspace-github-issue.png"), PngBitmapEncoderOptions.Default);
+                }
                 workspace.ShowFilesCommand.Execute(null);
                 Assert.True(workspace.IsFilesPage); Assert.False(workspace.IsGitHubPage);
             }

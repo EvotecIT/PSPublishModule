@@ -10,6 +10,7 @@ public sealed record GitHubItemRow(int Number, string Title, string State, strin
 {
     public string Caption => $"#{Number}  {Title}";
     public string Metadata => $"{State} · {Author ?? "Unknown author"}";
+    public string KindLabel => IsPullRequest ? "Pull request" : "Issue";
 }
 
 /// <summary>Project-scoped remote reads; generation checks reject results from prior selections.</summary>

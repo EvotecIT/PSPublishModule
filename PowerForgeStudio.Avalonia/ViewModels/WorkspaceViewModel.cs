@@ -126,7 +126,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     [RelayCommand] private void ShowRelease() { IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = false; IsReleasePage = true; }
     public GitHubViewModel GitHub { get; }
     [ObservableProperty] private bool _isGitHubPage;
-    partial void OnIsGitHubPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(OutputPaneHeight)); }
+    partial void OnIsGitHubPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(ShowGenericProjectContext)); OnPropertyChanged(nameof(OutputPaneHeight)); }
     private bool _compactViewport;
     public bool CompactViewport
     {
@@ -138,7 +138,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
-    partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(DisplayedOutput)); }
+    public bool ShowGenericProjectContext => !IsChangesPage && !IsGitHubPage;
+    partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(ShowGenericProjectContext)); OnPropertyChanged(nameof(DisplayedOutput)); }
     [ObservableProperty] private bool _isBuildPage;
     public bool IsFilesPage => !IsOverviewPage && !IsHistoryPage && !IsSettingsPage && !IsActivityPage && !IsStoragePage && !IsAutomationsPage && !IsConnectionsPage && !IsBuildPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;
     partial void OnIsBuildPageChanged(bool value)
