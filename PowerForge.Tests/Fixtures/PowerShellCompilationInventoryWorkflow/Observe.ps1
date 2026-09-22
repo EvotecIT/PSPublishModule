@@ -36,3 +36,27 @@ foreach($command in 'Get-ComputerDisk','Get-ComputerWindowsFeatures','Get-Comput
     [pscustomobject]@{command=$command;phase='downstream-stop-reuse';stopped=$stopped;reused=$reused;
         trace=@(& $module { $script:InventoryTrace.ToArray() })} | ConvertTo-Json -Depth 8 -Compress
 }
+foreach($command in 'cpu','device','ram','startup') {
+    foreach($items in @(@{values=@()},@{values=@(1,2)})) {
+        foreach($fault in 'none','error','throw') {
+            foreach($all in $false,$true) {
+                foreach($extended in $false,$true) {
+                    & $module { param($items,$fault) $script:InventoryItems=$items;$script:InventoryFault=$fault;$script:InventoryTrace.Clear() } $items.values $fault
+                    $errors=@();$caught=$null;$records=@()
+                    try {
+                        $records=@(switch($command) {
+                            cpu { Get-ComputerCPU -ComputerName fixture -All:$all -ErrorVariable errors 2>$null }
+                            device { Get-ComputerDevice -ComputerName fixture -All:$all -Extended:$extended -ErrorVariable errors 2>$null }
+                            ram { Get-ComputerRAM -ComputerName fixture -All:$all -Extended:$extended -ErrorVariable errors 2>$null }
+                            startup { Get-ComputerStartup -ComputerName fixture -All:$all -ErrorVariable errors 2>$null }
+                        })
+                    } catch { $caught=$_.FullyQualifiedErrorId }
+                    [pscustomobject]@{command=$command;count=$items.values.Count;fault=$fault;all=$all;extended=$extended;
+                        records=$records;recordTypes=@($records | ForEach-Object { $_.GetType().FullName });
+                        errors=@($errors | ForEach-Object { $_.FullyQualifiedErrorId });caught=$caught;
+                        trace=@(& $module { $script:InventoryTrace.ToArray() })} | ConvertTo-Json -Depth 8 -Compress
+                }
+            }
+        }
+    }
+}
