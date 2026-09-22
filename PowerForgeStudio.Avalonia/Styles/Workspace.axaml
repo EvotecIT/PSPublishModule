@@ -45,6 +45,8 @@
   <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#5C6B82" /></Style>
   <Style Selector="TextBlock.heading"><Setter Property="FontSize" Value="23" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Foreground" Value="#111B30" /></Style>
   <Style Selector="Border.card"><Setter Property="Background" Value="White" /><Setter Property="BorderBrush" Value="#D9E3F0" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="7" /></Style>
+  <Style Selector="Border.releaseStep"><Setter Property="Background" Value="#F3F7FD" /><Setter Property="BorderBrush" Value="#D9E3F0" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="6" /><Setter Property="Padding" Value="8,7" /></Style>
+  <Style Selector="TextBlock.releaseStepText"><Setter Property="Foreground" Value="#41536D" /><Setter Property="FontSize" Value="12" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="TextAlignment" Value="Center" /><Setter Property="TextTrimming" Value="CharacterEllipsis" /></Style>
   <Style Selector="TreeViewItem">
     <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
     <Setter Property="Padding" Value="0" />

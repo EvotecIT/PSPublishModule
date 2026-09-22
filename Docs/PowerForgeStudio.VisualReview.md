@@ -71,8 +71,22 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] The project tree prioritizes Build and Docs at working-copy roots; Storage evidence is aligned in the inspector, and compact Storage can scroll through the complete table above a shorter output dock.
 - [x] Activity source cards now fit on one row; compact Activity keeps provider state visible while showing the first actionable rows without scrolling.
 - [x] Overview names the page separately from the selected project and keeps the full working-copy path copyable without letting it dominate compact layout.
+- [x] Releases now shows the captured checkpoint state above a compact five-stage guide, keeps artifact paths secondary, and emphasizes the action available at that checkpoint.
 - [ ] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.
 - [ ] Capture final native Windows and headless evidence after the last visual change.
 
-The fresh renders show the remaining gap clearly: several page headings and data cards are still visually sparse beside the concepts, and inspectors outside Storage still repeat labels. Compact Storage has a checked scroll path to its lower rows, and compact Activity shows its first actionable items. Preserve the accurate source and safety information while tightening those layouts. Do not replace these gaps with image-only decorations or unimplemented controls.
+The 1600 × 1000 renders have now been compared with all eight concepts. The runtime captures are test fixtures, so their project names and counts differ from the illustrative designs. Compact Release, Activity and Storage were also inspected; the other compact routes still need a final side-by-side pass.
+
+| Pattern | Current rendering | Remaining visual work |
+|---|---|---|
+| Workspace and files | The tree, file list, preview, tabs and output dock use the shared shell. | Give the selected file a more useful context panel; avoid repeating a long path in several places. |
+| Overview | Identity, observed products, entrypoints and prerequisites form readable cards. | Tighten card density and reduce the generic context panel. Do not invent recent activity or tool health. |
+| Changes and history | Branch actions, changed paths, patch and commit form are present. | Improve patch readability and use the context panel for the selected change rather than generic working-copy labels. |
+| Build & Run | Validated contracts and reviewed local actions are visible before execution. | Make source, intent, progress and artifacts easier to scan without hiding the trust boundary or raw-output access. |
+| Releases | The captured state, available action and artifacts are clear at wide and compact sizes. | Group publication controls and receipts by stage; do not imply that a destination was published until a receipt exists. |
+| Project GitHub | Issues, PR details, checks, files and reviewed actions are functional. | Use the context panel for selected item evidence, and reduce the empty space in the list/detail split. |
+| Activity catalog | Source availability, counts, filters, actionable rows and evidence remain visible. | Keep the compact inspector readable when provider explanations are long. |
+| Storage | Measured sizes, candidate rows and guarded evidence align closely with the reference. | Keep long paths and safety explanations readable at compact width. |
+
+The shared right panel is still generic on several project routes, even when the center surface already has selected-item detail. That is the largest shell-level mismatch left. Preserve source and safety information while changing its placement; do not fill the panel with illustrative values or controls that have no owner.

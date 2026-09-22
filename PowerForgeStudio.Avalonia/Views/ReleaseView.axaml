@@ -1,19 +1,37 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:publish="using:PowerForgeStudio.Domain.Publish" xmlns:verify="using:PowerForgeStudio.Domain.Verification" xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing"
+             xmlns:publish="using:PowerForgeStudio.Domain.Publish" xmlns:verify="using:PowerForgeStudio.Domain.Verification" xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing" xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.ReleaseView" x:DataType="vm:ReleaseViewModel">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-  <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="16">
-    <StackPanel Spacing="8">
-      <TextBlock Text="Release workspace" FontSize="22" FontWeight="SemiBold" />
-      <TextBlock Text="Captured build working copy" Classes="muted" FontSize="12" />
-      <SelectableTextBlock Text="{Binding BuildRoot}" TextWrapping="Wrap" />
-      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+  <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
+    <StackPanel Spacing="12">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <controls:NavigationIcon Kind="review" Width="26" Height="26" Ink="#0865FF" VerticalAlignment="Center" />
+        <TextBlock Text="Releases" Classes="heading" />
+      </StackPanel>
+      <TextBlock Text="Prepare, sign, publish and verify artifacts from the captured build." Classes="muted" TextWrapping="Wrap" />
+      <Border Classes="card" Padding="14">
+        <StackPanel Spacing="7">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <TextBlock Text="Current state" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{Binding Stage}" FontWeight="SemiBold" TextWrapping="Wrap" />
+          </Grid>
+          <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+          <TextBlock Text="Captured working copy" Classes="muted" FontSize="11" />
+          <SelectableTextBlock Text="{Binding BuildRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BuildRoot}" FontSize="11" />
+        </StackPanel>
+      </Border>
+      <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
+        <Border Grid.Column="0" Classes="releaseStep"><TextBlock Text="1  Prepare" Classes="releaseStepText" /></Border>
+        <Border Grid.Column="1" Classes="releaseStep"><TextBlock Text="2  Sign" Classes="releaseStepText" /></Border>
+        <Border Grid.Column="2" Classes="releaseStep"><TextBlock Text="3  Publish" Classes="releaseStepText" /></Border>
+        <Border Grid.Column="3" Classes="releaseStep"><TextBlock Text="4  Verify" Classes="releaseStepText" /></Border>
+        <Border Grid.Column="4" Classes="releaseStep"><TextBlock Text="5  History" Classes="releaseStepText" /></Border>
+      </Grid>
     </StackPanel>
     <WrapPanel Grid.Row="1">
-      <Button Content="Prepare built artifacts" Command="{Binding PrepareCommand}" IsEnabled="{Binding CanPrepare}" Background="#0865FF" Foreground="White" Margin="0,0,16,5" />
-      <Button Content="Sign artifacts" Command="{Binding SignCommand}" IsEnabled="{Binding CanSign}" Margin="0,0,12,5" />
+      <Button Content="Prepare built artifacts" Command="{Binding PrepareCommand}" IsEnabled="{Binding CanPrepare}" Classes.primary="{Binding EmphasizePrepare}" Margin="0,0,12,5" />
+      <Button Content="Sign artifacts" Command="{Binding SignCommand}" IsEnabled="{Binding CanSign}" Classes.primary="{Binding CanSign}" Margin="0,0,12,5" />
       <Button Content="Cancel signing" Command="{Binding CancelSigningCommand}" IsVisible="{Binding IsSigning}" Margin="0,0,12,5" />
-      <TextBlock Text="{Binding Stage}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,0,5" />
     </WrapPanel>
     <StackPanel Grid.Row="2" Spacing="8">
       <WrapPanel>
@@ -35,14 +53,14 @@
       <ListBox Grid.Row="1" IsVisible="{Binding HasArtifacts}" MaxHeight="200" ItemsSource="{Binding Artifacts}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="domain:ReleaseSigningArtifact">
-            <StackPanel Spacing="6" Margin="8">
-              <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding ArtifactPath}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ArtifactPath}" FontSize="12" />
-              <StackPanel Orientation="Horizontal" Spacing="12">
-                <TextBlock Text="{Binding AdapterKind}" Foreground="#0865FF" FontSize="12" />
-                <TextBlock Text="{Binding ArtifactKind}" Classes="muted" FontSize="12" />
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="3" Margin="8,5">
+              <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7">
+                <TextBlock Text="{Binding AdapterKind}" Foreground="#0865FF" FontSize="11" />
+                <TextBlock Text="{Binding ArtifactKind}" Classes="muted" FontSize="11" />
               </StackPanel>
-            </StackPanel>
+              <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding ArtifactPath}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ArtifactPath}" FontSize="11" Classes="muted" />
+            </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>

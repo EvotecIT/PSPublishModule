@@ -25,7 +25,7 @@ public sealed partial class ReleaseViewModel
     }
     private void NotifyReleaseState()
     {
-        OnPropertyChanged(nameof(CanInspectPublication)); OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(CanSign));
+        OnPropertyChanged(nameof(CanInspectPublication)); OnPropertyChanged(nameof(CanPrepare)); OnPropertyChanged(nameof(EmphasizePrepare)); OnPropertyChanged(nameof(CanSign));
         OnPropertyChanged(nameof(CanPublish)); OnPropertyChanged(nameof(CanVerify));
         OnPropertyChanged(nameof(HasArtifacts)); OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));
         OnPropertyChanged(nameof(HasProtectedReleaseWork)); OnPropertyChanged(nameof(CanBrowseHistory));

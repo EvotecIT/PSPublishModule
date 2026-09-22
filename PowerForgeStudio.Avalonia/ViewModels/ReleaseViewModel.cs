@@ -25,6 +25,7 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
     [ObservableProperty] private string _status = "Complete a build, then prepare its release artifacts here.";
     [ObservableProperty] private string _stage = "Build required";
     public bool CanPrepare => !_disposed && !IsPreparing && !HasProtectedReleaseWork && !IsLoadingHistory && !RequiresRebuild && SigningResult?.Succeeded != true && _candidate?.Succeeded == true;
+    public bool EmphasizePrepare => CanPrepare && !HasHandoff;
     public bool HasHandoff => Handoff is not null;
     partial void OnIsPreparingChanged(bool value) => NotifyReleaseState();
 
