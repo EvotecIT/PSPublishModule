@@ -50,7 +50,7 @@
         <Button Content="Discard unsaved receipts" Command="{Binding DiscardUnsavedReceiptsCommand}" IsEnabled="{Binding ConfirmDiscardReceipts}" />
       </StackPanel>
     </StackPanel>
-    <Border Grid.Row="3" Classes="card" Padding="14">
+    <Border Grid.Row="5" Classes="card" Padding="14">
       <StackPanel Spacing="9">
         <WrapPanel ItemSpacing="10">
           <TextBlock Text="Published on GitHub" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -129,7 +129,7 @@
         </ListBox.ItemTemplate>
       </ListBox>
     </Grid>
-    <StackPanel Grid.Row="5" Spacing="8" IsVisible="{Binding ShowPublicationDetails}">
+    <StackPanel Grid.Row="3" Spacing="8" IsVisible="{Binding ShowPublicationDetails}">
       <TextBlock Text="Publication destinations" FontSize="16" FontWeight="SemiBold" />
       <WrapPanel>
         <Button Content="Inspect publication targets" Command="{Binding InspectPublicationCommand}" IsVisible="{Binding CanInspectPublication}" Margin="0,0,8,4" />
