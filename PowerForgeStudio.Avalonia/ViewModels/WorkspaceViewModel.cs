@@ -37,7 +37,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Automations = new AutomationsViewModel(automations);
         Connections = new ConnectionsViewModel(connections);
         Packages = new PackagesViewModel(packages);
-        Activity = new ActivityViewModel(activity);
+        Activity = new ActivityViewModel(activity, OpenActivityReleaseAsync);
         Overview = new ProjectOverviewViewModel(overview);
         History = new ProjectHistoryViewModel(history);
         Settings = new SettingsViewModel(stateStore as IWorkspaceRootCatalogService, stateStore as IWorkspacePreferenceService);

@@ -68,6 +68,8 @@
         <Button Content="Releases" Classes="chip" Classes.active="{Binding IsReleasesFilter}" Command="{Binding ShowReleasesCommand}" />
         <Button Content="Schedules" Classes="chip" Classes.active="{Binding IsSchedulesFilter}" Command="{Binding ShowSchedulesCommand}" />
         <Button Content="Muted · session" Classes="chip" Classes.active="{Binding IsMutedFilter}" Command="{Binding ShowMutedCommand}" />
+        <Button Content="Open selected release" Command="{Binding OpenSelectedReleaseCommand}"
+                IsVisible="{Binding CanOpenSelectedRelease}" />
       </WrapPanel>
 
       <Border Classes="card" Padding="0" MinHeight="300">

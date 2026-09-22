@@ -22,6 +22,8 @@ The desktop app stores machine-local state under `%LOCALAPPDATA%\PowerForgeStudi
 - `release-history.db` for durable release sessions and receipts
 - `file-recovery\...` for Studio-managed file recovery
 
+Activity > Releases includes recent saved release checkpoints from that local journal, scoped to the current workspace. Select a journal row and choose **Open selected release** to inspect its project Releases tab and saved receipts. Failed or waiting checkpoints also appear in Needs attention; completed checkpoints remain in Releases and All activity. Opening history is read-only and does not publish again.
+
 ## Local developer usage
 
 ### Validate Studio

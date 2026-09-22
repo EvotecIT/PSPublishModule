@@ -4,16 +4,95 @@ using PowerForge;
 using PowerForgeStudio.Domain.Activity;
 using PowerForgeStudio.Domain.Automation;
 using PowerForgeStudio.Domain.Hub;
+using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Orchestrator.Activity;
 using PowerForgeStudio.Orchestrator.Automation;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Hub;
 using PowerForgeStudio.Orchestrator.Portfolio;
+using PowerForgeStudio.Orchestrator.Queue;
+using PowerForgeStudio.Orchestrator.Storage;
 
 namespace PowerForgeStudio.Tests;
 
 public sealed class PowerForgeStudioActivityInventoryTests
 {
+    [Fact]
+    public async Task InspectAsync_TracksSavedReleaseStatesInsideSelectedWorkspace()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-activity-journal-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var repository = Directory.CreateDirectory(Path.Combine(root, "SampleProject")).FullName;
+            Directory.CreateDirectory(Path.Combine(repository, "Build"));
+            await File.WriteAllTextAsync(Path.Combine(repository, "Build", "Build-Project.ps1"), "throw 'must not run'");
+            Assert.True((await new GitClient().RunRawAsync(repository, ["init", "-b", "main"])).Succeeded);
+            var databasePath = Path.Combine(root, "history.db");
+            var database = new ReleaseStateDatabase(databasePath);
+            await database.InitializeAsync();
+            var now = DateTimeOffset.UtcNow;
+            await database.PersistQueueSessionAsync(ReleaseQueueSessionFactory.Create(root,
+                [QueueItem(repository, "SampleProject", ReleaseQueueStage.Completed, ReleaseQueueItemStatus.Succeeded, now.AddMinutes(-2))], now.AddMinutes(-2)));
+            await database.PersistQueueSessionAsync(ReleaseQueueSessionFactory.Create(root,
+                [QueueItem(repository, "SampleProject", ReleaseQueueStage.Publish, ReleaseQueueItemStatus.Failed, now.AddMinutes(-1))], now.AddMinutes(-1)));
+            var outside = root + "-outside";
+            await database.PersistQueueSessionAsync(ReleaseQueueSessionFactory.Create(outside,
+                [QueueItem(outside, "Outside", ReleaseQueueStage.Completed, ReleaseQueueItemStatus.Succeeded, now)], now));
+
+            using var http = new HttpClient(new StubHttpMessageHandler(_ => throw new InvalidOperationException("No HTTP expected.")))
+                { BaseAddress = new Uri("https://api.github.com") };
+            using var service = new WorkspaceActivityInventoryService(
+                new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
+                new GitHubInboxService(http, new StubGitRemoteResolver(null)),
+                new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
+                new FakeAutomationInventory(), new FakeGitHubProjectService(), new ReleaseHistoryService(databasePath));
+
+            var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(0, 0, 100));
+            var journal = snapshot.Entries.Where(entry => entry.Provider == "Release journal").ToArray();
+            Assert.Equal(2, journal.Length);
+            Assert.Contains(journal, entry => entry.State == "Failed" && entry.IsActionable && entry.Severity == "Critical");
+            Assert.Contains(journal, entry => entry.State == "Succeeded" && !entry.IsActionable && entry.Severity == "Information");
+            Assert.All(journal, entry => Assert.Equal(repository, entry.Source));
+            Assert.Equal("Available", Assert.Single(snapshot.Sources, source => source.Provider == "Local workspace").State);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    private static ReleaseQueueItem QueueItem(string root, string name, ReleaseQueueStage stage,
+        ReleaseQueueItemStatus status, DateTimeOffset observed)
+        => new(root, name, default, default, 1, stage, status,
+            status == ReleaseQueueItemStatus.Failed ? "Publication failed." : "Release completed.",
+            "release.test", "{}", observed);
+
+    [Fact]
+    public async Task InspectAsync_UnreadableJournalKeepsWorkspaceSignalsAndMarksPartialEvidence()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-activity-journal-error-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var repository = Directory.CreateDirectory(Path.Combine(root, "SampleProject")).FullName;
+            Directory.CreateDirectory(Path.Combine(repository, "Build"));
+            await File.WriteAllTextAsync(Path.Combine(repository, "Build", "Build-Project.ps1"), "throw 'must not run'");
+            await File.WriteAllTextAsync(Path.Combine(root, "history.db"), "invalid database");
+            using var http = new HttpClient(new StubHttpMessageHandler(_ => throw new InvalidOperationException("No HTTP expected.")))
+                { BaseAddress = new Uri("https://api.github.com") };
+            using var service = new WorkspaceActivityInventoryService(
+                new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
+                new GitHubInboxService(http, new StubGitRemoteResolver(null)),
+                new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
+                new FakeAutomationInventory(), new FakeGitHubProjectService(),
+                new ReleaseHistoryService(Path.Combine(root, "history.db")));
+
+            var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(0, 0, 100));
+            Assert.Equal("Partial", Assert.Single(snapshot.Sources, source => source.Provider == "Local workspace").State);
+            Assert.DoesNotContain(snapshot.Entries, entry => entry.Provider == "Release journal");
+            Assert.Equal(1, snapshot.RepositoryCount);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public async Task InspectAsync_ProjectsOwnerEvidenceWithoutRunningBuildScript()
     {
@@ -31,7 +110,7 @@ public sealed class PowerForgeStudioActivityInventoryTests
             using var service = new WorkspaceActivityInventoryService(
                 new RepositoryCatalogScanner(), new RepositoryPortfolioService(), inbox,
                 new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
-                new FakeAutomationInventory(), new FakeGitHubProjectService());
+                new FakeAutomationInventory(), new FakeGitHubProjectService(), new ReleaseHistoryService(Path.Combine(root, "history.db")));
 
             var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(4, 3, 50));
 
@@ -72,7 +151,7 @@ public sealed class PowerForgeStudioActivityInventoryTests
                 new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
                 new GitHubInboxService(http, new StubGitRemoteResolver(null)),
                 new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
-                new FailingAutomationInventory(), new FakeGitHubProjectService());
+                new FailingAutomationInventory(), new FakeGitHubProjectService(), new ReleaseHistoryService(Path.Combine(root, "history.db")));
 
             var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(0, 0, 50));
 
@@ -102,7 +181,7 @@ public sealed class PowerForgeStudioActivityInventoryTests
                 new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
                 new GitHubInboxService(http, new BlockingGitRemoteResolver()),
                 new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
-                new FakeAutomationInventory(), new FakeGitHubProjectService());
+                new FakeAutomationInventory(), new FakeGitHubProjectService(), new ReleaseHistoryService(Path.Combine(root, "history.db")));
 
             var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(1, 1, 50, 1));
 
@@ -136,7 +215,7 @@ public sealed class PowerForgeStudioActivityInventoryTests
                 new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
                 new GitHubInboxService(http, new StubGitRemoteResolver("https://github.com/EvotecIT/SampleProject.git")),
                 new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
-                new FakeAutomationInventory(), new FakeGitHubProjectService(statusCode));
+                new FakeAutomationInventory(), new FakeGitHubProjectService(statusCode), new ReleaseHistoryService(Path.Combine(root, "history.db")));
 
             var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(1, 1, 50, 5));
 

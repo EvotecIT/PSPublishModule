@@ -17,7 +17,7 @@ The left rail is workspace-wide. Project tabs are scoped to the selected working
 | Project | Build & Run | Inspect configuration, plan intent, execute and cancel | Build planning/execution services |
 | Project | GitHub | Issues, pull requests, checks, discussion, changed files and explicitly reviewed item actions for this repository | GitHub project services |
 | Project | Releases | Prepare, sign, publish, verify, recover and reopen durable receipts | Durable release workflows |
-| Workspace | Activity | Cross-project readiness, releases, reviews, CI and schedules needing attention | Activity inventory |
+| Workspace | Activity | Cross-project readiness, saved release checkpoints, reviews, CI and schedules needing attention | Activity inventory and durable release journal |
 | Workspace | GitHub | The Activity catalog prefiltered to cross-project GitHub evidence | Activity inventory |
 | Workspace | Automations | Provider-owned schedules and workflow definitions | Automation inventory |
 | Workspace | Storage | Measured working copies, cleanup candidates and guarded removal review | Storage inspection/removal services |
@@ -36,6 +36,7 @@ These are states within an owning surface, not additional top-level pages:
 - Build & Run: discovered contracts, reviewed plan, running progress, cancellation, artifacts and output.
 - GitHub: issues, pull requests, discussion/checks, changed-file patch, action draft and reviewed-action confirmation.
 - Releases: prepared plan, signing, destination review, publication, verification, saved history for the selected working copy and local-save recovery. A multi-project release can appear in each participating project's history, but its shared progress is shown only in the full journal because those events cannot be assigned safely to one project.
+- Activity: recent saved release states appear under Releases alongside readiness signals. Selecting a journal row can open its exact checkpoint in the project's Releases tab when that working copy remains available inside the workspace. Completed rows are history, while failed or waiting rows remain attention signals.
 - Storage: filters, selected-row evidence, removal review and broken-registration prune review.
 - Packages: NuGet/Gallery filters, ID search, selected package evidence and an explicit provider-page handoff. The public snapshot does not cover private feeds or licensing.
 - Connections: catalog evidence and provider-owned configuration handoff. Secret values never appear here.

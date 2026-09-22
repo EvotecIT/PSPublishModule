@@ -6,7 +6,10 @@ using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Orchestrator.Automation;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Hub;
+using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Portfolio;
+using PowerForgeStudio.Orchestrator.Storage;
+using PowerForgeStudio.Domain.Queue;
 
 namespace PowerForgeStudio.Orchestrator.Activity;
 
@@ -22,6 +25,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
     private readonly RepositoryReleaseDriftService _releaseDrift;
     private readonly RepositoryReleaseInboxService _releaseInbox;
     private readonly IWorkspaceAutomationInventoryService _automations;
+    private readonly IReleaseHistoryService _releaseHistory;
     private readonly IGitHubProjectService _gitHubProjects;
     private readonly bool _ownsGitHubServices;
 
@@ -34,6 +38,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
             new RepositoryReleaseInboxService(),
             new WorkspaceAutomationInventoryService(),
             new GitHubProjectService(),
+            new ReleaseHistoryService(PowerForgeStudioHostPaths.GetReleaseHistoryDatabasePath()),
             ownsGitHubServices: true)
     {
     }
@@ -46,6 +51,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         RepositoryReleaseInboxService releaseInbox,
         IWorkspaceAutomationInventoryService automations,
         IGitHubProjectService gitHubProjects,
+        IReleaseHistoryService releaseHistory,
         bool ownsGitHubServices = false)
     {
         _catalog = catalog;
@@ -54,6 +60,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         _releaseDrift = releaseDrift;
         _releaseInbox = releaseInbox;
         _automations = automations;
+        _releaseHistory = releaseHistory;
         _gitHubProjects = gitHubProjects;
         _ownsGitHubServices = ownsGitHubServices;
     }
@@ -74,6 +81,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         var inspectedAt = DateTimeOffset.UtcNow;
 
         var automationTask = InspectAutomationsSafelyAsync(root, cancellationToken);
+        var journalTask = InspectReleaseJournalSafelyAsync(root, cancellationToken);
         var entries = await Task.Run(() => _catalog.Scan(root), cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var managed = entries.Where(static entry => entry.IsReleaseManaged).ToArray();
@@ -102,10 +110,15 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         enriched = _releaseDrift.PopulateReleaseDrift(enriched);
 
         var activity = BuildPortfolioEntries(enriched, inspectedAt);
+        var journal = await journalTask.ConfigureAwait(false);
+        activity.AddRange(BuildReleaseJournalEntries(journal.Entries));
         var sources = new List<WorkspaceActivitySourceState>
         {
-            new("Local workspace", "Available", activity.Count(static entry => entry.Provider == "PowerForge portfolio"), inspectedAt,
-                $"Inspected {managed.Length} release-managed repositories without running build scripts.")
+            new("Local workspace", journal.Available ? "Available" : "Partial",
+                activity.Count(static entry => entry.Provider is "PowerForge portfolio" or "Release journal"), inspectedAt,
+                $"Inspected {managed.Length} release-managed repositories without running build scripts. " +
+                (journal.Available ? $"Read {journal.Entries.Count} saved release item(s) from the local journal."
+                    : "The local release journal could not be read; saved history may be missing."))
         };
 
         GitHubIssueResult gitHub;
@@ -188,6 +201,46 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
             }
         }
         return result;
+    }
+
+    private async Task<ReleaseJournalInspection> InspectReleaseJournalSafelyAsync(string root, CancellationToken token)
+    {
+        try
+        {
+            var entries = await _releaseHistory.ListForWorkspaceAsync(root, cancellationToken: token).ConfigureAwait(false);
+            return new ReleaseJournalInspection(entries, true);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return new ReleaseJournalInspection([], false);
+        }
+    }
+
+    private static IEnumerable<WorkspaceActivityEntry> BuildReleaseJournalEntries(
+        IReadOnlyList<WorkspaceReleaseJournalEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            var severity = entry.Status switch
+            {
+                ReleaseQueueItemStatus.Failed => "Critical",
+                ReleaseQueueItemStatus.Blocked or ReleaseQueueItemStatus.WaitingApproval or ReleaseQueueItemStatus.ReadyToRun => "Warning",
+                _ => "Information"
+            };
+            var detail = StudioOutputSanitizer.Sanitize(entry.Summary);
+            if (detail.Length > 1000) detail = detail[..1000] + "…";
+            yield return new WorkspaceActivityEntry(
+                $"journal:{entry.SessionId}:{NormalizeId(entry.WorkingCopy)}",
+                string.IsNullOrWhiteSpace(entry.RepositoryName) ? Path.GetFileName(entry.WorkingCopy) : entry.RepositoryName,
+                "Release", severity, entry.Status.ToString(), $"Saved release · {entry.Stage}", detail,
+                "Release journal", entry.UpdatedAtUtc, entry.WorkingCopy,
+                Directory.Exists(entry.WorkingCopy) ? entry.WorkingCopy : null,
+                severity != "Information") { ReleaseSessionId = entry.SessionId };
+        }
     }
 
     private async Task<GitHubIssueResult> BuildIssueEntriesAsync(
@@ -366,4 +419,8 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
     private sealed record AutomationInspectionResult(
         WorkspaceAutomationSnapshot Snapshot,
         IReadOnlyList<WorkspaceActivitySourceState> Sources);
+
+    private sealed record ReleaseJournalInspection(
+        IReadOnlyList<WorkspaceReleaseJournalEntry> Entries,
+        bool Available);
 }

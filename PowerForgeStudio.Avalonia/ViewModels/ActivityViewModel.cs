@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Activity;
 using PowerForgeStudio.Orchestrator.Activity;
+using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
@@ -11,16 +12,19 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
 {
     private readonly IWorkspaceActivityInventoryService _inventory;
     private readonly bool _ownsInventory;
+    private readonly Func<WorkspaceActivityEntry, Task>? _openRelease;
     private readonly List<WorkspaceActivityEntry> _allEntries = [];
     private readonly HashSet<string> _mutedIds = new(StringComparer.Ordinal);
     private WorkspaceActivityOptions _options = new();
     private CancellationTokenSource? _refreshCancellation;
     private int _refreshVersion;
 
-    public ActivityViewModel(IWorkspaceActivityInventoryService? inventory = null)
+    public ActivityViewModel(IWorkspaceActivityInventoryService? inventory = null,
+        Func<WorkspaceActivityEntry, Task>? openRelease = null)
     {
         _ownsInventory = inventory is null;
         _inventory = inventory ?? new WorkspaceActivityInventoryService();
+        _openRelease = openRelease;
     }
 
     public ObservableCollection<WorkspaceActivityEntry> Entries { get; } = [];
@@ -47,13 +51,18 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
     public bool HasMuted => MutedCount > 0;
     public int UnavailableSourceCount => Sources.Count(static source => source.IsUnavailable);
     public bool CanOpenSelected => SelectedEntry is { OpenTarget: { Length: > 0 } target } && IsSafeOpenTarget(target);
+    public bool CanOpenSelectedRelease => _openRelease is not null &&
+        SelectedEntry is { ReleaseSessionId: { Length: > 0 }, Source: { Length: > 0 } source } &&
+        Directory.Exists(source) && IsSafeOpenTarget(source);
     public bool CanMuteSelected => SelectedEntry is not null && !_mutedIds.Contains(SelectedEntry.Id);
 
     partial void OnSelectedEntryChanged(WorkspaceActivityEntry? value)
     {
         OnPropertyChanged(nameof(CanOpenSelected));
+        OnPropertyChanged(nameof(CanOpenSelectedRelease));
         OnPropertyChanged(nameof(CanMuteSelected));
         OpenSelectedCommand.NotifyCanExecuteChanged();
+        OpenSelectedReleaseCommand.NotifyCanExecuteChanged();
         MuteSelectedCommand.NotifyCanExecuteChanged();
     }
 
@@ -192,6 +201,14 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanOpenSelectedRelease))]
+    private async Task OpenSelectedReleaseAsync()
+    {
+        if (!CanOpenSelectedRelease || SelectedEntry is not { } selected || _openRelease is null) return;
+        try { await _openRelease(selected); }
+        catch (Exception ex) { Output = "Could not open the saved release: " + StudioDisplayError.From(ex); }
+    }
+
     private void ApplyFilter()
     {
         var selectedId = SelectedEntry?.Id;
@@ -233,11 +250,8 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         if (!File.Exists(target) && !Directory.Exists(target)) return false;
         var fullTarget = Path.TrimEndingDirectorySeparator(Path.GetFullPath(target));
         var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(WorkspaceRoot));
+        if (!WorkspacePathContainment.ContainsOrEquals(fullRoot, fullTarget)) return false;
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var contained = string.Equals(fullTarget, fullRoot, comparison)
-                        || fullTarget.StartsWith(fullRoot + Path.DirectorySeparatorChar, comparison)
-                        || fullTarget.StartsWith(fullRoot + Path.AltDirectorySeparatorChar, comparison);
-        if (!contained) return false;
         try
         {
             var current = Directory.Exists(fullTarget) ? fullTarget : Path.GetDirectoryName(fullTarget);

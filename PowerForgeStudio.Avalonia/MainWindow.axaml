@@ -330,7 +330,7 @@
               <TextBlock Text="Observed" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.ObservedDisplay}" />
               <TextBlock Text="Source" Classes="muted" />
-              <TextBlock Text="{Binding SelectedEntry.SourceDisplay}" FontSize="11" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SelectedEntry.SourceDisplay}" ToolTip.Tip="{Binding SelectedEntry.Source}" FontSize="11" TextWrapping="Wrap" />
               <Button Content="Open source" Command="{Binding OpenSelectedCommand}" IsEnabled="{Binding CanOpenSelected}" />
               <Button Content="Hide for this session" Command="{Binding MuteSelectedCommand}" IsEnabled="{Binding CanMuteSelected}" />
               <Button Content="Restore hidden items" Command="{Binding RestoreMutedCommand}" IsVisible="{Binding HasMuted}" />

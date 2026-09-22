@@ -31,6 +31,9 @@ public sealed class ReleaseHistoryScopeTests
             for (var index = 0; index < 101; index++)
                 await database.PersistQueueSessionAsync(ReleaseQueueSessionFactory.Create(workspace,
                     [Item(second, "Second", 1)], old.AddMinutes(index + 1)));
+            var outside = workspace + "-other";
+            await database.PersistQueueSessionAsync(ReleaseQueueSessionFactory.Create(outside,
+                [Item(outside, "Outside", 1)], DateTimeOffset.UtcNow));
 
             var history = new ReleaseHistoryService(databasePath);
             Assert.DoesNotContain(await history.ListAsync(), entry => entry.SessionId == batch.SessionId);
@@ -46,6 +49,14 @@ public sealed class ReleaseHistoryScopeTests
             Assert.Empty(project.Progress);
             Assert.Equal(2, (await history.LoadAsync(batch.SessionId))!.PublishReceipts.Count);
             Assert.Null(await history.LoadForWorkingCopyAsync(batch.SessionId, workspace));
+
+            var workspaceEntries = await history.ListForWorkspaceAsync(workspace, 200);
+            Assert.Equal(103, workspaceEntries.Count);
+            Assert.DoesNotContain(workspaceEntries, entry => entry.WorkingCopy == outside);
+            Assert.Contains(workspaceEntries, entry => entry.SessionId == batch.SessionId && entry.WorkingCopy == first);
+            Assert.Equal(2, (await history.ListForWorkspaceAsync(workspace, 2)).Count);
+            Assert.Contains(await history.ListForWorkspaceAsync(Path.GetPathRoot(workspace)!, 200),
+                entry => entry.SessionId == batch.SessionId && entry.WorkingCopy == first);
         }
         finally { Directory.Delete(workspace, recursive: true); }
     }

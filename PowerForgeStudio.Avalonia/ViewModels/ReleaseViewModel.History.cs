@@ -130,9 +130,13 @@ public sealed partial class ReleaseViewModel
     }
 
     [RelayCommand]
-    public async Task OpenHistoryAsync()
+    public Task OpenHistoryAsync() => SelectedHistory is { } selected
+        ? OpenHistorySessionAsync(selected.SessionId) : Task.CompletedTask;
+
+    /// <summary>Opens an exact journal session, including one older than the recent-history picker.</summary>
+    public async Task OpenHistorySessionAsync(string sessionId)
     {
-        if (!CanBrowseHistory || SelectedHistory is not { } selected) return;
+        if (!CanBrowseHistory || string.IsNullOrWhiteSpace(sessionId)) return;
         var version = ++_version;
         var historyVersion = _historyVersion;
         var root = HistoryScopeRoot;
@@ -140,10 +144,20 @@ public sealed partial class ReleaseViewModel
         try
         {
             var snapshot = root.Length == 0
-                ? await _history.LoadAsync(selected.SessionId)
-                : await _history.LoadForWorkingCopyAsync(selected.SessionId, root);
+                ? await _history.LoadAsync(sessionId)
+                : await _history.LoadForWorkingCopyAsync(sessionId, root);
             if (_disposed || version != _version || historyVersion != _historyVersion) return;
             if (snapshot is null) { Status = "Saved release was not found."; return; }
+            var selected = History.FirstOrDefault(entry => entry.SessionId == sessionId);
+            if (selected is null)
+            {
+                selected = new ReleaseHistoryEntry(sessionId, root.Length == 0 ? snapshot.Session.WorkspaceRoot : root,
+                    snapshot.Session.CreatedAtUtc);
+                History.Insert(0, selected);
+                if (History.Count > 100) History.RemoveAt(History.Count - 1);
+                HistoryStatus = "Opened a saved release outside the 100 most recently created sessions.";
+            }
+            SelectedHistory = selected;
             _candidate = null; Handoff = null; ResetPublicationState(); SigningResult = null; Artifacts.Clear(); Receipts.Clear(); ResetExecutionProgress();
             foreach (var progress in snapshot.Progress) ApplyExecutionProgress(progress);
             foreach (var receipt in snapshot.SigningReceipts) Receipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary) });

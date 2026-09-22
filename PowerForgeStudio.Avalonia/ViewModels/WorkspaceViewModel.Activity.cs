@@ -1,5 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PowerForgeStudio.Domain.Activity;
+using PowerForgeStudio.Orchestrator.Explorer;
+using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
@@ -47,6 +50,22 @@ public sealed partial class WorkspaceViewModel
         if (gitHubOnly) Activity.ShowGitHubCommand.Execute(null);
         else Activity.ShowAttentionCommand.Execute(null);
         if (!hasCurrentEvidence) await Activity.RefreshAsync();
+    }
+
+    private async Task OpenActivityReleaseAsync(WorkspaceActivityEntry entry)
+    {
+        if (_disposed || Release.HasProtectedReleaseWork || string.IsNullOrWhiteSpace(entry.ReleaseSessionId)) return;
+        var workspace = WorkspaceRoot;
+        var workingCopy = Path.TrimEndingDirectorySeparator(Path.GetFullPath(entry.Source));
+        if (!Directory.Exists(workingCopy) || !WorkspacePathContainment.ContainsOrEquals(workspace, workingCopy))
+            throw new InvalidOperationException("The saved release working copy is no longer available in this workspace.");
+
+        await SelectAsync(new ExplorerNode(Path.GetFileName(workingCopy), workingCopy, "branch", workingCopy));
+        if (_disposed || !SamePath(workspace, WorkspaceRoot) || !SamePath(workingCopy, ActiveWorkingCopyRoot)) return;
+        ShowReleaseCommand.Execute(null);
+        await Release.RefreshHistoryAsync();
+        if (_disposed || !IsReleasePage || !SamePath(workingCopy, ActiveWorkingCopyRoot)) return;
+        await Release.OpenHistorySessionAsync(entry.ReleaseSessionId);
     }
 
     private Task RefreshActiveUtilityPageAsync()

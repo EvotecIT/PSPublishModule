@@ -6,12 +6,75 @@ using PowerForge;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Avalonia.Views;
 using PowerForgeStudio.Domain.Activity;
+using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Orchestrator.Activity;
+using PowerForgeStudio.Orchestrator.Queue;
+using PowerForgeStudio.Orchestrator.Storage;
 
 namespace PowerForgeStudio.Avalonia.Tests;
 
 public sealed class WorkspaceActivityTests
 {
+    [Fact]
+    public async Task SavedReleaseActivityOpensItsProjectCheckpointInStudio()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-activity-release-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root, "SampleProject")).FullName;
+            Assert.True((await new GitClient().RunRawAsync(project, ["init", "-b", "main"])).Succeeded);
+            var database = new ReleaseStateDatabase(Path.Combine(root, "history.db"));
+            await database.InitializeAsync();
+            var observed = DateTimeOffset.UtcNow;
+            var created = observed.AddDays(-2);
+            var item = new ReleaseQueueItem(project, "SampleProject", default, default, 1,
+                ReleaseQueueStage.Completed, ReleaseQueueItemStatus.Succeeded,
+                "Release completed.", "release.completed", "{}", observed);
+            var session = ReleaseQueueSessionFactory.Create(root, [item], created);
+            await database.PersistQueueSessionAsync(session);
+            for (var index = 0; index < 101; index++)
+            {
+                var newer = created.AddMinutes(index + 1);
+                await database.PersistQueueSessionAsync(ReleaseQueueSessionFactory.Create(root,
+                    [item with { UpdatedAtUtc = newer }], newer));
+            }
+            var activityEntry = new WorkspaceActivityEntry("journal:" + session.SessionId, "SampleProject", "Release",
+                "Information", "Succeeded", "Saved release · Completed", "Release completed.",
+                "Release journal", observed, project, project, false) { ReleaseSessionId = session.SessionId };
+
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                using var release = new ReleaseViewModel(history: new ReleaseHistoryService(database.DatabasePath));
+                using var workspace = new WorkspaceViewModel(root, activity: new JournalActivityInventory(activityEntry), release: release);
+                await workspace.RefreshAsync();
+                await workspace.ShowActivityCommand.ExecuteAsync(null);
+                workspace.Activity.ShowReleasesCommand.Execute(null);
+                workspace.Activity.SelectedEntry = Assert.Single(workspace.Activity.Entries);
+                Assert.True(workspace.Activity.CanOpenSelectedRelease);
+
+                var wide = new MainWindow { DataContext = workspace, Width = 1600, Height = 1000 };
+                wide.Show();
+                try { Capture(wide, "activity-saved-release-wide.png"); }
+                finally { wide.Close(); }
+                var compact = new MainWindow { DataContext = workspace, Width = 1050, Height = 720 };
+                compact.Show();
+                try { Capture(compact, "activity-saved-release-compact.png"); }
+                finally { compact.Close(); }
+
+                await workspace.Activity.OpenSelectedReleaseCommand.ExecuteAsync(null);
+                Assert.True(workspace.IsReleasePage);
+                Assert.Equal(project, workspace.ActiveWorkingCopyRoot);
+                Assert.Equal(project, release.BuildRoot);
+                Assert.StartsWith("Saved release", release.Stage, StringComparison.Ordinal);
+                Assert.Equal(session.SessionId, release.SelectedHistory?.SessionId);
+                Assert.Contains("outside the 100", release.HistoryStatus, StringComparison.Ordinal);
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void OpenSource_AllowsWorkspacePathsAndGitHubButRejectsOtherLocalPaths()
     {
@@ -19,16 +82,23 @@ public sealed class WorkspaceActivityTests
         var outside = Path.GetTempFileName();
         try
         {
-            using var model = new ActivityViewModel(new FakeActivityInventory());
+            using var model = new ActivityViewModel(new FakeActivityInventory(), _ => Task.CompletedTask);
             model.SetWorkspace(root);
             model.SelectedEntry = OpenEntry("inside", root);
             Assert.True(model.CanOpenSelected);
+            model.SelectedEntry = OpenEntry("release-inside", root) with { ReleaseSessionId = "saved-session" };
+            Assert.True(model.CanOpenSelectedRelease);
             model.SelectedEntry = OpenEntry("github", "https://github.com/EvotecIT/PSPublishModule/issues/1");
             Assert.True(model.CanOpenSelected);
             model.SelectedEntry = OpenEntry("outside", outside);
             Assert.False(model.CanOpenSelected);
+            model.SelectedEntry = OpenEntry("release-outside", outside) with { ReleaseSessionId = "saved-session" };
+            Assert.False(model.CanOpenSelectedRelease);
             model.SelectedEntry = OpenEntry("other-host", "https://example.com/item");
             Assert.False(model.CanOpenSelected);
+            model.SetWorkspace(Path.GetPathRoot(root)!);
+            model.SelectedEntry = OpenEntry("release-under-root", root) with { ReleaseSessionId = "saved-session" };
+            Assert.True(model.CanOpenSelectedRelease);
         }
         finally
         {
@@ -205,6 +275,15 @@ public sealed class WorkspaceActivityTests
         private static WorkspaceActivityEntry Entry(string id, string project, string kind, string severity, string state,
             string title, string detail, string provider, DateTimeOffset observed, string? target, bool actionable = true)
             => new(id, project, kind, severity, state, title, detail, provider, observed, target ?? provider, target, actionable);
+    }
+
+    private sealed class JournalActivityInventory(WorkspaceActivityEntry entry) : IWorkspaceActivityInventoryService
+    {
+        public Task<WorkspaceActivitySnapshot> InspectAsync(string workspaceRoot,
+            WorkspaceActivityOptions? options = null, CancellationToken cancellationToken = default)
+            => Task.FromResult(new WorkspaceActivitySnapshot(DateTimeOffset.UtcNow, [entry],
+                [new WorkspaceActivitySourceState("Local workspace", "Available", 1, DateTimeOffset.UtcNow,
+                    "One saved release was observed.")], 1, 1));
     }
 
     private sealed class ControlledActivityInventory : IWorkspaceActivityInventoryService

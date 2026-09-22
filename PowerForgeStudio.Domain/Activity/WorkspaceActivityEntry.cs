@@ -15,6 +15,9 @@ public sealed record WorkspaceActivityEntry(
     string? OpenTarget,
     bool IsActionable)
 {
+    /// <summary>Local release checkpoint to open inside the selected working copy, when this row comes from the journal.</summary>
+    public string? ReleaseSessionId { get; init; }
+
     public bool NeedsAttention => Severity is "Critical" or "Warning";
 
     public bool IsCritical => Severity == "Critical";
@@ -25,7 +28,9 @@ public sealed record WorkspaceActivityEntry(
 
     public string ObservedDisplay => ObservedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 
-    public string SourceDisplay => string.IsNullOrWhiteSpace(Source) ? Provider : Source;
+    public string SourceDisplay => string.IsNullOrWhiteSpace(Source) ? Provider
+        : ReleaseSessionId is not null ? $"Working copy · {Path.GetFileName(Path.TrimEndingDirectorySeparator(Source))}"
+        : Source;
 }
 
 /// <summary>Freshness and availability for an owner contributing to Activity.</summary>
