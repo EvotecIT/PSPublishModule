@@ -1,9 +1,11 @@
 using System.Net;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using PowerForgeStudio.Avalonia.Controls;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Orchestrator.Hub;
@@ -196,6 +198,17 @@ public sealed class GitHubWorkspaceTests
                     using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
                     var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
                     if (!string.IsNullOrWhiteSpace(output)) frame.Save(Path.Combine(output, compact ? "workspace-pr-files-compact.png" : "workspace-pr-files.png"), PngBitmapEncoderOptions.Default);
+                    if (compact)
+                    {
+                        var pageScroll = Assert.Single(window.GetVisualDescendants().OfType<ScrollViewer>(),
+                            viewer => viewer.Name == "FilesPageScroll");
+                        Assert.True(pageScroll.Extent.Height - pageScroll.Viewport.Height > 100);
+                        Assert.True(Assert.Single(window.GetVisualDescendants().OfType<DiffPreview>()).Bounds.Height >= 250);
+                        pageScroll.Offset = new Vector(0, pageScroll.Extent.Height - pageScroll.Viewport.Height);
+                        window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var scrolledFrame = window.CaptureRenderedFrame(); Assert.NotNull(scrolledFrame);
+                        if (!string.IsNullOrWhiteSpace(output)) scrolledFrame.Save(Path.Combine(output, "workspace-pr-files-compact-scrolled.png"), PngBitmapEncoderOptions.Default);
+                    }
                 }
                 workspace.GitHub.SelectedChangedFile = workspace.GitHub.ChangedFiles[1];
                 Assert.Contains("binary", workspace.GitHub.PatchNotice);

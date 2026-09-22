@@ -1,6 +1,10 @@
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
+using PowerForgeStudio.Avalonia.Controls;
 using PowerForge;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Domain.Hub;
@@ -110,6 +114,12 @@ public sealed class ProjectHistoryTests
                     window.Width = 1050;
                     window.Height = 720;
                     Capture(window, "project-history-compact.png");
+                    var pageScroll = Assert.Single(window.GetVisualDescendants().OfType<ScrollViewer>(),
+                        viewer => viewer.Name == "HistoryPageScroll");
+                    Assert.True(pageScroll.Extent.Height - pageScroll.Viewport.Height > 100);
+                    Assert.True(Assert.Single(window.GetVisualDescendants().OfType<DiffPreview>()).Bounds.Height >= 250);
+                    pageScroll.Offset = new Vector(0, pageScroll.Extent.Height - pageScroll.Viewport.Height);
+                    Capture(window, "project-history-compact-scrolled.png");
                 }
                 finally { window.Close(); }
                 return true;

@@ -17,7 +17,10 @@
       <ComboBox ItemsSource="{Binding States}" SelectedItem="{Binding StateFilter, Mode=TwoWay}" Width="100" Margin="0,0,8,4" ToolTip.Tip="GitHub state filter" />
       <Button Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" Background="#0865FF" Foreground="White" Margin="0,0,0,4" />
     </WrapPanel>
-    <views:GitHubFilesView Grid.Row="2" IsVisible="{Binding IsFilesReview}" />
+    <ScrollViewer x:Name="FilesPageScroll" Grid.Row="2" IsVisible="{Binding IsFilesReview}"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <views:GitHubFilesView MinHeight="520" Height="{Binding #FilesPageScroll.Bounds.Height}" />
+    </ScrollViewer>
     <Grid Grid.Row="2" ColumnDefinitions="2*,5,3*" IsVisible="{Binding !IsFilesReview}">
       <ListBox x:Name="GitHubItems" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected, Mode=TwoWay}" Background="#F7F9FC">
         <ListBox.ItemTemplate>

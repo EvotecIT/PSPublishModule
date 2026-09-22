@@ -1,5 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Hub"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Hub" xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.GitHubFilesView" x:DataType="vm:GitHubViewModel">
   <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
     <WrapPanel>
@@ -29,10 +29,8 @@
           <TextBlock Text="{Binding PreviousFilePath}" TextWrapping="Wrap" Classes="muted" FontSize="12" />
           <TextBlock Text="{Binding PatchNotice}" TextWrapping="Wrap" Foreground="#98620C" FontSize="12" />
         </StackPanel>
-        <Border Grid.Row="1" Background="#F7F9FC" Padding="10">
-          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <SelectableTextBlock Text="{Binding PatchPreview}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
-          </ScrollViewer>
+        <Border Grid.Row="1" BorderBrush="#DCE3ED" BorderThickness="1" ClipToBounds="True">
+          <controls:DiffPreview Text="{Binding PatchPreview}" />
         </Border>
       </Grid>
     </Grid>

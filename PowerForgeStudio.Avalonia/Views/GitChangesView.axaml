@@ -1,5 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
+             xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.GitChangesView" x:DataType="vm:GitChangesViewModel">
   <Grid Margin="18">
   <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -44,10 +44,8 @@
         </ListBox.ItemTemplate>
       </ListBox>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
-      <Border Grid.Column="2" Background="#F7F9FC" BorderBrush="#DCE3ED" BorderThickness="1" Padding="10">
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-          <SelectableTextBlock Text="{Binding Diff}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="13" LineHeight="17" />
-        </ScrollViewer>
+      <Border Grid.Column="2" BorderBrush="#DCE3ED" BorderThickness="1">
+        <controls:DiffPreview Text="{Binding Diff}" />
       </Border>
     </Grid>
     <StackPanel Grid.Row="4" Spacing="8">
