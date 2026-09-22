@@ -92,7 +92,7 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-      <Border Classes="card" Padding="14">
+      <Border Classes="card" Padding="14" IsVisible="{Binding ShowTaskSection}">
         <StackPanel Spacing="10">
           <TextBlock Text="Project tasks" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="{Binding TaskCatalogStatus}" Classes="muted" TextWrapping="Wrap" />

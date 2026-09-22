@@ -12,6 +12,26 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class ProjectTaskTests
 {
     [Fact]
+    public async Task InvalidTaskConfigurationRemainsVisibleAfterInspection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-task-invalid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Build"));
+        await File.WriteAllTextAsync(Path.Combine(root, "Build", "powerforge.tasks.json"),
+            """{ "SchemaVersion": 1, "Tasks": [{ "Id": "broken", "Name": "Broken", "Executable": "dotnet", "TimeoutSecounds": 30 }] }""");
+        try
+        {
+            using var model = new BuildViewModel();
+            model.SetWorkingCopy(root);
+            Assert.False(model.ShowTaskSection);
+            await model.PlanAsync();
+            Assert.True(model.HasTaskConfigurationError);
+            Assert.True(model.ShowTaskSection);
+            Assert.Contains("unsupported property", model.TaskCatalogStatus);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task ProjectTaskAndReleasePreparationBlockEachOther()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-task-interlock-" + Guid.NewGuid().ToString("N"));
@@ -73,6 +93,7 @@ public sealed class ProjectTaskTests
                 await model.PlanAsync();
                 Assert.False(model.CanBuild);
                 var task = Assert.Single(model.Tasks);
+                Assert.True(model.ShowTaskSection);
                 Assert.Equal("sdk", task.Id);
                 Assert.Contains("Project tasks are ready", model.Status);
 

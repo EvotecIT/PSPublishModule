@@ -21,8 +21,10 @@ public sealed partial class BuildViewModel
     [ObservableProperty] private string _taskRoot = "";
     [ObservableProperty] private bool _isTaskRunning;
     [ObservableProperty] private bool _hasDetectedBuildContract;
+    [ObservableProperty] private bool _hasTaskConfigurationError;
 
     public bool HasTasks => Tasks.Count > 0;
+    public bool ShowTaskSection => HasTasks || HasTaskConfigurationError;
     public bool ShowBuildContractSection => !HasTasks || HasDetectedBuildContract;
     public bool HasSelectedTask => SelectedTask is not null;
     public bool HasSelectedTaskDescription => !string.IsNullOrWhiteSpace(SelectedTask?.Description);
@@ -53,6 +55,7 @@ public sealed partial class BuildViewModel
 
     partial void OnTaskRootChanged(string value) => OnPropertyChanged(nameof(HasTaskRun));
     partial void OnHasDetectedBuildContractChanged(bool value) => OnPropertyChanged(nameof(ShowBuildContractSection));
+    partial void OnHasTaskConfigurationErrorChanged(bool value) => OnPropertyChanged(nameof(ShowTaskSection));
 
     partial void OnIsTaskRunningChanged(bool value)
     {
@@ -65,7 +68,9 @@ public sealed partial class BuildViewModel
     {
         Tasks.Clear();
         SelectedTask = null;
+        HasTaskConfigurationError = false;
         OnPropertyChanged(nameof(HasTasks));
+        OnPropertyChanged(nameof(ShowTaskSection));
         OnPropertyChanged(nameof(ShowBuildContractSection));
         if (!IsTaskRunning) TaskCatalogStatus = "Inspect this working copy to discover local tasks.";
     }
@@ -78,6 +83,7 @@ public sealed partial class BuildViewModel
             if (_disposed || version != _contextVersion) return;
             foreach (var task in catalog.Tasks) Tasks.Add(task);
             OnPropertyChanged(nameof(HasTasks));
+            OnPropertyChanged(nameof(ShowTaskSection));
             OnPropertyChanged(nameof(ShowBuildContractSection));
             TaskCatalogStatus = catalog.Tasks.Count == 0
                 ? "No local tasks declared. Add Build/powerforge.tasks.json to this working copy."
@@ -87,7 +93,10 @@ public sealed partial class BuildViewModel
         catch (Exception ex)
         {
             if (!_disposed && version == _contextVersion)
+            {
+                HasTaskConfigurationError = true;
                 TaskCatalogStatus = $"Project tasks could not be loaded: {StudioOutputSanitizer.Sanitize(ex.Message)}";
+            }
         }
     }
 

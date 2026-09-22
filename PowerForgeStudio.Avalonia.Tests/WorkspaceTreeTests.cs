@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using System.ComponentModel;
 using PowerForge;
 using PowerForgeStudio.Avalonia.ViewModels;
 
@@ -83,6 +84,7 @@ public sealed class WorkspaceTreeTests
                     var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
                     if (!string.IsNullOrEmpty(output))
                     {
+                        Directory.CreateDirectory(output);
                         frame.Save(Path.Combine(output, "workspace-tree.png"), PngBitmapEncoderOptions.Default);
                         window.Width = 1050;
                         window.Height = 720;
@@ -124,6 +126,62 @@ public sealed class WorkspaceTreeTests
                     }
                     model.ToggleOutputPaneCommand.Execute(null);
                     Assert.Equal(170, model.OutputPaneHeight.Value);
+                    async Task CapturePopulatedRouteAsync(string name, Func<Task> open, Func<bool> isActive)
+                    {
+                        await open();
+                        Assert.True(isActive(), $"{name} did not become the active page.");
+                        foreach (var compact in new[] { false, true })
+                        {
+                            window.Width = compact ? 1050 : 1600;
+                            window.Height = compact ? 720 : 1000;
+                            window.UpdateLayout();
+                            Dispatcher.UIThread.RunJobs();
+                            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                            using var routeFrame = window.CaptureRenderedFrame();
+                            Assert.NotNull(routeFrame);
+                            if (!string.IsNullOrEmpty(output))
+                                routeFrame.Save(Path.Combine(output, $"integrated-{name}{(compact ? "-compact" : "")}.png"), PngBitmapEncoderOptions.Default);
+                        }
+                    }
+
+                    async Task WaitForEvidenceAsync(INotifyPropertyChanged source, Func<bool> ready)
+                    {
+                        if (ready()) return;
+                        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        PropertyChangedEventHandler? handler = null;
+                        handler = (_, _) => { if (ready()) completion.TrySetResult(); };
+                        source.PropertyChanged += handler;
+                        try
+                        {
+                            if (!ready()) await completion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                        }
+                        finally { source.PropertyChanged -= handler; }
+                    }
+
+                    await CapturePopulatedRouteAsync("overview", () => model.ShowOverviewCommand.ExecuteAsync(null), () => model.IsOverviewPage);
+                    await CapturePopulatedRouteAsync("changes", async () =>
+                    {
+                        model.ShowChangesCommand.Execute(null);
+                        await WaitForEvidenceAsync(model.Changes, () => !model.Changes.IsLoading && model.Changes.Files.Count > 0);
+                        model.Changes.Selected = model.Changes.Files[0];
+                        await WaitForEvidenceAsync(model.Changes, () => !model.Changes.Diff.StartsWith("Loading change", StringComparison.Ordinal));
+                    }, () => model.IsChangesPage);
+                    await CapturePopulatedRouteAsync("history", async () =>
+                    {
+                        await model.ShowHistoryCommand.ExecuteAsync(null);
+                        Assert.NotNull(model.History.SelectedCommit);
+                        await WaitForEvidenceAsync(model.History, () => !model.History.IsDetailLoading);
+                    }, () => model.IsHistoryPage);
+                    await CapturePopulatedRouteAsync("build", () => { model.ShowBuildCommand.Execute(null); return Task.CompletedTask; }, () => model.IsBuildPage);
+                    Assert.False(model.Build.ShowTaskSection);
+                    await CapturePopulatedRouteAsync("releases", () => { model.ShowReleaseCommand.Execute(null); return Task.CompletedTask; }, () => model.IsReleasePage);
+                    await CapturePopulatedRouteAsync("github", () => { model.ShowGitHubCommand.Execute(null); return Task.CompletedTask; }, () => model.IsGitHubPage);
+                    await CapturePopulatedRouteAsync("activity", () => model.ShowActivityCommand.ExecuteAsync(null), () => model.IsActivityPage);
+                    await CapturePopulatedRouteAsync("storage", () => model.ShowStorageCommand.ExecuteAsync(null), () => model.IsStoragePage);
+                    model.ShowFilesCommand.Execute(null);
+                    window.Width = 1600;
+                    window.Height = 1000;
+                    window.UpdateLayout();
                     window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
                     window.KeyRelease(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
                     Assert.True(window.FindControl<TextBox>("QuickProjectSearchBox")!.IsFocused);
