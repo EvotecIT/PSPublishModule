@@ -114,6 +114,54 @@ public sealed partial class WorkspaceRootCatalogService
         });
     }
 
+    private void PersistRecentRoots(IReadOnlyList<string> recentRoots)
+    {
+        // Forget changes only the recent-root registration. Copy all other JSON values as-is so
+        // future nested profile, preference and explorer fields survive this older host.
+        var temporary = _catalogPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var input = new FileStream(_catalogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var document = JsonDocument.Parse(input))
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                    throw new JsonException("The workspace catalog must contain a JSON object.");
+                using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+                {
+                    writer.WriteStartObject();
+                    var wroteRecent = false;
+                    var wroteUpdated = false;
+                    foreach (var property in document.RootElement.EnumerateObject())
+                    {
+                        if (property.Name.Equals("recentWorkspaceRoots", StringComparison.OrdinalIgnoreCase))
+                        {
+                            writer.WritePropertyName(property.Name);
+                            JsonSerializer.Serialize(writer, recentRoots);
+                            wroteRecent = true;
+                        }
+                        else if (property.Name.Equals("updatedAtUtc", StringComparison.OrdinalIgnoreCase))
+                        {
+                            writer.WriteString(property.Name, DateTimeOffset.UtcNow);
+                            wroteUpdated = true;
+                        }
+                        else property.WriteTo(writer);
+                    }
+                    if (!wroteRecent)
+                    {
+                        writer.WritePropertyName("recentWorkspaceRoots");
+                        JsonSerializer.Serialize(writer, recentRoots);
+                    }
+                    if (!wroteUpdated) writer.WriteString("updatedAtUtc", DateTimeOffset.UtcNow);
+                    writer.WriteEndObject();
+                }
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, _catalogPath, overwrite: true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
     private void WriteDocument(WorkspaceRootCatalogDocument document)
     {
         var temporary = _catalogPath + "." + Guid.NewGuid().ToString("N") + ".tmp";

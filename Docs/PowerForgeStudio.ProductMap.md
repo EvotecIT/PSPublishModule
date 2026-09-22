@@ -42,6 +42,7 @@ These are states within an owning surface, not additional top-level pages:
 - Storage: filters, selected-row evidence, removal review and broken-registration prune review.
 - Packages: NuGet/Gallery filters, ID search, selected package evidence and an explicit provider-page handoff. A public NuGet or PSGallery release receipt can open its package ID in this view. The receipt keeps the exact ID and version captured before publication; the public snapshot reports only its latest version and package-wide downloads. Use the saved verification receipt to assess delivery of the exact version. Private feeds and licensing are outside this snapshot.
 - Connections: catalog evidence and provider-owned configuration handoff. Secret values never appear here.
+- Settings: recent workspace roots can be forgotten without deleting their directory or saved explorer state. The active root and any root used by a retained profile are protected. Unsaved preference drafts must be resolved before a catalog change.
 
 Dialogs are used only when the operator must confirm a target, resolve a collision, choose what happens to unsaved work, or authorize a destructive/external effect. GitHub comments, issue state changes and PR reviews show the captured item state or exact PR head before submission. Merge and branch deletion remain in the repository settlement workflow. A successful read or simple navigation does not need a dialog.
 

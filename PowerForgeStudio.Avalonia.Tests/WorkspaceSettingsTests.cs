@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PowerForge;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Avalonia.Views;
@@ -20,8 +21,10 @@ public sealed class WorkspaceSettingsTests
         var fixture = Path.Combine(Path.GetTempPath(), "studio-settings-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(fixture, "Workspace");
         var repository = Path.Combine(workspace, "PowerForge.Sample");
+        var oldWorkspace = Path.Combine(fixture, "OldWorkspace");
         var catalogPath = Path.Combine(fixture, "workspace-roots.json");
         Directory.CreateDirectory(repository);
+        Directory.CreateDirectory(oldWorkspace);
         try
         {
             var readme = Path.Combine(repository, "README.md");
@@ -29,6 +32,10 @@ public sealed class WorkspaceSettingsTests
             Assert.True((await new GitClient().RunRawAsync(repository, ["init", "-b", "main"])).Succeeded);
 
             var store = new WorkspaceRootCatalogService(catalogPath);
+            var oldFile = Path.Combine(oldWorkspace, "keep.txt");
+            await File.WriteAllTextAsync(oldFile, "keep");
+            store.SaveActive(oldWorkspace);
+            store.SaveActive(workspace);
             var reference = new WorkspaceDocumentReference(repository, readme);
             store.SaveSession(workspace, [reference], reference, []);
             store.SaveProfile(new WorkspaceProfile(
@@ -63,6 +70,9 @@ public sealed class WorkspaceSettingsTests
                 Assert.Equal(initial, model.Settings.SavedPreferences);
                 Assert.Equal("Daily release", Assert.Single(model.Settings.WorkspaceProfiles).DisplayName);
                 Assert.Equal("Release reference", Assert.Single(model.Settings.WorkspaceProfileTemplates).DisplayName);
+                Assert.Equal(2, model.Settings.WorkspaceRoots.Count);
+                Assert.Equal("Active", Assert.Single(model.Settings.WorkspaceRoots, root => root.Path == workspace).State);
+                Assert.True(Assert.Single(model.Settings.WorkspaceRoots, root => root.Path == oldWorkspace).CanForget);
                 Assert.True(model.Settings.HasWorkspaceProfiles);
                 Assert.True(model.Settings.HasWorkspaceProfileTemplates);
                 model.ShowSettingsCommand.Execute(null);
@@ -119,7 +129,33 @@ public sealed class WorkspaceSettingsTests
                 model.ShowSettingsCommand.Execute(null);
                 var window = new MainWindow { DataContext = model, Width = 1600, Height = 1000 };
                 window.Show();
-                try { Capture(window, "settings-workspace.png"); }
+                try
+                {
+                    Capture(window, "settings-workspace.png");
+                    window.Width = 1050; window.Height = 720;
+                    Capture(window, "settings-workspace-with-root-compact.png");
+                    window.Width = 1600; window.Height = 1000;
+                    var forgetButton = Assert.Single(window.GetVisualDescendants().OfType<Button>(),
+                        button => button.IsVisible && Equals(button.Content, "Forget"));
+                    Assert.NotNull(forgetButton.Command);
+                    var oldRoot = Assert.Single(model.Settings.WorkspaceRoots, root => root.Path == oldWorkspace);
+                    Assert.Same(oldRoot, forgetButton.CommandParameter);
+                    Assert.True(forgetButton.IsEnabled);
+                    model.Settings.IsSaving = true;
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.False(forgetButton.IsEffectivelyEnabled);
+                    Assert.All(window.GetVisualDescendants().OfType<NumericUpDown>(), control => Assert.False(control.IsEffectivelyEnabled));
+                    model.Settings.IsSaving = false;
+                    model.Settings.ActivityMaxEntries++;
+                    Assert.False(model.Settings.ForgetRootCommand.CanExecute(oldRoot));
+                    model.Settings.DiscardChangesCommand.Execute(null);
+                    Assert.True(model.Settings.ForgetRootCommand.CanExecute(oldRoot));
+                    await model.Settings.ForgetRootCommand.ExecuteAsync(oldRoot);
+                    Assert.Single(model.Settings.WorkspaceRoots);
+                    Assert.Equal("keep", await File.ReadAllTextAsync(oldFile));
+                    Assert.DoesNotContain(oldWorkspace, store.Load(workspace).RecentWorkspaceRoots);
+                    Capture(window, "settings-workspace-forgotten.png");
+                }
                 finally { await CloseAndWaitAsync(window); }
 
                 var compact = new MainWindow { DataContext = model, Width = 1050, Height = 720 };

@@ -19,7 +19,7 @@
         <Button Content="Diagnostics" Classes="chip" Classes.active="{Binding IsDiagnosticsSection}" Command="{Binding ShowDiagnosticsCommand}" />
       </WrapPanel>
 
-      <StackPanel Spacing="14" IsVisible="{Binding IsGeneralSection}">
+      <StackPanel Spacing="14" IsVisible="{Binding IsGeneralSection}" IsEnabled="{Binding !IsSaving}">
         <Border Classes="card" Padding="18">
           <StackPanel Spacing="12">
             <TextBlock Text="Restore behavior" FontSize="16" FontWeight="SemiBold" />
@@ -37,17 +37,26 @@
         </Border>
       </StackPanel>
 
-      <StackPanel Spacing="14" IsVisible="{Binding IsWorkspaceSection}">
+      <StackPanel Spacing="14" IsVisible="{Binding IsWorkspaceSection}" IsEnabled="{Binding !IsSaving}">
         <Border Classes="card" Padding="18">
           <StackPanel Spacing="10">
             <TextBlock Text="Workspace roots" FontSize="16" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding WorkspaceRoot}" Foreground="#0865FF" TextWrapping="Wrap" />
             <ItemsControl ItemsSource="{Binding WorkspaceRoots}">
               <ItemsControl.ItemTemplate>
-                <DataTemplate><Border Background="#F6F8FC" CornerRadius="5" Padding="10" Margin="0,3"><TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" /></Border></DataTemplate>
+                <DataTemplate x:DataType="vm:WorkspaceRootRow">
+                  <Border Background="#F6F8FC" CornerRadius="5" Padding="10" Margin="0,3">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                      <TextBlock Text="{Binding Path}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" Text="{Binding State}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                      <Button Grid.Column="2" Content="Forget" ToolTip.Tip="Remove this recent entry; keep its directory and files"
+                              Command="{ReflectionBinding DataContext.ForgetRootCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              CommandParameter="{Binding}" IsVisible="{Binding CanForget}" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock Text="This milestone displays registered recent roots. Removing or regrouping roots will be added with an explicit registration-only review; no filesystem action is implied." Classes="muted" TextWrapping="Wrap" />
+            <TextBlock Text="Forget removes a recent entry from this machine's list. It does not delete its directory, files or saved explorer state. Active workspaces and roots used by retained profiles stay listed." Classes="muted" TextWrapping="Wrap" />
           </StackPanel>
         </Border>
 

@@ -58,6 +58,40 @@ public sealed partial class WorkspaceRootCatalogService : IWorkspaceRootCatalogS
         return normalized;
     }
 
+    public WorkspaceRootCatalog ForgetRecentRoot(string workspaceRoot, string fallbackWorkspaceRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fallbackWorkspaceRoot);
+        using var writeLock = AcquireWriteLock();
+
+        var existing = LoadDocument(strict: true);
+        var catalog = NormalizeCatalog(
+            activeWorkspaceRoot: existing?.ActiveWorkspaceRoot,
+            fallbackWorkspaceRoot: fallbackWorkspaceRoot,
+            recentWorkspaceRoots: existing?.RecentWorkspaceRoots,
+            activeProfileId: existing?.ActiveProfileId,
+            profiles: existing?.Profiles,
+            templates: existing?.Templates,
+            preferences: existing?.Preferences);
+        var target = PowerForgeStudioHostPaths.NormalizeWorkspaceRoot(workspaceRoot);
+        if (PathComparer.Equals(target, catalog.ActiveWorkspaceRoot))
+            throw new InvalidOperationException("The active workspace cannot be forgotten. Switch to another workspace first.");
+        if (catalog.Profiles.Any(profile => PathComparer.Equals(target, profile.WorkspaceRoot)))
+            throw new InvalidOperationException("A retained profile uses this workspace. Remove or change that profile before forgetting its root.");
+        if (!catalog.RecentWorkspaceRoots.Contains(target, PathComparer)) return catalog;
+
+        var normalized = NormalizeCatalog(
+            activeWorkspaceRoot: catalog.ActiveWorkspaceRoot,
+            fallbackWorkspaceRoot: fallbackWorkspaceRoot,
+            recentWorkspaceRoots: catalog.RecentWorkspaceRoots.Where(root => !PathComparer.Equals(root, target)).ToArray(),
+            activeProfileId: catalog.ActiveProfileId,
+            profiles: catalog.Profiles,
+            templates: catalog.Templates,
+            preferences: catalog.Preferences);
+        PersistRecentRoots(normalized.RecentWorkspaceRoots);
+        return normalized;
+    }
+
     public WorkspaceRootCatalog SaveProfile(WorkspaceProfile profile, string? activeProfileId = null)
     {
         using var writeLock = AcquireWriteLock();

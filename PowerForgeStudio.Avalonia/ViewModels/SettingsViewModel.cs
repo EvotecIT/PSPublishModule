@@ -15,6 +15,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IWorkspacePreferenceService? _preferences;
     private bool _applying;
     private int _saveVersion;
+    private int _draftVersion;
 
     public SettingsViewModel(IWorkspaceRootCatalogService? catalog, IWorkspacePreferenceService? preferences)
     {
@@ -26,7 +27,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         OperatingSystemDescription = RuntimeInformation.OSDescription;
     }
 
-    public ObservableCollection<string> WorkspaceRoots { get; } = [];
+    public ObservableCollection<WorkspaceRootRow> WorkspaceRoots { get; } = [];
     public ObservableCollection<WorkspaceProfile> WorkspaceProfiles { get; } = [];
     public ObservableCollection<WorkspaceProfileTemplate> WorkspaceProfileTemplates { get; } = [];
     public string ConfigurationPath { get; }
@@ -88,6 +89,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         SaveCommand.NotifyCanExecuteChanged();
         ReloadCommand.NotifyCanExecuteChanged();
         DiscardChangesCommand.NotifyCanExecuteChanged();
+        ForgetRootCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsSavingChanged(bool value)
@@ -98,6 +100,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         SaveCommand.NotifyCanExecuteChanged();
         ReloadCommand.NotifyCanExecuteChanged();
         DiscardChangesCommand.NotifyCanExecuteChanged();
+        ForgetRootCommand.NotifyCanExecuteChanged();
     }
 
     public void SetWorkspace(string root)
@@ -120,6 +123,44 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanDiscardChanges))]
     private void DiscardChanges()
         => ReloadCore();
+
+    private bool CanForgetRoot(WorkspaceRootRow? root)
+        => _catalog is not null && root is { CanForget: true } && !IsDirty && !IsSaving;
+
+    [RelayCommand(CanExecute = nameof(CanForgetRoot))]
+    private async Task ForgetRootAsync(WorkspaceRootRow? root)
+    {
+        if (!CanForgetRoot(root)) return;
+        var target = root!.Path;
+        var workspace = WorkspaceRoot;
+        var version = ++_saveVersion;
+        var draftVersion = _draftVersion;
+        IsSaving = true;
+        Status = "Removing the recent workspace registration…";
+        try
+        {
+            var catalog = await Task.Run(() => _catalog!.ForgetRecentRoot(target, workspace));
+            if (version != _saveVersion || !SamePath(workspace, WorkspaceRoot)) return;
+            var preserveDraft = _draftVersion != draftVersion;
+            ApplyCatalog(catalog, preserveDraft);
+            Status = IsDirty
+                ? "Recent workspace removed; newer settings edits remain unsaved."
+                : "Recent workspace removed from this machine's list.";
+            Output = $"Forgot {target}. Its directory, files and saved explorer state were not changed.";
+        }
+        catch (Exception ex)
+        {
+            if (version == _saveVersion)
+            {
+                Status = "Could not forget the recent workspace.";
+                Output = StudioDisplayError.From(ex);
+            }
+        }
+        finally
+        {
+            if (version == _saveVersion) IsSaving = false;
+        }
+    }
 
     private void ReloadCore()
     {
@@ -155,14 +196,16 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         var root = WorkspaceRoot;
         var version = ++_saveVersion;
+        var draftVersion = _draftVersion;
         IsSaving = true;
         Status = "Saving machine-local Studio settings…";
         try
         {
             var catalog = await Task.Run(() => _preferences.SavePreferences(requested!, root));
             if (version != _saveVersion || !SamePath(root, WorkspaceRoot)) return;
-            ApplyCatalog(catalog);
-            Status = "Studio settings saved.";
+            var preserveDraft = _draftVersion != draftVersion;
+            ApplyCatalog(catalog, preserveDraft);
+            Status = IsDirty ? "Earlier settings were saved; newer edits remain unsaved." : "Studio settings saved.";
             Output = $"Saved local preferences to {ConfigurationPath}. No repository file or credential was changed.";
         }
         catch (Exception ex)
@@ -210,10 +253,17 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private void ApplyCatalog(WorkspaceRootCatalog catalog)
+    private void ApplyCatalog(WorkspaceRootCatalog catalog, bool preserveDraft = false)
     {
         WorkspaceRoots.Clear();
-        foreach (var root in catalog.RecentWorkspaceRoots) WorkspaceRoots.Add(root);
+        foreach (var root in catalog.RecentWorkspaceRoots)
+        {
+            var active = SamePath(root, catalog.ActiveWorkspaceRoot);
+            var profile = catalog.Profiles.Any(item => SamePath(item.WorkspaceRoot, root));
+            WorkspaceRoots.Add(new WorkspaceRootRow(root, active ? "Active" : profile ? "Retained profile" : "Recent",
+                _catalog is not null && !active && !profile));
+        }
+        ForgetRootCommand.NotifyCanExecuteChanged();
 
         WorkspaceProfiles.Clear();
         foreach (var profile in catalog.Profiles) WorkspaceProfiles.Add(profile);
@@ -224,7 +274,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasWorkspaceProfiles));
         OnPropertyChanged(nameof(HasWorkspaceProfileTemplates));
         OnPropertyChanged(nameof(WorkspaceProfileSummary));
-        ApplyFields(catalog.Preferences ?? WorkspaceStudioPreferences.Default, markClean: true, updateSavedPreferences: true);
+        if (preserveDraft)
+        {
+            SavedPreferences = catalog.Preferences ?? WorkspaceStudioPreferences.Default;
+            IsDirty = !TryBuildPreferences(out var current, out _) || current != SavedPreferences;
+        }
+        else ApplyFields(catalog.Preferences ?? WorkspaceStudioPreferences.Default, markClean: true, updateSavedPreferences: true);
     }
 
     private void ApplyFields(
@@ -265,6 +320,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void MarkDirty()
     {
         if (_applying) return;
+        ++_draftVersion;
         IsDirty = !TryBuildPreferences(out var current, out _) || current != SavedPreferences;
     }
 
@@ -272,3 +328,5 @@ public sealed partial class SettingsViewModel : ObservableObject
         => string.Equals(Path.GetFullPath(left), Path.GetFullPath(right),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 }
+
+public sealed record WorkspaceRootRow(string Path, string State, bool CanForget);

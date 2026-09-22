@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PowerForgeStudio.Domain.Workspace;
 using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Workspace;
@@ -94,5 +95,57 @@ public sealed class WorkspaceExplorerPersistenceTests : IDisposable
         Assert.False(File.Exists(CatalogPath));
         var filesystemRoot = Path.GetPathRoot(_root)!;
         Assert.Equal(filesystemRoot, PowerForgeStudioHostPaths.NormalizeWorkspaceRoot(filesystemRoot));
+    }
+
+    [Fact]
+    public void ForgetRecentRootPreservesFilesProfilesPreferencesAndExplorerState()
+    {
+        var active = Path.Combine(_root, "Active");
+        var old = Path.Combine(_root, "Old");
+        var profileRoot = Path.Combine(_root, "Profile");
+        Directory.CreateDirectory(active);
+        Directory.CreateDirectory(old);
+        Directory.CreateDirectory(profileRoot);
+        var file = Path.Combine(old, "keep.txt");
+        File.WriteAllText(file, "keep");
+        File.WriteAllText(CatalogPath, "{\"futureSetting\":{\"value\":42}}");
+        var store = new WorkspaceRootCatalogService(CatalogPath);
+        store.SaveActive(old);
+        store.SaveActive(profileRoot);
+        store.SaveProfile(new WorkspaceProfile("retained", "Retained", null, null, null, [], profileRoot, null, null, null));
+        store.SaveActive(active);
+        store.SetFavorite(old, Path.Combine(old, "Project"), true);
+        var preferences = new WorkspaceStudioPreferences(false, 4, 2, 90, 20);
+        store.SavePreferences(preferences, active);
+        var catalogJson = JsonNode.Parse(File.ReadAllText(CatalogPath))!.AsObject();
+        catalogJson["preferences"]!.AsObject()["futurePreference"] = "keep preference";
+        catalogJson["profiles"]!.AsArray()[0]!.AsObject()["futureProfile"] = "keep profile";
+        catalogJson["explorerStates"]!.AsArray()[0]!.AsObject()["futureExplorer"] = "keep explorer";
+        File.WriteAllText(CatalogPath, catalogJson.ToJsonString());
+
+        var before = store.Load(active);
+        Assert.Equal(3, before.RecentWorkspaceRoots.Count);
+        var beforeJson = File.ReadAllText(CatalogPath);
+        Assert.Throws<InvalidOperationException>(() => store.ForgetRecentRoot(active, active));
+        Assert.Throws<InvalidOperationException>(() => store.ForgetRecentRoot(profileRoot, active));
+        Assert.Equal(beforeJson, File.ReadAllText(CatalogPath));
+
+        var result = store.ForgetRecentRoot(old + Path.DirectorySeparatorChar, active);
+        Assert.Equal(active, result.ActiveWorkspaceRoot);
+        Assert.Equal([active, profileRoot], result.RecentWorkspaceRoots);
+        Assert.Equal(preferences, result.Preferences);
+        Assert.Equal("retained", Assert.Single(result.Profiles).ProfileId);
+        Assert.Equal("keep", File.ReadAllText(file));
+        Assert.Equal(Path.Combine(old, "Project"), Assert.Single(store.LoadExplorer(old).FavoriteProjectRoots));
+        using var json = JsonDocument.Parse(File.ReadAllText(CatalogPath));
+        Assert.Equal(42, json.RootElement.GetProperty("futureSetting").GetProperty("value").GetInt32());
+        Assert.Equal("keep preference", json.RootElement.GetProperty("preferences").GetProperty("futurePreference").GetString());
+        Assert.Equal("keep profile", json.RootElement.GetProperty("profiles")[0].GetProperty("futureProfile").GetString());
+        Assert.Equal("keep explorer", json.RootElement.GetProperty("explorerStates")[0].GetProperty("futureExplorer").GetString());
+        Assert.Empty(Directory.GetFiles(_root, "*.tmp"));
+        var reopened = new WorkspaceRootCatalogService(CatalogPath).Load(active);
+        Assert.Equal(result.ActiveWorkspaceRoot, reopened.ActiveWorkspaceRoot);
+        Assert.Equal(result.RecentWorkspaceRoots, reopened.RecentWorkspaceRoots);
+        Assert.Equal(result.Preferences, reopened.Preferences);
     }
 }
