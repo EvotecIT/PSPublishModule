@@ -70,6 +70,7 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] A first shared Avalonia styling pass updated the title band, project filter order, typography, chips, inspector path density and output dock; fresh wide and compact Overview, Activity and Storage renders were inspected.
 - [x] Storage and Activity evidence rows now pair shared vector state cues with their text labels; Storage summary cards use the same navigation icon system.
 - [x] The project tree prioritizes Build and Docs at working-copy roots; Storage evidence is aligned in the inspector, and compact Storage can scroll through the complete table above a shorter output dock.
+- [x] The title-bar repository jump is separate from the sidebar tree filter; Ctrl+K focuses it, and wide and compact renders show its bounded result panel.
 - [x] Activity source cards now fit on one row; compact Activity keeps provider state visible while showing the first actionable rows without scrolling.
 - [x] Overview names the page separately from the selected project and keeps the full working-copy path copyable without letting it dominate compact layout.
 - [x] Releases now shows the captured checkpoint state above a compact five-stage guide, keeps artifact paths secondary, and emphasizes the action available at that checkpoint.

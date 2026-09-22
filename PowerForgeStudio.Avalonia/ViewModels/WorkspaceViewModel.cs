@@ -270,6 +270,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             _projectNodes.Clear();
             _gitSnapshots.Clear();
             ApplyFilter();
+            RefreshQuickProjectMatches();
             RepositoryCount = $"{found.Count} repositories";
             Status = "Local discovery complete";
             AppendOutput($"Discovered {found.Count} repositories in {root}.");

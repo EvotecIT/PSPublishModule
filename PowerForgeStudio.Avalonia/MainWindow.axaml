@@ -10,8 +10,34 @@
       <Grid ColumnDefinitions="360,*,280" Margin="22,0">
         <TextBlock Text="Project workspace" Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
         <Grid Grid.Column="1" MaxWidth="550" HorizontalAlignment="Stretch" VerticalAlignment="Center">
-          <TextBox Text="{Binding Filter}" PlaceholderText="Find a project…" Padding="32,6,10,6" Background="#EEF3FA" BorderBrush="#B8CAE0" />
+          <TextBox x:Name="QuickProjectSearchBox" Text="{Binding QuickProjectQuery}" PlaceholderText="Jump to a repository…" Padding="32,6,70,6" Background="#EEF3FA" BorderBrush="#B8CAE0" KeyDown="QuickProjectSearchKeyDown" />
           <controls:NavigationIcon Kind="search" Width="17" Height="17" Ink="#617189" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False" />
+          <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="#F7FAFE" BorderBrush="#CBD7E7" BorderThickness="1" CornerRadius="3" Padding="5,1" Margin="0,0,7,0" IsHitTestVisible="False">
+            <TextBlock Text="Ctrl + K" Foreground="#677892" FontSize="11" />
+          </Border>
+          <Popup IsOpen="{Binding HasQuickProjectQuery}" PlacementTarget="{Binding ElementName=QuickProjectSearchBox}" Placement="Bottom" IsLightDismissEnabled="True">
+            <Border Background="White" BorderBrush="#C8D5E7" BorderThickness="1" BoxShadow="0 8 18 0 #260B2745" Width="{Binding ElementName=QuickProjectSearchBox, Path=Bounds.Width}" Padding="6" CornerRadius="5">
+              <StackPanel>
+                <TextBlock Text="Repositories" Classes="muted" FontSize="11" FontWeight="SemiBold" Margin="8,5,8,3" />
+                <ItemsControl ItemsSource="{Binding QuickProjectMatches}" IsVisible="{Binding HasQuickProjectMatches}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ExplorerNode">
+                      <Button Classes="toolbar" Tag="{Binding}" Click="ChooseQuickProject" HorizontalContentAlignment="Stretch" Padding="8,6">
+                        <Grid ColumnDefinitions="20,*" ColumnSpacing="8">
+                          <controls:ProjectIcon Kind="project" Width="18" Height="18" />
+                          <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Path}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+                          </StackPanel>
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="No matching repositories in this workspace." Classes="muted" Margin="8" IsVisible="{Binding !HasQuickProjectMatches}" />
+              </StackPanel>
+            </Border>
+          </Popup>
         </Grid>
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right"><controls:NavigationIcon Kind="monitor" Width="21" Height="21" Ink="#D6E4F7" /><TextBlock Text="Local workspace" Foreground="#D6E4F7" /></StackPanel>
       </Grid>

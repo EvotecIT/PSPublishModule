@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using PowerForge;
@@ -80,6 +81,37 @@ public sealed class WorkspaceTreeTests
                     Assert.NotNull(frame);
                     var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
                     if (!string.IsNullOrEmpty(output)) frame.Save(Path.Combine(output, "workspace-tree.png"), PngBitmapEncoderOptions.Default);
+                    window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
+                    window.KeyRelease(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
+                    Assert.True(window.FindControl<TextBox>("QuickProjectSearchBox")!.IsFocused);
+                    model.QuickProjectQuery = "Module";
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.Equal(2, model.Projects.Count);
+                    var quickMatch = Assert.Single(model.QuickProjectMatches);
+                    Assert.Equal("Module.Sample", quickMatch.Name);
+                    Assert.True(model.HasQuickProjectQuery);
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var searchFrame = window.CaptureRenderedFrame();
+                        Assert.NotNull(searchFrame);
+                        searchFrame.Save(Path.Combine(output, "workspace-quick-search.png"), PngBitmapEncoderOptions.Default);
+                        window.Width = 1050; window.Height = 720;
+                        window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var compactSearchFrame = window.CaptureRenderedFrame();
+                        Assert.NotNull(compactSearchFrame);
+                        compactSearchFrame.Save(Path.Combine(output, "workspace-quick-search-compact.png"), PngBitmapEncoderOptions.Default);
+                    }
+                    model.Filter = "Studio";
+                    model.FavoritesOnly = true;
+                    Assert.Empty(model.Projects);
+                    Assert.Same(quickMatch, Assert.Single(model.QuickProjectMatches));
+                    await model.OpenQuickProjectAsync(quickMatch);
+                    Assert.Equal("Module.Sample", model.ProjectName);
+                    Assert.Equal(other, model.ActiveWorkingCopyRoot);
+                    Assert.Empty(model.Filter);
+                    Assert.False(model.FavoritesOnly);
+                    Assert.False(model.HasQuickProjectQuery);
                     // Filtering must retain expansion and project identity, not clone its hierarchy.
                     model.Filter = "Studio";
                     Assert.Same(project, Assert.Single(model.Projects));

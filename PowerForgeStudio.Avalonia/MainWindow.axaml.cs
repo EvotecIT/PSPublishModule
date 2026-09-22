@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using PowerForgeStudio.Avalonia.ViewModels;
@@ -17,12 +18,21 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         SizeChanged += (_, args) => ApplyResponsiveLayout(args.NewSize.Width);
+        KeyDown += FocusQuickProjectSearch;
         Closing += SaveBeforeClosing;
         DataContextChanged += (_, _) =>
         {
             if (DataContext is WorkspaceViewModel model)
                 model.ResolveUnsavedChanges = documents => new UnsavedChangesDialog(documents).ShowDialog<UnsavedChangesChoice>(this);
         };
+    }
+
+    private void FocusQuickProjectSearch(object? sender, KeyEventArgs args)
+    {
+        if (args.Key != Key.K || !args.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+        QuickProjectSearchBox.Focus();
+        QuickProjectSearchBox.SelectAll();
+        args.Handled = true;
     }
 
     private void ApplyResponsiveLayout(double width)
@@ -34,6 +44,27 @@ public sealed partial class MainWindow : Window
         ContextPanel.IsVisible = !compact;
         WorkspaceLayout.ColumnDefinitions[4].Width = new GridLength(compact ? 0 : 280);
         WorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(compact ? 270 : 326);
+    }
+
+    private async void QuickProjectSearchKeyDown(object? sender, KeyEventArgs args)
+    {
+        if (DataContext is not WorkspaceViewModel model) return;
+        if (args.Key == Key.Escape)
+        {
+            model.QuickProjectQuery = "";
+            args.Handled = true;
+        }
+        else if (args.Key == Key.Enter && model.QuickProjectMatches.FirstOrDefault() is { } first)
+        {
+            await model.OpenQuickProjectAsync(first);
+            args.Handled = true;
+        }
+    }
+
+    private async void ChooseQuickProject(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is WorkspaceViewModel model && sender is Button { Tag: ExplorerNode node })
+            await model.OpenQuickProjectAsync(node);
     }
 
     private async void ChooseWorkspace(object? sender, RoutedEventArgs args)

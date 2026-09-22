@@ -27,6 +27,8 @@ The left rail is workspace-wide. Project tabs are scoped to the selected working
 
 Projects in the rail returns to the selected project's Overview. It remains highlighted for every project tab. GitHub in the rail opens the cross-project Activity filter; GitHub in the project tab stays bound to the selected working copy.
 
+The title-bar field is a Ctrl+K repository jump over the loaded workspace catalog. It shows bounded matching repositories without changing the sidebar tree while typing; choosing one clears any tree filter and opens that project's Overview. The sidebar field only filters project names in the tree. The title-bar field does not search files, commits, issues or remote providers.
+
 ## Subpages and overlays
 
 These are states within an owning surface, not additional top-level pages:
