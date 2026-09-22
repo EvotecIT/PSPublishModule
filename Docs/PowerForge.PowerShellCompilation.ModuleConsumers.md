@@ -2,7 +2,7 @@
 
 This guide uses the `feature/powershell-compiler` development branch. The commands are not yet evidence of a published release.
 
-Build the local CLI as shown in the [development guide](PowerForge.PowerShellCompilation.Development.md) and keep its DLL path in `$powerforge`. Run the following commands in a short, clean project directory on Windows. Long generated executable and module paths are a separate [M29 qualification item](PowerForge.PowerShellCompilation.NextMilestones.md).
+Build the local CLI as shown in the [development guide](PowerForge.PowerShellCompilation.Development.md) and keep its DLL path in `$powerforge`. Run the following commands in a short, clean project directory on Windows. Long generated executable and module paths are a separate [M30 qualification item](PowerForge.PowerShellCompilation.NextMilestones.md).
 
 Save this as `Example.psm1`:
 
@@ -83,4 +83,4 @@ Use a **separate copy** of the same source and manifest for a `net472` project. 
 
 The sample was exercised on PowerShell 7.6.5/`net10.0` and Windows PowerShell 5.1.26100.9444/`net472` on Windows x64. Both hosts exported only the two declared commands, returned `1` from the typed function and the current year from the fallback, and passed project explain/test/diagnose. This is host-specific evidence, not qualification for Linux, macOS, another PowerShell servicing version, or general PowerShell module compatibility.
 
-The generated project includes PDBs and a portable `source-map.json` under its emitted source directory. A working authored-source breakpoint, stepping, locals, stack, and exception path has **not** yet been observed. Do not use PDB presence or the map alone as debugger qualification; that [M28 gate](PowerForge.PowerShellCompilation.NextMilestones.md) remains open.
+The generated project includes PDBs and a portable `source-map.json` under its emitted source directory. A working authored-source breakpoint, stepping, locals, stack, and exception path has **not** yet been observed. Do not use PDB presence or the map alone as debugger qualification; that [developer-tooling gate](PowerForge.PowerShellCompilation.NextMilestones.md) is deferred from the coverage milestone.

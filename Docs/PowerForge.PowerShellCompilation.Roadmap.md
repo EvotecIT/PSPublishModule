@@ -10,7 +10,7 @@ The companion [PowerShell Compilation guide](PowerForge.PowerShellCompilation.md
 
 This roadmap does not schedule a package, gallery, NuGet, or GitHub release. Those remain separate decisions after source work is complete.
 
-The [next major milestones, 24–30](PowerForge.PowerShellCompilation.NextMilestones.md), define the active delivery tranche: values/collections, complete pipelines, stateful modules, practical CLR libraries, the development loop, distribution/platform qualification, and finally measured acceleration. M24–M27 have completed bounded local implementation gates, including the September 22 corrections. M28 is in progress with executable run/watch, project NuGet packaging, and grouped project diagnostics implemented; debugger qualification, the module quickstart, and additional host qualification remain. The architecture history below remains their foundation.
+The [next major milestones, 24–31](PowerForge.PowerShellCompilation.NextMilestones.md), define the delivery tranche: values/collections, complete pipelines, stateful modules, practical CLR libraries, the development loop, broader complete-workload coverage, distribution/platform qualification, and measured acceleration. M24–M28 have completed bounded local implementation gates, including the September 22 corrections. M29 is the next coverage milestone. Interactive source debugging is a deferred developer-tooling qualification, not a gate on compiler coverage. The architecture history below remains their foundation.
 
 ## Product north star
 
@@ -49,15 +49,15 @@ The product succeeds when users can predict which of these outcomes they are get
 
 ## Current position
 
-Development continuation: `a30e72b79a579ed3d5796f6833c2161b8d4569b4` on `feature/powershell-compiler`, 2026-09-22. The continuation remains separate from the default branch. An earlier main merge does not establish current integration readiness; exact-candidate CI/review and current default-branch reconciliation remain M29 work.
+Development continuation: `feature/powershell-compiler`, with local development-loop checkpoint `7fdd84412aa3ca6ea4a80337d6a257f26573a006` on 2026-09-22. The continuation remains separate from the default branch. An earlier main merge does not establish current integration readiness; exact-candidate CI/review and current default-branch reconciliation remain M30 work.
 
-M24–M27 have completed bounded value, pipeline, state, region, and local-feed consumption gates, including the corrected stopping fixtures, package cancellation, metadata, and recurring ABI/provider coverage. M28 adds executable run/watch through the existing project and cache owners, explicit Strict library NuGet packaging through the existing independent-rebuild packer, and grouped project diagnostics from canonical final decisions and bound local calls. Failed rebuilds do not execute stale artifacts, and launch rechecks this attempt's authenticated output inventory. The [assessment](PowerForge.PowerShellCompilation.Assessment.md) identifies revisions, findings, and executable evidence; the [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md) own the remaining M28–M30 checklist.
+M24–M28 have completed bounded value, pipeline, state, region, local-feed consumption, and source-first development-loop gates. M28 includes executable run/watch through the existing project and cache owners, Strict library NuGet packaging through the independent-rebuild packer, grouped project diagnostics from canonical decisions and bound local calls, and a Hybrid module consumer quickstart on both supported Windows PowerShell hosts. Failed rebuilds do not execute stale artifacts, and launch rechecks this attempt's authenticated output inventory. Source paths/PDBs and `debug-plan` are implemented, but interactive debugger behavior is unqualified. The [assessment](PowerForge.PowerShellCompilation.Assessment.md) identifies revisions, findings, and executable evidence; the [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md) own the M29–M31 checklist.
 
 The September 20 checkpoint recorded 1,063 compiler tests and six Strict Windows programs passing, with 188/282 complete emitted PSSharedGoods functions and 36 promoted regions. These are dated, packet-specific results. An emitted Hybrid function can still delegate operations to PowerShell; counters alone prove neither runtime-free execution nor performance. Earlier 7.4/net8 and heterogeneous-discovery results below retain their historical scope.
 
 Generated-artifact policy permits `net472` and `net10.0` libraries/modules and only `net10.0` executables. Hosted qualification targets Windows PowerShell 5.1 and PowerShell 7.6. The shared `PowerForge.PowerShell` library independently retains `net472;net8.0;net10.0` build targets for its consumers. Compiler artifact retirement must not be described as removal of that shared host-library target.
 
-Keep four evidence states separate: implementation in this continuation; integrated source and CI; packed/published/installed versions; and execution on the declared target. M29 owns release and host-servicing qualification. No historical checkbox substitutes for those gates.
+Keep four evidence states separate: implementation in this continuation; integrated source and CI; packed/published/installed versions; and execution on the declared target. M30 owns release and host-servicing qualification. No historical checkbox substitutes for those gates.
 
 ### Recorded corrective gate: assignment semantics (September 7)
 
@@ -67,7 +67,7 @@ The merged 2026-09-06 corrections cover Single arithmetic, constrained numeric u
 - [x] Infer cast-initialized locals without inventing a variable constraint; retain/reject unsupported dynamic numeric promotion and preserve null-string reassignment.
 - [x] Preserve actual LHS constraints, ordinary unchanged casts, and current external census acceptance. Local validation passes 285 compiler gate cases, six Strict programs, 16 focused closure cases, and all three compiler framework builds.
 - [x] Complete one independent read-only semantic review. Record conservative scalar-string foreach eligibility loss as a remaining bounded-coverage gap rather than relaxing the fix.
-- [ ] Integrate the audited correction through normal source review and CI before treating it as a merged fix. Public package qualification remains M21/M29 work.
+- [ ] Integrate the audited correction through normal source review and CI before treating it as a merged fix. Public package qualification remains M21/M30 work.
 
 ### Corpus expansion and pilot order
 
@@ -1555,10 +1555,10 @@ Exit gate: **Complete for bounded M24–M26 contracts.** The continuation implem
 
 Assessment R1–R5 are closed with the recorded full-gate, corpus, focused artifact, and planning evidence. Package publication preserves prior output until commit; library/provider metadata share canonical NuGet rules; required ABI/provider families participate in recurring validation; stopping fixtures wait for the engine acknowledgment.
 
-1. [ ] Finish M28 observed debugging, the module quickstart, and additional host qualification through the existing owners. Executable run/watch, project NuGet packaging, the library quickstart, and grouped project diagnostics are implemented.
-2. [ ] Integrate against current default-branch owners and run exact-candidate CI/review, including a measured compiler-gate time budget. Keep that evidence distinct from local qualification.
-3. [ ] Complete M29 host-servicing, public-package upgrade/rollback, platform, and disposable-target gates. A private PowerShell API bridge needs an explicit servicing matrix and safe unsupported-host behavior; a cross-publish does not establish target execution. Generated API compatibility is separate from CLR/package binary replacement.
-4. [ ] Run M30 measurements on qualified complete workflows, including startup, crossing, allocation, and error-path controls.
+1. [ ] Complete M29's first coverage tranche: three previously blocked complete workflows across two unrelated families, including an ordinary module consumer, with original/generated parity and a same-input pinned packet. Keep Hybrid fallback, Strict rejection, and co-blockers explicit.
+2. [ ] Integrate against current default-branch owners and run exact-candidate CI/review, including a measured compiler-gate time budget. Keep that M30 evidence distinct from local coverage qualification.
+3. [ ] Complete M30 host-servicing, public-package upgrade/rollback, platform, and disposable-target gates. A private PowerShell API bridge needs an explicit servicing matrix and safe unsupported-host behavior; a cross-publish does not establish target execution. Generated API compatibility is separate from CLR/package binary replacement.
+4. [ ] Run M31 measurements on qualified complete workflows, including startup, crossing, allocation, and error-path controls. Qualify interactive source debugging separately when a consumer needs it.
 
 M24–M26 remain bounded completed foundations. Expand them only for an identified blocked workflow with explicit value/ownership/effect/lifetime contracts, original/generated artifact proof, and truthful retained boundaries. Known accepted-code defects precede breadth and optimization. See [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md) for acceptance criteria and [assessment](PowerForge.PowerShellCompilation.Assessment.md) for current evidence and finding dispositions.
 
@@ -1663,7 +1663,7 @@ Every new command family should normally require:
 
 ## Recorded core and extensibility/profile architecture gate
 
-The following checklist records earlier bounded architecture qualification. Current corrective evidence is in the assessment; additional host/profile promotion retains its own M29 gates. Historical results do not override those boundaries.
+The following checklist records earlier bounded architecture qualification. Current corrective evidence is in the assessment; additional host/profile promotion retains its own M30 gates. Historical results do not override those boundaries.
 
 - [x] no backend consumes PowerShell AST;
 - [x] no emitter performs semantic type or effect inference;
@@ -1711,6 +1711,7 @@ The semantic compiler does not have a competing AST/emitter eligibility brain. P
 - [x] Correct M27 package cancellation/metadata and recurring ABI/provider coverage. Document restore/rebuild consumption separately from unqualified binary drop-in replacement.
 - [x] Complete corrective full-gate, Strict corpus, and final fixture requalification.
 - [x] Deliver M28 executable run/watch with source invalidation, verified cache reuse, stream/argument fidelity, owned process-tree cancellation, and launch-integrity checks.
-- [ ] Complete remaining M28 debugging/module-consumer work and M29 host-servicing/release qualification through the existing owners; M30 follows with measured workflow benefit.
+- [x] Complete the bounded M28 development loop and two-host module consumer quickstart. Authenticated PDB source mapping is implemented; interactive debugger behavior is still unqualified and deferred.
+- [ ] Complete M29 workflow coverage, then M30 host-servicing/release qualification through the existing owners; M31 follows with measured workflow benefit.
 
 Broad percentage growth is useful only as a diagnostic trend. It never substitutes for these complete-program, clean-target, semantic, ecosystem, and product gates.

@@ -2,7 +2,7 @@
 
 Updated: 2026-09-22. Active continuation: `feature/powershell-compiler`. The readiness assessment records the qualified revisions and remaining integration boundaries.
 
-M24–M27 have completed their bounded local implementation gates, including the September 22 audit corrections. **M28 is in progress:** executable run/watch, Strict library NuGet packaging, and grouped project diagnostics are implemented. The module consumer quickstart has now been exercised on both supported Windows PowerShell hosts. Direct source-debugger qualification remains open. Completion of an implementation milestone does not establish general PowerShell compatibility, a released package, or qualification on an untested host.
+M24–M28 have completed bounded local implementation gates, including the September 22 audit corrections. M28 covers executable run/watch, Strict library NuGet packaging, grouped project diagnostics, and a module consumer quickstart on both supported Windows PowerShell hosts. **M29 is the current priority:** broaden the number of complete scripts and modules that compile and run with preserved behavior. Direct source-debugger qualification is deferred; it is not a condition for broader compiler coverage. Completion of a local milestone does not establish general PowerShell compatibility, a released package, or qualification on an untested host.
 
 The [readiness assessment](PowerForge.PowerShellCompilation.Assessment.md) owns findings and dated validation. The [architecture roadmap](PowerForge.PowerShellCompilation.Roadmap.md) owns design and M0–M23. The [compilation guide](PowerForge.PowerShellCompilation.md) owns commands. This document owns the remaining execution order; earlier per-commit journals are available in Git history.
 
@@ -18,10 +18,9 @@ The September 20 checkpoint recorded 1,063 compiler-gate tests and six Strict Wi
 
 | Priority | Milestone | Current state | Required outcome |
 | --- | --- | --- | --- |
-| 1 | M28 development loop | Current goal | Observe source breakpoints, stepping, locals, stacks, and exceptions across typed and Hybrid boundaries; close the complete development workflow |
-| 2 | M24–M27 practical workload and library expansion | Bounded local gates complete | Preserve qualified contracts; investigate reachable regressions before broadening claims |
-| 3 | M29 distribution and platforms | Partial / separate qualification | Supported hosts, release set, public-feed lifecycle, and clean-target execution are evidenced independently |
-| 4 | M30 performance | Planned | Repeatable workload benefit after semantic and deployment correctness |
+| 1 | M29 script and module coverage | Current | More complete real workflows execute with original/generated behavioral agreement; retained and rejected boundaries stay explicit |
+| 2 | M30 distribution and platforms | Partial / separate qualification | Supported hosts, release set, public-feed lifecycle, and clean-target execution are evidenced independently |
+| 3 | M31 performance | Planned | Repeatable workload benefit after semantic and deployment correctness |
 
 Known accepted-code defects take priority over breadth or performance. Keep remediation proportional to a reachable trigger and consequence: cover the observed failure and consequential sibling paths, then stop expanding the matrix once the supported contract is demonstrated. Record every finding as reproduced, source-demonstrated, or unverified; record its owner, affected modes, test, and closure evidence. Do not mark a milestone complete because its aggregate test count increased.
 
@@ -91,17 +90,17 @@ Corrective closure:
 - [x] **R2 / P3:** shared NuGet ID validation and canonical `x.y.z` policy reject malformed library, provider, and dependency metadata. Real builders preserve previous output; NuGet and ordinary consumers validate valid packages.
 - [x] **R3 / P2 validation:** include all nine ABI cases and six existing provider-consumer/lifecycle/dependency cases in the bounded gate. Require passing results from the necessary M27 families.
 - [x] Qualify replacement failure, Windows destination contention, cleanup failure, and cancellation during/after writing. Cleanup errors retain the primary failure and diagnostic details.
-- [x] Define the current consumption contract: select identity/version/TFM, restore, and rebuild the consumer. Generated ABI comparison covers API/module lifetime; binary drop-in replacement and replacing loaded assemblies are not promised. M29 qualifies any future broader upgrade contract before promotion.
+- [x] Define the current consumption contract: select identity/version/TFM, restore, and rebuild the consumer. Generated ABI comparison covers API/module lifetime; binary drop-in replacement and replacing loaded assemblies are not promised. M30 qualifies any future broader upgrade contract before promotion.
 - [x] Final focused suite passes 55/55 with no failures/skips, including the eight stopping fixtures on both hosts. The net472 Release build has zero warnings/errors; targeted read-only confirmation of the production fixes has no actionable findings.
 - [x] Canonical compiler gate passes 1,097/1,097 with zero failures/skips; Strict corpus passes 6/6 with 24 emitted units. Revision, host, artifact, and follow-up fixture evidence is recorded in the assessment.
 
-**Exit gate:** both ordinary consumers exercise success, invalid input, null/empty, defaults, cancellation where supported, and repeated lifetime. Intentional generated API incompatibilities and malformed package identities are rejected. Cancellation/failure cannot damage the prior destination. Runtime/dependency inspection proves the promised runtime-free closure. Signed-input rejection is not signed-package qualification; signing and public-feed upgrade/rollback remain M29.
+**Exit gate:** both ordinary consumers exercise success, invalid input, null/empty, defaults, cancellation where supported, and repeated lifetime. Intentional generated API incompatibilities and malformed package identities are rejected. Cancellation/failure cannot damage the prior destination. Runtime/dependency inspection proves the promised runtime-free closure. Signed-input rejection is not signed-package qualification; signing and public-feed upgrade/rollback remain M30.
 
 Native shared-library exports remain deferred until a concrete non-.NET embedding consumer requires their separate ABI.
 
 ## Milestone 28 — Deliver a source-first development loop
 
-**Status: Current.**
+**Status: Complete for the bounded local development workflows; source debugging is deferred.**
 
 **Outcome:** users develop from PowerShell source without treating generated C# or temporary build paths as the main interface.
 
@@ -112,17 +111,31 @@ The [project CLI](../PowerForge.Cli/Program.Command.PowerShell.Project.cs) expos
 - [x] Integrate the existing library NuGet builder with `project pack --format nuget` and reuse existing ABI-baseline checks. Require one tested Strict library, emitted source, explicit metadata, and the exact isolated restore lock. Preserve qualified ZIP delivery. Ordinary Windows net10.0/net472 consumers and a provider dependency consumer exercise the resulting packages.
 - [x] Extend project explain/diagnose with [grouped diagnostics](PowerForge.PowerShellCompilation.ProjectDiagnostics.md) from canonical unit decisions and bound call links. Distinguish semantic, shaping, dependency, target, input, and integrity causes; preserve final rejection/retention and operation exit status. Retain exact available coordinates and mark synthetic call locations unavailable. Provider contracts flow through final explanation shaping. Diagnose still rejects missing or stale artifact evidence.
 - [x] Give typed executable and Hybrid module PDBs stable `/_/src/<document-id>` paths with authored-source SHA-256 checksums. Remap Strict top-level sequence points from the compiler's synthetic entry wrapper to authored lines. `project debug-plan` verifies the current build receipt, artifact inventory, PDB, and source hashes before returning the source-file map; it does not itself prove an editor session.
-- [ ] Observe debugging directly: source breakpoints, stepping, locals, stacks, and exceptions across a typed call and a Hybrid boundary. State boundaries that cannot be stepped through; PDB presence alone is insufficient.
 - [x] Complete the [module consumer quickstart](PowerForge.PowerShellCompilation.ModuleConsumers.md) and qualify additional supported-host diagnostics. The same Hybrid sample passes project explain/test/diagnose and direct import on PowerShell 7.6.5/`net10.0` and Windows PowerShell 5.1.26100.9444/`net472`, with typed and retained commands plus manifest export filtering. The [library NuGet quickstart](PowerForge.PowerShellCompilation.LibraryPackages.md) and executable [run/watch quickstart](PowerForge.PowerShellCompilation.Development.md) remain separate. These Windows host checks do not qualify other platforms or source debugging.
+- [x] Requalify the exact candidate: the canonical compiler gate passes 1,139/1,139 tests and the Strict corpus passes 6/6 Windows programs. The `net472` PowerForge.PowerShell and `net10.0` CLI Release builds have zero warnings or errors. The assessment records the run identities and limits.
 
-**Exit gate:** clean init → lock → restore → run/test → edit → rebuild → diagnose/debug → pack through documented entrypoints. Verify argument quoting, redirected streams, cancellation, offline restore, stale-output prevention, invalidation, and source-line accuracy.
+**Exit gate:** the documented executable and module development paths cover init → lock → restore → run or test → edit → rebuild → diagnose → pack as applicable to each artifact. Their qualified cases cover argument quoting, redirected streams, cancellation, offline restore, stale-output prevention, cache invalidation, and diagnostic source-line accuracy. This gate does not claim an interactive source debugger.
 
-## Milestone 29 — Qualify distribution, providers, and platforms
+## Milestone 29 — Broaden complete script and module coverage
+
+**Status: Current; coverage is a separate proof lane from developer tooling, distribution, and speed.**
+
+**Outcome:** more real PowerShell scripts and modules compile as complete, useful workflows while preserving their observable behavior. A larger emitted-function census alone is not completion.
+
+- [ ] Pin a versioned, redistributable input packet with source hashes and a reproducible baseline. Record each workflow's selected host/profile, parse and analysis result, co-blockers, final compiled/retained/rejected disposition, complete artifact result, and executed behavior. Keep module and Strict program evidence separate.
+- [ ] Select at least three previously blocked complete workflows from two unrelated semantic families, including one module used through its ordinary import and exported commands. Rank them by shared semantic shape, ownership, effects, and lifetime rather than by product or individual CLR type. Record every co-blocker before choosing the implementation slice.
+- [ ] Close reusable contracts in the existing parser → binder → bound IR → analysis → lowering → backend owners. Preserve safe Hybrid runtime fallback and fail-closed Strict admission; do not special-case source names or let an emitter, wrapper, or census invent eligibility.
+- [ ] Differentially execute unchanged original source and generated artifacts on each claimed host. Compare values and CLR types, identity, order/cardinality, all relevant streams, scope/module state, errors, continuation, stopping, cleanup, and repeated invocation where those behaviors are reachable. Include supported negative paths and a clean import or fresh process; do not execute untrusted administration actions merely to count coverage.
+- [ ] Re-run the same pinned packet and canonical compiler gate. Show newly complete workflows without losing previously qualified ones, and reconcile explain/diagnose, final ledger, emitted artifacts, and observed fallback. Claim runtime-free growth only when a complete Strict artifact passes its dependency and execution gates. Report unsupported shapes and unchanged workloads explicitly.
+
+**Exit gate:** at least three newly complete, previously blocked workflows across two unrelated families, including one ordinary module consumer, have reproducible original/generated parity on their claimed supported hosts and no regression in the pinned packet. The same-input census is supporting evidence, not a percentage of PowerShell language support. Strict, additional hosts, and performance receive credit only from their separate evidence.
+
+## Milestone 30 — Qualify distribution, providers, and platforms
 
 **Status: Partial; public release and target qualification remain separate from local implementation.**
 
 - [ ] Reconcile the continuation with the then-current default branch, inspect conflicts at shared owners, and run exact-candidate CI/review before integration. Do not infer readiness from the branch's earlier main merge or local test result.
-- [ ] Measure the canonical gate on the actual CI runner and retain all required contract families within an explicit execution budget. The latest September 22 local test phase took 48m49s, longer than the workflow's 40-minute compiler-step budget. Its first corpus run failed multifile startup budgets; one unchanged-binary confirmation passed. Record scheduling/load conditions and repeatability before treating those absolute timing budgets as reliable CI evidence; local elapsed time is not a hosted-run measurement.
+- [ ] Measure the canonical gate on the actual CI runner and retain all required contract families within an explicit execution budget. September 22 local test phases took 48m49s at an earlier checkpoint and 46m39s for the later 1,139-test M28 candidate, both longer than the workflow's 40-minute compiler-step budget. The earlier checkpoint needed a separate corpus confirmation after a multifile startup-budget failure; the later M28 test-and-corpus invocation passed end to end. Record runner scheduling/load conditions and repeatability before treating local timings as hosted CI evidence.
 - [ ] Complete the compiler/core/CLI/PowerShell/provider release set and clean public-feed install, upgrade, rollback, and execution after publication authorization. Record source, package, installed version, and runtime evidence separately.
 - [ ] Exercise package-version upgrades through ordinary restore/rebuild. If an actual consumer requires binary drop-in upgrades, first define assembly identity, TFM, dependency/provider binding, and running-process restart policy, then test both previously compiled and rebuilt consumers. Do not infer this guarantee from the generated ABI hash.
 - [ ] Qualify PowerShell servicing updates against the native-function and statement-error bridges, which use private host APIs. Check capabilities before side effects; preserve authored fallback where supplied, otherwise fail with an actionable diagnostic. Test missing/changed contracts and a new patch candidate before changing pins.
@@ -135,17 +148,21 @@ The [project CLI](../PowerForge.Cli/Program.Command.PowerShell.Project.cs) expos
 
 **Exit gate:** every advertised profile has an obtainable release set, clean install/upgrade/rollback, and executed workload evidence. Missing optional profiles narrow the matrix. Private-host compatibility failures or unresolved package correctness findings block affected promotion.
 
-## Milestone 30 — Accelerate proven workflows
+## Milestone 31 — Accelerate proven workflows
 
 **Status: Planned.**
 
-- [ ] Select hot workflows from M24–M27 and retain startup, cheap-command, and error-path controls. Compare only modes implementing the same observable contract.
+- [ ] Select hot workflows from M24–M27 and M29 and retain startup, cheap-command, and error-path controls. Compare only modes implementing the same observable contract.
 - [ ] Use canonical IR/lowering and the boundary profiler to reduce crossings and allocations. Keep support eligibility independent from a hoped-for speedup.
 - [ ] Record fresh-process startup, warm throughput, allocations, peak working set, build/import time, and artifact size with pinned source, toolchain, host, target, run ID, and validated output. Include large-function/many-region compile-time and memory budgets so safe-suffix exploration cannot grow without measurement.
 - [ ] Report wins, ties, and regressions against declared budgets. Prefer another execution mode when compilation overhead dominates.
 - [ ] Consider another backend only after a measured C#/Roslyn/MSBuild limitation blocks a required outcome and the alternative can consume the same lowered contracts.
 
 **Exit gate:** three unrelated qualified workflow families have repeatable measurements and declared budgets. No language-wide speedup claim follows from a selected workload.
+
+## Deferred developer tooling — authored-source debugging
+
+The compiler emits stable PowerShell source paths and checksums in portable PDBs, and `project debug-plan` authenticates the map. No source breakpoint hit, step, local, stack, or exception behavior has been observed in an editor. Qualify those behaviors across a typed call and a Hybrid hosted boundary before advertising interactive source debugging. This work can resume for a consumer need or a concrete debugging defect; it is not an M29 coverage or M30 release prerequisite.
 
 ## How to choose and close the next implementation slice
 

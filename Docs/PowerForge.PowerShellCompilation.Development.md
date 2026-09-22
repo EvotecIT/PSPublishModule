@@ -2,7 +2,7 @@
 
 `powerforge powershell project run` builds and runs one executable target from source. `watch` repeats that workflow after edits. These commands are available on the `feature/powershell-compiler` development branch; this guide does not imply that a published package contains them.
 
-Use the .NET 10 SDK for building the CLI and generated executables. The Windows examples below select `win-x64`; a declared target must match the operating system and architecture of the process running PowerForge. Additional platform qualification is tracked separately in M29.
+Use the .NET 10 SDK for building the CLI and generated executables. The Windows examples below select `win-x64`; a declared target must match the operating system and architecture of the process running PowerForge. Additional platform qualification is tracked separately in M30.
 
 ## Build the development CLI
 
@@ -84,7 +84,7 @@ dotnet $powerforge powershell project diagnose ./powerforge.psproject.json
 dotnet $powerforge powershell project pack ./powerforge.psproject.json
 ```
 
-Project pack creates the existing qualified ZIP. For a tested Strict CLR library, use `project pack --format nuget` and the [library NuGet quickstart](PowerForge.PowerShellCompilation.LibraryPackages.md). Observed source debugging remains separate M28 work; portable PDB output alone is not debugger qualification.
+Project pack creates the existing qualified ZIP. For a tested Strict CLR library, use `project pack --format nuget` and the [library NuGet quickstart](PowerForge.PowerShellCompilation.LibraryPackages.md). Interactive source debugging remains a deferred tooling gate; portable PDB output alone is not debugger qualification.
 
 After building a typed executable or binary module, inspect its authenticated debugger inputs with `dotnet $powerforge powershell project debug-plan ./powerforge.psproject.json --output json`. Select a target with `--target <name>` when the project has more than one. The result supplies the artifact, portable PDB, working directory, and `sourceFileMap` from stable PDB document names to current authored PowerShell files. The command rejects a stale source, changed artifact, missing PDB, or source checksum mismatch; rebuild before using a rejected plan. For a VS Code C# debugger configuration, use `sourceFileMap` as returned, enable exact source matching, launch the executable artifact or attach to a module host, and put breakpoints in the authored `.ps1`/`.psm1`. The direct breakpoint, step, locals, stack, and exception gate remains open; treat this as debugger setup evidence, not an observed debugger guarantee.
 
