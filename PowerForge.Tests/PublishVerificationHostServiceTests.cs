@@ -7,6 +7,20 @@ namespace PowerForge.Tests;
 public sealed class PublishVerificationHostServiceTests
 {
     [Fact]
+    public void PackageIdentityReader_UsesArchiveMetadataInsteadOfFileName()
+    {
+        using var package = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");
+        var renamed = Path.Combine(package.RootPath, "signed-output.nupkg");
+        File.Move(package.PackagePath, renamed);
+
+        var identity = NuGetPackageIdentityReader.TryRead(renamed);
+
+        Assert.NotNull(identity);
+        Assert.Equal("Contoso.ReleaseOps", identity.Id);
+        Assert.Equal("1.2.3", identity.Version);
+    }
+
+    [Fact]
     public async Task VerifyAsync_NuGetFeed_VerifiesPackageAgainstResolvedFlatContainer()
     {
         using var packageScope = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");

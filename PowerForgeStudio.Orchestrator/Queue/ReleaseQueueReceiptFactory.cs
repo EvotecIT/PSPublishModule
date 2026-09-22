@@ -14,7 +14,9 @@ public static class ReleaseQueueReceiptFactory
         string? destination,
         ReleasePublishReceiptStatus status,
         string summary,
-        string? sourcePath = null)
+        string? sourcePath = null,
+        string? packageId = null,
+        string? packageVersion = null)
         => new(
             RootPath: rootPath,
             RepositoryName: repositoryName,
@@ -25,7 +27,10 @@ public static class ReleaseQueueReceiptFactory
             SourcePath: sourcePath,
             Status: status,
             Summary: summary,
-            PublishedAtUtc: DateTimeOffset.UtcNow);
+            PublishedAtUtc: DateTimeOffset.UtcNow) {
+            PackageId = packageId,
+            PackageVersion = packageVersion
+        };
 
     public static ReleasePublishReceipt FailedPublishReceipt(
         string rootPath,

@@ -98,7 +98,7 @@ public sealed class DurableSigningTests
             Assert.Empty(reopened.Progress);
             var version = await sqlite.QueryReadOnlyAsListAsync(path,
                 "SELECT value FROM app_schema WHERE key = 'schema_version';", reader => reader.GetString(0));
-            Assert.Equal("21", Assert.Single(version));
+            Assert.Equal("22", Assert.Single(version));
         }
         finally { Directory.Delete(root, true); }
     }

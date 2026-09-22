@@ -676,6 +676,7 @@ public sealed partial class ReleasePublishExecutionService
                             cancellationToken).ConfigureAwait(false);
                         foreach (var package in packages)
                         {
+                            var identity = NuGetPackageIdentityReader.TryRead(package);
                             var result = await PublishNugetPackageAsync(
                                 package,
                                 config.PublishApiKey!,
@@ -691,7 +692,9 @@ public sealed partial class ReleasePublishExecutionService
                                 config.PublishSource,
                                 result.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                                 result.Succeeded ? "Package pushed with dotnet nuget push." : result.ErrorMessage!,
-                                package));
+                                package,
+                                identity?.Id,
+                                identity?.Version));
                             if (!result.Succeeded && config.PublishFailFast)
                                 break;
                         }

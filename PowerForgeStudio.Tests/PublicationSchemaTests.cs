@@ -19,6 +19,31 @@ public sealed class PublicationSchemaTests
         """;
 
     [Fact]
+    public async Task ExistingReceiptTableGainsIdentityColumnsWithoutLosingPublicationEvidence()
+    {
+        var root = NewRoot();
+        try
+        {
+            var path = Path.Combine(root, "state.db");
+            var database = new ReleaseStateDatabase(path);
+            await database.InitializeAsync();
+            var original = ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Fixture", "ProjectBuild",
+                "Fixture.1.2.3.nupkg", "NuGet", "https://api.nuget.org/v3/index.json",
+                ReleasePublishReceiptStatus.Published, "Published.", "package.nupkg");
+            await database.PersistPublishReceiptsAsync("existing", [original]);
+            var sqlite = new SQLite();
+            await sqlite.ExecuteNonQueryAsync(path,
+                "ALTER TABLE release_publish_receipt DROP COLUMN package_id; ALTER TABLE release_publish_receipt DROP COLUMN package_version;");
+
+            await new ReleaseStateDatabase(path).InitializeAsync();
+
+            var recovered = Assert.Single(await new ReleaseStateDatabase(path).LoadPublishReceiptsAsync("existing"));
+            Assert.Equal(original, recovered);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task MigrationPreservesLegacyEvidenceAndSupportsMultipleDestinationsAndDuplicateEvidence()
     {
         var root = NewRoot();
@@ -27,9 +52,11 @@ public sealed class PublicationSchemaTests
             var path = Path.Combine(root, "state.db"); var sqlite = new SQLite();
             await sqlite.ExecuteNonQueryAsync(path, LegacyTable);
             var database = new ReleaseStateDatabase(path);
-            var original = Assert.Single(await database.LoadPublishReceiptsAsync("legacy"));
             await database.InitializeAsync();
-            Assert.Equal(original, Assert.Single(await database.LoadPublishReceiptsAsync("legacy")));
+            var original = Assert.Single(await database.LoadPublishReceiptsAsync("legacy"));
+            Assert.Equal("Original evidence", original.Summary);
+            Assert.Null(original.PackageId);
+            Assert.Null(original.PackageVersion);
             var session = ReleaseQueueSessionFactory.Create(root, [], DateTimeOffset.UtcNow);
             var receipt = original with { RootPath = root, Destination = "feed-a" };
             await database.PersistReleaseCheckpointAsync(session, publishReceipts: [receipt, receipt with { Destination = "feed-b" }, receipt]);
@@ -41,7 +68,7 @@ public sealed class PublicationSchemaTests
             Assert.Single(recovered, value => value.Destination == "feed-b");
             Assert.Equal(original, Assert.Single(await database.LoadPublishReceiptsAsync("legacy")));
             var version = await sqlite.QueryReadOnlyAsListAsync(path, "SELECT value FROM app_schema WHERE key = 'schema_version';", reader => reader.GetString(0));
-            Assert.Equal("21", Assert.Single(version));
+            Assert.Equal("22", Assert.Single(version));
         }
         finally { Directory.Delete(root, true); }
     }

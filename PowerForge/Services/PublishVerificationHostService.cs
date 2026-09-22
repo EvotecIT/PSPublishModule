@@ -129,7 +129,7 @@ public sealed class PublishVerificationHostService : IDisposable
         }
 
         var sourcePath = request.SourcePath!;
-        var identity = TryReadPackageIdentity(sourcePath);
+        var identity = NuGetPackageIdentityReader.TryRead(sourcePath);
         if (identity is null)
         {
             return Failed("NuGet package identity could not be read from the .nupkg.");
@@ -345,35 +345,6 @@ public sealed class PublishVerificationHostService : IDisposable
         return new Uri(builder.ToString(), UriKind.Absolute);
     }
 
-    private static NuGetPackageIdentity? TryReadPackageIdentity(string packagePath)
-    {
-        try
-        {
-            using var archive = ZipFile.OpenRead(packagePath);
-            var nuspecEntry = archive.Entries.FirstOrDefault(entry => entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
-            if (nuspecEntry is null)
-            {
-                return null;
-            }
-
-            using var stream = nuspecEntry.Open();
-            using var reader = new StreamReader(stream);
-            var xml = System.Xml.Linq.XDocument.Load(reader);
-            var metadata = xml.Root?.Elements().FirstOrDefault(element => element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase));
-            var id = metadata?.Elements().FirstOrDefault(element => element.Name.LocalName.Equals("id", StringComparison.OrdinalIgnoreCase))?.Value;
-            var version = metadata?.Elements().FirstOrDefault(element => element.Name.LocalName.Equals("version", StringComparison.OrdinalIgnoreCase))?.Value;
-            var packageId = id;
-            var packageVersion = version;
-            return string.IsNullOrWhiteSpace(packageId) || string.IsNullOrWhiteSpace(packageVersion)
-                ? null
-                : new NuGetPackageIdentity(packageId!.Trim(), packageVersion!.Trim());
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private static PublishVerificationResult Verified(string summary)
         => new() { Status = PublishVerificationStatus.Verified, Summary = summary };
 
@@ -382,19 +353,6 @@ public sealed class PublishVerificationHostService : IDisposable
 
     private static PublishVerificationResult Skipped(string summary)
         => new() { Status = PublishVerificationStatus.Skipped, Summary = summary };
-
-    private sealed class NuGetPackageIdentity
-    {
-        public NuGetPackageIdentity(string id, string version)
-        {
-            Id = id;
-            Version = version;
-        }
-
-        public string Id { get; }
-
-        public string Version { get; }
-    }
 
     private struct ProbeResponse
     {

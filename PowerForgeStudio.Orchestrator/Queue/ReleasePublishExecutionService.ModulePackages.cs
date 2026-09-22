@@ -105,6 +105,7 @@ public sealed partial class ReleasePublishExecutionService
                             cancellationToken).ConfigureAwait(false);
                         foreach (var package in packages)
                         {
+                            var identity = NuGetPackageIdentityReader.TryRead(package);
                             var publish = await PublishNugetPackageAsync(
                                 package,
                                 publishConfig.PublishApiKey!,
@@ -120,7 +121,9 @@ public sealed partial class ReleasePublishExecutionService
                                 publishConfig.PublishSource,
                                 publish.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
                                 publish.Succeeded ? "Signed checkpointed package published without rebuilding." : publish.ErrorMessage!,
-                                package));
+                                package,
+                                identity?.Id,
+                                identity?.Version));
                             if (!publish.Succeeded && publishConfig.PublishFailFast)
                                 break;
                         }

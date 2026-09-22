@@ -280,6 +280,7 @@ public sealed partial class ReleasePublishExecutionService
             cancellationToken).ConfigureAwait(false);
 
         if (!publishResult.Succeeded) cancellationToken.ThrowIfCancellationRequested();
+        var normalizedPreRelease = NormalizeModulePreRelease(packageDetails.PreRelease);
         return ReleaseQueueReceiptFactory.CreatePublishReceipt(
             repository.RootPath,
             repository.Name,
@@ -290,7 +291,11 @@ public sealed partial class ReleasePublishExecutionService
             publishResult.Succeeded ? ReleasePublishReceiptStatus.Published : ReleasePublishReceiptStatus.Failed,
             publishResult.Succeeded ? $"Module published to {publishResult.RepositoryName ?? destination} using {publishResult.Tool}."
                 : publishResult.ErrorMessage ?? "Module publication failed.",
-            packageDetails.PackagePath);
+            packageDetails.PackagePath,
+            packageDetails.ModuleName,
+            normalizedPreRelease.Length == 0
+                ? packageDetails.Version
+                : $"{packageDetails.Version}-{normalizedPreRelease}");
     }
 
     private async Task<ReleasePublishReceipt> ExecuteModuleGitHubPublishAsync(

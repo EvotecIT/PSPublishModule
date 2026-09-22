@@ -21,6 +21,7 @@ public sealed partial class ReleaseViewModel
 
     public ObservableCollection<ReleasePublishTarget> PublicationTargets { get; } = [];
     public ObservableCollection<ReleasePublishReceipt> PublicationReceipts { get; } = [];
+    [ObservableProperty] private ReleasePublishReceipt? _selectedPublicationReceipt;
     public ObservableCollection<ReleaseVerificationReceipt> VerificationReceipts { get; } = [];
     [ObservableProperty] private string _publicationSummary = "";
     [ObservableProperty] private bool _isInspectingPublication;
@@ -36,6 +37,15 @@ public sealed partial class ReleaseViewModel
     public bool CanVerify => !_disposed && !HasProtectedReleaseWork
         && Handoff?.Session.Items.SingleOrDefault() is { Stage: ReleaseQueueStage.Verify, Status: ReleaseQueueItemStatus.ReadyToRun };
     public bool HasPublicationReceipts => PublicationReceipts.Count > 0;
+    public bool CanInspectPublicPackage => !_disposed && !HasProtectedReleaseWork && openPublicPackage is not null && SelectedPublicationReceipt?.CanInspectPublicPackage == true;
+    partial void OnSelectedPublicationReceiptChanged(ReleasePublishReceipt? value) => OnPropertyChanged(nameof(CanInspectPublicPackage));
+
+    [RelayCommand]
+    private async Task InspectPublicPackageAsync()
+    {
+        if (!CanInspectPublicPackage || SelectedPublicationReceipt is not { } receipt) return;
+        await openPublicPackage!(receipt);
+    }
     public bool HasVerificationReceipts => VerificationReceipts.Count > 0;
     public bool HasPublicationTargets => PublicationTargets.Count > 0;
     public bool CanReviewPublication => CanInspectPublication && _publicationSnapshot is not null && HasPublicationTargets;
@@ -100,6 +110,7 @@ public sealed partial class ReleaseViewModel
             HasUnpersistedEvidence = _pendingPublicationSave is not null;
             Handoff = captured with { Session = result.Session };
             PublicationReceipts.Clear();
+            SelectedPublicationReceipt = null;
             foreach (var receipt in result.Execution.Receipts)
                 PublicationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.Sanitize(receipt.Destination) });
             OnPropertyChanged(nameof(HasPublicationReceipts)); ResetPublicationApproval();
@@ -177,7 +188,7 @@ public sealed partial class ReleaseViewModel
 
     private void ResetPublicationState()
     {
-        ResetPublicationApproval(); PublicationTargets.Clear(); PublicationReceipts.Clear(); VerificationReceipts.Clear(); PublicationSummary = "";
+        ResetPublicationApproval(); PublicationTargets.Clear(); PublicationReceipts.Clear(); SelectedPublicationReceipt = null; VerificationReceipts.Clear(); PublicationSummary = "";
         OnPropertyChanged(nameof(HasPublicationTargets)); OnPropertyChanged(nameof(HasPublicationReceipts)); OnPropertyChanged(nameof(HasVerificationReceipts));
         NotifyReleaseState();
     }

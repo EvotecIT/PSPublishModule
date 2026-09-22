@@ -1,15 +1,86 @@
 using Avalonia.Headless;
+using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using System.Globalization;
 using PowerForgeStudio.Avalonia.ViewModels;
+using PowerForgeStudio.Avalonia.Views;
 using PowerForgeStudio.Domain.Packages;
+using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Orchestrator.Packages;
 
 namespace PowerForgeStudio.Avalonia.Tests;
 
 public sealed class WorkspacePackagesTests
 {
+    [Fact]
+    public async Task SavedPublicationOpensExactPackageInPublicSnapshotWithoutClaimingVersionDownloads()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-package-handoff-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                var source = new FakePackageCatalog();
+                using var model = new WorkspaceViewModel(root, packages: source);
+                model.ShowReleaseCommand.Execute(null);
+                var receipt = new ReleasePublishReceipt(root, "OfficeIMO", "ProjectBuild", "signed-output.nupkg", "NuGet",
+                    "https://api.nuget.org/v3/index.json", "signed-output.nupkg", ReleasePublishReceiptStatus.Published,
+                    "Published.", DateTimeOffset.UtcNow) { PackageId = "OfficeIMO.Word", PackageVersion = "1.2.3" };
+                model.Release.PublicationReceipts.Add(receipt);
+                model.Release.SelectedPublicationReceipt = receipt;
+
+                var releaseWindow = new MainWindow { DataContext = model, Width = 1600, Height = 900 };
+                releaseWindow.Show();
+                try
+                {
+                    releaseWindow.GetVisualDescendants().OfType<ReleaseView>().Single()
+                        .GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+                    Capture(releaseWindow, "package-release-receipt-wide.png");
+                    releaseWindow.Width = 1050;
+                    releaseWindow.Height = 720;
+                    releaseWindow.UpdateLayout();
+                    releaseWindow.GetVisualDescendants().OfType<ReleaseView>().Single()
+                        .GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+                    Capture(releaseWindow, "package-release-receipt-compact.png");
+                }
+                finally { releaseWindow.Close(); }
+
+                await model.Release.InspectPublicPackageCommand.ExecuteAsync(null);
+
+                Assert.True(model.IsPackagesPage);
+                Assert.Equal("OfficeIMO.Word", model.Packages.Search);
+                Assert.Equal("NuGet.org", model.Packages.Filter);
+                Assert.Equal("OfficeIMO.Word", model.Packages.SelectedEntry?.Id);
+                Assert.Contains("latest version", model.Packages.HandoffStatus, StringComparison.Ordinal);
+                Assert.Contains("package-wide", model.Packages.HandoffStatus, StringComparison.Ordinal);
+
+                var wide = new MainWindow { DataContext = model, Width = 1600, Height = 900 };
+                wide.Show();
+                try { Capture(wide, "package-release-handoff-wide.png"); }
+                finally { wide.Close(); }
+                var compact = new MainWindow { DataContext = model, Width = 1050, Height = 720 };
+                compact.Show();
+                try { Capture(compact, "package-release-handoff-compact.png"); }
+                finally { compact.Close(); }
+
+                var privateReceipt = receipt with { Destination = "https://private.example.test/v3/index.json" };
+                Assert.False(privateReceipt.CanInspectPublicPackage);
+                Assert.False((receipt with { TargetKind = "PowerShellRepository", Destination = "PowerShellGallery" }).CanInspectPublicPackage);
+                Assert.Equal("PowerShell Gallery", (receipt with { TargetKind = "PowerShellRepository", Destination = "PSGallery" }).PublicRegistry);
+                Assert.False((receipt with { Status = ReleasePublishReceiptStatus.Failed }).CanInspectPublicPackage);
+
+                source.NuGetVersion = "1.2.4";
+                await model.Packages.RefreshAsync();
+                Assert.Equal("1.2.4", model.Packages.SelectedEntry?.LatestVersion);
+                Assert.Equal("", model.Packages.HandoffStatus);
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public async Task PackagesRouteFiltersAndPreservesEvidenceWhenRefreshFails()
     {
@@ -86,13 +157,14 @@ public sealed class WorkspacePackagesTests
     private sealed class FakePackageCatalog : IWorkspacePackageCatalogService
     {
         public bool Fail { get; set; }
+        public string NuGetVersion { get; set; } = "1.2.3";
 
         public Task<WorkspacePackageSnapshot> ReadAsync(CancellationToken cancellationToken = default)
         {
             if (Fail) throw new HttpRequestException("Endpoint unavailable");
             return Task.FromResult(new WorkspacePackageSnapshot(
                 DateTimeOffset.UtcNow.AddMinutes(-10), DateTimeOffset.UtcNow,
-                [new WorkspacePackageMetric("OfficeIMO.Word", "NuGet.org", "1.2.3", 1200,
+                [new WorkspacePackageMetric("OfficeIMO.Word", "NuGet.org", NuGetVersion, 1200,
                     "https://www.nuget.org/packages/OfficeIMO.Word"),
                  new WorkspacePackageMetric("PSPublishModule", "PowerShell Gallery", "3.0.144", 300,
                     "https://www.powershellgallery.com/packages/PSPublishModule")],

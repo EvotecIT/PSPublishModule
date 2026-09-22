@@ -17,7 +17,7 @@ namespace PowerForgeStudio.Orchestrator.Storage;
 
 public sealed partial class ReleaseStateDatabase
 {
-    private const string CurrentSchemaVersion = "21";
+    private const string CurrentSchemaVersion = "22";
     private readonly SQLite _sqlite = new() {
         BusyTimeoutMs = 10_000
     };
@@ -99,6 +99,8 @@ public sealed partial class ReleaseStateDatabase
             target_kind,
             destination,
             source_path,
+            package_id,
+            package_version,
             status,
             summary,
             published_at_utc)
@@ -111,6 +113,8 @@ public sealed partial class ReleaseStateDatabase
             @TargetKind,
             @Destination,
             @SourcePath,
+            @PackageId,
+            @PackageVersion,
             @Status,
             @Summary,
             @PublishedAtUtc);
@@ -124,6 +128,8 @@ public sealed partial class ReleaseStateDatabase
                target_kind,
                destination,
                source_path,
+               package_id,
+               package_version,
                status,
                summary,
                published_at_utc
@@ -140,6 +146,8 @@ public sealed partial class ReleaseStateDatabase
             ["@TargetKind"] = receipt.TargetKind,
             ["@Destination"] = receipt.Destination,
             ["@SourcePath"] = receipt.SourcePath,
+            ["@PackageId"] = receipt.PackageId,
+            ["@PackageVersion"] = receipt.PackageVersion,
             ["@Status"] = receipt.Status.ToString(),
             ["@Summary"] = receipt.Summary,
             ["@PublishedAtUtc"] = receipt.PublishedAtUtc.ToString("O")
@@ -152,9 +160,12 @@ public sealed partial class ReleaseStateDatabase
             TargetKind: reader.GetString(4),
             Destination: reader.IsDBNull(5) ? null : reader.GetString(5),
             SourcePath: reader.IsDBNull(6) ? null : reader.GetString(6),
-            Status: Enum.Parse<ReleasePublishReceiptStatus>(reader.GetString(7), ignoreCase: true),
-            Summary: reader.GetString(8),
-            PublishedAtUtc: DateTimeOffset.Parse(reader.GetString(9))));
+            Status: Enum.Parse<ReleasePublishReceiptStatus>(reader.GetString(9), ignoreCase: true),
+            Summary: reader.GetString(10),
+            PublishedAtUtc: DateTimeOffset.Parse(reader.GetString(11))) {
+            PackageId = reader.IsDBNull(7) ? null : reader.GetString(7),
+            PackageVersion = reader.IsDBNull(8) ? null : reader.GetString(8)
+        });
     private static readonly ReceiptTableDefinition<ReleaseVerificationReceipt> VerificationReceiptTable = new(
         TableName: "release_verification_receipt",
         InsertSql:

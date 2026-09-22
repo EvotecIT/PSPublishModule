@@ -3,6 +3,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Packages;
+using PowerForgeStudio.Domain.Publish;
 using PowerForgeStudio.Orchestrator.Packages;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
@@ -12,6 +13,7 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
 {
     private readonly IWorkspacePackageCatalogService _catalog;
     private readonly List<WorkspacePackageMetric> _all = [];
+    private WorkspacePackageSnapshot? _lastSnapshot;
     private CancellationTokenSource? _refresh;
     private int _version;
 
@@ -32,11 +34,13 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _nuGetCountLabel = "Not loaded";
     [ObservableProperty] private string _powerShellGalleryCountLabel = "Not loaded";
     [ObservableProperty] private string _warningSummary = "";
+    [ObservableProperty] private string _handoffStatus = "";
     [ObservableProperty] private int _warningCount;
     [ObservableProperty] private bool _isStale;
     public bool HasLoaded { get; private set; }
     public bool HasEntries => Entries.Count > 0;
     public bool HasWarnings => WarningCount > 0;
+    public bool HasHandoffStatus => HandoffStatus.Length > 0;
     public bool HasSelection => SelectedEntry is not null;
     public bool IsAllFilter => Filter == "All";
     public bool IsNuGetFilter => Filter == "NuGet.org";
@@ -48,6 +52,26 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
     public bool CanOpenSelected => SelectedEntry?.DetailsUrl is { Length: > 0 };
 
     partial void OnWarningCountChanged(int value) => OnPropertyChanged(nameof(HasWarnings));
+    partial void OnHandoffStatusChanged(string value) => OnPropertyChanged(nameof(HasHandoffStatus));
+
+    public void FocusPublishedPackage(ReleasePublishReceipt receipt)
+    {
+        if (receipt.PublicRegistry is not { } registry || receipt.PackageId is not { } id ||
+            receipt.PackageVersion is not { } version) return;
+        Filter = registry;
+        Search = id;
+        var match = Entries.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase) && item.Registry == registry);
+        SelectedEntry = match;
+        var source = _lastSnapshot is null ? "No public snapshot is loaded" :
+            $"Snapshot generated {_lastSnapshot.GeneratedAtUtc:yyyy-MM-dd HH:mm} UTC" +
+            (_lastSnapshot.IsStale ? " (stale)" : "") +
+            (_lastSnapshot.IsPartial ? " (partial)" : "");
+        HandoffStatus = match is null
+            ? $"{id} {version}: no matching {registry} row in this snapshot. {source}. Check the saved release verification for the exact version."
+            : string.Equals(match.LatestVersion, version, StringComparison.OrdinalIgnoreCase)
+                ? $"{id} {version}: the public snapshot reports this as the latest version. {source}. Downloads are package-wide; use release verification to confirm exact-version delivery."
+                : $"{id} {version}: the public snapshot lists latest version {match.VersionDisplay}. {source}. Older versions are not represented here; check the saved release verification.";
+    }
 
     partial void OnSelectedEntryChanged(WorkspacePackageMetric? value)
     {
@@ -59,13 +83,18 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
 
     partial void OnFilterChanged(string value)
     {
+        HandoffStatus = "";
         OnPropertyChanged(nameof(IsAllFilter));
         OnPropertyChanged(nameof(IsNuGetFilter));
         OnPropertyChanged(nameof(IsGalleryFilter));
         ApplyFilter();
     }
 
-    partial void OnSearchChanged(string value) => ApplyFilter();
+    partial void OnSearchChanged(string value)
+    {
+        HandoffStatus = "";
+        ApplyFilter();
+    }
 
     [RelayCommand]
     public async Task RefreshAsync()
@@ -80,6 +109,8 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
         {
             var snapshot = await _catalog.ReadAsync(_refresh.Token);
             if (version != _version) return;
+            _lastSnapshot = snapshot;
+            HandoffStatus = "";
             var selected = SelectedEntry is { } current ? (Registry: current.Registry, Id: current.Id) : ((string Registry, string Id)?)null;
             _all.Clear();
             _all.AddRange(snapshot.Packages.OrderByDescending(static item => item.Downloads ?? -1)

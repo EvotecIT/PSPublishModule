@@ -163,6 +163,7 @@ public sealed partial class ReleaseViewModel
             foreach (var receipt in snapshot.SigningReceipts) Receipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary) });
             foreach (var receipt in snapshot.PublishReceipts)
                 PublicationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.Sanitize(receipt.Destination) });
+            SelectedPublicationReceipt = null;
             foreach (var receipt in snapshot.VerificationReceipts)
                 VerificationReceipts.Add(receipt with { Summary = StudioOutputSanitizer.Sanitize(receipt.Summary), Destination = StudioOutputSanitizer.Sanitize(receipt.Destination) });
             OnPropertyChanged(nameof(HasPublicationReceipts)); OnPropertyChanged(nameof(HasVerificationReceipts));

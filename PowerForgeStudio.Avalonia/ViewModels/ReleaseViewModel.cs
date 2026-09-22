@@ -10,7 +10,8 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 /// <summary>Prepares a release from the captured build rather than the currently selected repository.</summary>
 public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? service = null, IReleaseSigningWorkflow? signing = null,
     PowerForgeStudio.Orchestrator.Storage.IReleaseHistoryService? history = null, IReleasePublicationPreviewService? publication = null,
-    IReleasePublicationWorkflow? publishing = null, IReleaseVerificationWorkflow? verification = null) : ObservableObject, IDisposable
+    IReleasePublicationWorkflow? publishing = null, IReleaseVerificationWorkflow? verification = null,
+    Func<PowerForgeStudio.Domain.Publish.ReleasePublishReceipt, Task>? openPublicPackage = null) : ObservableObject, IDisposable
 {
     private readonly IReleaseBuildHandoffService _service = service ?? new ReleaseBuildHandoffService();
     private readonly IReleaseSigningWorkflow _signing = signing ?? new DurableReleaseSigningWorkflow(PowerForgeStudioHostPaths.GetReleaseHistoryDatabasePath());

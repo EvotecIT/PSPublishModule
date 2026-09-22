@@ -117,16 +117,18 @@
       <CheckBox Content="I reviewed these destinations and approve external publication" IsChecked="{Binding ConfirmPublication}" IsVisible="{Binding CanReviewPublication}" />
       <Button Content="Publish signed artifacts" Command="{Binding PublishCommand}" IsEnabled="{Binding CanPublish}" IsVisible="{Binding CanReviewPublication}" Background="#0865FF" Foreground="White" />
       <TextBlock IsVisible="{Binding HasPublicationReceipts}" Text="Publication receipts" FontSize="16" FontWeight="SemiBold" />
-      <ListBox IsVisible="{Binding HasPublicationReceipts}" ItemsSource="{Binding PublicationReceipts}" MaxHeight="260" Background="#F7F9FC">
+      <ListBox IsVisible="{Binding HasPublicationReceipts}" ItemsSource="{Binding PublicationReceipts}" SelectedItem="{Binding SelectedPublicationReceipt, Mode=TwoWay}" MaxHeight="260" Background="#F7F9FC">
         <ListBox.ItemTemplate><DataTemplate x:DataType="publish:ReleasePublishReceipt">
           <StackPanel Spacing="5" Margin="8">
             <TextBlock Text="{Binding TargetName}" FontWeight="SemiBold" />
             <TextBlock Text="{Binding Status}" Foreground="#0865FF" />
+            <TextBlock Text="{Binding PackageIdentityDisplay}" IsVisible="{Binding HasPackageIdentity}" FontSize="12" Foreground="#4C5F79" />
             <TextBlock Text="{Binding Destination}" TextWrapping="Wrap" />
             <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
           </StackPanel>
         </DataTemplate></ListBox.ItemTemplate>
       </ListBox>
+      <Button Content="Compare selected package with public snapshot" Command="{Binding InspectPublicPackageCommand}" IsEnabled="{Binding CanInspectPublicPackage}" IsVisible="{Binding HasPublicationReceipts}" HorizontalAlignment="Left" />
       <TextBlock IsVisible="{Binding HasVerificationReceipts}" Text="Verification receipts" FontSize="16" FontWeight="SemiBold" />
       <ListBox IsVisible="{Binding HasVerificationReceipts}" ItemsSource="{Binding VerificationReceipts}" MaxHeight="260" Background="#F7F9FC">
         <ListBox.ItemTemplate><DataTemplate x:DataType="verify:ReleaseVerificationReceipt">

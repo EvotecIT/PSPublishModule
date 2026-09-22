@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PowerForgeStudio.Domain.Publish;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
@@ -34,5 +35,12 @@ public sealed partial class WorkspaceViewModel
         IsChangesPage = false;
         IsPackagesPage = true;
         if (!Packages.HasLoaded) await Packages.RefreshAsync();
+    }
+
+    private async Task OpenPublicPackageAsync(ReleasePublishReceipt receipt)
+    {
+        if (!receipt.CanInspectPublicPackage || KeepReleaseVisible()) return;
+        await ShowPackagesAsync();
+        if (IsPackagesPage) Packages.FocusPublishedPackage(receipt);
     }
 }

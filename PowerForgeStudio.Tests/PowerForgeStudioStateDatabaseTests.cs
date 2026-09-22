@@ -137,7 +137,7 @@ public sealed class PowerForgeStudioStateDatabaseTests
     }
 
     [Fact]
-    public async Task PersistPublishReceiptsAsync_RoundTripsSourcePath()
+    public async Task PersistPublishReceiptsAsync_RoundTripsPackageIdentity()
     {
         var stateDatabase = await CreateStateDatabaseAsync();
 
@@ -154,7 +154,10 @@ public sealed class PowerForgeStudioStateDatabaseTests
                     SourcePath: @"C:\Temp\DbaClientX.1.2.3.nupkg",
                     Status: ReleasePublishReceiptStatus.Published,
                     Summary: "Published package.",
-                    PublishedAtUtc: DateTimeOffset.UtcNow)
+                    PublishedAtUtc: DateTimeOffset.UtcNow) {
+                    PackageId = "DbaClientX",
+                    PackageVersion = "1.2.3"
+                }
             ]);
 
         var receipts = await stateDatabase.LoadPublishReceiptsAsync("session-1");
@@ -162,6 +165,8 @@ public sealed class PowerForgeStudioStateDatabaseTests
         var receipt = Assert.Single(receipts);
         Assert.Equal(@"C:\Temp\DbaClientX.1.2.3.nupkg", receipt.SourcePath);
         Assert.Equal("https://api.nuget.org/v3/index.json", receipt.Destination);
+        Assert.Equal("DbaClientX", receipt.PackageId);
+        Assert.Equal("1.2.3", receipt.PackageVersion);
     }
 
     [Fact]

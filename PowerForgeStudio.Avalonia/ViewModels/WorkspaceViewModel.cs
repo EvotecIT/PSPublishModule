@@ -32,7 +32,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 
     public WorkspaceViewModel(string root, IWorkspaceExplorerStateStore? stateStore = null, IFileExplorerService? files = null, IWorkspaceRepositorySource? repositories = null, IGitHubProjectService? gitHub = null, ReleaseViewModel? release = null, IFileRecoveryService? recovery = null, IWorkspaceStorageInspectionService? storage = null, IWorkspaceStorageRemovalService? storageRemoval = null, IWorkspaceAutomationInventoryService? automations = null, IWorkspaceConnectionInventoryService? connections = null, IWorkspaceActivityInventoryService? activity = null, PowerForgeStudio.Orchestrator.Projects.IProjectOverviewService? overview = null, IProjectHistoryService? history = null, IGitHubProjectActionService? gitHubActions = null, IWorkspacePackageCatalogService? packages = null)
     {
-        Release = release ?? new ReleaseViewModel();
+        Release = release ?? new ReleaseViewModel(openPublicPackage: OpenPublicPackageAsync);
         Storage = new StorageViewModel(storage, storageRemoval, GetProtectedWorkingCopies);
         Automations = new AutomationsViewModel(automations);
         Connections = new ConnectionsViewModel(connections);

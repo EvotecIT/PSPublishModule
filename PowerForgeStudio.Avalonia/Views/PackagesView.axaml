@@ -18,6 +18,7 @@
     <StackPanel Grid.Row="2" Spacing="4">
       <TextBlock Text="{Binding SourceStatus}" Classes="muted" FontSize="12" />
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="12" />
+      <TextBlock Text="{Binding HandoffStatus}" IsVisible="{Binding HasHandoffStatus}" Foreground="#244A82" FontSize="12" TextWrapping="Wrap" />
       <TextBlock Text="{Binding WarningSummary}" IsVisible="{Binding HasWarnings}" Foreground="#98620C" FontSize="12" TextWrapping="Wrap" />
     </StackPanel>
     <Grid Grid.Row="3" ColumnDefinitions="Auto,*" ColumnSpacing="12">

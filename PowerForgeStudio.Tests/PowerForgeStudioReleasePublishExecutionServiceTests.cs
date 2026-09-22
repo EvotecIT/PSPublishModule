@@ -410,7 +410,7 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
                 ModuleVersion = '2.0.0'
                 PrivateData = @{
                     PSData = @{
-                        Prerelease = 'preview1'
+                        Prerelease = '-preview1'
                     }
                 }
             }
@@ -536,6 +536,8 @@ public sealed partial class PowerForgeStudioReleasePublishExecutionServiceTests
             Assert.Equal(ReleasePublishReceiptStatus.Published, receipt.Status);
             Assert.Contains("PSGallery", receipt.Summary, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("PSResourceGet", receipt.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("PSPublishModule", receipt.PackageId);
+            Assert.Equal("2.0.0-preview1", receipt.PackageVersion);
         }
         finally
         {
