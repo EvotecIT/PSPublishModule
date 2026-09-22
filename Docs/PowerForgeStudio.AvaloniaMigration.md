@@ -222,6 +222,8 @@ Evidence:
 
 This milestone does not edit connections, authenticate a new account, publish a package, retrieve licensing customer data, query download totals or open an IntelligenceX chat session. Those actions must remain in their existing owners and expose explicit capability/scope evidence before Studio enables them. Native Windows keyboard, pointer and credential-flow interaction remain unverified.
 
+The selected Licensing connection now offers an explicit `Open Evotec Control` handoff. Studio accepts only the known HTTPS portal origin and opens its public home page through the system browser; it does not read a protected profile or pass credentials. A focused command test rejects a lookalike host, HTTP and query-bearing URLs, and wide and compact Details renders were inspected in `Artifacts/StudioValidation/licensing-handoff-20260923/`. The owner repository has typed read-only release, license and download APIs in `Licensing.Admin`; that package was not present on the public NuGet feed when checked on 2026-09-23. Authenticated inventory remains an owner-client integration, not a Studio HTTP or profile-parsing copy.
+
 ### Activity and attention milestone
 
 The Activity rail route is a read-only cross-project inbox. It projects the existing repository catalog, local Git readiness, release drift, release inbox, GitHub issue/PR/CI reads and automation inventory instead of introducing another issue tracker or release state engine. Opening the page never executes a build script, schedule, publication action, issue mutation or pull-request mutation. External probes are bounded to eight repositories by default and three displayed issues per repository.

@@ -478,6 +478,8 @@
               <TextBlock Text="{Binding SelectedEntry.State}" Foreground="#0865FF" />
               <TextBlock Text="Endpoint" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.Endpoint}" FontSize="11" TextWrapping="Wrap" />
+              <Button Content="Open Evotec Control" Command="{Binding OpenSelectedPortalCommand}"
+                      IsVisible="{Binding CanOpenSelectedPortal}" HorizontalAlignment="Left" />
               <TextBlock Text="Credential reference" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.CredentialReference}" TextWrapping="Wrap" />
               <TextBlock Text="Observed capabilities" Classes="muted" />

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Connections;
@@ -9,12 +10,16 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 public sealed partial class ConnectionsViewModel : ObservableObject, IDisposable
 {
     private readonly IWorkspaceConnectionInventoryService _inventory;
+    private readonly Action<string> _openExternal;
     private readonly List<WorkspaceConnectionEntry> _allEntries = [];
     private CancellationTokenSource? _refreshCancellation;
     private int _refreshVersion;
 
-    public ConnectionsViewModel(IWorkspaceConnectionInventoryService? inventory = null)
-        => _inventory = inventory ?? new WorkspaceConnectionInventoryService();
+    public ConnectionsViewModel(IWorkspaceConnectionInventoryService? inventory = null, Action<string>? openExternal = null)
+    {
+        _inventory = inventory ?? new WorkspaceConnectionInventoryService();
+        _openExternal = openExternal ?? (target => Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }));
+    }
 
     public ObservableCollection<WorkspaceConnectionEntry> Entries { get; } = [];
     public ObservableCollection<WorkspaceConnectionSourceState> Sources { get; } = [];
@@ -35,6 +40,14 @@ public sealed partial class ConnectionsViewModel : ObservableObject, IDisposable
     public int UnconfiguredCount => _allEntries.Count(static entry => entry.State == "Unconfigured");
     public int PendingCount => AvailableCount + UnconfiguredCount;
     public int AttentionCount => _allEntries.Count(static entry => entry.NeedsAttention);
+    public bool CanOpenSelectedPortal => SelectedEntry is { Id: "licensing:control", Provider: "Licensing" } entry &&
+        IsEvotecControlUri(entry.Endpoint);
+
+    partial void OnSelectedEntryChanged(WorkspaceConnectionEntry? value)
+    {
+        OnPropertyChanged(nameof(CanOpenSelectedPortal));
+        OpenSelectedPortalCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnFilterChanged(string value)
     {
@@ -111,6 +124,29 @@ public sealed partial class ConnectionsViewModel : ObservableObject, IDisposable
     [RelayCommand] private void ShowAttention() => Filter = "Attention";
     [RelayCommand] private void ShowToolchains() => Filter = "Toolchains";
     [RelayCommand] private void ShowServices() => Filter = "Services";
+
+    [RelayCommand(CanExecute = nameof(CanOpenSelectedPortal))]
+    private void OpenSelectedPortal()
+    {
+        if (!CanOpenSelectedPortal) return;
+        try
+        {
+            _openExternal("https://control.evotec.xyz/");
+            Status = "Opened Evotec Control in the system browser. Studio did not transfer credentials.";
+        }
+        catch (Exception ex)
+        {
+            Output = "Could not open Evotec Control: " + StudioDisplayError.From(ex);
+        }
+    }
+
+    private static bool IsEvotecControlUri(string value)
+        => Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+           uri.Scheme == Uri.UriSchemeHttps &&
+           string.Equals(uri.Host, "control.evotec.xyz", StringComparison.OrdinalIgnoreCase) &&
+           uri.Port == 443 && uri.AbsolutePath == "/" &&
+           string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query) &&
+           string.IsNullOrEmpty(uri.Fragment);
 
     private void ApplyFilter()
     {

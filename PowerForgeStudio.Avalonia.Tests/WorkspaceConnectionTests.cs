@@ -1,7 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PowerForge;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Avalonia.Views;
@@ -12,6 +14,29 @@ namespace PowerForgeStudio.Avalonia.Tests;
 
 public sealed class WorkspaceConnectionTests
 {
+    [Fact]
+    public void LicensingHandoffOpensOnlyTheKnownPortalWithoutPassingCredentials()
+    {
+        var opened = new List<string>();
+        using var model = new ConnectionsViewModel(openExternal: opened.Add);
+        var entry = new WorkspaceConnectionEntry("licensing:control", "Evotec Control", "Licensing", "Product services",
+            "Unconfigured", "https://control.evotec.xyz", "Protected profile reference", [], null,
+            "Public health only", "Licensing.Admin");
+        model.SelectedEntry = entry;
+        Assert.True(model.CanOpenSelectedPortal);
+        model.OpenSelectedPortalCommand.Execute(null);
+        Assert.Equal(["https://control.evotec.xyz/"], opened);
+        Assert.DoesNotContain("Protected profile", model.Status, StringComparison.Ordinal);
+
+        foreach (var endpoint in new[] { "https://control.evotec.xyz.evil.invalid", "https://control.evotec.xyz/?token=secret", "http://control.evotec.xyz" })
+        {
+            model.SelectedEntry = entry with { Endpoint = endpoint };
+            Assert.False(model.CanOpenSelectedPortal);
+            Assert.False(model.OpenSelectedPortalCommand.CanExecute(null));
+        }
+        Assert.Single(opened);
+    }
+
     [Fact]
     public async Task WorkspaceChangeCancelsInspectionAndAllowsImmediateRefresh()
     {
@@ -69,6 +94,11 @@ public sealed class WorkspaceConnectionTests
                 {
                     model.Connections.SelectedEntry = model.Connections.Entries[0];
                     Capture(window, "connections-inventory.png");
+                    model.Connections.SelectedEntry = model.Connections.Entries.Single(entry => entry.Provider == "Licensing");
+                    Assert.True(model.Connections.CanOpenSelectedPortal);
+                    Assert.Contains(window.GetVisualDescendants().OfType<Button>(), button =>
+                        button.Content is string content && content == "Open Evotec Control" && button.IsEffectivelyVisible);
+                    Capture(window, "connections-licensing.png");
                     model.Connections.ShowToolchainsCommand.Execute(null);
                     Assert.Equal(3, model.Connections.Entries.Count);
                     model.Connections.ShowAttentionCommand.Execute(null);
@@ -77,12 +107,18 @@ public sealed class WorkspaceConnectionTests
                 }
                 finally { window.Close(); }
 
-                model.Connections.SelectedEntry = null;
+                model.Connections.SelectedEntry = model.Connections.Entries.Single(entry => entry.Provider == "Licensing");
                 var compact = new MainWindow { DataContext = model, Width = 1050, Height = 720 };
                 compact.Show();
                 try
                 {
                     Capture(compact, "connections-inventory-compact.png");
+                    var details = compact.FindControl<Button>("CompactContextButton")!;
+                    details.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.Contains(compact.GetVisualDescendants().OfType<Button>(), button =>
+                        button.Content is string content && content == "Open Evotec Control" && button.IsEffectivelyVisible);
+                    Capture(compact, "connections-licensing-compact-details.png");
+                    details.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     var page = compact.FindControl<ConnectionsView>("ConnectionsPage");
                     var scroller = page?.FindControl<global::Avalonia.Controls.ScrollViewer>("PageScroll");
                     Assert.NotNull(scroller);
@@ -125,7 +161,7 @@ public sealed class WorkspaceConnectionTests
                 Entry("github", "GitHub", "GitHub", "Source control", "Authentication required", "https://github.com", "GitHub CLI credential store", ["GitHub CLI available"], null),
                 Entry("nuget", "NuGet.org", "Package registries", "Registries", "Reachable", "https://api.nuget.org/v3/index.json", "External publish credential; not loaded", ["Public service index"], now),
                 Entry("gallery", "PowerShell Gallery", "Package registries", "Registries", "Reachable", "https://www.powershellgallery.com/api/v2", "External publish credential; not loaded", ["Public service index"], now),
-                Entry("licensing", "Evotec Control", "Licensing", "Product services", "Unconfigured", "https://control.evotec.xyz", "No Licensing.Admin protected-profile reference found", ["Public health"], null),
+                Entry("licensing:control", "Evotec Control", "Licensing", "Product services", "Unconfigured", "https://control.evotec.xyz", "No Licensing.Admin protected-profile reference found", ["Public health"], null),
                 Entry("ix", "IntelligenceX", "IntelligenceX", "Intelligence", "Available", "named-pipe://./intelligencex.chat", "IntelligenceX provider-owned profile store", ["Owner source detected"], null)
             ];
             WorkspaceConnectionSourceState[] sources =
