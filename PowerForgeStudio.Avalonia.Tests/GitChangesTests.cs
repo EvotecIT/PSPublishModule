@@ -62,6 +62,13 @@ public sealed class GitChangesTests
                 {
                     window.Show();
                     window.UpdateLayout();
+                    var branchActions = Assert.Single(window.GetVisualDescendants().OfType<Expander>(), expander => Equals(expander.Header, "Branch actions"));
+                    Assert.False(branchActions.IsExpanded);
+                    branchActions.IsExpanded = true;
+                    window.UpdateLayout();
+                    Assert.Contains(branchActions.GetVisualDescendants().OfType<Button>(), button => Equals(button.Content, "Create & switch") && button.IsEffectivelyVisible);
+                    branchActions.IsExpanded = false;
+                    window.UpdateLayout();
                     Dispatcher.UIThread.RunJobs();
                     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                     using var frame = window.CaptureRenderedFrame();

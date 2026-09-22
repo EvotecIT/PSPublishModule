@@ -6,12 +6,12 @@
   <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10" MinHeight="620" Height="{Binding #PageScroll.Bounds.Height}">
     <StackPanel Spacing="6">
       <TextBlock Text="Changes" FontSize="22" FontWeight="SemiBold" />
-      <SelectableTextBlock Text="{Binding Root}" TextWrapping="Wrap" FontSize="12" />
+      <SelectableTextBlock Text="{Binding Root}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Root}" FontSize="12" />
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
     </StackPanel>
-    <Border Grid.Row="1" Background="#F7F9FC" BorderBrush="#DCE3ED" BorderThickness="1" CornerRadius="6" Padding="10">
+    <Expander Grid.Row="1" Header="Branch actions" IsExpanded="False">
+    <Border Background="#F7F9FC" BorderBrush="#DCE3ED" BorderThickness="1" CornerRadius="6" Padding="10">
       <StackPanel Spacing="8">
-        <TextBlock Text="Branch" FontWeight="SemiBold" />
         <WrapPanel>
           <StackPanel Orientation="Horizontal" Margin="0,0,18,8">
             <ComboBox Width="220" ItemsSource="{Binding Branches}" SelectedItem="{Binding SelectedBranch, Mode=TwoWay}"
@@ -25,6 +25,7 @@
         </WrapPanel>
       </StackPanel>
     </Border>
+    </Expander>
     <WrapPanel Grid.Row="2">
       <Button Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,8,0" />
       <Button Content="Stage selected" Command="{Binding StageCommand}" IsEnabled="{Binding CanStage}" Margin="0,0,8,0" />
@@ -43,9 +44,9 @@
         </ListBox.ItemTemplate>
       </ListBox>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
-      <Border Grid.Column="2" Background="#F7F9FC" Padding="10">
+      <Border Grid.Column="2" Background="#F7F9FC" BorderBrush="#DCE3ED" BorderThickness="1" Padding="10">
         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-          <SelectableTextBlock Text="{Binding Diff}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
+          <SelectableTextBlock Text="{Binding Diff}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="13" LineHeight="17" />
         </ScrollViewer>
       </Border>
     </Grid>
