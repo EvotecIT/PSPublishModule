@@ -14,6 +14,9 @@ internal sealed class ReleaseBuildProgressAdapter(IProgress<ReleaseBuildProgress
         progress?.Report(new ReleaseBuildProgress(phase, state, StudioOutputSanitizer.Sanitize(detail)));
     }
 
+    public void ProjectBuildOutputLine(string line, bool isError)
+        => Report("ProjectBuild", isError ? "Error output" : "Output", line);
+
     public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null) => Report(phase.ToString(), "Started", detail);
     public void PhaseUpdated(ProjectBuildProgressPhase phase, int completedItems, int totalItems, string? detail = null) => Report(phase.ToString(), $"{completedItems}/{totalItems}", detail);
     public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null) => Report(phase.ToString(), "Completed", detail);

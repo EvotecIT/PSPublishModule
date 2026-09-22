@@ -512,7 +512,9 @@ public sealed partial class ReleaseBuildExecutionService : IReleaseBuildExecutio
         var powerShellExecution = await _projectBuildCommandHostService.ExecuteBuildAsync(new ProjectBuildCommandBuildRequest {
             RepositoryRoot = repository.RootPath,
             ConfigPath = configPath,
-            ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath()
+            ModulePath = PowerForgeStudioHostPaths.ResolvePSPublishModulePath(),
+            OutputLineReceived = line => progress.ProjectBuildOutputLine(line, isError: false),
+            ErrorLineReceived = line => progress.ProjectBuildOutputLine(line, isError: true)
         }, cancellationToken);
         var fallbackArtifactInfo = CollectProjectArtifacts(repository.RootPath);
         var succeeded = powerShellExecution.Succeeded;

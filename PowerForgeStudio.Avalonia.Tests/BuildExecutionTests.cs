@@ -147,6 +147,40 @@ public sealed class BuildExecutionTests
         Assert.False(model.IsBuilding);
     }
 
+    [Fact]
+    public async Task BuildViewModelShowsOutputWhileExecutorIsStillRunning()
+    {
+        await TestAppBuilder.RunAsync(async () =>
+        {
+            var executor = new ReportingExecutor();
+            using var model = new BuildViewModel(builds: executor);
+            model.SetWorkingCopy(Path.GetTempPath());
+            model.HasSuccessfulInspection = true;
+            var observed = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var outputNotifications = 0;
+            model.PropertyChanged += (_, change) =>
+            {
+                if (change.PropertyName != nameof(BuildViewModel.BuildOutput)) return;
+                outputNotifications++;
+                if (model.BuildOutput.Contains("restoring packages", StringComparison.Ordinal))
+                    observed.TrySetResult(model.BuildOutput);
+            };
+
+            var pending = model.BuildAsync();
+            try
+            {
+                var output = await observed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.False(pending.IsCompleted);
+                Assert.Contains("ProjectBuild · Output · restoring packages", output, StringComparison.Ordinal);
+                Assert.True(output.Length <= 128 * 1024, $"Build output grew to {output.Length} characters.");
+                Assert.InRange(outputNotifications, 1, 25);
+            }
+            finally { executor.AllowCompletion.TrySetResult(); }
+            await pending;
+            return true;
+        });
+    }
+
     private sealed class WaitingExecutor : IReleaseBuildExecutionService
     {
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -157,6 +191,21 @@ public sealed class BuildExecutionTests
             Started.SetResult();
             await Task.Delay(Timeout.Infinite, cancellationToken);
             throw new InvalidOperationException("Expected cancellation.");
+        }
+    }
+
+    private sealed class ReportingExecutor : IReleaseBuildExecutionService
+    {
+        public TaskCompletionSource AllowCompletion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<ReleaseBuildExecutionResult> ExecuteAsync(string rootPath, CancellationToken cancellationToken = default,
+            IProgress<ReleaseBuildProgress>? progress = null)
+        {
+            for (var index = 0; index < 1_000; index++)
+                progress?.Report(new ReleaseBuildProgress("ProjectBuild", "Output", new string('x', 256)));
+            progress?.Report(new ReleaseBuildProgress("ProjectBuild", "Output", "restoring packages"));
+            await AllowCompletion.Task.WaitAsync(cancellationToken);
+            return new ReleaseBuildExecutionResult(rootPath, true, "Build completed.", 0, []);
         }
     }
 }

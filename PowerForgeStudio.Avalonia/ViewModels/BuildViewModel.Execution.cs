@@ -44,12 +44,11 @@ public sealed partial class BuildViewModel
         BuildOutput = "";
         BuildStatus = "Building current configuration…";
         IsBuilding = true;
-        var progress = new Progress<ReleaseBuildProgress>(update =>
+        var progress = new BufferedBuildProgress(text =>
         {
             if (_disposed || version != _buildVersion) return;
-            var line = StudioOutputSanitizer.Sanitize($"{update.Phase} · {update.State} · {update.Detail}");
-            var text = BuildOutput + $"\n[{DateTime.Now:HH:mm:ss}] {line}";
-            BuildOutput = text.Length > 128 * 1024 ? text[^(128 * 1024)..] : text;
+            var combined = BuildOutput + text;
+            BuildOutput = combined.Length > 128 * 1024 ? combined[^(128 * 1024)..] : combined;
         });
         try
         {

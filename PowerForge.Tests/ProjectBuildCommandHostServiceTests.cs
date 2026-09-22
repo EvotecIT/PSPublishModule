@@ -76,6 +76,29 @@ public sealed class ProjectBuildCommandHostServiceTests
         Assert.Contains("-ConfigPath 'C:\\Repo\\Build\\project.build.json'", captured.CommandText, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ExecuteBuildAsync_ForwardsLiveOutputCallbacksToPowerShellRunner()
+    {
+        var received = new List<string>();
+        var service = new ProjectBuildCommandHostService(new StubPowerShellRunner(request => {
+            request.OutputLineReceived?.Invoke("restoring packages");
+            request.ErrorLineReceived?.Invoke("warning from build");
+            return new PowerShellRunResult(0, "restoring packages", "warning from build", "pwsh");
+        }));
+
+        var result = await service.ExecuteBuildAsync(new ProjectBuildCommandBuildRequest {
+            RepositoryRoot = Path.GetTempPath(),
+            ModulePath = "PSPublishModule",
+            OutputLineReceived = line => received.Add("out: " + line),
+            ErrorLineReceived = line => received.Add("err: " + line)
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(["out: restoring packages", "err: warning from build"], received);
+        Assert.Equal("restoring packages", result.StandardOutput);
+        Assert.Equal("warning from build", result.StandardError);
+    }
+
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly Func<PowerShellRunRequest, PowerShellRunResult> _execute;

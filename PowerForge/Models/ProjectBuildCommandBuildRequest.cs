@@ -13,4 +13,10 @@ public sealed class ProjectBuildCommandBuildRequest
 
     /// <summary>Resolved PSPublishModule path used for Import-Module.</summary>
     public string ModulePath { get; set; } = string.Empty;
+
+    /// <summary>Optional callback for each standard-output line while the build runs.</summary>
+    public Action<string>? OutputLineReceived { get; set; }
+
+    /// <summary>Optional callback for each standard-error line while the build runs.</summary>
+    public Action<string>? ErrorLineReceived { get; set; }
 }

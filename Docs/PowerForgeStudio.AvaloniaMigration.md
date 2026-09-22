@@ -284,7 +284,7 @@ Evidence:
 
 An initially broad release-build test filter included Apple source-trust tests in unchanged code. Several expected exception types/messages differed from the current wrapper behavior, so that run was stopped and the changed execution contracts were tested separately. This milestone does not claim a green full Studio suite or verified Apple execution. Its 78 disposable Git fixture residues were removed after containment/attribute checks. The completed core test binary output (about 565 MiB) was also removed; the active app's build output remains available for continued development. No user project or public feed was modified.
 
-Remaining execution work includes arbitrary executable/PowerShell task profiles, live raw process output where supported, durable activity/history and artifact provenance, release signing/publishing/verification controls, and native interaction proof. The earlier checklist remains the full replacement scope.
+PowerShell `Build-Project.ps1` fallback now forwards stdout and stderr lines through the shared PowerForge command host while the build runs. Studio sanitizes each progress detail and retains a bounded output tail; JSON project builds continue to report structured in-process phases. This exposes build progress without waiting for the PowerShell process to exit. Remaining execution work includes arbitrary executable/PowerShell task profiles, live output from other process adapters, durable activity/history and artifact provenance, release signing/publishing/verification controls, and native interaction proof. The earlier checklist remains the full replacement scope.
 
 ### Git Changes milestone
 

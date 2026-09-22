@@ -66,10 +66,17 @@ public sealed class ProjectBuildCommandHostService
         return RunCommandAsync(
             request.RepositoryRoot,
             BuildScript(request.RepositoryRoot, request.ModulePath, command.ToString()),
-            cancellationToken);
+            cancellationToken,
+            request.OutputLineReceived,
+            request.ErrorLineReceived);
     }
 
-    private async Task<ProjectBuildCommandHostExecutionResult> RunCommandAsync(string workingDirectory, string script, CancellationToken cancellationToken)
+    private async Task<ProjectBuildCommandHostExecutionResult> RunCommandAsync(
+        string workingDirectory,
+        string script,
+        CancellationToken cancellationToken,
+        Action<string>? outputLineReceived = null,
+        Action<string>? errorLineReceived = null)
     {
         var startedAt = Stopwatch.StartNew();
         cancellationToken.ThrowIfCancellationRequested();
@@ -78,7 +85,12 @@ public sealed class ProjectBuildCommandHostService
             timeout: TimeSpan.FromMinutes(15),
             preferPwsh: !FrameworkCompatibility.IsWindows(),
             workingDirectory: workingDirectory,
-            executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"));
+            environmentVariables: null,
+            executableOverride: Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE"),
+            captureOutput: true,
+            captureError: true,
+            outputLineReceived: outputLineReceived,
+            errorLineReceived: errorLineReceived);
         var result = _powerShellRunner is ICancellablePowerShellRunner cancellableRunner
             ? await cancellableRunner.RunAsync(runRequest, cancellationToken).ConfigureAwait(false)
             : await Task.Run(() => _powerShellRunner.Run(runRequest), cancellationToken).ConfigureAwait(false);
