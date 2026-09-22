@@ -94,9 +94,12 @@ public sealed class GitHubWorkspaceTests
                     Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(),
                         block => block.Text?.Contains("refresh did not complete", StringComparison.Ordinal) == true && block.IsEffectivelyVisible);
                     using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
-                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
                     if (!string.IsNullOrWhiteSpace(output))
+                    {
+                        Directory.CreateDirectory(output);
                         frame.Save(Path.Combine(output, "workspace-github-action-failed-refresh.png"), PngBitmapEncoderOptions.Default);
+                    }
                 }
                 finally { window.Close(); }
             }
@@ -165,7 +168,7 @@ public sealed class GitHubWorkspaceTests
                     window.Width = compact ? 1050 : 1600; window.Height = compact ? 700 : 1000;
                     window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
                     using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
-                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
                     if (!string.IsNullOrWhiteSpace(output))
                     {
                         Directory.CreateDirectory(output);
@@ -197,7 +200,7 @@ public sealed class GitHubWorkspaceTests
                 {
                     review.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                     using var frame = review.CaptureRenderedFrame(); Assert.NotNull(frame);
-                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
                     if (!string.IsNullOrWhiteSpace(output))
                         frame.Save(Path.Combine(output, "workspace-github-action-review.png"), PngBitmapEncoderOptions.Default);
                 }
@@ -211,7 +214,7 @@ public sealed class GitHubWorkspaceTests
                     window.Width = compact ? 1050 : 1600; window.Height = compact ? 700 : 1000;
                     window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                     using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
-                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
                     if (!string.IsNullOrWhiteSpace(output)) frame.Save(Path.Combine(output, compact ? "workspace-pr-files-compact.png" : "workspace-pr-files.png"), PngBitmapEncoderOptions.Default);
                     if (compact)
                     {
@@ -247,7 +250,7 @@ public sealed class GitHubWorkspaceTests
                 using (var issueFrame = window.CaptureRenderedFrame())
                 {
                     Assert.NotNull(issueFrame);
-                    var output = Environment.GetEnvironmentVariable("STUDIO_SCREENSHOT_DIR");
+                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
                     if (!string.IsNullOrWhiteSpace(output)) issueFrame.Save(Path.Combine(output, "workspace-github-issue.png"), PngBitmapEncoderOptions.Default);
                 }
                 workspace.ShowFilesCommand.Execute(null);
