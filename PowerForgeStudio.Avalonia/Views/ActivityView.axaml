@@ -21,19 +21,34 @@
         <Button Grid.Column="1" Content="Refresh evidence" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" VerticalAlignment="Center" />
       </Grid>
 
-      <ItemsControl ItemsSource="{Binding Sources}">
-        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="218" ItemHeight="116" ItemSpacing="10" LineSpacing="10" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+      <ItemsControl ItemsSource="{Binding Sources}" IsVisible="{ReflectionBinding !DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}">
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="activity:WorkspaceActivitySourceState">
-            <Border Classes="card" Padding="13" Margin="0,0,10,0">
+            <Border Classes="card" Padding="10" Margin="0,0,9,0" MinHeight="94" ToolTip.Tip="{Binding Message}">
               <StackPanel Spacing="4">
                 <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Provider}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Grid.Column="1" Text="{Binding EntryCount}" Foreground="#0865FF" FontWeight="SemiBold" /></Grid>
-                <Grid ColumnDefinitions="16,*,Auto" ColumnSpacing="5">
+                <Grid ColumnDefinitions="16,*" ColumnSpacing="5">
                   <controls:StatusIcon IsError="{Binding IsUnavailable}" IsWarning="{Binding IsPartial}" IsSuccess="{Binding IsAvailable}" Width="14" Height="14" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding State}" Classes="sourceState" Classes.available="{Binding IsAvailable}" Classes.partial="{Binding IsPartial}" Classes.unavailable="{Binding IsUnavailable}" />
-                  <TextBlock Grid.Column="2" Text="{Binding ObservedDisplay}" Classes="muted" FontSize="10" />
+                  <TextBlock Grid.Column="1" Text="{Binding State}" Classes="sourceState" Classes.available="{Binding IsAvailable}" Classes.partial="{Binding IsPartial}" Classes.unavailable="{Binding IsUnavailable}" TextTrimming="CharacterEllipsis" />
                 </Grid>
-                <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" MaxHeight="43" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" MaxHeight="30" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding ObservedDisplay}" Classes="muted" FontSize="10" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <ItemsControl ItemsSource="{Binding Sources}" IsVisible="{ReflectionBinding DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}">
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="activity:WorkspaceActivitySourceState">
+            <Border Classes="card" Padding="8" Margin="0,0,8,0" MinHeight="88" ToolTip.Tip="{Binding Message}">
+              <StackPanel Spacing="2">
+                <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Provider}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" /><TextBlock Grid.Column="1" Text="{Binding EntryCount}" Foreground="#0865FF" /></Grid>
+                <Grid ColumnDefinitions="14,*" ColumnSpacing="4"><controls:StatusIcon IsError="{Binding IsUnavailable}" IsWarning="{Binding IsPartial}" IsSuccess="{Binding IsAvailable}" Width="12" Height="12" VerticalAlignment="Center" /><TextBlock Grid.Column="1" Text="{Binding State}" Classes="sourceState" Classes.available="{Binding IsAvailable}" Classes.partial="{Binding IsPartial}" Classes.unavailable="{Binding IsUnavailable}" FontSize="11" TextTrimming="CharacterEllipsis" /></Grid>
+                <TextBlock Text="{Binding Message}" FontSize="10" TextWrapping="Wrap" MaxHeight="28" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding ObservedDisplay}" Classes="muted" FontSize="10" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </Border>
           </DataTemplate>
@@ -54,10 +69,6 @@
         <Button Content="Schedules" Classes="chip" Classes.active="{Binding IsSchedulesFilter}" Command="{Binding ShowSchedulesCommand}" />
         <Button Content="Muted · session" Classes="chip" Classes.active="{Binding IsMutedFilter}" Command="{Binding ShowMutedCommand}" />
       </WrapPanel>
-
-      <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding IsTruncated}">
-        <TextBlock Text="{Binding OmittedCount, StringFormat='The bounded Activity view omitted {0} lower-priority signal(s). Open the owning project detail pages for complete provider evidence.'}" TextWrapping="Wrap" />
-      </Border>
 
       <Border Classes="card" Padding="0" MinHeight="300">
         <Grid RowDefinitions="42,*">
@@ -87,6 +98,10 @@
           </ListBox>
           <TextBlock Grid.Row="1" Text="No activity matches this filter. Provider gaps remain visible above." IsVisible="{Binding !HasEntries}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" TextWrapping="Wrap" Margin="20" />
         </Grid>
+      </Border>
+
+      <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding IsTruncated}">
+        <TextBlock Text="{Binding OmittedCount, StringFormat='The bounded Activity view omitted {0} lower-priority signal(s). Open the owning project detail pages for complete provider evidence.'}" TextWrapping="Wrap" />
       </Border>
 
       <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="11">

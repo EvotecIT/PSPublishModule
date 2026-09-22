@@ -22,7 +22,7 @@ public sealed class StatusIcon : Control
     private static readonly IBrush ErrorBrush = Brush.Parse("#D32835");
     private static readonly IBrush ReviewBrush = Brush.Parse("#1769ED");
     private static readonly IBrush NeutralBrush = Brush.Parse("#738198");
-    private static readonly Pen WhitePen = new(Brushes.White, 2, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+    private readonly Pen _whitePen = new(Brushes.White, 2, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
 
     static StatusIcon() => AffectsRender<StatusIcon>(IsErrorProperty, IsWarningProperty, IsReviewProperty, IsSuccessProperty);
 
@@ -34,7 +34,7 @@ public sealed class StatusIcon : Control
             null, new Point(10, 10), 8, 8);
         if (IsError || IsWarning)
         {
-            context.DrawLine(WhitePen, new Point(10, 5), new Point(10, 11));
+            context.DrawLine(_whitePen, new Point(10, 5), new Point(10, 11));
             context.DrawEllipse(Brushes.White, null, new Point(10, 14), 1, 1);
         }
         else if (IsReview || !IsSuccess)
@@ -43,8 +43,8 @@ public sealed class StatusIcon : Control
         }
         else
         {
-            context.DrawLine(WhitePen, new Point(6, 10), new Point(9, 13));
-            context.DrawLine(WhitePen, new Point(9, 13), new Point(14, 7));
+            context.DrawLine(_whitePen, new Point(6, 10), new Point(9, 13));
+            context.DrawLine(_whitePen, new Point(9, 13), new Point(14, 7));
         }
     }
 }
