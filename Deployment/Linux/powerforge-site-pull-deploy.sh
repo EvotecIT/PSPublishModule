@@ -213,7 +213,10 @@ site_output="$website/_site"
 run_id=$(date -u +%s%N)
 stage="/tmp/powerforge-${run_id}-1-${site}"
 mkdir -m 0700 "$stage"
-tar --dereference --hard-dereference --directory "$site_output" -cf "$stage/artifact.tar" \
+# The build runs with umask 077, but Apache must traverse and read the published tree.
+# Normalize archive modes without making the private build workspace accessible.
+tar --dereference --hard-dereference --mode='u+rwX,go+rX,go-w' \
+  --directory "$site_output" -cf "$stage/artifact.tar" \
   --exclude=.git --exclude=.github .
 artifact_sha=$(sha256sum "$stage/artifact.tar" | awk '{print $1}')
 jq -n --arg repository "$SOURCE_NAME" --arg source "$source_sha" \
