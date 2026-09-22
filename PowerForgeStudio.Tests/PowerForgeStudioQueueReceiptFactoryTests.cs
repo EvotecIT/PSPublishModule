@@ -30,6 +30,10 @@ public sealed class PowerForgeStudioQueueReceiptFactoryTests
                 "GitHub release", "GitHub", "https://github.com/Contoso/Fixture/releases/tag/v1",
                 ReleasePublishReceiptStatus.Published, "Published.", first, githubAssetPaths: [first, second]);
             Assert.Null(incomplete.GitHubAssets);
+            var assetless = ReleaseQueueReceiptFactory.CreatePublishReceipt(root, "Fixture", "ProjectBuild",
+                "GitHub release", "GitHub", "https://github.com/Contoso/Fixture/releases/tag/v1",
+                ReleasePublishReceiptStatus.Published, "Published.", githubAssetPaths: []);
+            Assert.Null(assetless.GitHubAssets);
         }
         finally { Directory.Delete(root, true); }
     }

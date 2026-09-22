@@ -50,7 +50,7 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
         var receipts = Enumerable.Range(1, count).Select(index => new ReleasePublishReceipt(root, "Fixture", "ProjectBuild",
             $"Release {index}", "GitHub", $"https://github.com/Fixture/Release/releases/tag/v{index}", null,
             ReleasePublishReceiptStatus.Published, "Published", DateTimeOffset.UtcNow) {
-                GitHubAssets = new Dictionary<string, long>()
+                GitHubAssets = new Dictionary<string, long> { ["release.zip"] = 12 }
             }).ToArray();
         var published = new ReleasePublishExecutionResult(root, true, "Published", "{}", receipts);
         var item = CreateVerifyReadyQueueItem(root, "Fixture", ReleaseRepositoryKind.Library, JsonSerializer.Serialize(published));
@@ -65,7 +65,7 @@ public sealed partial class PowerForgeStudioVerificationExecutionServiceTests
                 throw new OperationCanceledException("fixture-secret-must-not-escape", cancellation.Token);
             }
             return new HttpResponseMessage(HttpStatusCode.OK) {
-                Content = new StringContent("{\"draft\":false,\"assets\":[]}")
+                Content = new StringContent("{\"draft\":false,\"assets\":[{\"name\":\"release.zip\",\"size\":12,\"state\":\"uploaded\"}]}")
             };
         }));
         using var service = new ReleaseVerificationExecutionService(client,

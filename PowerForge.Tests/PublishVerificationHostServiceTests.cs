@@ -58,6 +58,28 @@ public sealed class PublishVerificationHostServiceTests
     }
 
     [Fact]
+    public async Task VerifyAsync_GitHubRelease_EmptyInventoryCannotPassOnUrlAlone()
+    {
+        var calls = 0;
+        using var client = new HttpClient(new StubHttpMessageHandler(_ => {
+            calls++;
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }));
+        using var service = new PublishVerificationHostService(client,
+            new PowerShellRepositoryResolver(new StubPowerShellRunner(_ =>
+                throw new InvalidOperationException("PowerShell was not expected."))));
+
+        var result = await service.VerifyAsync(new PublishVerificationRequest {
+            TargetKind = "GitHub",
+            Destination = "https://github.com/Contoso/ReleaseOps/releases/tag/v1.2.3",
+            GitHubAssets = new Dictionary<string, long>()
+        });
+
+        Assert.Equal(PublishVerificationStatus.Failed, result.Status);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
     public void PackageIdentityReader_UsesArchiveMetadataInsteadOfFileName()
     {
         using var package = CreateTemporaryPackage("Contoso.ReleaseOps", "1.2.3");

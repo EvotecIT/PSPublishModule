@@ -102,7 +102,7 @@ public sealed class PublishVerificationHostService : IDisposable
 
     private async Task<PublishVerificationResult> VerifyGitHubAsync(PublishVerificationRequest request, CancellationToken cancellationToken)
     {
-        if (request.GitHubAssets is null)
+        if (request.GitHubAssets is null || request.GitHubAssets.Count == 0)
             return Failed("The saved GitHub publication has no asset inventory; republish or reconcile the release before marking it verified.");
         if (!Uri.TryCreate(request.Destination, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps || !uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))

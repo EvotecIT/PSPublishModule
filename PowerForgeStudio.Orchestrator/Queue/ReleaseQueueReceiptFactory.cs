@@ -38,6 +38,7 @@ public static class ReleaseQueueReceiptFactory
 
     private static Dictionary<string, long>? CaptureGitHubAssets(IReadOnlyList<string> paths)
     {
+        if (paths.Count == 0) return null;
         var assets = new Dictionary<string, long>(StringComparer.Ordinal);
         foreach (var path in paths)
         {
