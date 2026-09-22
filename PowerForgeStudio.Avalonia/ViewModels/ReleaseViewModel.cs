@@ -11,7 +11,8 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? service = null, IReleaseSigningWorkflow? signing = null,
     PowerForgeStudio.Orchestrator.Storage.IReleaseHistoryService? history = null, IReleasePublicationPreviewService? publication = null,
     IReleasePublicationWorkflow? publishing = null, IReleaseVerificationWorkflow? verification = null,
-    Func<PowerForgeStudio.Domain.Publish.ReleasePublishReceipt, Task>? openPublicPackage = null) : ObservableObject, IDisposable
+    Func<PowerForgeStudio.Domain.Publish.ReleasePublishReceipt, Task>? openPublicPackage = null,
+    PowerForgeStudio.Orchestrator.Hub.IGitHubReleaseCatalogService? githubReleases = null) : ObservableObject, IDisposable
 {
     private readonly IReleaseBuildHandoffService _service = service ?? new ReleaseBuildHandoffService();
     private readonly IReleaseSigningWorkflow _signing = signing ?? new DurableReleaseSigningWorkflow(PowerForgeStudioHostPaths.GetReleaseHistoryDatabasePath());
@@ -79,6 +80,8 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
         if (_disposed) return;
         _disposed = true; ++_version; _preparing?.Cancel(); _signingCancellation?.Cancel();
         _publicationCancellation?.Cancel(); _verificationCancellation?.Cancel();
+        _githubRefresh?.Cancel(); _githubRefresh?.Dispose();
+        if (githubReleases is null && _releaseGitHubService is IDisposable disposableGitHub) disposableGitHub.Dispose();
         if (publishing is null && _publishing is IDisposable disposablePublishing) disposablePublishing.Dispose();
         if (verification is null && _verification is IDisposable disposableVerification) disposableVerification.Dispose();
     }

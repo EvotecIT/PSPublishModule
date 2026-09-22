@@ -39,6 +39,7 @@ public sealed partial class ReleaseViewModel
                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
         ++_historyVersion;
         HistoryScopeRoot = root;
+        ResetGitHubReleaseCatalog(root);
         History.Clear();
         SelectedHistory = null;
         IsLoadingHistory = false;

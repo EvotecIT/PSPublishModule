@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:publish="using:PowerForgeStudio.Domain.Publish" xmlns:verify="using:PowerForgeStudio.Domain.Verification" xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing" xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
+             xmlns:publish="using:PowerForgeStudio.Domain.Publish" xmlns:verify="using:PowerForgeStudio.Domain.Verification" xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing" xmlns:hub="using:PowerForgeStudio.Domain.Hub" xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.ReleaseView" x:DataType="vm:ReleaseViewModel">
   <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-  <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
+  <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
     <StackPanel Spacing="12">
       <StackPanel Orientation="Horizontal" Spacing="10">
         <controls:NavigationIcon Kind="review" Width="26" Height="26" Ink="#0865FF" VerticalAlignment="Center" />
@@ -50,7 +50,41 @@
         <Button Content="Discard unsaved receipts" Command="{Binding DiscardUnsavedReceiptsCommand}" IsEnabled="{Binding ConfirmDiscardReceipts}" />
       </StackPanel>
     </StackPanel>
-    <Grid Grid.Row="3" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+    <Border Grid.Row="3" Classes="card" Padding="14">
+      <StackPanel Spacing="9">
+        <WrapPanel ItemSpacing="10">
+          <TextBlock Text="Published on GitHub" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Content="Refresh releases" Command="{Binding RefreshGitHubReleasesCommand}" IsEnabled="{Binding CanRefreshGitHubReleases}" />
+        </WrapPanel>
+        <TextBlock Text="{Binding GithubReleaseStatus}" Classes="muted" TextWrapping="Wrap" FontSize="12" />
+        <ListBox ItemsSource="{Binding GitHubReleases}" SelectedItem="{Binding SelectedGitHubRelease, Mode=TwoWay}" IsVisible="{Binding HasGitHubReleases}" MaxHeight="170" Background="#F7F9FC">
+          <ListBox.ItemTemplate><DataTemplate x:DataType="hub:GitHubReleaseMetric">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="3" Margin="8,5">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="1" Text="{Binding StateDisplay}" Foreground="#0865FF" FontSize="11" />
+              <TextBlock Grid.Row="1" Text="{Binding TagName}" Classes="muted" FontSize="12" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AssetSummary}" Classes="muted" FontSize="11" />
+            </Grid>
+          </DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel IsVisible="{Binding HasSelectedGitHubRelease}" Spacing="7">
+          <WrapPanel ItemSpacing="10">
+            <TextBlock Text="{Binding SelectedGitHubRelease.PublishedDisplay}" Classes="muted" VerticalAlignment="Center" FontSize="12" />
+            <Button Content="Open release on GitHub" Command="{Binding OpenGitHubReleaseCommand}" IsEnabled="{Binding CanOpenGitHubRelease}" />
+          </WrapPanel>
+          <TextBlock Text="Asset downloads" FontWeight="SemiBold" FontSize="12" />
+          <ItemsControl ItemsSource="{Binding SelectedGitHubRelease.Assets}">
+            <ItemsControl.ItemTemplate><DataTemplate x:DataType="hub:GitHubReleaseAssetMetric">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="8,3">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding DownloadsDisplay}" FontWeight="SemiBold" />
+              </Grid>
+            </DataTemplate></ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+    <Grid Grid.Row="4" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
       <TextBlock IsVisible="{Binding HasArtifacts}" Text="Release artifacts" FontSize="16" FontWeight="SemiBold" />
       <ListBox Grid.Row="1" IsVisible="{Binding HasArtifacts}" MaxHeight="200" ItemsSource="{Binding Artifacts}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
@@ -95,7 +129,7 @@
         </ListBox.ItemTemplate>
       </ListBox>
     </Grid>
-    <StackPanel Grid.Row="4" Spacing="8" IsVisible="{Binding ShowPublicationDetails}">
+    <StackPanel Grid.Row="5" Spacing="8" IsVisible="{Binding ShowPublicationDetails}">
       <TextBlock Text="Publication destinations" FontSize="16" FontWeight="SemiBold" />
       <WrapPanel>
         <Button Content="Inspect publication targets" Command="{Binding InspectPublicationCommand}" IsVisible="{Binding CanInspectPublication}" Margin="0,0,8,4" />

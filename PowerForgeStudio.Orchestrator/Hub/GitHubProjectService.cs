@@ -6,7 +6,7 @@ using PowerForgeStudio.Domain.Hub;
 namespace PowerForgeStudio.Orchestrator.Hub;
 
 /// <summary>Bounded GitHub reads. Access failures never masquerade as empty data.</summary>
-public sealed partial class GitHubProjectService : IGitHubProjectService, IDisposable
+public sealed partial class GitHubProjectService : IGitHubProjectService, IGitHubReleaseCatalogService, IDisposable
 {
     private const int MaxPagedRequestCount = 5;
     private const int MaximumResponseBytes = 4 * 1024 * 1024;
