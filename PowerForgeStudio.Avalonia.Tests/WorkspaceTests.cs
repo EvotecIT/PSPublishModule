@@ -96,6 +96,14 @@ public sealed class WorkspaceTests
                     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                     Assert.NotNull(window.FindControl<TreeView>("ProjectTree"));
                     Assert.Single(window.GetVisualDescendants().OfType<FilesView>());
+                    var projectActions = window.FindControl<Button>("ProjectActionsButton");
+                    Assert.NotNull(projectActions);
+                    Assert.True(projectActions.IsEffectivelyVisible);
+                    Assert.Equal("Project actions", ControlAutomationPeer.CreatePeerForElement(projectActions)?.GetName());
+                    Assert.Equal(model.Branch, window.FindControl<TextBlock>("StatusBranch")?.Text);
+                    Assert.Equal(model.GitSummary, window.FindControl<TextBlock>("StatusGitSummary")?.Text);
+                    Assert.Equal(model.RepositoryCount, window.FindControl<TextBlock>("StatusRepositoryCount")?.Text);
+                    Assert.Equal("1 repository", model.RepositoryCount);
                     using var frame = window.CaptureRenderedFrame();
                     Assert.NotNull(frame);
                     var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
@@ -159,6 +167,9 @@ public sealed class WorkspaceTests
                     Dispatcher.UIThread.RunJobs();
                     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                     Assert.False(window.FindControl<Border>("ContextPanel")!.IsVisible);
+                    Assert.False(window.FindControl<TextBlock>("StatusGitSummary")!.IsEffectivelyVisible);
+                    Assert.True(window.FindControl<TextBlock>("StatusBranch")!.IsEffectivelyVisible);
+                    Assert.True(window.FindControl<TextBlock>("StatusRepositoryCount")!.IsEffectivelyVisible);
                     using var compact = window.CaptureRenderedFrame();
                     Assert.NotNull(compact);
                     if (!string.IsNullOrEmpty(output)) compact.Save(Path.Combine(output, "workspace-compact.png"), PngBitmapEncoderOptions.Default);

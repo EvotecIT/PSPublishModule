@@ -300,9 +300,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             ApplyFilter();
             RefreshQuickProjectMatches();
             CompleteProjectCatalogRefresh(root);
-            RepositoryCount = $"{found.Count} repositories";
+            RepositoryCount = found.Count == 1 ? "1 repository" : $"{found.Count} repositories";
             Status = "Local discovery complete";
-            AppendOutput($"Discovered {found.Count} repositories in {root}.");
+            AppendOutput($"Discovered {RepositoryCount} in {root}.");
             await RestoreSessionAsync(refresh, root, selection);
             if (!_disposed && refresh == _refreshVersion && SamePath(root, WorkspaceRoot))
             {

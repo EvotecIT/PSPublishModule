@@ -124,13 +124,18 @@
               <Border Grid.Column="2" Background="#F7FAFE" BorderBrush="#D6E2F1" BorderThickness="1" CornerRadius="16" Padding="10,5"
                       IsVisible="{Binding HasWorkingCopy}" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal" Spacing="7">
-                  <controls:NavigationIcon Kind="github" Ink="#0865FF" Width="16" Height="16" VerticalAlignment="Center" />
+                  <controls:NavigationIcon Kind="branch" Ink="#0865FF" Width="16" Height="16" VerticalAlignment="Center" />
                   <TextBlock Text="{Binding Branch}" Foreground="#26334B" VerticalAlignment="Center" MaxWidth="180" TextTrimming="CharacterEllipsis" />
                   <Border Background="#CBD7E7" Width="1" Margin="2,2" />
                   <TextBlock Text="{Binding GitSummary}" Foreground="#64748B" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
               </Border>
-              <Button Grid.Column="3" Content="Project actions" Classes="toolbar" IsVisible="{Binding HasActiveProject}" VerticalAlignment="Center">
+              <Button Grid.Column="3" x:Name="ProjectActionsButton" Classes="projectMenu" IsVisible="{Binding HasActiveProject}" VerticalAlignment="Center"
+                      AutomationProperties.Name="Project actions">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <TextBlock Text="Project actions" VerticalAlignment="Center" />
+                  <controls:NavigationIcon Kind="down" Ink="#52647D" Width="13" Height="13" VerticalAlignment="Center" />
+                </StackPanel>
                 <Button.Flyout>
                   <MenuFlyout>
                     <MenuItem Header="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" />
@@ -505,9 +510,24 @@
       </Border>
     </Grid>
     <Border Grid.Row="2" Background="#F5F8FD" BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" Padding="15,5">
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Text="{Binding DisplayedStatus}" ToolTip.Tip="{Binding DisplayedStatus}" FontSize="12" TextTrimming="CharacterEllipsis" />
-        <TextBlock Grid.Column="1" Text="Avalonia · Local workspace" Classes="muted" FontSize="12" />
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="14">
+        <TextBlock x:Name="StatusMessage" Text="{Binding DisplayedStatus}" ToolTip.Tip="{Binding DisplayedStatus}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasWorkingCopy}">
+            <controls:NavigationIcon Kind="branch" Ink="#52647D" Width="14" Height="14" VerticalAlignment="Center" />
+            <TextBlock x:Name="StatusBranch" Text="{Binding Branch}" Classes="muted" FontSize="12" MaxWidth="130" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{ReflectionBinding !DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}">
+            <Border Background="#CBD7E7" Width="1" Height="14" IsVisible="{Binding HasWorkingCopy}" />
+            <TextBlock x:Name="StatusGitSummary" Text="{Binding GitSummary}" Classes="muted" FontSize="12" MaxWidth="170" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" IsVisible="{Binding HasWorkingCopy}" />
+          </StackPanel>
+          <Border Background="#CBD7E7" Width="1" Height="14" />
+          <TextBlock x:Name="StatusRepositoryCount" Text="{Binding RepositoryCount}" Classes="muted" FontSize="12" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <controls:NavigationIcon Kind="monitor" Ink="#64748B" Width="14" Height="14" VerticalAlignment="Center" />
+          <TextBlock Text="Local workspace" Classes="muted" FontSize="12" />
+        </StackPanel>
       </Grid>
     </Border>
   </Grid>
