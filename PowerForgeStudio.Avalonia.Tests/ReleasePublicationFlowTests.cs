@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
@@ -15,6 +16,56 @@ namespace PowerForgeStudio.Avalonia.Tests;
 
 public sealed class ReleasePublicationFlowTests
 {
+    [Fact]
+    public async Task InspectingDestinationsBringsTheApprovalAreaIntoTheCompactViewport()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-release-scroll-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                using var release = new ReleaseViewModel(new Handoff(root), new Signing(), publication: new Preview(root));
+                using var workspace = new WorkspaceViewModel(root, release: release);
+                release.SetBuild(new(root, true, "Built", 1, []), false, false);
+                workspace.ShowReleaseCommand.Execute(null);
+                var window = new MainWindow { DataContext = workspace, Width = 1050, Height = 720 };
+                window.Show();
+                try
+                {
+                    await release.PrepareAsync();
+                    await release.SignAsync();
+                    window.UpdateLayout();
+                    var view = Assert.Single(window.GetVisualDescendants().OfType<ReleaseView>());
+                    var scroll = view.FindControl<ScrollViewer>("PageScroll")!;
+                    scroll.Offset = new global::Avalonia.Vector(0, 0);
+
+                    await release.InspectPublicationAsync();
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+
+                    Assert.True(release.HasPublicationTargets);
+                    Assert.True(scroll.Offset.Y > 0);
+                    var heading = view.FindControl<TextBlock>("PublicationHeading")!;
+                    var position = heading.TranslatePoint(default, scroll);
+                    Assert.NotNull(position);
+                    Assert.InRange(position.Value.Y, 0, scroll.Viewport.Height);
+                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        Directory.CreateDirectory(output);
+                        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var frame = window.CaptureRenderedFrame();
+                        Assert.NotNull(frame);
+                        frame.Save(Path.Combine(output, "release-destination-review-compact.png"), PngBitmapEncoderOptions.Default);
+                    }
+                }
+                finally { window.Close(); }
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     [Fact]
     public async Task ReviewedTargetsPublishAndVerifyThroughDurableWorkflowSurfaces()
     {

@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:publish="using:PowerForgeStudio.Domain.Publish" xmlns:verify="using:PowerForgeStudio.Domain.Verification" xmlns:storage="using:PowerForgeStudio.Orchestrator.Storage" xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue" xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels" xmlns:domain="using:PowerForgeStudio.Domain.Signing" xmlns:hub="using:PowerForgeStudio.Domain.Hub" xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.ReleaseView" x:DataType="vm:ReleaseViewModel">
-  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+  <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled">
   <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
     <StackPanel Spacing="12">
       <StackPanel Orientation="Horizontal" Spacing="10">
@@ -130,7 +130,7 @@
       </ListBox>
     </Grid>
     <StackPanel Grid.Row="3" Spacing="8" IsVisible="{Binding ShowPublicationDetails}">
-      <TextBlock Text="Publication destinations" FontSize="16" FontWeight="SemiBold" />
+      <TextBlock x:Name="PublicationHeading" Text="Publication destinations" FontSize="16" FontWeight="SemiBold" />
       <WrapPanel>
         <Button Content="Inspect publication targets" Command="{Binding InspectPublicationCommand}" IsVisible="{Binding CanInspectPublication}" Margin="0,0,8,4" />
         <Button Content="Cancel publication" Command="{Binding CancelPublicationCommand}" IsVisible="{Binding IsPublishing}" Margin="0,0,8,4" />
@@ -163,7 +163,7 @@
         </DataTemplate></ListBox.ItemTemplate>
       </ListBox>
       <Button Content="Compare selected package with public snapshot" Command="{Binding InspectPublicPackageCommand}" IsEnabled="{Binding CanInspectPublicPackage}" IsVisible="{Binding HasPublicationReceipts}" HorizontalAlignment="Left" />
-      <TextBlock IsVisible="{Binding HasVerificationReceipts}" Text="Verification receipts" FontSize="16" FontWeight="SemiBold" />
+      <TextBlock x:Name="VerificationHeading" IsVisible="{Binding HasVerificationReceipts}" Text="Verification receipts" FontSize="16" FontWeight="SemiBold" />
       <ListBox IsVisible="{Binding HasVerificationReceipts}" ItemsSource="{Binding VerificationReceipts}" MaxHeight="260" Background="#F7F9FC">
         <ListBox.ItemTemplate><DataTemplate x:DataType="verify:ReleaseVerificationReceipt">
           <StackPanel Spacing="5" Margin="8">
