@@ -107,6 +107,7 @@ public sealed class GitHubReleasePublisherTests
             }
             catch (OperationCanceledException) { }
             catch (HttpListenerException) when (stop.IsCancellationRequested) { }
+            catch (ObjectDisposedException) when (stop.IsCancellationRequested) { }
         });
         try
         {

@@ -445,8 +445,9 @@ internal sealed partial class PowerForgeReleaseService
                 EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory, virusTotalProject);
         }
         var captureModuleArtifactProvenance =
-            ShouldCaptureVirusTotalModuleArtifactProvenance(spec, request, runModule) ||
-            runModule && spec.Module?.IncludesPackages == true;
+            !request.PlanOnly && !request.ValidateOnly &&
+            (ShouldCaptureVirusTotalModuleArtifactProvenance(spec, request, runModule) ||
+             runModule && (spec.Module?.IncludesPackages == true || publishUnifiedGitHub));
 
         if (!runModule && !runPackages && !runTools && !runAppleApps && !runWorkspaceValidation)
         {
