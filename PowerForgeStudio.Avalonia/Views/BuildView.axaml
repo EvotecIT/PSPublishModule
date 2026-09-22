@@ -4,7 +4,7 @@
              xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue"
              xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.BuildView" x:DataType="vm:BuildViewModel">
-  <ScrollViewer>
+  <ScrollViewer x:Name="PageScroll">
     <StackPanel Margin="22,14" Spacing="10">
       <StackPanel Orientation="Horizontal" Spacing="10">
         <controls:NavigationIcon Kind="output" Width="26" Height="26" Ink="#0865FF" VerticalAlignment="Center" />
@@ -22,7 +22,7 @@
       <Border Background="#EEF4FF" CornerRadius="6" Padding="11">
         <StackPanel Spacing="4">
           <TextBlock Text="Review before execution" FontWeight="SemiBold" Foreground="#0865FF" />
-          <TextBlock Text="JSON plans run no scripts. PowerShell inspection can run trusted code. Reviewed actions hide raw arguments; project output may contain secrets." TextWrapping="Wrap" />
+          <TextBlock Text="Studio does not request a build or publication while planning. Script-backed contracts can run trusted PowerShell to export a plan and may have side effects. Reviewed actions omit arguments; output may contain secrets." TextWrapping="Wrap" />
         </StackPanel>
       </Border>
       <StackPanel Orientation="Horizontal" Spacing="10">
@@ -94,7 +94,7 @@
       <TextBlock Text="Build runs the current configuration with publishing disabled through PowerForge. Project scripts and build hooks execute code; project builds may perform configured local signing. Changing projects leaves an active build running; its working copy is shown below." Classes="muted" TextWrapping="Wrap" />
       <Border IsVisible="{Binding HasBuild}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="14">
         <StackPanel Spacing="10">
-          <TextBlock Text="Build result" FontSize="18" FontWeight="SemiBold" />
+          <TextBlock x:Name="BuildResultHeading" Text="Build result" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="{Binding BuildStatus}" TextWrapping="Wrap" />
           <TextBlock Text="Captured working copy" Classes="muted" FontSize="11" />
           <SelectableTextBlock Text="{Binding BuildRoot}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BuildRoot}" FontSize="12" />

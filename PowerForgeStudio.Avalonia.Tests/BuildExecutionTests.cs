@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
@@ -179,6 +180,47 @@ public sealed class BuildExecutionTests
             await pending;
             return true;
         });
+    }
+
+    [Fact]
+    public async Task CompletedBuildScrollsItsReceiptIntoView()
+    {
+        await TestAppBuilder.RunAsync(async () =>
+        {
+            using var model = new BuildViewModel(builds: new CompletedExecutor());
+            model.SetWorkingCopy(Path.GetTempPath());
+            model.HasSuccessfulInspection = true;
+            var view = new BuildView { DataContext = model };
+            var window = new Window { Content = view, Width = 900, Height = 360 };
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+                var scroll = view.GetVisualDescendants().OfType<ScrollViewer>().First();
+                Assert.Equal(0, scroll.Offset.Y);
+
+                await model.BuildAsync();
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+
+                Assert.NotNull(model.BuildResult);
+                Assert.True(scroll.Offset.Y > 0, "The completed build receipt remained below the visible viewport.");
+                var heading = Assert.Single(view.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "Build result");
+                var position = heading.TranslatePoint(default, scroll);
+                Assert.NotNull(position);
+                Assert.InRange(position.Value.Y, 0, scroll.Viewport.Height - heading.Bounds.Height);
+            }
+            finally { window.Close(); }
+            return true;
+        });
+    }
+
+    private sealed class CompletedExecutor : IReleaseBuildExecutionService
+    {
+        public Task<ReleaseBuildExecutionResult> ExecuteAsync(string rootPath, CancellationToken cancellationToken = default,
+            IProgress<ReleaseBuildProgress>? progress = null)
+            => Task.FromResult(new ReleaseBuildExecutionResult(rootPath, true, "Build completed.", 0, []));
     }
 
     private sealed class WaitingExecutor : IReleaseBuildExecutionService
