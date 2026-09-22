@@ -97,6 +97,7 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] Focused tree rows use a thin blue outline that remains visible during keyboard navigation; wide and compact headless renders were inspected in `Artifacts/StudioValidation/tree-focus/`.
 - [x] Dormant projects can move into a counted Archived tree group without changing repository files; wide and compact renders were inspected in `Artifacts/StudioValidation/archived-projects/`.
 - [x] The output dock now wraps long lines and can expand to show more build or inspection output. Wide and compact expanded captures were inspected; the compact page gives most of its remaining height to the dock until it is collapsed.
+- [x] A settled native Windows pass through Overview, Files, Changes, History, Build & Run, Releases, project GitHub, Activity and Storage confirmed the shared shell at 1600 × 1000 physical pixels. The compact Overview path now wraps while remaining copyable; the Activity source strip keeps all five observed providers on one row, so the attention list starts higher. Captures are in `Artifacts/StudioValidation/native-eight-current/` and `Artifacts/StudioValidation/activity-five-sources/`.
 - [x] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.
 - [ ] Capture final native Windows and headless evidence after the last visual change.

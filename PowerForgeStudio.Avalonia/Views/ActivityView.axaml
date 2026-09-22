@@ -28,13 +28,13 @@
       </Grid>
 
       <ItemsControl ItemsSource="{Binding Sources}">
-        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="5" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="activity:WorkspaceActivitySourceState">
             <Border Classes="card" Background="#F7FAFE" Padding="9,6" Margin="0,0,8,0" MinHeight="45" ToolTip.Tip="{Binding Message}">
               <StackPanel Spacing="2">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="5">
-                  <TextBlock Text="{Binding Provider}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Provider}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Provider}" />
                   <TextBlock Grid.Column="1" Text="{Binding EntryCount}" Foreground="#0865FF" FontWeight="SemiBold" FontSize="12" />
                 </Grid>
                 <Grid ColumnDefinitions="13,*" ColumnSpacing="4">
