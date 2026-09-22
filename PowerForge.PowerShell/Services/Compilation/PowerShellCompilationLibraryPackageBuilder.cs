@@ -94,7 +94,7 @@ public sealed partial class PowerShellCompilationLibraryPackageBuilder
     private readonly IProcessRunner _processRunner;
 
     /// <summary>Creates a package builder using the standard process runner.</summary>
-    public PowerShellCompilationLibraryPackageBuilder() : this(new ProcessRunner()) { }
+    public PowerShellCompilationLibraryPackageBuilder() : this(new ProcessRunner(ownProcessTree: true)) { }
 
     /// <summary>Creates a package builder with an explicit process runner.</summary>
     public PowerShellCompilationLibraryPackageBuilder(IProcessRunner processRunner)
@@ -120,6 +120,13 @@ public sealed partial class PowerShellCompilationLibraryPackageBuilder
             Directory.CreateDirectory(sourceDirectory);
             Directory.CreateDirectory(rebuildDirectory);
             var inputs = SnapshotInputs(manifest, request.Compilation.GeneratedSourcePath!, snapshotDirectory, sourceDirectory, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(manifest.ResolvedPackageLockSha256))
+            {
+                var lockPath = Path.Combine(sourceDirectory, "packages.lock.json");
+                if (!File.Exists(lockPath) || !ComputeSha256(lockPath, cancellationToken)
+                        .Equals(manifest.ResolvedPackageLockSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("The emitted source project must contain the exact reviewed NuGet lock. Rebuild with source emission enabled before packing.");
+            }
             var projectPaths = Directory.EnumerateFiles(sourceDirectory, "*.csproj", SearchOption.TopDirectoryOnly).ToArray();
             if (projectPaths.Length != 1)
                 throw new InvalidOperationException("The verified emitted source snapshot must contain exactly one generated project.");

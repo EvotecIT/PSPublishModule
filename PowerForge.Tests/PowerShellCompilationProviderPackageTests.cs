@@ -745,9 +745,11 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         public string ScriptPath { get; }
         public string OutputPath { get; }
 
-        public static ScriptFixture Create(string source)
+        public static ScriptFixture Create(string source, bool compactPath = false)
         {
-            var root = Path.Combine(Path.GetTempPath(), "PowerForgeProviderArtifactTests", Guid.NewGuid().ToString("N"));
+            var root = compactPath
+                ? Path.Combine(Path.GetTempPath(), "PFC", Guid.NewGuid().ToString("N")[..12])
+                : Path.Combine(Path.GetTempPath(), "PowerForgeProviderArtifactTests", Guid.NewGuid().ToString("N"));
             var output = Path.Combine(root, "out");
             Directory.CreateDirectory(output);
             var script = Path.Combine(root, "input.ps1");

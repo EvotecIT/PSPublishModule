@@ -82,7 +82,7 @@ dotnet $powerforge powershell project diagnose ./powerforge.psproject.json
 dotnet $powerforge powershell project pack ./powerforge.psproject.json
 ```
 
-Project pack creates the existing qualified ZIP. Integration with the Strict CLR library NuGet packer and observed source debugging remain separate M28 work; portable PDB output alone is not debugger qualification.
+Project pack creates the existing qualified ZIP. For a tested Strict CLR library, use `project pack --format nuget` and the [library NuGet quickstart](PowerForge.PowerShellCompilation.LibraryPackages.md). Observed source debugging remains separate M28 work; portable PDB output alone is not debugger qualification.
 
 For a module, create the project from its `.psd1` or `.psm1` with `--kind dll --mode Hybrid`; for a CLR library, use `--kind library --mode Strict`. Both use the same lock → restore → build → test → diagnose → pack sequence. Module test performs a clean import, while library test validates CLR metadata. Invoke exported commands or use an ordinary .NET consumer to verify the behavior you intend to distribute. Run/watch is the executable development path, not a substitute for those consumers.
 

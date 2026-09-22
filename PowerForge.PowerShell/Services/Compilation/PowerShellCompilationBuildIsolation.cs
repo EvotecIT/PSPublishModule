@@ -5,12 +5,13 @@ namespace PowerForge;
 /// <summary>Writes the compiler-owned MSBuild and NuGet boundary used by generated projects.</summary>
 internal static class PowerShellCompilationBuildIsolation
 {
-    internal static void Write(string directory, bool requireSdkSelection, bool offlineRestore = false)
+    internal static void Write(string directory, bool requireSdkSelection, bool offlineRestore = false, bool lockedRestore = false)
     {
         if (string.IsNullOrWhiteSpace(directory)) throw new ArgumentException("Build-isolation directory is required.", nameof(directory));
         Directory.CreateDirectory(directory);
         var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        File.WriteAllText(Path.Combine(directory, "Directory.Build.props"), "<Project />" + Environment.NewLine, utf8);
+        File.WriteAllText(Path.Combine(directory, "Directory.Build.props"),
+            (lockedRestore ? "<Project><PropertyGroup><RestoreLockedMode>true</RestoreLockedMode></PropertyGroup></Project>" : "<Project />") + Environment.NewLine, utf8);
         File.WriteAllText(Path.Combine(directory, "Directory.Build.targets"), "<Project />" + Environment.NewLine, utf8);
         File.WriteAllText(
             Path.Combine(directory, "Directory.Packages.props"),

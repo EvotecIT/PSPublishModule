@@ -32,6 +32,9 @@ public sealed class PowerShellCompilationProjectManifest
 
     /// <summary>Portable diagnostics, redaction, and evidence retention policy.</summary>
     public PowerShellCompilationDiagnosticsPolicy Diagnostics { get; set; } = new();
+
+    /// <summary>Optional explicit NuGet metadata used only by the library NuGet packaging workflow.</summary>
+    public PowerShellCompilationProjectNuGetPackage? NuGet { get; set; }
 }
 
 /// <summary>Portable resource selection for a compilation project.</summary>
@@ -174,4 +177,10 @@ public sealed class PowerShellCompilationProjectTargetResult
 
     /// <summary>Artifact SHA-256 when available.</summary>
     public string? ArtifactSha256 { get; set; }
+
+    /// <summary>Published local package SHA-256, when the packaging workflow returns one.</summary>
+    public string? PackageSha256 { get; set; }
+
+    /// <summary>Public ABI SHA-256 authenticated by library packaging, when available.</summary>
+    public string? PublicAbiSha256 { get; set; }
 }

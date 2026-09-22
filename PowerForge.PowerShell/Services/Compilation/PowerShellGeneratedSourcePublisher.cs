@@ -21,6 +21,8 @@ internal static class PowerShellGeneratedSourcePublisher
                            Path.GetExtension(path).Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
                            Path.GetFileName(path).Equals("PowerForge.TargetContract.json", StringComparison.OrdinalIgnoreCase) ||
                            Path.GetFileName(path).Equals("global.json", StringComparison.OrdinalIgnoreCase) ||
+                           !string.IsNullOrWhiteSpace(spec.NuGetLockFilePath) &&
+                               Path.GetFileName(path).Equals("packages.lock.json", StringComparison.OrdinalIgnoreCase) ||
                            PowerShellCompilationPathSafety.PathEquals(path, projectPath))
             .OrderBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -28,6 +30,9 @@ internal static class PowerShellGeneratedSourcePublisher
             throw new InvalidOperationException("Generated source publication could not locate the generated project file.");
         if (!files.Any(path => Path.GetExtension(path).Equals(".cs", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Generated source publication could not locate generated C# source.");
+        var lockedRestore = !string.IsNullOrWhiteSpace(spec.NuGetLockFilePath);
+        if (lockedRestore && !File.Exists(Path.Combine(workspace, "packages.lock.json")))
+            throw new InvalidOperationException("Generated source publication requires the exact NuGet lock used by the artifact build.");
 
         foreach (var file in files)
             File.Copy(file, Path.Combine(sourceDirectory, Path.GetFileName(file)), overwrite: false);
@@ -42,7 +47,7 @@ internal static class PowerShellGeneratedSourcePublisher
         }
         CopyGeneratedDirectory(workspace, sourceDirectory, "provider-runtime");
         CopyGeneratedDirectory(workspace, sourceDirectory, "provider-native-runtime");
-        PowerShellCompilationBuildIsolation.Write(sourceDirectory, requireSdkSelection: true, spec.OfflineRestore);
+        PowerShellCompilationBuildIsolation.Write(sourceDirectory, requireSdkSelection: true, spec.OfflineRestore, lockedRestore);
         WriteSourceMap(sourceDirectory, spec, methods);
         return sourceDirectory;
     }

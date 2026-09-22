@@ -618,6 +618,7 @@ function Invoke-ProviderCleanupFailure {
         if (mode == PowerShellCompilationMode.Strict)
         {
             VerifyDependencyProviderFromLocalFeed(artifactFixture.RootPath, result);
+            VerifyDependencyProviderProjectPackage(packagePath);
         }
         var loadContext = new ArtifactLoadContext(Path.GetDirectoryName(result.ArtifactPath!)!);
         try

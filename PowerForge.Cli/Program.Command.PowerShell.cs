@@ -497,7 +497,7 @@ internal static partial class Program
                 Command = "powershell",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, explainUsage = PowerShellExplainUsage, diagnoseUsage = PowerShellDiagnoseUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage, projectUsage = PowerShellProjectUsage, projectRunUsage = PowerShellProjectRunUsage, supportUsage = PowerShellSupportUsage })
+                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, explainUsage = PowerShellExplainUsage, diagnoseUsage = PowerShellDiagnoseUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage, projectUsage = PowerShellProjectUsage, projectRunUsage = PowerShellProjectRunUsage, projectPackUsage = PowerShellProjectPackUsage, supportUsage = PowerShellSupportUsage })
             });
         }
         else
@@ -509,6 +509,7 @@ internal static partial class Program
             Console.WriteLine(PowerShellDiagnoseUsage);
             Console.WriteLine(PowerShellProjectUsage);
             Console.WriteLine(PowerShellProjectRunUsage);
+            Console.WriteLine(PowerShellProjectPackUsage);
             Console.WriteLine(PowerShellSupportUsage);
         }
     }

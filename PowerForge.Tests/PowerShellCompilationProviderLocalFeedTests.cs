@@ -135,17 +135,22 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         Assert.Contains("provider matrix local-feed consumer passed", run.StdOut, StringComparison.Ordinal);
     }
 
-    private static void VerifyDependencyProviderFromLocalFeed(string root, PowerShellCompilationBuildResult result)
+    private static void VerifyDependencyProviderFromLocalFeed(string root, PowerShellCompilationBuildResult result, string? existingPackage = null)
     {
         var feed = Directory.CreateDirectory(Path.Combine(root, "provider-dependency-feed")).FullName;
-        var package = new PowerShellCompilationLibraryPackageBuilder().Build(
+        var packagePath = Path.Combine(feed, "Generated.ProviderDependency.1.0.0.nupkg");
+        if (existingPackage is not null) File.Copy(existingPackage, packagePath);
+        else new PowerShellCompilationLibraryPackageBuilder().Build(
             new PowerShellCompilationLibraryPackageBuildRequest(
                 result,
-                Path.Combine(feed, "Generated.ProviderDependency.1.0.0.nupkg"),
+                packagePath,
                 "Generated.ProviderDependency",
                 "1.0.0"));
-        Assert.Contains("lib/net10.0/Generic.Semantic.Provider.WithDependency.dll", package.Files);
-        Assert.Contains("lib/net10.0/Generic.Semantic.Provider.Dependency.dll", package.Files);
+        using (var package = new NuGet.Packaging.PackageArchiveReader(packagePath))
+        {
+            Assert.Contains("lib/net10.0/Generic.Semantic.Provider.WithDependency.dll", package.GetFiles());
+            Assert.Contains("lib/net10.0/Generic.Semantic.Provider.Dependency.dll", package.GetFiles());
+        }
         var consumer = Directory.CreateDirectory(Path.Combine(root, "provider-dependency-consumer")).FullName;
         var project = Path.Combine(consumer, "ProviderDependencyConsumer.csproj");
         WriteConsumerProject(project, "Generated.ProviderDependency", feed);

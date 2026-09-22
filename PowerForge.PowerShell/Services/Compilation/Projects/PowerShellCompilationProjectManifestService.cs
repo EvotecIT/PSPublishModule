@@ -106,6 +106,9 @@ public sealed class PowerShellCompilationProjectManifestService
         manifest.ProviderPackages = NormalizeRelativePaths(root, manifest.ProviderPackages, requireInputs, "provider package");
         manifest.ProviderTrust ??= new PowerShellCompilationProviderTrustPolicy();
         manifest.Diagnostics ??= new PowerShellCompilationDiagnosticsPolicy();
+        if (!string.IsNullOrWhiteSpace(manifest.NuGet?.CompatibilityBaseline))
+            manifest.NuGet!.CompatibilityBaseline = NormalizeRelativePath(root,
+                manifest.NuGet.CompatibilityBaseline!, requireInputs, "NuGet compatibility baseline");
         manifest.Artifacts ??= Array.Empty<PowerShellCompilationProjectArtifact>();
         if (manifest.Artifacts.Length == 0) throw new InvalidDataException("A PowerShell compilation project requires at least one artifact target.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
