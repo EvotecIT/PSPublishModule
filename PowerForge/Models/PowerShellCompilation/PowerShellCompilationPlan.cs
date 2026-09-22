@@ -120,6 +120,9 @@ public sealed class PowerShellCompilationUnitPlan
     /// <summary>Compilation blockers. An empty array means the unit is structurally eligible.</summary>
     public PowerShellCompilationDiagnostic[] Diagnostics { get; }
 
+    /// <summary>Direct local calls recorded by semantic analysis, without re-resolving authored commands.</summary>
+    public PowerShellCompilationLocalCall[] LocalCalls { get; set; } = Array.Empty<PowerShellCompilationLocalCall>();
+
     /// <summary>Whether the complete unit is structurally eligible for typed compilation.</summary>
     public bool IsCompilable => Diagnostics.Length == 0;
 }

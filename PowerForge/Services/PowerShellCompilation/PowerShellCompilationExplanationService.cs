@@ -433,7 +433,7 @@ public static class PowerShellCompilationExplanationService
         return Path.GetFullPath(left).Equals(Path.GetFullPath(right), FrameworkCompatibility.PathStringComparison());
     }
 
-    private static string NormalizeRelativePath(string path, string fallback)
+    internal static string NormalizeRelativePath(string path, string fallback)
     {
         var normalized = NormalizePath(path);
         return Path.IsPathRooted(normalized) || string.IsNullOrWhiteSpace(normalized)

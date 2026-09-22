@@ -10,7 +10,7 @@ The companion [PowerShell Compilation guide](PowerForge.PowerShellCompilation.md
 
 This roadmap does not schedule a package, gallery, NuGet, or GitHub release. Those remain separate decisions after source work is complete.
 
-The [next major milestones, 24–30](PowerForge.PowerShellCompilation.NextMilestones.md), define the active delivery tranche: values/collections, complete pipelines, stateful modules, practical CLR libraries, the development loop, distribution/platform qualification, and finally measured acceleration. M24–M27 have completed bounded local implementation gates, including the September 22 corrections. M28 is in progress with executable run/watch and project NuGet packaging implemented; grouped diagnostics, debugger qualification, the module quickstart, and additional host qualification remain. The architecture history below remains their foundation.
+The [next major milestones, 24–30](PowerForge.PowerShellCompilation.NextMilestones.md), define the active delivery tranche: values/collections, complete pipelines, stateful modules, practical CLR libraries, the development loop, distribution/platform qualification, and finally measured acceleration. M24–M27 have completed bounded local implementation gates, including the September 22 corrections. M28 is in progress with executable run/watch, project NuGet packaging, and grouped project diagnostics implemented; debugger qualification, the module quickstart, and additional host qualification remain. The architecture history below remains their foundation.
 
 ## Product north star
 
@@ -1555,7 +1555,7 @@ Exit gate: **Complete for bounded M24–M26 contracts.** The continuation implem
 
 Assessment R1–R5 are closed with the recorded full-gate, corpus, focused artifact, and planning evidence. Package publication preserves prior output until commit; library/provider metadata share canonical NuGet rules; required ABI/provider families participate in recurring validation; stopping fixtures wait for the engine acknowledgment.
 
-1. [ ] Finish M28 grouped diagnostics, observed debugging, the module quickstart, and additional host qualification through the existing owners. Executable run/watch and project NuGet packaging with a library consumer quickstart are implemented.
+1. [ ] Finish M28 observed debugging, the module quickstart, and additional host qualification through the existing owners. Executable run/watch, project NuGet packaging, the library quickstart, and grouped project diagnostics are implemented.
 2. [ ] Integrate against current default-branch owners and run exact-candidate CI/review, including a measured compiler-gate time budget. Keep that evidence distinct from local qualification.
 3. [ ] Complete M29 host-servicing, public-package upgrade/rollback, platform, and disposable-target gates. A private PowerShell API bridge needs an explicit servicing matrix and safe unsupported-host behavior; a cross-publish does not establish target execution. Generated API compatibility is separate from CLR/package binary replacement.
 4. [ ] Run M30 measurements on qualified complete workflows, including startup, crossing, allocation, and error-path controls.
@@ -1711,6 +1711,6 @@ The semantic compiler does not have a competing AST/emitter eligibility brain. P
 - [x] Correct M27 package cancellation/metadata and recurring ABI/provider coverage. Document restore/rebuild consumption separately from unqualified binary drop-in replacement.
 - [x] Complete corrective full-gate, Strict corpus, and final fixture requalification.
 - [x] Deliver M28 executable run/watch with source invalidation, verified cache reuse, stream/argument fidelity, owned process-tree cancellation, and launch-integrity checks.
-- [ ] Complete remaining M28 diagnostics/debugging/module-consumer work and M29 host-servicing/release qualification through the existing owners; M30 follows with measured workflow benefit.
+- [ ] Complete remaining M28 debugging/module-consumer work and M29 host-servicing/release qualification through the existing owners; M30 follows with measured workflow benefit.
 
 Broad percentage growth is useful only as a diagnostic trend. It never substitutes for these complete-program, clean-target, semantic, ecosystem, and product gates.

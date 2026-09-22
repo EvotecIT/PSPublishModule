@@ -197,25 +197,9 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         return Complete("install", context.ProjectPath, results);
     }
 
-    /// <summary>Verifies build receipts, canonical reproduction evidence, locks, and primary artifact hashes.</summary>
+    /// <summary>Explains current source blockers and verifies existing build receipts, locks, and artifact integrity.</summary>
     public PowerShellCompilationProjectResult Diagnose(string projectPath, IEnumerable<string>? targetNames = null)
-    {
-        var context = PowerShellCompilationProjectManifestService.Open(projectPath);
-        var results = new List<PowerShellCompilationProjectTargetResult>();
-        foreach (var artifact in SelectArtifacts(context, targetNames))
-        {
-            try
-            {
-                var validated = ValidateBuildReceipt(context, artifact);
-                results.Add(Pass(artifact, "Target, locks, reproduction evidence, and complete artifact-set integrity are valid.", validated.ArtifactPath, validated.Manifest.DependencyGraph?.LockSha256, validated.Manifest.ArtifactSha256));
-            }
-            catch (Exception exception)
-            {
-                results.Add(Fail(artifact, exception));
-            }
-        }
-        return Complete("diagnose", context.ProjectPath, results);
-    }
+        => InspectDiagnostics(projectPath, targetNames, verifyArtifact: true);
 
     private static PowerShellCompilationProjectEnvironment ReadEnvironment(
         PowerShellCompilationProjectManifestService.ProjectContext context)

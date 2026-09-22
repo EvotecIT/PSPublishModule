@@ -8,11 +8,11 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
 {
     /// <summary>Analyzes every selected target and writes portable evidence.</summary>
     public PowerShellCompilationProjectResult Analyze(string projectPath, IEnumerable<string>? targetNames = null)
-        => Inspect(projectPath, targetNames, explain: false);
+        => Inspect(projectPath, targetNames);
 
     /// <summary>Shapes final target-aware decisions without building artifacts.</summary>
     public PowerShellCompilationProjectResult Explain(string projectPath, IEnumerable<string>? targetNames = null)
-        => Inspect(projectPath, targetNames, explain: true);
+        => InspectDiagnostics(projectPath, targetNames, verifyArtifact: false);
 
     /// <summary>Produces opt-in measured profile advice without changing project source or target selection.</summary>
     public PowerShellCompilationProjectResult Recommend(
@@ -79,8 +79,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
 
     private static PowerShellCompilationProjectResult Inspect(
         string projectPath,
-        IEnumerable<string>? targetNames,
-        bool explain)
+        IEnumerable<string>? targetNames)
     {
         var context = PowerShellCompilationProjectManifestService.Open(projectPath);
         var results = new List<PowerShellCompilationProjectTargetResult>();
@@ -91,13 +90,10 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 var providers = ResolveProviders(context, artifact);
                 var input = ResolveInput(context, artifact);
                 var plan = CreatePlan(context, artifact, input, providers.Providers);
-                object evidence = explain
-                    ? PowerShellCompilationExplainShaper.CreateFinalExplanation(input, plan, artifact.Target.TargetFramework)
-                    : plan;
-                var evidencePath = context.Resolve($".powerforge/{(explain ? "explain" : "analysis")}/{artifact.Name}.json");
-                WriteJson(evidencePath, evidence);
+                var evidencePath = context.Resolve($".powerforge/analysis/{artifact.Name}.json");
+                WriteJson(evidencePath, plan);
                 results.Add(plan.CanProceed
-                    ? Pass(artifact, explain ? "Final target-aware decisions were shaped." : "Analysis can proceed.", evidencePath, plan.DependencyGraph?.LockSha256)
+                    ? Pass(artifact, "Analysis can proceed.", evidencePath, plan.DependencyGraph?.LockSha256)
                     : new PowerShellCompilationProjectTargetResult
                     {
                         Name = artifact.Name,
@@ -113,7 +109,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 results.Add(Fail(artifact, exception));
             }
         }
-        return Complete(explain ? "explain" : "analyze", context.ProjectPath, results);
+        return Complete("analyze", context.ProjectPath, results);
     }
 
     private static PowerShellCompilationPlan CreatePlan(
@@ -121,7 +117,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         PowerShellCompilationProjectArtifact artifact,
         PowerShellCompilationResolvedInput input,
         IEnumerable<PowerShellCompilationCommandProviderContract> providers,
-        string? nuGetPackageRoot = null)
+        string? nuGetPackageRoot = null,
+        Action? beforeDependencyAnalysis = null)
     {
         return new PowerShellCompilationAnalyzer(providers, context.Manifest.SemanticProfileId).Analyze(
             input,
@@ -133,7 +130,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             context.Resolve(artifact.OutputDirectory),
             artifact.Target,
             GetGeneratedOutputDirectories(context),
-            nuGetPackageRoot);
+            nuGetPackageRoot,
+            beforeDependencyAnalysis);
     }
 
     private static string[] GetGeneratedOutputDirectories(

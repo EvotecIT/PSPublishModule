@@ -2,7 +2,7 @@
 
 Updated: 2026-09-22. M28 NuGet packaging implementation: `7ba90d82352152195472e5526e57fc4f18adbdbc`. M28 run/watch implementation: `3823979bd305cb530fd5586e75eff46dc49f5db8` on `feature/powershell-compiler`. Earlier audit baseline: `419620a88000a714cfb4450821a02fb8e5364583`; corrections: `18e443a1401611e7e144c39cc52b27f3e9c25ab0`; stopping-fixture consolidation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1`.
 
-The compiler has a substantial semantic architecture and useful bounded Hybrid/Strict workflows. The September 22 audit findings are closed with implementation and artifact evidence. M28 now includes executable run/watch and Strict library NuGet packaging through existing owners and thin CLI surfaces. Grouped diagnostics, observed debugging, the module quickstart, and additional host qualification remain open. Integration, public distribution, and additional platform qualification remain separate work.
+The compiler has a substantial semantic architecture and useful bounded Hybrid/Strict workflows. The September 22 audit findings are closed with implementation and artifact evidence. M28 now includes executable run/watch, Strict library NuGet packaging, and grouped project diagnostics through existing owners and thin CLI surfaces. Observed debugging, the module quickstart, and additional host qualification remain open. Integration, public distribution, and additional platform qualification remain separate work.
 
 The independent read-only audit covered the three latest baseline implementation commits (`bc925783a`, `c589eea3c`, `419620a88`) and surrounding contracts. Primary inspection also covered target policy, native host bridges, the compiler gate, CI wiring, and roadmap consistency. This is not an exhaustive audit of all 975 changed files in the continuation. One targeted read-only confirmation of the corrective implementation reported no actionable P0–P3 findings.
 
@@ -108,6 +108,28 @@ Gate evidence identities: test TRX SHA-256 `cb3944eeb5968add60ab5cccf5cbdae887a8
 | Multifile application | 11 | `6bc917641df750de1a4f25a30b2f9aeb89b841947a75ee02cfc3fe4d41e87d1c` |
 
 No PR, GitHub CI run, merge, or public package release was created for this goal. Local implementation and qualification do not replace M29 integration/release gates. Task-owned transient outputs are removed after this evidence is recorded.
+
+## M28 grouped project diagnostics
+
+The [project diagnostics guide](PowerForge.PowerShellCompilation.ProjectDiagnostics.md) explains per-function decisions, source coordinates, retained/rejected routes, and links from the existing bound local-call graph. The report projects canonical analysis and final shaping evidence; it adds no parser, eligibility engine, or call discovery by message text. Project Explain now returns the final shaping status rather than the earlier semantic plan's status. Both binary-module and executable shaping receive the same resolved providers as analysis.
+
+Diagnose combines that report with the existing authenticated build-receipt, lock, environment, and artifact-inventory checks. Source readiness and operation success remain separate: a valid source report cannot make a missing or altered artifact pass. Input, target, dependency, semantic, shaping, and integrity failures retain their owning stage. Synthetic calls without exact authored coordinates remain explicitly unmapped. Neither command executes authored source, imports its module, rebuilds output, or refreshes reviewed locks.
+
+**R7 / P2 — nested diagnostic identities, corrected.** Independent review found raw Windows relative paths being hashed in the new report lookup and local-call links, while explanations and disposition ledgers normalize separators. A direct CLI probe with `Public/Inner.ps1` reproduced an unstructured exception. Those sites now use the existing explanation owner's normalization. The bounded sweep found and corrected the same pre-existing mismatch in three runtime failure-map lookups, covering compiled methods, promoted regions, and retained units. Established explanation/ledger IDs and semantic fingerprints remain unchanged; newly generated failure maps use matching IDs. Existing artifact evidence remains authenticated by its recorded hashes.
+
+**R8 / P2 — acquired package environment, corrected.** Independent review found the new diagnostic analysis using the global package root before receipt verification used the acquired project environment. Both diagnostic commands now validate and use that acquired environment when present. Invalid evidence becomes a dependency issue while source inspection is still attempted. The existing receipt check remains independent. An internal callback at the dependency-planning boundary classifies runtime-pack resolution failures without inspecting exception text.
+
+Focused qualification:
+
+- Initial API, CLI, explanation, provider, and artifact-diagnostic coverage passed **20/20** in **2m28s**, followed by focused provider and report-failure checks. These runs preceded the two review corrections.
+- Final correction coverage passed **10/10**, zero failures/skips, in **51s**: grouped Strict/Hybrid decisions, source and integrity separation, invalid target/input/provider/environment evidence, nested local-call identity, nested fallback/compiled failure maps, and real CLI output. The self-contained Package executable was restored and built, then Explain and Diagnose both succeeded in child processes with an empty global NuGet cache. Removing acquired evidence produced a dependency-stage runtime-pack failure.
+- The provider closure cases passed **2/2** in **20s** after giving the separate executable fixture its own project directory. Sharing an already-restored directory between two manifests correctly fails environment identity validation. This fixture-only adjustment followed targeted confirmation; production code did not change.
+- Final shared host Release `net472` build passed with zero warnings/errors. The CLI example directly reported the shaping blocker and local call at **7:5**; the final nested CLI probe retained a structured result and matching callee ID.
+- One full independent read-only review found R7 and R8; one targeted confirmation found no remaining actionable issue in the fixes and their normalization siblings. Confirmation patch fingerprint: `cfca96961fad73b7b5c15adce2232ceb19d9c1f3`.
+
+The full compiler gate is being run on the corrected candidate; final counts and evidence identities are recorded after completion. Superseded runs were stopped after review remediation and a provider fixture failure rather than represented as passing evidence.
+
+A separate qualification probe encountered a plain Strict self-contained Windows x64 closure rejection before diagnostics: unoptimized, non-single-file `net10.0` `return 7` restored and published, then the existing verifier rejected a `System.Private.CoreLib, Version=0.0.0.0` reference. No closure rule was weakened. M29 explicitly tracks identification of the requesting assembly and target execution before that deployment form is promoted. Package-mode diagnostics do not qualify this Strict form. General source debugging and additional host qualification remain M28 work.
 
 ## Design and compatibility boundaries
 

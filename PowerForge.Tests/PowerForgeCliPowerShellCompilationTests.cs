@@ -689,7 +689,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         }
     }
 
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(string repositoryRoot, string arguments)
+    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(
+        string repositoryRoot, string arguments, IReadOnlyDictionary<string, string>? environment = null)
     {
         var cli = Path.Combine(repositoryRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
         using var process = new Process
@@ -705,6 +706,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
                 CreateNoWindow = true
             }
         };
+        if (environment is not null)
+            foreach (var variable in environment) process.StartInfo.Environment[variable.Key] = variable.Value;
         process.Start();
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();

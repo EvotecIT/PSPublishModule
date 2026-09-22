@@ -37,6 +37,8 @@ Change `return 7` to `return 9`. Watch stops the preceding attempt, waits for st
 
 For scripts that need the PowerShell runtime, choose `--mode Package` when creating the project. Strict mode requires the complete executable workflow to be admitted by the compiler. Use `project explain` to inspect unsupported source. `run` and `watch` accept one executable target; use `--target <name>` when the manifest declares several targets.
 
+Use the [project diagnostics guide](PowerForge.PowerShellCompilation.ProjectDiagnostics.md) to inspect grouped source, dependency, shaping, and artifact-integrity causes with `project explain` and `project diagnose`.
+
 ## Arguments and streams
 
 Everything after the CLI's `--` is passed to the executable as an argument vector without shell parsing:

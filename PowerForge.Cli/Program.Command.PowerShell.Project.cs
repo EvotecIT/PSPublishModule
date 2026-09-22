@@ -154,6 +154,9 @@ internal static partial class Program
             var message = $"{target.Name}: {target.Message}";
             if (target.Succeeded) logger.Success(message); else logger.Error(message);
             if (!string.IsNullOrWhiteSpace(target.Path)) logger.Info(target.Path);
+            if (target.DiagnosticReport is not null)
+                foreach (var line in PowerShellCompilationDiagnosticReportFormatter.Format(target.DiagnosticReport))
+                    logger.Info(line);
         }
         return exitCode;
     }

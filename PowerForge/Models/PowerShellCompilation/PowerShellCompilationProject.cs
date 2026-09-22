@@ -183,4 +183,7 @@ public sealed class PowerShellCompilationProjectTargetResult
 
     /// <summary>Public ABI SHA-256 authenticated by library packaging, when available.</summary>
     public string? PublicAbiSha256 { get; set; }
+
+    /// <summary>Grouped source and workflow diagnostics for explain/diagnose, when available.</summary>
+    public PowerShellCompilationDiagnosticReport? DiagnosticReport { get; set; }
 }

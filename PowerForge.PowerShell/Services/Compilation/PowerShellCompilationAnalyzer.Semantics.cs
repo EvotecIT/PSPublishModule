@@ -102,7 +102,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         }
 
         var semantic = new PowerShellSemanticCompilationPipeline(commandRegistry, semanticProfileId).Compile(compilationDocuments, targetFramework, capabilities);
-        return structural.Select(file => new PowerShellCompilationFilePlan(
+        var result = structural.Select(file => new PowerShellCompilationFilePlan(
             file.FullPath,
             file.RelativePath,
             file.Units.Select(unit => ApplySemanticUnitEvidence(
@@ -114,6 +114,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                     ? sourceDiagnostics
                     : Array.Empty<PowerShellSemanticDiagnostic>())).ToArray(),
             file.Diagnostics)).ToArray();
+        AttachLocalCallEvidence(structural, result, targets, semantic);
+        return result;
     }
 
     private static PowerShellCompilationUnitPlan ApplySemanticUnitEvidence(

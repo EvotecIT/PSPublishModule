@@ -156,9 +156,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.NotNull(constructor);
     }
 
-    [Fact]
-    [Trait("Category", "PowerShellCompilation")]
-    public void HybridFailureMapDistinguishesFallbackAndCompiledLifecycleUnits()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void HybridFailureMapDistinguishesFallbackAndCompiledLifecycleUnits(bool nested)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-Fallback { [int] $value = 1; Get-Variable -Name value -ValueOnly }; " +
@@ -166,13 +168,24 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "begin { $total = 0 } process { $total += $Value } end { $total } }; " +
             "Export-ModuleMember -Function Get-Fallback,Invoke-Lifecycle",
             ".psm1");
+        if (nested)
+        {
+            var publicDirectory = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Public"));
+            File.WriteAllText(Path.Combine(publicDirectory.FullName, "Functions.ps1"), File.ReadAllText(fixture.ScriptPath));
+            File.WriteAllText(fixture.ScriptPath, ". \"$PSScriptRoot/Public/Functions.ps1\"");
+        }
+        var input = new PowerShellCompilationInputResolver().Resolve(new[] { fixture.ScriptPath },
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "Generic.HostedFailureMapProof",
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            allowUnreviewedDependencyResolution: true));
+            allowUnreviewedDependencyResolution: true)
+        {
+            CompilationSourcePaths = input.CompilationSourceFiles
+        });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var entries = result.Manifest!.FailureMap!.Entries;
@@ -180,6 +193,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             entry.UnitName == "Get-Fallback" && entry.BoundaryContract == "PowerShellRuntime" && entry.GeneratedStartLine == 0);
         Assert.Contains(entries, static entry =>
             entry.UnitName == "Invoke-Lifecycle" && entry.BoundaryContract == "TypedClr+PowerShellRuntime" && entry.GeneratedStartLine > 0);
+        if (nested)
+            Assert.All(entries.Where(entry => entry.UnitName is "Get-Fallback" or "Invoke-Lifecycle"),
+                entry => Assert.Equal("Public/Functions.ps1", entry.RelativePath));
     }
 
     [Fact]

@@ -27,15 +27,30 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         manifests.Save(project, manifest);
         var workflow = new PowerShellCompilationProjectWorkflowService();
         Check(workflow.Lock(project));
+        Check(workflow.Explain(project));
         Check(workflow.Restore(project));
         Check(workflow.Build(project));
         Check(workflow.Test(project));
+        Check(workflow.Diagnose(project));
         var packed = workflow.PackNuGet(project);
         Check(packed);
         var receipt = JsonSerializer.Deserialize<PowerShellCompilationBuildResult>(
             File.ReadAllText(Path.Combine(fixture.RootPath, ".powerforge/build", manifest.Artifacts[0].Name + ".json")),
             PowerShellCompilationProjectManifestService.JsonOptions)!;
         VerifyDependencyProviderFromLocalFeed(fixture.RootPath, receipt, packed.Targets.Single().Path!);
+        var executableRoot = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "executable")).FullName;
+        File.Copy(providerPackage, Path.Combine(executableRoot, "provider.nupkg"));
+        var executableSource = Path.Combine(executableRoot, "entry.ps1");
+        File.WriteAllText(executableSource, "Write-PackageDependencyCore 'locked'");
+        var executableProject = Path.Combine(executableRoot, "powerforge.psproject.json");
+        var executableTarget = PowerShellCompilationTargetContractService.Create(PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict, "net10.0", "win-x64", false, false,
+            PowerShellCompilationExecutableOptimization.None, true);
+        var executableManifest = manifests.Create(executableProject, executableSource, "ProviderExplanation", executableTarget);
+        executableManifest.ProviderPackages = manifest.ProviderPackages;
+        executableManifest.ProviderTrust = manifest.ProviderTrust;
+        manifests.Save(executableProject, executableManifest);
+        Check(workflow.Explain(executableProject)); // Exercises the executable shaping owner with the reviewed provider.
         var originalPackage = File.ReadAllBytes(packed.Targets.Single().Path!);
         File.AppendAllText(Path.Combine(fixture.RootPath, "provider.nupkg"), "changed");
         Assert.False(workflow.PackNuGet(project).Succeeded);

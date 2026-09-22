@@ -8,11 +8,20 @@ public static class PowerShellCompilationExplainShaper
         PowerShellCompilationResolvedInput input,
         PowerShellCompilationPlan plan,
         string targetFramework)
+        => CreateFinalExplanation(input, plan, targetFramework, Array.Empty<PowerShellCompilationCommandProviderContract>());
+
+    /// <summary>Shapes final decisions with the same resolved provider contracts used by project analysis.</summary>
+    public static PowerShellCompilationExplanation CreateFinalExplanation(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationPlan plan,
+        string targetFramework,
+        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (string.IsNullOrWhiteSpace(targetFramework)) throw new ArgumentException("A target framework is required.", nameof(targetFramework));
-        var shaped = Shape(input, plan, targetFramework);
+        if (commandProviders is null) throw new ArgumentNullException(nameof(commandProviders));
+        var shaped = Shape(input, plan, targetFramework, commandProviders: commandProviders);
         var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
             plan,
             input.Kind,
@@ -25,7 +34,8 @@ public static class PowerShellCompilationExplainShaper
         PowerShellCompilationResolvedInput input,
         PowerShellCompilationPlan plan,
         string targetFramework,
-        string? semanticProfileId = null)
+        string? semanticProfileId = null,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
     {
         var profile = semanticProfileId ?? plan.TargetContract?.SemanticProfileId ??
             PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
@@ -35,7 +45,7 @@ public static class PowerShellCompilationExplainShaper
             return null;
         if (input.Kind == PowerShellCompilationArtifactKind.Executable && plan.Mode == PowerShellCompilationMode.Strict)
         {
-            var executable = PowerShellTypedExecutableEmitter.Emit(input.SourcePath, input.CompilationSourceFiles, plan, targetFramework, profile);
+            var executable = PowerShellTypedExecutableEmitter.Emit(input.SourcePath, input.CompilationSourceFiles, plan, targetFramework, profile, commandProviders);
             return new PowerShellTypedCompilationResult(
                 input.SourcePath,
                 "PowerForge.Compiled",
@@ -49,7 +59,7 @@ public static class PowerShellCompilationExplainShaper
                 irSnapshots: executable.IrSnapshots);
         }
 
-        var transpiler = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), profile);
+        var transpiler = new PowerShellTypedCompilationTranspiler(commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>(), profile);
         var typeName = PowerShellCSharpSymbolRenderer.Identifier(input.ArtifactName) + "Methods";
         var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, plan.Mode);
         var typed = input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable

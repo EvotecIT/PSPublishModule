@@ -55,7 +55,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         string? outputDirectory,
         PowerShellCompilationTargetContract? targetContract,
         IEnumerable<string>? generatedOutputDirectories,
-        string? nuGetPackageRoot)
+        string? nuGetPackageRoot,
+        Action? beforeDependencyAnalysis = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -78,6 +79,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             input.ModuleRoot,
             normalizedTargetFramework,
             PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
+        beforeDependencyAnalysis?.Invoke();
         var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
         var dependencies = dependencyPlanner.Analyze(
             input,

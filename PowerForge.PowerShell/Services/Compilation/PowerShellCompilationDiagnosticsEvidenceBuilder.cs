@@ -37,7 +37,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 item.Name.Equals(method.SourceName, StringComparison.OrdinalIgnoreCase) && item.StartLine == method.SourceLine)
                 ?? file.Units.FirstOrDefault(item => item.Name.Equals(method.SourceName, StringComparison.OrdinalIgnoreCase));
             if (unit is null) continue;
-            var unitId = PowerShellCompilationExplanationService.ComputeUnitId(file.RelativePath, unit);
+            var unitId = PowerShellCompilationExplanationService.ComputeUnitId(
+                PowerShellCompilationExplanationService.NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath)), unit);
             var ledgerEntry = ledger.Entries.FirstOrDefault(item => item.UnitId.Equals(unitId, StringComparison.Ordinal));
             var boundary = DescribeBoundary(ledgerEntry);
             var maps = method.SourceMap.Length == 0
@@ -69,7 +70,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             var unit = file.Units.FirstOrDefault(item => item.Kind == PowerShellCompilationUnitKind.Function &&
                 item.Name.Equals(region.SourceName, StringComparison.OrdinalIgnoreCase) && item.StartLine == region.SourceLine);
             if (unit is null) continue;
-            var unitId = PowerShellCompilationExplanationService.ComputeUnitId(file.RelativePath, unit);
+            var unitId = PowerShellCompilationExplanationService.ComputeUnitId(
+                PowerShellCompilationExplanationService.NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath)), unit);
             var disposition = ledger.Entries.FirstOrDefault(item => item.UnitId.Equals(unitId, StringComparison.Ordinal));
             var maps = region.SourceMap.Count == 0
                 ? new[] { new PowerShellCompilationSourceMapEntry(region.StartLine, region.StartColumn, region.EndLine, region.EndColumn, 1, 1, 1, 1) }
@@ -105,7 +107,9 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 NormalizeRelative(item.RelativePath, Path.GetFileName(item.FullPath)).Equals(disposition.RelativePath, StringComparison.OrdinalIgnoreCase));
             if (file is null) continue;
             var unit = file.Units.FirstOrDefault(item =>
-                PowerShellCompilationExplanationService.ComputeUnitId(file.RelativePath, item).Equals(disposition.UnitId, StringComparison.Ordinal));
+                PowerShellCompilationExplanationService.ComputeUnitId(
+                    PowerShellCompilationExplanationService.NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath)), item)
+                    .Equals(disposition.UnitId, StringComparison.Ordinal));
             if (unit is null) continue;
             var extent = GetUnitExtent(file.FullPath, unit);
             entries.Add(new PowerShellCompilationFailureMapEntry
