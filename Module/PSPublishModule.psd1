@@ -9,7 +9,7 @@
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @()
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '3.0.148'
+    ModuleVersion          = '3.0.149'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
