@@ -4,6 +4,41 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void LibraryPackage_RejectsInvalidNuGetMetadataBeforeRebuildOrPublication()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-CompiledValue { 42 }", ".psm1");
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.PackageMetadata",
+            PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = "net10.0", EmitSource = true });
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        var output = Path.Combine(fixture.RootPath, "package.nupkg");
+        File.WriteAllText(output, "previous package");
+        var runner = new UnexpectedPackageRebuildRunner();
+        var builder = new PowerShellCompilationLibraryPackageBuilder(runner);
+        foreach (var version in new[] { "1.+2.3", "1. 2.3", "1.2.-0", "1.2", "1.2.3.0", "01.2.3", "1.2.3-beta", "1.2.3+build", " 1.2.3" })
+            Assert.Throws<ArgumentException>(() => builder.Build(new PowerShellCompilationLibraryPackageBuildRequest(
+                build, output, "Generated.PackageMetadata", version)));
+        foreach (var id in new[] { "Valid..Package", "", "Bad/Package", new string('A', 101) })
+            Assert.Throws<ArgumentException>(() => builder.Build(new PowerShellCompilationLibraryPackageBuildRequest(
+                build, output, id, "1.2.3")));
+        Assert.Equal(0, runner.Calls);
+        Assert.Equal("previous package", File.ReadAllText(output));
+        Assert.Empty(Directory.GetFiles(fixture.RootPath, "*.tmp"));
+    }
+
+    private sealed class UnexpectedPackageRebuildRunner : IProcessRunner
+    {
+        internal int Calls { get; private set; }
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            throw new InvalidOperationException("Invalid metadata reached the independent rebuild.");
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void LibraryPackage_PreservesRootSourceIdentityAcrossMultipleSourceFiles()
     {
         using var fixture = ArtifactFixture.Create("""
@@ -121,6 +156,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 "Generated.Net472Library",
                 "1.0.0"));
         Assert.Equal("net472", package.TargetFramework);
+        using (var reader = new NuGet.Packaging.PackageArchiveReader(package.PackagePath))
+        {
+            Assert.Equal("Generated.Net472Library", reader.NuspecReader.GetId());
+            Assert.Equal("1.0.0", reader.NuspecReader.GetVersion().ToNormalizedString());
+        }
         Assert.Contains("lib/net472/Generated.Net472Library.dll", package.Files);
         Assert.Contains("lib/net472/Generated.Net472Library.xml", package.Files);
         Assert.Contains("lib/net472/Generated.Net472Library.pdb", package.Files);

@@ -288,6 +288,8 @@ public sealed partial class PowerShellCompilationProviderPackageReader
             throw new InvalidOperationException($"Provider package '{path}' targets ABI '{manifest.ProviderAbiVersion}', expected '{PowerShellCompilationProviderAbi.CurrentVersion}'.");
         Require(manifest.PackageId, "PackageId", path);
         Require(manifest.PackageVersion, "PackageVersion", path);
+        if (!PowerShellCompilationPackageIdentity.IsValidId(manifest.PackageId))
+            throw new InvalidOperationException($"Provider package '{path}' must use a valid NuGet PackageId.");
         Require(manifest.Publisher, "Publisher", path);
         Require(manifest.LicenseExpression, "LicenseExpression", path);
         if (policy.RequireRedistributable && !manifest.Redistributable)
@@ -312,7 +314,7 @@ public sealed partial class PowerShellCompilationProviderPackageReader
             if (!normalizedRuntimeIdentifiers.Contains(requestedRuntimeIdentifier, StringComparer.Ordinal))
                 throw new InvalidOperationException($"Provider package '{path}' does not support runtime identifier '{runtimeIdentifier}'.");
         }
-        if (!Version.TryParse(manifest.PackageVersion, out var packageVersion) || packageVersion.Build < 0 || packageVersion.Revision >= 0)
+        if (!PowerShellCompilationPackageIdentity.IsCanonicalVersion(manifest.PackageVersion))
             throw new InvalidOperationException($"Provider package '{path}' must use a three-part public PackageVersion.");
         ApplyIdentityPolicy(manifest, policy, path);
         if (manifest.SemanticProfiles is null || manifest.SemanticProfiles.Length == 0)
@@ -353,7 +355,9 @@ public sealed partial class PowerShellCompilationProviderPackageReader
             Require(dependency.PackageId, "Dependency.PackageId", path);
             Require(dependency.Version, "Dependency.Version", path);
             Require(dependency.ContentHash, "Dependency.ContentHash", path);
-            if (!Version.TryParse(dependency.Version, out var dependencyVersion) || dependencyVersion.Build < 0 || dependencyVersion.Revision >= 0)
+            if (!PowerShellCompilationPackageIdentity.IsValidId(dependency.PackageId))
+                throw new InvalidOperationException($"Provider package '{path}' dependency must use a valid NuGet PackageId.");
+            if (!PowerShellCompilationPackageIdentity.IsCanonicalVersion(dependency.Version))
                 throw new InvalidOperationException($"Provider package '{path}' dependency '{dependency.PackageId}' must use an exact three-part public version.");
         }
         foreach (var provider in manifest.Providers)

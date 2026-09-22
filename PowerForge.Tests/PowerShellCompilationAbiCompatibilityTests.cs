@@ -3,6 +3,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilerGate")]
 public sealed class PowerShellCompilationAbiCompatibilityTests
 {
     [Fact]

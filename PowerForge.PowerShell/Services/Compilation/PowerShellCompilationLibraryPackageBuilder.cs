@@ -1,7 +1,6 @@
 using System.IO.Compression;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -89,7 +88,7 @@ public sealed class PowerShellCompilationLibraryPackageBuildResult
 /// Independently rebuilds emitted Strict library source and packages its CLR assets and compiler
 /// evidence into a deterministic NuGet package suitable for a local feed.
 /// </summary>
-public sealed class PowerShellCompilationLibraryPackageBuilder
+public sealed partial class PowerShellCompilationLibraryPackageBuilder
 {
     private static readonly DateTimeOffset DeterministicTimestamp = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private readonly IProcessRunner _processRunner;
@@ -107,6 +106,7 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
         CancellationToken cancellationToken = default)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
+        cancellationToken.ThrowIfCancellationRequested();
         ValidateRequest(request);
         cancellationToken.ThrowIfCancellationRequested();
         var manifest = Clone(request.Compilation.Manifest!);
@@ -114,14 +114,12 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
         var snapshotDirectory = Path.Combine(temporaryRoot, "snapshot");
         var sourceDirectory = Path.Combine(snapshotDirectory, "generated-source");
         var rebuildDirectory = Path.Combine(temporaryRoot, "rebuild");
-        var outputDirectory = Path.GetDirectoryName(request.OutputPath);
-        if (!string.IsNullOrWhiteSpace(outputDirectory)) Directory.CreateDirectory(outputDirectory);
-        var temporaryPackage = request.OutputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        Directory.CreateDirectory(sourceDirectory);
-        Directory.CreateDirectory(rebuildDirectory);
+        Exception? failure = null;
         try
         {
-            var inputs = SnapshotInputs(manifest, request.Compilation.GeneratedSourcePath!, snapshotDirectory, sourceDirectory);
+            Directory.CreateDirectory(sourceDirectory);
+            Directory.CreateDirectory(rebuildDirectory);
+            var inputs = SnapshotInputs(manifest, request.Compilation.GeneratedSourcePath!, snapshotDirectory, sourceDirectory, cancellationToken);
             var projectPaths = Directory.EnumerateFiles(sourceDirectory, "*.csproj", SearchOption.TopDirectoryOnly).ToArray();
             if (projectPaths.Length != 1)
                 throw new InvalidOperationException("The verified emitted source snapshot must contain exactly one generated project.");
@@ -156,32 +154,39 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
             var expectedAbi = manifest.PublicAbi!.Sha256;
             if (abiValues.Length != 1 || !abiValues[0].Equals(expectedAbi, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The independently rebuilt library does not contain the expected public ABI identity.");
-            EnsureReproduced(primaryInput.File, rebuiltAssembly, "library");
+            EnsureReproduced(primaryInput.File, rebuiltAssembly, "library", cancellationToken);
             var debugInput = inputs.SingleOrDefault(static input => input.File.Role.Equals("DebugSymbols", StringComparison.Ordinal));
             if (debugInput is not null)
-                EnsureReproduced(debugInput.File, Path.Combine(rebuildDirectory, Path.GetFileName(debugInput.File.Path)), "portable PDB");
+                EnsureReproduced(debugInput.File, Path.Combine(rebuildDirectory, Path.GetFileName(debugInput.File.Path)), "portable PDB", cancellationToken);
 
-            var entries = CreateEntries(rebuildDirectory, manifest, inputs);
-            WritePackage(temporaryPackage, request, entries);
-            if (File.Exists(request.OutputPath))
-                File.Replace(temporaryPackage, request.OutputPath, destinationBackupFileName: null);
-            else
-                File.Move(temporaryPackage, request.OutputPath);
+            var entries = CreateEntries(rebuildDirectory, manifest, inputs, cancellationToken);
+            var packageHash = PublishPackage(request.OutputPath,
+                stream =>
+                {
+                    WritePackage(stream, request, entries, cancellationToken);
+                    // Clean the rebuild workspace before publication: a cleanup failure must
+                    // not report failure only after a new package has already been committed.
+                    Directory.Delete(temporaryRoot, recursive: true);
+                }, cancellationToken);
 
             return new PowerShellCompilationLibraryPackageBuildResult
             {
                 PackagePath = request.OutputPath,
-                PackageSha256 = ComputeSha256(request.OutputPath),
+                PackageSha256 = packageHash,
                 TargetFramework = manifest.TargetFramework,
                 PublicAbiSha256 = expectedAbi,
                 Files = entries.Select(static entry => entry.PackagePath).OrderBy(static path => path, StringComparer.Ordinal).ToArray(),
                 RebuildOutput = rebuildOutput
             };
         }
+        catch (Exception error)
+        {
+            failure = error;
+            throw;
+        }
         finally
         {
-            if (File.Exists(temporaryPackage)) File.Delete(temporaryPackage);
-            if (Directory.Exists(temporaryRoot)) Directory.Delete(temporaryRoot, recursive: true);
+            Cleanup(() => { if (Directory.Exists(temporaryRoot)) Directory.Delete(temporaryRoot, recursive: true); }, failure);
         }
     }
 
@@ -210,8 +215,8 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
         if (!manifest.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) &&
             !manifest.TargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Compiled library packages support only net10.0 and net472.");
-        if (!IsPackageId(request.PackageId)) throw new ArgumentException("PackageId is not a valid NuGet identity.", nameof(request));
-        if (!IsThreePartVersion(request.PackageVersion))
+        if (!PowerShellCompilationPackageIdentity.IsValidId(request.PackageId)) throw new ArgumentException("PackageId is not a valid NuGet identity.", nameof(request));
+        if (!PowerShellCompilationPackageIdentity.IsCanonicalVersion(request.PackageVersion))
             throw new ArgumentException("PackageVersion must be a stable three-part version such as 1.2.3.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.Authors) || string.IsNullOrWhiteSpace(request.Description) || string.IsNullOrWhiteSpace(request.LicenseExpression))
             throw new ArgumentException("Authors, Description, and LicenseExpression are required.", nameof(request));
@@ -229,12 +234,14 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
     private static PackageEntry[] CreateEntries(
         string rebuildDirectory,
         PowerShellCompilationArtifactManifest manifest,
-        IReadOnlyCollection<VerifiedInput> inputs)
+        IReadOnlyCollection<VerifiedInput> inputs,
+        CancellationToken cancellationToken)
     {
         var entries = new List<PackageEntry>();
         var frameworkRoot = "lib/" + manifest.TargetFramework + "/";
         foreach (var input in inputs.OrderBy(static item => item.File.RelativePath, StringComparer.Ordinal))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var fileName = Path.GetFileName(input.File.Path);
             string packagePath;
             string sourcePath;
@@ -270,7 +277,7 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
             if (!File.Exists(sourcePath))
                 throw new InvalidOperationException($"Verified package input '{input.File.Role}' is missing from its immutable snapshot or rebuild output.");
             if (input.File.Role is "Primary" or "DebugSymbols" or "CompilerProviderRuntime" or "CompilerProviderNativeRuntime")
-                EnsureReproduced(input.File, sourcePath, input.File.Role);
+                EnsureReproduced(input.File, sourcePath, input.File.Role, cancellationToken);
             entries.Add(PackageEntry.File(packagePath, sourcePath, input.File.Role, input.File.Path));
         }
 
@@ -279,7 +286,7 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
             foreach (var assembly in package.Assemblies ?? Array.Empty<PowerShellCompilationProviderAssembly>())
             {
                 var path = Path.Combine(rebuildDirectory, assembly.AssemblyName + ".dll");
-                if (!File.Exists(path) || !ComputeSha256(path).Equals(assembly.Sha256, StringComparison.OrdinalIgnoreCase))
+                if (!File.Exists(path) || !ComputeSha256(path, cancellationToken).Equals(assembly.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"Independently rebuilt provider assembly '{assembly.AssemblyName}' does not match its reviewed lock.");
             }
         }
@@ -358,7 +365,8 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
         PowerShellCompilationArtifactManifest manifest,
         string generatedSourcePath,
         string snapshotDirectory,
-        string cleanSourceDirectory)
+        string cleanSourceDirectory,
+        CancellationToken cancellationToken)
     {
         if (manifest.Files is null || manifest.Files.Length == 0 || manifest.Files.Any(static file => file is null))
             throw new InvalidOperationException("The compilation manifest does not contain a complete artifact file inventory.");
@@ -385,6 +393,7 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
         var uniquePaths = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         for (var index = 0; index < manifest.Files.Length; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var file = manifest.Files[index];
             if (string.IsNullOrWhiteSpace(file.Path) || string.IsNullOrWhiteSpace(file.Role) ||
                 string.IsNullOrWhiteSpace(file.Sha256) || file.SizeBytes < 0)
@@ -395,7 +404,7 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
             PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
                 source,
                 $"Compilation input '{file.Path}' traverses a symbolic link or junction.");
-            ValidateFileIdentity(file, source);
+            ValidateFileIdentity(file, source, cancellationToken);
 
             string destination;
             string? generatedRelativePath = null;
@@ -413,8 +422,10 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
                 destination = Path.Combine(snapshotDirectory, "evidence", index.ToString("D4", System.Globalization.CultureInfo.InvariantCulture), Path.GetFileName(source));
             }
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            File.Copy(source, destination, overwrite: false);
-            ValidateFileIdentity(file, destination);
+            using (var input = File.OpenRead(source))
+            using (var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                CopyStream(input, output, cancellationToken);
+            ValidateFileIdentity(file, destination, cancellationToken);
             inputs.Add(new VerifiedInput(file, destination, generatedRelativePath));
         }
 
@@ -434,19 +445,19 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
             throw new InvalidOperationException("The emitted source directory contains missing, changed, or unrecorded build inputs.");
     }
 
-    private static void ValidateFileIdentity(PowerShellCompilationArtifactFile expected, string path)
+    private static void ValidateFileIdentity(PowerShellCompilationArtifactFile expected, string path, CancellationToken cancellationToken)
     {
         if (!File.Exists(path)) throw new FileNotFoundException("A manifest-bound compilation input is missing.", path);
         var info = new FileInfo(path);
-        if (info.Length != expected.SizeBytes || !ComputeSha256(path).Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase))
+        if (info.Length != expected.SizeBytes || !ComputeSha256(path, cancellationToken).Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Compilation input '{expected.Role}' no longer matches its recorded size and SHA-256 identity.");
     }
 
-    private static void EnsureReproduced(PowerShellCompilationArtifactFile expected, string path, string label)
+    private static void EnsureReproduced(PowerShellCompilationArtifactFile expected, string path, string label, CancellationToken cancellationToken)
     {
         if (!File.Exists(path)) throw new FileNotFoundException($"The independent rebuild did not produce the expected {label}.", path);
         var info = new FileInfo(path);
-        if (info.Length != expected.SizeBytes || !ComputeSha256(path).Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase))
+        if (info.Length != expected.SizeBytes || !ComputeSha256(path, cancellationToken).Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"The independent rebuild did not reproduce the original unsigned {label} bytes.");
     }
 
@@ -496,18 +507,18 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
            ?? throw new InvalidOperationException($"Could not clone {typeof(T).Name} for package publication.");
 
     private static void WritePackage(
-        string path,
+        Stream stream,
         PowerShellCompilationLibraryPackageBuildRequest request,
-        IReadOnlyCollection<PackageEntry> entries)
+        IReadOnlyCollection<PackageEntry> entries,
+        CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
         AddText(archive, request.PackageId + ".nuspec", CreateNuspec(request));
         AddText(archive, "[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"utf-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"json\" ContentType=\"application/json\"/><Default Extension=\"dll\" ContentType=\"application/octet\"/><Default Extension=\"pdb\" ContentType=\"application/octet\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"nuspec\" ContentType=\"application/octet\"/></Types>");
         foreach (var entry in entries)
         {
-            if (entry.SourcePath is not null) AddFile(archive, entry.PackagePath, entry.SourcePath);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (entry.SourcePath is not null) AddFile(archive, entry.PackagePath, entry.SourcePath, cancellationToken);
             else AddText(archive, entry.PackagePath, entry.Content!);
         }
     }
@@ -528,13 +539,13 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
         writer.Write(content);
     }
 
-    private static void AddFile(ZipArchive archive, string packagePath, string sourcePath)
+    private static void AddFile(ZipArchive archive, string packagePath, string sourcePath, CancellationToken cancellationToken)
     {
         var entry = archive.CreateEntry(packagePath, CompressionLevel.Optimal);
         entry.LastWriteTime = DeterministicTimestamp;
         using var target = entry.Open();
         using var source = File.OpenRead(sourcePath);
-        source.CopyTo(target);
+        CopyStream(source, target, cancellationToken);
     }
 
     private static string Serialize<T>(T value)
@@ -603,17 +614,6 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
         return value.Length <= limit ? value : value.Substring(value.Length - limit, limit);
     }
 
-    private static bool IsPackageId(string value)
-        => !string.IsNullOrWhiteSpace(value) && value.Length <= 100 &&
-           value.All(static character => char.IsLetterOrDigit(character) || character is '.' or '-' or '_') &&
-           char.IsLetterOrDigit(value[0]) && char.IsLetterOrDigit(value[value.Length - 1]);
-
-    private static bool IsThreePartVersion(string value)
-    {
-        var parts = (value ?? string.Empty).Split('.');
-        return parts.Length == 3 && parts.All(static part => int.TryParse(part, out var number) && number >= 0);
-    }
-
     private static string Xml(string value) => System.Security.SecurityElement.Escape(value) ?? string.Empty;
 
     private static string PackageSegment(string value)
@@ -621,13 +621,6 @@ public sealed class PowerShellCompilationLibraryPackageBuilder
         var result = new string((value ?? string.Empty).Select(static character =>
             char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_').ToArray());
         return string.IsNullOrWhiteSpace(result) ? "Other" : result;
-    }
-
-    private static string ComputeSha256(string path)
-    {
-        using var stream = File.OpenRead(path);
-        using var algorithm = SHA256.Create();
-        return string.Concat(algorithm.ComputeHash(stream).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
     }
 
     private sealed class PackageEntry

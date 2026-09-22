@@ -199,6 +199,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     [Theory]
     [InlineData(PowerShellCompilationMode.Strict)]
     [InlineData(PowerShellCompilationMode.Hybrid)]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void ArtifactBuildRequiresReviewedProviderLockAndExecutesAdapter(PowerShellCompilationMode mode)
     {
         using var providerFixture = ProviderFixture.Create();
@@ -287,6 +288,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     [Theory]
     [InlineData(PowerShellCompilationMode.Strict)]
     [InlineData(PowerShellCompilationMode.Hybrid)]
+    [Trait("Category", "PowerShellCompilerGate")]
     public async Task ExecutableProviderMatrixRoutesValuesCardinalityStreamsAndErrors(PowerShellCompilationMode mode)
     {
         using var providerFixture = ProviderFixture.Create();
@@ -560,6 +562,7 @@ function Invoke-ProviderCleanupFailure {
     [Theory]
     [InlineData(PowerShellCompilationMode.Strict)]
     [InlineData(PowerShellCompilationMode.Hybrid)]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void ExecutableProviderCarriesAndInvokesItsLockedManagedDependencyClosure(PowerShellCompilationMode mode)
     {
         using var providerFixture = ProviderFixture.Create();
