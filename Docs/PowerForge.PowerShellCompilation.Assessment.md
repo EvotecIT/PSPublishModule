@@ -1,8 +1,8 @@
 # PowerShell compilation readiness assessment
 
-Updated: 2026-09-22. Audited baseline: `419620a88000a714cfb4450821a02fb8e5364583`. Production corrections: `18e443a1401611e7e144c39cc52b27f3e9c25ab0`. Final stopping-fixture consolidation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1` on `feature/powershell-compiler`.
+Updated: 2026-09-22. M28 run/watch implementation: `3823979bd305cb530fd5586e75eff46dc49f5db8` on `feature/powershell-compiler`. Earlier audit baseline: `419620a88000a714cfb4450821a02fb8e5364583`; corrections: `18e443a1401611e7e144c39cc52b27f3e9c25ab0`; stopping-fixture consolidation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1`.
 
-The compiler has a substantial semantic architecture and useful bounded Hybrid/Strict workflows. The September 22 audit found package cancellation, metadata validation, recurring test-selection, and stopping-test synchronization problems. All findings are closed with implementation, full compiler/Strict corpus validation, and a final focused fixture run. M28 is the next development milestone. Integration, public distribution, and additional platform qualification remain separate work.
+The compiler has a substantial semantic architecture and useful bounded Hybrid/Strict workflows. The September 22 audit findings are closed with implementation and artifact evidence. M28 now includes executable run/watch through the existing project owner and thin CLI. Packaging integration, grouped diagnostics, observed debugging, and complete library/module quickstarts remain open. Integration, public distribution, and additional platform qualification remain separate work.
 
 The independent read-only audit covered the three latest baseline implementation commits (`bc925783a`, `c589eea3c`, `419620a88`) and surrounding contracts. Primary inspection also covered target policy, native host bridges, the compiler gate, CI wiring, and roadmap consistency. This is not an exhaustive audit of all 975 changed files in the continuation. One targeted read-only confirmation of the corrective implementation reported no actionable P0–P3 findings.
 
@@ -44,6 +44,40 @@ The fixture treated public state `Stopping` as engine acknowledgment. A probe on
 
 The [test](../PowerForge.Tests/PowerShellCompilationLoopStoppingTests.cs) now waits for native `CurrentPipelineStopping` before releasing either invocation. A sibling sweep found the same handshake in seven other paused fixtures. All eight now use one [test helper](../PowerForge.Tests/PowerShellCompilationStoppingProbe.cs); the separate infinite-enumeration test already waits for actual stop completion and needs no release handshake. The shared helper passed 100 handshake probes on each host with zero early acknowledgments. Timeout/capability failures, exact original/compiled comparisons, and every loop/capture/finally assertion are retained. No runtime semantics or arbitrary delay was added. Final artifact-fixture qualification is recorded below.
 
+## M28 executable development workflow
+
+The [development guide](PowerForge.PowerShellCompilation.Development.md) covers source-first `run` and `watch`, application arguments and streams, offline restore, and exact-source qualification before distribution. The implementation reuses the project workflow service, dependency planner, artifact builder/cache, receipt verifier, and owned process runner. It adds no second compiler, package resolver, or process-lifetime implementation.
+
+Already-declared local script/resource content may change against the reviewed dependency graph. Topology, module metadata, binary/provider identities, semantic profiles, and targets still require explicit lock/restore. Development artifacts record their effective source graph and reviewed baseline; edited source is not labeled fully reviewed. Normal build/test/pack retains exact-source lock validation.
+
+Watch debounces content changes, cancels and joins the preceding build/application tree before restarting, and recovers after invalid source. Failed/canceled builds never fall back to old output. Input discovery comes from declared files and the existing resolver/planner; unrelated scripts do not invalidate the run. Application argument vectors, inherited stdin/stdout/stderr, and exit codes remain intact.
+
+**R6 / P2 — launch integrity, corrected.** Independent inspection found that the public `starting` callback followed artifact validation, while the final launch check covered only inputs. A callback or concurrent producer could replace output before execution. The final boundary now compares the disk inventory with this attempt's previously authenticated inventory, without accepting a replacement receipt. Regression cases alter a runnable executable and its separate generated assembly during `starting`; both fail before any process starts. This check does not promise an atomic filesystem-to-process snapshot against an external writer racing OS launch; concurrent writing into the development output is unsupported.
+
+Qualification at the implementation revision:
+
+- All eight final API run/watch cases passed across the remediation runs: six existing development cases plus the two final launch-integrity cases. They cover source/callee/resource invalidation, unchanged cache reuse, invalid source and recovery, rapid edits, provider/profile/target rejection, exclusion of unrelated scripts, late build cancellation preserving prior output, and termination of the application plus its descendant before restart/cancellation. The initial new payload fixture assumed an adjacent resource; it was corrected to the actual generated assembly, and both final integrity cases passed in 1m17s.
+- A direct final CLI run passed init → lock → restore → offline restore → run, preserved seven binary input bytes and ten arguments exactly, kept stderr separate, and returned the application's exit code 23. CLI assembly SHA-256: `622f97aaa818f958a5ce19283be073fb1cfda0d668411bd268ff02f86dc19f55`.
+- Final `PowerForge.PowerShell` Release `net472` compilation passed with zero warnings/errors. Executable qualification used .NET 10 / Windows x64; these observations do not qualify another OS or architecture.
+- One independent full read-only review and one targeted remediation confirmation completed. Confirmation patch hash: `17b7a65502b337c91470865c559f93b8cb01b0d9`; no remaining actionable finding in the inspected remediation. The only later implementation-commit change was milestone prose.
+
+The broad compiler gate passed **1,104/1,104**, with zero failures/skips, in **41m11s**, followed by **6/6 Strict programs** and **24 emitted units** with zero failures/regressions. Its required run/watch/CLI and existing package/provider families passed. This run used the reviewed candidate before launch-inventory and narrower-input remediation (review fingerprint `4e75a8ac65dc6adf72a181928f3677245d0bb6fc`). Gate engine assembly SHA-256: `c8f0f8a188ae89799d152ba063a75e14409bdb19570d1d81773dca3716fa85f1`; test assembly SHA-256: `288b5b5af273647f7a4025e2f28d8cd14da8f13ebe5a62be1c21a958c5e49d09`.
+
+The final focused API tests, direct CLI proof, and net472 build above qualify those narrow production changes at `3823979bd`. Their binaries were built into a separate task-owned directory so the running broad gate retained its original binaries. The final two launch-integrity cases also satisfy the subsequently added family-presence requirement; they were not part of the 1,104-case run. This is combined broad and focused evidence, not a claim that the final source received another full-suite run.
+
+Strict packet `powerforge-public-powershell-modules-net10-v1`, SHA-256 `ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e`, ran on `net10.0` / `win-x64`. Evidence JSON SHA-256: `d4f7730d46d3c3c3a0e0d8e2b00ef633d713eb0ee2e2d1067eada8fe558da901`.
+
+| Strict program | Emitted units | Artifact SHA-256 |
+| --- | --- | --- |
+| Number theory | 3 | `a2f7035b4e56dd3e605f0247033cc6da1ed9b8af4c1a93be3dabd5e58e382fed` |
+| Calendar rules | 3 | `b5dc9a468188fbad6b3b8ee42d598236bd03d122d7216b0f78385b16f0da480b` |
+| Recursion/local call | 3 | `831427f8c89017329d1280fddcb593f90705018f5a36f1be91ae2873942a13eb` |
+| Collection mutation | 2 | `57bc24dd15982eed8dd39e0aea1e9a69abc37aa01d543acf2a6eb990baa4ac38` |
+| Switch/control flow | 2 | `5e620892390cc4606307960d54b77297d6d078c36f1bf4f523bfc3695280abae` |
+| Multifile application | 11 | `4f6ad817d9cef16739f9959a7c68662de3b554ff555bc7ce20e0a18cc3a1b1eb` |
+
+The recurring gate now requires passing run, watch lifecycle, launch-integrity, and CLI-stream families in addition to the existing compiler/package/provider families. M28 remains partial; its remaining acceptance checklist is maintained in [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md).
+
 ## Design and compatibility boundaries
 
 | Area | Decision | Boundary |
@@ -61,7 +95,7 @@ The [test](../PowerForge.Tests/PowerShellCompilationLoopStoppingTests.cs) now wa
 
 No P0/P1 defect, runtime-free certification bypass, or incorrect-transfer regression was established in the reviewed changes. That scoped result is not a guarantee about the whole compiler.
 
-## Current validation and branch state
+## Earlier September 22 audit qualification
 
 - Final focused suite at `3cfa5edad`: **55/55 passed**, zero failed/skipped, in **2m05s**. Includes all eight stopping fixtures (18 host/shape cases), publication failures, library/provider metadata, ABI, and provider consumers. The initial corrective suite passed 39/39 before consolidating the sibling fixtures.
 - Final `PowerForge.PowerShell` Release `net472` build: **zero warnings/errors**.
@@ -81,16 +115,7 @@ pwsh -NoProfile -File ./Build/Invoke-PowerShellCompilerGate.ps1 `
 
 The gate runs compiler-tagged tests plus census, bound-pipeline, and fuzz tests, then six Strict programs. The VSTest/xUnit assembly targets `net10.0`; artifact tests select separate host processes. Use `-NoBuild` only after rebuilding the current test project. A passing net10 test assembly alone does not establish net472 compilation or a complete platform matrix.
 
-Strict packet: `powerforge-public-powershell-modules-net10-v1`, SHA-256 `ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e`. The run selected Strict programs only; module qualification comes from separate artifact tests, not this corpus invocation.
-
-| Strict program | Emitted units | Artifact SHA-256 |
-| --- | --- | --- |
-| Number theory | 3 | `5b3b10e93d90e729a05867d9c4f8a77b4a0ea6cea05551267f2d3130ec7a4ba5` |
-| Calendar rules | 3 | `cbda476e155835c5f438c3e9edf2764b7a7e499725a4c4985936b18c3fe24d4f` |
-| Recursion/local call | 3 | `05c570200c6dda260a657af1791b904e9f9d366713da9c1175e4b337a1549b2a` |
-| Collection mutation | 2 | `21d275922d71f3320a46beddfba78e594da49e39579773613cf5110b3f67b354` |
-| Switch/control flow | 2 | `440f8ab2687e213b955d2b0ee38fcccf5f76b2db46fbc9e9f012ae8903260bf9` |
-| Multifile application | 11 | `5a2a85f92592069f2c4d825a70e59d97f7872a7069ec68b3b822ff4ea6de51c5` |
+The corpus invocation selected Strict programs only; module qualification comes from separate artifact tests. The latest program identities are recorded in the M28 section above.
 
 At audit start the clean continuation and remote head matched `419620a88`; a fresh fetch found 133 continuation-only commits and 11 default-branch-only commits. There was no open PR or GitHub run. `BuildModule.yml` runs on main pushes, PRs to main, or manual dispatch; a continuation push alone provides no CI proof. Both baseline and corrective local gates exceeded the workflow's 40-minute compiler-step timeout: measure the candidate on its actual runner and adjust partition/budget if needed without dropping required cases.
 

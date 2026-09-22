@@ -34,7 +34,7 @@ public sealed class PowerShellCompilationProjectRunResult
     /// <summary>Build/validation failure, or an empty string after a successful launch.</summary>
     public string Error { get; set; } = string.Empty;
 
-    /// <summary>Application exit code, or 1 when the artifact could not be built or launched.</summary>
+    /// <summary>Application or process-runner exit code, or 1 when no execution result is available.</summary>
     public int ExitCode => Process?.ExitCode ?? 1;
 }
 

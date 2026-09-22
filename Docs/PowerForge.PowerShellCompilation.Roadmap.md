@@ -10,7 +10,7 @@ The companion [PowerShell Compilation guide](PowerForge.PowerShellCompilation.md
 
 This roadmap does not schedule a package, gallery, NuGet, or GitHub release. Those remain separate decisions after source work is complete.
 
-The [next major milestones, 24–30](PowerForge.PowerShellCompilation.NextMilestones.md), define the active delivery tranche: values/collections, complete pipelines, stateful modules, practical CLR libraries, the development loop, distribution/platform qualification, and finally measured acceleration. M24–M27 have completed bounded local implementation gates, including the September 22 corrections. M28 is the next development milestone. The architecture history below remains their foundation.
+The [next major milestones, 24–30](PowerForge.PowerShellCompilation.NextMilestones.md), define the active delivery tranche: values/collections, complete pipelines, stateful modules, practical CLR libraries, the development loop, distribution/platform qualification, and finally measured acceleration. M24–M27 have completed bounded local implementation gates, including the September 22 corrections. M28 is in progress with executable run/watch implemented; packaging integration, diagnostics, debugger qualification, and complete consumer quickstarts remain. The architecture history below remains their foundation.
 
 ## Product north star
 
@@ -49,9 +49,9 @@ The product succeeds when users can predict which of these outcomes they are get
 
 ## Current position
 
-Qualified continuation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1` on `feature/powershell-compiler`, 2026-09-22; production corrections are in `18e443a14`. The continuation is intentionally separate from the default branch and has no open PR at this checkpoint. At audit start a fresh fetch found 133 continuation-only commits and 11 default-branch-only commits; an earlier main merge does not establish current integration readiness.
+Development continuation: `3823979bd305cb530fd5586e75eff46dc49f5db8` on `feature/powershell-compiler`, 2026-09-22. The continuation remains separate from the default branch. An earlier main merge does not establish current integration readiness; exact-candidate CI/review and current default-branch reconciliation remain M29 work.
 
-M24–M27 have completed bounded value, pipeline, state, region, and local-feed consumption gates. The M25 stopping failure was a test handshake race: eight fixtures now wait for engine acknowledgment, retaining their behavior assertions. Package cancellation and library/provider/dependency metadata validation are corrected in shared owners. The canonical gate includes required ABI/provider families and passes **1,097/1,097** with zero failures/skips, followed by **6/6** Strict programs. The final fixture/package suite passes **55/55**, and net472 builds cleanly. The [assessment](PowerForge.PowerShellCompilation.Assessment.md) identifies the revisions and evidence; the [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md) own the M28–M30 checklist.
+M24–M27 have completed bounded value, pipeline, state, region, and local-feed consumption gates, including the corrected stopping fixtures, package cancellation, metadata, and recurring ABI/provider coverage. M28 adds executable run/watch through the existing project and cache owners. Failed rebuilds do not execute stale artifacts, and launch rechecks this attempt's authenticated output inventory. The [assessment](PowerForge.PowerShellCompilation.Assessment.md) identifies revisions, findings, and executable evidence; the [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md) own the remaining M28–M30 checklist.
 
 The September 20 checkpoint recorded 1,063 compiler tests and six Strict Windows programs passing, with 188/282 complete emitted PSSharedGoods functions and 36 promoted regions. These are dated, packet-specific results. An emitted Hybrid function can still delegate operations to PowerShell; counters alone prove neither runtime-free execution nor performance. Earlier 7.4/net8 and heterogeneous-discovery results below retain their historical scope.
 
@@ -1555,7 +1555,7 @@ Exit gate: **Complete for bounded M24–M26 contracts.** The continuation implem
 
 Assessment R1–R5 are closed with the recorded full-gate, corpus, focused artifact, and planning evidence. Package publication preserves prior output until commit; library/provider metadata share canonical NuGet rules; required ABI/provider families participate in recurring validation; stopping fixtures wait for the engine acknowledgment.
 
-1. [ ] Deliver M28 run/watch/diagnose/debug through the existing project, cache, diagnostics, source-map, and package owners. Failed rebuilds must not silently execute stale outputs.
+1. [ ] Finish M28 packaging integration, grouped diagnostics, observed debugging, and library/module quickstarts through the existing owners. Executable run/watch is implemented with stale-output prevention and launch-integrity checks.
 2. [ ] Integrate against current default-branch owners and run exact-candidate CI/review, including a measured compiler-gate time budget. Keep that evidence distinct from local qualification.
 3. [ ] Complete M29 host-servicing, public-package upgrade/rollback, platform, and disposable-target gates. A private PowerShell API bridge needs an explicit servicing matrix and safe unsupported-host behavior; a cross-publish does not establish target execution. Generated API compatibility is separate from CLR/package binary replacement.
 4. [ ] Run M30 measurements on qualified complete workflows, including startup, crossing, allocation, and error-path controls.
@@ -1709,7 +1709,8 @@ The semantic compiler does not have a competing AST/emitter eligibility brain. P
 - [ ] physical macOS/Arm64 promotion and a stable-channel release remain open under Milestone 22.
 - [x] M23 closes through the bounded M24–M26 continuation/transfer, full-module workflows, and independent Strict stateful lifetime contracts. Broader unsupported families remain explicit boundaries.
 - [x] Correct M27 package cancellation/metadata and recurring ABI/provider coverage. Document restore/rebuild consumption separately from unqualified binary drop-in replacement.
-- [x] Complete corrective full-gate, Strict corpus, and final fixture requalification; M28 is the next development milestone.
-- [ ] Complete M28 run/watch/diagnose/debug and M29 host-servicing/release qualification through the existing owners; M30 follows with measured workflow benefit.
+- [x] Complete corrective full-gate, Strict corpus, and final fixture requalification.
+- [x] Deliver M28 executable run/watch with source invalidation, verified cache reuse, stream/argument fidelity, owned process-tree cancellation, and launch-integrity checks.
+- [ ] Complete remaining M28 packaging/diagnostics/debugging/consumer work and M29 host-servicing/release qualification through the existing owners; M30 follows with measured workflow benefit.
 
 Broad percentage growth is useful only as a diagnostic trend. It never substitutes for these complete-program, clean-target, semantic, ecosystem, and product gates.
