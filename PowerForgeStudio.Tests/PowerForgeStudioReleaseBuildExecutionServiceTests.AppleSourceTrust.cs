@@ -136,6 +136,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             /* End PBXFileSystemSynchronizedRootGroup section */
             """);
         File.WriteAllText(Path.Combine(synchronizedSources, "RuntimeConfig.json"), "{ \"mode\": \"unreviewed\" }");
+        File.WriteAllText(Path.Combine(synchronizedSources, "Tracked.swift"), "struct Tracked {}");
         File.WriteAllText(Path.Combine(repositoryRoot, ".gitignore"), "Parent/AppSources/RuntimeConfig.json\n");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
@@ -554,6 +555,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             """);
         Directory.CreateDirectory(Path.Combine(repositoryRoot, "Resources"));
         File.WriteAllText(Path.Combine(repositoryRoot, "Resources", "config.json"), "unreviewed resource");
+        File.WriteAllText(Path.Combine(repositoryRoot, "Resources", "tracked.txt"), "tracked resource");
         File.WriteAllText(Path.Combine(repositoryRoot, ".gitignore"), "Resources/config.json\n");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
@@ -683,6 +685,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(Path.Combine(package, "Package.swift"), "// swift-tools-version: 6.0");
         var sources = Directory.CreateDirectory(Path.Combine(package, "Sources", "Shared"));
         File.WriteAllText(Path.Combine(sources.FullName, "Generated.swift"), "struct Injected {}");
+        File.WriteAllText(Path.Combine(sources.FullName, "Tracked.swift"), "struct Tracked {}");
         File.WriteAllText(Path.Combine(repositoryRoot, ".gitignore"), "Packages/Shared/Sources/Shared/Generated.swift\n");
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);

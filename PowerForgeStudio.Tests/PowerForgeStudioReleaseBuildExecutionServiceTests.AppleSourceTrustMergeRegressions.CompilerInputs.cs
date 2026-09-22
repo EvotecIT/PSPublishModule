@@ -104,7 +104,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             "OTHER_CFLAGS = -fprebuilt-module-path=Modules\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Modules", exception.Message, StringComparison.Ordinal);
@@ -125,7 +125,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Ignorelist", exception.Message, StringComparison.Ordinal);
@@ -167,7 +167,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Quoted preprocessor include", exception.Message, StringComparison.Ordinal);
@@ -254,7 +254,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -295,7 +295,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("resource input was not found", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -376,7 +376,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_SWIFT_FLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);

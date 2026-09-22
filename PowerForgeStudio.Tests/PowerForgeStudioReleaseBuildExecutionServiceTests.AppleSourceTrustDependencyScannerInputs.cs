@@ -18,7 +18,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
@@ -36,7 +36,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(Path.Combine(repositoryRoot, "Compiler.rsp"), "-fdepscan-daemon=Rules\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);

@@ -19,7 +19,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             File.WriteAllText(Path.Combine(repositoryRoot, "Metal.rsp"), "-include Rules\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);

@@ -17,7 +17,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_SWIFT_FLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules.dylib", exception.Message, StringComparison.Ordinal);
@@ -35,7 +35,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(Path.Combine(repositoryRoot, "Swift.rsp"), "-load-pass-plugin=Rules.dylib\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules.dylib", exception.Message, StringComparison.Ordinal);

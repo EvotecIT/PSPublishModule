@@ -176,7 +176,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             File.WriteAllText(Path.Combine(repositoryRoot, "Module.rsp"), "-swift-module-file=Rules=Injected.swiftmodule\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Equal(Path.Combine(repositoryRoot, expectedPath), exception.FileName);

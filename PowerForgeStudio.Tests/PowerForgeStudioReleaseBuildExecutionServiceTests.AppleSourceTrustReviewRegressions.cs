@@ -100,7 +100,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         var configPath = WriteAppleReleaseConfig(repositoryRoot, projectRoot: ".");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Injected.swift", exception.Message, StringComparison.Ordinal);

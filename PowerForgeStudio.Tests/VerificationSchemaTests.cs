@@ -41,7 +41,7 @@ public sealed class VerificationSchemaTests
             Assert.Single(recovered, value => value.Destination == "feed-b");
             Assert.Equal(original, Assert.Single(await database.LoadVerificationReceiptsAsync("legacy")));
             var version = await sqlite.QueryReadOnlyAsListAsync(path, "SELECT value FROM app_schema WHERE key = 'schema_version';", reader => reader.GetString(0));
-            Assert.Equal("22", Assert.Single(version));
+            Assert.Equal("23", Assert.Single(version));
         }
         finally { Directory.Delete(root, true); }
     }

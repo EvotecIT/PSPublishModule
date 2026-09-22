@@ -20,7 +20,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CPLUSPLUSFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Equal(Path.Combine(repositoryRoot, expectedPath), exception.FileName);

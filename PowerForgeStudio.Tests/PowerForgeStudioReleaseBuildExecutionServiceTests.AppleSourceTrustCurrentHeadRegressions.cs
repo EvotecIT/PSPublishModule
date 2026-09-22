@@ -21,7 +21,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_SWIFT_FLAGS = -cache-compile-job {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
@@ -42,7 +42,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_SWIFT_FLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
@@ -60,7 +60,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(Path.Combine(repositoryRoot, "Swift.rsp"), "-ld-path=Rules\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
@@ -150,7 +150,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_SWIFT_FLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
@@ -169,7 +169,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(Path.Combine(plugins.FullName, "marker"), "tracked plugin search root");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Server", exception.Message, StringComparison.Ordinal);
@@ -336,7 +336,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("missing exact-source input", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -354,7 +354,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
@@ -375,7 +375,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
@@ -393,7 +393,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
         File.WriteAllText(Path.Combine(repositoryRoot, "Compiler.rsp"), "-fthinlto-index=Rules\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
@@ -416,7 +416,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
@@ -436,7 +436,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Rules", exception.Message, StringComparison.Ordinal);
@@ -463,7 +463,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_CFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains(expectedPath, exception.Message, StringComparison.Ordinal);
@@ -570,7 +570,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             "OTHER_LDFLAGS = -Wl,-order_file,-Rules\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("-Rules", exception.Message, StringComparison.Ordinal);

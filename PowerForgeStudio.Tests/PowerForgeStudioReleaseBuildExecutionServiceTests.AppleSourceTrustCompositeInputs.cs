@@ -23,7 +23,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             File.WriteAllText(Path.Combine(repositoryRoot, "Plugin.rsp"), "-load-resolved-plugin Lib#Exec#Macros\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Equal(Path.Combine(repositoryRoot, "Exec"), exception.FileName);
@@ -43,7 +43,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             $"OTHER_LDFLAGS = {option}\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Equal(Path.Combine(repositoryRoot, "Current"), exception.FileName);
@@ -67,7 +67,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             File.WriteAllText(Path.Combine(repositoryRoot, "Remap.rsp"), "-remap-file Source.c;Alias.c\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Equal(Path.Combine(repositoryRoot, "Alias.c"), exception.FileName);

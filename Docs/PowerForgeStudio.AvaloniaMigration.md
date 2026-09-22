@@ -51,6 +51,7 @@ The desktop GUI is PowerForgeStudio.Avalonia, a thin presentation host over the 
 - [ ] Connect a supported Codex automation inventory adapter and provider-owned configuration actions when their owners expose safe APIs.
 - [x] Validate native rendering, keyboard navigation and representative workflows within the recorded Windows capture limits.
 - [x] Review interacting behavior and retire the WPF host, its tests, dependencies and compatibility switches.
+- [x] Restore the default Avalonia build and complete shared Studio test gate.
 - [x] Clean task-owned validation artifacts and report delivery limits.
 
 ## Ownership and migration boundary
@@ -657,3 +658,9 @@ The tree now retains Favorites and Other projects sections even when the favorit
 Settings can forget a non-active recent workspace root. The active root and any root used by a retained profile are protected. Forget changes only the machine-local recent-root list and timestamp; it leaves directories, files, retained profiles, preferences and saved explorer state intact. The focused JSON rewrite also preserves unknown top-level and nested values so a newer catalog is not downgraded by this registration action.
 
 Preference fields are disabled while a catalog write runs. If an edit reaches the view model during an in-flight save, the completed write updates the saved baseline but retains the newer draft and marks it unsaved. Wide and compact headless Settings renders were inspected in `Artifacts/StudioValidation/settings-root-management/`. The shared workspace suite passed 69 tests and the full Avalonia suite passed 67 tests. Native pointer and keyboard interaction for this control remains unverified.
+
+### Complete default build gate (2026-09-22)
+
+`Build/Build-PowerForgeStudio.ps1 -NoRestore` now completes with zero build warnings and errors. All 68 Avalonia tests and 881 shared Studio tests pass; the one local smoke harness remains opt-in and skipped. This supersedes the earlier default-gate failure recorded above.
+
+The Apple exact-source tests now assert the current source-trust wrapper and its underlying missing-file cause. Three ignored-input fixtures include a tracked sibling so Git retains the parent directory and the test reaches the intended file check. The release-station fixture uses a disposable artifact with a captured integrity digest instead of a machine-specific repository path. Two database assertions expect the current schema version, 23. No Apple build, external publication, or real repository mutation was part of this gate.

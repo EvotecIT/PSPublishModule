@@ -216,7 +216,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             "OTHER_LDFLAGS = Injected.a\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Injected.a", exception.Message, StringComparison.Ordinal);
@@ -249,7 +249,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             "OTHER_CFLAGS = -imacros Injected.h\n");
         CommitRepository(repositoryRoot);
 
-        var exception = Assert.Throws<FileNotFoundException>(() =>
+        var exception = AssertMissingExactSourceInput(() =>
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("Injected.h", exception.Message, StringComparison.Ordinal);
@@ -311,7 +311,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains("/usr/bin/xcodebuild", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("not trusted", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("requires the trusted system tool", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -338,7 +338,7 @@ public sealed partial class PowerForgeStudioReleaseBuildExecutionServiceTests
             ReleaseBuildExecutionService.ResolveExactAppleSourceCommit(repositoryRoot, configPath));
 
         Assert.Contains(trustedPath, exception.Message, StringComparison.Ordinal);
-        Assert.Contains("not trusted", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("requires the trusted system tool", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

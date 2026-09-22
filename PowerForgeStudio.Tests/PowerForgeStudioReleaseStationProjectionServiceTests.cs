@@ -13,8 +13,12 @@ public sealed class PowerForgeStudioReleaseStationProjectionServiceTests
     [Fact]
     public void BuildSnapshots_ProjectsSigningPublishAndVerificationStations()
     {
+        using var fixture = new StationFixture();
+        var repositoryRoot = fixture.RepositoryRoot;
+        var artifactsRoot = fixture.ArtifactsRoot;
+        var packagePath = fixture.PackagePath;
         var buildResult = new ReleaseBuildExecutionResult(
-            RootPath: @"C:\Support\GitHub\DbaClientX",
+            RootPath: repositoryRoot,
             Succeeded: true,
             Summary: "Build completed safely.",
             DurationSeconds: 1.2,
@@ -25,41 +29,41 @@ public sealed class PowerForgeStudioReleaseStationProjectionServiceTests
                     Summary: "Project build completed.",
                     ExitCode: 0,
                     DurationSeconds: 1.2,
-                    ArtifactDirectories: [@"C:\Support\GitHub\DbaClientX\Artefacts"],
-                    ArtifactFiles: [@"C:\Support\GitHub\DbaClientX\Artefacts\DbaClientX.1.0.0.nupkg"])
+                    ArtifactDirectories: [artifactsRoot],
+                    ArtifactFiles: [packagePath])
             ]);
 
         var signingResult = new ReleaseSigningExecutionResult(
-            RootPath: @"C:\Support\GitHub\DbaClientX",
+            RootPath: repositoryRoot,
             Succeeded: true,
             Summary: "Signing completed safely.",
             SourceCheckpointStateJson: JsonSerializer.Serialize(buildResult),
             Receipts: [
-                new ReleaseSigningReceipt(
-                    RootPath: @"C:\Support\GitHub\DbaClientX",
+                ReleaseSigningArtifactIntegrity.Capture(new ReleaseSigningReceipt(
+                    RootPath: repositoryRoot,
                     RepositoryName: "DbaClientX",
                     AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
-                    ArtifactPath: @"C:\Support\GitHub\DbaClientX\Artefacts\DbaClientX.1.0.0.nupkg",
+                    ArtifactPath: packagePath,
                     ArtifactKind: "NuGetPackage",
                     Status: ReleaseSigningReceiptStatus.Signed,
                     Summary: "Package signed.",
-                    SignedAtUtc: DateTimeOffset.UtcNow)
+                    SignedAtUtc: DateTimeOffset.UtcNow))
             ]);
 
         var publishResult = new ReleasePublishExecutionResult(
-            RootPath: @"C:\Support\GitHub\DbaClientX",
+            RootPath: repositoryRoot,
             Succeeded: true,
             Summary: "Publish completed safely.",
             SourceCheckpointStateJson: JsonSerializer.Serialize(signingResult),
             Receipts: [
                 new ReleasePublishReceipt(
-                    RootPath: @"C:\Support\GitHub\DbaClientX",
+                    RootPath: repositoryRoot,
                     RepositoryName: "DbaClientX",
                     AdapterKind: ReleaseBuildAdapterKind.ProjectBuild.ToString(),
                     TargetName: "NuGet package",
                     TargetKind: "NuGet",
                     Destination: "Configured NuGet feed",
-                    SourcePath: @"C:\Support\GitHub\DbaClientX\Artefacts\DbaClientX.1.0.0.nupkg",
+                    SourcePath: packagePath,
                     Status: ReleasePublishReceiptStatus.Published,
                     Summary: "Published to NuGet.",
                     PublishedAtUtc: DateTimeOffset.UtcNow)
@@ -67,12 +71,12 @@ public sealed class PowerForgeStudioReleaseStationProjectionServiceTests
 
         var queueSession = new ReleaseQueueSession(
             SessionId: Guid.NewGuid().ToString("N"),
-            WorkspaceRoot: @"C:\Support\GitHub",
+            WorkspaceRoot: Path.GetDirectoryName(repositoryRoot)!,
             CreatedAtUtc: DateTimeOffset.UtcNow,
             Summary: new ReleaseQueueSummary(3, 0, 0, 1, 0, 1),
             Items: [
                 new ReleaseQueueItem(
-                    RootPath: @"C:\Support\GitHub\DbaClientX",
+                    RootPath: repositoryRoot,
                     RepositoryName: "DbaClientX",
                     RepositoryKind: ReleaseRepositoryKind.Library,
                     WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
@@ -84,7 +88,7 @@ public sealed class PowerForgeStudioReleaseStationProjectionServiceTests
                     CheckpointStateJson: JsonSerializer.Serialize(buildResult),
                     UpdatedAtUtc: DateTimeOffset.UtcNow),
                 new ReleaseQueueItem(
-                    RootPath: @"C:\Support\GitHub\DbaClientX",
+                    RootPath: repositoryRoot,
                     RepositoryName: "DbaClientX",
                     RepositoryKind: ReleaseRepositoryKind.Library,
                     WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
@@ -96,7 +100,7 @@ public sealed class PowerForgeStudioReleaseStationProjectionServiceTests
                     CheckpointStateJson: JsonSerializer.Serialize(signingResult),
                     UpdatedAtUtc: DateTimeOffset.UtcNow),
                 new ReleaseQueueItem(
-                    RootPath: @"C:\Support\GitHub\DbaClientX",
+                    RootPath: repositoryRoot,
                     RepositoryName: "DbaClientX",
                     RepositoryKind: ReleaseRepositoryKind.Library,
                     WorkspaceKind: ReleaseWorkspaceKind.PrimaryRepository,
@@ -124,5 +128,20 @@ public sealed class PowerForgeStudioReleaseStationProjectionServiceTests
         Assert.Single(verificationStation.Items);
         Assert.Equal("NuGet", verificationStation.Items[0].TargetKind);
         Assert.Contains("signed", signingBatch.Headline, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class StationFixture : IDisposable
+    {
+        public string RepositoryRoot { get; } = Path.Combine(Path.GetTempPath(), "powerforge-station-" + Guid.NewGuid().ToString("N"));
+        public string ArtifactsRoot => Path.Combine(RepositoryRoot, "Artefacts");
+        public string PackagePath => Path.Combine(ArtifactsRoot, "DbaClientX.1.0.0.nupkg");
+
+        public StationFixture()
+        {
+            Directory.CreateDirectory(ArtifactsRoot);
+            File.WriteAllText(PackagePath, "package fixture");
+        }
+
+        public void Dispose() => Directory.Delete(RepositoryRoot, recursive: true);
     }
 }
