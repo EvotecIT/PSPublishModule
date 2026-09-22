@@ -42,27 +42,28 @@
             <Button Content="Reload detail" Command="{Binding LoadSelectionCommand}" IsEnabled="{Binding HasSelection}" Margin="0,0,8,4" />
             <Button Content="Open on GitHub" Click="OpenOnGitHub" IsEnabled="{Binding HasSelection}" Margin="0,0,0,4" />
           </WrapPanel>
-          <Border IsVisible="{Binding HasSelection}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="5" Padding="12">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Reviewed action" FontWeight="SemiBold" />
-              <TextBlock Text="Actions use the current item state and exact PR head. Studio rechecks that evidence before sending anything." Classes="muted" FontSize="12" TextWrapping="Wrap" />
-              <ComboBox ItemsSource="{Binding AvailableActions}" SelectedItem="{Binding SelectedAction, Mode=TwoWay}" IsEnabled="{Binding !IsActionRunning}">
-                <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:GitHubActionOption">
-                    <TextBlock Text="{Binding Caption}" />
-                  </DataTemplate>
-                </ComboBox.ItemTemplate>
-              </ComboBox>
-              <TextBlock Text="{Binding SelectedAction.Explanation}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
-              <TextBox Text="{Binding ActionBody, Mode=TwoWay}" AcceptsReturn="True" MinHeight="76" MaxHeight="160" TextWrapping="Wrap"
-                       PlaceholderText="Comment or review summary" IsEnabled="{Binding SelectedAction.AllowsBody}" />
-              <WrapPanel>
-                <Button Content="Review action" Click="ReviewAction" IsEnabled="{Binding CanPrepareAction}" Classes="primary" Margin="0,0,8,4" />
-                <TextBlock Text="Merge and branch deletion use the repository settlement workflow." Classes="muted" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" />
-              </WrapPanel>
-              <TextBlock Text="{Binding ActionStatus}" IsVisible="{Binding !HasActionOutcome}" FontSize="12" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
+          <Expander x:Name="ReviewActionPanel" Header="Review action" IsExpanded="False" IsVisible="{Binding HasSelection}">
+            <Border BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="5" Padding="12">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Actions use the current item state and exact PR head. Studio rechecks that evidence before sending anything." Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                <ComboBox ItemsSource="{Binding AvailableActions}" SelectedItem="{Binding SelectedAction, Mode=TwoWay}" IsEnabled="{Binding !IsActionRunning}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GitHubActionOption">
+                      <TextBlock Text="{Binding Caption}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="{Binding SelectedAction.Explanation}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                <TextBox Text="{Binding ActionBody, Mode=TwoWay}" AcceptsReturn="True" MinHeight="76" MaxHeight="160" TextWrapping="Wrap"
+                         PlaceholderText="Comment or review summary" IsEnabled="{Binding SelectedAction.AllowsBody}" />
+                <WrapPanel>
+                  <Button Content="Review action" Click="ReviewAction" IsEnabled="{Binding CanPrepareAction}" Classes="primary" Margin="0,0,8,4" />
+                  <TextBlock Text="Merge and branch deletion use the repository settlement workflow." Classes="muted" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap" />
+                </WrapPanel>
+                <TextBlock Text="{Binding ActionStatus}" IsVisible="{Binding !HasActionOutcome}" FontSize="12" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+          </Expander>
           <Border IsVisible="{Binding HasChecks}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="5" Padding="12">
             <StackPanel Spacing="8">
               <TextBlock Text="Checks at PR head" FontWeight="SemiBold" />

@@ -171,6 +171,21 @@ public sealed class GitHubWorkspaceTests
                         Directory.CreateDirectory(output);
                         frame.Save(Path.Combine(output, compact ? "workspace-github-compact.png" : "workspace-github.png"), PngBitmapEncoderOptions.Default);
                     }
+                    var actionPanel = Assert.Single(window.GetVisualDescendants().OfType<Expander>(),
+                        panel => panel.Name == "ReviewActionPanel");
+                    Assert.False(actionPanel.IsExpanded);
+                    Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(),
+                        block => block.Text == "Checks at PR head" && block.IsEffectivelyVisible);
+                    if (compact)
+                    {
+                        actionPanel.IsExpanded = true;
+                        window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        Assert.Contains(actionPanel.GetVisualDescendants().OfType<TextBox>(),
+                            box => box.PlaceholderText == "Comment or review summary" && box.IsEffectivelyVisible);
+                        using var actionFrame = window.CaptureRenderedFrame(); Assert.NotNull(actionFrame);
+                        if (!string.IsNullOrWhiteSpace(output)) actionFrame.Save(Path.Combine(output, "workspace-github-action-form-compact.png"), PngBitmapEncoderOptions.Default);
+                        actionPanel.IsExpanded = false;
+                    }
                 }
                 workspace.GitHub.SelectedAction = Assert.Single(workspace.GitHub.AvailableActions,
                     option => option.Kind == GitHubProjectActionKind.RequestPullRequestChanges);
