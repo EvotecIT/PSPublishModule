@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PowerForge;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Host;
@@ -16,10 +17,12 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _operation;
     private int _contextVersion;
     private bool _disposed;
-    public BuildViewModel(IRepositoryPlanPreviewService? planner = null, IReleaseBuildExecutionService? builds = null)
+    public BuildViewModel(IRepositoryPlanPreviewService? planner = null, IReleaseBuildExecutionService? builds = null,
+        ProjectTaskService? tasks = null)
     {
         _planner = planner ?? new RepositoryPlanPreviewService();
         _builds = builds ?? new ReleaseBuildExecutionService();
+        _taskService = tasks ?? new ProjectTaskService();
     }
     public ObservableCollection<RepositoryPlanResult> Results { get; } = [];
     [ObservableProperty] private string _workingCopyRoot = "";
@@ -37,15 +40,16 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
             ++_contextVersion;
             _operation?.Cancel();
             Results.Clear();
+            ClearTaskSelection();
             HasSuccessfulInspection = false;
             Status = "Configuration changed. Save or discard drafts, then inspect again.";
         }
-        OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(EmphasizePlan)); OnPropertyChanged(nameof(CanBuild));
+        OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(EmphasizePlan)); OnPropertyChanged(nameof(CanBuild)); OnPropertyChanged(nameof(CanRunTask));
     }
-    public bool CanPlan => !HasUnsavedChanges && !IsBusy && !IsBuilding && !_disposed && !string.IsNullOrEmpty(WorkingCopyRoot);
+    public bool CanPlan => !HasUnsavedChanges && !IsBusy && !IsBuilding && !IsTaskRunning && !_disposed && !string.IsNullOrEmpty(WorkingCopyRoot);
     public bool EmphasizePlan => CanPlan && !HasSuccessfulInspection;
     partial void OnWorkingCopyRootChanged(string value) { OnPropertyChanged(nameof(EmphasizePlan)); OnPropertyChanged(nameof(ContractDisplay)); }
-    partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(EmphasizePlan)); OnPropertyChanged(nameof(CanBuild)); }
+    partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanPlan)); OnPropertyChanged(nameof(EmphasizePlan)); OnPropertyChanged(nameof(CanBuild)); OnPropertyChanged(nameof(CanRunTask)); }
 
     public void SetWorkingCopy(string root)
     {
@@ -54,7 +58,9 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
         _operation?.Cancel();
         WorkingCopyRoot = root;
         Results.Clear();
+        ClearTaskSelection();
         HasSuccessfulInspection = false;
+        HasDetectedBuildContract = false;
         Contracts = "No contract inspected.";
         Status = string.IsNullOrEmpty(root) ? "Select a working copy to inspect its build contract." : "Ready to inspect and plan this working copy.";
         OnPropertyChanged(nameof(CanPlan));
@@ -71,6 +77,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
         _operation = cancellation;
         IsBusy = true;
         Results.Clear();
+        ClearTaskSelection();
         HasSuccessfulInspection = false;
         Status = "Inspecting build contracts…";
         try
@@ -78,12 +85,17 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
             var repository = await Task.Run(() => new RepositoryCatalogScanner().InspectRepository(root), cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
             if (_disposed || version != _contextVersion) return;
+            HasDetectedBuildContract = repository.IsReleaseManaged;
             Contracts = string.Join("\n", new[] { repository.UnifiedReleaseConfigPath, repository.ModuleBuildScriptPath, repository.ProjectBuildScriptPath }
                 .Where(x => !string.IsNullOrEmpty(x)).Distinct());
+            await LoadTasksAsync(root, version, cancellation.Token);
+            if (_disposed || version != _contextVersion) return;
             if (!repository.IsReleaseManaged)
             {
-                Contracts = "No supported contract found.";
-                Status = "Add Build/project.build.json, a supported module/release JSON contract, or a PowerForge build script.";
+                Contracts = Tasks.Count > 0 ? "No package build contract found." : "No supported contract found.";
+                Status = Tasks.Count > 0
+                    ? "Project tasks are ready below. No package build contract was detected."
+                    : "Add Build/project.build.json, a supported module/release JSON contract, or a PowerForge build script.";
                 return;
             }
             Status = "Inspecting configuration and generating available plans…";
@@ -106,5 +118,5 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Cancel() { Status = "Cancellation requested; waiting for the planner to stop…"; _operation?.Cancel(); }
 
-    public void Dispose() { _disposed = true; ++_contextVersion; _operation?.Cancel(); _buildCancellation?.Cancel(); }
+    public void Dispose() { _disposed = true; ++_contextVersion; _operation?.Cancel(); _buildCancellation?.Cancel(); _taskCancellation?.Cancel(); }
 }

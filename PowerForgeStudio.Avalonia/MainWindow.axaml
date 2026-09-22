@@ -283,8 +283,21 @@
                              BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding BuildRoot}" AutomationProperties.Name="Captured build working copy path" />
                   </StackPanel>
                 </Border>
-                <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10">
+                <Border Background="#F3F7FD" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding HasTaskRun}">
+                  <StackPanel Spacing="5">
+                    <TextBlock Text="Captured task" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding TaskStatus}" TextWrapping="Wrap" FontSize="12" />
+                    <TextBlock Text="Source working copy" Classes="muted" FontSize="11" />
+                    <TextBox Text="{Binding TaskRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
+                             BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding TaskRoot}" AutomationProperties.Name="Captured task working copy path" />
+                  </StackPanel>
+                </Border>
+                <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding ShowBuildContractSection}">
                   <TextBlock Text="Build runs local project code with PowerForge publishing disabled. Inspect the captured artifacts in Releases before signing or publishing."
+                             TextWrapping="Wrap" FontSize="12" />
+                </Border>
+                <Border Background="#FFF8E8" BorderBrush="#E8CA80" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding HasTasks}">
+                  <TextBlock Text="Project tasks run the configured tool as trusted code. They can change local files or publish externally; the build-only publication guard does not apply."
                              TextWrapping="Wrap" FontSize="12" />
                 </Border>
               </StackPanel>

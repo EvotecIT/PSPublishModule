@@ -2,6 +2,7 @@
              xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
              xmlns:domain="using:PowerForgeStudio.Domain.Portfolio"
              xmlns:queue="using:PowerForgeStudio.Orchestrator.Queue"
+             xmlns:powerforge="using:PowerForge"
              xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.BuildView" x:DataType="vm:BuildViewModel">
   <ScrollViewer x:Name="PageScroll">
@@ -19,7 +20,7 @@
         </StackPanel>
       </Border>
       <TextBlock Text="Save or discard this working copy's drafts before inspecting or building. Build commands use files on disk." IsVisible="{Binding HasUnsavedChanges}" Foreground="#B45309" TextWrapping="Wrap" />
-      <Border Background="#EEF4FF" CornerRadius="6" Padding="11">
+      <Border Background="#EEF4FF" CornerRadius="6" Padding="11" IsVisible="{Binding ShowBuildContractSection}">
         <StackPanel Spacing="4">
           <TextBlock Text="Review before execution" FontWeight="SemiBold" Foreground="#0865FF" />
           <TextBlock Text="Studio does not request a build or publication while planning. Script-backed contracts can run trusted PowerShell to export a plan and may have side effects. Reviewed actions omit arguments; output may contain secrets." TextWrapping="Wrap" />
@@ -28,11 +29,11 @@
       <StackPanel Orientation="Horizontal" Spacing="10">
         <Button Content="Inspect &amp; plan" Command="{Binding PlanCommand}" IsEnabled="{Binding CanPlan}" Classes.primary="{Binding EmphasizePlan}" />
         <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
-        <Button Content="Build current configuration" Command="{Binding BuildCommand}" IsEnabled="{Binding CanBuild}" Classes.primary="{Binding CanBuild}" />
+        <Button Content="Build current configuration" Command="{Binding BuildCommand}" IsEnabled="{Binding CanBuild}" IsVisible="{Binding ShowBuildContractSection}" Classes.primary="{Binding CanBuild}" />
       </StackPanel>
       <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
-      <TextBlock Text="Detected contracts" FontWeight="SemiBold" />
-      <SelectableTextBlock Text="{Binding ContractDisplay}" ToolTip.Tip="{Binding Contracts}" TextWrapping="Wrap" FontSize="12" />
+      <TextBlock Text="Detected contracts" FontWeight="SemiBold" IsVisible="{Binding ShowBuildContractSection}" />
+      <SelectableTextBlock Text="{Binding ContractDisplay}" ToolTip.Tip="{Binding Contracts}" TextWrapping="Wrap" FontSize="12" IsVisible="{Binding ShowBuildContractSection}" />
       <ItemsControl ItemsSource="{Binding Results}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="domain:RepositoryPlanResult">
@@ -91,7 +92,48 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-      <TextBlock Text="Build runs the current configuration with publishing disabled through PowerForge. Project scripts and build hooks execute code; project builds may perform configured local signing. Changing projects leaves an active build running; its working copy is shown below." Classes="muted" TextWrapping="Wrap" />
+      <Border Classes="card" Padding="14">
+        <StackPanel Spacing="10">
+          <TextBlock Text="Project tasks" FontSize="18" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding TaskCatalogStatus}" Classes="muted" TextWrapping="Wrap" />
+          <TextBlock Text="Tasks run trusted local code and can change files or contact external services. The inherited process environment may contain credentials; keep secret values out of JSON arguments." Classes="muted" TextWrapping="Wrap" />
+          <ListBox ItemsSource="{Binding Tasks}" SelectedItem="{Binding SelectedTask, Mode=TwoWay}" MaxHeight="180" IsVisible="{Binding HasTasks}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="powerforge:ProjectTaskPlan">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" Text="{Binding Id}" Classes="muted" FontSize="11" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <Border Background="#F7FAFE" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding HasSelectedTask}">
+            <StackPanel Spacing="5">
+              <TextBlock Text="Reviewed command" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding SelectedTaskDescription}" TextWrapping="Wrap" Classes="muted" IsVisible="{Binding HasSelectedTaskDescription}" />
+              <SelectableTextBlock Text="{Binding SelectedTaskExecutable}" TextWrapping="Wrap" />
+              <TextBlock Text="Arguments (one per line)" Classes="muted" FontSize="11" />
+              <SelectableTextBlock Text="{Binding SelectedTaskArguments}" TextWrapping="Wrap" FontSize="12" />
+              <TextBlock Text="Working directory" Classes="muted" FontSize="11" />
+              <SelectableTextBlock Text="{Binding SelectedTaskWorkingDirectory}" TextWrapping="Wrap" FontSize="12" />
+              <TextBlock Text="{Binding SelectedTaskTimeout, StringFormat='Timeout: {0}'}" Classes="muted" FontSize="11" />
+            </StackPanel>
+          </Border>
+          <Button Content="Run selected task" Command="{Binding RunTaskCommand}" IsEnabled="{Binding CanRunTask}" HorizontalAlignment="Left" Classes.primary="{Binding CanRunTask}" />
+        </StackPanel>
+      </Border>
+      <Border IsVisible="{Binding HasTaskRun}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="14">
+        <StackPanel Spacing="8">
+          <TextBlock x:Name="TaskResultHeading" Text="Task run" FontSize="18" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding TaskStatus}" TextWrapping="Wrap" />
+          <TextBlock Text="Captured working copy" Classes="muted" FontSize="11" />
+          <SelectableTextBlock Text="{Binding TaskRoot}" TextWrapping="Wrap" FontSize="12" />
+          <ProgressBar IsVisible="{Binding IsTaskRunning}" IsIndeterminate="True" Height="3" />
+          <Button Content="Cancel task" Command="{Binding CancelTaskCommand}" IsVisible="{Binding IsTaskRunning}" HorizontalAlignment="Left" />
+          <SelectableTextBlock Text="{Binding TaskOutput}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <TextBlock Text="Build runs the current configuration with publishing disabled through PowerForge. Project scripts and build hooks execute code; project builds may perform configured local signing. Changing projects leaves an active build running; its working copy is shown below." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding ShowBuildContractSection}" />
       <Border IsVisible="{Binding HasBuild}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="14">
         <StackPanel Spacing="10">
           <TextBlock x:Name="BuildResultHeading" Text="Build result" FontSize="18" FontWeight="SemiBold" />

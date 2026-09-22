@@ -28,16 +28,22 @@ public sealed partial class BuildView : UserControl
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName != nameof(BuildViewModel.BuildResult) || sender is not BuildViewModel { BuildResult: not null } model)
-            return;
+        if (sender is not BuildViewModel model) return;
+        TextBlock? heading = args.PropertyName switch
+        {
+            nameof(BuildViewModel.BuildResult) when model.BuildResult is not null => BuildResultHeading,
+            nameof(BuildViewModel.IsTaskRunning) when !model.IsTaskRunning && model.HasTaskRun => TaskResultHeading,
+            _ => null
+        };
+        if (heading is null) return;
 
         Dispatcher.UIThread.Post(() =>
         {
             if (ReferenceEquals(_observedModel, model) && ReferenceEquals(DataContext, model))
             {
                 PageScroll.UpdateLayout();
-                var heading = BuildResultHeading.TranslatePoint(default, PageScroll);
-                if (heading is { } position)
+                var point = heading.TranslatePoint(default, PageScroll);
+                if (point is { } position)
                 {
                     var target = PageScroll.Offset.Y + position.Y - 12;
                     PageScroll.Offset = new Vector(PageScroll.Offset.X,

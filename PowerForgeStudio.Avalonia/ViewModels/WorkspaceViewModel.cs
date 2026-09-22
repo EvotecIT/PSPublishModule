@@ -69,12 +69,13 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         };
         Release.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(ReleaseViewModel.HasProtectedReleaseWork)) Build.IsReleaseRunning = Release.HasProtectedReleaseWork;
+            if (args.PropertyName == nameof(ReleaseViewModel.HasActiveReleaseOperation)) Build.IsReleaseRunning = Release.HasActiveReleaseOperation;
         };
         Build.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName is nameof(BuildViewModel.BuildResult) or nameof(BuildViewModel.IsBuilding) or nameof(BuildViewModel.WasBuildCancelled))
                 Release.SetBuild(Build.BuildResult, Build.IsBuilding, Build.WasBuildCancelled);
+            if (args.PropertyName == nameof(BuildViewModel.IsTaskRunning)) Release.IsProjectTaskRunning = Build.IsTaskRunning;
             if (args.PropertyName is nameof(BuildViewModel.BuildOutput) or nameof(BuildViewModel.HasBuild))
                 OnPropertyChanged(nameof(DisplayedOutput));
         };

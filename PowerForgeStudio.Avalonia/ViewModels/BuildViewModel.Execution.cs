@@ -13,20 +13,21 @@ public sealed partial class BuildViewModel
     [ObservableProperty] private bool _hasSuccessfulInspection;
     [ObservableProperty] private bool _isBuilding;
     [ObservableProperty] private bool _isReleaseRunning;
-    partial void OnIsReleaseRunningChanged(bool value) => OnPropertyChanged(nameof(CanBuild));
+    partial void OnIsReleaseRunningChanged(bool value) { OnPropertyChanged(nameof(CanBuild)); OnPropertyChanged(nameof(CanRunTask)); }
     [ObservableProperty] private bool _wasBuildCancelled;
     [ObservableProperty] private string _buildRoot = "";
     [ObservableProperty] private string _buildStatus = "No build started.";
     [ObservableProperty] private string _buildOutput = "";
     [ObservableProperty] private ReleaseBuildExecutionResult? _buildResult;
     public bool HasBuild => !string.IsNullOrEmpty(BuildRoot);
-    public bool CanBuild => HasSuccessfulInspection && !HasUnsavedChanges && !IsBusy && !IsBuilding && !IsReleaseRunning && !_disposed;
+    public bool CanBuild => HasSuccessfulInspection && !HasUnsavedChanges && !IsBusy && !IsBuilding && !IsTaskRunning && !IsReleaseRunning && !_disposed;
     partial void OnHasSuccessfulInspectionChanged(bool value) { OnPropertyChanged(nameof(CanBuild)); OnPropertyChanged(nameof(EmphasizePlan)); }
     partial void OnIsBuildingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanBuild));
         OnPropertyChanged(nameof(CanPlan));
         OnPropertyChanged(nameof(EmphasizePlan));
+        OnPropertyChanged(nameof(CanRunTask));
     }
     partial void OnBuildRootChanged(string value) => OnPropertyChanged(nameof(HasBuild));
 

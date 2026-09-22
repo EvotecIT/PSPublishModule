@@ -23,15 +23,17 @@ public sealed partial class ReleaseViewModel(IReleaseBuildHandoffService? servic
     public ObservableCollection<ReleaseSigningArtifact> Artifacts { get; } = [];
     public ReleaseBuildHandoff? Handoff { get; private set; }
     [ObservableProperty] private bool _isPreparing;
+    [ObservableProperty] private bool _isProjectTaskRunning;
     [ObservableProperty] private string _buildRoot = "";
     [ObservableProperty] private string _status = "Complete a build, then prepare its release artifacts here.";
     [ObservableProperty] private string _stage = "Build required";
-    public bool CanPrepare => !_disposed && !IsPreparing && !HasProtectedReleaseWork && !IsLoadingHistory && !RequiresRebuild && SigningResult?.Succeeded != true && _candidate?.Succeeded == true;
+    public bool CanPrepare => !_disposed && !IsProjectTaskRunning && !IsPreparing && !HasProtectedReleaseWork && !IsLoadingHistory && !RequiresRebuild && SigningResult?.Succeeded != true && _candidate?.Succeeded == true;
     public bool EmphasizePrepare => CanPrepare && !HasHandoff;
     public bool HasHandoff => Handoff is not null;
     public bool HasBuildRoot => !string.IsNullOrWhiteSpace(BuildRoot);
     partial void OnBuildRootChanged(string value) => OnPropertyChanged(nameof(HasBuildRoot));
     partial void OnIsPreparingChanged(bool value) => NotifyReleaseState();
+    partial void OnIsProjectTaskRunningChanged(bool value) => NotifyReleaseState();
 
     public void SetBuild(ReleaseBuildExecutionResult? build, bool running, bool cancelled)
     {

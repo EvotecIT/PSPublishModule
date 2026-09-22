@@ -14,7 +14,7 @@ public sealed partial class ReleaseViewModel
     public ReleaseSigningExecutionResult? SigningResult { get; private set; }
     [ObservableProperty] private bool _isSigning;
     [ObservableProperty] private bool _requiresRebuild;
-    public bool CanSign => !_disposed && !HasProtectedReleaseWork && !IsLoadingHistory && !IsPreparing && Handoff is not null && SigningResult is null && !RequiresRebuild;
+    public bool CanSign => !_disposed && !IsProjectTaskRunning && !HasProtectedReleaseWork && !IsLoadingHistory && !IsPreparing && Handoff is not null && SigningResult is null && !RequiresRebuild;
     public bool HasArtifacts => Artifacts.Count > 0;
     public bool HasReceipts => Receipts.Count > 0;
     partial void OnRequiresRebuildChanged(bool value) => NotifyReleaseState();
@@ -31,6 +31,7 @@ public sealed partial class ReleaseViewModel
         OnPropertyChanged(nameof(HasArtifacts)); OnPropertyChanged(nameof(HasHandoff)); OnPropertyChanged(nameof(HasReceipts));
         OnPropertyChanged(nameof(ShowPublicationDetails)); OnPropertyChanged(nameof(CanReviewPublication));
         OnPropertyChanged(nameof(HasProtectedReleaseWork)); OnPropertyChanged(nameof(CanBrowseHistory)); OnPropertyChanged(nameof(CanOpenHistory));
+        OnPropertyChanged(nameof(HasActiveReleaseOperation));
     }
 
     [RelayCommand]

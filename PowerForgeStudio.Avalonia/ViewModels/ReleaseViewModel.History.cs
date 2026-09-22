@@ -23,6 +23,7 @@ public sealed partial class ReleaseViewModel
     [ObservableProperty] private bool _hasUnpersistedEvidence;
     [ObservableProperty] private bool _confirmDiscardReceipts;
     public bool HasProtectedReleaseWork => IsSigning || IsPublishing || IsVerifying || IsSavingReceipts || HasUnpersistedEvidence;
+    public bool HasActiveReleaseOperation => HasProtectedReleaseWork || IsPreparing || IsInspectingPublication;
     public bool CanBrowseHistory => !_disposed && !HasProtectedReleaseWork && !IsPreparing && !IsLoadingHistory;
     public bool CanOpenHistory => CanBrowseHistory && SelectedHistory is not null;
     public string HistoryScopeDisplay => string.IsNullOrWhiteSpace(HistoryScopeRoot)

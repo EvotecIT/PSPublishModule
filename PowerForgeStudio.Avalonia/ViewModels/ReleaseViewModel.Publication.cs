@@ -29,12 +29,12 @@ public sealed partial class ReleaseViewModel
     [ObservableProperty] private bool _isVerifying;
     [ObservableProperty] private bool _confirmPublication;
 
-    public bool CanInspectPublication => !_disposed && !HasProtectedReleaseWork && !IsLoadingHistory && !IsInspectingPublication
+    public bool CanInspectPublication => !_disposed && !IsProjectTaskRunning && !HasProtectedReleaseWork && !IsLoadingHistory && !IsInspectingPublication
         && Handoff?.Session.Items.SingleOrDefault()?.Stage == ReleaseQueueStage.Publish;
-    public bool CanPublish => !_disposed && !HasProtectedReleaseWork && ConfirmPublication && _publicationSnapshot is not null
+    public bool CanPublish => !_disposed && !IsProjectTaskRunning && !HasProtectedReleaseWork && ConfirmPublication && _publicationSnapshot is not null
         && ReferenceEquals(_inspectedSession, Handoff?.Session)
         && Handoff?.Session.Items.SingleOrDefault() is { Stage: ReleaseQueueStage.Publish, Status: ReleaseQueueItemStatus.ReadyToRun };
-    public bool CanVerify => !_disposed && !HasProtectedReleaseWork
+    public bool CanVerify => !_disposed && !IsProjectTaskRunning && !HasProtectedReleaseWork
         && Handoff?.Session.Items.SingleOrDefault() is { Stage: ReleaseQueueStage.Verify, Status: ReleaseQueueItemStatus.ReadyToRun };
     public bool HasPublicationReceipts => PublicationReceipts.Count > 0;
     public bool CanInspectPublicPackage => !_disposed && !HasProtectedReleaseWork && openPublicPackage is not null && SelectedPublicationReceipt?.CanInspectPublicPackage == true;

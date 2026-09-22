@@ -26,6 +26,10 @@ Activity > Releases includes recent saved release checkpoints from that local jo
 
 ## Local developer usage
 
+Repositories can expose reviewed PowerShell and executable actions through
+[`Build/powerforge.tasks.json`](PowerForgeStudio.ProjectTasks.md). Studio shows the
+command and arguments before running it and keeps its result tied to the selected working copy.
+
 ### Validate Studio
 
 ```powershell

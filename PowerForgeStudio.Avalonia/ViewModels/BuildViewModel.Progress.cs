@@ -44,5 +44,7 @@ public sealed partial class BuildViewModel
             }
             if (text.Length > 0) append(text);
         }
+
+        public void FlushNow() => Flush();
     }
 }

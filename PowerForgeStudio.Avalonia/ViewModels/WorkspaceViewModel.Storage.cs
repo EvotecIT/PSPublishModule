@@ -44,7 +44,8 @@ public sealed partial class WorkspaceViewModel
         if (!string.IsNullOrWhiteSpace(ActiveWorkingCopyRoot)) paths.Add(ActiveWorkingCopyRoot);
         foreach (var document in Documents) paths.Add(document.Reference.WorkingCopyRoot);
         if (Build.IsBuilding && !string.IsNullOrWhiteSpace(Build.BuildRoot)) paths.Add(Build.BuildRoot);
-        if (Release.HasProtectedReleaseWork && !string.IsNullOrWhiteSpace(Release.BuildRoot)) paths.Add(Release.BuildRoot);
+        if (Build.IsTaskRunning && !string.IsNullOrWhiteSpace(Build.TaskRoot)) paths.Add(Build.TaskRoot);
+        if (Release.HasActiveReleaseOperation && !string.IsNullOrWhiteSpace(Release.BuildRoot)) paths.Add(Release.BuildRoot);
         return paths;
     }
 }
