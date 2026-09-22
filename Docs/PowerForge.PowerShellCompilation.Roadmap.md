@@ -49,7 +49,7 @@ The product succeeds when users can predict which of these outcomes they are get
 
 ## Current position
 
-Qualified continuation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1` on `fix/compiler-audit-milestones`, 2026-09-22; production corrections are in `18e443a14`. The continuation is intentionally separate from the default branch and has no open PR at this checkpoint. At audit start a fresh fetch found 133 continuation-only commits and 11 default-branch-only commits; an earlier main merge does not establish current integration readiness.
+Qualified continuation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1` on `feature/powershell-compiler`, 2026-09-22; production corrections are in `18e443a14`. The continuation is intentionally separate from the default branch and has no open PR at this checkpoint. At audit start a fresh fetch found 133 continuation-only commits and 11 default-branch-only commits; an earlier main merge does not establish current integration readiness.
 
 M24–M27 have completed bounded value, pipeline, state, region, and local-feed consumption gates. The M25 stopping failure was a test handshake race: eight fixtures now wait for engine acknowledgment, retaining their behavior assertions. Package cancellation and library/provider/dependency metadata validation are corrected in shared owners. The canonical gate includes required ABI/provider families and passes **1,097/1,097** with zero failures/skips, followed by **6/6** Strict programs. The final fixture/package suite passes **55/55**, and net472 builds cleanly. The [assessment](PowerForge.PowerShellCompilation.Assessment.md) identifies the revisions and evidence; the [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md) own the M28–M30 checklist.
 

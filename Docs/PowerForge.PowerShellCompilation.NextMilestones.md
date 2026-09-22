@@ -1,6 +1,6 @@
 # PowerShell compiler: next major milestones
 
-Updated: 2026-09-22. Qualified continuation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1` on `fix/compiler-audit-milestones`; production corrections are in `18e443a14`.
+Updated: 2026-09-22. Qualified continuation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1` on `feature/powershell-compiler`; production corrections are in `18e443a14`.
 
 M24–M27 have completed their bounded local implementation gates. The September 22 stopping failure was traced to a test handshake race and corrected across eight fixtures without changing runtime semantics. Package cancellation, metadata, and coverage corrections pass the 1,097-test compiler gate, six-program Strict corpus, and final 55-case focused suite. **M28 is next.** Completion of an implementation milestone does not establish general PowerShell compatibility, a released package, or qualification on an untested host.
 
