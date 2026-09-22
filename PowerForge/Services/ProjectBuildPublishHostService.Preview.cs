@@ -12,6 +12,27 @@ public sealed partial class ProjectBuildPublishHostService
         return ProjectBuildPackageFeedResolver.ResolvePublishDestination(config);
     }
 
+    /// <summary>Reloads a referenced module project-build feed with its lane overrides, without resolving API keys or secret files.</summary>
+    /// <remarks>The returned address may contain URL credentials. Do not log or persist it.</remarks>
+    public string ResolvePublishDestinationForVerification(ProjectBuildConfigurationReference reference, string configPath)
+    {
+        FrameworkCompatibility.NotNull(reference, nameof(reference));
+        FrameworkCompatibility.NotNullOrWhiteSpace(configPath, nameof(configPath));
+        var path = PathValueResolver.Resolve(Directory.GetCurrentDirectory(), configPath);
+        var config = new ProjectBuildSupportService(_logger).LoadConfig(path);
+        ProjectBuildConfigurationAdapter.ApplyReference(config, reference);
+        return ProjectBuildPackageFeedResolver.ResolvePublishDestination(config);
+    }
+
+    /// <summary>Resolves an inline module package-build feed without resolving API keys or secret files.</summary>
+    /// <remarks>The returned address may contain URL credentials. Do not log or persist it.</remarks>
+    public string ResolvePublishDestinationForVerification(PackageBuildConfiguration configuration)
+    {
+        FrameworkCompatibility.NotNull(configuration, nameof(configuration));
+        return ProjectBuildPackageFeedResolver.ResolvePublishDestination(
+            ProjectBuildConfigurationAdapter.FromPackageBuild(configuration));
+    }
+
     /// <summary>Reads publication flags and destinations without resolving credential files or environment variables.</summary>
     /// <remarks>This is display data, not an executable publication plan or credential-readiness check.</remarks>
     public ProjectPublicationPreview PreviewConfiguration(string configPath)

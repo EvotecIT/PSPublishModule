@@ -323,24 +323,55 @@ public sealed class ReleaseVerificationExecutionService : IReleaseVerificationEx
 
     private static string? TryResolveCurrentNuGetDestination(ReleasePublishReceipt receipt)
     {
-        if (!string.Equals(receipt.AdapterKind, "ProjectBuild", StringComparison.OrdinalIgnoreCase) ||
-            !Directory.Exists(receipt.RootPath)) return null;
+        if (!Directory.Exists(receipt.RootPath)) return null;
         try
         {
             var repository = new RepositoryCatalogScanner().InspectRepository(receipt.RootPath);
-            if (string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath)) return null;
-            var configPath = RepositoryPlanPreviewService.ResolveProjectConfigPath(repository.ProjectBuildScriptPath, receipt.RootPath);
-            if (string.IsNullOrWhiteSpace(configPath)) return null;
-            var current = new ProjectBuildPublishHostService().ResolvePublishDestinationForVerification(configPath);
-            return StudioOutputSanitizer.DestinationCredentialsOmitted(current) &&
-                   string.Equals(StudioOutputSanitizer.SanitizeDestination(current), receipt.Destination, StringComparison.Ordinal)
-                ? current : null;
+            var publisher = new ProjectBuildPublishHostService();
+            if (string.Equals(receipt.AdapterKind, "ProjectBuild", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(repository.ProjectBuildScriptPath)) return null;
+                var configPath = RepositoryPlanPreviewService.ResolveProjectConfigPath(repository.ProjectBuildScriptPath, receipt.RootPath);
+                if (string.IsNullOrWhiteSpace(configPath)) return null;
+                var current = publisher.ResolvePublishDestinationForVerification(configPath);
+                return MatchesSavedDestination(current, receipt.Destination) ? current : null;
+            }
+
+            if (!string.Equals(receipt.TargetKind, "ModulePackages", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(receipt.AdapterKind, "UnifiedRelease", StringComparison.OrdinalIgnoreCase)) return null;
+
+            IReadOnlyList<ModulePackageReleaseLane> lanes;
+            if (!string.IsNullOrWhiteSpace(repository.UnifiedReleaseConfigPath))
+            {
+                var spec = PowerForgeReleaseService.LoadConfiguration(repository.UnifiedReleaseConfigPath!);
+                lanes = ModulePackageReleaseCheckpointService.ResolveLanes(repository.UnifiedReleaseConfigPath!, spec);
+            }
+            else if (string.Equals(Path.GetExtension(repository.ModuleBuildScriptPath), ".json", StringComparison.OrdinalIgnoreCase))
+            {
+                var context = new ModulePipelineConfigurationService().Load(repository.ModuleBuildScriptPath!);
+                lanes = ModulePackageReleaseCheckpointService.ResolveLanes(context);
+            }
+            else return null;
+
+            var matches = lanes.Where(static lane => lane.PublishNuget)
+                .Select(lane => lane.Reference is not null
+                    ? publisher.ResolvePublishDestinationForVerification(lane.Reference, lane.ConfigPath)
+                    : publisher.ResolvePublishDestinationForVerification(lane.Inline!))
+                .Where(current => MatchesSavedDestination(current, receipt.Destination))
+                .Distinct(StringComparer.Ordinal)
+                .Take(2)
+                .ToArray();
+            return matches.Length == 1 ? matches[0] : null;
         }
         catch
         {
             return null;
         }
     }
+
+    private static bool MatchesSavedDestination(string current, string? saved)
+        => StudioOutputSanitizer.DestinationCredentialsOmitted(current) &&
+           string.Equals(StudioOutputSanitizer.SanitizeDestination(current), saved, StringComparison.Ordinal);
 
     private async Task<ReleaseVerificationReceipt> VerifyPowerShellRepositoryAsync(ReleasePublishReceipt publishReceipt, CancellationToken cancellationToken)
     {
