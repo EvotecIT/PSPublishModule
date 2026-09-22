@@ -39,7 +39,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(Assert.Single(units, unit => unit.Name == "Invoke-OwnedStop").RetainedHostedSource);
         Assert.False(Assert.Single(units, unit => unit.Name == "Get-OwnedCount").RetainedHostedSource);
         Assert.True(Assert.Single(units, unit => unit.Name == "Wait-RetainedSignal").RetainedHostedSource);
-        const string probe = """
+        const string probe = AcknowledgedStopProbe + """
             Add-Type -TypeDefinition @'
             using System.Threading;
             public sealed class OwnedStopSignal {
@@ -60,10 +60,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [void]$ps.AddCommand($name+'\Invoke-OwnedStop').AddParameter('Signal',$state)
                 $running=$ps.BeginInvoke()
                 if(!$state.Started.WaitOne(5000)) {throw ('Retained stage was not entered: '+$ps.Streams.Error)}
-                $stop=$ps.BeginStop($null,$null)
-                $deadline=[DateTime]::UtcNow.AddSeconds(5)
-                while($ps.InvocationStateInfo.State -ne 'Stopping' -and [DateTime]::UtcNow -lt $deadline) {[Threading.Thread]::Sleep(1)}
-                if($ps.InvocationStateInfo.State -ne 'Stopping') {throw 'Stop was not acknowledged'}
+                $stop=Start-CompilerTestStop $ps
                 [void]$state.Release.Set(); $ps.EndStop($stop)
                 try {[void]$ps.EndInvoke($running)} catch {}
                 $stopped=[string]$ps.InvocationStateInfo.State

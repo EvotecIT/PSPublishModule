@@ -36,7 +36,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains(factory, module, StringComparison.Ordinal);
         File.WriteAllText(result.ArtifactPath!, module.Replace(factory, "[GuardedLoopProbe]::Wrap(" + factory + ")", StringComparison.Ordinal));
         File.WriteAllText(fixture.ScriptPath, source.Replace("{ $value += 1.0 }", "{ [GuardedLoopProbe]::Checkpoint(); $value += 1.0 }", StringComparison.Ordinal));
-        const string probe = """
+        const string probe = AcknowledgedStopProbe + """
             Add-Type -TypeDefinition @'
             using System;
             using System.Threading;
@@ -64,10 +64,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [void]$ps.AddScript($script.ToString()).AddArgument($observed)
                 $running = $ps.BeginInvoke()
                 if (-not [GuardedLoopProbe]::Started.WaitOne(10000)) { throw "No actual loop entry: $($ps.Streams.Error)" }
-                $stop = $ps.BeginStop($null, $null)
-                $deadline = [DateTime]::UtcNow.AddSeconds(5)
-                while ($ps.InvocationStateInfo.State -ne 'Stopping' -and [DateTime]::UtcNow -lt $deadline) { [Threading.Thread]::Sleep(1) }
-                if ($ps.InvocationStateInfo.State -ne 'Stopping') { throw 'Stop request not observed.' }
+                $stop=Start-CompilerTestStop $ps
                 [void][GuardedLoopProbe]::Release.Set()
                 if (-not $stop.AsyncWaitHandle.WaitOne(5000)) { throw 'Loop ignored stopping.' }
                 $ps.EndStop($stop)

@@ -33,7 +33,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
         Assert.All(result.Manifest.UnitDispositionLedger!.Entries, unit => Assert.False(unit.RetainedHostedSource));
         if (scriptBlock) Assert.Single(Assert.Single(result.Manifest.UnitDispositionLedger.Entries).RegionGraph!.ScriptBlocks);
-        const string probe = """
+        const string probe = AcknowledgedStopProbe + """
             Add-Type -TypeDefinition @'
             using System.Threading;
             public sealed class NativeLifecycleStopState {
@@ -55,10 +55,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                     [void]$ps.AddCommand($name).AddParameter('State',$state).AddParameter('Phase',$phase)
                     $running=$ps.BeginInvoke()
                     if(!$state.Started.WaitOne(5000)) {throw ('Clause was not entered: '+$ps.Streams.Error)}
-                    $stop=$ps.BeginStop($null,$null)
-                    $deadline=[DateTime]::UtcNow.AddSeconds(5)
-                    while($ps.InvocationStateInfo.State -ne 'Stopping' -and [DateTime]::UtcNow -lt $deadline) {[Threading.Thread]::Sleep(1)}
-                    if($ps.InvocationStateInfo.State -ne 'Stopping') {throw 'Stop was not acknowledged'}
+                    $stop=Start-CompilerTestStop $ps
                     [void]$state.Release.Set(); $ps.EndStop($stop)
                     try {[void]$ps.EndInvoke($running)} catch {}
                     [pscustomobject]@{phase=$phase;state=[string]$ps.InvocationStateInfo.State;calls=$state.Calls;finally=$state.Finally;clean=$state.Cleans;

@@ -179,7 +179,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         string artifactPath,
         string host)
     {
-        const string probe = """
+        const string probe = AcknowledgedStopProbe + """
             Add-Type -TypeDefinition @'
             using System.Threading;
             public sealed class EnumHashtableStopState {
@@ -227,12 +227,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [void]$ps.AddCommand([string]$selected[0]).AddParameter('enum', 'System.DayOfWeek')
                 $running = $ps.BeginInvoke()
                 if (!$state.Started.WaitOne(10000)) { throw ('Retained stage was not entered: ' + $ps.InvocationStateInfo.State) }
-                $stop = $ps.BeginStop($null, $null)
-                $deadline = [DateTime]::UtcNow.AddSeconds(5)
-                while ($ps.InvocationStateInfo.State -ne 'Stopping' -and [DateTime]::UtcNow -lt $deadline) {
-                    [Threading.Thread]::Sleep(1)
-                }
-                if ($ps.InvocationStateInfo.State -ne 'Stopping') { throw 'Cancellation was not acknowledged.' }
+                $stop=Start-CompilerTestStop $ps
                 [void]$state.Release.Set()
                 if (!$stop.AsyncWaitHandle.WaitOne(5000)) { throw 'Cancellation did not complete.' }
                 $ps.EndStop($stop)

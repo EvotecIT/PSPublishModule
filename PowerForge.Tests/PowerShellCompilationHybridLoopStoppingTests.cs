@@ -29,7 +29,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var plan = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "Generated.RegionEvidence", "Methods", framework, PowerShellCompilationCapabilities.HybridModule);
         Assert.True(Assert.Single(plan.PromotedRegions).RequiresPowerShellStopping);
-        const string probe = """
+        const string probe = AcknowledgedStopProbe + """
             Add-Type -TypeDefinition @'
             using System;
             using System.Collections.Generic;
@@ -74,10 +74,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [void]$ps.AddScript($script.ToString()).AddArgument($useCompiled).AddArgument($owner).AddArgument($member).AddArgument($started).AddArgument($release).AddArgument($observed)
                 $running=$ps.BeginInvoke()
                 if(-not $started.WaitOne(5000)) { throw "No loop entry: $($ps.Streams.Error)" }
-                $stop=$ps.BeginStop($null,$null)
-                $deadline=[DateTime]::UtcNow.AddSeconds(5)
-                while($ps.InvocationStateInfo.State -ne 'Stopping' -and [DateTime]::UtcNow -lt $deadline) { [Threading.Thread]::Sleep(1) }
-                if($ps.InvocationStateInfo.State -ne 'Stopping') { throw 'The stop request was not observed.' }
+                $stop=Start-CompilerTestStop $ps
                 [void]$release.Set()
                 if(-not $stop.AsyncWaitHandle.WaitOne(5000)) { throw 'The generated loop ignored native stopping.' }
                 $ps.EndStop($stop)

@@ -23,7 +23,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.CompiledMethods == 1, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => cause.Message))));
-        const string probe = """
+        const string probe = AcknowledgedStopProbe + """
             Add-Type -TypeDefinition @'
             using System;
             using System.Threading;
@@ -53,10 +53,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [void]$ps.AddCommand('Invoke-NativeStop').AddParameter('Marker',$marker)
                 $running=$ps.BeginInvoke()
                 if (-not $started.WaitOne(5000)) { throw "The native loop did not reach its pause. $($ps.Streams.Error)" }
-                $stop=$ps.BeginStop($null,$null)
-                $deadline=[DateTime]::UtcNow.AddSeconds(5)
-                while ($ps.InvocationStateInfo.State -ne 'Stopping' -and [DateTime]::UtcNow -lt $deadline) { [Threading.Thread]::Sleep(1) }
-                if ($ps.InvocationStateInfo.State -ne 'Stopping') { throw 'The stop request was not observed.' }
+                $stop=Start-CompilerTestStop $ps
                 [void]$release.Set()
                 if (-not $stop.AsyncWaitHandle.WaitOne(5000)) { throw 'The finite native loop did not stop.' }
                 $ps.EndStop($stop)

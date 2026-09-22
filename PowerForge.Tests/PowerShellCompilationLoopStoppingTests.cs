@@ -40,7 +40,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(loops.Length * 2, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
-        const string probe = """
+        const string probe = AcknowledgedStopProbe + """
             Add-Type -TypeDefinition @'
             using System;
             using System.Collections;
@@ -79,17 +79,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                             [void]$ps.AddCommand('Invoke-'+$name).AddParameter('Started',$started).AddParameter('Release',$release).AddParameter('Observed',$observed).AddParameter('Items',$items).AddParameter('Array',$array).AddParameter('Text','').AddParameter('Enumerable',$enumerable).AddParameter('Cursor',$enumerable).AddParameter('PauseBefore',$pauseBefore).AddParameter('UseContinue',$useContinue).AddParameter('Limit',$limit)
                             $running=$ps.BeginInvoke()
                             if(-not $started.WaitOne(5000)) { throw "The loop did not reach its pause: $name/$shape. $($ps.Streams.Error)" }
-                            # BeginStop sets the public state before the asynchronous stop worker marks
-                            # the engine. Observe the flag used by native loop interrupt checks before
-                            # releasing either implementation; Stopping alone races that worker.
-                            $flags=[Reflection.BindingFlags]'Instance,Public,NonPublic'
-                            $context=$ps.Runspace.GetType().GetProperty('ExecutionContext',$flags).GetValue($ps.Runspace,$null)
-                            $stopping=$context.GetType().GetProperty('CurrentPipelineStopping',$flags)
-                            if($null -eq $stopping) { throw 'The host does not expose the loop stopping contract.' }
-                            $stop=$ps.BeginStop($null,$null)
-                            $deadline=[DateTime]::UtcNow.AddSeconds(5)
-                            while(-not $stopping.GetValue($context,$null) -and [DateTime]::UtcNow -lt $deadline) { [Threading.Thread]::Sleep(1) }
-                            if(-not $stopping.GetValue($context,$null)) { throw 'The engine did not acknowledge the stop request.' }
+                            $stop=Start-CompilerTestStop $ps
                             [void]$release.Set()
                             if(-not $stop.AsyncWaitHandle.WaitOne(5000)) { throw 'The finite loop did not stop.' }
                             $ps.EndStop($stop)
