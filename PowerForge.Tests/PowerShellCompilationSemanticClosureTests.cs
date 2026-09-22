@@ -208,6 +208,13 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "msvcrt.dll"));
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "mi.dll"));
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "mimofcodec.dll"));
+        foreach (var import in new[] { "rpcrt4.dll", "sspicli.dll", "httpapi.dll", "websocket.dll", "mswsock.dll", "xolehlp.dll", "kernel32", "oleaut32", "user32" })
+        {
+            Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", import));
+            Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", import));
+        }
+        Assert.False(PowerShellTargetNativeAbiCatalog.Contains("win-x64", @"C:\unreviewed\kernel32.dll"));
+        Assert.False(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "kernel32.dll.extra"));
         Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "unreviewed.so"));
         Assert.False(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "unreviewed.dll"));
     }

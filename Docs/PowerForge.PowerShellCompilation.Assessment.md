@@ -8,6 +8,23 @@ The independent read-only audit covered the three latest baseline implementation
 
 ## Findings and corrective evidence
 
+### R9 — plain Strict self-contained runtime closure — corrected locally
+
+Owner: the existing Strict dependency-closure verifier and target native ABI catalog. The `net10.0` / `win-x64`, unoptimized, non-single-file `return 7` project reproduced the recorded rejection using SDK 10.0.303 and runtime pack 10.0.11.
+
+Runtime compatibility facades referenced `System.Private.CoreLib` at version zero, while the target reference catalog omitted its implementation identity. The verifier now admits the delivered runtime identity only with matching reviewed assembly identity, SHA-256, framework, RID, deployment role, and disposition. It does not trust a runtime-looking name or token alone.
+
+The runtime's [compatibility shims](https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/shims/README.md) also forward optional types to assemblies absent from an ordinary self-contained deployment. Only exact reviewed pure facades may contain unused optional forwarders. Actual type references and other exported forwarders are followed through nested/chained metadata; missing used destinations and cycles remain rejected. Windows ABI additions cover the runtime pack's observed OS imports. Exact locked runtime helper executables, including `createdump.exe`, undergo architecture and native-import inspection; they cannot substitute for the primary artifact.
+
+Local qualification on September 22:
+
+- The reviewed-lock, offline-isolated project build succeeds, and the delivered executable exits successfully with stdout `7`. Target-contract SHA-256: `9b2a38965cea9ea170142bf45cd742ee3506c82bef60f132c66aeb52ef7e0431`; dependency lock: `d1c387ab86a965c77009c102fbb3d56608810669c5195fa575c119f42d555994`; executable: `d828b1b736bc69f0830f38c05593572a3f7d54aebe3a2c4044a83c67fcfd5220`.
+- Focused closure/project tests pass **24/24**, zero failures/skips, in **1m27s**. They include real Package and Strict self-contained execution, acquired-environment Explain/Diagnose with an empty global package cache, exact-evidence mismatches, missing/delivered/nested/chained/cyclic type-forwarder destinations, zero-version implementation references, and native helper/primary separation.
+- `PowerForge.PowerShell` Release `net472` compilation passes with **zero warnings/errors**. One independent read-only closure review (`strict_runtime_closure_review`) reports no actionable P0–P3 findings; no confirmation pass was needed.
+- Long output paths still fail in the Windows toolchain/process-launch path. Compact fixtures establish this deployment result without claiming long-path support. Additional RIDs and optimized deployment profiles remain separate qualification. The broad compiler gate has not yet been rerun for this workload goal.
+
+The fresh pinned PSSharedGoods census remains **188/282 complete emitted functions and 36 promoted regions**, with no input/parser failures. This deployment correction adds no language coverage. Initial workload selection also verifies co-blockers: `Get-ComputerDisk` is blocked by `-as`; `Convert-UAC` by return propagation from captured output; and `Convert-GenericRightsToFileSystemRights` by dynamic static-member access before its `-as` expression can be admitted. The current milestone goal must qualify complete workflows rather than count a removed diagnostic as successful compilation.
+
 ### R1 — P2: package cancellation and replacement — corrected
 
 Owner: [library package builder](../PowerForge.PowerShell/Services/Compilation/PowerShellCompilationLibraryPackageBuilder.cs) and its [I/O and publication boundary](../PowerForge.PowerShell/Services/Compilation/PowerShellCompilationLibraryPackageBuilder.IO.cs).

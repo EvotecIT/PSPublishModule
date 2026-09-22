@@ -2,6 +2,38 @@ namespace PowerForge;
 
 internal static partial class PowerShellStrictDependencyClosureVerifier
 {
+    private static void AddReviewedRuntimePackIdentities(
+        PowerShellStrictDependencyClosureRequest request,
+        IReadOnlyCollection<ManagedAssemblyInspection> assemblies,
+        ISet<string> targetRuntimeAssemblies)
+    {
+        // Reference packs omit runtime implementation assemblies such as System.Private.CoreLib.
+        // Admit a delivered runtime identity only when the selected target's reviewed pack records
+        // its exact identity and bytes. A filename, token, or provenance label alone is insufficient.
+        foreach (var node in request.DependencyGraph.Nodes.Where(node =>
+                     node.Exists && node.Kind == PowerShellCompilationDependencyNodeKind.ManagedLibrary &&
+                     node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Deployment) &&
+                     node.Disposition is PowerShellCompilationDependencyGraphDisposition.Referenced or
+                         PowerShellCompilationDependencyGraphDisposition.Bundled or
+                         PowerShellCompilationDependencyGraphDisposition.PrivateRestored))
+        {
+            var identity = node.Identity;
+            if (!identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal) ||
+                !identity.TargetFramework.Equals(request.TargetFramework, StringComparison.OrdinalIgnoreCase) ||
+                !identity.RuntimeIdentifier.Equals(request.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(identity.PublicKeyToken) || string.IsNullOrWhiteSpace(identity.Sha256) ||
+                !Version.TryParse(identity.Version, out var version)) continue;
+            var key = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(identity.Name, version,
+                identity.PublicKeyToken, identity.Culture, identity.Retargetable, identity.ContentType);
+            foreach (var assembly in assemblies.Where(assembly => assembly.Identity.StableKey.Equals(key, StringComparison.OrdinalIgnoreCase) &&
+                                          assembly.ContentSha256.Equals(identity.Sha256, StringComparison.OrdinalIgnoreCase)))
+            {
+                assembly.IsReviewedRuntimePack = true;
+                targetRuntimeAssemblies.Add(key);
+            }
+        }
+    }
+
     private static void VerifyReviewedDependencyGraph(
         PowerShellStrictDependencyClosureRequest request,
         IReadOnlyCollection<ManagedAssemblyInspection> assemblies,

@@ -18,12 +18,22 @@ The September 20 checkpoint recorded 1,063 compiler-gate tests and six Strict Wi
 
 | Priority | Milestone | Current state | Required outcome |
 | --- | --- | --- | --- |
-| 1 | M28 development loop | Current | Documented run/watch/diagnose/debug experience over the existing owners |
-| 2 | M29 distribution and platforms | Partial / separate qualification | Supported hosts, release set, public-feed lifecycle, and clean-target execution are evidenced independently |
-| 3 | M30 performance | Planned | Repeatable workload benefit after semantic and deployment correctness |
-| Ongoing | M24–M26 semantic expansion | Bounded implementation complete | Expand only for selected blocked workflows, retaining unsupported behavior safely |
+| 1 | M24–M26 practical workload expansion | Current goal | Select complete blocked workflows, close their necessary semantic and shaping blockers, and compare original/compiled execution |
+| 2 | M28 development loop | Bounded features implemented; extras deferred | Add debugger and module quickstart work when needed by the selected workflows |
+| 3 | M29 distribution and platforms | Partial / separate qualification | Supported hosts, release set, public-feed lifecycle, and clean-target execution are evidenced independently |
+| 4 | M30 performance | Planned | Repeatable workload benefit after semantic and deployment correctness |
 
 Known accepted-code defects take priority over breadth or performance. Keep remediation proportional to a reachable trigger and consequence: cover the observed failure and consequential sibling paths, then stop expanding the matrix once the supported contract is demonstrated. Record every finding as reproduced, source-demonstrated, or unverified; record its owner, affected modes, test, and closure evidence. Do not mark a milestone complete because its aggregate test count increased.
+
+### Current workload goal
+
+Prioritize useful Hybrid script/module coverage. Extend Strict only where a complete runtime-free artifact can be qualified; keep the same canonical compiler owners for both routes. Readiness work serves the selected workflows rather than becoming a prerequisite to every coverage improvement.
+
+- [x] Reproduce and correct plain Strict self-contained Windows x64 closure rejection while preserving exact target/content evidence and missing-dependency rejection. Focused artifact tests and a direct executable pass; broader integration remains separate.
+- [x] Refresh the pinned PSSharedGoods baseline: 188/282 complete emitted functions, 36 promoted regions. No coverage growth is claimed for the deployment correction.
+- [ ] Select the bounded workflow set and record all co-blockers before implementation. Initial `-as` candidates show distinct blockers: disk reporting needs language conversion; UAC conversion also needs return propagation out of captured statement output; generic-rights conversion also needs dynamic static-member access. An operator-only change cannot claim all three complete.
+- [ ] Implement and qualify the selected complete workflows through existing binding, IR, analysis, lowering, and runtime owners. Record exactly what remains hosted and keep unrelated shapes rejected or retained.
+- [ ] Complete proportionate independent review and the compiler gate, update measured outcomes, and clean task outputs. No PR, merge, or package publication is part of this goal.
 
 ## Milestone 24 — Preserve values, collections, and error continuation
 
@@ -127,7 +137,7 @@ The [project CLI](../PowerForge.Cli/Program.Command.PowerShell.Project.cs) expos
 - [ ] Qualify PowerShell servicing updates against the native-function and statement-error bridges, which use private host APIs. Check capabilities before side effects; preserve authored fallback where supplied, otherwise fail with an actionable diagnostic. Test missing/changed contracts and a new patch candidate before changing pins.
 - [ ] Partition native Linux validation from Windows-only signing, management, net472, and oracle fixtures. Run actual Linux behavior in its own output tree; cross-publishing alone is not target execution.
 - [ ] Promote additional physical RID/deployment profiles only for an actual consumer need. macOS/Arm64, Windows Arm64, and additional deployment forms remain experimental until observed on target.
-- [ ] Resolve the observed plain Strict self-contained Windows x64 closure rejection before qualifying that deployment form. A `net10.0`, non-single-file, unoptimized `return 7` project restored and published, then failed closure verification on a `System.Private.CoreLib, Version=0.0.0.0` reference. Keep the closure gate intact; identify the requesting assembly and runtime identity rule, and prove the corrected artifact on target. Package-mode acquired-runtime-pack diagnostics do not close this item.
+- [x] Correct the observed plain Strict self-contained Windows x64 closure rejection. The unoptimized, non-single-file `net10.0` probe now builds with reviewed .NET 10.0.11 runtime assets and executes `return 7` on Windows x64. Exact runtime identity/content admission, used type-forwarder resolution, explicit Windows ABI imports, and locked runtime helper inspection retain closure verification. This bounded deployment proof does not qualify optimized output, another RID, or long paths; see the assessment.
 - [ ] Perform the disposable management-target reboot/reconnect gate only on a target explicitly placed under that lifecycle. Keep parser/metadata inspection separate from source execution and live provider effects.
 - [ ] Exercise long/non-ASCII/space-containing paths, clean machines, offline resources, tampering, interrupted operations, runtime servicing, uninstall, and side-by-side versions. Verify packed generated projects do not acquire ambient build configuration or unintended network inputs.
 - [ ] Carry explicit package authorship/license/source metadata and dependency notices through packaging; do not treat a default metadata value as evidence about the input source. Record signing authority, immutable hashes, and servicing policy for the release set.

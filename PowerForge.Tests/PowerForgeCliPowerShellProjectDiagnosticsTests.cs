@@ -4,9 +4,11 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeCliPowerShellCompilationTests
 {
-    [Fact]
+    [Theory]
+    [InlineData(PowerShellCompilationMode.Package)]
+    [InlineData(PowerShellCompilationMode.Strict)]
     [Trait("Category", "PowerShellCompilerGate")]
-    public async Task ProjectDiagnosticsCli_UsesAcquiredRuntimePackWithEmptyGlobalCache()
+    public async Task ProjectDiagnosticsCli_UsesAcquiredRuntimePackWithEmptyGlobalCache(PowerShellCompilationMode mode)
     {
         if (!OperatingSystem.IsWindows()) return;
         using var fixture = PowerShellCompilationProjectDiagnosticsTests.Fixture.Create(
@@ -14,14 +16,21 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         var source = Path.Combine(fixture.Root, "main.ps1");
         File.WriteAllText(source, "return 7");
         var target = PowerShellCompilationTargetContractService.Create(PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package, "net10.0", "win-x64", true, false,
+            mode, "net10.0", "win-x64", true, false,
             PowerShellCompilationExecutableOptimization.None, true);
         var manifests = new PowerShellCompilationProjectManifestService();
-        manifests.Save(fixture.Project, manifests.Create(fixture.Project, source, "AcquiredDiagnostics", target));
+        manifests.Save(fixture.Project, manifests.Create(fixture.Project, source, "Acquired", target));
         var workflow = new PowerShellCompilationProjectWorkflowService();
         Check(workflow.Lock(fixture.Project));
         Check(workflow.Restore(fixture.Project));
-        Check(workflow.Build(fixture.Project));
+        var build = workflow.Build(fixture.Project);
+        Check(build);
+        var executable = Assert.Single(build.Targets).Path!;
+        var execution = await new ProcessRunner().RunAsync(new ProcessRunRequest(executable,
+            Path.GetDirectoryName(executable)!, Array.Empty<string>(), TimeSpan.FromSeconds(30)));
+        Assert.True(execution.Succeeded, execution.StdErr + execution.StdOut);
+        Assert.Equal("7", execution.StdOut.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(execution.StdErr), execution.StdErr);
         var environment = new Dictionary<string, string>
         {
             ["NUGET_PACKAGES"] = Directory.CreateDirectory(Path.Combine(fixture.Root, "empty-cache")).FullName
