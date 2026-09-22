@@ -21,7 +21,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             spec.TargetFramework);
         typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId);
         typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework: spec.TargetFramework, semanticProfileId: spec.SemanticProfileId);
-        File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(false));
+        WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
+            spec.SourcePath, compilationSourcePaths);
         WriteBinaryHostRuntime(workspace, typed);
         File.WriteAllText(
             Path.Combine(workspace, "CompiledCmdlets.cs"),

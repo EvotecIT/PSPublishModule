@@ -36,6 +36,12 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         Assert.True(offline.Succeeded, string.Join(Environment.NewLine, offline.Targets.Select(static result => result.Message)));
         var build = workflow.Build(fixture.ProjectPath);
         Assert.True(build.Succeeded, string.Join(Environment.NewLine, build.Targets.Select(static result => result.Message)));
+        var debugPlan = workflow.CreateDebugPlan(fixture.ProjectPath);
+        Assert.Equal("BinaryModule", debugPlan.ArtifactKind);
+        Assert.Equal(Assert.Single(build.Targets).Path, debugPlan.ArtifactPath);
+        var mappedSource = Assert.Single(debugPlan.SourceFileMap);
+        Assert.Equal(Path.Combine(fixture.Root, "Generic.psm1"), mappedSource.Value);
+        Assert.StartsWith("/_/src/", mappedSource.Key, StringComparison.Ordinal);
         var environmentAfterBuild = JsonSerializer.Deserialize<PowerShellCompilationProjectEnvironment>(
             File.ReadAllText(Path.Combine(fixture.Root, ".powerforge", "environment", "environment.json")),
             PowerShellCompilationProjectManifestService.JsonOptions)!;
@@ -169,14 +175,20 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         var redirected = workflow.Test(fixture.ProjectPath);
         Assert.False(redirected.Succeeded);
         Assert.Contains("primary path", Assert.Single(redirected.Targets).Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Throws<InvalidDataException>(() => workflow.CreateDebugPlan(fixture.ProjectPath));
 
         File.WriteAllText(receiptPath, originalReceipt);
         Assert.True(workflow.Test(fixture.ProjectPath).Succeeded);
         var outputRoot = Path.Combine(fixture.Root, Assert.Single(manifest.Artifacts).OutputDirectory.Replace('/', Path.DirectorySeparatorChar));
-        File.WriteAllText(Path.Combine(outputRoot, "unexpected.txt"), "post-build mutation");
+        var unexpectedPath = Path.Combine(outputRoot, "unexpected.txt");
+        File.WriteAllText(unexpectedPath, "post-build mutation");
         var pack = workflow.Pack(fixture.ProjectPath);
         Assert.False(pack.Succeeded);
         Assert.Contains("inventory differs", Assert.Single(pack.Targets).Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Throws<InvalidDataException>(() => workflow.CreateDebugPlan(fixture.ProjectPath));
+        File.Delete(unexpectedPath);
+        File.AppendAllText(Path.Combine(fixture.Root, "Generic.psm1"), "\n# changed after build");
+        Assert.Throws<InvalidDataException>(() => workflow.CreateDebugPlan(fixture.ProjectPath));
     }
 
     [Fact]

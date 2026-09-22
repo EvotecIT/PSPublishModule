@@ -59,6 +59,11 @@ internal static class PowerShellTypedExecutableCompiler
             entrySource.Document.DocumentId,
             entrySource.Document.Text,
             entryDocument.SourceMappings);
+        PowerShellTypedExecutableEntrySourceMapper.Remap(
+            entry.Emission,
+            entryDocument.Document,
+            entrySource.Document,
+            entryDocument.SourceMappings);
 
         var localMethods = new List<PowerShellCSharpMethodEmission>();
         var descriptions = new List<PowerShellCompiledMethod>();
@@ -230,7 +235,7 @@ internal static class PowerShellTypedExecutableCompiler
             outputScalarization: method.OutputScalarization,
             hostedRegionSiteCount: method.HostedRegionSiteCount,
             requiresProviderCancellation: method.RequiresProviderCancellation);
-        description.DocumentId = function.Symbol.DocumentId;
+        description.DocumentId = method.SourceSpan.DocumentId;
         description.DeclaredOutputTypeIsSemanticContract = method.DeclaredOutputType is not null;
         description.SuccessOutputType = method.SuccessOutputType?.FullName ?? string.Empty;
         description.RequiresPowerShellModuleState = method.RequiresPowerShellModuleState;

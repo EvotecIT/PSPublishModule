@@ -146,7 +146,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     spec.TargetFramework,
                     spec.SemanticProfileId,
                     commandProviderInputs);
-                File.WriteAllText(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource,
+                    spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: true);
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 var publishSingleFile = ShouldEnablePublishSingleFile(spec);
@@ -245,7 +246,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                             PowerShellCompilationPathSafety.PathEquals(method.SourcePath, file.FullPath) &&
                             method.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) && method.SourceLine == unit.StartLine)))))
                     throw new InvalidOperationException("Strict DLL compilation rejected a top-level script unit because DLL emitters currently produce typed functions only.");
-                File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
+                    spec.SourcePath, compilationSourcePaths);
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
                     WriteBinaryHostRuntime(workspace, typed);

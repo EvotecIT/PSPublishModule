@@ -32,6 +32,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(Path.Combine(fixture.OutputPath, "GeneratedProof.generated"), result.GeneratedSourcePath);
         Assert.Equal(result.GeneratedSourcePath, result.Manifest!.GeneratedSourcePath);
+        PowerShellCompilationDebugSourceAssert.HasPortableAuthoredSource(
+            Path.ChangeExtension(result.ArtifactPath!, ".pdb"), fixture.ScriptPath, fixture.RootPath);
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs")));
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "GeneratedProof.csproj")));
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "Directory.Build.props")));
@@ -213,10 +215,54 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        PowerShellCompilationDebugSourceAssert.HasPortableAuthoredSource(
+            Path.ChangeExtension(result.ArtifactPath!, ".pdb"), fixture.ScriptPath, fixture.RootPath);
         var program = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "Program.cs"));
         Assert.Contains("private static readonly bool AcceptsSurplusPositionalArguments", program, StringComparison.Ordinal);
         Assert.Contains("Console.InputEncoding = new UTF8Encoding", program, StringComparison.Ordinal);
         Assert.Contains("Console.OutputEncoding = new UTF8Encoding", program, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_StrictExecutableEntrySequencePointUsesAuthoredLinePastLocalFunction()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Add-One {\n" +
+            "    param([int] $Value)\n" +
+            "    [int] $next = $Value + 1\n" +
+            "    return $next\n" +
+            "}\n\n" +
+            "[int] $result = Add-One -Value 6\n" +
+            "return $result", compactPath: true);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "GeneratedDebugEntry",
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            EmitSource = true,
+            TargetFramework = "net10.0"
+        });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var pdbPath = Path.ChangeExtension(result.ArtifactPath!, ".pdb");
+        PowerShellCompilationDebugSourceAssert.HasPortableAuthoredSource(
+            pdbPath, fixture.ScriptPath, fixture.RootPath);
+        PowerShellCompilationDebugSourceAssert.HasAuthoredSequencePoint(
+            pdbPath, fixture.ScriptPath, fixture.RootPath, authoredLine: 7);
+        PowerShellCompilationDebugSourceAssert.HasAuthoredSequencePoint(
+            pdbPath, fixture.ScriptPath, fixture.RootPath, authoredLine: 8);
+        using var map = JsonDocument.Parse(File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "source-map.json")));
+        var entry = Assert.Single(map.RootElement.GetProperty("methods").EnumerateArray(),
+            method => method.GetProperty("powershellName").GetString() == "<script>");
+        Assert.Equal(1, entry.GetProperty("sourceLine").GetInt32());
+        var methodRange = entry.GetProperty("sourceRange");
+        Assert.Equal(1, methodRange.GetProperty("startLine").GetInt32());
+        Assert.Equal(1, methodRange.GetProperty("startColumn").GetInt32());
+        Assert.Equal(8, methodRange.GetProperty("endLine").GetInt32());
+        Assert.Equal(15, methodRange.GetProperty("endColumn").GetInt32());
+        Assert.Contains(entry.GetProperty("statements").EnumerateArray(), statement =>
+            statement.GetProperty("sourceRange").GetProperty("startLine").GetInt32() == 7);
+        Assert.Contains(entry.GetProperty("statements").EnumerateArray(), statement =>
+            statement.GetProperty("sourceRange").GetProperty("startLine").GetInt32() == 8);
     }
 
     [Fact]

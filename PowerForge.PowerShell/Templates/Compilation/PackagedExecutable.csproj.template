@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=/_/src</PathMap>
+    <DebugType>portable</DebugType>
     <PublishSingleFile>{{SINGLE_FILE}}</PublishSingleFile>
     <SelfContained>{{SELF_CONTAINED}}</SelfContained>
     <IncludeAllContentForSelfExtract>{{SINGLE_FILE}}</IncludeAllContentForSelfExtract>

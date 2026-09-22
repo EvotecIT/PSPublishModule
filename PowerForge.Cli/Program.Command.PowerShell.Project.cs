@@ -5,7 +5,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellProjectUsage =
-        "Usage: powerforge powershell project <init|analyze|explain|recommend|lock|restore|build|run|watch|test|pack|install|diagnose> <project-or-source> [--project <powerforge.psproject.json>] [--name <name>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--semantic-profile <id>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--emit-source] [--optimization <None|Trimmed|NativeAot>] [--target <name> ...] [--boundary-profile <profile.json>] [--offline] [--output json]";
+        "Usage: powerforge powershell project <init|analyze|explain|recommend|lock|restore|build|run|watch|test|pack|install|diagnose|debug-plan> <project-or-source> [--project <powerforge.psproject.json>] [--name <name>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--semantic-profile <id>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--emit-source] [--optimization <None|Trimmed|NativeAot>] [--target <name> ...] [--boundary-profile <profile.json>] [--offline] [--output json]";
 
     private static int CommandPowerShellProject(string[] args, bool outputJson, ILogger logger)
     {
@@ -18,6 +18,8 @@ internal static partial class Program
         var operationArgs = args.Skip(1).ToArray();
         if (operation is "run" or "watch")
             return CommandPowerShellProjectRun(operation, operationArgs, outputJson);
+        if (operation == "debug-plan")
+            return CommandPowerShellProjectDebugPlan(operationArgs, outputJson, logger);
         if (operation == "pack")
             return CommandPowerShellProjectPack(operationArgs, outputJson, logger);
         if (operation == "init")
@@ -171,7 +173,7 @@ internal static partial class Program
                 Command = "powershell.project",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { usage = PowerShellProjectUsage, runUsage = PowerShellProjectRunUsage, packUsage = PowerShellProjectPackUsage })
+                Result = JsonSerializer.SerializeToElement(new { usage = PowerShellProjectUsage, runUsage = PowerShellProjectRunUsage, packUsage = PowerShellProjectPackUsage, debugUsage = PowerShellProjectDebugUsage })
             });
         }
         else
@@ -179,6 +181,7 @@ internal static partial class Program
             Console.WriteLine(PowerShellProjectUsage);
             Console.WriteLine(PowerShellProjectRunUsage);
             Console.WriteLine(PowerShellProjectPackUsage);
+            Console.WriteLine(PowerShellProjectDebugUsage);
         }
     }
 }

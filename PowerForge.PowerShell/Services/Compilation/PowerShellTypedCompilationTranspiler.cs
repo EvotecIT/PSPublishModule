@@ -753,8 +753,8 @@ internal sealed class PowerShellCSharpMethodEmission
 
     internal string GeneratedName { get; }
     internal Type ReturnType { get; }
-    internal string Source { get; }
-    internal SourceSpan SourceSpan { get; }
+    internal string Source { get; set; }
+    internal SourceSpan SourceSpan { get; set; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
@@ -771,7 +771,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal PowerShellCompilationHelp? Help { get; }
     internal string[] Aliases { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
-    internal PowerShellCompilationSourceMapEntry[] SourceMap { get; }
+    internal PowerShellCompilationSourceMapEntry[] SourceMap { get; set; }
     internal PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
     internal string OutputCardinality { get; }
     internal string[] OutputValueStates { get; }
