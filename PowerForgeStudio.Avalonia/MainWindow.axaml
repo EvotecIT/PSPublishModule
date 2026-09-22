@@ -156,10 +156,13 @@
         <Border Grid.Row="3" Background="#102236" BorderBrush="#2D4157" BorderThickness="0,1,0,0">
           <Grid RowDefinitions="38,*">
             <Border BorderBrush="#2D4157" BorderThickness="0,0,0,1">
-              <StackPanel Orientation="Horizontal" Spacing="9" Margin="17,10"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#80B8FF" /><TextBlock Text="Output" Foreground="#F2F7FF" FontWeight="SemiBold" /></StackPanel>
+              <Grid ColumnDefinitions="*,Auto" Margin="17,0">
+                <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center"><controls:NavigationIcon Kind="output" Width="17" Height="17" Ink="#80B8FF" /><TextBlock Text="Output" Foreground="#F2F7FF" FontWeight="SemiBold" /></StackPanel>
+                <Button Grid.Column="1" Content="{Binding OutputPaneToggleLabel}" Command="{Binding ToggleOutputPaneCommand}" Classes="toolbar" Foreground="#C8DCF5" VerticalAlignment="Center" ToolTip.Tip="Resize output pane" />
+              </Grid>
             </Border>
-            <ScrollViewer Grid.Row="1" Margin="17,5,17,12" HorizontalScrollBarVisibility="Auto">
-              <SelectableTextBlock Text="{Binding DisplayedOutput}" Foreground="#D7E7F8" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" />
+            <ScrollViewer Grid.Row="1" Margin="17,5,17,12" HorizontalScrollBarVisibility="Disabled">
+              <SelectableTextBlock Text="{Binding DisplayedOutput}" Foreground="#D7E7F8" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" TextWrapping="Wrap" />
             </ScrollViewer>
           </Grid>
         </Border>

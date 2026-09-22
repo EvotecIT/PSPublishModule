@@ -97,6 +97,33 @@ public sealed class WorkspaceTreeTests
                         window.UpdateLayout();
                         Dispatcher.UIThread.RunJobs();
                     }
+                    model.ToggleOutputPaneCommand.Execute(null);
+                    Assert.Equal(300, model.OutputPaneHeight.Value);
+                    Assert.Equal("Collapse", model.OutputPaneToggleLabel);
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        window.UpdateLayout();
+                        Dispatcher.UIThread.RunJobs();
+                        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var expandedFrame = window.CaptureRenderedFrame();
+                        Assert.NotNull(expandedFrame);
+                        expandedFrame.Save(Path.Combine(output, "workspace-output-expanded.png"), PngBitmapEncoderOptions.Default);
+                        window.Width = 1050;
+                        window.Height = 720;
+                        window.UpdateLayout();
+                        Dispatcher.UIThread.RunJobs();
+                        Assert.Equal(250, model.OutputPaneHeight.Value);
+                        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var compactExpandedFrame = window.CaptureRenderedFrame();
+                        Assert.NotNull(compactExpandedFrame);
+                        compactExpandedFrame.Save(Path.Combine(output, "workspace-output-expanded-compact.png"), PngBitmapEncoderOptions.Default);
+                        window.Width = 1600;
+                        window.Height = 1000;
+                        window.UpdateLayout();
+                        Dispatcher.UIThread.RunJobs();
+                    }
+                    model.ToggleOutputPaneCommand.Execute(null);
+                    Assert.Equal(170, model.OutputPaneHeight.Value);
                     window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
                     window.KeyRelease(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
                     Assert.True(window.FindControl<TextBox>("QuickProjectSearchBox")!.IsFocused);
