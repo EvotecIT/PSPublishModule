@@ -10,12 +10,12 @@
       <Grid ColumnDefinitions="360,*,280" Margin="22,0">
         <TextBlock Text="Project workspace" Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
         <Grid Grid.Column="1" MaxWidth="550" HorizontalAlignment="Stretch" VerticalAlignment="Center">
-          <TextBox x:Name="QuickProjectSearchBox" Text="{Binding QuickProjectQuery}" PlaceholderText="Jump to a repository…" Padding="32,6,70,6" Background="#EEF3FA" BorderBrush="#B8CAE0" KeyDown="QuickProjectSearchKeyDown" />
+          <TextBox x:Name="QuickProjectSearchBox" Text="{Binding QuickProjectQuery}" PlaceholderText="Jump to a repository…" Padding="32,6,70,6" Background="#EEF3FA" BorderBrush="#B8CAE0" KeyDown="QuickProjectSearchKeyDown" GotFocus="QuickProjectSearchGotFocus" />
           <controls:NavigationIcon Kind="search" Width="17" Height="17" Ink="#617189" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False" />
           <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="#F7FAFE" BorderBrush="#CBD7E7" BorderThickness="1" CornerRadius="3" Padding="5,1" Margin="0,0,7,0" IsHitTestVisible="False">
             <TextBlock Text="Ctrl + K" Foreground="#677892" FontSize="11" />
           </Border>
-          <Popup IsOpen="{Binding HasQuickProjectQuery}" PlacementTarget="{Binding ElementName=QuickProjectSearchBox}" Placement="Bottom" IsLightDismissEnabled="True">
+          <Popup x:Name="QuickProjectResultsPopup" IsOpen="{Binding IsQuickProjectSearchOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=QuickProjectSearchBox}" Placement="Bottom" IsLightDismissEnabled="True">
             <Border Background="White" BorderBrush="#C8D5E7" BorderThickness="1" BoxShadow="0 8 18 0 #260B2745" Width="{Binding ElementName=QuickProjectSearchBox, Path=Bounds.Width}" Padding="6" CornerRadius="5">
               <StackPanel>
                 <TextBlock Text="Repositories" Classes="muted" FontSize="11" FontWeight="SemiBold" Margin="8,5,8,3" />
@@ -62,7 +62,7 @@
             <Button Grid.Column="1" ToolTip.Tip="Choose workspace folder" Click="ChooseWorkspace" Classes="toolbar"><controls:NavigationIcon Kind="plus" Width="18" Height="18" Ink="#25354E" /></Button>
             <Button Grid.Column="2" ToolTip.Tip="Refresh repositories" Command="{Binding RefreshCommand}" Classes="toolbar"><controls:NavigationIcon Kind="refresh" Width="18" Height="18" Ink="#25354E" /></Button>
           </Grid>
-          <TextBox Grid.Row="1" Text="{Binding Filter}" PlaceholderText="Filter projects…" Margin="16,0,16,7" />
+          <TextBox x:Name="ProjectTreeFilterBox" Grid.Row="1" Text="{Binding Filter}" PlaceholderText="Filter projects…" Margin="16,0,16,7" />
           <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="16,0,16,5">
             <Button Content="Favorites" Classes="chip" Classes.active="{Binding FavoritesOnly}" Command="{Binding ShowFavoriteProjectsCommand}" />
             <Button Content="All" Classes="chip" Classes.active="{Binding AllProjects}" Command="{Binding ShowAllProjectsCommand}" />

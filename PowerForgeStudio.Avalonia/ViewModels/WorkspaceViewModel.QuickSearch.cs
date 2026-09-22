@@ -8,6 +8,7 @@ public sealed partial class WorkspaceViewModel
     public ObservableCollection<ExplorerNode> QuickProjectMatches { get; } = [];
 
     [ObservableProperty] private string _quickProjectQuery = "";
+    [ObservableProperty] private bool _isQuickProjectSearchOpen;
 
     public bool HasQuickProjectQuery => !string.IsNullOrWhiteSpace(QuickProjectQuery);
     public bool HasQuickProjectMatches => QuickProjectMatches.Count > 0;
@@ -15,8 +16,11 @@ public sealed partial class WorkspaceViewModel
     partial void OnQuickProjectQueryChanged(string value)
     {
         OnPropertyChanged(nameof(HasQuickProjectQuery));
+        IsQuickProjectSearchOpen = HasQuickProjectQuery;
         RefreshQuickProjectMatches();
     }
+
+    public void ReopenQuickProjectSearch() => IsQuickProjectSearchOpen = HasQuickProjectQuery;
 
     private void RefreshQuickProjectMatches()
     {

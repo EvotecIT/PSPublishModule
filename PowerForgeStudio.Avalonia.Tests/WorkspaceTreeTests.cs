@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
@@ -102,6 +103,18 @@ public sealed class WorkspaceTreeTests
                         Assert.NotNull(compactSearchFrame);
                         compactSearchFrame.Save(Path.Combine(output, "workspace-quick-search-compact.png"), PngBitmapEncoderOptions.Default);
                     }
+                    var searchPopup = window.FindControl<Popup>("QuickProjectResultsPopup")!;
+                    Assert.True(searchPopup.IsOpen);
+                    searchPopup.IsOpen = false;
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.False(model.IsQuickProjectSearchOpen);
+                    window.KeyPress(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
+                    window.KeyRelease(Key.K, RawInputModifiers.Control, PhysicalKey.None, null);
+                    Assert.True(searchPopup.IsOpen);
+                    Assert.True(window.FindControl<TextBox>("ProjectTreeFilterBox")!.Focus());
+                    searchPopup.IsOpen = false;
+                    Assert.True(window.FindControl<TextBox>("QuickProjectSearchBox")!.Focus());
+                    Assert.True(searchPopup.IsOpen);
                     model.Filter = "Studio";
                     model.FavoritesOnly = true;
                     Assert.Empty(model.Projects);

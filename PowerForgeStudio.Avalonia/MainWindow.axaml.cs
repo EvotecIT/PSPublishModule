@@ -32,7 +32,13 @@ public sealed partial class MainWindow : Window
         if (args.Key != Key.K || !args.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
         QuickProjectSearchBox.Focus();
         QuickProjectSearchBox.SelectAll();
+        if (DataContext is WorkspaceViewModel model) model.ReopenQuickProjectSearch();
         args.Handled = true;
+    }
+
+    private void QuickProjectSearchGotFocus(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is WorkspaceViewModel model) model.ReopenQuickProjectSearch();
     }
 
     private void ApplyResponsiveLayout(double width)
