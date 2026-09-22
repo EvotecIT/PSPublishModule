@@ -202,6 +202,33 @@
                 <TextBlock Text="Review the Overview warning card before building." IsVisible="{Binding HasWarnings}" Foreground="#B45309" TextWrapping="Wrap" FontSize="12" />
               </StackPanel>
             </ScrollViewer>
+            <ScrollViewer IsVisible="{Binding IsBuildPage}">
+              <StackPanel Spacing="12" DataContext="{Binding Build}">
+                <TextBlock Text="Build context" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="Working copy" Classes="muted" FontSize="12" />
+                <TextBox Text="{Binding WorkingCopyRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
+                         BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding WorkingCopyRoot}" AutomationProperties.Name="Build working copy path" />
+                <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
+                <TextBlock Text="Detected contracts" FontWeight="SemiBold" />
+                <SelectableTextBlock Text="{Binding ContractDisplay}" TextWrapping="Wrap" ToolTip.Tip="{Binding Contracts}" FontSize="12" />
+                <TextBlock Text="Inspection" Classes="muted" FontSize="12" />
+                <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="12" />
+                <TextBlock Text="Save or discard drafts before inspecting or building." IsVisible="{Binding HasUnsavedChanges}" Foreground="#B45309" TextWrapping="Wrap" FontSize="12" />
+                <Border Background="#F3F7FD" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding HasBuild}">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="Captured build" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding BuildStatus}" TextWrapping="Wrap" FontSize="12" />
+                    <TextBlock Text="Source working copy" Classes="muted" FontSize="11" />
+                    <TextBox Text="{Binding BuildRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
+                             BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding BuildRoot}" AutomationProperties.Name="Captured build working copy path" />
+                  </StackPanel>
+                </Border>
+                <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10">
+                  <TextBlock Text="Build runs local project code with PowerForge publishing disabled. Inspect the captured artifacts in Releases before signing or publishing."
+                             TextWrapping="Wrap" FontSize="12" />
+                </Border>
+              </StackPanel>
+            </ScrollViewer>
             <ScrollViewer IsVisible="{Binding IsReleasePage}">
               <StackPanel Spacing="12" DataContext="{Binding Release}">
                 <TextBlock Text="Release checkpoint" FontWeight="SemiBold" FontSize="16" />

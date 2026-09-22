@@ -138,7 +138,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
-    public bool ShowGenericProjectContext => !IsOverviewPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;
+    public bool ShowGenericProjectContext => !IsOverviewPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage && !IsBuildPage;
     partial void OnIsChangesPageChanged(bool value) { OnPropertyChanged(nameof(IsFilesPage)); OnPropertyChanged(nameof(IsProjectRoute)); OnPropertyChanged(nameof(ShowGenericProjectContext)); OnPropertyChanged(nameof(DisplayedOutput)); }
     [ObservableProperty] private bool _isBuildPage;
     public bool IsFilesPage => !IsOverviewPage && !IsHistoryPage && !IsSettingsPage && !IsActivityPage && !IsStoragePage && !IsAutomationsPage && !IsConnectionsPage && !IsBuildPage && !IsChangesPage && !IsGitHubPage && !IsReleasePage;
@@ -146,6 +146,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsFilesPage));
         OnPropertyChanged(nameof(IsProjectRoute));
+        OnPropertyChanged(nameof(ShowGenericProjectContext));
         OnPropertyChanged(nameof(DisplayedOutput));
     }
     public string DisplayedOutput => IsOverviewPage ? Overview.Output : IsHistoryPage ? History.Output : IsSettingsPage ? Settings.Output : IsActivityPage ? Activity.Output : IsStoragePage ? Storage.Output : IsAutomationsPage ? Automations.Output : IsConnectionsPage ? Connections.Output : IsChangesPage ? Changes.LastOperation : IsBuildPage && Build.HasBuild ? Build.BuildOutput : Output;

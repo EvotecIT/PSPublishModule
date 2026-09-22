@@ -157,6 +157,7 @@ public sealed class BuildTests
             {
                 using var workspace = new WorkspaceViewModel(root) { ActiveWorkingCopyRoot = root, ProjectName = "SampleModule" };
                 workspace.ShowBuildCommand.Execute(null);
+                Assert.False(workspace.ShowGenericProjectContext);
                 await workspace.Build.PlanAsync();
                 var result = Assert.Single(workspace.Build.Results);
                 Assert.Equal(RepositoryPlanStatus.Succeeded, result.Status);
@@ -173,6 +174,8 @@ public sealed class BuildTests
                 {
                     window.Show();
                     window.UpdateLayout();
+                    var context = Assert.Single(window.GetVisualDescendants().OfType<Border>(), border => border.Name == "ContextPanel");
+                    Assert.Contains(context.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "Build context" && block.IsEffectivelyVisible);
                     Dispatcher.UIThread.RunJobs();
                     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                     using var frame = window.CaptureRenderedFrame();

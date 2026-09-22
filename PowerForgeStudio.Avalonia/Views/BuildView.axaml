@@ -95,8 +95,9 @@
       <Border IsVisible="{Binding HasBuild}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="14">
         <StackPanel Spacing="10">
           <TextBlock Text="Build result" FontSize="18" FontWeight="SemiBold" />
-          <SelectableTextBlock Text="{Binding BuildRoot}" TextWrapping="Wrap" />
           <TextBlock Text="{Binding BuildStatus}" TextWrapping="Wrap" />
+          <TextBlock Text="Captured working copy" Classes="muted" FontSize="11" />
+          <SelectableTextBlock Text="{Binding BuildRoot}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BuildRoot}" FontSize="12" />
           <ProgressBar IsVisible="{Binding IsBuilding}" IsIndeterminate="True" Height="3" />
           <Button Content="Cancel build" Command="{Binding CancelBuildCommand}" IsVisible="{Binding IsBuilding}" HorizontalAlignment="Left" />
           <ItemsControl ItemsSource="{Binding BuildResult.AdapterResults}">
@@ -106,13 +107,21 @@
                   <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
                   <SelectableTextBlock Text="{Binding ErrorTail}" Foreground="#AE2424" TextWrapping="Wrap" FontSize="12" />
                   <SelectableTextBlock Text="{Binding OutputTail}" TextWrapping="Wrap" FontSize="12" />
-                  <TextBlock Text="Artifact files" Classes="muted" />
                   <ItemsControl ItemsSource="{Binding ArtifactFiles}">
-                    <ItemsControl.ItemTemplate><DataTemplate><SelectableTextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="12" /></DataTemplate></ItemsControl.ItemTemplate>
+                    <ItemsControl.ItemTemplate><DataTemplate>
+                      <Grid ColumnDefinitions="65,*" ColumnSpacing="8" Margin="0,2">
+                        <TextBlock Text="File" Classes="muted" FontSize="11" />
+                        <SelectableTextBlock Grid.Column="1" Text="{Binding}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding}" FontSize="12" />
+                      </Grid>
+                    </DataTemplate></ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <TextBlock Text="Build directories" Classes="muted" />
                   <ItemsControl ItemsSource="{Binding ArtifactDirectories}">
-                    <ItemsControl.ItemTemplate><DataTemplate><SelectableTextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="12" /></DataTemplate></ItemsControl.ItemTemplate>
+                    <ItemsControl.ItemTemplate><DataTemplate>
+                      <Grid ColumnDefinitions="65,*" ColumnSpacing="8" Margin="0,2">
+                        <TextBlock Text="Directory" Classes="muted" FontSize="11" />
+                        <SelectableTextBlock Grid.Column="1" Text="{Binding}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding}" FontSize="12" />
+                      </Grid>
+                    </DataTemplate></ItemsControl.ItemTemplate>
                   </ItemsControl>
                 </StackPanel>
               </DataTemplate>
