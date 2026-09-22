@@ -2,7 +2,7 @@
 
 Updated: 2026-09-22. Active continuation: `feature/powershell-compiler`. The readiness assessment records the qualified revisions and remaining integration boundaries.
 
-M24–M27 have completed their bounded local implementation gates, including the September 22 audit corrections. **M28 is in progress:** executable run/watch is implemented through the existing project owner, and Strict library NuGet packaging is integrated. Grouped project diagnostics are implemented. Debugger qualification, module quickstarts, and additional host qualification remain open below. Completion of an implementation milestone does not establish general PowerShell compatibility, a released package, or qualification on an untested host.
+M24–M27 have completed their bounded local implementation gates, including the September 22 audit corrections. **M28 is in progress:** executable run/watch, Strict library NuGet packaging, and grouped project diagnostics are implemented. The module consumer quickstart has now been exercised on both supported Windows PowerShell hosts. Direct source-debugger qualification remains open. Completion of an implementation milestone does not establish general PowerShell compatibility, a released package, or qualification on an untested host.
 
 The [readiness assessment](PowerForge.PowerShellCompilation.Assessment.md) owns findings and dated validation. The [architecture roadmap](PowerForge.PowerShellCompilation.Roadmap.md) owns design and M0–M23. The [compilation guide](PowerForge.PowerShellCompilation.md) owns commands. This document owns the remaining execution order; earlier per-commit journals are available in Git history.
 
@@ -18,22 +18,12 @@ The September 20 checkpoint recorded 1,063 compiler-gate tests and six Strict Wi
 
 | Priority | Milestone | Current state | Required outcome |
 | --- | --- | --- | --- |
-| 1 | M24–M26 practical workload expansion | Current goal | Select complete blocked workflows, close their necessary semantic and shaping blockers, and compare original/compiled execution |
-| 2 | M28 development loop | Bounded features implemented; extras deferred | Add debugger and module quickstart work when needed by the selected workflows |
+| 1 | M28 development loop | Current goal | Observe source breakpoints, stepping, locals, stacks, and exceptions across typed and Hybrid boundaries; close the complete development workflow |
+| 2 | M24–M27 practical workload and library expansion | Bounded local gates complete | Preserve qualified contracts; investigate reachable regressions before broadening claims |
 | 3 | M29 distribution and platforms | Partial / separate qualification | Supported hosts, release set, public-feed lifecycle, and clean-target execution are evidenced independently |
 | 4 | M30 performance | Planned | Repeatable workload benefit after semantic and deployment correctness |
 
 Known accepted-code defects take priority over breadth or performance. Keep remediation proportional to a reachable trigger and consequence: cover the observed failure and consequential sibling paths, then stop expanding the matrix once the supported contract is demonstrated. Record every finding as reproduced, source-demonstrated, or unverified; record its owner, affected modes, test, and closure evidence. Do not mark a milestone complete because its aggregate test count increased.
-
-### Current workload goal
-
-Prioritize useful Hybrid script/module coverage. Extend Strict only where a complete runtime-free artifact can be qualified; keep the same canonical compiler owners for both routes. Readiness work serves the selected workflows rather than becoming a prerequisite to every coverage improvement.
-
-- [x] Reproduce and correct plain Strict self-contained Windows x64 closure rejection while preserving exact target/content evidence and missing-dependency rejection. Focused artifact tests and a direct executable pass; broader integration remains separate.
-- [x] Refresh the pinned PSSharedGoods baseline: 188/282 complete emitted functions, 36 promoted regions. No coverage growth is claimed for the deployment correction.
-- [x] Select three complete pinned workflows: `Get-ComputerDisk`, `Get-ComputerWindowsFeatures`, and `Get-ComputerSMBShareList`. They cover inventory transformation/filtering and share-enumeration lifecycle. Disk reporting needs native `-as` conversion and native scalar/vector slot admission; optional-feature reporting needs the slot correction; share enumeration needs `-as [type]`. Initial UAC and generic-rights candidates retain their separate captured-return and dynamic static-member blockers.
-- [x] Implement and qualify the selected complete workflows through existing binding, IR, analysis, lowering, and runtime owners. Both supported hosted lanes match the unchanged full module with isolated providers, including failures, stopping, cancellation, cleanup, and reuse. The census increases to 196/282 complete functions and 29 promoted regions; seven former prefixes are now inside complete methods. This is Hybrid coverage, not new Strict language admission or live-provider qualification.
-- [x] Complete independent review and qualification: full suite 1,138 passed / one stale fixture failed, focused correction 1/1 passed, and separate Strict corpus 6/6 passed. Production remained unchanged after review. Record the combined evidence and remove transient task outputs. No PR, merge, or package publication is part of this goal.
 
 ## Milestone 24 — Preserve values, collections, and error continuation
 
@@ -122,7 +112,7 @@ The [project CLI](../PowerForge.Cli/Program.Command.PowerShell.Project.cs) expos
 - [x] Integrate the existing library NuGet builder with `project pack --format nuget` and reuse existing ABI-baseline checks. Require one tested Strict library, emitted source, explicit metadata, and the exact isolated restore lock. Preserve qualified ZIP delivery. Ordinary Windows net10.0/net472 consumers and a provider dependency consumer exercise the resulting packages.
 - [x] Extend project explain/diagnose with [grouped diagnostics](PowerForge.PowerShellCompilation.ProjectDiagnostics.md) from canonical unit decisions and bound call links. Distinguish semantic, shaping, dependency, target, input, and integrity causes; preserve final rejection/retention and operation exit status. Retain exact available coordinates and mark synthetic call locations unavailable. Provider contracts flow through final explanation shaping. Diagnose still rejects missing or stale artifact evidence.
 - [ ] Observe debugging directly: source breakpoints, stepping, locals, stacks, and exceptions across a typed call and a Hybrid boundary. State boundaries that cannot be stepped through; PDB presence alone is insufficient.
-- [ ] Complete the module consumer quickstart and qualify additional supported-host diagnostics. The [library NuGet quickstart](PowerForge.PowerShellCompilation.LibraryPackages.md) and executable [run/watch quickstart](PowerForge.PowerShellCompilation.Development.md) are implemented with Windows host diagnostics; this does not qualify other platforms or source debugging.
+- [x] Complete the [module consumer quickstart](PowerForge.PowerShellCompilation.ModuleConsumers.md) and qualify additional supported-host diagnostics. The same Hybrid sample passes project explain/test/diagnose and direct import on PowerShell 7.6.5/`net10.0` and Windows PowerShell 5.1.26100.9444/`net472`, with typed and retained commands plus manifest export filtering. The [library NuGet quickstart](PowerForge.PowerShellCompilation.LibraryPackages.md) and executable [run/watch quickstart](PowerForge.PowerShellCompilation.Development.md) remain separate. These Windows host checks do not qualify other platforms or source debugging.
 
 **Exit gate:** clean init → lock → restore → run/test → edit → rebuild → diagnose/debug → pack through documented entrypoints. Verify argument quoting, redirected streams, cancellation, offline restore, stale-output prevention, invalidation, and source-line accuracy.
 

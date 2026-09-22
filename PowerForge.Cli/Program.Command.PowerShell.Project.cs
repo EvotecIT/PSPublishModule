@@ -5,7 +5,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellProjectUsage =
-        "Usage: powerforge powershell project <init|analyze|explain|recommend|lock|restore|build|test|pack|install|diagnose> <project-or-source> [--project <powerforge.psproject.json>] [--name <name>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--semantic-profile <id>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--emit-source] [--optimization <None|Trimmed|NativeAot>] [--target <name> ...] [--boundary-profile <profile.json>] [--offline] [--output json]";
+        "Usage: powerforge powershell project <init|analyze|explain|recommend|lock|restore|build|run|watch|test|pack|install|diagnose> <project-or-source> [--project <powerforge.psproject.json>] [--name <name>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--semantic-profile <id>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--emit-source] [--optimization <None|Trimmed|NativeAot>] [--target <name> ...] [--boundary-profile <profile.json>] [--offline] [--output json]";
 
     private static int CommandPowerShellProject(string[] args, bool outputJson, ILogger logger)
     {
