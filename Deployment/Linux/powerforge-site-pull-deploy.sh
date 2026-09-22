@@ -33,19 +33,35 @@ source "$config"
 : "${CURRENT_LINK:?}"
 : "${PUBLIC_URL:?}"
 : "${SMOKE_PATHS:=/}"
-[[ $SOURCE_REPOSITORY =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git$ ]] || fail 'source repository must be a GitHub HTTPS URL'
 [[ $SOURCE_NAME =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail 'invalid source repository name'
-[[ $SOURCE_REPOSITORY == "https://github.com/${SOURCE_NAME}.git" ]] || fail 'source repository name and URL disagree'
+if [[ -n ${SOURCE_REPOSITORY_PATH:-} ]]; then
+  [[ $SOURCE_REPOSITORY == "git@github.com:${SOURCE_NAME}.git" ]] || fail 'private source repository name and SSH URL disagree'
+else
+  [[ $SOURCE_REPOSITORY == "https://github.com/${SOURCE_NAME}.git" ]] || fail 'public source repository name and HTTPS URL disagree'
+fi
 [[ $SOURCE_BRANCH =~ ^[A-Za-z0-9._/-]+$ && $SOURCE_BRANCH != *..* && $SOURCE_BRANCH != /* ]] || fail 'invalid source branch'
 [[ $WEBSITE_DIRECTORY =~ ^[A-Za-z0-9._/-]+$ && $WEBSITE_DIRECTORY != *..* && $WEBSITE_DIRECTORY != /* ]] || fail 'invalid website directory'
 [[ $PIPELINE_CONFIG =~ ^[A-Za-z0-9._/-]+\.json$ && $PIPELINE_CONFIG != *..* && $PIPELINE_CONFIG != /* ]] || fail 'invalid pipeline config'
-[[ $ENGINE_REPOSITORY_PATH == /* && -d $ENGINE_REPOSITORY_PATH/.git ]] || fail 'invalid local engine repository'
 [[ $ENGINE_SHA =~ ^[0-9a-f]{40}$ ]] || fail 'engine revision must be an exact SHA'
 [[ $WORK_ROOT == /* && $WORK_ROOT != / && $WORK_ROOT != /tmp && $WORK_ROOT != /var/tmp ]] || fail 'invalid work root'
 [[ $CURRENT_LINK == /* && $CURRENT_LINK != / ]] || fail 'invalid current release link'
 [[ $PUBLIC_URL =~ ^https://[A-Za-z0-9.-]+$ ]] || fail 'public URL must be an HTTPS origin'
 [[ -d $WORK_ROOT && ! -L $WORK_ROOT && $(stat -c %u "$WORK_ROOT") -eq $(id -u) ]] || fail 'work root must be a real directory owned by the build account'
 [[ $(stat -c %a "$WORK_ROOT") == 700 ]] || fail 'work root must have mode 0700'
+
+assert_root_checkout() {
+  local checkout=$1 part mode
+  [[ $checkout == /* && -d $checkout/.git && ! -L $checkout/.git ]] || fail "invalid root-owned checkout: $checkout"
+  part=$checkout/.git
+  while [[ $part != / ]]; do
+    [[ -d $part && ! -L $part && $(stat -c %u "$part") -eq 0 ]] || fail "checkout path must be root-owned and free of symlinks: $part"
+    mode=$(stat -c %a "$part")
+    (( (8#$mode & 0022) == 0 )) || fail "checkout path must not be group or world writable: $part"
+    part=${part%/*}
+    [[ -n $part ]] || part=/
+  done
+}
+assert_root_checkout "$ENGINE_REPOSITORY_PATH"
 
 for required in git dotnet tar jq curl sha256sum flock mktemp sudo; do
   command -v "$required" >/dev/null || fail "missing command: $required"
@@ -55,8 +71,19 @@ flock -n 9 || fail 'another pull deployment is running'
 
 git -c "safe.directory=$ENGINE_REPOSITORY_PATH" -C "$ENGINE_REPOSITORY_PATH" \
   cat-file -e "${ENGINE_SHA}^{commit}" || fail 'pinned engine revision is absent locally'
-remote_line=$(git -c protocol.file.allow=never ls-remote --exit-code "$SOURCE_REPOSITORY" "refs/heads/$SOURCE_BRANCH")
-remote_sha=${remote_line%%[[:space:]]*}
+if [[ -n ${SOURCE_REPOSITORY_PATH:-} ]]; then
+  source_snapshot=/var/lib/powerforge/site-sources/$site
+  [[ -d $source_snapshot && ! -L $source_snapshot && $(stat -c %u "$source_snapshot") -eq 0 ]] || fail 'missing root-owned private source snapshot'
+  [[ $(stat -c '%g %a' "$source_snapshot") == "$(id -g) 750" ]] || fail 'private source snapshot must be mode 0750 and shared only with the build account'
+  [[ -f $source_snapshot/source.tar && ! -L $source_snapshot/source.tar && $(stat -c %u "$source_snapshot/source.tar") -eq 0 ]] || fail 'missing root-owned private source archive'
+  [[ -f $source_snapshot/source.sha && ! -L $source_snapshot/source.sha && $(stat -c %u "$source_snapshot/source.sha") -eq 0 ]] || fail 'missing root-owned private source revision'
+  [[ $(stat -c '%g %a' "$source_snapshot/source.tar") == "$(id -g) 640" ]] || fail 'private source archive has unexpected access mode'
+  [[ $(stat -c '%g %a' "$source_snapshot/source.sha") == "$(id -g) 640" ]] || fail 'private source revision has unexpected access mode'
+  remote_sha=$(<"$source_snapshot/source.sha")
+else
+  remote_line=$(git -c protocol.file.allow=never ls-remote --exit-code "$SOURCE_REPOSITORY" "refs/heads/$SOURCE_BRANCH")
+  remote_sha=${remote_line%%[[:space:]]*}
+fi
 [[ $remote_sha =~ ^[0-9a-f]{40}$ ]] || fail 'source branch did not resolve to an exact revision'
 if [[ $build_only -eq 0 && -L $CURRENT_LINK && -f $CURRENT_LINK/_powerforge/deployment.json ]]; then
   if jq -e --arg source "$remote_sha" --arg engine "$ENGINE_SHA" \
@@ -83,11 +110,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
-git -c protocol.file.allow=never clone --depth 1 --single-branch --branch "$SOURCE_BRANCH" \
-  "$SOURCE_REPOSITORY" "$run_root/source"
-source_sha=$(git -C "$run_root/source" rev-parse HEAD)
+if [[ -n ${SOURCE_REPOSITORY_PATH:-} ]]; then
+  mkdir "$run_root/source"
+  cp -- "$source_snapshot/source.tar" "$run_root/source.tar"
+  archive_sha=$(git get-tar-commit-id <"$run_root/source.tar")
+  [[ $archive_sha == "$remote_sha" ]] || fail 'private source archive and revision disagree'
+  tar -xf "$run_root/source.tar" -C "$run_root/source"
+  source_sha=$remote_sha
+else
+  git -c protocol.file.allow=never clone --depth 1 --single-branch --branch "$SOURCE_BRANCH" \
+    "$SOURCE_REPOSITORY" "$run_root/source"
+  source_sha=$(git -C "$run_root/source" rev-parse HEAD)
+fi
 [[ $source_sha =~ ^[0-9a-f]{40}$ ]] || fail 'invalid fetched source revision'
 [[ $source_sha == "$remote_sha" ]] || fail 'source branch changed during clone; retry on the next timer run'
+website="$run_root/source/$WEBSITE_DIRECTORY"
+[[ -f $website/$PIPELINE_CONFIG ]] || fail 'pipeline config is missing from fetched source'
+if [[ -f $website/.powerforge/engine-lock.json ]]; then
+  locked_engine=$(jq -er '.ref | select(type == "string")' "$website/.powerforge/engine-lock.json")
+  [[ $locked_engine == "$ENGINE_SHA" ]] || fail 'configured engine revision disagrees with the website engine lock'
+fi
 printf 'source=%s engine=%s\n' "$source_sha" "$ENGINE_SHA"
 
 # The engine archive comes from an exact commit in the host's trusted checkout.
@@ -103,8 +145,6 @@ dotnet build "$run_root/engine/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj" \
   --configfile "$run_root/engine/.github/nuget.public.config"
 cli="$run_root/engine/PowerForge.Web.Cli/bin/Release/net10.0/PowerForge.Web.Cli.dll"
 [[ -s $cli ]] || fail 'pinned engine CLI build produced no executable'
-website="$run_root/source/$WEBSITE_DIRECTORY"
-[[ -f $website/$PIPELINE_CONFIG ]] || fail 'pipeline config is missing from fetched source'
 (cd "$website" && dotnet "$cli" pipeline --config "$PIPELINE_CONFIG" --mode ci)
 site_output="$website/_site"
 [[ -s $site_output/index.html ]] || fail 'website pipeline produced no index.html'
