@@ -89,6 +89,7 @@ The shared visual system is a navy 70 px rail and title band, white workspace, r
 - [x] Project GitHub keeps checks and conversation in the first wide viewport; the reviewed-action draft is available from a collapsed section rather than occupying the default detail view.
 - [x] Files shows observed modification dates beside names and sizes at wide width; compact width keeps the name and size columns legible, with the full UTC timestamp available in the inspector.
 - [x] Storage now uses a denser divided table, a clearer removal-review action, and a collapsed full-path field so safety evidence stays visible. Wide, compact and expanded-path headless renders were inspected.
+- [x] Files shows the current folder relative to the working copy, with the absolute path on hover. The file list and preview share compact divided headers, and the Edit action sits beside the preview title. Wide and compact headless renders were inspected.
 - [x] Compare current Avalonia wide and compact renders for each pattern against this set.
 - [ ] Close the remaining shell, density, inspector and output-dock differences in the running application.
 - [ ] Capture final native Windows and headless evidence after the last visual change.

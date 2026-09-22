@@ -194,6 +194,18 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     public bool HasSelectedFile => SelectedFile is not null;
     public string SelectedFileRelativePath => SelectedFile is null || string.IsNullOrEmpty(ActiveWorkingCopyRoot)
         ? "" : Path.GetRelativePath(ActiveWorkingCopyRoot, SelectedFile.FullPath);
+    public string CurrentDirectoryDisplay
+    {
+        get
+        {
+            if (!HasWorkingCopy) return "Choose a working copy";
+            if (string.IsNullOrEmpty(CurrentDirectory) || SamePath(CurrentDirectory, ActiveWorkingCopyRoot)) return "Working copy";
+            var relative = Path.GetRelativePath(ActiveWorkingCopyRoot, CurrentDirectory).Replace('\\', '/');
+            return relative == ".." || relative.StartsWith("../", StringComparison.Ordinal)
+                ? "Working copy"
+                : "Working copy / " + relative;
+        }
+    }
     public bool CanManageFiles => HasWorkingCopy && !IsSelectionLoading && !IsFileOperationRunning;
 
     partial void OnActiveWorkingCopyRootChanged(string value)
@@ -213,8 +225,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         if (_sessionReady || !string.IsNullOrEmpty(value)) Release.SetHistoryScope(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
         OnPropertyChanged(nameof(SelectedFileRelativePath));
+        OnPropertyChanged(nameof(CurrentDirectoryDisplay));
         OnPropertyChanged(nameof(CanManageFiles));
     }
+    partial void OnCurrentDirectoryChanged(string value) => OnPropertyChanged(nameof(CurrentDirectoryDisplay));
     partial void OnIsFileOperationRunningChanged(bool value) { OnPropertyChanged(nameof(CanManageFiles)); NotifyEditorChanged(); }
     partial void OnIsSelectionLoadingChanged(bool value) { OnPropertyChanged(nameof(CanManageFiles)); NotifyEditorChanged(); }
     partial void OnSelectedFileChanged(FileItemViewModel? value)

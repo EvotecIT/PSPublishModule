@@ -4,7 +4,7 @@
              x:Class="PowerForgeStudio.Avalonia.Views.FilesView" x:DataType="vm:WorkspaceViewModel">
   <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="22,18">
     <TextBlock Text="Files" Classes="heading" />
-    <TextBlock Grid.Row="1" Text="{Binding CurrentDirectory}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentDirectory}" Margin="0,9,0,13" />
+    <TextBlock Grid.Row="1" Text="{Binding CurrentDirectoryDisplay}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentDirectory}" Margin="0,9,0,13" />
     <Border Grid.Row="2" Background="#F5F8FD" BorderBrush="#DDE7F3" BorderThickness="1" CornerRadius="7"
             Padding="7,5" Margin="0,0,0,13" IsEnabled="{Binding CanManageFiles}" IsVisible="{Binding IsPreviewVisible}">
       <WrapPanel ItemSpacing="3" LineSpacing="3">
@@ -46,12 +46,14 @@
     <Grid Grid.Row="3" ColumnDefinitions="0.85*,14,1.15*">
       <Border Classes="card" IsVisible="{Binding IsPreviewVisible}">
         <Grid RowDefinitions="42,*">
-          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="9" Margin="15,12">
-            <TextBlock Text="Name" FontWeight="SemiBold" />
-            <TextBlock Grid.Column="1" Text="Modified" FontWeight="SemiBold"
-                       IsVisible="{ReflectionBinding !DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}" />
-            <TextBlock Grid.Column="2" Text="Size" FontWeight="SemiBold" MinWidth="45" TextAlignment="Right" />
-          </Grid>
+          <Border Background="#F4F8FD" BorderBrush="#DDE7F3" BorderThickness="0,0,0,1" CornerRadius="7,7,0,0">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="9" Margin="15,12">
+              <TextBlock Text="Name" FontWeight="SemiBold" />
+              <TextBlock Grid.Column="1" Text="Modified" FontWeight="SemiBold"
+                         IsVisible="{ReflectionBinding !DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}" />
+              <TextBlock Grid.Column="2" Text="Size" FontWeight="SemiBold" MinWidth="45" TextAlignment="Right" />
+            </Grid>
+          </Border>
           <ListBox Grid.Row="1" x:Name="FileList" ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
                    DoubleTapped="OpenFile" KeyDown="FileKeyDown" Background="Transparent">
             <ListBox.ItemTemplate>
@@ -71,9 +73,13 @@
       </Border>
       <Border Grid.Column="{Binding EditorColumn}" Grid.ColumnSpan="{Binding EditorColumnSpan}" Classes="card">
         <Grid RowDefinitions="42,Auto,Auto,*">
-          <TextBlock Text="{Binding PreviewTitle}" FontWeight="SemiBold" Margin="15,12" TextTrimming="CharacterEllipsis" />
+          <Border Background="#F4F8FD" BorderBrush="#DDE7F3" BorderThickness="0,0,0,1" CornerRadius="7,7,0,0">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="15,5">
+              <TextBlock Text="{Binding PreviewTitle}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              <Button Grid.Column="1" Content="Edit" Click="BeginEdit" IsVisible="{Binding IsPreviewVisible}" IsEnabled="{Binding CanEditDocument}" Padding="10,5" />
+            </Grid>
+          </Border>
           <WrapPanel Grid.Row="1" Margin="12,0,12,8">
-            <Button Content="Edit" Click="BeginEdit" IsVisible="{Binding IsPreviewVisible}" IsEnabled="{Binding CanEditDocument}" Margin="0,0,6,4" />
             <Button Content="Save" Command="{Binding SaveActiveDocumentCommand}" IsVisible="{Binding IsEditorVisible}" IsEnabled="{Binding CanSaveDocument}" Margin="0,0,6,4" />
             <Button Content="Reload" Command="{Binding ReloadDocumentCommand}" IsVisible="{Binding IsEditorVisible}" IsEnabled="{Binding CanEditDocument}" Margin="0,0,6,4" />
             <Button Content="Browse files" Command="{Binding ShowWorkspaceCommand}" IsVisible="{Binding IsEditorVisible}" Margin="0,0,6,4" />
