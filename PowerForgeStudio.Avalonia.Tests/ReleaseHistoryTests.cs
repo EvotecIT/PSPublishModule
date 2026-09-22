@@ -105,6 +105,7 @@ public sealed class ReleaseHistoryTests
                 await release.OpenHistoryAsync();
 
                 Assert.Equal(events, release.ExecutionProgress);
+                Assert.Equal(events.Reverse(), release.RecentExecutionProgress);
                 Assert.Equal("Verified", release.ProgressStatus.Split('·')[1].Trim());
                 Assert.Equal(1, release.ProgressCompleted);
                 Assert.Equal(1, release.ProgressTotal);
@@ -167,6 +168,7 @@ public sealed class ReleaseHistoryTests
                     await reopened.OpenHistoryAsync(); Assert.Single(reopened.Receipts); Assert.False(reopened.CanSign);
                     Assert.Equal(2, reopened.ExecutionProgress.Count);
                     Assert.Equal("Signed", reopened.ExecutionProgress[^1].State);
+                    Assert.Equal("Signed", reopened.RecentExecutionProgress[0].State);
                     Assert.Equal(1, reopened.ProgressCompleted);
                     Assert.False(reopened.CanPrepare); Assert.Equal(root, reopened.BuildRoot); Assert.True(reopened.HasBuildRoot);
                     using var reopenedWorkspace = new WorkspaceViewModel(root, release: reopened);

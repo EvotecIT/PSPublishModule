@@ -9,6 +9,7 @@ public sealed partial class ReleaseViewModel
 {
     private const int MaximumVisibleProgressEvents = 100;
     public ObservableCollection<ReleaseArtifactProgress> ExecutionProgress { get; } = [];
+    public ObservableCollection<ReleaseArtifactProgress> RecentExecutionProgress { get; } = [];
     [ObservableProperty] private int _progressCompleted;
     [ObservableProperty] private int _progressTotal;
     [ObservableProperty] private string _progressStatus = "";
@@ -25,6 +26,7 @@ public sealed partial class ReleaseViewModel
     private void ResetExecutionProgress()
     {
         ExecutionProgress.Clear();
+        RecentExecutionProgress.Clear();
         ProgressCompleted = 0;
         ProgressTotal = 0;
         ProgressStatus = "";
@@ -42,7 +44,12 @@ public sealed partial class ReleaseViewModel
     {
         if (_disposed) return;
         ExecutionProgress.Add(progress);
-        while (ExecutionProgress.Count > MaximumVisibleProgressEvents) ExecutionProgress.RemoveAt(0);
+        RecentExecutionProgress.Insert(0, progress);
+        while (ExecutionProgress.Count > MaximumVisibleProgressEvents)
+        {
+            ExecutionProgress.RemoveAt(0);
+            RecentExecutionProgress.RemoveAt(RecentExecutionProgress.Count - 1);
+        }
         ProgressCompleted = Math.Clamp(progress.CompletedItems, 0, Math.Max(0, progress.TotalItems));
         ProgressTotal = Math.Max(0, progress.TotalItems);
         ProgressStatus = progress.Display;

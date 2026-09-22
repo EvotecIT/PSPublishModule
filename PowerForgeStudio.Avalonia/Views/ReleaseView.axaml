@@ -103,11 +103,11 @@
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
-      <TextBlock Grid.Row="2" IsVisible="{Binding HasExecutionProgress}" Text="Release execution progress" FontSize="16" FontWeight="SemiBold" />
+      <TextBlock Grid.Row="2" IsVisible="{Binding HasExecutionProgress}" Text="Release activity · newest first" FontSize="16" FontWeight="SemiBold" />
       <ProgressBar Grid.Row="3" Minimum="0" Maximum="{Binding ProgressTotal}" Value="{Binding ProgressCompleted}" IsVisible="{Binding HasDeterminateProgress}" Height="4" />
       <ProgressBar Grid.Row="3" IsIndeterminate="True" IsVisible="{Binding ShowIndeterminateProgress}" Height="4" />
       <TextBlock Grid.Row="4" Text="{Binding ProgressStatus}" IsVisible="{Binding HasExecutionProgress}" FontWeight="SemiBold" TextWrapping="Wrap" />
-      <ListBox Grid.Row="5" IsVisible="{Binding HasExecutionProgress}" MaxHeight="180" ItemsSource="{Binding ExecutionProgress}" Background="#F7F9FC">
+      <ListBox Grid.Row="5" IsVisible="{Binding HasExecutionProgress}" MaxHeight="180" ItemsSource="{Binding RecentExecutionProgress}" Background="#F7F9FC">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="queue:ReleaseArtifactProgress">
             <StackPanel Spacing="4" Margin="8">

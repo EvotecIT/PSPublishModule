@@ -165,6 +165,8 @@ Studio checks that the certificate is available when you prepare a release. `Cer
 
 Publication remains a separate reviewed action. Configure the intended JSON destinations, inspect them in Releases, explicitly approve the displayed targets and enable `RELEASE_OPS_STUDIO_ENABLE_PUBLISH=true` only for the Studio process that should publish. A local NuGet feed can be used for a disposable end-to-end check without public credentials.
 
+The Release activity list shows the newest update first so the current result stays visible; saved history retains the full chronological event record and receipts.
+
 A published app still resolves its machine-local workspace and release state under the platform application-data folder. Build, signing and publication availability then depends on the PowerForge and toolchain evidence shown by Studio Connections.
 
 ## Quick command list
