@@ -42,21 +42,27 @@
           <TextBlock Text="{Binding Status}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
           <Button Grid.Column="1" Content="Cancel scan" Command="{Binding CancelRefreshCommand}" />
         </Grid>
-        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent}" Height="5" />
+        <ProgressBar Minimum="0" Maximum="100" Value="{Binding ScanProgressPercent}" IsIndeterminate="{Binding IsMeasuringOtherFolders}" Height="5" />
       </StackPanel>
+      <TextBlock Text="{Binding OtherFolderCount, StringFormat='{}{0} other folders under _worktrees are outside the scanned Git registrations; inspect them separately before considering cleanup.'}"
+                 Classes="muted" TextWrapping="Wrap" IsVisible="{Binding HasOtherFolders}" />
+      <TextBlock Text="{Binding OtherFolderScanWarning}" Foreground="#98620C" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding RegistrationScanWarning}" Foreground="#98620C" TextWrapping="Wrap" />
       <WrapPanel ItemSpacing="8" LineSpacing="8">
         <Button Content="All working copies" Classes="chip" Classes.active="{Binding IsAllFilter}" Command="{Binding ShowAllCommand}" />
         <Button Content="Review candidates" Classes="chip" Classes.active="{Binding IsCandidatesFilter}" Command="{Binding ShowCandidatesCommand}" />
         <Button Content="Changed" Classes="chip" Classes.active="{Binding IsChangedFilter}" Command="{Binding ShowChangedCommand}" />
         <Button Content="Broken references" Classes="chip" Classes.active="{Binding IsBrokenFilter}" Command="{Binding ShowBrokenCommand}" />
+        <Button Content="Other folders" Classes="chip" Classes.active="{Binding IsOtherFilter}" Command="{Binding ShowOtherCommand}" />
       </WrapPanel>
       <WrapPanel ItemSpacing="8" LineSpacing="8">
-        <Button Content="Open selected" Click="OpenSelected" IsEnabled="{Binding SelectedEntry.Exists}" />
-        <Button Content="Review removal" Click="ReviewRemoval" IsEnabled="{Binding CanReviewRemoval}" Classes="primary" />
-        <Button Content="Review stale registrations" Click="ReviewPrune" IsEnabled="{Binding CanReviewPrune}" />
+        <Button Content="Open selected" Click="OpenSelected" IsEnabled="{Binding SelectedEntry.Exists}" IsVisible="{Binding !IsOtherFilter}" />
+        <Button Content="Open other folder" Click="OpenSelectedOther" IsEnabled="{Binding HasSelectedOtherFolder}" IsVisible="{Binding IsOtherFilter}" />
+        <Button Content="Review removal" Click="ReviewRemoval" IsEnabled="{Binding CanReviewRemoval}" IsVisible="{Binding !IsOtherFilter}" Classes="primary" />
+        <Button Content="Review stale registrations" Click="ReviewPrune" IsEnabled="{Binding CanReviewPrune}" IsVisible="{Binding !IsOtherFilter}" />
         <Button Content="Refresh inspection" Command="{Binding RefreshCommand}" IsEnabled="{Binding !IsLoading}" />
       </WrapPanel>
-      <Border Classes="card" Padding="0" MinHeight="280">
+      <Border Classes="card" Padding="0" MinHeight="280" IsVisible="{Binding !IsOtherFilter}">
         <Grid RowDefinitions="42,*">
           <Border Background="#F4F8FD" BorderBrush="#D9E3F0" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="2*,90,1.2*,1.5*" ColumnSpacing="12" Margin="16,0">
@@ -78,6 +84,31 @@
                       <TextBlock Grid.Column="1" Text="{Binding LocalStateDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
                     </Grid>
                     <TextBlock Grid.Column="3" Text="{Binding NextCheck}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Grid.Row="1" Text="{Binding EmptyMessage}" IsVisible="{Binding ShowEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Classes="muted" />
+        </Grid>
+      </Border>
+      <Border Classes="card" Padding="0" MinHeight="280" IsVisible="{Binding IsOtherFilter}">
+        <Grid RowDefinitions="42,*">
+          <Border Background="#F4F8FD" BorderBrush="#D9E3F0" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="2*,90,1.3*" ColumnSpacing="12" Margin="16,0">
+              <TextBlock Text="Other _worktrees folder" Classes="muted" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="Size" Classes="muted" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="Observed kind" Classes="muted" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+          <ListBox Grid.Row="1" ItemsSource="{Binding OtherFolders}" SelectedItem="{Binding SelectedOtherFolder, Mode=TwoWay}" Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="workspace:WorkspaceStorageOtherFolder">
+                <Border BorderBrush="#E5ECF5" BorderThickness="0,0,0,1">
+                  <Grid ColumnDefinitions="2*,90,1.3*" ColumnSpacing="12" Margin="16,6">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+                    <TextBlock Grid.Column="1" Text="{Binding SizeDisplay}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Text="{Binding Kind}" VerticalAlignment="Center" TextWrapping="Wrap" />
                   </Grid>
                 </Border>
               </DataTemplate>

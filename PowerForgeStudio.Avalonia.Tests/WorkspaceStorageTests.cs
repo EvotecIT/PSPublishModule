@@ -304,6 +304,83 @@ public sealed class WorkspaceStorageTests
         }
     }
 
+    [Fact]
+    public async Task OtherWorktreeFoldersRenderSeparatelyWithoutRemovalControls()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-storage-other-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var primary = Directory.CreateDirectory(Path.Combine(root, "Product")).FullName;
+            Assert.True((await new GitClient().RunRawAsync(primary, ["init", "-b", "main"])).Succeeded);
+            var otherPath = Directory.CreateDirectory(Path.Combine(root, "_worktrees", "unclassified")).FullName;
+            var entry = Entry("Product", primary, primary, "main", true, 1024, "Clean", 0,
+                "Not checked", "Retain primary checkout", false);
+            var other = new WorkspaceStorageOtherFolder(otherPath, "Folder without Git metadata", 2048, 2, null);
+
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                using var model = new WorkspaceViewModel(root,
+                    storage: new FakeStorageInspectionService([entry], [other]));
+                await model.RefreshAsync();
+                await model.ShowStorageCommand.ExecuteAsync(null);
+                model.Storage.ShowOtherCommand.Execute(null);
+
+                Assert.True(model.Storage.IsOtherFilter);
+                Assert.Equal(otherPath, model.Storage.SelectedOtherFolder?.Path);
+                Assert.Null(model.Storage.SelectedEntry);
+                Assert.False(model.Storage.CanReviewRemoval);
+                Assert.False(model.Storage.CanReviewPrune);
+
+                var window = new MainWindow { DataContext = model, Width = 1600, Height = 1000 };
+                window.Show();
+                try
+                {
+                    var storage = window.GetVisualDescendants().OfType<StorageView>().Single();
+                    Assert.DoesNotContain(storage.GetVisualDescendants().OfType<Button>(), button =>
+                        Equals(button.Content, "Review removal") && button.IsVisible);
+                    Capture(window, "storage-other-folders-wide.png");
+                    window.Width = 1050;
+                    window.Height = 720;
+                    window.UpdateLayout();
+                    Capture(window, "storage-other-folders-compact.png");
+                    var details = window.FindControl<Button>("CompactContextButton")!;
+                    details.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.Equal("Projects", details.Content);
+                    Capture(window, "storage-other-folders-compact-details.png");
+                }
+                finally { window.Close(); }
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task IncompleteRegistrationsShowPartialInventoryInsteadOfAnEmptyOtherFolderClaim()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-storage-partial-" + Guid.NewGuid().ToString("N"));
+        await TestAppBuilder.RunAsync(async () =>
+        {
+            using var model = new StorageViewModel(new FakeStorageInspectionService([], registrationScanWarning:
+                "Git worktree registrations could not be read completely; inventory is partial."));
+            model.SetWorkspace(root);
+            model.ShowOtherCommand.Execute(null);
+            var window = new Window { Content = new StorageView { DataContext = model }, Width = 1050, Height = 720 };
+            window.Show();
+            try
+            {
+                await model.RefreshAsync();
+                Assert.Contains("Partial inventory", model.Status);
+                Assert.Contains("not classified", model.EmptyMessage);
+                Assert.Empty(model.OtherFolders);
+                Capture(window, "storage-partial-registrations.png");
+            }
+            finally { window.Close(); }
+            return true;
+        });
+    }
+
     private static WorkspaceStorageEntry Entry(
         string repository,
         string path,
@@ -370,7 +447,10 @@ public sealed class WorkspaceStorageTests
         }
     }
 
-    private sealed class FakeStorageInspectionService(IReadOnlyList<WorkspaceStorageEntry> entries) : IWorkspaceStorageInspectionService
+    private sealed class FakeStorageInspectionService(
+        IReadOnlyList<WorkspaceStorageEntry> entries,
+        IReadOnlyList<WorkspaceStorageOtherFolder>? otherFolders = null,
+        string? registrationScanWarning = null) : IWorkspaceStorageInspectionService
     {
         public Task<WorkspaceStorageSnapshot> InspectAsync(string workspaceRoot, CancellationToken cancellationToken = default)
         {
@@ -381,7 +461,10 @@ public sealed class WorkspaceStorageTests
                 entries.Sum(static entry => entry.SizeBytes),
                 entries.Where(static entry => !entry.IsPrimary).Sum(static entry => entry.SizeBytes),
                 entries.Count(static entry => entry.IsReviewCandidate),
-                entries));
+                entries,
+                otherFolders,
+                registrationScanWarning is null ? null : "Other _worktrees folders were not classified because Git registrations are incomplete.",
+                registrationScanWarning));
         }
     }
 

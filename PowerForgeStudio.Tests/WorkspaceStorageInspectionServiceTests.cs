@@ -78,6 +78,74 @@ public sealed class WorkspaceStorageInspectionServiceTests : IDisposable
         Assert.Contains("prune", broken.NextCheck, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task StorageListsGitCheckoutsWithoutTreatingLocalBuildFoldersAsWorkingCopies()
+    {
+        var workspace = Directory.CreateDirectory(Path.Combine(_fixture, "Workspace")).FullName;
+        var primary = Directory.CreateDirectory(Path.Combine(workspace, "Product")).FullName;
+        await Run(primary, "init", "-b", "main");
+        var localBuild = Directory.CreateDirectory(Path.Combine(workspace, "LocalBuild", "Build")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(localBuild, "project.build.json"), "{}");
+
+        var snapshot = await new WorkspaceStorageInspectionService().InspectAsync(workspace);
+
+        var entry = Assert.Single(snapshot.Entries);
+        Assert.Equal(primary, entry.Path);
+        Assert.True(entry.IsPrimary);
+    }
+
+    [Fact]
+    public async Task OtherWorktreeContainerFoldersAreVisibleWithoutBecomingRemovalCandidates()
+    {
+        var workspace = Directory.CreateDirectory(Path.Combine(_fixture, "Workspace")).FullName;
+        var primary = Directory.CreateDirectory(Path.Combine(workspace, "Product")).FullName;
+        await Run(primary, "init", "-b", "main");
+        await Run(primary, "config", "user.email", "studio@example.test");
+        await Run(primary, "config", "user.name", "Studio Test");
+        await File.WriteAllTextAsync(Path.Combine(primary, "README.md"), "primary");
+        await Run(primary, "add", "README.md");
+        await Run(primary, "commit", "-m", "Initial");
+
+        var container = Directory.CreateDirectory(Path.Combine(workspace, "_worktrees")).FullName;
+        var registered = Path.Combine(container, "registered");
+        await Run(primary, "worktree", "add", "-b", "feature/registered", registered);
+        var independent = Directory.CreateDirectory(Path.Combine(container, "independent")).FullName;
+        await Run(independent, "init", "-b", "main");
+        var linked = Directory.CreateDirectory(Path.Combine(container, "linked")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(linked, ".git"), "gitdir: ../missing-owner/.git/worktrees/linked");
+        var plain = Directory.CreateDirectory(Path.Combine(container, "plain")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(plain, "notes.txt"), "keep");
+
+        var snapshot = await new WorkspaceStorageInspectionService().InspectAsync(workspace);
+
+        Assert.Equal(2, snapshot.Entries.Count);
+        Assert.DoesNotContain(snapshot.UnregisteredFolders, folder => folder.Path == registered);
+        Assert.Equal(3, snapshot.UnregisteredFolders.Count);
+        Assert.Equal("Independent Git checkout", Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == independent).Kind);
+        Assert.Equal("Git-linked folder", Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == linked).Kind);
+        Assert.Equal("Folder without Git metadata", Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == plain).Kind);
+        Assert.True(snapshot.OtherFolderBytes > 0);
+        Assert.All(snapshot.Entries.Where(entry => entry.IsReviewCandidate), entry => Assert.NotEqual(independent, entry.Path));
+    }
+
+    [Fact]
+    public async Task FailedGitRegistrationListingDoesNotClassifyOtherFolders()
+    {
+        var workspace = Directory.CreateDirectory(Path.Combine(_fixture, "Workspace")).FullName;
+        var primary = Directory.CreateDirectory(Path.Combine(workspace, "Product")).FullName;
+        Directory.CreateDirectory(Path.Combine(primary, ".git"));
+        var unknown = Directory.CreateDirectory(Path.Combine(workspace, "_worktrees", "possibly-registered")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(unknown, "notes.txt"), "retain");
+
+        var snapshot = await new WorkspaceStorageInspectionService().InspectAsync(workspace);
+
+        Assert.False(snapshot.IsRegistrationInventoryComplete);
+        Assert.Contains("partial", snapshot.RegistrationScanWarning!, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(snapshot.UnregisteredFolders);
+        Assert.Contains("not classified", snapshot.OtherFolderScanWarning!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Git inspection failed", Assert.Single(snapshot.Entries).LocalState);
+    }
+
     private async Task Run(string root, params string[] arguments)
     {
         var result = await _git.RunRawAsync(root, arguments);

@@ -438,8 +438,8 @@
           <ScrollViewer IsVisible="{Binding IsStoragePage}">
             <StackPanel Spacing="12" DataContext="{Binding Storage}">
               <TextBlock Text="Review evidence" FontWeight="SemiBold" FontSize="16" />
-              <TextBlock Text="Select a working copy to inspect its local evidence." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasSelection}" />
-              <StackPanel Spacing="12" IsVisible="{Binding HasSelection}">
+              <TextBlock Text="Select a working copy or other folder to inspect its local evidence." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasSelection}" />
+              <StackPanel Spacing="12" IsVisible="{Binding HasSelectedWorkingCopy}">
                 <TextBlock Text="{Binding SelectedEntry.DisplayName}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
                 <Expander x:Name="StoragePathExpander" Header="Full working-copy path" FontSize="12">
                   <TextBox Text="{Binding SelectedEntry.Path}" IsReadOnly="True" TextWrapping="Wrap" MinHeight="42" MaxHeight="96" FontSize="12"
@@ -465,6 +465,19 @@
                   <TextBlock Text="Candidate rows are local evidence. Use Review removal to refresh remote, Studio-use and retained-content checks." TextWrapping="Wrap" />
                 </Border>
                 <TextBlock Text="{Binding SelectedEntry.Warning}" Foreground="#BA2737" TextWrapping="Wrap" />
+              </StackPanel>
+              <StackPanel Spacing="12" IsVisible="{Binding HasSelectedOtherFolder}">
+                <TextBlock Text="{Binding SelectedOtherFolder.Name}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SelectedOtherFolder.Kind}" Foreground="#98620C" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SelectedOtherFolder.SizeDisplay, StringFormat='Size evidence: {0}'}" TextWrapping="Wrap" />
+                <Expander Header="Full folder path" FontSize="12">
+                  <TextBox Text="{Binding SelectedOtherFolder.Path}" IsReadOnly="True" TextWrapping="Wrap" MinHeight="42" MaxHeight="96" FontSize="12"
+                           BorderThickness="0" Background="Transparent" Padding="0" AutomationProperties.Name="Selected other folder path" />
+                </Expander>
+                <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10">
+                  <TextBlock Text="This folder was not found in the scanned workspace Git registrations. It is not classified as unused or safe to remove; Studio offers no removal action here." TextWrapping="Wrap" />
+                </Border>
+                <TextBlock Text="{Binding SelectedOtherFolder.Warning}" Foreground="#BA2737" TextWrapping="Wrap" />
               </StackPanel>
             </StackPanel>
           </ScrollViewer>

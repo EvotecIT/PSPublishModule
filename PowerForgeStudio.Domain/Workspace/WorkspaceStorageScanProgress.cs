@@ -6,7 +6,8 @@ public sealed record WorkspaceStorageScanProgress(
     int TotalRepositories,
     string WorkingCopyPath,
     long MeasuredBytes,
-    int MeasuredItems)
+    int MeasuredItems,
+    bool IsOtherFolder = false)
 {
     public string MeasuredDisplay => MeasuredBytes >= 1024L * 1024 * 1024
         ? $"{MeasuredBytes / (1024d * 1024 * 1024):0.0} GiB"

@@ -27,6 +27,24 @@ public sealed partial class StorageView : UserControl
         }
     }
 
+    private void OpenSelectedOther(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is not StorageViewModel { SelectedOtherFolder: { } folder })
+            return;
+        try
+        {
+            Process.Start(new ProcessStartInfo(folder.Path) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            if (DataContext is StorageViewModel model)
+            {
+                model.Status = "Could not open the selected folder.";
+                model.Output = ViewModels.StudioDisplayError.From(ex);
+            }
+        }
+    }
+
     private async void ReviewRemoval(object? sender, RoutedEventArgs args)
     {
         if (DataContext is not StorageViewModel model || TopLevel.GetTopLevel(this) is not Window owner)

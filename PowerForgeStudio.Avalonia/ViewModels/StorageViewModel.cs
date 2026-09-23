@@ -15,6 +15,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     private readonly bool _ownsRemoval;
     private readonly Func<IReadOnlyCollection<string>> _protectedWorkingCopies;
     private readonly List<WorkspaceStorageEntry> _allEntries = [];
+    private readonly List<WorkspaceStorageOtherFolder> _allOtherFolders = [];
     private CancellationTokenSource? _refreshCancellation;
     private int _refreshVersion;
     private int _reviewVersion;
@@ -31,14 +32,21 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<WorkspaceStorageEntry> Entries { get; } = [];
+    public ObservableCollection<WorkspaceStorageOtherFolder> OtherFolders { get; } = [];
     [ObservableProperty] private WorkspaceStorageEntry? _selectedEntry;
+    [ObservableProperty] private WorkspaceStorageOtherFolder? _selectedOtherFolder;
     [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private bool _isMeasuringOtherFolders;
     [ObservableProperty] private double _scanProgressPercent;
     [ObservableProperty] private string _status = "Open Storage to inspect local working copies.";
     [ObservableProperty] private string _emptyMessage = "Refresh inspection to measure working copies.";
     [ObservableProperty] private string _output = "Storage inspection has not run.";
     [ObservableProperty] private string _indexedDisplay = "—";
     [ObservableProperty] private string _worktreeDisplay = "—";
+    [ObservableProperty] private string _otherFolderDisplay = "—";
+    [ObservableProperty] private int _otherFolderCount;
+    [ObservableProperty] private string _otherFolderScanWarning = "";
+    [ObservableProperty] private string _registrationScanWarning = "";
     [ObservableProperty] private int _candidateCount;
     [ObservableProperty] private string _filter = "All";
     [ObservableProperty] private WorkspaceStorageRemovalReview? _removalReview;
@@ -53,13 +61,17 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _confirmPrunableRegistrations;
     [ObservableProperty] private string _pruneError = "";
     public string WorkspaceRoot { get; private set; } = "";
-    public bool HasEntries => Entries.Count > 0;
+    public bool HasEntries => IsOtherFilter ? OtherFolders.Count > 0 : Entries.Count > 0;
     public bool ShowEmpty => !IsLoading && !HasEntries;
-    public bool HasSelection => SelectedEntry is not null;
+    public bool HasSelection => SelectedEntry is not null || SelectedOtherFolder is not null;
+    public bool HasSelectedWorkingCopy => SelectedEntry is not null;
+    public bool HasSelectedOtherFolder => SelectedOtherFolder is not null;
+    public bool HasOtherFolders => OtherFolderCount > 0;
     public bool IsAllFilter => Filter == "All";
     public bool IsCandidatesFilter => Filter == "Candidates";
     public bool IsChangedFilter => Filter == "Changed";
     public bool IsBrokenFilter => Filter == "Broken";
+    public bool IsOtherFilter => Filter == "Other";
 
     public bool CanReviewRemoval => SelectedEntry is { IsPrimary: false, Exists: true } && !IsBusy;
     public bool CanRemoveReviewed => RemovalReview is { ReadyForConfirmation: true } review &&
@@ -70,6 +82,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedEntryChanged(WorkspaceStorageEntry? value)
     {
+        if (value is not null && SelectedOtherFolder is not null) SelectedOtherFolder = null;
         _reviewVersion++;
         IsReviewingRemoval = false;
         IsReviewingPrune = false;
@@ -81,8 +94,15 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         ConfirmPrunableRegistrations = false;
         PruneError = "";
         OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(HasSelectedWorkingCopy));
         OnPropertyChanged(nameof(CanReviewRemoval));
         OnPropertyChanged(nameof(CanReviewPrune));
+    }
+    partial void OnSelectedOtherFolderChanged(WorkspaceStorageOtherFolder? value)
+    {
+        if (value is not null && SelectedEntry is not null) SelectedEntry = null;
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(HasSelectedOtherFolder));
     }
     partial void OnIsLoadingChanged(bool value)
     {
@@ -98,12 +118,14 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     partial void OnConfirmRetainedArtifactsChanged(bool value) => OnPropertyChanged(nameof(CanRemoveReviewed));
     partial void OnPruneReviewChanged(WorkspaceStoragePruneReview? value) => OnPropertyChanged(nameof(CanPruneReviewed));
     partial void OnConfirmPrunableRegistrationsChanged(bool value) => OnPropertyChanged(nameof(CanPruneReviewed));
+    partial void OnOtherFolderCountChanged(int value) => OnPropertyChanged(nameof(HasOtherFolders));
     partial void OnFilterChanged(string value)
     {
         OnPropertyChanged(nameof(IsAllFilter));
         OnPropertyChanged(nameof(IsCandidatesFilter));
         OnPropertyChanged(nameof(IsChangedFilter));
         OnPropertyChanged(nameof(IsBrokenFilter));
+        OnPropertyChanged(nameof(IsOtherFilter));
         ApplyFilter();
     }
 
@@ -116,12 +138,20 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         _reviewVersion++;
         _refreshCancellation?.Cancel();
         IsLoading = false;
+        IsMeasuringOtherFolders = false;
         WorkspaceRoot = full;
         _allEntries.Clear();
+        _allOtherFolders.Clear();
         Entries.Clear();
+        OtherFolders.Clear();
         SelectedEntry = null;
+        SelectedOtherFolder = null;
         IndexedDisplay = "—";
         WorktreeDisplay = "—";
+        OtherFolderDisplay = "—";
+        OtherFolderCount = 0;
+        OtherFolderScanWarning = "";
+        RegistrationScanWarning = "";
         CandidateCount = 0;
         ScanProgressPercent = 0;
         Status = "Ready to inspect workspace storage.";
@@ -141,6 +171,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         _refreshCancellation?.Dispose();
         _refreshCancellation = new CancellationTokenSource();
         IsLoading = true;
+        IsMeasuringOtherFolders = false;
         ScanProgressPercent = 0;
         Status = "Measuring repositories and registered worktrees…";
         try
@@ -150,7 +181,10 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
                 if (version != _refreshVersion || !IsLoading || _refreshCancellation?.IsCancellationRequested == true || !string.Equals(root, WorkspaceRoot,
                         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
                 ScanProgressPercent = item.TotalRepositories == 0 ? 0 : 100d * item.CompletedRepositories / item.TotalRepositories;
-                Status = $"Measuring {Path.GetFileName(item.WorkingCopyPath)} · {item.CompletedRepositories}/{item.TotalRepositories} repositories · {item.MeasuredDisplay} in current copy";
+                IsMeasuringOtherFolders = item.IsOtherFolder;
+                Status = item.IsOtherFolder
+                    ? $"Measuring other _worktrees folder {Path.GetFileName(item.WorkingCopyPath)} · {item.MeasuredDisplay} in current folder"
+                    : $"Measuring {Path.GetFileName(item.WorkingCopyPath)} · {item.CompletedRepositories}/{item.TotalRepositories} repositories · {item.MeasuredDisplay} in current copy";
             }));
             var snapshot = await _inspection.InspectAsync(root, progress, _refreshCancellation.Token);
             if (version != _refreshVersion || !string.Equals(root, WorkspaceRoot,
@@ -161,15 +195,32 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
             {
                 Warning = entry.Warning is null ? null : StudioOutputSanitizer.Sanitize(entry.Warning)
             }));
+            _allOtherFolders.Clear();
+            _allOtherFolders.AddRange(snapshot.UnregisteredFolders.Select(folder => folder with
+            {
+                Warning = folder.Warning is null ? null : StudioOutputSanitizer.Sanitize(folder.Warning)
+            }));
             IndexedDisplay = snapshot.IndexedDisplay;
             WorktreeDisplay = snapshot.WorktreeDisplay;
+            OtherFolderDisplay = snapshot.OtherFolderDisplay;
+            OtherFolderCount = _allOtherFolders.Count;
+            OtherFolderScanWarning = snapshot.OtherFolderScanWarning is null ? "" : StudioOutputSanitizer.Sanitize(snapshot.OtherFolderScanWarning);
+            RegistrationScanWarning = snapshot.RegistrationScanWarning is null ? "" : StudioOutputSanitizer.Sanitize(snapshot.RegistrationScanWarning);
             CandidateCount = snapshot.ReviewCandidateCount;
-            EmptyMessage = "No working copies match this filter.";
+            EmptyMessage = IsOtherFilter && !snapshot.IsRegistrationInventoryComplete
+                ? "Other folders were not classified because Git registrations are incomplete. Refresh inspection to retry."
+                : IsOtherFilter ? "No other folders were found in _worktrees." : "No working copies match this filter.";
             ApplyFilter();
-            Status = $"Inspected {snapshot.Entries.Count} working copies. No files were removed.";
-            Output = $"[{snapshot.InspectedAtUtc:HH:mm:ss}] Storage inspection complete — {snapshot.Entries.Count} working copies, " +
-                     $"{snapshot.IndexedDisplay} indexed, {snapshot.WorktreeDisplay} in worktrees, {snapshot.ReviewCandidateCount} review candidate(s).\n" +
-                     "Candidate status is local evidence only. Open Review removal to refresh remote, Studio-use and retained-content evidence.";
+            Status = (snapshot.IsRegistrationInventoryComplete ? "Inspected " : "Partial inventory: inspected ") +
+                     $"{snapshot.Entries.Count} working copies and {_allOtherFolders.Count} other _worktrees folders. No files were removed.";
+            Output = $"[{snapshot.InspectedAtUtc:HH:mm:ss}] Storage inspection {(snapshot.IsRegistrationInventoryComplete ? "complete" : "partial")} — {snapshot.Entries.Count} working copies, " +
+                     $"{snapshot.IndexedDisplay} indexed, {snapshot.WorktreeDisplay} in registered worktrees, " +
+                     $"{_allOtherFolders.Count} other _worktrees folders ({snapshot.OtherFolderDisplay} measured logical" +
+                     (snapshot.UnmeasuredOtherFolderCount > 0 ? $", {snapshot.UnmeasuredOtherFolderCount} not measured" : "") +
+                     $"), {snapshot.ReviewCandidateCount} review candidate(s).\n" +
+                     "Other folders are not cleanup candidates. Candidate status is local evidence only; Review removal refreshes remote, Studio-use and retained-content evidence." +
+                     (snapshot.RegistrationScanWarning is { Length: > 0 } registrationWarning ? "\n" + registrationWarning : "") +
+                     (snapshot.OtherFolderScanWarning is { Length: > 0 } warning ? "\n" + warning : "");
         }
         catch (OperationCanceledException)
         {
@@ -193,7 +244,10 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
         finally
         {
             if (version == _refreshVersion)
+            {
+                IsMeasuringOtherFolders = false;
                 IsLoading = false;
+            }
         }
     }
 
@@ -209,6 +263,7 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     [RelayCommand] private void ShowCandidates() => Filter = "Candidates";
     [RelayCommand] private void ShowChanged() => Filter = "Changed";
     [RelayCommand] private void ShowBroken() => Filter = "Broken";
+    [RelayCommand] private void ShowOther() => Filter = "Other";
 
     public async Task<bool> ReviewSelectedRemovalAsync()
     {
@@ -350,6 +405,24 @@ public sealed partial class StorageViewModel : ObservableObject, IDisposable
     private void ApplyFilter()
     {
         var selectedPath = SelectedEntry?.Path;
+        var selectedOtherPath = SelectedOtherFolder?.Path;
+        OtherFolders.Clear();
+        if (IsOtherFilter)
+        {
+            Entries.Clear();
+            SelectedEntry = null;
+            foreach (var folder in _allOtherFolders) OtherFolders.Add(folder);
+            SelectedOtherFolder = OtherFolders.FirstOrDefault(folder => string.Equals(folder.Path, selectedOtherPath, PathComparison))
+                ?? OtherFolders.FirstOrDefault();
+            EmptyMessage = RegistrationScanWarning.Length > 0
+                ? "Other folders were not classified because Git registrations are incomplete. Refresh inspection to retry."
+                : "No other folders were found in _worktrees.";
+            OnPropertyChanged(nameof(HasEntries));
+            OnPropertyChanged(nameof(ShowEmpty));
+            return;
+        }
+        SelectedOtherFolder = null;
+        EmptyMessage = "No working copies match this filter.";
         var visible = Filter switch
         {
             "Candidates" => _allEntries.Where(static entry => entry.IsReviewCandidate),
