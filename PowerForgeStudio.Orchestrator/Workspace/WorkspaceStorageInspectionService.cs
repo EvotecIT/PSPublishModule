@@ -138,12 +138,18 @@ public sealed class WorkspaceStorageInspectionService : IWorkspaceStorageInspect
                 }
 
                 var gitPath = Path.Combine(fullPath, ".git");
+                var gitLink = File.Exists(gitPath) ? WorktreeDetector.ResolveGitAdministrativeDirectory(fullPath) : null;
                 var kind = Directory.Exists(gitPath) ? "Independent Git checkout"
-                    : File.Exists(gitPath) ? "Git-linked folder"
+                    : gitLink is not null ? "Git-linked folder"
+                    : File.Exists(gitPath) ? "Folder with .git file"
                     : "Folder without Git metadata";
+                var gitMetadataState = gitLink is null
+                    ? File.Exists(gitPath) ? "Git link could not be resolved" : null
+                    : Directory.Exists(gitLink) ? "Git administrative target present" : "Git administrative target missing";
                 progress?.Report(new(repositoryCount, repositoryCount, fullPath, 0, 0, IsOtherFolder: true));
                 var measured = MeasureDirectory(fullPath, token, progress, repositoryCount, repositoryCount, isOtherFolder: true);
-                folders.Add(new(fullPath, kind, measured.Bytes, measured.Items, measured.Warning));
+                folders.Add(new(fullPath, kind, measured.Bytes, measured.Items, measured.Warning,
+                    GitMetadataState: gitMetadataState));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

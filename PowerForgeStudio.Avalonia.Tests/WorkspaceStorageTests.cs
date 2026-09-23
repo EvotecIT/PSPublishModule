@@ -316,7 +316,8 @@ public sealed class WorkspaceStorageTests
             var otherPath = Directory.CreateDirectory(Path.Combine(root, "_worktrees", "unclassified")).FullName;
             var entry = Entry("Product", primary, primary, "main", true, 1024, "Clean", 0,
                 "Not checked", "Retain primary checkout", false);
-            var other = new WorkspaceStorageOtherFolder(otherPath, "Folder without Git metadata", 2048, 2, null);
+            var other = new WorkspaceStorageOtherFolder(otherPath, "Git-linked folder", 2048, 2, null,
+                GitMetadataState: "Git administrative target missing");
 
             await TestAppBuilder.RunAsync(async () =>
             {
@@ -327,7 +328,9 @@ public sealed class WorkspaceStorageTests
                 model.Storage.ShowOtherCommand.Execute(null);
 
                 Assert.True(model.Storage.IsOtherFilter);
-                Assert.Equal(otherPath, model.Storage.SelectedOtherFolder?.Path);
+                var selectedOther = Assert.IsType<WorkspaceStorageOtherFolder>(model.Storage.SelectedOtherFolder);
+                Assert.Equal(otherPath, selectedOther.Path);
+                Assert.Equal("Git administrative target missing", selectedOther.GitMetadataState);
                 Assert.Null(model.Storage.SelectedEntry);
                 Assert.False(model.Storage.CanReviewRemoval);
                 Assert.False(model.Storage.CanReviewPrune);

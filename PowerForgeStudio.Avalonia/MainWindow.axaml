@@ -469,6 +469,8 @@
               <StackPanel Spacing="12" IsVisible="{Binding HasSelectedOtherFolder}">
                 <TextBlock Text="{Binding SelectedOtherFolder.Name}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding SelectedOtherFolder.Kind}" Foreground="#98620C" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SelectedOtherFolder.GitMetadataState}" Foreground="#98620C" TextWrapping="Wrap"
+                           IsVisible="{Binding SelectedOtherFolder.HasGitMetadataState}" />
                 <TextBlock Text="{Binding SelectedOtherFolder.SizeDisplay, StringFormat='Size evidence: {0}'}" TextWrapping="Wrap" />
                 <Expander Header="Full folder path" FontSize="12">
                   <TextBox Text="{Binding SelectedOtherFolder.Path}" IsReadOnly="True" TextWrapping="Wrap" MinHeight="42" MaxHeight="96" FontSize="12"

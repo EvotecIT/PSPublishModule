@@ -127,6 +127,7 @@ dotnet run --project .\PowerForgeStudio.Cli\PowerForgeStudio.Cli.csproj -- stora
 
 `storage` measures primary and registered working copies locally. It sends scan progress to stderr, then writes a bounded inventory to stdout. Its sizes are logical bytes, not verified reclaimable space; review any removal candidate in Studio before cleanup.
 The inventory also reports immediate folders under `_worktrees` that are absent from the scanned Git registrations. They are separate read-only evidence, not cleanup candidates; some may be independent repositories, linked to an owner outside the workspace, or non-Git data. Studio can open them for inspection but does not remove them.
+For a Git-linked folder, the inspector and CLI distinguish a present administrative target from a missing one. A missing target means Git cannot use that link as recorded; it does not prove the folder has no unique files or is safe to remove.
 If Git registration listing fails or is incomplete for any repository, Storage marks the working-copy totals partial and withholds the other-folder classification. Refresh after resolving the Git problem before drawing conclusions about unregistered folders.
 
 ## Day-to-day workflow

@@ -45,6 +45,24 @@ public static class WorktreeDetector
         return Directory.Exists(gitPath) || File.Exists(gitPath);
     }
 
+    /// <summary>Resolves a worktree's .git file to its administrative directory, without requiring that directory to exist.</summary>
+    public static string? ResolveGitAdministrativeDirectory(string worktreePath)
+    {
+        var gitFilePath = Path.Combine(worktreePath, ".git");
+        try
+        {
+            if (!File.Exists(gitFilePath)) return null;
+            var content = File.ReadAllText(gitFilePath).Trim();
+            if (!content.StartsWith("gitdir:", StringComparison.OrdinalIgnoreCase)) return null;
+            var reference = content["gitdir:".Length..].Trim();
+            return string.IsNullOrWhiteSpace(reference) ? null : Path.GetFullPath(reference, worktreePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Resolves the parent repository name from a worktree's .git file.
     /// Returns null if not a worktree or if the parent can't be determined.

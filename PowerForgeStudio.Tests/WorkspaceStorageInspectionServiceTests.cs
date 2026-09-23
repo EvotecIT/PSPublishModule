@@ -113,6 +113,11 @@ public sealed class WorkspaceStorageInspectionServiceTests : IDisposable
         await Run(independent, "init", "-b", "main");
         var linked = Directory.CreateDirectory(Path.Combine(container, "linked")).FullName;
         await File.WriteAllTextAsync(Path.Combine(linked, ".git"), "gitdir: ../missing-owner/.git/worktrees/linked");
+        var adminTarget = Directory.CreateDirectory(Path.Combine(workspace, "admin-target")).FullName;
+        var linkedPresent = Directory.CreateDirectory(Path.Combine(container, "linked-present")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(linkedPresent, ".git"), "gitdir: ../../admin-target");
+        var invalidLink = Directory.CreateDirectory(Path.Combine(container, "invalid-link")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(invalidLink, ".git"), "not a Git link");
         var plain = Directory.CreateDirectory(Path.Combine(container, "plain")).FullName;
         await File.WriteAllTextAsync(Path.Combine(plain, "notes.txt"), "keep");
 
@@ -120,9 +125,17 @@ public sealed class WorkspaceStorageInspectionServiceTests : IDisposable
 
         Assert.Equal(2, snapshot.Entries.Count);
         Assert.DoesNotContain(snapshot.UnregisteredFolders, folder => folder.Path == registered);
-        Assert.Equal(3, snapshot.UnregisteredFolders.Count);
+        Assert.Equal(5, snapshot.UnregisteredFolders.Count);
         Assert.Equal("Independent Git checkout", Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == independent).Kind);
-        Assert.Equal("Git-linked folder", Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == linked).Kind);
+        var missingLink = Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == linked);
+        Assert.Equal("Git-linked folder", missingLink.Kind);
+        Assert.Equal("Git administrative target missing", missingLink.GitMetadataState);
+        var presentLink = Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == linkedPresent);
+        Assert.Equal("Git-linked folder", presentLink.Kind);
+        Assert.Equal("Git administrative target present", presentLink.GitMetadataState);
+        var invalid = Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == invalidLink);
+        Assert.Equal("Folder with .git file", invalid.Kind);
+        Assert.Equal("Git link could not be resolved", invalid.GitMetadataState);
         Assert.Equal("Folder without Git metadata", Assert.Single(snapshot.UnregisteredFolders, folder => folder.Path == plain).Kind);
         Assert.True(snapshot.OtherFolderBytes > 0);
         Assert.All(snapshot.Entries.Where(entry => entry.IsReviewCandidate), entry => Assert.NotEqual(independent, entry.Path));

@@ -7,9 +7,11 @@ public sealed record WorkspaceStorageOtherFolder(
     long SizeBytes,
     int ItemCount,
     string? Warning,
-    bool Measured = true)
+    bool Measured = true,
+    string? GitMetadataState = null)
 {
     public string Name => System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(Path));
+    public bool HasGitMetadataState => GitMetadataState is not null;
     public string SizeDisplay => !Measured ? "Not measured"
         : SizeBytes >= 1024L * 1024 * 1024 ? $"{SizeBytes / (1024d * 1024 * 1024):0.0} GiB"
         : SizeBytes >= 1024L * 1024 ? $"{SizeBytes / (1024d * 1024):0.0} MiB"

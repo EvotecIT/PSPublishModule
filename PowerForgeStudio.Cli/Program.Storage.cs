@@ -67,7 +67,8 @@ internal static partial class Program
         WriteStorageRows("Broken references", broken.Take(top));
         Console.WriteLine("Other _worktrees folders (not classified as cleanup candidates):");
         foreach (var folder in otherFolders.Take(top))
-            Console.WriteLine($"  {folder.SizeDisplay,10}  {folder.Kind,-26}  {folder.Path}");
+            Console.WriteLine($"  {folder.SizeDisplay,10}  {folder.Kind,-26}  {folder.Path}" +
+                              (folder.GitMetadataState is null ? "" : $" [{folder.GitMetadataState}]"));
         Console.WriteLine("Sizes are logical, not verified reclaimable space. Review removal in Studio before any cleanup.");
     }
 
