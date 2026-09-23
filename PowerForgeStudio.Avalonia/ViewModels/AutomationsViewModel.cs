@@ -128,6 +128,7 @@ public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
         Entries.Clear();
         foreach (var entry in visible) Entries.Add(entry);
         SelectedEntry = selectedId is null ? null : Entries.FirstOrDefault(entry => entry.Id == selectedId);
+        SelectedEntry ??= Entries.FirstOrDefault(static entry => entry.NeedsAttention) ?? Entries.FirstOrDefault();
         OnPropertyChanged(nameof(HasEntries));
     }
 

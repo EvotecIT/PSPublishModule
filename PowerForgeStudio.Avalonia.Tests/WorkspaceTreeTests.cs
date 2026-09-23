@@ -244,7 +244,11 @@ public sealed class WorkspaceTreeTests
             {
                 foreach (var file in new DirectoryInfo(fixture).EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 }))
                     if (file.IsReadOnly) file.IsReadOnly = false;
-                Directory.Delete(fixture, recursive: true);
+                for (var attempt = 0; Directory.Exists(fixture); attempt++)
+                {
+                    try { Directory.Delete(fixture, recursive: true); }
+                    catch (IOException) when (attempt < 4) { await Task.Delay(100 * (attempt + 1)); }
+                }
             }
         }
     }

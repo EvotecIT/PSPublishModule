@@ -475,9 +475,13 @@
               <TextBlock Text="{Binding SelectedEntry.Provider}" Foreground="#0865FF" />
               <TextBlock Text="Project / scope" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.ProjectDisplay}" TextWrapping="Wrap" />
+              <TextBlock Text="Current state" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.State}" TextWrapping="Wrap" />
               <TextBlock Text="Schedule" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.Schedule}" TextWrapping="Wrap" />
-              <TextBlock Text="Last observation" Classes="muted" />
+              <TextBlock Text="Next run" Classes="muted" />
+              <TextBlock Text="{Binding SelectedEntry.NextRunDisplay}" TextWrapping="Wrap" />
+              <TextBlock Text="Last run" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.LastRunDisplay}" />
               <TextBlock Text="{Binding SelectedEntry.LastResult}" TextWrapping="Wrap" />
               <TextBlock Text="Source" Classes="muted" />

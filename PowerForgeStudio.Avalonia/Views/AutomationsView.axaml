@@ -47,13 +47,13 @@
             <TextBlock Grid.Column="1" Text="Provider / project" Classes="muted" VerticalAlignment="Center" />
             <TextBlock Grid.Column="2" Text="Schedule" Classes="muted" VerticalAlignment="Center" />
             <TextBlock Grid.Column="3" Text="State" Classes="muted" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="4" Text="Last observed run" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="4" Text="Last run" Classes="muted" VerticalAlignment="Center" />
           </Grid>
           <ListBox Grid.Row="1" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry, Mode=TwoWay}" Background="Transparent">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="automation:WorkspaceAutomationEntry">
                 <Grid ColumnDefinitions="1.5*,1.1*,1.2*,100,1.1*" ColumnSpacing="12" Margin="10,8">
-                  <StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SourcePath}" /><TextBlock Text="{Binding Scope}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" /></StackPanel>
+                  <StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" /><TextBlock Text="{Binding Scope}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" /></StackPanel>
                   <StackPanel Grid.Column="1"><TextBlock Text="{Binding Provider}" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding ProjectDisplay}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" /></StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding Schedule}" VerticalAlignment="Center" TextWrapping="Wrap" />
                   <TextBlock Grid.Column="3" Text="{Binding State}" VerticalAlignment="Center" Classes="automationState" Classes.attention="{Binding NeedsAttention}" />

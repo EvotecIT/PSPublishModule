@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PowerForge;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Avalonia.Views;
@@ -57,30 +58,44 @@ public sealed class WorkspaceAutomationTests
                 Assert.Equal(3, model.Automations.Sources.Count);
                 Assert.Equal(2, model.Automations.AttentionCount);
                 Assert.Equal(1, model.Automations.DefinitionOnlyCount);
+                Assert.Equal("health", model.Automations.SelectedEntry?.Id);
 
                 var window = new MainWindow { DataContext = model, Width = 1600, Height = 1000 };
                 window.Show();
                 try
                 {
-                    model.Automations.SelectedEntry = model.Automations.Entries[0];
+                    Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(),
+                        block => block.Text == "Next run" && block.IsEffectivelyVisible);
+                    Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(),
+                        block => block.Text == model.Automations.SelectedEntry!.NextRunDisplay && block.IsEffectivelyVisible);
                     Capture(window, "automations-inventory.png");
+                    model.Automations.SelectedEntry = model.Automations.Entries[0];
+                    await model.Automations.RefreshAsync();
+                    Assert.Equal("profile", model.Automations.SelectedEntry?.Id);
                     model.Automations.ShowAllCommand.Execute(null);
                     Assert.Equal(5, model.Automations.Entries.Count);
                     model.Automations.ShowAttentionCommand.Execute(null);
                     Assert.Equal(2, model.Automations.Entries.Count);
                     Assert.All(model.Automations.Entries, entry => Assert.Equal("Failed", entry.State));
+                    Assert.Equal("health", model.Automations.SelectedEntry?.Id);
                     model.Automations.ShowRelevantCommand.Execute(null);
                 }
                 finally
                 {
                     window.Close();
                 }
-                model.Automations.SelectedEntry = null;
                 var compact = new MainWindow { DataContext = model, Width = 1050, Height = 720 };
                 compact.Show();
                 try
                 {
                     Capture(compact, "automations-inventory-compact.png");
+                    var details = compact.FindControl<Button>("CompactContextButton")!;
+                    Assert.True(details.IsVisible);
+                    details.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                    Assert.Contains(compact.GetVisualDescendants().OfType<TextBlock>(),
+                        block => block.Text == model.Automations.SelectedEntry!.NextRunDisplay && block.IsEffectivelyVisible);
+                    Capture(compact, "automations-evidence-compact.png");
+                    details.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
                     var page = compact.FindControl<AutomationsView>("AutomationsPage");
                     var scroller = page?.FindControl<global::Avalonia.Controls.ScrollViewer>("PageScroll");
                     Assert.NotNull(scroller);
