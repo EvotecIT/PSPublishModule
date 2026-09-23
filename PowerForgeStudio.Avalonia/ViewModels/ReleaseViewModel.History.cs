@@ -45,12 +45,12 @@ public sealed partial class ReleaseViewModel
         SelectedHistory = null;
         IsLoadingHistory = false;
         HistoryStatus = root.Length == 0 ? "Refresh saved releases for the workspace."
-            : "Refresh saved releases for this working copy.";
+            : "Refresh saved releases for this project folder.";
         if (HasProtectedReleaseWork || IsPreparing || !Stage.StartsWith("Saved release", StringComparison.Ordinal)) return;
         Handoff = null; SigningResult = null; Artifacts.Clear(); Receipts.Clear();
         ResetPublicationState(); ResetExecutionProgress();
         BuildRoot = ""; Stage = "Build required";
-        Status = "Selected working copy changed. Open a saved release from this project's history or run a new build.";
+        Status = "Selected project folder changed. Open a saved release from this project's history or run a new build.";
         NotifyReleaseState();
     }
     partial void OnHasUnpersistedEvidenceChanged(bool value) => NotifyReleaseState();

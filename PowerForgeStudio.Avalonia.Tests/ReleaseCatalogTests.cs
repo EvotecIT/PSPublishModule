@@ -19,6 +19,8 @@ public sealed class ReleaseCatalogTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-github-release-" + Guid.NewGuid().ToString("N"))).FullName;
         var first = Directory.CreateDirectory(Path.Combine(root, "First")).FullName;
         var second = Directory.CreateDirectory(Path.Combine(root, "Second")).FullName;
+        File.WriteAllText(Path.Combine(first, ".git"), "gitdir: fixture");
+        File.WriteAllText(Path.Combine(second, ".git"), "gitdir: fixture");
         try
         {
             await TestAppBuilder.RunAsync(async () =>
@@ -26,8 +28,8 @@ public sealed class ReleaseCatalogTests
                 var github = new FakeGitHub();
                 using var release = new ReleaseViewModel(githubReleases: github);
                 using var workspace = new WorkspaceViewModel(root, release: release);
-                workspace.ActiveWorkingCopyRoot = first;
                 workspace.ShowReleaseCommand.Execute(null);
+                release.SetHistoryScope(first);
                 await release.RefreshGitHubReleasesAsync();
                 Assert.Equal("First/v1", release.SelectedGitHubRelease?.TagName);
                 Assert.Equal(32, release.SelectedGitHubRelease?.AssetDownloads);
@@ -48,7 +50,7 @@ public sealed class ReleaseCatalogTests
 
                 github.DelayNext = true;
                 var stale = release.RefreshGitHubReleasesAsync();
-                workspace.ActiveWorkingCopyRoot = second;
+                release.SetHistoryScope(second);
                 Assert.Empty(release.GitHubReleases);
                 await release.RefreshGitHubReleasesAsync();
                 Assert.Equal("Second/v1", release.SelectedGitHubRelease?.TagName);
@@ -59,6 +61,41 @@ public sealed class ReleaseCatalogTests
                 await release.RefreshGitHubReleasesAsync();
                 Assert.Equal("Second/v1", release.SelectedGitHubRelease?.TagName);
                 Assert.Contains("may be stale", release.GithubReleaseStatus);
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task LocalProjectKeepsSavedReleaseHistoryWithoutOfferingGitHubMetrics()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-local-release-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                var github = new FakeGitHub();
+                using var release = new ReleaseViewModel(githubReleases: github);
+                using var workspace = new WorkspaceViewModel(root, release: release);
+                workspace.ActiveWorkingCopyRoot = root;
+                workspace.ShowReleaseCommand.Execute(null);
+                Assert.False(release.CanRefreshGitHubReleases);
+                Assert.True(release.CanBrowseHistory);
+                Assert.Contains("local project folder", release.GithubReleaseStatus);
+                await release.RefreshGitHubReleasesAsync();
+                Assert.Empty(release.GitHubReleases);
+                Assert.Equal(0, github.ResolveCalls);
+                var window = new MainWindow { DataContext = workspace, Width = 1050, Height = 720 };
+                window.Show();
+                try
+                {
+                    window.UpdateLayout();
+                    window.GetVisualDescendants().OfType<ReleaseView>().Single()
+                        .GetVisualDescendants().OfType<ScrollViewer>().First().ScrollToEnd();
+                    Capture(window, "local-release-github-unavailable.png");
+                }
+                finally { window.Close(); }
                 return true;
             });
         }
@@ -80,10 +117,14 @@ public sealed class ReleaseCatalogTests
     private sealed class FakeGitHub : IGitHubReleaseCatalogService
     {
         private TaskCompletionSource<GitHubPage<GitHubReleaseMetric>>? _delayed;
+        public int ResolveCalls { get; private set; }
         public bool DelayNext { get; set; }
         public bool ErrorNext { get; set; }
         public Task<string?> ResolveRepositoryAsync(string workingCopy, CancellationToken cancellationToken = default)
-            => Task.FromResult<string?>("EvotecIT/" + Path.GetFileName(workingCopy));
+        {
+            ResolveCalls++;
+            return Task.FromResult<string?>("EvotecIT/" + Path.GetFileName(workingCopy));
+        }
         public Task<GitHubPage<GitHubReleaseMetric>> FetchRecentReleasesAsync(string slug, CancellationToken cancellationToken = default)
         {
             if (ErrorNext)

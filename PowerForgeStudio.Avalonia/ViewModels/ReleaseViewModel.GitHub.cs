@@ -3,6 +3,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Hub;
+using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Hub;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
@@ -16,10 +17,11 @@ public sealed partial class ReleaseViewModel
     public ObservableCollection<GitHubReleaseMetric> GitHubReleases { get; } = [];
     [ObservableProperty] private GitHubReleaseMetric? _selectedGitHubRelease;
     [ObservableProperty] private bool _isLoadingGitHubReleases;
-    [ObservableProperty] private string _githubReleaseStatus = "Choose a working copy to inspect its published GitHub releases.";
+    [ObservableProperty] private string _githubReleaseStatus = "Choose a Git working copy to inspect its published GitHub releases.";
+    private bool _hasGitHistoryScope;
     public bool HasGitHubReleases => GitHubReleases.Count > 0;
     public bool HasSelectedGitHubRelease => SelectedGitHubRelease is not null;
-    public bool CanRefreshGitHubReleases => !_disposed && !IsLoadingGitHubReleases && HistoryScopeRoot.Length > 0;
+    public bool CanRefreshGitHubReleases => !_disposed && !IsLoadingGitHubReleases && _hasGitHistoryScope;
     public bool CanOpenGitHubRelease => SelectedGitHubRelease?.HtmlUrl is { Length: > 0 };
 
     partial void OnIsLoadingGitHubReleasesChanged(bool value) => OnPropertyChanged(nameof(CanRefreshGitHubReleases));
@@ -40,9 +42,12 @@ public sealed partial class ReleaseViewModel
         SelectedGitHubRelease = null;
         _githubObservedAtUtc = null;
         IsLoadingGitHubReleases = false;
+        _hasGitHistoryScope = root.Length > 0 && WorktreeDetector.IsGitRepository(root);
         GithubReleaseStatus = root.Length == 0
-            ? "Choose a working copy to inspect its published GitHub releases."
-            : "Refresh GitHub releases to read recent asset download counts for this project.";
+            ? "Choose a Git working copy to inspect its published GitHub releases."
+            : _hasGitHistoryScope
+                ? "Refresh GitHub releases to read recent asset download counts for this project."
+                : "This local project folder has no Git working copy. GitHub release metrics are unavailable.";
         OnPropertyChanged(nameof(HasGitHubReleases));
         OnPropertyChanged(nameof(CanRefreshGitHubReleases));
     }
