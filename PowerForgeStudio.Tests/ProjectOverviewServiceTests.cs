@@ -41,6 +41,8 @@ public sealed class ProjectOverviewServiceTests : IDisposable
         Assert.Equal(Path.Combine(workingCopy, "README.md"), snapshot.ReadmePath);
         Assert.Contains(snapshot.EntryPoints, item => item.Name == "Project build" &&
             item.SourcePath == Path.Combine(workingCopy, "Build", "project.build.json"));
+        Assert.Contains(snapshot.EntryPoints, item => item.Name == "Project build script" && item.IsAvailable &&
+            item.SourcePath == Path.Combine(workingCopy, "Build", "Build-Project.ps1"));
         Assert.Contains(snapshot.EntryPoints, item => item.Name == ".NET solution");
         Assert.Contains(snapshot.Products, item => item.Name == ".NET / package");
         Assert.Contains(snapshot.Products, item => item.Name == ".NET projects" && item.Detail.StartsWith("1 ", StringComparison.Ordinal));

@@ -200,6 +200,12 @@ public sealed class ProjectOverviewService : IProjectOverviewService
             else if (HasExtension(path, ".sln", ".slnx"))
                 Add(".NET solution", "Solution entrypoint", path);
         }
+        var buildDirectory = Path.Combine(workingCopyRoot, "Build");
+        foreach (var path in files.Where(path => PathComparer.Equals(Path.GetDirectoryName(path)!, buildDirectory)))
+        {
+            if (Path.GetFileName(path).Equals("Build-Project.ps1", StringComparison.OrdinalIgnoreCase))
+                Add("Project build script", "PowerShell build entrypoint", path);
+        }
         return result;
 
         void AddConfigured(string? configuredPath, string name, string detail)
@@ -216,7 +222,8 @@ public sealed class ProjectOverviewService : IProjectOverviewService
                 name,
                 File.Exists(path) ? detail : detail + " (missing in selected working copy)",
                 path,
-                RelativeDisplay(workingCopyRoot, path)));
+                RelativeDisplay(workingCopyRoot, path),
+                File.Exists(path)));
         }
     }
 

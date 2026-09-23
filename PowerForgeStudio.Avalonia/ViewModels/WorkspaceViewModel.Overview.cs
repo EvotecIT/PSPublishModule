@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PowerForgeStudio.Domain.Projects;
+using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
 
@@ -88,4 +90,26 @@ public sealed partial class WorkspaceViewModel
 
     private bool IsActiveOverviewRoot(string root)
         => !_disposed && !string.IsNullOrWhiteSpace(ActiveWorkingCopyRoot) && SamePath(root, ActiveWorkingCopyRoot);
+
+    private async Task OpenOverviewEntryPointAsync(ProjectOverviewItem item)
+    {
+        if (KeepReleaseVisible()) throw new InvalidOperationException("Finish the active release before opening another project file.");
+        var root = Overview.WorkingCopyRoot;
+        if (string.IsNullOrWhiteSpace(root) || !SamePath(root, ActiveWorkingCopyRoot) ||
+            item.SourcePath is not { } sourcePath || !Path.IsPathFullyQualified(sourcePath))
+            throw new InvalidOperationException("The selected working copy changed. Refresh Project Overview.");
+
+        var source = Path.GetFullPath(sourcePath);
+        if (SamePath(source, root) || !WorkspacePathContainment.ContainsOrEquals(root, source) || !File.Exists(source))
+            throw new InvalidOperationException("The entrypoint is no longer a file inside the selected working copy. Refresh Project Overview.");
+
+        for (var current = source; !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
+        {
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Entrypoints reached through symbolic links or junctions cannot open in Studio.");
+            if (SamePath(current, root)) break;
+        }
+
+        await SelectAsync(new ExplorerNode(Path.GetFileName(source), source, "file", root));
+    }
 }

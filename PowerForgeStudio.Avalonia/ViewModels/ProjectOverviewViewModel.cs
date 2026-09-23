@@ -13,13 +13,17 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 public sealed partial class ProjectOverviewViewModel : ObservableObject, IDisposable
 {
     private readonly IProjectOverviewService _service;
+    private readonly Func<ProjectOverviewItem, Task>? _openEntryPoint;
     private RepositoryCatalogEntry? _repository;
     private ProjectGitStatus? _git;
     private CancellationTokenSource? _inspection;
     private int _version;
 
-    public ProjectOverviewViewModel(IProjectOverviewService? service = null)
-        => _service = service ?? new ProjectOverviewService();
+    public ProjectOverviewViewModel(IProjectOverviewService? service = null, Func<ProjectOverviewItem, Task>? openEntryPoint = null)
+    {
+        _service = service ?? new ProjectOverviewService();
+        _openEntryPoint = openEntryPoint;
+    }
 
     public ObservableCollection<ProjectOverviewItem> Products { get; } = [];
     public ObservableCollection<ProjectOverviewItem> EntryPoints { get; } = [];
@@ -149,6 +153,15 @@ public sealed partial class ProjectOverviewViewModel : ObservableObject, IDispos
             Output = "Opened README.md with the configured desktop application.";
         }
         catch (Exception ex) { Output = "Could not open README.md: " + StudioDisplayError.From(ex); }
+    }
+
+    [RelayCommand]
+    private async Task OpenEntryPointAsync(ProjectOverviewItem? item)
+    {
+        if (item?.SourcePath is null || _openEntryPoint is null ||
+            !EntryPoints.Contains(item) || string.IsNullOrWhiteSpace(WorkingCopyRoot)) return;
+        try { await _openEntryPoint(item); }
+        catch (Exception ex) { Output = "Could not open project entrypoint: " + StudioDisplayError.From(ex); }
     }
 
     private void Apply(ProjectOverviewSnapshot snapshot)

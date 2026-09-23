@@ -44,6 +44,7 @@ Archiving a project is reversible machine-local tree organization. It records th
 These are states within an owning surface, not additional top-level pages:
 
 - Files: document editor, unsaved-change choice, create/copy/move/rename, recoverable deletion and recovery.
+- Overview: detected build configuration, `Build-Project.ps1` and solution files open directly in Files for inspection. Opening a row never executes it; a missing or redirected file requires a fresh overview before use.
 - Changes: local branch selector, new branch field, change list, diff and commit form.
 - Build & Run: discovered contracts, reviewed plan, running progress, cancellation, artifacts and output. Optional [project tasks](PowerForgeStudio.ProjectTasks.md) expose explicit PowerShell or executable commands with their own reviewed selection and result.
 - GitHub: issues, pull requests, discussion/checks, changed-file patch, action draft and reviewed-action confirmation.

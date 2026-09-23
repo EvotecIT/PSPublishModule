@@ -22,7 +22,8 @@ public sealed record ProjectOverviewItem(
     string Name,
     string Detail,
     string? SourcePath = null,
-    string? DisplayPath = null)
+    string? DisplayPath = null,
+    bool IsAvailable = true)
 {
     public string SourceDisplay => DisplayPath ?? SourcePath ?? "";
 }

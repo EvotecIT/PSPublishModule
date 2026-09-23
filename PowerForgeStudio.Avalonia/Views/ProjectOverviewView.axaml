@@ -72,7 +72,11 @@
               <ItemsControl ItemsSource="{Binding EntryPoints}">
                 <ItemsControl.ItemTemplate><DataTemplate x:DataType="domain:ProjectOverviewItem">
                   <Border Background="#F6F8FC" CornerRadius="5" Padding="10" Margin="0,3">
-                    <StackPanel Spacing="3"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" /><TextBlock Text="{Binding Detail}" Classes="muted" /><SelectableTextBlock Text="{Binding SourceDisplay}" ToolTip.Tip="{Binding SourcePath}" FontSize="11" TextWrapping="Wrap" /></StackPanel>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                      <StackPanel Spacing="3"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" /><TextBlock Text="{Binding Detail}" Classes="muted" /><SelectableTextBlock Text="{Binding SourceDisplay}" ToolTip.Tip="{Binding SourcePath}" FontSize="11" TextWrapping="Wrap" /></StackPanel>
+                      <Button Grid.Column="1" Content="Open file" VerticalAlignment="Center" IsEnabled="{Binding IsAvailable}"
+                              Command="{ReflectionBinding DataContext.OpenEntryPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                    </Grid>
                   </Border>
                 </DataTemplate></ItemsControl.ItemTemplate>
               </ItemsControl>

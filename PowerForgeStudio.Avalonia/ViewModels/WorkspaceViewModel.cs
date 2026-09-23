@@ -38,7 +38,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Connections = new ConnectionsViewModel(connections);
         Packages = new PackagesViewModel(packages);
         Activity = new ActivityViewModel(activity, OpenActivityReleaseAsync);
-        Overview = new ProjectOverviewViewModel(overview);
+        Overview = new ProjectOverviewViewModel(overview, OpenOverviewEntryPointAsync);
         History = new ProjectHistoryViewModel(history);
         Settings = new SettingsViewModel(stateStore as IWorkspaceRootCatalogService, stateStore as IWorkspacePreferenceService);
         GitHub = new GitHubViewModel(gitHub, gitHubActions);

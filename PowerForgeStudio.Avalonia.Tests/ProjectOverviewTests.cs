@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using PowerForge;
 using PowerForgeStudio.Avalonia.ViewModels;
 using PowerForgeStudio.Avalonia.Views;
@@ -98,6 +99,7 @@ public sealed class ProjectOverviewTests
                 Assert.Equal(Path.GetFileName(root), model.ProjectName);
                 Assert.Contains("Build and release", model.Overview.Purpose, StringComparison.Ordinal);
                 Assert.Contains(model.Overview.EntryPoints, item => item.Name == "Project build");
+                Assert.Contains(model.Overview.EntryPoints, item => item.Name == "Project build script");
                 Assert.Contains(model.Overview.EntryPoints, item => item.Name == ".NET solution");
                 Assert.False(File.Exists(Path.Combine(root, "overview-should-not-run.txt")));
 
@@ -119,9 +121,30 @@ public sealed class ProjectOverviewTests
                     Assert.NotNull(scroller);
                     scroller.Offset = new global::Avalonia.Vector(0, scroller.Extent.Height);
                     Capture(window, "project-overview-compact-bottom.png");
-                    model.ShowFilesCommand.Execute(null);
-                    Assert.True(model.IsFilesPage);
+                    var buildEntry = Assert.Single(model.Overview.EntryPoints, item => item.Name == "Project build script");
+                    Assert.True(buildEntry.IsAvailable);
+                    File.Delete(buildEntry.SourcePath!);
+                    await model.Overview.OpenEntryPointCommand.ExecuteAsync(buildEntry);
+                    Assert.True(model.IsOverviewPage);
+                    Assert.Contains("no longer a file", model.Overview.Output, StringComparison.Ordinal);
+
+                    await File.WriteAllTextAsync(buildEntry.SourcePath!, "# Restored build entrypoint");
+                    await model.RefreshOverviewCommand.ExecuteAsync(null);
+                    buildEntry = Assert.Single(model.Overview.EntryPoints, item => item.Name == "Project build script");
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+                    var open = Assert.Single(page!.GetVisualDescendants().OfType<Button>(), button =>
+                        button.Content is string text && text == "Open file" &&
+                        button.DataContext is ProjectOverviewItem item && item.SourcePath == buildEntry.SourcePath);
+                    Assert.True(open.IsEffectivelyEnabled);
+                    Assert.Same(model.Overview.OpenEntryPointCommand, open.Command);
+                    Assert.Same(buildEntry, open.CommandParameter);
+                    open.Command!.Execute(open.CommandParameter);
+                    await model.Overview.OpenEntryPointCommand.ExecutionTask!;
+                    Assert.True(model.IsFilesPage, model.Overview.Output);
                     Assert.False(model.IsOverviewPage);
+                    Assert.Equal(buildEntry.SourcePath, model.SelectedPath);
+                    Capture(window, "project-overview-open-entrypoint.png");
 
                     var gitDirectory = Path.Combine(root, ".git");
                     Directory.Move(gitDirectory, gitDirectory + ".saved");
