@@ -70,6 +70,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
             _drafts[Root] = CommitMessage;
             _branchDrafts[Root] = NewBranchName;
         }
+        Selected = null;
         Root = root;
         CommitMessage = _drafts.GetValueOrDefault(root, "");
         NewBranchName = _branchDrafts.GetValueOrDefault(root, "");
@@ -81,6 +82,8 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     public async Task RefreshAsync()
     {
         if (_disposed) return;
+        var selectedPath = Selected?.Path;
+        var selectedStaged = Selected?.Staged;
         var version = ++_contextVersion;
         _read?.Cancel();
         using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
@@ -102,6 +105,9 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
                 : snapshot.Branches.FirstOrDefault();
             foreach (var file in snapshot.StagedChanges) Files.Add(new GitChangeRow(file, true));
             foreach (var file in snapshot.UnstagedChanges.Concat(snapshot.UntrackedFiles)) Files.Add(new GitChangeRow(file, false));
+            if (selectedPath is not null)
+                Selected = Files.FirstOrDefault(row => row.Staged == selectedStaged &&
+                    string.Equals(row.Path, selectedPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
             Status = !snapshot.IsGitRepository ? "This folder is not a Git working copy."
                 : snapshot.HasConflicts ? "Merge conflicts need resolution before committing."
                 : $"{snapshot.BranchDisplay} · {snapshot.StatusSummary}";

@@ -13,6 +13,70 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class GitChangesTests
 {
     [Fact]
+    public async Task VisibleChangesRefreshFindsExternalEditsAndRetainsSelectedFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-git-external-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var initialized = await new GitClient().RunRawAsync(root, ["init", "-b", "main"]);
+            Assert.True(initialized.Succeeded, initialized.StdErr);
+            await File.WriteAllTextAsync(Path.Combine(root, "selected.txt"), "selected content");
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                using var workspace = new WorkspaceViewModel(root) { ActiveWorkingCopyRoot = root, ProjectName = "Git fixture" };
+                workspace.ShowChangesCommand.Execute(null);
+                await workspace.Changes.RefreshAsync();
+                workspace.Changes.Selected = Assert.Single(workspace.Changes.Files);
+
+                await File.WriteAllTextAsync(Path.Combine(root, "external.txt"), "written outside Studio");
+                await workspace.RefreshVisibleChangesAsync();
+                Assert.Equal("selected.txt", workspace.Changes.Selected?.Path);
+                Assert.Contains(workspace.Changes.Files, row => row.Path == "external.txt");
+
+                var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
+                if (!string.IsNullOrEmpty(output))
+                {
+                    var window = new MainWindow { DataContext = workspace, Width = 1600, Height = 1000 };
+                    window.Show();
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    Directory.CreateDirectory(output);
+                    using var frame = window.CaptureRenderedFrame();
+                    Assert.NotNull(frame);
+                    frame.Save(Path.Combine(output, "git-external-refresh-wide.png"), PngBitmapEncoderOptions.Default);
+                    window.Width = 1050; window.Height = 720;
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    using var compact = window.CaptureRenderedFrame();
+                    Assert.NotNull(compact);
+                    compact.Save(Path.Combine(output, "git-external-refresh-compact.png"), PngBitmapEncoderOptions.Default);
+                    window.Close();
+                }
+
+                File.Delete(Path.Combine(root, "selected.txt"));
+                await workspace.RefreshVisibleChangesAsync();
+                Assert.Null(workspace.Changes.Selected);
+
+                workspace.ShowFilesCommand.Execute(null);
+                await File.WriteAllTextAsync(Path.Combine(root, "inactive.txt"), "not scanned on another page");
+                await workspace.RefreshVisibleChangesAsync();
+                Assert.DoesNotContain(workspace.Changes.Files, row => row.Path == "inactive.txt");
+                workspace.ShowChangesCommand.Execute(null);
+                for (var attempt = 0; attempt < 100 && workspace.Changes.IsLoading; attempt++) await Task.Delay(20);
+                Assert.Contains(workspace.Changes.Files, row => row.Path == "inactive.txt");
+                return true;
+            });
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task GitChangesCanStageUnstageCommitAndHandleRenameWithLiteralUnicodePaths()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-git-" + Guid.NewGuid().ToString("N"));

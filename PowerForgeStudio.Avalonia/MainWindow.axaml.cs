@@ -11,6 +11,7 @@ public sealed partial class MainWindow : Window
 {
     private bool? _compactLayout;
     private bool _compactDetailsOpen;
+    private bool _hasBeenActivated;
     private bool _closeAfterSave;
     private bool _savingOnClose;
     private bool _discardOnNextClose;
@@ -19,6 +20,11 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         SizeChanged += (_, args) => ApplyResponsiveLayout(args.NewSize.Width);
+        Activated += (_, _) =>
+        {
+            if (!_hasBeenActivated) { _hasBeenActivated = true; return; }
+            if (DataContext is WorkspaceViewModel model) _ = model.RefreshVisibleChangesAsync();
+        };
         KeyDown += FocusQuickProjectSearch;
         Closing += SaveBeforeClosing;
         PropertyChanged += (_, args) =>

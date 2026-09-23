@@ -173,7 +173,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     partial void OnOutputChanged(string value) => OnPropertyChanged(nameof(DisplayedOutput));
     [RelayCommand] private void ShowFiles() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
     [RelayCommand] private void ShowBuild() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
-    [RelayCommand] private void ShowChanges() { if (KeepReleaseVisible() || !HasGitWorkingCopy) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
+    [RelayCommand] private void ShowChanges() { if (KeepReleaseVisible() || !HasGitWorkingCopy) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; _ = RefreshVisibleChangesAsync(); }
 
     private bool KeepReleaseVisible()
     {
