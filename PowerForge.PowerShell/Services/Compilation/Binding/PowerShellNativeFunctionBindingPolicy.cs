@@ -77,6 +77,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(static node => node is ScriptBlockExpressionAst block && PowerShellSemanticBinder.IsAssignedScriptBlock(block), searchNestedScriptBlocks: true) is not null ||
            function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null ||
            FindNativePipelineOperator(function) is not null ||
+           function.Body.Find(static node => node is BinaryExpressionAst { Operator: TokenKind.Format } format &&
+               format.Left.StaticType == typeof(object), searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node =>
                node is ConvertExpressionAst conversion && conversion.Parent is CommandExpressionAst { Parent: PipelineAst discardPipeline } &&
                    PowerShellCompilationConversionPolicy.IsStatementDiscard(conversion) && IsCapturedPipeline(discardPipeline) ||

@@ -16,7 +16,9 @@ internal static class PowerShellFormatSemanticBinder
             type == typeof(bool) || type == typeof(char) || type == typeof(DateTime) ||
             type == typeof(TimeSpan) || type == typeof(Guid) ||
             value.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble;
-        if (format.Type.ClrType == typeof(string) && (scalar || native) &&
+        var hostTemplate = format.Type.ClrType == typeof(string) ||
+            (native && format.Type.ClrType == typeof(object));
+        if (hostTemplate && (scalar || native) &&
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
             return new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.PowerShellScalarFormat,
                 format, value, new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred,

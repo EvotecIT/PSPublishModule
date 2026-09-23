@@ -725,7 +725,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitBinaryOperation(PowerShellLoweredBinaryExpression expression, string left, string right)
     {
         if (expression.Operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat)
-            return $"__statementErrors.FormatScalar(({left} ?? string.Empty), (object?)({right}))";
+        {
+            var format = expression.Left.ClrType == typeof(string)
+                ? $"({left} ?? string.Empty)"
+                : $"__nativeFunction.Stringify(__statementErrors.UnwrapObjectArgument({left}))";
+            return $"__statementErrors.FormatScalar({format}, (object?)({right}))";
+        }
         if (expression.UsesNativeInvocation) return EmitNativeBinary(expression, left, right);
         if (expression.Operation == PowerShellBoundBinaryOperator.NativeStringConcatenate)
             return $"global::System.String.Concat({left}, __nativeFunction.Stringify({right}))";

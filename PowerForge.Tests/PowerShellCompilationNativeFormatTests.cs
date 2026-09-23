@@ -5,6 +5,63 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
+    public void NativeFormat_PreservesRuntimeTypedTemplates(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Format-Dynamic {
+                [CmdletBinding()] param([object]$Template,[object]$Value)
+                $result='prior'; $result=$Template -f $Value; $result
+                'after'
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.DynamicFormat", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.All(result.Manifest.UnitDispositionLedger!.Entries, unit => Assert.False(unit.RetainedHostedSource));
+        const string probe = """
+            foreach($culture in 'en-US','pl-PL') {
+                [Threading.Thread]::CurrentThread.CurrentCulture=[Globalization.CultureInfo]::GetCultureInfo($culture)
+                foreach($shape in 'string','null','number','array','wrapped','invalid') {
+                    $template=switch($shape) {
+                        'string' {'<{0:N2}>'}; 'null' {$null}; 'number' {42};
+                        'array' {,@('<{0}>')}; 'invalid' {'{'}
+                    }
+                    if($shape -eq 'wrapped') {
+                        $template=[Management.Automation.PSObject]::AsPSObject('<{0}>')
+                        Add-Member -InputObject $template -MemberType ScriptMethod -Name ToString -Value {'custom-{0}'} -Force
+                    }
+                    foreach($action in 'Continue','Stop') {
+                        $caught=$null;$errors=@();$Error.Clear()
+                        try {$records=@(Format-Dynamic -Template $template -Value 42 -ErrorAction $action -ErrorVariable errors 2>$null)}
+                        catch {$caught=[pscustomobject]@{id=$_.FullyQualifiedErrorId;type=$_.Exception.GetType().FullName;message=$_.Exception.Message};$records=@()}
+                        [pscustomobject]@{culture=$culture;shape=$shape;action=$action;records=$records;
+                            caught=$caught;errors=@($errors | ForEach-Object {[pscustomobject]@{id=$_.FullyQualifiedErrorId;
+                                type=$_.Exception.GetType().FullName;message=$_.Exception.Message}})} | ConvertTo-Json -Compress -Depth 6
+                    }
+                }
+            }
+            """;
+        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "original-dynamic-format");
+        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "compiled-dynamic-format");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
+        var expected = original.StandardOutput.Split('\n');
+        var actual = compiled.StandardOutput.Split('\n');
+        Assert.Equal(24, expected.Count(line => !string.IsNullOrWhiteSpace(line)));
+        Assert.True(expected.SequenceEqual(actual), string.Join(Environment.NewLine, expected.Zip(actual)
+            .Where(pair => pair.First != pair.Second).Take(4).Select(pair =>
+                "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second)));
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void NativeFormat_PreservesObjectCollectionsCallbacksAndFailures(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""
