@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "packetId": "powerforge-compiler-discovery-net10-v2",
-  "fixedOn": "2026-09-07",
+  "packetId": "powerforge-compiler-discovery-net10-v4",
+  "fixedOn": "2026-09-23",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
   "purpose": "Pinned source discovery only. Inputs are never imported or executed; independent scripts retain separate compilation closures. These counts are not language coverage or complete-workload qualification.",
@@ -19,6 +19,33 @@
       "entryPoint": "PowerShell-786225096078651d0fcbc535136d074b4c500698",
       "selection": "Scripts",
       "artifactKind": "Executable",
+      "modes": ["Strict", "Hybrid"]
+    },
+    {
+      "id": "psscripttools",
+      "scenarioFamily": "independent-cross-platform-utility-module",
+      "repositoryUrl": "https://github.com/jdhitsolutions/PSScriptTools",
+      "revision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/jdhitsolutions/PSScriptTools/blob/549fa3e3d769532320054fc0b3c8f42df0452361/license.txt",
+      "archiveUrl": "https://codeload.github.com/jdhitsolutions/PSScriptTools/zip/549fa3e3d769532320054fc0b3c8f42df0452361",
+      "sha256": "05c86295a0846ae4f51ecfa6f38ef71ba8173be83eb0adc8627525a4c6ee72bd",
+      "entryPoint": "PSScriptTools-549fa3e3d769532320054fc0b3c8f42df0452361/PSScriptTools.psd1",
+      "selection": "Module",
+      "artifactKind": "BinaryModule",
+      "modes": ["Strict", "Hybrid"]
+    },
+    {
+      "id": "powerinfoblox",
+      "scenarioFamily": "ipam-dns-dhcp-wapi-module",
+      "repositoryUrl": "https://github.com/EvotecIT/PowerInfoblox",
+      "revision": "33067f88cbd8afae2f35ee0436475f7087ad65cf",
+      "license": "No license file in pinned repository snapshot; payload remains external",
+      "archiveUrl": "https://codeload.github.com/EvotecIT/PowerInfoblox/zip/33067f88cbd8afae2f35ee0436475f7087ad65cf",
+      "sha256": "30f8f3f967cab7a5c959258488ba28516576e1572301494472c4dafe5a7660a7",
+      "entryPoint": "PowerInfoblox-33067f88cbd8afae2f35ee0436475f7087ad65cf/PowerInfoblox.psd1",
+      "selection": "Module",
+      "artifactKind": "BinaryModule",
       "modes": ["Strict", "Hybrid"]
     },
     {

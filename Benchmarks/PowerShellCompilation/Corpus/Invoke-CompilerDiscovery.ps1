@@ -62,12 +62,12 @@ foreach ($entry in $selected) {
             id = $entry.id; revision = $entry.revision; archiveSha256 = $entry.sha256
             artifactKind = $entry.artifactKind; mode = $mode; semanticProfile = $packet.semanticProfile
             submittedInputs = $inputs.Count; assessedInputs = $products.Count; failedInputs = $failures.Count
-            sourceFiles = [int](($products.sourceFiles | Measure-Object -Sum).Sum)
-            totalUnits = [int](($products.totalUnits | Measure-Object -Sum).Sum)
-            emittedUnits = [int](($products.compilableUnits | Measure-Object -Sum).Sum)
-            totalFunctions = [int](($products.coverage.totalFunctions | Measure-Object -Sum).Sum)
-            emittedFunctions = [int](($products.coverage.emittedFunctions | Measure-Object -Sum).Sum)
-            parseErrorFiles = [int](($products.parseErrorFiles | Measure-Object -Sum).Sum)
+            sourceFiles = [int](($products | ForEach-Object { $_.sourceFiles } | Measure-Object -Sum).Sum)
+            totalUnits = [int](($products | ForEach-Object { $_.totalUnits } | Measure-Object -Sum).Sum)
+            emittedUnits = [int](($products | ForEach-Object { $_.compilableUnits } | Measure-Object -Sum).Sum)
+            totalFunctions = [int](($products | ForEach-Object { $_.coverage.totalFunctions } | Measure-Object -Sum).Sum)
+            emittedFunctions = [int](($products | ForEach-Object { $_.coverage.emittedFunctions } | Measure-Object -Sum).Sum)
+            parseErrorFiles = [int](($products | ForEach-Object { $_.parseErrorFiles } | Measure-Object -Sum).Sum)
             failures = @($failures); completeWorkloadExecutions = 0
         }
         $results.Add($summary)
