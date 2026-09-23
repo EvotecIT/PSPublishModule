@@ -317,7 +317,9 @@ A later refresh correction keeps the previous Git rows and patch visible while t
 
 The native Windows focus-return check launched the current Release executable against a disposable Git repository with isolated app data. Its accessibility tree exposed the project, but the capture returned black pixels and window activation failed, so no input was attempted. The exact validation process was closed. This does not prove the focus event or its visible outcome.
 
-Remaining Git work includes remote workflows, partial staging, and native interaction proof. Diffs displayed in the UI are capped at 256 KiB after capture; the shared Git runner's capture is not yet bounded by that display limit. Git branch and worktree discovery now propagate secondary probe failures instead of reporting an empty list; the focused Git tests cover failed and timed-out worktree probes.
+Working-copy patch reads now pass the 256 KiB limit into the shared Git process runner, matching the existing bounded commit-history path. A successful oversized patch carries an explicit truncation notice; a failed, timed-out or stderr-truncated Git process still fails the read instead of returning a partial patch. A real 320 KiB diff and a controlled failed read passed within the 12 focused shared Git tests; six history tests and two Avalonia Changes tests passed through the same owner. The public Git client overload remains unchanged.
+
+Remaining Git work includes remote workflows, partial staging, and native interaction proof. Git branch and worktree discovery now propagate secondary probe failures instead of reporting an empty list; the focused Git tests cover failed and timed-out worktree probes.
 
 No user repository was staged, committed, or published by the GUI validation. Disposable repositories were removed by their tests. Temporary WPF validation binaries were removed; active Avalonia outputs and small screenshots are retained.
 

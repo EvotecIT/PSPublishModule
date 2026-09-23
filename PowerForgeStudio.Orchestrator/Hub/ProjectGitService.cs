@@ -6,7 +6,7 @@ namespace PowerForgeStudio.Orchestrator.Hub;
 public sealed partial class ProjectGitService : IProjectHistoryService
 {
     private const int MaxHistoryFiles = 400;
-    private const int MaxHistoryOutputCharacters = 256 * 1024;
+    private const int MaxCapturedGitOutputCharacters = 256 * 1024;
     private const int MaxHistoryContextCharacters = 16 * 1024;
     private readonly GitClient _gitClient;
 
@@ -46,7 +46,7 @@ public sealed partial class ProjectGitService : IProjectHistoryService
             ["status", "--porcelain=2", "--branch", "--untracked-files=no", "-z"],
             MaxHistoryContextCharacters,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        EnsureHistoryReadCompleted(result);
+        EnsureBoundedReadCompleted(result);
         return new ProjectHistoryContext(true, ParseHistoryBranch(result.StdOut));
     }
 
@@ -57,9 +57,12 @@ public sealed partial class ProjectGitService : IProjectHistoryService
         if (!string.IsNullOrWhiteSpace(filePath)) { args.Add("--"); args.Add(ValidateFilePath(repositoryRoot, filePath)); }
         if (staged && originalPath is not null && !string.IsNullOrWhiteSpace(filePath)) args.Add(ValidateFilePath(repositoryRoot, originalPath));
 
-        var result = await _gitClient.RunRawAsync(repositoryRoot, args, cancellationToken: cancellationToken).ConfigureAwait(false);
-        EnsureSuccess(result);
-        return result.StdOut.Length > 256 * 1024 ? result.StdOut[..(256 * 1024)] + "\n[Diff truncated at 256 KiB]" : result.StdOut;
+        var result = await _gitClient.RunRawAsync(repositoryRoot, args, MaxCapturedGitOutputCharacters,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        EnsureBoundedReadCompleted(result);
+        return result.StandardOutputLimitExceeded || result.StdOut.Length > MaxCapturedGitOutputCharacters
+            ? result.StdOut[..Math.Min(result.StdOut.Length, MaxCapturedGitOutputCharacters)] + "\n[Diff truncated at 256 KiB]"
+            : result.StdOut;
     }
 
     public async Task<IReadOnlyList<GitLogEntry>> GetLogAsync(string repositoryRoot, int count = 15, CancellationToken cancellationToken = default)
@@ -89,7 +92,7 @@ public sealed partial class ProjectGitService : IProjectHistoryService
 
         var result = await _gitClient.RunRawAsync(repositoryRoot,
             ["log", $"-{count}", "--format=%H%n%h%n%an%n%s%n%aI%n---"],
-            MaxHistoryOutputCharacters,
+            MaxCapturedGitOutputCharacters,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         EnsureSuccess(result);
         return ParseLogEntries(result.StdOut);
@@ -115,9 +118,9 @@ public sealed partial class ProjectGitService : IProjectHistoryService
             : ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", firstParent, commitHash, "--"];
         var filesResult = await _gitClient.RunRawAsync(repositoryRoot,
             fileArguments,
-            MaxHistoryOutputCharacters,
+            MaxCapturedGitOutputCharacters,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        EnsureHistoryReadCompleted(filesResult);
+        EnsureBoundedReadCompleted(filesResult);
         var fileOutput = filesResult.StdOut;
         if (filesResult.StandardOutputLimitExceeded && fileOutput.Length > 0 && fileOutput[^1] != '\0')
         {
@@ -136,9 +139,9 @@ public sealed partial class ProjectGitService : IProjectHistoryService
             : ["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames", "--find-copies", firstParent, commitHash, "--"];
         var diffResult = await _gitClient.RunRawAsync(repositoryRoot,
             diffArguments,
-            MaxHistoryOutputCharacters,
+            MaxCapturedGitOutputCharacters,
             cancellationToken: cancellationToken).ConfigureAwait(false);
-        EnsureHistoryReadCompleted(diffResult);
+        EnsureBoundedReadCompleted(diffResult);
         var diff = string.IsNullOrWhiteSpace(diffResult.StdOut)
             ? "No textual diff is available for this commit."
             : diffResult.StdOut;
@@ -200,7 +203,7 @@ public sealed partial class ProjectGitService : IProjectHistoryService
                 : "Git failed: " + Host.StudioOutputSanitizer.Sanitize(result.StdErr));
     }
 
-    private static void EnsureHistoryReadCompleted(ProcessRunResult result)
+    private static void EnsureBoundedReadCompleted(ProcessRunResult result)
     {
         if (result.ExitCode != 0 || result.StartFailed || result.TimedOut || result.StandardErrorLimitExceeded)
             EnsureSuccess(result);

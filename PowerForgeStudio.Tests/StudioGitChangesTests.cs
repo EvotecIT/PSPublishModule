@@ -146,6 +146,41 @@ public sealed class StudioGitChangesTests
         Assert.Equal(3, runner.Requests.Count);
     }
 
+    [Fact]
+    public async Task LargeWorkingCopyDiffIsBoundedWhileTheGitProcessRuns()
+    {
+        using var fixture = new RepositoryFixture();
+        await fixture.Run("init", "-b", "main");
+        await fixture.Run("config", "user.name", "Studio validation");
+        await fixture.Run("config", "user.email", "studio-validation@example.invalid");
+        await fixture.Run("config", "commit.gpgSign", "false");
+        await fixture.Run("config", "core.hooksPath", Path.Combine(fixture.Root, "empty-hooks"));
+        var file = Path.Combine(fixture.Root, "large.txt");
+        await File.WriteAllTextAsync(file, "initial\n");
+        await fixture.Run("add", "large.txt");
+        await fixture.Run("commit", "-m", "Initial fixture");
+        await File.WriteAllTextAsync(file, new string('X', 320 * 1024) + "\n");
+
+        var runner = new RecordingRunner();
+        var diff = await new ProjectGitService(new GitClient(runner)).GetDiffAsync(fixture.Root, "large.txt");
+
+        Assert.StartsWith("diff --git", diff, StringComparison.Ordinal);
+        Assert.EndsWith("[Diff truncated at 256 KiB]", diff, StringComparison.Ordinal);
+        Assert.True(diff.Length <= 256 * 1024 + "\n[Diff truncated at 256 KiB]".Length);
+        Assert.Equal(256 * 1024, Assert.Single(runner.Requests).MaxCapturedOutputCharacters);
+    }
+
+    [Fact]
+    public async Task FailedBoundedDiffDoesNotReturnAPartialPatch()
+    {
+        var runner = new StubRunner(_ => new ProcessRunResult(128, "partial patch", "bad object", "git",
+            TimeSpan.Zero, false, standardOutputLimitExceeded: true));
+        var service = new ProjectGitService(new GitClient(runner));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.GetDiffAsync(Path.GetTempPath(), "notes.txt"));
+        Assert.Equal(256 * 1024, Assert.Single(runner.Requests).MaxCapturedOutputCharacters);
+    }
+
     private sealed class StubRunner(Func<ProcessRunRequest, ProcessRunResult> run) : IProcessRunner
     {
         public List<ProcessRunRequest> Requests { get; } = [];
@@ -153,6 +188,16 @@ public sealed class StudioGitChangesTests
         {
             Requests.Add(request);
             return Task.FromResult(run(request));
+        }
+    }
+
+    private sealed class RecordingRunner : IProcessRunner
+    {
+        public List<ProcessRunRequest> Requests { get; } = [];
+        public async Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            return await new ProcessRunner().RunAsync(request, cancellationToken);
         }
     }
 
