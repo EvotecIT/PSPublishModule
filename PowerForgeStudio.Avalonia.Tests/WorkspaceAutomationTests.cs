@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
@@ -48,9 +49,12 @@ public sealed class WorkspaceAutomationTests
         {
             var repository = Directory.CreateDirectory(Path.Combine(root, "PowerForge")).FullName;
             Assert.True((await new GitClient().RunRawAsync(repository, ["init", "-b", "main"])).Succeeded);
+            var workflows = Directory.CreateDirectory(Path.Combine(repository, ".github", "workflows")).FullName;
+            var workflow = Path.Combine(workflows, "workflow-failure-sweeper.yml");
+            await File.WriteAllTextAsync(workflow, "on:\n  schedule:\n    - cron: '20 8 * * *'\n");
             await TestAppBuilder.RunAsync(async () =>
             {
-                using var model = new WorkspaceViewModel(root, automations: new FakeAutomationInventory());
+                using var model = new WorkspaceViewModel(root, automations: new FakeAutomationInventory(workflow));
                 await model.RefreshAsync();
                 await model.ShowAutomationsCommand.ExecuteAsync(null);
                 Assert.True(model.IsAutomationsPage);
@@ -79,6 +83,14 @@ public sealed class WorkspaceAutomationTests
                     Assert.All(model.Automations.Entries, entry => Assert.Equal("Failed", entry.State));
                     Assert.Equal("health", model.Automations.SelectedEntry?.Id);
                     model.Automations.ShowRelevantCommand.Execute(null);
+                    model.Automations.SelectedEntry = Assert.Single(model.Automations.Entries, entry => entry.Id == "pf");
+                    Assert.True(model.Automations.CanOpenSelectedSource);
+                    await model.Automations.OpenSelectedSourceCommand.ExecuteAsync(null);
+                    Assert.True(model.IsFilesPage);
+                    Assert.Equal(workflow, model.SelectedPath);
+                    Assert.Equal(workflow, model.ActiveDocument?.Reference.Path);
+                    Capture(window, "automation-workflow-source-wide.png");
+                    await model.ShowAutomationsCommand.ExecuteAsync(null);
                 }
                 finally
                 {
@@ -94,7 +106,17 @@ public sealed class WorkspaceAutomationTests
                     details.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
                     Assert.Contains(compact.GetVisualDescendants().OfType<TextBlock>(),
                         block => block.Text == model.Automations.SelectedEntry!.NextRunDisplay && block.IsEffectivelyVisible);
+                    Assert.Equal("No verified next run", model.Automations.SelectedEntry?.NextRunDisplay);
+                    var openSource = compact.FindControl<Button>("OpenAutomationSourceButton")!;
+                    Assert.True(openSource.IsEffectivelyVisible);
+                    var openPosition = openSource.TranslatePoint(default, compact);
+                    Assert.NotNull(openPosition);
+                    Assert.InRange(openPosition.Value.Y, 0, compact.Height - model.OutputPaneHeight.Value);
                     Capture(compact, "automations-evidence-compact.png");
+                    await model.Automations.OpenSelectedSourceCommand.ExecuteAsync(null);
+                    Assert.True(model.IsFilesPage);
+                    Capture(compact, "automation-workflow-source-compact.png");
+                    await model.ShowAutomationsCommand.ExecuteAsync(null);
                     details.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
                     var page = compact.FindControl<AutomationsView>("AutomationsPage");
                     var scroller = page?.FindControl<global::Avalonia.Controls.ScrollViewer>("PageScroll");
@@ -106,6 +128,11 @@ public sealed class WorkspaceAutomationTests
                 {
                     compact.Close();
                 }
+                File.Delete(workflow);
+                model.Automations.SelectedEntry = Assert.Single(model.Automations.Entries, entry => entry.Id == "pf");
+                await model.Automations.OpenSelectedSourceCommand.ExecuteAsync(null);
+                Assert.True(model.IsAutomationsPage);
+                Assert.Contains("Could not open workflow source", model.Automations.Status);
                 return true;
             });
         }
@@ -128,7 +155,7 @@ public sealed class WorkspaceAutomationTests
         frame.Save(Path.Combine(output, fileName), PngBitmapEncoderOptions.Default);
     }
 
-    private sealed class FakeAutomationInventory : IWorkspaceAutomationInventoryService
+    private sealed class FakeAutomationInventory(string workflowPath) : IWorkspaceAutomationInventoryService
     {
         public Task<WorkspaceAutomationSnapshot> InspectAsync(string workspaceRoot, CancellationToken cancellationToken = default)
         {
@@ -137,7 +164,7 @@ public sealed class WorkspaceAutomationTests
             [
                 Entry("profile", "EvotecIT Codex Profile Sync", "Windows Task Scheduler", "Local workstation", "", "Every 30 minutes", "Upcoming", now.AddMinutes(18), now.AddMinutes(-12), "Succeeded", true, true),
                 Entry("health", "PasswordSolutionX health", "Windows Task Scheduler", "Local workstation", "PasswordSolutionX", "Hourly", "Failed", now.AddMinutes(42), now.AddMinutes(-18), "Result 0x00000001", true, true),
-                Entry("pf", "workflow-failure-sweeper.yml", "GitHub Actions", ".github/workflows", "PowerForge", "20 8 * * *", "Failed", null, now.AddHours(-3), "completed · failure · schedule · run #42", true, true),
+                Entry("pf", "workflow-failure-sweeper.yml", "GitHub Actions", ".github/workflows", "PowerForge", "20 8 * * *", "Failed", null, now.AddHours(-3), "completed · failure · schedule · run #42", true, true, workflowPath),
                 Entry("office", "codeql.yml", "GitHub Actions", ".github/workflows", "OfficeIMO", "22 3 * * 1", "Definition only", null, null, "Runtime not checked", false, true),
                 Entry("vendor", "Vendor updater", "Windows Task Scheduler", "Local workstation", "", "Daily · 10:30", "Healthy", null, now.AddHours(-2), "Succeeded", true, false)
             ];
@@ -151,9 +178,10 @@ public sealed class WorkspaceAutomationTests
         }
 
         private static WorkspaceAutomationEntry Entry(string id, string name, string provider, string scope, string project,
-            string schedule, string state, DateTimeOffset? next, DateTimeOffset? last, string result, bool runtime, bool relevant)
+            string schedule, string state, DateTimeOffset? next, DateTimeOffset? last, string result, bool runtime, bool relevant,
+            string? sourcePath = null)
             => new(id, name, provider, scope, project, schedule, state, next, last, result, runtime,
-                state != "Paused", relevant, scope, runtime ? "Provider runtime evidence." : "Local definition only.");
+                state != "Paused", relevant, sourcePath ?? scope, runtime ? "Provider runtime evidence." : "Local definition only.");
     }
 
     private sealed class ControlledAutomationInventory : IWorkspaceAutomationInventoryService

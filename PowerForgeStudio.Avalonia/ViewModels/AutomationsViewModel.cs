@@ -9,15 +9,18 @@ namespace PowerForgeStudio.Avalonia.ViewModels;
 public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
 {
     private readonly IWorkspaceAutomationInventoryService _inventory;
+    private readonly Func<WorkspaceAutomationEntry, Task>? _openSource;
     private readonly bool _ownsInventory;
     private readonly List<WorkspaceAutomationEntry> _allEntries = [];
     private CancellationTokenSource? _refreshCancellation;
     private int _refreshVersion;
 
-    public AutomationsViewModel(IWorkspaceAutomationInventoryService? inventory = null)
+    public AutomationsViewModel(IWorkspaceAutomationInventoryService? inventory = null,
+        Func<WorkspaceAutomationEntry, Task>? openSource = null)
     {
         _inventory = inventory ?? new WorkspaceAutomationInventoryService();
         _ownsInventory = inventory is null;
+        _openSource = openSource;
     }
 
     public ObservableCollection<WorkspaceAutomationEntry> Entries { get; } = [];
@@ -37,6 +40,24 @@ public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
     public int RelevantCount => _allEntries.Count(static entry => entry.IsRelevant);
     public int AttentionCount => _allEntries.Count(static entry => entry.NeedsAttention);
     public int DefinitionOnlyCount => _allEntries.Count(static entry => !entry.HasRuntimeEvidence);
+    public bool CanOpenSelectedSource => _openSource is not null && SelectedEntry is { Provider: "GitHub Actions" } selected &&
+        Path.IsPathFullyQualified(selected.SourcePath) &&
+        (selected.SourcePath.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
+         selected.SourcePath.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase));
+
+    partial void OnSelectedEntryChanged(WorkspaceAutomationEntry? value)
+    {
+        OnPropertyChanged(nameof(CanOpenSelectedSource));
+        OpenSelectedSourceCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanOpenSelectedSource))]
+    private async Task OpenSelectedSourceAsync()
+    {
+        if (!CanOpenSelectedSource || SelectedEntry is not { } selected) return;
+        try { await _openSource!(selected); }
+        catch (Exception ex) { Status = "Could not open workflow source: " + StudioDisplayError.From(ex); }
+    }
 
     partial void OnFilterChanged(string value)
     {

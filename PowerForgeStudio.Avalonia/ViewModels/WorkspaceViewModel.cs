@@ -34,7 +34,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     {
         Release = release ?? new ReleaseViewModel(openPublicPackage: OpenPublicPackageAsync);
         Storage = new StorageViewModel(storage, storageRemoval, GetProtectedWorkingCopies);
-        Automations = new AutomationsViewModel(automations);
+        Automations = new AutomationsViewModel(automations, OpenAutomationSourceAsync);
         Connections = new ConnectionsViewModel(connections);
         Packages = new PackagesViewModel(packages);
         Activity = new ActivityViewModel(activity, OpenActivityReleaseAsync);

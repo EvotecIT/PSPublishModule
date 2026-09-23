@@ -473,6 +473,7 @@
               <TextBlock Text="Automation evidence" FontWeight="SemiBold" FontSize="16" />
               <TextBlock Text="{Binding SelectedEntry.Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
               <TextBlock Text="{Binding SelectedEntry.Provider}" Foreground="#0865FF" />
+              <Button x:Name="OpenAutomationSourceButton" Content="Open workflow file" Command="{Binding OpenSelectedSourceCommand}" IsVisible="{Binding CanOpenSelectedSource}" HorizontalAlignment="Left" />
               <TextBlock Text="Project / scope" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.ProjectDisplay}" TextWrapping="Wrap" />
               <TextBlock Text="Current state" Classes="muted" />
