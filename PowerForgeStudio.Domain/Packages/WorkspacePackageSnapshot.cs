@@ -11,7 +11,9 @@ public sealed record WorkspacePackageSnapshot(
     string SourceUrl,
     bool NuGetAvailable = true,
     bool PowerShellGalleryAvailable = true,
-    IReadOnlyList<string>? SourceWarnings = null)
+    IReadOnlyList<string>? SourceWarnings = null,
+    bool NuGetRetained = false,
+    bool PowerShellGalleryRetained = false)
 {
     public IReadOnlyList<string> Warnings => SourceWarnings ?? [];
     public int NuGetCount => Packages.Count(static item => item.Registry == "NuGet.org");
@@ -21,4 +23,11 @@ public sealed record WorkspacePackageSnapshot(
         ? nuget + gallery : null;
     public bool IsStale => ReadAtUtc - GeneratedAtUtc > TimeSpan.FromDays(2);
     public bool IsPartial => WarningCount > 0;
+    public bool HasRetainedMetrics => NuGetRetained || PowerShellGalleryRetained;
+    public bool IsRegistryRetained(string registry) => registry switch
+    {
+        "NuGet.org" => NuGetRetained,
+        "PowerShell Gallery" => PowerShellGalleryRetained,
+        _ => false
+    };
 }

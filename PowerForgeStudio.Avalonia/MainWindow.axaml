@@ -526,6 +526,7 @@
               <TextBlock Text="{Binding SelectedEntry.VersionDisplay}" />
               <TextBlock Text="Downloads" Classes="muted" />
               <TextBlock Text="{Binding SelectedEntry.DownloadsDisplay}" />
+              <TextBlock Text="{Binding SelectedFreshness}" IsVisible="{Binding HasSelectedFreshness}" Foreground="#98620C" TextWrapping="Wrap" FontSize="12" />
               <Button Content="Open package page" Command="{Binding OpenSelectedCommand}" IsEnabled="{Binding CanOpenSelected}" />
               <TextBlock Text="Source" Classes="muted" />
               <TextBlock Text="{Binding SourceStatus}" TextWrapping="Wrap" />

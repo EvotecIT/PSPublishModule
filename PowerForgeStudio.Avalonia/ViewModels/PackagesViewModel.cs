@@ -31,6 +31,7 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _nuGetDownloads = "Not reported";
     [ObservableProperty] private string _powerShellGalleryDownloads = "Not reported";
     [ObservableProperty] private string _totalDownloads = "Not reported";
+    [ObservableProperty] private string _totalDownloadsLabel = "Total downloads";
     [ObservableProperty] private string _nuGetCountLabel = "Not loaded";
     [ObservableProperty] private string _powerShellGalleryCountLabel = "Not loaded";
     [ObservableProperty] private string _warningSummary = "";
@@ -49,6 +50,10 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
     public int NuGetCount => _all.Count(static entry => entry.Registry == "NuGet.org");
     public int PowerShellGalleryCount => _all.Count(static entry => entry.Registry == "PowerShell Gallery");
     public string SelectedSource => SelectedEntry?.DetailsUrl ?? "";
+    public string SelectedFreshness => SelectedEntry is { } entry && _lastSnapshot?.IsRegistryRetained(entry.Registry) == true
+        ? "These registry values were retained from an earlier collection. Their observation time is unavailable."
+        : "";
+    public bool HasSelectedFreshness => SelectedFreshness.Length > 0;
     public bool CanOpenSelected => SelectedEntry?.DetailsUrl is { Length: > 0 };
 
     partial void OnWarningCountChanged(int value) => OnPropertyChanged(nameof(HasWarnings));
@@ -65,18 +70,21 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
         var source = _lastSnapshot is null ? "No public snapshot is loaded" :
             $"Snapshot generated {_lastSnapshot.GeneratedAtUtc:yyyy-MM-dd HH:mm} UTC" +
             (_lastSnapshot.IsStale ? " (stale)" : "") +
-            (_lastSnapshot.IsPartial ? " (partial)" : "");
+            (_lastSnapshot.IsPartial ? " (partial)" : "") +
+            (_lastSnapshot.IsRegistryRetained(registry) ? "; registry values were retained from an earlier collection" : "");
         HandoffStatus = match is null
             ? $"{id} {version}: no matching {registry} row in this snapshot. {source}. Check the saved release verification for the exact version."
             : string.Equals(match.LatestVersion, version, StringComparison.OrdinalIgnoreCase)
-                ? $"{id} {version}: the public snapshot reports this as the latest version. {source}. Downloads are package-wide; use release verification to confirm exact-version delivery."
-                : $"{id} {version}: the public snapshot lists latest version {match.VersionDisplay}. {source}. Older versions are not represented here; check the saved release verification.";
+                ? $"{id} {version}: the public snapshot lists this as the latest known version. {source}. Downloads are package-wide; use release verification to confirm exact-version delivery."
+                : $"{id} {version}: the public snapshot lists latest known version {match.VersionDisplay}. {source}. Older versions are not represented here; check the saved release verification.";
     }
 
     partial void OnSelectedEntryChanged(WorkspacePackageMetric? value)
     {
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(SelectedSource));
+        OnPropertyChanged(nameof(SelectedFreshness));
+        OnPropertyChanged(nameof(HasSelectedFreshness));
         OnPropertyChanged(nameof(CanOpenSelected));
         OpenSelectedCommand.NotifyCanExecuteChanged();
     }
@@ -119,8 +127,11 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
             NuGetDownloads = Format(snapshot.NuGetDownloads);
             PowerShellGalleryDownloads = Format(snapshot.PowerShellGalleryDownloads);
             TotalDownloads = Format(snapshot.TotalDownloads);
-            NuGetCountLabel = snapshot.NuGetAvailable ? $"{snapshot.NuGetCount} packages" : "Registry unavailable";
-            PowerShellGalleryCountLabel = snapshot.PowerShellGalleryAvailable ? $"{snapshot.PowerShellGalleryCount} modules" : "Registry unavailable";
+            TotalDownloadsLabel = snapshot.HasRetainedMetrics ? "Total downloads · includes prior values" : "Total downloads";
+            NuGetCountLabel = snapshot.NuGetAvailable ? $"{snapshot.NuGetCount} packages" +
+                (snapshot.NuGetRetained ? " · prior values" : "") : "Registry unavailable";
+            PowerShellGalleryCountLabel = snapshot.PowerShellGalleryAvailable ? $"{snapshot.PowerShellGalleryCount} modules" +
+                (snapshot.PowerShellGalleryRetained ? " · prior values" : "") : "Registry unavailable";
             WarningCount = snapshot.WarningCount;
             WarningSummary = snapshot.Warnings.Count > 0
                 ? string.Join(" · ", snapshot.Warnings)
@@ -130,6 +141,8 @@ public sealed partial class PackagesViewModel : ObservableObject, IDisposable
             ApplyFilter();
             if (selected is { } key)
                 SelectedEntry = Entries.FirstOrDefault(item => item.Registry == key.Registry && item.Id == key.Id);
+            OnPropertyChanged(nameof(SelectedFreshness));
+            OnPropertyChanged(nameof(HasSelectedFreshness));
             NotifyCounts();
             Status = $"{TotalCount} public packages observed" +
                 (snapshot.IsStale ? " · source snapshot is older than two days" : "") +

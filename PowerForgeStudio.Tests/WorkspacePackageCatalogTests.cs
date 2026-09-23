@@ -87,6 +87,52 @@ public sealed class WorkspacePackageCatalogTests
         Assert.Contains(snapshot.Warnings, warning => warning.Contains("Gallery unavailable", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task RetainedNuGetValuesRemainVisibleButAreNotMarkedFresh()
+    {
+        using var client = Client("""
+            {"generatedAtUtc":"2026-09-22T08:52:35Z",
+             "summary":{"nuGetDownloads":1200,"powerShellGalleryDownloads":300},
+             "warnings":["NuGet request failed: HttpRequestException",
+                         "Preserved existing NuGet stats after upstream fetch warnings returned empty data."],
+             "nuget":{"packages":[{"id":"OfficeIMO.Word","version":"1.2.3","totalDownloads":1200}]},
+             "powerShellGallery":{"modules":[{"id":"PSPublishModule","version":"3.0.144","downloadCount":300}]}}
+            """);
+
+        var snapshot = await new WorkspacePackageCatalogService(client).ReadAsync();
+
+        Assert.True(snapshot.NuGetAvailable);
+        Assert.True(snapshot.NuGetRetained);
+        Assert.False(snapshot.PowerShellGalleryRetained);
+        Assert.True(snapshot.HasRetainedMetrics);
+        Assert.True(snapshot.IsRegistryRetained("NuGet.org"));
+        Assert.False(snapshot.IsRegistryRetained("PowerShell Gallery"));
+        Assert.Equal(1500, snapshot.TotalDownloads);
+        Assert.Contains(snapshot.Warnings, warning => warning.Contains("prior statistics retained", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RetainedGalleryValuesAreIdentifiedSeparatelyFromCurrentNuGetValues()
+    {
+        using var client = Client("""
+            {"generatedAtUtc":"2026-09-22T08:52:35Z",
+             "summary":{"nuGetDownloads":1200,"powerShellGalleryDownloads":300},
+             "warnings":["PowerShell Gallery request failed: HttpRequestException",
+                         "Preserved existing PowerShell Gallery stats after upstream fetch warnings returned empty data."],
+             "nuget":{"packages":[{"id":"OfficeIMO.Word","version":"1.2.3","totalDownloads":1200}]},
+             "powerShellGallery":{"modules":[{"id":"PSPublishModule","version":"3.0.144","downloadCount":300}]}}
+            """);
+
+        var snapshot = await new WorkspacePackageCatalogService(client).ReadAsync();
+
+        Assert.True(snapshot.PowerShellGalleryAvailable);
+        Assert.True(snapshot.PowerShellGalleryRetained);
+        Assert.False(snapshot.NuGetRetained);
+        Assert.True(snapshot.IsRegistryRetained("PowerShell Gallery"));
+        Assert.False(snapshot.IsRegistryRetained("NuGet.org"));
+        Assert.Equal(1500, snapshot.TotalDownloads);
+    }
+
     private static HttpClient Client(string content) => new(new StubHandler(content));
 
     private sealed class StubHandler(string content) : HttpMessageHandler

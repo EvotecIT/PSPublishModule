@@ -1,5 +1,6 @@
 using Avalonia.Headless;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -86,7 +87,7 @@ public sealed class WorkspacePackagesTests
         {
             await TestAppBuilder.RunAsync(async () =>
             {
-                var source = new FakePackageCatalog();
+                var source = new FakePackageCatalog { NuGetRetained = true };
                 using var model = new WorkspaceViewModel(root, packages: source);
                 model.ShowReleaseCommand.Execute(null);
                 var receipt = new ReleasePublishReceipt(root, "OfficeIMO", "ProjectBuild", "signed-output.nupkg", "NuGet",
@@ -117,8 +118,12 @@ public sealed class WorkspacePackagesTests
                 Assert.Equal("OfficeIMO.Word", model.Packages.Search);
                 Assert.Equal("NuGet.org", model.Packages.Filter);
                 Assert.Equal("OfficeIMO.Word", model.Packages.SelectedEntry?.Id);
-                Assert.Contains("latest version", model.Packages.HandoffStatus, StringComparison.Ordinal);
+                Assert.Contains("latest known version", model.Packages.HandoffStatus, StringComparison.Ordinal);
                 Assert.Contains("package-wide", model.Packages.HandoffStatus, StringComparison.Ordinal);
+                Assert.Contains("registry values were retained", model.Packages.HandoffStatus, StringComparison.Ordinal);
+                Assert.Contains("prior values", model.Packages.NuGetCountLabel, StringComparison.Ordinal);
+                Assert.Contains("includes prior values", model.Packages.TotalDownloadsLabel, StringComparison.Ordinal);
+                Assert.True(model.Packages.HasSelectedFreshness);
 
                 var wide = new MainWindow { DataContext = model, Width = 1600, Height = 900 };
                 wide.Show();
@@ -126,7 +131,14 @@ public sealed class WorkspacePackagesTests
                 finally { wide.Close(); }
                 var compact = new MainWindow { DataContext = model, Width = 1050, Height = 720 };
                 compact.Show();
-                try { Capture(compact, "package-release-handoff-compact.png"); }
+                try
+                {
+                    Capture(compact, "package-release-handoff-compact.png");
+                    var details = compact.FindControl<Button>("CompactContextButton")!;
+                    details.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.Equal("Projects", details.Content);
+                    Capture(compact, "package-release-handoff-compact-details.png");
+                }
                 finally { compact.Close(); }
 
                 var privateReceipt = receipt with { Destination = "https://private.example.test/v3/index.json" };
@@ -222,6 +234,7 @@ public sealed class WorkspacePackagesTests
     {
         public bool Fail { get; set; }
         public string NuGetVersion { get; set; } = "1.2.3";
+        public bool NuGetRetained { get; set; }
 
         public Task<WorkspacePackageSnapshot> ReadAsync(CancellationToken cancellationToken = default)
         {
@@ -233,7 +246,9 @@ public sealed class WorkspacePackagesTests
                  new WorkspacePackageMetric("PSPublishModule", "PowerShell Gallery", "3.0.144", 300,
                     "https://www.powershellgallery.com/packages/PSPublishModule")],
                 1200, 300, 1, WorkspacePackageCatalogService.SourceUrl,
-                SourceWarnings: ["PowerShell Gallery: upstream request failed."]));
+                SourceWarnings: NuGetRetained ? ["NuGet.org: prior statistics retained; freshness may differ from snapshot time."]
+                    : ["PowerShell Gallery: upstream request failed."],
+                NuGetRetained: NuGetRetained));
         }
     }
 }

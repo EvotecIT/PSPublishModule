@@ -59,6 +59,8 @@ public sealed class WorkspacePackageCatalogService(HttpClient? httpClient = null
         var sourceWarningCount = 0;
         var nuGetReadFailed = false;
         var galleryReadFailed = false;
+        var nuGetRetained = false;
+        var galleryRetained = false;
         if (root.TryGetProperty("warnings", out var warnings) && warnings.ValueKind == JsonValueKind.Array)
         {
             sourceWarningCount = warnings.GetArrayLength();
@@ -68,6 +70,8 @@ public sealed class WorkspacePackageCatalogService(HttpClient? httpClient = null
                 var warningText = warning.GetString();
                 if (IndicatesProviderFailure(warningText, "NuGet")) nuGetReadFailed = true;
                 if (IndicatesProviderFailure(warningText, "PowerShell Gallery")) galleryReadFailed = true;
+                if (IndicatesRetainedMetrics(warningText, "NuGet")) nuGetRetained = true;
+                if (IndicatesRetainedMetrics(warningText, "PowerShell Gallery")) galleryRetained = true;
                 var summaryLine = SummarizeWarning(warningText);
                 if (summaryLine is not null && !warningSummaries.Contains(summaryLine, StringComparer.Ordinal))
                     warningSummaries.Add(summaryLine);
@@ -83,7 +87,8 @@ public sealed class WorkspacePackageCatalogService(HttpClient? httpClient = null
         return new WorkspacePackageSnapshot(generatedAtUtc, readAtUtc, packages,
             hasNuGet ? ReadNonNegative(summary, "nuGetDownloads") : null,
             hasGallery ? ReadNonNegative(summary, "powerShellGalleryDownloads") : null,
-            warningCount, SourceUrl, hasNuGet, hasGallery, warningSummaries.Take(5).ToArray());
+            warningCount, SourceUrl, hasNuGet, hasGallery, warningSummaries.Take(5).ToArray(),
+            hasNuGet && nuGetRetained, hasGallery && galleryRetained);
     }
 
     private static bool ReadItems(JsonElement root, string sectionName, string listName, string registry,
@@ -128,6 +133,10 @@ public sealed class WorkspacePackageCatalogService(HttpClient? httpClient = null
            (warning.Contains("request failed", StringComparison.OrdinalIgnoreCase) ||
             warning.Contains("response payload", StringComparison.OrdinalIgnoreCase) ||
             warning.Contains("Failed to parse", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IndicatesRetainedMetrics(string? warning, string provider)
+        => warning?.Contains(provider, StringComparison.OrdinalIgnoreCase) == true &&
+           warning.Contains("Preserved existing", StringComparison.OrdinalIgnoreCase);
 
     private static string? ReadString(JsonElement item, string name)
         => item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
