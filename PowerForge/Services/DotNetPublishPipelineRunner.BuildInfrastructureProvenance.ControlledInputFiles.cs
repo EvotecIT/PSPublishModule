@@ -62,6 +62,7 @@ public sealed partial class DotNetPublishPipelineRunner
             taskInputBaseDirectory,
             controlledProjectPath,
             evaluatedProjectContexts,
+            executableMsBuildInputs,
             out _);
 
     private static bool HasOnlyControlledBuildFileInputs(
@@ -72,6 +73,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? taskInputBaseDirectory,
         string? controlledProjectPath,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts,
+        IReadOnlyCollection<string> allEvaluatedMsBuildInputs,
         out string? failureReason)
     {
         failureReason = null;
@@ -87,6 +89,10 @@ public sealed partial class DotNetPublishPipelineRunner
             var executableInputs = new HashSet<string>(
                 executableMsBuildInputs.Select(Path.GetFullPath),
                 FileSystemPathSafety.ExistingPathComparer);
+            IReadOnlyDictionary<string, string> immutableGlobalProperties =
+                ReadImmutableTargetGuardProperties(
+                    evaluatedGlobalProperties,
+                    allEvaluatedMsBuildInputs.Concat(executableMsBuildInputs));
             if (!string.IsNullOrWhiteSpace(controlledProjectPath))
             {
                 controlledProjectPath = Path.GetFullPath(controlledProjectPath!);
@@ -255,7 +261,8 @@ public sealed partial class DotNetPublishPipelineRunner
                             controlledDocumentSources,
                             properties,
                             outputProjectPath,
-                            readLines: ReadControlledCheckoutTextInput)))
+                            readLines: ReadControlledCheckoutTextInput,
+                            immutableGlobalProperties: immutableGlobalProperties)))
                 {
                     failureReason = $"MSBuild document contains an uncontrolled task file input: '{Path.GetFileName(path)}'";
                     return false;

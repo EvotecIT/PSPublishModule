@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -9,7 +8,8 @@ public sealed partial class DotNetPublishPipelineRunner
         XElement element,
         IReadOnlyDictionary<string, string> evaluatedProperties,
         string? definingProjectPath,
-        IEnumerable<XDocument>? relatedDocuments = null)
+        IEnumerable<XDocument>? relatedDocuments = null,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties = null)
     {
         if (!IsDefinitelyInactiveMsBuildElement(element, evaluatedProperties, definingProjectPath))
             return false;
@@ -19,117 +19,91 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target is null)
             return true;
 
-        bool targetIsDefinitelyInactive = IsDefinitelyInactiveMsBuildElement(
-            target,
-            evaluatedProperties,
-            definingProjectPath);
-
-        IEnumerable<XDocument> assignmentDocuments = relatedDocuments ?? Enumerable.Empty<XDocument>();
-        if (target.Document is not null)
-            assignmentDocuments = assignmentDocuments.Prepend(target.Document);
-        XElement[] otherTargetElements = assignmentDocuments
-            .SelectMany(document => document.Descendants())
-            .Where(candidate =>
-            {
-                XElement? candidateTarget = candidate.AncestorsAndSelf().FirstOrDefault(ancestor =>
-                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
-                return candidateTarget is not null && !ReferenceEquals(candidateTarget, target);
-            })
-            .ToArray();
-
-        if (targetIsDefinitelyInactive)
-        {
-            // Assignments inside this target cannot run before its own condition is checked.
-            // Only another target can make an evaluated-false target guard reachable.
-            HashSet<string> targetConditionProperties = ReadControlledBuildConditionPropertyNames(
-                target,
-                target,
-                includeTargetCondition: true);
-            if (!CanAssignTargetTimeConditionProperty(otherTargetElements, targetConditionProperties))
-                return true;
-        }
-
-        HashSet<string> conditionProperties = ReadControlledBuildConditionPropertyNames(
-            element,
-            target,
-            includeTargetCondition: targetIsDefinitelyInactive);
-        if (conditionProperties.Count == 0)
-            return true;
-
-        IEnumerable<XElement> precedingTargetElements = target.Descendants()
-            .TakeWhile(candidate => !ReferenceEquals(candidate, element));
-        return !CanAssignTargetTimeConditionProperty(
-            precedingTargetElements.Concat(otherTargetElements),
-            conditionProperties);
+        // Evaluation values can change before or during a target, including through SDK
+        // targets and engine-managed properties. Only a false condition proven from
+        // immutable global properties can make a target-time operation unreachable.
+        return immutableGlobalProperties is not null &&
+               IsDefinitelyInactiveMsBuildElement(
+                   element,
+                   immutableGlobalProperties,
+                   definingProjectPath);
     }
 
-    private static HashSet<string> ReadControlledBuildConditionPropertyNames(
-        XElement element,
-        XElement target,
-        bool includeTargetCondition)
+    private static IReadOnlyDictionary<string, string> ReadImmutableTargetGuardProperties(
+        IReadOnlyDictionary<string, string>? globalProperties,
+        IEnumerable<string> evaluatedMsBuildInputs)
     {
-        var propertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        IEnumerable<string> conditions = element.AncestorsAndSelf()
-            .TakeWhile(candidate => !ReferenceEquals(candidate, target))
-            .Select(candidate => candidate.Attribute("Condition")?.Value)
-            .Where(value => !string.IsNullOrWhiteSpace(value))!;
-        if (includeTargetCondition && !string.IsNullOrWhiteSpace(target.Attribute("Condition")?.Value))
-            conditions = conditions.Prepend(target.Attribute("Condition")!.Value);
-        IEnumerable<string> precedingWhenConditions = element.AncestorsAndSelf()
-            .TakeWhile(candidate => !ReferenceEquals(candidate, target))
-            .Where(candidate =>
-                candidate.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) ||
-                candidate.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase))
-            .SelectMany(branch => branch.ElementsBeforeSelf())
-            .Where(candidate => candidate.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase))
-            .Select(candidate => candidate.Attribute("Condition")?.Value)
-            .Where(value => !string.IsNullOrWhiteSpace(value))!;
+        var immutable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (globalProperties is null)
+            return immutable;
 
-        foreach (string condition in conditions.Concat(precedingWhenConditions))
+        foreach (KeyValuePair<string, string> property in globalProperties)
+            immutable[property.Key] = property.Value;
+        immutable.Remove("MSBuildLastTaskResult");
+
+        foreach (string path in evaluatedMsBuildInputs.Distinct(FileSystemPathSafety.ExistingPathComparer))
         {
-            foreach (Match match in Regex.Matches(
-                         condition,
-                         @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
-                         RegexOptions.CultureInvariant))
+            XDocument document;
+            try
             {
-                propertyNames.Add(match.Groups[1].Value);
+                document = XDocument.Load(path, LoadOptions.None);
             }
-        }
-
-        return propertyNames;
-    }
-
-    private static bool CanAssignTargetTimeConditionProperty(
-        IEnumerable<XElement> candidateElements,
-        ISet<string> conditionProperties)
-    {
-        foreach (XElement element in candidateElements)
-        {
-            if (element.Parent?.Name.LocalName.Equals(
-                    "PropertyGroup",
-                    StringComparison.OrdinalIgnoreCase) == true &&
-                conditionProperties.Contains(element.Name.LocalName))
+            catch
             {
-                return true;
+                // An incomplete import inventory cannot prove a property immutable.
+                immutable.Clear();
+                break;
             }
 
-            if (!element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            string? propertyName = element.Attributes()
+            string? localProperties = document.Root?.Attributes()
                 .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
-                    "PropertyName",
+                    "TreatAsLocalProperty",
                     StringComparison.OrdinalIgnoreCase))?
                 .Value;
-            if (string.IsNullOrWhiteSpace(propertyName))
-                continue;
-            if (ContainsUnresolvedBuildExpression(propertyName!) ||
-                conditionProperties.Contains(DecodeMsBuildEscapes(propertyName!).Trim()))
+            if (localProperties is not null)
+                localProperties = DecodeMsBuildEscapes(localProperties);
+            if (!string.IsNullOrWhiteSpace(localProperties) &&
+                ContainsUnresolvedBuildExpression(localProperties!))
             {
-                return true;
+                immutable.Clear();
+                break;
+            }
+
+            foreach (string propertyName in (localProperties ?? string.Empty).Split(';'))
+                immutable.Remove(propertyName.Trim());
+
+            foreach (XElement target in document.Descendants().Where(element =>
+                         element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (XElement assignment in target.Descendants())
+                {
+                    if (assignment.Parent?.Name.LocalName.Equals(
+                            "PropertyGroup",
+                            StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        immutable.Remove(assignment.Name.LocalName);
+                    }
+
+                    if (!assignment.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    string? propertyName = assignment.Attributes()
+                        .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
+                            "PropertyName",
+                            StringComparison.OrdinalIgnoreCase))?
+                        .Value;
+                    if (string.IsNullOrWhiteSpace(propertyName))
+                        continue;
+                    propertyName = DecodeMsBuildEscapes(propertyName!);
+                    if (ContainsUnresolvedBuildExpression(propertyName))
+                    {
+                        immutable.Clear();
+                        return immutable;
+                    }
+                    immutable.Remove(propertyName.Trim());
+                }
             }
         }
 
-        return false;
+        return immutable;
     }
 }

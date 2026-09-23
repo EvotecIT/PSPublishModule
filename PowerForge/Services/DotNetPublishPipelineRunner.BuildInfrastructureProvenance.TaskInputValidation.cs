@@ -14,7 +14,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties = null,
         string? controlledProjectPath = null,
         Func<string, bool>? isControlledInput = null,
-        Func<string, string[]?>? readLines = null)
+        Func<string, string[]?>? readLines = null,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties = null)
         => HasOnlyControlledConditionFileInputs(
                document,
                declaringPath,
@@ -23,7 +24,8 @@ public sealed partial class DotNetPublishPipelineRunner
                taskInputAllowedRoot,
                relatedDocuments,
                evaluatedGlobalProperties,
-               isControlledInput) &&
+               isControlledInput,
+               immutableGlobalProperties) &&
            HasOnlyControlledCallTargetDestinations(
                document,
                declaringPath,
@@ -48,7 +50,8 @@ public sealed partial class DotNetPublishPipelineRunner
                taskInputAllowedRoot,
                relatedDocuments,
                evaluatedGlobalProperties,
-               readLines ?? ReadControlledCheckoutTextInput) &&
+               readLines ?? ReadControlledCheckoutTextInput,
+               immutableGlobalProperties) &&
            HasOnlyControlledPublishItemInputs(
                document,
                declaringPath,
@@ -57,7 +60,8 @@ public sealed partial class DotNetPublishPipelineRunner
                taskInputAllowedRoot,
                relatedDocuments,
                evaluatedGlobalProperties,
-               isControlledInput) &&
+               isControlledInput,
+               immutableGlobalProperties) &&
            HasOnlyControlledTaskLoadedFileInputs(
                document,
                declaringPath,
@@ -66,7 +70,8 @@ public sealed partial class DotNetPublishPipelineRunner
                taskInputAllowedRoot,
                relatedDocuments,
                evaluatedGlobalProperties,
-               readLines ?? ReadControlledCheckoutTextInput) &&
+               readLines ?? ReadControlledCheckoutTextInput,
+               immutableGlobalProperties) &&
            HasOnlyControlledLiteralTaskFileOutputs(
                document,
                declaringPath,
@@ -75,7 +80,8 @@ public sealed partial class DotNetPublishPipelineRunner
                taskInputAllowedRoot,
                relatedDocuments,
                evaluatedGlobalProperties,
-               controlledProjectPath) &&
+               controlledProjectPath,
+               immutableGlobalProperties) &&
            HasOnlyControlledLiteralTaskFileInputs(
                document,
                declaringPath,
@@ -85,5 +91,6 @@ public sealed partial class DotNetPublishPipelineRunner
                relatedDocuments,
                evaluatedGlobalProperties,
                isControlledInput,
-               readLines);
+               readLines,
+               immutableGlobalProperties);
 }

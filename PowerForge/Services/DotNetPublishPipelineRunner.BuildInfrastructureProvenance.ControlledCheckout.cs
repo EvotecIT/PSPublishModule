@@ -754,6 +754,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(controlledProjectPath!)!,
                     controlledProjectPath,
                     controlledProjectContexts,
+                    evaluatedMsBuildInputs,
                     out string? buildInputFailureReason))
             {
                 failureReason = "controlled checkout contains an unverified build file input: " +

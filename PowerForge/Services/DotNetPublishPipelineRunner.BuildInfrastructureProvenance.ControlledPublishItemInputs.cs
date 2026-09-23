@@ -27,7 +27,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string taskInputAllowedRoot,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
-        Func<string, bool>? isControlledInput)
+        Func<string, bool>? isControlledInput,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         foreach (XElement item in document.Descendants().Where(element =>
                      (ControlledTargetFileItemNames.Contains(element.Name.LocalName) ||
@@ -39,7 +40,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     item,
                     evaluatedGlobalProperties,
                     declaringPath,
-                    relatedDocuments.Select(related => related.Document)))
+                    relatedDocuments.Select(related => related.Document),
+                    immutableGlobalProperties))
             {
                 continue;
             }
