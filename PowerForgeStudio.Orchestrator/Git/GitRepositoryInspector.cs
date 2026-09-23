@@ -24,7 +24,7 @@ public sealed class GitRepositoryInspector
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
 
-        if (!Directory.Exists(repositoryRoot))
+        if (!GitRepositoryOwnership.HasOwnWorkingCopy(repositoryRoot))
         {
             return new RepositoryGitSnapshot(false, null, null, 0, 0, 0, 0);
         }
@@ -40,6 +40,10 @@ public sealed class GitRepositoryInspector
                 snapshot.BehindCount,
                 snapshot.TrackedChangeCount,
                 snapshot.UntrackedChangeCount);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {

@@ -5,6 +5,7 @@ using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Orchestrator.Automation;
 using PowerForgeStudio.Orchestrator.Catalog;
+using PowerForgeStudio.Orchestrator.Git;
 using PowerForgeStudio.Orchestrator.Hub;
 using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Portfolio;
@@ -89,14 +90,31 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         var entries = await Task.Run(() => _catalog.Scan(root), cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var managed = entries.Where(static entry => entry.IsReleaseManaged).ToArray();
-        var portfolio = await Task.Run(() => _portfolio.BuildPortfolio(managed), cancellationToken).ConfigureAwait(false);
-        var probeOrder = PrioritizeGitHubProbes(root, portfolio);
+        var managedPortfolio = await _portfolio.BuildPortfolioAsync(managed, cancellationToken).ConfigureAwait(false);
+        // Ordinary repositories are eligible for GitHub evidence too. Avoid a full Git status scan over
+        // every project merely to order the bounded remote probe; inspect only selected candidates.
+        var unmanagedCandidates = entries.Where(static entry => !entry.IsReleaseManaged
+                && GitRepositoryOwnership.HasOwnWorkingCopy(entry.RootPath))
+            .Select(static entry => new RepositoryPortfolioItem(entry,
+                new RepositoryGitSnapshot(false, null, null, 0, 0, 0, 0),
+                new RepositoryReadiness(RepositoryReadinessKind.Blocked, "No release contract detected.")));
+        var priorityOrder = PrioritizeGitHubProbes(root, managedPortfolio
+            .Where(static item => GitRepositoryOwnership.HasOwnWorkingCopy(item.RootPath))
+            .Concat(unmanagedCandidates).ToArray());
+        var selectedUnmanaged = priorityOrder.Take(options.MaxGitHubRepositories)
+            .Where(static item => !item.Repository.IsReleaseManaged)
+            .Select(static item => item.Repository).ToArray();
         using var gitHubDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         gitHubDeadline.CancelAfter(TimeSpan.FromSeconds(options.GitHubTimeoutSeconds));
         IReadOnlyList<RepositoryPortfolioItem> enriched;
         var gitHubTimedOut = false;
         try
         {
+            var inspectedUnmanaged = await _portfolio.BuildPortfolioAsync(selectedUnmanaged, gitHubDeadline.Token)
+                .ConfigureAwait(false);
+            var pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            var inspectedByPath = inspectedUnmanaged.ToDictionary(static item => item.RootPath, pathComparer);
+            var probeOrder = priorityOrder.Select(item => inspectedByPath.GetValueOrDefault(item.RootPath) ?? item).ToArray();
             enriched = await _gitHubInbox.PopulateInboxAsync(
                 probeOrder,
                 new GitHubInboxOptions { MaxRepositories = options.MaxGitHubRepositories },
@@ -105,16 +123,20 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             gitHubTimedOut = true;
-            enriched = probeOrder.Select(static item => item with
+            enriched = priorityOrder.Select(static item => item with
             {
                 GitHubInbox = new RepositoryGitHubInbox(
                     RepositoryGitHubInboxStatus.NotProbed, null, null, null, null, null, null, null, null,
                     "GitHub refresh timed out.", "The bounded Activity provider deadline elapsed.")
             }).ToArray();
         }
-        enriched = _releaseDrift.PopulateReleaseDrift(enriched);
+        var enrichedByPath = enriched.ToDictionary(static item => item.RootPath,
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var managedEnriched = managedPortfolio.Select(item => enrichedByPath.GetValueOrDefault(item.RootPath) ?? item)
+            .ToArray();
+        managedEnriched = _releaseDrift.PopulateReleaseDrift(managedEnriched).ToArray();
 
-        var activity = BuildPortfolioEntries(enriched, inspectedAt);
+        var activity = BuildPortfolioEntries(managedEnriched, enriched, inspectedAt);
         var journal = await journalTask.ConfigureAwait(false);
         activity.AddRange(BuildReleaseJournalEntries(journal.Entries));
         var sources = new List<WorkspaceActivitySourceState>
@@ -164,7 +186,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
             .Take(options.MaxEntries)
             .ToArray();
 
-        return new WorkspaceActivitySnapshot(DateTimeOffset.UtcNow, displayed, sources, managed.Length, ordered.Length);
+        return new WorkspaceActivitySnapshot(DateTimeOffset.UtcNow, displayed, sources, entries.Count, ordered.Length);
     }
 
     private IReadOnlyList<RepositoryPortfolioItem> PrioritizeGitHubProbes(
@@ -195,11 +217,12 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
     }
 
     private List<WorkspaceActivityEntry> BuildPortfolioEntries(
-        IReadOnlyList<RepositoryPortfolioItem> portfolio,
+        IReadOnlyList<RepositoryPortfolioItem> managedPortfolio,
+        IReadOnlyList<RepositoryPortfolioItem> gitHubPortfolio,
         DateTimeOffset observedAt)
     {
         var result = new List<WorkspaceActivityEntry>();
-        var inboxItems = _releaseInbox.BuildInbox(portfolio, queueSession: null, maxItems: int.MaxValue);
+        var inboxItems = _releaseInbox.BuildInbox(managedPortfolio, queueSession: null, maxItems: int.MaxValue);
         foreach (var item in inboxItems.Where(static item => item.Badge != "Ready Today"))
         {
             var kind = item.Badge.Contains("Release", StringComparison.OrdinalIgnoreCase)
@@ -214,7 +237,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
                 item.RootPath, item.RootPath, IsActionable: true));
         }
 
-        foreach (var item in portfolio)
+        foreach (var item in gitHubPortfolio)
         {
             var inbox = item.GitHubInbox;
             if (inbox?.LatestWorkflowFailed == true)
@@ -331,7 +354,8 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
             }
         }
 
-        var deferred = Math.Max(0, portfolio.Count - candidates.Length);
+        var deferred = portfolio.Count(static item => item.GitHubInbox?.Status == RepositoryGitHubInboxStatus.NotProbed);
+        var withoutOrigin = portfolio.Count(static item => item.GitHubInbox?.Summary == "GitHub origin not detected.");
         var providerGaps = portfolio.Count(static item => item.GitHubInbox?.Status is
             RepositoryGitHubInboxStatus.NotProbed or RepositoryGitHubInboxStatus.Unavailable);
         var state = authenticationRequired && successful == 0 ? "Authentication required"
@@ -339,8 +363,9 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
             : rateLimited && successful == 0 ? "Rate limited"
             : successful > 0 && (unavailable > 0 || authenticationRequired || accessDenied || rateLimited || deferred > 0 || providerGaps > 0) ? "Partial"
             : successful > 0 ? "Available"
-            : candidates.Length == 0 && portfolio.Count > 0 ? "Deferred"
-            : candidates.Length == 0 ? "Absent"
+            : candidates.Length == 0 && deferred > 0 ? "Deferred"
+            : candidates.Length == 0 && withoutOrigin == portfolio.Count ? "Absent"
+            : candidates.Length == 0 ? "Unavailable"
             : "Unavailable";
         var message = state switch
         {
@@ -350,7 +375,7 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
             "Partial" => $"Issue evidence loaded for {successful} repository(s); {Math.Max(unavailable + deferred, providerGaps)} had unavailable or deferred GitHub signals. The bounded scan prioritizes non-archived favorites and local attention.",
             "Available" => $"Open issues were observed for {successful} repository(s).",
             "Deferred" => "GitHub evidence was intentionally deferred by the bounded repository limit. The scan prioritizes non-archived favorites and local attention.",
-            "Absent" => "No release-managed GitHub repositories were detected.",
+            "Absent" => "No supported GitHub origin was observed among the repositories checked.",
             _ => "GitHub issue evidence could not be observed. Empty results are not assumed."
         };
         return new GitHubIssueResult(entries,

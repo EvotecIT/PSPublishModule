@@ -1,4 +1,5 @@
 using PowerForge;
+using PowerForgeStudio.Orchestrator.Git;
 using PowerForgeStudio.Orchestrator.Portfolio;
 
 namespace PowerForgeStudio.Tests;
@@ -28,6 +29,7 @@ public sealed class PowerForgeStudioGitRemoteResolverTests
 
         try
         {
+            Assert.True((await new GitClient().RunRawAsync(repositoryRoot, ["init", "-b", "main"])).Succeeded);
             var url = await resolver.ResolveOriginUrlAsync(repositoryRoot);
 
             Assert.Equal(repositoryRoot, capturedRepositoryRoot);
@@ -54,9 +56,30 @@ public sealed class PowerForgeStudioGitRemoteResolverTests
         });
         try
         {
+            Assert.True((await new GitClient().RunRawAsync(repositoryRoot, ["init", "-b", "main"])).Succeeded);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 resolver.ResolveOriginUrlAsync(repositoryRoot, cancellation.Token));
         }
         finally { Directory.Delete(repositoryRoot, recursive: true); }
+    }
+
+    [Fact]
+    public async Task ResolveOriginUrlAsync_DoesNotInheritEnclosingRepositoryRemote()
+    {
+        var parent = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-origin-parent-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            Assert.True((await new GitClient().RunRawAsync(parent, ["init", "-b", "main"])).Succeeded);
+            Assert.True((await new GitClient().RunRawAsync(parent,
+                ["remote", "add", "origin", "https://github.com/EvotecIT/Parent.git"])).Succeeded);
+            var child = Directory.CreateDirectory(Path.Combine(parent, "OrdinaryProject")).FullName;
+
+            Assert.Null(await new GitRemoteResolver().ResolveOriginUrlAsync(child));
+            Assert.False((await new GitRepositoryInspector().InspectAsync(child)).IsGitRepository);
+            Assert.Equal("https://github.com/EvotecIT/Parent.git",
+                await new GitRemoteResolver().ResolveOriginUrlAsync(parent));
+        }
+        finally { Directory.Delete(parent, recursive: true); }
     }
 }

@@ -8,6 +8,7 @@ using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Orchestrator.Activity;
 using PowerForgeStudio.Orchestrator.Automation;
 using PowerForgeStudio.Orchestrator.Catalog;
+using PowerForgeStudio.Orchestrator.Git;
 using PowerForgeStudio.Orchestrator.Hub;
 using PowerForgeStudio.Orchestrator.Portfolio;
 using PowerForgeStudio.Orchestrator.Queue;
@@ -28,8 +29,11 @@ public sealed class PowerForgeStudioActivityInventoryTests
             foreach (var name in new[] { "Alpha", "Beta" })
             {
                 var repository = Directory.CreateDirectory(Path.Combine(root, name)).FullName;
-                Directory.CreateDirectory(Path.Combine(repository, "Build"));
-                await File.WriteAllTextAsync(Path.Combine(repository, "Build", "Build-Project.ps1"), "# Inventory must not run this script");
+                if (name == "Alpha")
+                {
+                    Directory.CreateDirectory(Path.Combine(repository, "Build"));
+                    await File.WriteAllTextAsync(Path.Combine(repository, "Build", "Build-Project.ps1"), "# Inventory must not run this script");
+                }
                 Assert.True((await new GitClient().RunRawAsync(repository, ["init", "-b", "main"])).Succeeded);
             }
 
@@ -55,7 +59,76 @@ public sealed class PowerForgeStudioActivityInventoryTests
             Assert.NotEmpty(requests);
             Assert.All(requests, path => Assert.Contains("/repos/EvotecIT/Beta", path, StringComparison.Ordinal));
             Assert.Contains(snapshot.Entries, entry => entry.Kind == "Issue" && entry.Project == "Beta");
+            Assert.Contains(snapshot.Entries, entry => entry.Kind == "Pull request" && entry.Project == "Beta");
+            Assert.Contains(snapshot.Entries, entry => entry.Kind == "CI" && entry.Project == "Beta");
+            Assert.Equal(2, snapshot.RepositoryCount);
+            Assert.Contains("1 release-managed", Assert.Single(snapshot.Sources, source => source.Provider == "Local workspace").Message);
+            Assert.DoesNotContain(snapshot.Entries, entry => entry.Project == "Beta" && entry.Provider == "PowerForge portfolio");
             Assert.Equal("Partial", Assert.Single(snapshot.Sources, source => source.Provider == "GitHub").State);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task InspectAsync_NonGitFolderDoesNotConsumeGitHubProbeSlot()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-activity-probe-slot-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var nonGit = Directory.CreateDirectory(Path.Combine(root, "AlphaFolder")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(nonGit, "README.md"), "ordinary folder");
+            var repository = Directory.CreateDirectory(Path.Combine(root, "Beta")).FullName;
+            Assert.True((await new GitClient().RunRawAsync(repository, ["init", "-b", "main"])).Succeeded);
+            var requests = new List<string>();
+            using var http = new HttpClient(new StubHttpMessageHandler(request =>
+            {
+                var path = request.RequestUri?.PathAndQuery ?? "";
+                requests.Add(path);
+                if (path == "/repos/EvotecIT/Beta") return Json("""{ "default_branch": "main" }""");
+                return CreateGitHubResponse(request);
+            })) { BaseAddress = new Uri("https://api.github.com") };
+            using var service = new WorkspaceActivityInventoryService(
+                new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
+                new GitHubInboxService(http, new NamedGitRemoteResolver()),
+                new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
+                new FakeAutomationInventory(), new FakeGitHubProjectService(),
+                new ReleaseHistoryService(Path.Combine(root, "history.db")));
+
+            var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(1, 1, 50));
+
+            Assert.Equal(2, snapshot.RepositoryCount);
+            Assert.NotEmpty(requests);
+            Assert.All(requests, path => Assert.Contains("/repos/EvotecIT/Beta", path, StringComparison.Ordinal));
+            Assert.Contains(snapshot.Entries, entry => entry.Kind == "Issue" && entry.Project == "Beta");
+            Assert.Equal("Available", Assert.Single(snapshot.Sources, source => source.Provider == "GitHub").State);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task InspectAsync_OrdinaryRepositoryWithoutGitHubOriginIsAbsentNotDeferred()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-activity-ordinary-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var repository = Directory.CreateDirectory(Path.Combine(root, "OrdinaryProject")).FullName;
+            Assert.True((await new GitClient().RunRawAsync(repository, ["init", "-b", "main"])).Succeeded);
+            using var http = new HttpClient(new StubHttpMessageHandler(_ => throw new InvalidOperationException("No HTTP expected.")))
+                { BaseAddress = new Uri("https://api.github.com") };
+            using var service = new WorkspaceActivityInventoryService(
+                new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
+                new GitHubInboxService(http, new StubGitRemoteResolver(null)),
+                new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
+                new FakeAutomationInventory(), new FakeGitHubProjectService(),
+                new ReleaseHistoryService(Path.Combine(root, "history.db")));
+
+            var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(1, 1, 50));
+
+            Assert.Equal(1, snapshot.RepositoryCount);
+            Assert.DoesNotContain(snapshot.Entries, entry => entry.Provider == "PowerForge portfolio");
+            Assert.Equal("Absent", Assert.Single(snapshot.Sources, source => source.Provider == "GitHub").State);
         }
         finally { Directory.Delete(root, recursive: true); }
     }
@@ -240,6 +313,38 @@ public sealed class PowerForgeStudioActivityInventoryTests
         }
     }
 
+    [Fact]
+    public async Task InspectAsync_GitHubDeadlineBoundsSelectedOrdinaryGitStatus()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-activity-git-timeout-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var repository = Directory.CreateDirectory(Path.Combine(root, "OrdinaryProject")).FullName;
+            Assert.True((await new GitClient().RunRawAsync(repository, ["init", "-b", "main"])).Succeeded);
+            var portfolio = new RepositoryPortfolioService(
+                new GitRepositoryInspector(new GitClient(new BlockingProcessRunner())),
+                new RepositoryGitPreflightService());
+            using var http = new HttpClient(new StubHttpMessageHandler(_ => throw new InvalidOperationException("No HTTP expected.")))
+                { BaseAddress = new Uri("https://api.github.com") };
+            using var service = new WorkspaceActivityInventoryService(
+                new RepositoryCatalogScanner(), portfolio,
+                new GitHubInboxService(http, new StubGitRemoteResolver(null)),
+                new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
+                new FakeAutomationInventory(), new FakeGitHubProjectService(),
+                new ReleaseHistoryService(Path.Combine(root, "history.db")));
+            using var userDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+
+            var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(1, 1, 50, 1),
+                userDeadline.Token);
+
+            Assert.Equal(1, snapshot.RepositoryCount);
+            Assert.Contains(snapshot.Sources, source => source.Provider == "GitHub" && source.State == "Unavailable"
+                && source.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Forbidden, "Access denied")]
     [InlineData(HttpStatusCode.TooManyRequests, "Rate limited")]
@@ -310,6 +415,16 @@ public sealed class PowerForgeStudioActivityInventoryTests
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return null;
+        }
+    }
+
+    private sealed class BlockingProcessRunner : IProcessRunner
+    {
+        public async Task<ProcessRunResult> RunAsync(ProcessRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Git status must have been canceled.");
         }
     }
 

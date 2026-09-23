@@ -237,7 +237,7 @@ Evidence:
 - All 40 Avalonia tests pass on the final Activity candidate.
 - Wide, compact-top and compact-list Skia renders were inspected: `Artifacts/StudioValidation/activity-attention.png`, `activity-attention-compact.png` and `activity-attention-compact-list.png`. The compact shell keeps the project tree, collapses the right inspector and scrolls the inbox above the output dock.
 
-The Activity route currently reads open GitHub issues and aggregate pull-request/CI signals. It does not provide a global issue search, review submission, issue edits, persistent mute rules, GitHub workflow runtime history or durable Activity history. The existing selected-project GitHub page remains the detail owner. Native Windows pointer, keyboard and external-link opening remain unverified.
+The Activity route reads open GitHub issues and aggregate pull-request/CI signals for both release-managed and ordinary repositories. It inspects local Git status only for release-managed repositories and the ordinary repositories selected by the bounded GitHub probe; a missing build contract does not create a release warning. The provider marks a checked workspace with no supported GitHub origin Absent, while repositories beyond the probe limit remain Deferred. It does not provide global issue search, review submission, issue edits, persistent mute rules, GitHub workflow runtime history or durable Activity history. The existing selected-project GitHub page remains the detail owner. Native Windows UI Automation opened a selected local warning in wide and compact Activity layouts without taking foreground input; direct pointer, keyboard and external-link opening remain unverified.
 
 ### Settings milestone
 

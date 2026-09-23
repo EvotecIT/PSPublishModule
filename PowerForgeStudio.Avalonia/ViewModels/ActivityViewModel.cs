@@ -133,8 +133,8 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
             ApplyFilter();
             NotifyCounts();
             Status = snapshot.IsTruncated
-                ? $"Showing {_allEntries.Count} of {snapshot.TotalEntryCount} activity signals across {snapshot.RepositoryCount} release-managed repositories."
-                : $"Observed {_allEntries.Count} activity signals across {snapshot.RepositoryCount} release-managed repositories.";
+                ? $"Showing {_allEntries.Count} of {snapshot.TotalEntryCount} activity signals across {snapshot.RepositoryCount} repository groups."
+                : $"Observed {_allEntries.Count} activity signals across {snapshot.RepositoryCount} repository groups.";
             Output = $"[{snapshot.InspectedAtUtc:HH:mm:ss}] Activity refresh complete — {_allEntries.Count} signals, " +
                      $"{ActionableCount} actionable, {CriticalCount} critical, {ReviewCount} awaiting review, " +
                      $"{UnavailableSourceCount} provider source(s) unavailable" +

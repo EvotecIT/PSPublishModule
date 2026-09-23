@@ -22,11 +22,17 @@ public sealed class RepositoryPortfolioService
     }
 
     public IReadOnlyList<RepositoryPortfolioItem> BuildPortfolio(IEnumerable<RepositoryCatalogEntry> entries)
+        => BuildPortfolioAsync(entries, CancellationToken.None).GetAwaiter().GetResult();
+
+    public async Task<IReadOnlyList<RepositoryPortfolioItem>> BuildPortfolioAsync(
+        IEnumerable<RepositoryCatalogEntry> entries, CancellationToken cancellationToken = default)
     {
         var items = new List<RepositoryPortfolioItem>();
         foreach (var entry in entries)
         {
-            var gitSnapshot = _gitRepositoryInspector.Inspect(entry.RootPath);
+            cancellationToken.ThrowIfCancellationRequested();
+            var gitSnapshot = await _gitRepositoryInspector.InspectAsync(entry.RootPath, cancellationToken)
+                .ConfigureAwait(false);
             var gitDiagnostics = _gitPreflightService.Assess(entry, gitSnapshot);
             gitSnapshot = gitSnapshot with {
                 Diagnostics = gitDiagnostics
