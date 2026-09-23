@@ -100,7 +100,7 @@ public sealed partial class MainWindow : Window
         ToolTip.SetTip(CompactContextButton,
             _compactDetailsOpen ? "Show project tree" : "Show selected item details");
         WorkspaceLayout.ColumnDefinitions[4].Width = new GridLength(showContext ? (compact ? 300 : 280) : 0);
-        WorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(compact ? (_compactDetailsOpen ? 0 : 270) : 326);
+        WorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(compact ? (_compactDetailsOpen ? 0 : 300) : 326);
     }
 
     private async void QuickProjectSearchKeyDown(object? sender, KeyEventArgs args)
