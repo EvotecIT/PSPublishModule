@@ -22,7 +22,7 @@ public sealed class GitHubWorkflowRuntimeSourceTests : IDisposable
                 """)
             : Json(HttpStatusCode.OK, """
                 {"total_count":1,"workflow_runs":[
-                  {"workflow_id":7,"status":"completed","conclusion":"failure","created_at":"2026-09-21T02:00:00Z","run_number":42}]}
+                  {"id":123456,"workflow_id":7,"status":"completed","conclusion":"failure","created_at":"2026-09-21T02:00:00Z","run_number":42}]}
                 """));
         using var client = new HttpClient(handler) { BaseAddress = new Uri("https://api.github.com") };
         var source = new GitHubWorkflowRuntimeSource(client, (_, _) => Task.FromResult<string?>("EvotecIT/Fixture"));
@@ -36,11 +36,13 @@ public sealed class GitHubWorkflowRuntimeSourceTests : IDisposable
         Assert.True(maintenance.IsEnabled);
         Assert.Equal(DateTimeOffset.Parse("2026-09-21T02:00:00Z"), maintenance.LastRunAt);
         Assert.Contains("run #42", maintenance.LastResult);
+        Assert.Equal("https://github.com/EvotecIT/Fixture/actions/runs/123456", maintenance.LatestRunUrl);
         Assert.Null(maintenance.NextRunAt);
         var disabled = Assert.Single(result.Entries, item => item.Name == "disabled");
         Assert.Equal("Disabled", disabled.State);
         Assert.True(disabled.HasRuntimeEvidence);
         Assert.False(disabled.IsEnabled);
+        Assert.Null(disabled.LatestRunUrl);
         Assert.Equal(2, handler.Paths.Count);
         Assert.Contains("event=schedule", handler.Paths[1]);
     }
@@ -60,6 +62,7 @@ public sealed class GitHubWorkflowRuntimeSourceTests : IDisposable
         Assert.Equal("Definition only", item.State);
         Assert.False(item.HasRuntimeEvidence);
         Assert.Null(item.NextRunAt);
+        Assert.Null(item.LatestRunUrl);
     }
 
     [Fact]

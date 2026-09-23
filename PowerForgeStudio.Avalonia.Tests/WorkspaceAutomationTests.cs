@@ -42,6 +42,27 @@ public sealed class WorkspaceAutomationTests
     }
 
     [Fact]
+    public void LatestRunOpensOnlyAnObservedGitHubRun()
+    {
+        string? opened = null;
+        using var model = new AutomationsViewModel(openExternal: url => opened = url);
+        var row = new WorkspaceAutomationEntry("run", "Scheduled build", "GitHub Actions", "workflow", "Fixture",
+            "daily", "Failed", null, DateTimeOffset.UtcNow, "failure", true, true, true, "workflow.yml", "Observed",
+            "https://github.com/EvotecIT/Fixture/actions/runs/123456");
+        model.SelectedEntry = row;
+        Assert.True(model.CanOpenSelectedRun);
+        model.OpenSelectedRunCommand.Execute(null);
+        Assert.Equal(row.LatestRunUrl, opened);
+
+        model.SelectedEntry = row with { LatestRunUrl = "https://github.com.evil.example/EvotecIT/Fixture/actions/runs/123456" };
+        Assert.False(model.CanOpenSelectedRun);
+        model.OpenSelectedRunCommand.Execute(null);
+        Assert.Equal(row.LatestRunUrl, opened);
+        model.SelectedEntry = row with { LatestRunUrl = null };
+        Assert.False(model.CanOpenSelectedRun);
+    }
+
+    [Fact]
     public async Task AutomationsRouteSeparatesRuntimeEvidenceAndProviderDefinitions()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-automation-ui-" + Guid.NewGuid().ToString("N"))).FullName;
@@ -109,6 +130,7 @@ public sealed class WorkspaceAutomationTests
                     Assert.Equal("No verified next run", model.Automations.SelectedEntry?.NextRunDisplay);
                     var openSource = compact.FindControl<Button>("OpenAutomationSourceButton")!;
                     Assert.True(openSource.IsEffectivelyVisible);
+                    Assert.True(compact.FindControl<Button>("OpenAutomationRunButton")!.IsEffectivelyVisible);
                     var openPosition = openSource.TranslatePoint(default, compact);
                     Assert.NotNull(openPosition);
                     Assert.InRange(openPosition.Value.Y, 0, compact.Height - model.OutputPaneHeight.Value);
@@ -164,7 +186,7 @@ public sealed class WorkspaceAutomationTests
             [
                 Entry("profile", "EvotecIT Codex Profile Sync", "Windows Task Scheduler", "Local workstation", "", "Every 30 minutes", "Upcoming", now.AddMinutes(18), now.AddMinutes(-12), "Succeeded", true, true),
                 Entry("health", "PasswordSolutionX health", "Windows Task Scheduler", "Local workstation", "PasswordSolutionX", "Hourly", "Failed", now.AddMinutes(42), now.AddMinutes(-18), "Result 0x00000001", true, true),
-                Entry("pf", "workflow-failure-sweeper.yml", "GitHub Actions", ".github/workflows", "PowerForge", "20 8 * * *", "Failed", null, now.AddHours(-3), "completed · failure · schedule · run #42", true, true, workflowPath),
+                Entry("pf", "workflow-failure-sweeper.yml", "GitHub Actions", ".github/workflows", "PowerForge", "20 8 * * *", "Failed", null, now.AddHours(-3), "completed · failure · schedule · run #42", true, true, workflowPath, "https://github.com/EvotecIT/PSPublishModule/actions/runs/123456"),
                 Entry("office", "codeql.yml", "GitHub Actions", ".github/workflows", "OfficeIMO", "22 3 * * 1", "Definition only", null, null, "Runtime not checked", false, true),
                 Entry("vendor", "Vendor updater", "Windows Task Scheduler", "Local workstation", "", "Daily · 10:30", "Healthy", null, now.AddHours(-2), "Succeeded", true, false)
             ];
@@ -179,9 +201,9 @@ public sealed class WorkspaceAutomationTests
 
         private static WorkspaceAutomationEntry Entry(string id, string name, string provider, string scope, string project,
             string schedule, string state, DateTimeOffset? next, DateTimeOffset? last, string result, bool runtime, bool relevant,
-            string? sourcePath = null)
+            string? sourcePath = null, string? latestRunUrl = null)
             => new(id, name, provider, scope, project, schedule, state, next, last, result, runtime,
-                state != "Paused", relevant, sourcePath ?? scope, runtime ? "Provider runtime evidence." : "Local definition only.");
+                state != "Paused", relevant, sourcePath ?? scope, runtime ? "Provider runtime evidence." : "Local definition only.", latestRunUrl);
     }
 
     private sealed class ControlledAutomationInventory : IWorkspaceAutomationInventoryService

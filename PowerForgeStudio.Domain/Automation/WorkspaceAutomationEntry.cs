@@ -16,7 +16,8 @@ public sealed record WorkspaceAutomationEntry(
     bool IsEnabled,
     bool IsRelevant,
     string SourcePath,
-    string Detail)
+    string Detail,
+    string? LatestRunUrl = null)
 {
     public bool NeedsAttention => State is "Failed" or "Inaccessible" or "Expired";
     public string NextRunDisplay => NextRunAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "No verified next run";

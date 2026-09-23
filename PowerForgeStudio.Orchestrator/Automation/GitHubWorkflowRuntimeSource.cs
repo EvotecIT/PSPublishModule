@@ -83,6 +83,7 @@ internal sealed class GitHubWorkflowRuntimeSource : IDisposable
                 State = state,
                 LastRunAt = last?.CreatedAt,
                 LastResult = lastResult,
+                LatestRunUrl = last?.Url,
                 HasRuntimeEvidence = true,
                 IsEnabled = enabled,
                 Detail = $"GitHub workflow state checked. {lastResult}. Next occurrence is not verified."
@@ -121,7 +122,9 @@ internal sealed class GitHubWorkflowRuntimeSource : IDisposable
                 item.TryGetProperty("status", out var status) ? status.GetString() ?? "Unknown" : "Unknown",
                 item.TryGetProperty("conclusion", out var conclusion) && conclusion.ValueKind == JsonValueKind.String ? conclusion.GetString() : null,
                 item.TryGetProperty("created_at", out var created) && created.TryGetDateTimeOffset(out var timestamp) ? timestamp : null,
-                item.TryGetProperty("run_number", out var number) ? number.GetInt32() : 0);
+                item.TryGetProperty("run_number", out var number) ? number.GetInt32() : 0,
+                item.TryGetProperty("id", out var runId) && runId.TryGetInt64(out var value) && value > 0
+                    ? $"https://github.com/{slug}/actions/runs/{value}" : null);
             if (!latest.TryGetValue(id, out var previous) || run.CreatedAt > previous.CreatedAt)
                 latest[id] = run;
         }
@@ -168,7 +171,7 @@ internal sealed class GitHubWorkflowRuntimeSource : IDisposable
 
     private sealed record RepositoryRuntime(string Root, IReadOnlyList<RuntimeEvidence> Entries, bool Partial);
     private sealed record RuntimeEvidence(string Path, string WorkflowState, ScheduledRun? Run);
-    private sealed record ScheduledRun(string Status, string? Conclusion, DateTimeOffset? CreatedAt, int RunNumber);
+    private sealed record ScheduledRun(string Status, string? Conclusion, DateTimeOffset? CreatedAt, int RunNumber, string? Url);
 
     public void Dispose()
     {

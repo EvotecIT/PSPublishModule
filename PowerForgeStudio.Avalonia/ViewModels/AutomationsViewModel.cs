@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PowerForgeStudio.Domain.Automation;
@@ -10,17 +12,20 @@ public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
 {
     private readonly IWorkspaceAutomationInventoryService _inventory;
     private readonly Func<WorkspaceAutomationEntry, Task>? _openSource;
+    private readonly Action<string> _openExternal;
     private readonly bool _ownsInventory;
     private readonly List<WorkspaceAutomationEntry> _allEntries = [];
     private CancellationTokenSource? _refreshCancellation;
     private int _refreshVersion;
 
     public AutomationsViewModel(IWorkspaceAutomationInventoryService? inventory = null,
-        Func<WorkspaceAutomationEntry, Task>? openSource = null)
+        Func<WorkspaceAutomationEntry, Task>? openSource = null,
+        Action<string>? openExternal = null)
     {
         _inventory = inventory ?? new WorkspaceAutomationInventoryService();
         _ownsInventory = inventory is null;
         _openSource = openSource;
+        _openExternal = openExternal ?? (target => Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }));
     }
 
     public ObservableCollection<WorkspaceAutomationEntry> Entries { get; } = [];
@@ -44,11 +49,14 @@ public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
         Path.IsPathFullyQualified(selected.SourcePath) &&
         (selected.SourcePath.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
          selected.SourcePath.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase));
+    public bool CanOpenSelectedRun => SelectedEntry is { Provider: "GitHub Actions", LatestRunUrl: { } url } && IsGitHubRunUrl(url);
 
     partial void OnSelectedEntryChanged(WorkspaceAutomationEntry? value)
     {
         OnPropertyChanged(nameof(CanOpenSelectedSource));
         OpenSelectedSourceCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanOpenSelectedRun));
+        OpenSelectedRunCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand(CanExecute = nameof(CanOpenSelectedSource))]
@@ -58,6 +66,24 @@ public sealed partial class AutomationsViewModel : ObservableObject, IDisposable
         try { await _openSource!(selected); }
         catch (Exception ex) { Status = "Could not open workflow source: " + StudioDisplayError.From(ex); }
     }
+
+    [RelayCommand(CanExecute = nameof(CanOpenSelectedRun))]
+    private void OpenSelectedRun()
+    {
+        if (!CanOpenSelectedRun || SelectedEntry?.LatestRunUrl is not { } url) return;
+        try
+        {
+            _openExternal(url);
+            Status = "Opened the observed GitHub Actions run in the system browser.";
+        }
+        catch (Exception ex) { Status = "Could not open GitHub Actions run: " + StudioDisplayError.From(ex); }
+    }
+
+    private static bool IsGitHubRunUrl(string url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+           uri.Scheme == Uri.UriSchemeHttps && uri.Host == "github.com" && uri.Port == 443 &&
+           string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query) && string.IsNullOrEmpty(uri.Fragment) &&
+           Regex.IsMatch(uri.AbsolutePath, @"\A/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/actions/runs/[1-9][0-9]*\z");
 
     partial void OnFilterChanged(string value)
     {
