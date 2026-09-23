@@ -2432,7 +2432,23 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         string error = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(10000), $"git {arguments} timed out");
         Assert.True(process.ExitCode == 0, $"git {arguments} failed: {error}");
+        if (string.Equals(arguments, "init", StringComparison.Ordinal))
+        {
+            // Fixture restores and the controlled checkout must select the same reviewed SDK.
+            File.Copy(FindRepositoryGlobalJson(), Path.Combine(root, "global.json"));
+            RunGit(root, "add global.json");
+        }
         return output;
+    }
+
+    private static string FindRepositoryGlobalJson()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln")))
+                return Path.Combine(directory.FullName, "global.json");
+        }
+        throw new InvalidOperationException("Unable to locate repository global.json.");
     }
 
     private static void RunDotNet(string root, string arguments)
