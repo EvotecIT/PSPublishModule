@@ -92,6 +92,13 @@ public sealed class ProjectOverviewTests
                 await project.EnsureLoadedAsync();
                 await model.SelectAsync(project);
 
+                Assert.True(project.IsExpanded);
+                var workingCopy = Assert.Single(project.Children, child => child.Kind == "branch");
+                Assert.True(workingCopy.IsExpanded);
+                var buildFolder = Assert.Single(workingCopy.Children, child => child.Name == "Build");
+                Assert.True(buildFolder.IsExpanded);
+                Assert.Contains(buildFolder.Children, child => child.Name == "Build-Project.ps1");
+
                 Assert.True(model.IsOverviewPage);
                 Assert.False(model.ShowGenericProjectContext);
                 Assert.True(model.IsProjectRoute);
@@ -145,6 +152,9 @@ public sealed class ProjectOverviewTests
                     Assert.False(model.IsOverviewPage);
                     Assert.Equal(buildEntry.SourcePath, model.SelectedPath);
                     Capture(window, "project-overview-open-entrypoint.png");
+                    buildFolder.IsExpanded = false;
+                    await model.SelectAsync(project);
+                    Assert.False(buildFolder.IsExpanded);
 
                     var gitDirectory = Path.Combine(root, ".git");
                     Directory.Move(gitDirectory, gitDirectory + ".saved");

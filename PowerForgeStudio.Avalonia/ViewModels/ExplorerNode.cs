@@ -43,6 +43,14 @@ public sealed partial class ExplorerNode : ObservableObject
     };
     public string RepositoryRoot { get; }
     public ObservableCollection<ExplorerNode> Children { get; } = [];
+    internal bool BuildExpansionHandled { get; set; }
+    internal bool BuildWasExplicitlyCollapsed { get; private set; }
+
+    internal void RestoreBuildCollapsed()
+    {
+        BuildExpansionHandled = true;
+        BuildWasExplicitlyCollapsed = true;
+    }
     [ObservableProperty] private string _detail = "";
     [ObservableProperty] private string _statusMarker = "";
     [ObservableProperty] private bool _isExpanded;
@@ -60,7 +68,15 @@ public sealed partial class ExplorerNode : ObservableObject
 
     partial void OnIsExpandedChanged(bool value)
     {
-        if (value) _ = EnsureLoadedAsync();
+        if (Kind == "folder" && Name.Equals("Build", StringComparison.OrdinalIgnoreCase))
+        {
+            if (value) { BuildExpansionHandled = true; BuildWasExplicitlyCollapsed = false; }
+            else if (BuildExpansionHandled) BuildWasExplicitlyCollapsed = true;
+        }
+        if (value)
+        {
+            _ = EnsureLoadedAsync();
+        }
     }
 
     public Task EnsureLoadedAsync()

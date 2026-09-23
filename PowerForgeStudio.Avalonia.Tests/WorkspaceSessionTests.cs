@@ -92,8 +92,10 @@ public sealed class WorkspaceSessionTests
             {
                 var root = Path.Combine(workspace, name);
                 Directory.CreateDirectory(Path.Combine(root, "Docs"));
+                Directory.CreateDirectory(Path.Combine(root, "Build"));
                 await File.WriteAllTextAsync(Path.Combine(root, "README.md"), "# " + name);
                 await File.WriteAllTextAsync(Path.Combine(root, "Docs", "guide.md"), "Guide for " + name);
+                await File.WriteAllTextAsync(Path.Combine(root, "Build", "project.build.json"), "{}");
                 var result = await new GitClient().RunRawAsync(root, ["init", "-b", "main"]);
                 Assert.True(result.Succeeded, result.StdErr);
             }
@@ -114,7 +116,14 @@ public sealed class WorkspaceSessionTests
                         var docs = Assert.Single(checkout.Children, item => item.Name == "Docs");
                         await docs.EnsureLoadedAsync(); docs.IsExpanded = true;
                         await model.SelectAsync(Assert.Single(checkout.Children, item => item.Name == "README.md"));
-                        if (name == "Studio.Sample") await model.ToggleFavoriteCommand.ExecuteAsync(null);
+                        if (name == "Studio.Sample")
+                        {
+                            await model.SelectAsync(project);
+                            var build = Assert.Single(checkout.Children, item => item.Name == "Build");
+                            Assert.True(build.IsExpanded);
+                            build.IsExpanded = false;
+                            await model.ToggleFavoriteCommand.ExecuteAsync(null);
+                        }
                     }
                     Assert.Equal(2, model.Documents.Count);
                     Assert.Equal("Module.Sample", model.ProjectName);
@@ -130,6 +139,17 @@ public sealed class WorkspaceSessionTests
                 Assert.Equal(2, reopened.Documents.Count);
                 Assert.Equal("Module.Sample", reopened.ProjectName);
                 Assert.Equal("# Module.Sample", reopened.Preview);
+                var restoredProject = Assert.Single(reopened.Projects, item => item.Name == "Module.Sample");
+                var restoredPrimary = Assert.Single(restoredProject.Children, item => item.Path == Path.Combine(workspace, "Module.Sample"));
+                var restoredBuild = Assert.Single(restoredPrimary.Children, item => item.Name == "Build");
+                Assert.False(restoredBuild.IsExpanded);
+                await reopened.SelectAsync(restoredProject);
+                Assert.True(restoredBuild.IsExpanded);
+                var restoredFavorite = Assert.Single(reopened.Projects, item => item.Name == "Studio.Sample");
+                await reopened.SelectAsync(restoredFavorite);
+                var favoriteBuild = Assert.Single(restoredFavorite.Children[0].Children, item => item.Name == "Build");
+                Assert.False(favoriteBuild.IsExpanded);
+                await reopened.SelectAsync(restoredProject);
                 var favoriteGroup = reopened.ExplorerRoots[0];
                 Assert.Equal("Studio.Sample", Assert.Single(favoriteGroup.Children).Name);
                 reopened.ShowFavoriteProjectsCommand.Execute(null);
@@ -165,6 +185,7 @@ public sealed class WorkspaceSessionTests
                     Assert.Single(store.LoadExplorer(workspace).OpenDocuments);
                     Assert.Single(store.LoadExplorer(workspace).FavoriteProjectRoots);
                     Assert.Contains(store.LoadExplorer(workspace).ExpandedPaths, path => path.EndsWith("Docs", StringComparison.Ordinal));
+                    Assert.Contains(Path.Combine(workspace, "Studio.Sample", "Build"), store.LoadExplorer(workspace).CollapsedBuildPaths!);
                 }
                 finally { window.Close(); await closed.Task.WaitAsync(TimeSpan.FromSeconds(10)); }
                 return true;

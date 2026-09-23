@@ -11,6 +11,7 @@ public sealed partial class WorkspaceViewModel
     private readonly IWorkspaceExplorerStateStore? _stateStore;
     private readonly HashSet<string> _favorites = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly HashSet<string> _archived = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private readonly HashSet<string> _collapsedBuildPaths = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly SemaphoreSlim _sessionSave = new(1, 1);
     private string? _loadedStateRoot;
     private int _restoringSession;
@@ -97,7 +98,7 @@ public sealed partial class WorkspaceViewModel
     {
         if (_loadedStateRoot is not null && SamePath(_loadedStateRoot, root)) return;
         _loadedStateRoot = null;
-        Documents.Clear(); ActiveDocument = null; _favorites.Clear(); _archived.Clear(); _pendingRestore = null;
+        Documents.Clear(); ActiveDocument = null; _favorites.Clear(); _archived.Clear(); _collapsedBuildPaths.Clear(); _pendingRestore = null;
         StateError = "";
         if (_stateStore is null) { _loadedStateRoot = root; return; }
         try
@@ -109,6 +110,7 @@ public sealed partial class WorkspaceViewModel
             _restoreDocumentsFromDisk = _restoreOpenDocuments;
             foreach (var favorite in state.FavoriteProjectRoots) _favorites.Add(Path.GetFullPath(favorite));
             foreach (var archived in state.ArchivedProjectRoots ?? []) _archived.Add(Path.GetFullPath(archived));
+            foreach (var collapsed in state.CollapsedBuildPaths ?? []) _collapsedBuildPaths.Add(Path.GetFullPath(collapsed));
         }
         catch (Exception ex)
         {
@@ -207,10 +209,11 @@ public sealed partial class WorkspaceViewModel
         var documents = Documents.Select(document => document.Reference).ToArray();
         var active = ActiveDocument?.Reference;
         var expanded = LoadedNodes().Where(node => node.IsExpanded && !string.IsNullOrEmpty(node.Path)).Select(node => Path.GetFullPath(node.Path)).ToArray();
+        var collapsedBuildPaths = SnapshotCollapsedBuildPaths();
         await _sessionSave.WaitAsync();
         try
         {
-            await Task.Run(() => _stateStore.SaveSession(root, documents, active, expanded));
+            await Task.Run(() => _stateStore.SaveSession(root, documents, active, expanded, collapsedBuildPaths));
             if (SamePath(root, WorkspaceRoot)) StateError = "";
         }
         catch (Exception ex) { if (SamePath(root, WorkspaceRoot)) StateError = "Could not save workspace state: " + StudioDisplayError.From(ex); }
@@ -220,12 +223,25 @@ public sealed partial class WorkspaceViewModel
     private static bool SameDocument(WorkspaceDocumentReference first, WorkspaceDocumentReference second)
         => SamePath(first.WorkingCopyRoot, second.WorkingCopyRoot) && SamePath(first.Path, second.Path);
 
+    private string[] SnapshotCollapsedBuildPaths()
+    {
+        foreach (var node in LoadedNodes().Where(node => node.Kind == "folder" &&
+                     node.Name.Equals("Build", StringComparison.OrdinalIgnoreCase) && node.Path.Length > 0))
+        {
+            var path = Path.GetFullPath(node.Path);
+            if (node.BuildWasExplicitlyCollapsed) _collapsedBuildPaths.Add(path);
+            else _collapsedBuildPaths.Remove(path);
+        }
+        return _collapsedBuildPaths.ToArray();
+    }
+
     private void CaptureSessionBeforeRefresh()
     {
         if (!_sessionReady || _loadedStateRoot is null || !SamePath(_loadedStateRoot, WorkspaceRoot)) return;
         _restoreDocumentsFromDisk = false;
         _pendingRestore = new WorkspaceExplorerState(WorkspaceRoot, _favorites.ToArray(), Documents.Select(document => document.Reference).ToArray(),
-            ActiveDocument?.Reference, LoadedNodes().Where(node => node.IsExpanded && node.Path.Length > 0).Select(node => Path.GetFullPath(node.Path)).ToArray());
+            ActiveDocument?.Reference, LoadedNodes().Where(node => node.IsExpanded && node.Path.Length > 0).Select(node => Path.GetFullPath(node.Path)).ToArray(),
+            _archived.ToArray(), SnapshotCollapsedBuildPaths());
     }
 
     public async Task<bool> ActivateWorkspaceAsync(string root)

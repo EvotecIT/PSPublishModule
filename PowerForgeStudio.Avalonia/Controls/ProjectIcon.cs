@@ -39,6 +39,13 @@ public sealed class ProjectIcon : Control
             context.DrawEllipse(Brushes.White, ink, new Point(7,20), 2, 2);
             context.DrawEllipse(Brush.Parse("#B3E2BD"), ink, new Point(17,4), 2, 2);
         }
+        else if (Kind == "script")
+        {
+            var gearInk = new Pen(Brush.Parse("#354C73"), 1.4, lineJoin: PenLineJoin.Round);
+            context.DrawGeometry(Brush.Parse("#EAF2FF"), gearInk, Geometry.Parse(
+                "M10,2 L14,2 14.7,4.7 16.5,5.5 18.9,4.1 21,7.1 19.1,9.1 19.4,11 22,12 19.4,13 19.1,14.9 21,16.9 18.9,19.9 16.5,18.5 14.7,19.3 14,22 10,22 9.3,19.3 7.5,18.5 5.1,19.9 3,16.9 4.9,14.9 4.6,13 2,12 4.6,11 4.9,9.1 3,7.1 5.1,4.1 7.5,5.5 9.3,4.7 Z"));
+            context.DrawEllipse(Brushes.White, gearInk, new Point(12, 12), 3, 3);
+        }
         else if (Kind == "solution")
             context.DrawGeometry(Brush.Parse("#964AC1"), null, Geometry.Parse("M3,8 L8,4 13,9 21,2 21,22 13,15 8,20 3,16 Z M6,9 L6,15 10,12 Z"));
         else

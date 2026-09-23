@@ -22,7 +22,8 @@ public sealed class WorkspaceExplorerPersistenceTests : IDisposable
         var reference = new WorkspaceDocumentReference(project, Path.Combine(project, "README.md"));
         store.SetFavorite(_root, project, true);
         store.SetProjectArchived(_root, project, true);
-        store.SaveSession(_root, [reference], reference, [project]);
+        var build = Path.Combine(project, "Build");
+        store.SaveSession(_root, [reference], reference, [project], [build]);
         store.SaveProfile(new WorkspaceProfile("release", "Release", null, null, null, [], _root, null, null, null));
         store.SaveActive(_root, "release");
         var restored = new WorkspaceRootCatalogService(CatalogPath);
@@ -31,6 +32,7 @@ public sealed class WorkspaceExplorerPersistenceTests : IDisposable
         Assert.Equal(project, Assert.Single(state.ArchivedProjectRoots!));
         Assert.Equal(reference, Assert.Single(state.OpenDocuments));
         Assert.Equal(reference, state.ActiveDocument);
+        Assert.Equal(build, Assert.Single(state.CollapsedBuildPaths!));
         Assert.Equal("release", restored.Load(_root).ActiveProfileId);
         using var json = JsonDocument.Parse(File.ReadAllText(CatalogPath));
         Assert.Equal(42, json.RootElement.GetProperty("futureSetting").GetProperty("value").GetInt32());

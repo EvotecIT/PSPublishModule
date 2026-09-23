@@ -6,6 +6,20 @@ public sealed partial class WorkspaceViewModel
 {
     private readonly Dictionary<string, ProjectGitStatus> _gitSnapshots = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
+    private async Task ExpandSelectedProjectAsync(ExplorerNode project, int selectionVersion)
+    {
+        project.IsExpanded = true;
+        await project.EnsureLoadedAsync();
+        if (_disposed || selectionVersion != _selectionVersion) return;
+        var primary = project.Children.FirstOrDefault(child => child.Path.Length > 0 && SamePath(child.Path, project.Path));
+        var build = primary?.Children.FirstOrDefault(child => child.Kind == "folder" &&
+            child.Name.Equals("Build", StringComparison.OrdinalIgnoreCase));
+        if (build is null || build.BuildExpansionHandled) return;
+        build.BuildExpansionHandled = true;
+        build.IsExpanded = true;
+        await build.EnsureLoadedAsync();
+    }
+
     private void UpdateGitDecorations(string root, ProjectGitStatus snapshot)
     {
         if (string.IsNullOrEmpty(root)) return;

@@ -8,5 +8,6 @@ public interface IWorkspaceExplorerStateStore
     WorkspaceExplorerState LoadExplorer(string workspaceRoot);
     WorkspaceExplorerState SetFavorite(string workspaceRoot, string projectRoot, bool favorite);
     WorkspaceExplorerState SaveSession(string workspaceRoot, IReadOnlyList<WorkspaceDocumentReference> documents,
-        WorkspaceDocumentReference? activeDocument, IReadOnlyList<string> expandedPaths);
+        WorkspaceDocumentReference? activeDocument, IReadOnlyList<string> expandedPaths,
+        IReadOnlyList<string>? collapsedBuildPaths = null);
 }

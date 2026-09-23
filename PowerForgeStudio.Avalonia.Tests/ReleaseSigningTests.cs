@@ -139,7 +139,7 @@ public sealed class ReleaseSigningTests
         public TaskCompletionSource Returned { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public WorkspaceExplorerState LoadExplorer(string root) => new(root, [], [], null, []);
         public WorkspaceExplorerState SetFavorite(string root, string project, bool favorite) => LoadExplorer(root);
-        public WorkspaceExplorerState SaveSession(string root, IReadOnlyList<WorkspaceDocumentReference> docs, WorkspaceDocumentReference? active, IReadOnlyList<string> expanded)
+        public WorkspaceExplorerState SaveSession(string root, IReadOnlyList<WorkspaceDocumentReference> docs, WorkspaceDocumentReference? active, IReadOnlyList<string> expanded, IReadOnlyList<string>? collapsedBuildPaths = null)
         {
             Started.TrySetResult(); Finish.Task.Wait(TimeSpan.FromSeconds(10)); Returned.TrySetResult(); return LoadExplorer(root);
         }

@@ -376,8 +376,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             .ToDictionary(x => x.Path, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         node.Children.Clear();
         foreach (var entry in node.Kind == "branch" ? OrderWorkingCopyRoot(entries) : entries)
-            node.Children.Add(existing.TryGetValue(entry.FullPath, out var child) && child.Kind == Kind(entry) ? child
-                : new ExplorerNode(entry.Name, entry.FullPath, Kind(entry), node.RepositoryRoot, entry.IsDirectory ? LoadDirectoryAsync : null));
+        {
+            var child = existing.TryGetValue(entry.FullPath, out var prior) && prior.Kind == Kind(entry) ? prior
+                : new ExplorerNode(entry.Name, entry.FullPath, Kind(entry), node.RepositoryRoot, entry.IsDirectory ? LoadDirectoryAsync : null);
+            if (child.Kind == "folder" && child.Name.Equals("Build", StringComparison.OrdinalIgnoreCase) &&
+                _collapsedBuildPaths.Contains(Path.GetFullPath(child.Path)) && !child.BuildExpansionHandled)
+                child.RestoreBuildCollapsed();
+            node.Children.Add(child);
+        }
         if (_gitSnapshots.TryGetValue(node.RepositoryRoot, out var snapshot)) UpdateGitDecorations(node.RepositoryRoot, snapshot);
     }
 
@@ -403,6 +409,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         try
         {
             IsSelectionLoading = true;
+            if (node.Kind == "project")
+            {
+                await ExpandSelectedProjectAsync(node, version);
+                if (_disposed || version != _selectionVersion) return;
+            }
             PreviewTitle = node.Name;
             Preview = "Loading…";
             _updatingTreeSelection = true;

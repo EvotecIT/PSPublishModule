@@ -223,6 +223,10 @@ public sealed class WorkspaceTreeTests
                     await model.OpenQuickProjectAsync(quickMatch);
                     Assert.Equal("Module.Sample", model.ProjectName);
                     Assert.Equal(other, model.ActiveWorkingCopyRoot);
+                    var quickCheckout = Assert.Single(quickMatch.Children, item => item.Path == other);
+                    var quickBuild = Assert.Single(quickCheckout.Children, item => item.Name == "Build");
+                    Assert.True(quickBuild.IsExpanded);
+                    Assert.Contains(quickBuild.Children, item => item.Name == "Build-Project.ps1");
                     Assert.Empty(model.Filter);
                     Assert.False(model.FavoritesOnly);
                     Assert.False(model.ChangedProjectsOnly);

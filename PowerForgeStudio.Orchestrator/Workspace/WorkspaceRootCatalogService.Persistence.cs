@@ -41,7 +41,8 @@ public sealed partial class WorkspaceRootCatalogService
     }
 
     public WorkspaceExplorerState SaveSession(string workspaceRoot, IReadOnlyList<WorkspaceDocumentReference> documents,
-        WorkspaceDocumentReference? activeDocument, IReadOnlyList<string> expandedPaths)
+        WorkspaceDocumentReference? activeDocument, IReadOnlyList<string> expandedPaths,
+        IReadOnlyList<string>? collapsedBuildPaths = null)
     {
         workspaceRoot = NormalizeRoot(workspaceRoot);
         ArgumentNullException.ThrowIfNull(documents);
@@ -53,7 +54,8 @@ public sealed partial class WorkspaceRootCatalogService
         var state = FindExplorer(document, workspaceRoot) with
         {
             OpenDocuments = documents.ToArray(), ActiveDocument = activeDocument,
-            ExpandedPaths = expandedPaths.Select(NormalizeRoot).Distinct(PathComparer).ToArray()
+            ExpandedPaths = expandedPaths.Select(NormalizeRoot).Distinct(PathComparer).ToArray(),
+            CollapsedBuildPaths = (collapsedBuildPaths ?? []).Select(NormalizeRoot).Distinct(PathComparer).ToArray()
         };
         PersistExplorer(document, state);
         return state;
@@ -83,7 +85,7 @@ public sealed partial class WorkspaceRootCatalogService
             {
                 if (state is null || string.IsNullOrWhiteSpace(state.WorkspaceRoot) || !Path.IsPathFullyQualified(state.WorkspaceRoot)
                     || state.FavoriteProjectRoots is null || state.OpenDocuments is null || state.ExpandedPaths is null
-                    || state.FavoriteProjectRoots.Concat(state.ExpandedPaths).Concat(state.ArchivedProjectRoots ?? []).Any(path => string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
+                    || state.FavoriteProjectRoots.Concat(state.ExpandedPaths).Concat(state.ArchivedProjectRoots ?? []).Concat(state.CollapsedBuildPaths ?? []).Any(path => string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
                     || state.OpenDocuments.Any(reference => !ValidDocument(reference)) || state.ActiveDocument is not null && !ValidDocument(state.ActiveDocument))
                     throw new JsonException("The saved explorer state contains invalid paths or missing collections.");
             }

@@ -10,4 +10,5 @@ public sealed record WorkspaceExplorerState(
     IReadOnlyList<WorkspaceDocumentReference> OpenDocuments,
     WorkspaceDocumentReference? ActiveDocument,
     IReadOnlyList<string> ExpandedPaths,
-    IReadOnlyList<string>? ArchivedProjectRoots = null);
+    IReadOnlyList<string>? ArchivedProjectRoots = null,
+    IReadOnlyList<string>? CollapsedBuildPaths = null);

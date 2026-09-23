@@ -59,8 +59,6 @@ public sealed partial class WorkspaceViewModel
             if (archivedGroup is not null) archivedGroup.IsExpanded = true;
         }
         ShowOverviewCommand.Execute(null);
-        await node.EnsureLoadedAsync();
-        node.IsExpanded = true;
         await SelectAsync(node);
     }
 }
