@@ -20,6 +20,8 @@ public sealed class LocalProjectTreeTests
             await File.WriteAllTextAsync(Path.Combine(build, "project.build.json"), "{}");
             await File.WriteAllTextAsync(Path.Combine(projectRoot, "README.md"), "# Local build project");
             Directory.CreateDirectory(Path.Combine(workspace, "UnrelatedFolder"));
+            var worktreeBuild = Directory.CreateDirectory(Path.Combine(workspace, "_worktrees", "AnotherProject", "Build")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(worktreeBuild, "project.build.json"), "{}");
 
             await TestAppBuilder.RunAsync(async () =>
             {

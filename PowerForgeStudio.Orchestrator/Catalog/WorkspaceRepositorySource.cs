@@ -29,7 +29,14 @@ public sealed class WorkspaceRepositorySource : IWorkspaceRepositorySource
             cancellationToken: cancellationToken);
         return rootEntry.IsReleaseManaged
             ? [rootEntry]
-            : scanner.Scan(root, cancellationToken).Where(IsDiscoverableProject).ToArray();
+            : Directory.EnumerateDirectories(root)
+                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .Where(static path => !string.Equals(Path.GetFileName(path), "_worktrees", StringComparison.OrdinalIgnoreCase))
+                .Select(path => scanner.InspectRepository(path,
+                    includeImmediateChildBuildFolders: WorktreeDetector.IsGitRepository(path),
+                    cancellationToken: cancellationToken))
+                .Where(IsDiscoverableProject)
+                .ToArray();
     }
 
     internal static bool IsDiscoverableProject(RepositoryCatalogEntry entry)

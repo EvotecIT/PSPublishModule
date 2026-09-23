@@ -10,7 +10,7 @@ At compact widths, Details temporarily shows the same context panel in place of 
 
 The left rail is workspace-wide. Project tabs are scoped to the selected project folder. A rail entry must never silently behave like a project tab.
 
-The tree discovers immediate Git checkouts and folders with a supported PowerForge build contract, including local JSON or PowerShell projects before they have Git metadata. A selected local project keeps Files, Build & Run and release planning available. Changes, History and project GitHub require a Git working copy and are disabled until one exists; workspace Activity still separates local build evidence from GitHub evidence.
+The tree discovers immediate Git checkouts and folders with their own supported PowerForge build contract, including local JSON or PowerShell projects before they have Git metadata. A non-Git folder does not inherit a build contract from an unrelated child, and the workspace's `_worktrees` container is not a project. A selected local project keeps Files, Build & Run and release planning available. Changes, History and project GitHub require a Git working copy and are disabled until one exists; workspace Activity still separates local build evidence from GitHub evidence.
 
 | Scope | Entry | Purpose | Main owner |
 |---|---|---|---|
